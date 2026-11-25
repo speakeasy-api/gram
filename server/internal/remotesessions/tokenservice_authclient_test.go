@@ -383,3 +383,26 @@ func TestResolveAssociatedAccessTokens_SkipsAnAssociatedClientTheSignInDoesNotBi
 	require.NoError(t, err)
 	require.Empty(t, tokens)
 }
+
+func TestResolveHostedRegistrationAccessTokens_UsesOnlyAssignedGrant(t *testing.T) {
+	t.Parallel()
+	ctx, f := newAuthClientTokenFixture(t, "hosted-exact-grant")
+	subject := urn.NewUserSubject("hosted-exact-user")
+	sibling := seedRemoteClientAtTier(t, ctx, f.ti.conn, conv.ToNullUUID(f.projectID), conv.ToPGText(f.organizationID), f.issuerID, "hosted-exact-sibling", f.signInA)
+	f.consent(t, subject, f.signInB, sibling, "same-provider-sibling-token")
+	session := f.consent(t, subject, f.signInB, f.clientID, "assignment-token")
+	req := f.request(subject, f.clientID)
+	tokens, err := f.mgr.ResolveHostedRegistrationAccessTokens(ctx, req)
+	require.NoError(t, err)
+	require.Equal(t, session.ID, tokens[f.issuerID].RemoteSessionID)
+	require.Equal(t, f.clientID, tokens[f.issuerID].RemoteSessionClientID)
+
+	unknown := f.request(subject, uuid.New())
+	_, err = f.mgr.ResolveHostedRegistrationAccessTokens(ctx, unknown)
+	require.ErrorIs(t, err, remotesessions.ErrChosenClientUnbound)
+
+	siblingOnly := urn.NewUserSubject("hosted-sibling-only")
+	f.consent(t, siblingOnly, f.signInB, sibling, "sibling-only-token")
+	_, err = f.mgr.ResolveHostedRegistrationAccessTokens(ctx, f.request(siblingOnly, f.clientID))
+	require.ErrorIs(t, err, remotesessions.ErrNoValidToken)
+}

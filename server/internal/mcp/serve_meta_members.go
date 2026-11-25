@@ -515,16 +515,15 @@ func (s *Service) resolveOrganizationMemberSnapshotWithRecheck(
 		if !supported || (serving && known && len(offer.clients) == 0 && needsOAuth) {
 			continue
 		}
-		if recheck == nil && needsOAuth && userSessionIssuerID != uuid.Nil {
+		// Hosted serving checks the exact placement at dispatch, after member
+		// and toolset permission checks. Consent retains the compatibility
+		// inventory used by the existing writers and callback.
+		if recheck == nil && needsOAuth && userSessionIssuerID != uuid.Nil && !(serving && member.backend == metaMemberBackendHosted) {
 			if serving && !servingClientsLoaded {
-				// Typed proxied members were handled above. Only hosted
-				// serving needs sign-in bindings; never attach legacy associations
-				// to a typed member. A binding lookup failure hides only the
-				// hosted OAuth members, not the rest of the gateway.
 				servingClientsLoaded = true
 				clients, servingClientsErr = s.remoteChallengeMgr.ListOrganizationClients(ctx, organizationID, userSessionIssuerID)
 				if servingClientsErr != nil {
-					logger.WarnContext(ctx, "list hosted gateway sign-in clients", attr.SlogError(servingClientsErr))
+					logger.WarnContext(ctx, "list gateway sign-in clients", attr.SlogError(servingClientsErr))
 				}
 			}
 			if servingClientsErr != nil || !slices.ContainsFunc(clients, func(client remotesessions.Client) bool {
