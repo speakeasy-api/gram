@@ -1776,6 +1776,7 @@ trackedFiles:
   src/models/components/observabilitysummary.ts: {}
   src/models/components/oktaidentityproviderconnection.ts: {}
   src/models/components/oktaresourceconnectionconfirmation.ts: {}
+  src/models/components/oktaresourceconnectionrefusal.ts: {}
   src/models/components/oktaresourceconnectionserver.ts: {}
   src/models/components/oktaserversuggestion.ts: {}
   src/models/components/oktaserversuggestionapplication.ts: {}

@@ -119,7 +119,7 @@ func TestXAAReadinessProjectsExistingStatesWithoutLeakingSnapshot(t *testing.T) 
 			observation, at, reason := "success", "2026-01-01T00:00:00Z", "downstream_rejected"
 			reader := &xaaReaderStub{result: &srv.ListOktaResourceConnectionsResult{TotalCount: 99, Servers: []*srv.OktaResourceConnectionServer{
 				{ProjectID: xaaProjectID, McpServerID: "hidden-server", State: "hidden-state"},
-				{ProjectID: xaaProjectID, McpServerID: xaaServerID, State: state, Pending: true, BrokenReason: &reason, ObservedResult: &observation, ObservedAt: &at, ServerName: "private-label", ResourceIndicator: "https://private.invalid", ClientID: &observation},
+				{ProjectID: xaaProjectID, McpServerID: xaaServerID, State: state, Pending: true, BrokenReason: &reason, ObservedResult: &observation, ObservedAt: &at, ServerName: "private-label", ResourceIndicator: "https://private.invalid", ClientID: &observation, RecentRefusals: []*srv.OktaResourceConnectionRefusal{{RefusedBy: "identity_provider", People: 2, LastRefusedAt: at}}},
 			}}}
 			session := xaaTestSession(t, &xaaReadinessService{connections: reader}, false)
 			result := xaaCall(t, session, xaaProjectSlug, xaaServerID)
@@ -135,6 +135,7 @@ func TestXAAReadinessProjectsExistingStatesWithoutLeakingSnapshot(t *testing.T) 
 			require.Equal(t, &observation, output.ObservedResult)
 			require.Equal(t, &at, output.ObservedAt)
 			require.Equal(t, &reason, output.BrokenReason)
+			require.Equal(t, []XAARefusal{{RefusedBy: "identity_provider", People: 2, LastRefusedAt: at}}, output.RecentRefusals)
 			for _, secret := range []string{"hidden", "private", "total_count", "client_id", "servers"} {
 				require.NotContains(t, string(wire), secret)
 			}
@@ -511,7 +512,7 @@ func TestXAAReadinessOktaVendorsKeepOktaDetails(t *testing.T) {
 	on := func(context.Context, string) (bool, error) { return true, nil }
 	issuerID := uuid.NewString()
 	reader := &xaaReaderStub{result: &srv.ListOktaResourceConnectionsResult{Servers: []*srv.OktaResourceConnectionServer{
-		{ProjectID: xaaProjectID, McpServerID: xaaServerID, State: "needs_connection", Pending: true, IssuerID: &issuerID, ResourceIndicator: "https://upstream.example.test/mcp"},
+		{ProjectID: xaaProjectID, McpServerID: xaaServerID, State: "needs_connection", Pending: true, IssuerID: &issuerID, ResourceIndicator: "https://upstream.example.test/mcp", RecentRefusals: []*srv.OktaResourceConnectionRefusal{{RefusedBy: "service", People: 1, LastRefusedAt: "2026-01-01T00:00:00Z"}}},
 	}}}
 	external := XAAIdentityChaining{Served: false, NotServedReason: new("binding_not_ready"), Bindings: []XAAIdentityChainingBinding{}}
 	identity := &xaaIdentityStub{chaining: external}
@@ -530,6 +531,7 @@ func TestXAAReadinessOktaVendorsKeepOktaDetails(t *testing.T) {
 	output = xaaOutput(t, xaaCall(t, session, xaaProjectSlug, xaaServerID))
 	require.Equal(t, xaaStateReady, output.State, "the Okta connection does not describe a vendor whose order names Speakeasy")
 	require.Nil(t, output.OktaSignIn)
+	require.Equal(t, []XAARefusal{{RefusedBy: "service", People: 1, LastRefusedAt: "2026-01-01T00:00:00Z"}}, output.RecentRefusals, "refusals match the dashboard's list")
 	require.Equal(t, servers.server.issuerID, identity.issuer)
 }
 

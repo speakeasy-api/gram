@@ -16,6 +16,7 @@ import { Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
 import type { RowSelection } from "@/hooks/useRowSelection";
 import { HumanizeDateTime } from "@/lib/dates";
+import { cn } from "@/lib/utils";
 import type { OktaResourceConnectionServer } from "@gram/client/models/components/oktaresourceconnectionserver.js";
 
 import { OktaLinkButton } from "./OktaLinkButton";
@@ -29,6 +30,7 @@ import {
   notApplicableReasonLabel,
   notApplicableReasonSummary,
   observedNote,
+  refusalNotes,
   xaaStateLabel,
   xaaStateVariant,
 } from "./xaaView";
@@ -90,16 +92,22 @@ function ServerCell({
 function StateNote({
   tooltip,
   summary,
+  clamp = true,
 }: {
   tooltip: string;
   summary: string;
+  /** False shows the whole note, for one that carries the fix. */
+  clamp?: boolean;
 }): JSX.Element {
   return (
     <SimpleTooltip tooltip={tooltip}>
       <Text
         muted
         small
-        className="line-clamp-3 text-xs leading-5 whitespace-normal"
+        className={cn(
+          "text-xs leading-5 whitespace-normal",
+          clamp && "line-clamp-3",
+        )}
       >
         {summary}
       </Text>
@@ -131,6 +139,14 @@ function StateCell({
         />
       )}
       {note && <StateNote tooltip={note.tooltip} summary={note.summary} />}
+      {refusalNotes(row.recentRefusals).map((refusal) => (
+        <StateNote
+          key={refusal.summary}
+          tooltip={refusal.tooltip}
+          summary={refusal.summary}
+          clamp={false}
+        />
+      ))}
     </div>
   );
 }

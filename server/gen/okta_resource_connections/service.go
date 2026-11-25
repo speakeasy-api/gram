@@ -117,6 +117,22 @@ type OktaResourceConnectionConfirmation struct {
 	OktaApplicationID *string
 }
 
+// People whose Cross App Access sign-in to this server was refused in the last
+// 24 hours, by one party. Refusals do not change state: a connection refused
+// for some people can still be verified by others.
+type OktaResourceConnectionRefusal struct {
+	// identity_provider: the identity provider refused access, the permissions or
+	// the server, for example because the person is not assigned to the app there;
+	// service: the service refused the identity provider's sign-in. Setup problems
+	// and expired sign-ins are not counted.
+	RefusedBy string
+	// Distinct people refused in the last 24 hours who have not had a request
+	// answered by this server since.
+	People int
+	// When the latest of those refusals happened.
+	LastRefusedAt string
+}
+
 // OktaResourceConnectionServer is the result type of the
 // oktaResourceConnections service reset method.
 type OktaResourceConnectionServer struct {
@@ -153,6 +169,10 @@ type OktaResourceConnectionServer struct {
 	ObservedResult *string
 	// When the exchange behind observed_result started.
 	ObservedAt *string
+	// People refused Cross App Access sign-in to this server in the last 24 hours,
+	// by who refused. Omitted when there are none, or when Connection Logs are off
+	// or could not be read.
+	RecentRefusals []*OktaResourceConnectionRefusal
 	// Whether the administrator still has a step to do for this server.
 	Pending bool
 	// The upstream authorization server ID. Together with the resource indicator,

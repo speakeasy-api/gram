@@ -95,6 +95,10 @@ type ResetResponseBody struct {
 	ObservedResult *string `form:"observed_result,omitempty" json:"observed_result,omitempty" xml:"observed_result,omitempty"`
 	// When the exchange behind observed_result started.
 	ObservedAt *string `form:"observed_at,omitempty" json:"observed_at,omitempty" xml:"observed_at,omitempty"`
+	// People refused Cross App Access sign-in to this server in the last 24 hours,
+	// by who refused. Omitted when there are none, or when Connection Logs are off
+	// or could not be read.
+	RecentRefusals []*OktaResourceConnectionRefusalResponseBody `form:"recent_refusals,omitempty" json:"recent_refusals,omitempty" xml:"recent_refusals,omitempty"`
 	// Whether the administrator still has a step to do for this server.
 	Pending bool `form:"pending" json:"pending" xml:"pending"`
 	// The upstream authorization server ID. Together with the resource indicator,
@@ -826,6 +830,10 @@ type OktaResourceConnectionServerResponseBody struct {
 	ObservedResult *string `form:"observed_result,omitempty" json:"observed_result,omitempty" xml:"observed_result,omitempty"`
 	// When the exchange behind observed_result started.
 	ObservedAt *string `form:"observed_at,omitempty" json:"observed_at,omitempty" xml:"observed_at,omitempty"`
+	// People refused Cross App Access sign-in to this server in the last 24 hours,
+	// by who refused. Omitted when there are none, or when Connection Logs are off
+	// or could not be read.
+	RecentRefusals []*OktaResourceConnectionRefusalResponseBody `form:"recent_refusals,omitempty" json:"recent_refusals,omitempty" xml:"recent_refusals,omitempty"`
 	// Whether the administrator still has a step to do for this server.
 	Pending bool `form:"pending" json:"pending" xml:"pending"`
 	// The upstream authorization server ID. Together with the resource indicator,
@@ -862,6 +870,21 @@ type OktaResourceConnectionServerResponseBody struct {
 	OktaApplicationLabel *string `form:"okta_application_label,omitempty" json:"okta_application_label,omitempty" xml:"okta_application_label,omitempty"`
 	// When the administrator confirmed the connection for this server's upstream.
 	ConfirmedAt *string `form:"confirmed_at,omitempty" json:"confirmed_at,omitempty" xml:"confirmed_at,omitempty"`
+}
+
+// OktaResourceConnectionRefusalResponseBody is used to define fields on
+// response body types.
+type OktaResourceConnectionRefusalResponseBody struct {
+	// identity_provider: the identity provider refused access, the permissions or
+	// the server, for example because the person is not assigned to the app there;
+	// service: the service refused the identity provider's sign-in. Setup problems
+	// and expired sign-ins are not counted.
+	RefusedBy string `form:"refused_by" json:"refused_by" xml:"refused_by"`
+	// Distinct people refused in the last 24 hours who have not had a request
+	// answered by this server since.
+	People int `form:"people" json:"people" xml:"people"`
+	// When the latest of those refusals happened.
+	LastRefusedAt string `form:"last_refused_at" json:"last_refused_at" xml:"last_refused_at"`
 }
 
 // OktaResourceConnectionConfirmationRequestBody is used to define fields on
@@ -947,6 +970,16 @@ func NewResetResponseBody(res *oktaresourceconnections.OktaResourceConnectionSer
 		OktaApplicationID:         res.OktaApplicationID,
 		OktaApplicationLabel:      res.OktaApplicationLabel,
 		ConfirmedAt:               res.ConfirmedAt,
+	}
+	if res.RecentRefusals != nil {
+		body.RecentRefusals = make([]*OktaResourceConnectionRefusalResponseBody, len(res.RecentRefusals))
+		for i, val := range res.RecentRefusals {
+			if val == nil {
+				body.RecentRefusals[i] = nil
+				continue
+			}
+			body.RecentRefusals[i] = marshalOktaresourceconnectionsOktaResourceConnectionRefusalToOktaResourceConnectionRefusalResponseBody(val)
+		}
 	}
 	if res.Scopes != nil {
 		body.Scopes = make([]string, len(res.Scopes))

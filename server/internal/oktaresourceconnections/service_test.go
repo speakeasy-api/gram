@@ -2,6 +2,7 @@ package oktaresourceconnections_test
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"slices"
 	"strings"
@@ -26,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections/provisiontest"
 	idprepo "github.com/speakeasy-api/gram/server/internal/identityproviderconnections/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	oktaapprepo "github.com/speakeasy-api/gram/server/internal/oktaapplications/repo"
 	"github.com/speakeasy-api/gram/server/internal/oktaresourceconnections"
 	"github.com/speakeasy-api/gram/server/internal/oktaresourceconnections/repo"
@@ -87,6 +89,52 @@ func TestList_DerivesStatesAndValues(t *testing.T) {
 	require.Equal(t, "needs_connection", row.State)
 	require.Equal(t, "https://tenant-admin.okta.com/admin/workload-principals/ai-agents/wlp1/resource-connections/create", conv.PtrValOr(row.DeepLink, ""))
 	require.Equal(t, "https://tenant-admin.okta.com/admin/workload-principals/ai-agents/wlp1/resource-connections/create", conv.PtrValOr(res.DeepLink, ""))
+}
+
+// Refusals sit next to the state without changing it, and a failed read leaves them out.
+func TestList_ReportsRecentRefusals(t *testing.T) {
+	t.Parallel()
+	ctx, si := newTestService(t)
+	recordAgent(t, ctx, si, "wlp1")
+	refused := capableServer(t, ctx, si, "Refused")
+	quiet := capableServer(t, ctx, si, "Quiet")
+	at := time.Date(2026, 11, 20, 9, 30, 0, 0, time.UTC)
+	var asked []string
+	si.refusals = func(ctx context.Context, filter mcpconnectionattempts.RefusalFilter) ([]mcpconnectionattempts.Refusals, error) {
+		require.Equal(t, si.orgID, filter.OrganizationID)
+		require.WithinDuration(t, time.Now().Add(-24*time.Hour), filter.Since, time.Minute, "the window is the verified hold")
+		deadline, ok := ctx.Deadline()
+		require.True(t, ok, "the read has its own short deadline")
+		require.WithinDuration(t, time.Now().Add(3*time.Second), deadline, 2*time.Second)
+		require.NotEmpty(t, filter.ProjectIDs)
+		asked = filter.ServerIDs
+		return []mcpconnectionattempts.Refusals{
+			{ServerID: refused.serverID.String(), RefusedBy: mcpconnectionattempts.RefusedByIdentityProvider, People: 2, LastRefusedAt: at},
+			{ServerID: refused.serverID.String(), RefusedBy: mcpconnectionattempts.RefusedByService, People: 1, LastRefusedAt: at.Add(-time.Hour)},
+			{ServerID: uuid.NewString(), RefusedBy: mcpconnectionattempts.RefusedByService, People: 5, LastRefusedAt: at},
+		}, nil
+	}
+
+	res := list(t, ctx, si, true)
+	require.ElementsMatch(t, []string{refused.serverID.String(), quiet.serverID.String()}, asked, "only the listed servers are read")
+	row := rowFor(t, res, refused.serverID)
+	require.Equal(t, "needs_connection", row.State, "refusals do not change the state")
+	require.Equal(t, []*gen.OktaResourceConnectionRefusal{
+		{RefusedBy: "identity_provider", People: 2, LastRefusedAt: "2026-11-20T09:30:00Z"},
+		{RefusedBy: "service", People: 1, LastRefusedAt: "2026-11-20T08:30:00Z"},
+	}, row.RecentRefusals)
+	require.Empty(t, rowFor(t, res, quiet.serverID).RecentRefusals)
+
+	si.refusals = func(context.Context, mcpconnectionattempts.RefusalFilter) ([]mcpconnectionattempts.Refusals, error) {
+		return nil, errors.New("clickhouse down")
+	}
+	res = list(t, ctx, si, true)
+	require.Empty(t, rowFor(t, res, refused.serverID).RecentRefusals)
+
+	si.refusals = func(context.Context, mcpconnectionattempts.RefusalFilter) ([]mcpconnectionattempts.Refusals, error) {
+		return nil, mcpconnectionattempts.ErrLogsOff
+	}
+	require.Empty(t, rowFor(t, list(t, ctx, si, true), refused.serverID).RecentRefusals)
 }
 
 func TestList_ClientBindingStates(t *testing.T) {

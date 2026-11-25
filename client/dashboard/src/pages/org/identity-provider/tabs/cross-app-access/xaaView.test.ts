@@ -15,6 +15,7 @@ import {
   notApplicableReasonLabel,
   notApplicableReasonSummary,
   observedNote,
+  refusalNotes,
   XAA_CONFIRM_BATCH,
   xaaStateLabel,
   xaaStateVariant,
@@ -225,4 +226,33 @@ it("parses future not-applicable reasons before rendering the list", () => {
     "future_reason",
   );
   expect(NotApplicableReason$inboundSchema.safeParse(42).success).toBe(false);
+});
+
+describe("refusalNotes", () => {
+  it("says who refused how many people, when, and what to fix", () => {
+    const lastRefusedAt = new Date(Date.now() - 3 * 60 * 60 * 1000);
+    expect(
+      refusalNotes([
+        { refusedBy: "identity_provider", people: 2, lastRefusedAt },
+        { refusedBy: "service", people: 1, lastRefusedAt },
+      ]).map((note) => note.summary),
+    ).toEqual([
+      "Your identity provider refused 2 people in the last day, most recently 3h ago. Check they are assigned to the app there.",
+      "The service refused 1 person in the last day, most recently 3h ago. Check the service accepts sign-ins from your identity provider and that its client is set up.",
+    ]);
+  });
+
+  it("points at Connection Logs for who was refused, through a gateway too", () => {
+    const [note] = refusalNotes([
+      { refusedBy: "service", people: 1, lastRefusedAt: new Date() },
+    ]);
+    expect(note?.tooltip).toContain(
+      "The status shows the setup, not each person's sign-in. To see who was refused, open Connection Logs for this server, or for the gateway they used to reach it.",
+    );
+  });
+
+  it("is empty without refusals", () => {
+    expect(refusalNotes(undefined)).toEqual([]);
+    expect(refusalNotes([])).toEqual([]);
+  });
 });

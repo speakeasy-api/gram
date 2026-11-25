@@ -837,9 +837,36 @@ func unmarshalOktaResourceConnectionServerResponseBodyToOktaresourceconnectionsO
 		OktaApplicationLabel:      v.OktaApplicationLabel,
 		ConfirmedAt:               v.ConfirmedAt,
 	}
+	if v.RecentRefusals != nil {
+		res.RecentRefusals = make([]*oktaresourceconnections.OktaResourceConnectionRefusal, len(v.RecentRefusals))
+		for i, val := range v.RecentRefusals {
+			if val == nil {
+				res.RecentRefusals[i] = nil
+				continue
+			}
+			res.RecentRefusals[i] = unmarshalOktaResourceConnectionRefusalResponseBodyToOktaresourceconnectionsOktaResourceConnectionRefusal(val)
+		}
+	}
 	res.Scopes = make([]string, len(v.Scopes))
 	for i, val := range v.Scopes {
 		res.Scopes[i] = val
+	}
+
+	return res
+}
+
+// unmarshalOktaResourceConnectionRefusalResponseBodyToOktaresourceconnectionsOktaResourceConnectionRefusal
+// builds a value of type
+// *oktaresourceconnections.OktaResourceConnectionRefusal from a value of type
+// *OktaResourceConnectionRefusalResponseBody.
+func unmarshalOktaResourceConnectionRefusalResponseBodyToOktaresourceconnectionsOktaResourceConnectionRefusal(v *OktaResourceConnectionRefusalResponseBody) *oktaresourceconnections.OktaResourceConnectionRefusal {
+	if v == nil {
+		return nil
+	}
+	res := &oktaresourceconnections.OktaResourceConnectionRefusal{
+		RefusedBy:     *v.RefusedBy,
+		People:        *v.People,
+		LastRefusedAt: *v.LastRefusedAt,
 	}
 
 	return res

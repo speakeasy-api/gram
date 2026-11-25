@@ -95,6 +95,10 @@ type ResetResponseBody struct {
 	ObservedResult *string `form:"observed_result,omitempty" json:"observed_result,omitempty" xml:"observed_result,omitempty"`
 	// When the exchange behind observed_result started.
 	ObservedAt *string `form:"observed_at,omitempty" json:"observed_at,omitempty" xml:"observed_at,omitempty"`
+	// People refused Cross App Access sign-in to this server in the last 24 hours,
+	// by who refused. Omitted when there are none, or when Connection Logs are off
+	// or could not be read.
+	RecentRefusals []*OktaResourceConnectionRefusalResponseBody `form:"recent_refusals,omitempty" json:"recent_refusals,omitempty" xml:"recent_refusals,omitempty"`
 	// Whether the administrator still has a step to do for this server.
 	Pending *bool `form:"pending,omitempty" json:"pending,omitempty" xml:"pending,omitempty"`
 	// The upstream authorization server ID. Together with the resource indicator,
@@ -826,6 +830,10 @@ type OktaResourceConnectionServerResponseBody struct {
 	ObservedResult *string `form:"observed_result,omitempty" json:"observed_result,omitempty" xml:"observed_result,omitempty"`
 	// When the exchange behind observed_result started.
 	ObservedAt *string `form:"observed_at,omitempty" json:"observed_at,omitempty" xml:"observed_at,omitempty"`
+	// People refused Cross App Access sign-in to this server in the last 24 hours,
+	// by who refused. Omitted when there are none, or when Connection Logs are off
+	// or could not be read.
+	RecentRefusals []*OktaResourceConnectionRefusalResponseBody `form:"recent_refusals,omitempty" json:"recent_refusals,omitempty" xml:"recent_refusals,omitempty"`
 	// Whether the administrator still has a step to do for this server.
 	Pending *bool `form:"pending,omitempty" json:"pending,omitempty" xml:"pending,omitempty"`
 	// The upstream authorization server ID. Together with the resource indicator,
@@ -862,6 +870,21 @@ type OktaResourceConnectionServerResponseBody struct {
 	OktaApplicationLabel *string `form:"okta_application_label,omitempty" json:"okta_application_label,omitempty" xml:"okta_application_label,omitempty"`
 	// When the administrator confirmed the connection for this server's upstream.
 	ConfirmedAt *string `form:"confirmed_at,omitempty" json:"confirmed_at,omitempty" xml:"confirmed_at,omitempty"`
+}
+
+// OktaResourceConnectionRefusalResponseBody is used to define fields on
+// response body types.
+type OktaResourceConnectionRefusalResponseBody struct {
+	// identity_provider: the identity provider refused access, the permissions or
+	// the server, for example because the person is not assigned to the app there;
+	// service: the service refused the identity provider's sign-in. Setup problems
+	// and expired sign-ins are not counted.
+	RefusedBy *string `form:"refused_by,omitempty" json:"refused_by,omitempty" xml:"refused_by,omitempty"`
+	// Distinct people refused in the last 24 hours who have not had a request
+	// answered by this server since.
+	People *int `form:"people,omitempty" json:"people,omitempty" xml:"people,omitempty"`
+	// When the latest of those refusals happened.
+	LastRefusedAt *string `form:"last_refused_at,omitempty" json:"last_refused_at,omitempty" xml:"last_refused_at,omitempty"`
 }
 
 // OktaResourceConnectionConfirmationRequestBody is used to define fields on
@@ -1330,6 +1353,16 @@ func NewResetOktaResourceConnectionServerOK(body *ResetResponseBody) *oktaresour
 		OktaApplicationLabel:      body.OktaApplicationLabel,
 		ConfirmedAt:               body.ConfirmedAt,
 	}
+	if body.RecentRefusals != nil {
+		v.RecentRefusals = make([]*oktaresourceconnections.OktaResourceConnectionRefusal, len(body.RecentRefusals))
+		for i, val := range body.RecentRefusals {
+			if val == nil {
+				v.RecentRefusals[i] = nil
+				continue
+			}
+			v.RecentRefusals[i] = unmarshalOktaResourceConnectionRefusalResponseBodyToOktaresourceconnectionsOktaResourceConnectionRefusal(val)
+		}
+	}
 	v.Scopes = make([]string, len(body.Scopes))
 	for i, val := range body.Scopes {
 		v.Scopes[i] = val
@@ -1624,6 +1657,13 @@ func ValidateResetResponseBody(body *ResetResponseBody) (err error) {
 	}
 	if body.ObservedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.observed_at", *body.ObservedAt, goa.FormatDateTime))
+	}
+	for _, e := range body.RecentRefusals {
+		if e != nil {
+			if err2 := ValidateOktaResourceConnectionRefusalResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	if body.IssuerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.issuer_id", *body.IssuerID, goa.FormatUUID))
@@ -2565,6 +2605,13 @@ func ValidateOktaResourceConnectionServerResponseBody(body *OktaResourceConnecti
 	if body.ObservedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.observed_at", *body.ObservedAt, goa.FormatDateTime))
 	}
+	for _, e := range body.RecentRefusals {
+		if e != nil {
+			if err2 := ValidateOktaResourceConnectionRefusalResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	if body.IssuerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.issuer_id", *body.IssuerID, goa.FormatUUID))
 	}
@@ -2575,6 +2622,29 @@ func ValidateOktaResourceConnectionServerResponseBody(body *OktaResourceConnecti
 	}
 	if body.ConfirmedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.confirmed_at", *body.ConfirmedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateOktaResourceConnectionRefusalResponseBody runs the validations
+// defined on OktaResourceConnectionRefusalResponseBody
+func ValidateOktaResourceConnectionRefusalResponseBody(body *OktaResourceConnectionRefusalResponseBody) (err error) {
+	if body.RefusedBy == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("refused_by", "body"))
+	}
+	if body.People == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("people", "body"))
+	}
+	if body.LastRefusedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("last_refused_at", "body"))
+	}
+	if body.RefusedBy != nil {
+		if !(*body.RefusedBy == "identity_provider" || *body.RefusedBy == "service") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.refused_by", *body.RefusedBy, []any{"identity_provider", "service"}))
+		}
+	}
+	if body.LastRefusedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_refused_at", *body.LastRefusedAt, goa.FormatDateTime))
 	}
 	return
 }
