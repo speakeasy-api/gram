@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"io"
 	"log/slog"
 	"net/url"
@@ -19,7 +20,6 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/classifier/classifiertest"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/sigint/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
@@ -27,13 +27,13 @@ import (
 
 type windowMessages struct {
 	storedMessages
-	history []repo.LoadEvaluationHistoryRow
+	history []transcriptstore.LoadEvaluationHistoryRow
 	calls   int
 	limits  []int
 	err     error
 }
 
-func (s *windowMessages) LoadHistory(_ context.Context, _ string, _ uuid.UUID, _ repo.LoadEvaluationMessagesRow, limit, _ int) ([]repo.LoadEvaluationHistoryRow, error) {
+func (s *windowMessages) LoadHistory(_ context.Context, _ string, _ uuid.UUID, _ transcriptstore.LoadEvaluationMessagesRow, limit, _ int) ([]transcriptstore.LoadEvaluationHistoryRow, error) {
 	s.calls++
 	s.limits = append(s.limits, limit)
 	return s.history[:min(limit, len(s.history))], s.err
@@ -44,7 +44,7 @@ func TestWindowReusesHistoryAndResolvedAttachments(t *testing.T) {
 	m := message()
 	target := storedMessage(m)
 	target.Content = "Yes, that one."
-	var history []repo.LoadEvaluationHistoryRow
+	var history []transcriptstore.LoadEvaluationHistoryRow
 	for _, role := range []string{"assistant", "tool", "user"} {
 		row := targetContent(storedMessage(m))
 		row.ID = uuid.New()
@@ -92,7 +92,7 @@ func TestWindowGroupsSensorsAndKeepsReadingIdentityOnRedelivery(t *testing.T) {
 	prior := targetContent(target)
 	prior.ID = uuid.New()
 	prior.Content = "First context"
-	source := &windowMessages{storedMessages: storedMessages{target.ID: target}, history: []repo.LoadEvaluationHistoryRow{prior}}
+	source := &windowMessages{storedMessages: storedMessages{target.ID: target}, history: []transcriptstore.LoadEvaluationHistoryRow{prior}}
 	h.messages = source
 	require.NoError(t, h.Handle(t.Context(), m, gcp.MessageMetadata{}))
 	require.Equal(t, 1, source.calls)
@@ -136,7 +136,7 @@ func TestWindowOlderInvalidContentDoesNotPreventSmallerReading(t *testing.T) {
 	target := storedMessage(m)
 	prior, invalid := targetContent(storedMessage(message())), targetContent(storedMessage(message()))
 	invalid.ContentRaw = []byte("invalid JSON")
-	h.messages = &windowMessages{storedMessages: storedMessages{target.ID: target}, history: []repo.LoadEvaluationHistoryRow{prior, invalid}}
+	h.messages = &windowMessages{storedMessages: storedMessages{target.ID: target}, history: []transcriptstore.LoadEvaluationHistoryRow{prior, invalid}}
 	require.NoError(t, h.Handle(t.Context(), m, gcp.MessageMetadata{}))
 	require.Len(t, pub.readings, 1)
 	require.Equal(t, "other", pub.readings[0].GetSensorId())
@@ -183,11 +183,11 @@ func TestWindowBudgetFallbackAndObservability(t *testing.T) {
 			target.Content = "Yes, that one."
 			prior := targetContent(storedMessage(message()))
 			prior.Content, prior.Role = "Most recent context", "assistant"
-			history := []repo.LoadEvaluationHistoryRow{prior}
+			history := []transcriptstore.LoadEvaluationHistoryRow{prior}
 			blobs := &countingBlobs{reader: memoryBlobs{}}
 			switch name {
 			case "overflow marker":
-				history = append(history, repo.LoadEvaluationHistoryRow{ID: uuid.New(), ContentTooLarge: true})
+				history = append(history, transcriptstore.LoadEvaluationHistoryRow{ID: uuid.New(), ContentTooLarge: true})
 			case "oversized attachment":
 				uri := "gs://test-bucket/" + m.GetProjectId() + "/oversized"
 				oversized := targetContent(storedMessage(message()))
@@ -300,7 +300,7 @@ func TestWindowAggregateContentLimit(t *testing.T) {
 			target.Content = strings.Repeat("x", tc.targetSize)
 			prior := targetContent(storedMessage(message()))
 			prior.Content = strings.Repeat("x", tc.priorSize)
-			in := &conversationInput{message: m, stored: target, history: &windowMessages{history: []repo.LoadEvaluationHistoryRow{prior}}}
+			in := &conversationInput{message: m, stored: target, history: &windowMessages{history: []transcriptstore.LoadEvaluationHistoryRow{prior}}}
 			resolved, err := in.NewBuffer(2).Resolve(t.Context(), 2)
 			require.NoError(t, err)
 			require.True(t, resolved.Truncated)

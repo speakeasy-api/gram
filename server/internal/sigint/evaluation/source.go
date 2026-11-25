@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -50,10 +51,22 @@ type Source interface {
 }
 
 // Repository loads configuration from the primary database.
-type Repository struct{ db *pgxpool.Pool }
+type Repository struct {
+	db *pgxpool.Pool
+	// transcripts reads message bodies, opening encrypted shadows for the
+	// projects that keep them. Nil reads plaintext.
+	transcripts *transcriptstore.Transcripts
+}
 
 // NewRepository constructs a configuration source.
-func NewRepository(db *pgxpool.Pool) *Repository { return &Repository{db: db} }
+func NewRepository(db *pgxpool.Pool) *Repository { return &Repository{db: db, transcripts: nil} }
+
+// WithTranscripts makes message and history loads open bodies through
+// transcripts.
+func (r *Repository) WithTranscripts(transcripts *transcriptstore.Transcripts) *Repository {
+	r.transcripts = transcripts
+	return r
+}
 
 // Load pins ownership to the organization and project in the same SQL statement.
 // Disabled sensors are excluded before matching or inference. Empty enabled

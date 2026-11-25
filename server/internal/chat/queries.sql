@@ -1168,6 +1168,9 @@ WHERE project_id = @project_id
   AND id = ANY(@ids::uuid[]);
 
 -- name: ListChatMessages :many
+-- Tests and fixtures only. Production code reads message bodies through
+-- transcriptstore.Transcripts, which opens encrypted shadows; the
+-- no-plaintext-transcript-read lint rule rejects any production call.
 -- Transcript order is (created_at, seq): created_at carries the event's
 -- original occurred_at for hook-captured messages (spool replays arrive out
 -- of insert order), and seq breaks ties stably for same-timestamp rows.

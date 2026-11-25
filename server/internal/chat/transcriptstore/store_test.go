@@ -553,12 +553,16 @@ func TestSourceFingerprintExpressionsAgree(t *testing.T) {
 	t.Parallel()
 	expression := regexp.MustCompile(`sha256\(convert_to\(jsonb_build_array\([^\n]*?\)::text,'UTF8'\)\)`)
 	var canonical string
-	for path, count := range map[string]int{"queries.sql": 6, "fixtures/queries.sql": 1} {
+	// Readers in internal/plainrepo hash other table aliases; the expression
+	// must match once the alias is set aside.
+	alias := regexp.MustCompile(`\b[a-z_]+\.(content_raw|content|tool_calls|tool_outcome_notes|tool_call_summaries|storage_error)\b`)
+	for path, count := range map[string]int{"queries.sql": 6, "fixtures/queries.sql": 1, "internal/plainrepo/queries.sql": 22} {
 		source, err := os.ReadFile(path)
 		require.NoError(t, err)
 		matches := expression.FindAllString(string(source), -1)
 		require.Len(t, matches, count, path)
 		for _, match := range matches {
+			match = alias.ReplaceAllString(match, "m.$1")
 			if canonical == "" {
 				canonical = match
 			}

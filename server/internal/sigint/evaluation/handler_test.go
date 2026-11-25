@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"strings"
 	"testing"
 	"time"
@@ -22,7 +23,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/classifier/classifiertest"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
-	"github.com/speakeasy-api/gram/server/internal/sigint/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -80,10 +80,10 @@ func message() *conversationv1.MessageEvent {
 	return m
 }
 
-type storedMessages map[uuid.UUID]repo.LoadEvaluationMessagesRow
+type storedMessages map[uuid.UUID]transcriptstore.LoadEvaluationMessagesRow
 
-func (s storedMessages) LoadMessages(_ context.Context, _ string, project uuid.UUID, ids []uuid.UUID) ([]repo.LoadEvaluationMessagesRow, error) {
-	var rows []repo.LoadEvaluationMessagesRow
+func (s storedMessages) LoadMessages(_ context.Context, _ string, project uuid.UUID, ids []uuid.UUID) ([]transcriptstore.LoadEvaluationMessagesRow, error) {
+	var rows []transcriptstore.LoadEvaluationMessagesRow
 	for _, id := range ids {
 		if row, ok := s[id]; ok && row.ProjectID.UUID == project {
 			rows = append(rows, row)
@@ -92,8 +92,8 @@ func (s storedMessages) LoadMessages(_ context.Context, _ string, project uuid.U
 	return rows, nil
 }
 
-func storedMessage(m *conversationv1.MessageEvent) repo.LoadEvaluationMessagesRow {
-	var row repo.LoadEvaluationMessagesRow
+func storedMessage(m *conversationv1.MessageEvent) transcriptstore.LoadEvaluationMessagesRow {
+	var row transcriptstore.LoadEvaluationMessagesRow
 	row.ID = uuid.MustParse(m.GetMessageId())
 	row.ChatID = uuid.MustParse(m.GetConversationId())
 	row.ProjectID = uuid.NullUUID{UUID: uuid.MustParse(m.GetProjectId()), Valid: true}

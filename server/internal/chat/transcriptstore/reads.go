@@ -311,3 +311,13 @@ func (t *Transcripts) Pages(db DBTX) TranscriptPages {
 func (p TranscriptPages) ListChatTranscriptMessagesPage(ctx context.Context, page TranscriptPage) ([]ListChatTranscriptMessagesPageRow, error) {
 	return p.transcripts.ListChatTranscriptMessagesPage(ctx, p.db, page)
 }
+
+// FindAssistantToolCallMessageID returns the newest assistant message of a
+// chat that issued the tool call, or pgx.ErrNoRows (wrapped).
+func (t *Transcripts) FindAssistantToolCallMessageID(ctx context.Context, db DBTX, projectID, chatID uuid.UUID, toolCallID string) (uuid.UUID, error) {
+	id, err := plainrepo.New(db).FindAssistantToolCallMessageID(ctx, plainrepo.FindAssistantToolCallMessageIDParams{ProjectID: uuid.NullUUID{UUID: projectID, Valid: true}, ChatID: chatID, ToolCallID: toolCallID})
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("find assistant tool call message: %w", err)
+	}
+	return id, nil
+}

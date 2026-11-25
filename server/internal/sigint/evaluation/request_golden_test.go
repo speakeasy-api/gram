@@ -1,6 +1,7 @@
 package evaluation
 
 import (
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"testing"
 
 	"github.com/google/uuid"
@@ -10,7 +11,6 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/classifier"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/sigint/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -56,7 +56,7 @@ func assertConversationModelRequest(t *testing.T, strategy string) {
 	// HistorySource supplies non-system history newest first. The oldest row is
 	// deliberately outside the five-message window. Other context roles need not
 	// match the target's sensor predicate.
-	var history []repo.LoadEvaluationHistoryRow
+	var history []transcriptstore.LoadEvaluationHistoryRow
 	for _, item := range []struct{ role, content string }{
 		{"tool", "Payment declined: retry required."},
 		{"assistant", "Checking the invoice."},

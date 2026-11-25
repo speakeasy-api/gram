@@ -2063,6 +2063,7 @@ func newStartCommand() *cli.Command {
 				return err
 			}
 			platformMCPCfg := platformMCPConfig{
+				Transcripts:               transcripts,
 				AICatalog:                 aiCatalog,
 				CustomDomainTargetSuffix:  customDomainTargetSuffix,
 				DeploymentRedeploy:        deploymentsService,

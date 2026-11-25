@@ -3,6 +3,7 @@ package platformmcp
 import (
 	"context"
 	"encoding/json"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"strings"
 	"testing"
 	"time"
@@ -12,7 +13,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
-	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/risk/maskdisplay"
 )
@@ -309,8 +309,8 @@ func TestSessionRecallToolsRequirePrincipal(t *testing.T) {
 	}
 }
 
-func recallMessageRow(id uuid.UUID, role, content string) platformrepo.ListOwnedChatTranscriptMessagesForRecallRow {
-	return platformrepo.ListOwnedChatTranscriptMessagesForRecallRow{
+func recallMessageRow(id uuid.UUID, role, content string) transcriptstore.ListOwnedChatTranscriptMessagesForRecallRow {
+	return transcriptstore.ListOwnedChatTranscriptMessagesForRecallRow{
 		ID:             id,
 		Role:           role,
 		Content:        content,
@@ -343,7 +343,7 @@ func TestTurnsFromRowsAdaptsTranscript(t *testing.T) {
 	unanalyzedRow := recallMessageRow(unanalyzedID, "user", "also check signup")
 	unanalyzedRow.RiskAnalyzedAt = pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
 
-	extract := turnsFromRows([]platformrepo.ListOwnedChatTranscriptMessagesForRecallRow{
+	extract := turnsFromRows([]transcriptstore.ListOwnedChatTranscriptMessagesForRecallRow{
 		userRow, assistantRow, toolRow, systemRow, offloadedRow, unanalyzedRow,
 	}, nil)
 
@@ -395,7 +395,7 @@ func TestTurnsFromRowsUnwrapsStringEncodedToolCalls(t *testing.T) {
 	row := recallMessageRow(uuid.New(), "assistant", "Working on it.")
 	row.ToolCalls = wrapped
 
-	extract := turnsFromRows([]platformrepo.ListOwnedChatTranscriptMessagesForRecallRow{row}, nil)
+	extract := turnsFromRows([]transcriptstore.ListOwnedChatTranscriptMessagesForRecallRow{row}, nil)
 
 	require.Equal(t, 0, extract.undecodedToolCalls)
 	require.Len(t, extract.turns, 2)
@@ -428,7 +428,7 @@ func TestTurnsFromRowsCountsUndecodableToolCalls(t *testing.T) {
 			row := recallMessageRow(uuid.New(), "assistant", "Working on it.")
 			row.ToolCalls = tc.payload
 
-			extract := turnsFromRows([]platformrepo.ListOwnedChatTranscriptMessagesForRecallRow{row}, nil)
+			extract := turnsFromRows([]transcriptstore.ListOwnedChatTranscriptMessagesForRecallRow{row}, nil)
 
 			require.Equal(t, tc.wantUndecoded, extract.undecodedToolCalls)
 			require.Len(t, extract.turns, 1, "only the prose turn survives")
@@ -449,7 +449,7 @@ func TestTurnsFromRowsKeepsValidCallsAmongMalformed(t *testing.T) {
 		42
 	]`)
 
-	extract := turnsFromRows([]platformrepo.ListOwnedChatTranscriptMessagesForRecallRow{row}, nil)
+	extract := turnsFromRows([]transcriptstore.ListOwnedChatTranscriptMessagesForRecallRow{row}, nil)
 
 	require.Equal(t, 1, extract.undecodedToolCalls)
 	require.Len(t, extract.turns, 2)
@@ -463,7 +463,7 @@ func TestTurnsFromRowsSubstitutesMaskedContent(t *testing.T) {
 	row := recallMessageRow(messageID, "user", "raw secret content")
 
 	extract := turnsFromRows(
-		[]platformrepo.ListOwnedChatTranscriptMessagesForRecallRow{row},
+		[]transcriptstore.ListOwnedChatTranscriptMessagesForRecallRow{row},
 		map[uuid.UUID]string{messageID: "masked content"},
 	)
 
@@ -493,7 +493,7 @@ func TestMaskFindingSpansWithholdsOnStaleOffsets(t *testing.T) {
 	content := "aaaaDRIFTYbbbb SECRET moved here"
 
 	masks := maskFindingSpans(
-		[]platformrepo.ListOwnedChatTranscriptMessagesForRecallRow{recallMessageRow(messageID, "user", content)},
+		[]transcriptstore.ListOwnedChatTranscriptMessagesForRecallRow{recallMessageRow(messageID, "user", content)},
 		[]chrepo.RiskFindingUnmaskRow{recallFinding(messageID, "content", "SECRET", 4)},
 	)
 
@@ -509,7 +509,7 @@ func TestMaskFindingSpansDerivesMissingSurface(t *testing.T) {
 	content := "aaaaSECRETbbbb"
 
 	masks := maskFindingSpans(
-		[]platformrepo.ListOwnedChatTranscriptMessagesForRecallRow{recallMessageRow(messageID, "user", content)},
+		[]transcriptstore.ListOwnedChatTranscriptMessagesForRecallRow{recallMessageRow(messageID, "user", content)},
 		[]chrepo.RiskFindingUnmaskRow{recallFinding(messageID, "", "SECRET", 4)},
 	)
 
@@ -524,7 +524,7 @@ func TestMaskFindingSpansReplacesEverySpan(t *testing.T) {
 	content := "token AKIAIOSFODNN7EXAMPLE and key HUSH42 end"
 
 	masks := maskFindingSpans(
-		[]platformrepo.ListOwnedChatTranscriptMessagesForRecallRow{recallMessageRow(messageID, "user", content)},
+		[]transcriptstore.ListOwnedChatTranscriptMessagesForRecallRow{recallMessageRow(messageID, "user", content)},
 		[]chrepo.RiskFindingUnmaskRow{
 			recallFinding(messageID, "content", "AKIAIOSFODNN7EXAMPLE", strings.Index(content, "AKIA")),
 			recallFinding(messageID, "content", "HUSH42", strings.Index(content, "HUSH42")),
@@ -547,7 +547,7 @@ func TestMaskFindingSpansWithholdsOnOverlap(t *testing.T) {
 	content := "aaaaSECRETbbbb"
 
 	masks := maskFindingSpans(
-		[]platformrepo.ListOwnedChatTranscriptMessagesForRecallRow{recallMessageRow(messageID, "user", content)},
+		[]transcriptstore.ListOwnedChatTranscriptMessagesForRecallRow{recallMessageRow(messageID, "user", content)},
 		[]chrepo.RiskFindingUnmaskRow{
 			recallFinding(messageID, "content", "SECRET", 4),
 			recallFinding(messageID, "content", "SECRETbb", 4),
@@ -567,7 +567,7 @@ func TestMaskFindingSpansCollapsesIdenticalDuplicateSpans(t *testing.T) {
 	finding := recallFinding(messageID, "content", "SECRET", 4)
 
 	masks := maskFindingSpans(
-		[]platformrepo.ListOwnedChatTranscriptMessagesForRecallRow{recallMessageRow(messageID, "user", content)},
+		[]transcriptstore.ListOwnedChatTranscriptMessagesForRecallRow{recallMessageRow(messageID, "user", content)},
 		[]chrepo.RiskFindingUnmaskRow{finding, finding},
 	)
 
@@ -585,7 +585,7 @@ func TestMaskFindingSpansKeepsMultibyteContentIntact(t *testing.T) {
 	content := prefix + secret + " — döne"
 
 	masks := maskFindingSpans(
-		[]platformrepo.ListOwnedChatTranscriptMessagesForRecallRow{recallMessageRow(messageID, "user", content)},
+		[]transcriptstore.ListOwnedChatTranscriptMessagesForRecallRow{recallMessageRow(messageID, "user", content)},
 		[]chrepo.RiskFindingUnmaskRow{recallFinding(messageID, "content", secret, strings.Index(content, secret))},
 	)
 
@@ -604,7 +604,7 @@ func TestMaskFindingSpansSkipsToolAndDerivedSurfaces(t *testing.T) {
 
 			messageID := uuid.New()
 			masks := maskFindingSpans(
-				[]platformrepo.ListOwnedChatTranscriptMessagesForRecallRow{recallMessageRow(messageID, "assistant", "prose the finding does not anchor into")},
+				[]transcriptstore.ListOwnedChatTranscriptMessagesForRecallRow{recallMessageRow(messageID, "assistant", "prose the finding does not anchor into")},
 				[]chrepo.RiskFindingUnmaskRow{recallFinding(messageID, surface, "prose", 0)},
 			)
 
@@ -624,7 +624,7 @@ func TestMaskFindingSpansWithholdsOnUnknownSurface(t *testing.T) {
 	content := "aaaaSECRETbbbb"
 
 	masks := maskFindingSpans(
-		[]platformrepo.ListOwnedChatTranscriptMessagesForRecallRow{recallMessageRow(messageID, "user", content)},
+		[]transcriptstore.ListOwnedChatTranscriptMessagesForRecallRow{recallMessageRow(messageID, "user", content)},
 		[]chrepo.RiskFindingUnmaskRow{recallFinding(messageID, "json_path", "SECRET", 4)},
 	)
 

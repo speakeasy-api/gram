@@ -598,3 +598,245 @@ UNION ALL
 LEFT JOIN chat_message_transcripts t ON t.message_id = evidence.id AND t.project_id = evidence.project_id AND @open_shadows::boolean
 LEFT JOIN chat_messages m ON m.id = t.message_id
 ORDER BY evidence.created_at, evidence.seq;
+
+-- name: SearchPlatformChatMessages :many
+-- Literal substring search over captured messages in one project and interval,
+-- newest or oldest first by (created_at, id). Fields over 128 KiB are neither
+-- matched nor returned. The caller requests one extra row to detect more pages.
+SELECT m.id, m.chat_id, m.seq, m.created_at, m.role, m.generation,
+       COALESCE(CASE WHEN octet_length(m.source) <= 512 THEN m.source END, '')::text AS source,
+       COALESCE(CASE WHEN octet_length(m.user_id) <= 512 THEN m.user_id END, '')::text AS user_id,
+       COALESCE(CASE WHEN octet_length(c.title) <= 4096 THEN c.title END, '')::text AS chat_title,
+       c.title_manually_set AS chat_title_manually_set,
+       COALESCE(c.user_id, '')::text AS owner_user_id,
+       CASE WHEN octet_length(m.content) <= 131072 THEN m.content ELSE '' END::text AS content,
+       CASE WHEN octet_length(m.tool_calls::text) <= 131072 THEN m.tool_calls END::jsonb AS tool_calls,
+       CASE WHEN octet_length(m.content_raw::text) <= 131072 THEN m.content_raw END::jsonb AS content_raw,
+       (octet_length(m.content) > 131072 OR COALESCE(octet_length(m.tool_calls::text), 0) > 131072
+        OR COALESCE(octet_length(m.content_raw::text), 0) > 131072)::boolean AS oversized,
+       t.ciphertext AS shadow_ciphertext,
+       COALESCE(t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')), false)::boolean AS shadow_current
+FROM chat_messages m
+JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
+JOIN projects p ON p.id = c.project_id
+LEFT JOIN chat_message_transcripts t ON t.message_id = m.id AND t.project_id = m.project_id AND @open_shadows::boolean
+WHERE m.project_id = @project_id::uuid
+  AND c.organization_id = @organization_id AND p.organization_id = @organization_id
+  AND c.deleted IS FALSE AND p.deleted IS FALSE
+  AND m.created_at >= @from_time AND m.created_at < @to_time
+  AND (cardinality(@chat_ids::uuid[]) = 0 OR m.chat_id = ANY(@chat_ids::uuid[]))
+  -- Own-scope visibility for a member without chat:read, the predicate the chat
+  -- ListChats query applies: their sessions plus agent-only sessions of agents
+  -- they own. Every other filter only narrows it further.
+  AND (@own_user_id::text = '' OR c.user_id = @own_user_id
+       OR (c.user_id IS NULL AND COALESCE(c.external_user_id, '') = '' AND c.agent_id = ANY(@owned_agent_ids::uuid[])))
+  AND (@owner_user_id::text = '' OR c.user_id = @owner_user_id)
+  AND (@source::text = '' OR m.source = @source)
+  AND (@pattern::text = ''
+       OR (octet_length(m.content) <= 131072 AND m.content ILIKE @pattern ESCAPE '\')
+       OR (octet_length(m.tool_calls::text) <= 131072 AND m.tool_calls::text ILIKE @pattern ESCAPE '\')
+       OR (octet_length(m.content_raw::text) <= 131072 AND m.content_raw::text ILIKE @pattern ESCAPE '\')
+       OR c.title ILIKE @pattern ESCAPE '\'
+       -- A stored cron envelope is shown as "Cron: <job name>" (chattitle.Display),
+       -- so a search for the shown title matches it too.
+       OR (NOT c.title_manually_set
+           AND ('Cron: ' || substring(c.title from '^\s*\[cron:[0-9a-fA-F-]{36} ([^\]]+)')) ILIKE @pattern ESCAPE '\'))
+  AND (@participant_id::text = ''
+       OR (@participant_provider::text = '' AND m.user_id = @participant_id)
+       OR EXISTS (
+         SELECT 1 FROM chat_message_participants cp
+         WHERE cp.project_id = m.project_id AND cp.chat_id = m.chat_id AND cp.message_id = m.id
+           AND (cp.user_id = @participant_id OR cp.provider_user_id = @participant_id)
+           AND (@participant_provider = '' OR cp.provider = @participant_provider)))
+  AND (NOT @has_cursor::boolean
+       OR (@oldest_first::boolean AND (m.created_at, m.id) > (@cursor_at::timestamptz, @cursor_id::uuid))
+       OR (NOT @oldest_first AND (m.created_at, m.id) < (@cursor_at, @cursor_id)))
+ORDER BY CASE WHEN @oldest_first THEN m.created_at END ASC,
+         CASE WHEN @oldest_first THEN m.id END ASC,
+         CASE WHEN NOT @oldest_first THEN m.created_at END DESC,
+         CASE WHEN NOT @oldest_first THEN m.id END DESC
+LIMIT @row_limit::integer;
+
+-- name: ReadPlatformChatMessages :many
+-- Capture-sequence window around one message of this chat, or its latest one,
+-- with up to five recorded participants per message.
+WITH anchor AS (
+    SELECT cm.seq FROM chat_messages cm
+    JOIN chats c ON c.id = cm.chat_id AND c.project_id = cm.project_id AND c.deleted IS FALSE
+    JOIN projects p ON p.id = c.project_id AND p.organization_id = c.organization_id AND p.deleted IS FALSE
+    WHERE c.organization_id = @organization_id AND p.organization_id = @organization_id
+      AND (sqlc.narg('message_id')::uuid IS NULL OR cm.id = sqlc.narg('message_id'))
+      AND cm.chat_id = @chat_id AND cm.project_id = @project_id
+    ORDER BY cm.seq DESC LIMIT 1
+), preceding AS (
+    SELECT cm.* FROM chat_messages cm, anchor a
+     WHERE cm.chat_id = @chat_id AND cm.project_id = @project_id AND cm.seq < a.seq
+     ORDER BY cm.seq DESC LIMIT @context_size::integer
+), following AS (
+    SELECT cm.* FROM chat_messages cm, anchor a
+     WHERE cm.chat_id = @chat_id AND cm.project_id = @project_id AND cm.seq >= a.seq
+     ORDER BY cm.seq ASC LIMIT @following_limit::integer
+), neighbors AS (SELECT * FROM preceding UNION ALL SELECT * FROM following)
+SELECT n.id, n.chat_id, n.seq, n.created_at, n.role, n.generation,
+       COALESCE(CASE WHEN octet_length(n.source) <= 512 THEN n.source END, '')::text AS source,
+       COALESCE(CASE WHEN octet_length(n.user_id) <= 512 THEN n.user_id END, '')::text AS user_id,
+       CASE WHEN octet_length(n.content) <= 131072 THEN n.content ELSE '' END::text AS content,
+       CASE WHEN octet_length(n.tool_calls::text) <= 131072 THEN n.tool_calls END::jsonb AS tool_calls,
+       CASE WHEN octet_length(n.content_raw::text) <= 131072 THEN n.content_raw END::jsonb AS content_raw,
+       (octet_length(n.content) > 131072 OR COALESCE(octet_length(n.tool_calls::text), 0) > 131072
+        OR COALESCE(octet_length(n.content_raw::text), 0) > 131072)::boolean AS oversized,
+       COALESCE((
+         SELECT jsonb_agg(jsonb_build_object(
+                  'provider', CASE WHEN octet_length(cp.provider) <= 512 THEN cp.provider END, 'provider_user_id', CASE WHEN octet_length(cp.provider_user_id) <= 512 THEN cp.provider_user_id END,
+                  'user_id', COALESCE(CASE WHEN octet_length(cp.user_id) <= 512 THEN cp.user_id END, ''), 'display_name', COALESCE(CASE WHEN octet_length(cp.display_name) <= 1024 THEN cp.display_name END, '')))
+         FROM (SELECT * FROM chat_message_participants cp
+               WHERE cp.project_id = @project_id AND cp.chat_id = n.chat_id AND cp.message_id = n.id
+               ORDER BY cp.provider, cp.provider_user_id, cp.id LIMIT 5) cp
+       ), '[]')::jsonb AS participants,
+       t.ciphertext AS shadow_ciphertext,
+       COALESCE(t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,n.content,n.content_raw IS NULL,n.content_raw,n.tool_calls IS NULL,n.tool_calls,n.tool_outcome_notes,n.tool_call_summaries IS NULL,n.tool_call_summaries,n.storage_error)::text,'UTF8')), false)::boolean AS shadow_current
+FROM neighbors n
+LEFT JOIN chat_message_transcripts t ON t.message_id = n.id AND t.project_id = n.project_id AND @open_shadows::boolean
+ORDER BY n.seq;
+
+-- name: ListOwnedChatTranscriptMessagesForRecall :many
+-- Latest generation only: compaction/edit rewrites bump chat_messages.generation
+-- and the digest must reflect the current conversation view, not superseded
+-- rows. chat_messages.project_id is NULL on old rows — always filtered, so
+-- pre-project-stamp rows fail closed rather than leaking across tenants.
+-- Newest rows first under @row_limit so the cap keeps the end of a long
+-- session — the part a handoff digest is about — and the service restores
+-- chronological order. Content is never truncated here: finding-span
+-- verification compares exact bytes, so per-message bounding happens after
+-- masking, not at the read.
+SELECT cm.id, cm.seq, cm.created_at, cm.role, cm.content, cm.content_asset_url, cm.tool_calls, cm.tool_call_id, cm.tool_urn, cm.source, cm.risk_analyzed_at,
+       t.ciphertext AS shadow_ciphertext,
+       COALESCE(t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,cm.content,cm.content_raw IS NULL,cm.content_raw,cm.tool_calls IS NULL,cm.tool_calls,cm.tool_outcome_notes,cm.tool_call_summaries IS NULL,cm.tool_call_summaries,cm.storage_error)::text,'UTF8')), false)::boolean AS shadow_current
+FROM chat_messages cm
+JOIN chats c ON c.id = cm.chat_id
+LEFT JOIN chat_message_transcripts t ON t.message_id = cm.id AND t.project_id = cm.project_id AND @open_shadows::boolean
+LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+WHERE cm.chat_id = @chat_id
+  AND cm.project_id = @project_id
+  AND c.organization_id = @organization_id
+  AND c.user_id = @user_id::text
+  AND c.deleted IS FALSE
+  AND (ua.id IS NULL OR ua.account_type <> 'personal')
+  AND cm.generation = (
+    SELECT COALESCE(MAX(generation), 0)
+    FROM chat_messages
+    WHERE chat_id = @chat_id
+      AND project_id = @project_id
+  )
+ORDER BY cm.created_at DESC, cm.seq DESC
+LIMIT @row_limit;
+
+-- name: LoadEvaluationMessages :many
+-- One tenant-pinned read resolves the batch and its current attachment locators.
+-- System messages are excluded for every input strategy.
+SELECT m.id, m.chat_id, m.project_id, m.seq, m.generation, m.created_at,
+       m.role, m.content, m.content_raw, m.content_asset_url, m.tool_calls,
+       m.user_id, m.external_user_id, c.user_account_id,
+       COALESCE(m.origin = 'anthropic-inference' AND (
+         m.external_message_id LIKE '%/block:%' OR EXISTS (
+           SELECT 1 FROM chat_messages sibling
+           WHERE sibling.project_id = m.project_id AND sibling.chat_id = m.chat_id
+             AND sibling.role <> 'system'
+             AND sibling.external_message_id = m.external_message_id || '/block:0'
+         )
+       ), false)::boolean AS row_local_content,
+       ARRAY(SELECT cp.content_asset_url FROM chat_content_parts cp
+             WHERE cp.project_id = m.project_id AND cp.chat_id = m.chat_id
+               AND cp.parent_chat_message_id = m.id AND cp.deleted IS FALSE
+             ORDER BY cp.created_at, cp.id)::text[] AS attachment_uris,
+       t.ciphertext AS shadow_ciphertext,
+       COALESCE(t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')), false)::boolean AS shadow_current
+FROM chat_messages m
+JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
+JOIN projects p ON p.id = m.project_id
+LEFT JOIN chat_message_transcripts t ON t.message_id = m.id AND t.project_id = m.project_id AND @open_shadows::boolean
+WHERE m.project_id = @project_id::uuid AND p.organization_id = @organization_id
+  AND p.deleted IS FALSE AND c.deleted IS FALSE
+  AND m.role <> 'system'
+  AND m.id = ANY(@message_ids::uuid[]);
+
+-- name: LoadEvaluationHistory :many
+-- Anchor to the target snapshot, never to the latest message in the conversation.
+-- Filter system messages before LIMIT so they do not consume window capacity.
+-- Bound the cumulative inline payload before transferring it to the application.
+-- Keep overflow rows as markers: skipping them would change window membership.
+-- Reserve eight bytes per attachment locator for array element framing.
+WITH candidates AS MATERIALIZED (
+    SELECT m.id, m.project_id, m.chat_id, m.created_at, m.seq,
+           m.role, m.content, m.content_raw, m.content_asset_url, m.tool_calls,
+           m.origin, m.external_message_id
+    FROM chat_messages m
+    JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
+    JOIN projects p ON p.id = m.project_id
+    WHERE m.project_id = @project_id::uuid AND p.organization_id = @organization_id
+      AND p.deleted IS FALSE AND c.deleted IS FALSE
+      AND m.role <> 'system'
+      AND m.chat_id = @chat_id AND m.generation = @generation
+      AND m.id <> @target_id
+      AND (m.created_at, m.seq) < (@target_created_at::timestamptz, @target_seq::bigint)
+    ORDER BY m.created_at DESC, m.seq DESC
+    LIMIT @history_limit
+), sized AS (
+    SELECT m.*,
+           (octet_length(m.role)::bigint + octet_length(m.content)::bigint
+            + COALESCE(octet_length(m.content_raw::text), 0)::bigint
+            + COALESCE(octet_length(m.content_asset_url), 0)::bigint
+            + COALESCE(octet_length(m.tool_calls::text), 0)::bigint
+            + COALESCE((SELECT sum(octet_length(cp.content_asset_url)::bigint + 8)
+                        FROM chat_content_parts cp
+                        WHERE cp.project_id = m.project_id AND cp.chat_id = m.chat_id
+                          AND cp.parent_chat_message_id = m.id AND cp.deleted IS FALSE), 0)
+           ) AS payload_bytes
+    FROM candidates m
+), bounded AS (
+    SELECT m.*,
+           (sum(payload_bytes) OVER (ORDER BY created_at DESC, seq DESC ROWS UNBOUNDED PRECEDING)
+            > @content_budget::bigint)::boolean AS content_too_large
+    FROM sized m
+)
+SELECT m.id,
+       (CASE WHEN m.content_too_large THEN '' ELSE m.role END)::text AS role,
+       (CASE WHEN m.content_too_large THEN '' ELSE m.content END)::text AS content,
+       (CASE WHEN m.content_too_large THEN NULL ELSE m.content_raw END)::jsonb AS content_raw,
+       (CASE WHEN m.content_too_large THEN '' ELSE COALESCE(m.content_asset_url, '') END)::text AS content_asset_url,
+       (CASE WHEN m.content_too_large THEN NULL ELSE m.tool_calls END)::jsonb AS tool_calls,
+       COALESCE(m.origin = 'anthropic-inference' AND (
+         m.external_message_id LIKE '%/block:%' OR EXISTS (
+           SELECT 1 FROM chat_messages sibling
+           WHERE sibling.project_id = m.project_id AND sibling.chat_id = m.chat_id
+             AND sibling.role <> 'system'
+             AND sibling.external_message_id = m.external_message_id || '/block:0'
+         )
+       ), false)::boolean AS row_local_content,
+        CASE WHEN m.content_too_large THEN ARRAY[]::text[] ELSE
+        ARRAY(SELECT cp.content_asset_url FROM chat_content_parts cp
+             WHERE cp.project_id = m.project_id AND cp.chat_id = m.chat_id
+               AND cp.parent_chat_message_id = m.id AND cp.deleted IS FALSE
+              ORDER BY cp.created_at, cp.id)::text[] END AS attachment_uris,
+        m.content_too_large,
+        t.ciphertext AS shadow_ciphertext,
+       COALESCE(t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,src.content,src.content_raw IS NULL,src.content_raw,src.tool_calls IS NULL,src.tool_calls,src.tool_outcome_notes,src.tool_call_summaries IS NULL,src.tool_call_summaries,src.storage_error)::text,'UTF8')), false)::boolean AS shadow_current
+FROM bounded m
+LEFT JOIN chat_message_transcripts t ON t.message_id = m.id AND t.project_id = m.project_id AND @open_shadows::boolean
+LEFT JOIN chat_messages src ON src.id = t.message_id
+ORDER BY m.created_at DESC, m.seq DESC;
+
+-- name: FindAssistantToolCallMessageID :one
+SELECT id
+FROM chat_messages
+WHERE project_id = sqlc.arg(project_id)
+  AND chat_id = sqlc.arg(chat_id)
+  AND role = 'assistant'
+  AND tool_calls IS NOT NULL
+  AND EXISTS (
+    SELECT 1
+    FROM jsonb_array_elements(tool_calls) tc
+    WHERE tc->>'id' = sqlc.arg(tool_call_id)::text
+  )
+ORDER BY created_at DESC
+LIMIT 1;
