@@ -32,6 +32,14 @@ const (
 	// organizationEncryptionDetailMaxLen bounds the error detail echoed to
 	// the dashboard, which can carry a provider message.
 	organizationEncryptionDetailMaxLen = 300
+
+	// encryptionListValuesPresent is the transition list's values filter
+	// that keeps only organizations with values for the use case.
+	encryptionListValuesPresent = "present"
+
+	// encryptionListSortLastWritten is the transition list's sort that puts
+	// the most recently written organizations first.
+	encryptionListSortLastWritten = "last_written"
 )
 
 // OrganizationEncryptionRunStarter starts on-demand runs for one
@@ -128,12 +136,32 @@ func (s *Service) ListOrganizationEncryptionTransitions(ctx context.Context, pay
 	}
 	logger := s.logger.With(attr.SlogOrgEncryptionUseCase(move.UseCase))
 
+	withValues, err := orgencryption.ListOrganizationsWithValues(ctx, move.Stores)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error reading which organizations have values").LogError(ctx, logger)
+	}
+
+	valueOrganizationIDs := make([]string, 0, len(withValues))
+	valueCounts := make([]int64, 0, len(withValues))
+	valueLastWrittenAt := make([]pgtype.Timestamptz, 0, len(withValues))
+	for _, organization := range withValues {
+		valueOrganizationIDs = append(valueOrganizationIDs, organization.OrganizationID)
+		valueCounts = append(valueCounts, organization.Values)
+		valueLastWrittenAt = append(valueLastWrittenAt, conv.ToPGTimestamptz(organization.LastWrittenAt))
+	}
+	withValuesOnly := payload.Values == encryptionListValuesPresent
+
 	q := repo.New(s.db)
 	rows, err := q.AdminListOrganizationEncryptionTransitions(ctx, repo.AdminListOrganizationEncryptionTransitionsParams{
-		UseCase:     string(move.UseCase),
-		State:       conv.PtrToPGText(payload.State),
-		LimitValue:  conv.SafeInt32(payload.Limit + 1),
-		OffsetValue: conv.SafeInt32(payload.Offset),
+		UseCase:              string(move.UseCase),
+		WithValuesOnly:       withValuesOnly,
+		State:                conv.PtrToPGText(payload.State),
+		SortByLastWritten:    payload.Sort == encryptionListSortLastWritten,
+		LimitValue:           conv.SafeInt32(payload.Limit + 1),
+		OffsetValue:          conv.SafeInt32(payload.Offset),
+		ValueOrganizationIds: valueOrganizationIDs,
+		ValueCounts:          valueCounts,
+		ValueLastWrittenAt:   valueLastWrittenAt,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing organization encryption transitions").LogError(ctx, logger)
@@ -160,10 +188,16 @@ func (s *Service) ListOrganizationEncryptionTransitions(ctx context.Context, pay
 			LastBackfillUnreadable:  conv.FromPGInt8(row.LastBackfillUnreadableCount),
 			LastBackfillError:       conv.FromPGText[string](row.LastBackfillError),
 			LastVerifiedAt:          encryptionTimeView(row.LastVerifiedAt),
+			ValueCount:              row.ValueCount,
+			LastWrittenAt:           encryptionTimeView(row.LastWrittenAt),
 		})
 	}
 
-	counts, err := q.AdminCountOrganizationEncryptionTransitionStates(ctx, string(move.UseCase))
+	counts, err := q.AdminCountOrganizationEncryptionTransitionStates(ctx, repo.AdminCountOrganizationEncryptionTransitionStatesParams{
+		UseCase:              string(move.UseCase),
+		WithValuesOnly:       withValuesOnly,
+		ValueOrganizationIds: valueOrganizationIDs,
+	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error counting organization encryption transitions").LogError(ctx, logger)
 	}
@@ -282,7 +316,7 @@ func (s *Service) FinalizeOrganizationEncryption(ctx context.Context, payload *g
 		// would be refused from org_kms. Return what Finalize recorded; the
 		// dashboard reloads the counts.
 		logger.ErrorContext(ctx, "read organization encryption after finalize", attr.SlogError(err))
-		view = transitionView(finalized, orgencryption.CopyCounts{Waiting: 0, Unreadable: 0, Unattributed: 0, PlatformCopies: 0}, nil)
+		view = transitionView(finalized, orgencryption.CopyCounts{Waiting: 0, Unreadable: 0, Unattributed: 0, PlatformCopies: 0, Values: 0, LastWrittenAt: time.Time{}}, nil)
 	}
 
 	return &gen.AdminOrganizationEncryptionFinalizeResult{UseCase: view, ClearingStarted: clearingStarted}, nil

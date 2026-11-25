@@ -91,6 +91,9 @@ LIMIT @limit_value;
 -- platform-key copy. Unattributed counts keys of the organization's projects
 -- stored without organization_id, which the organization-scoped queries never
 -- reach.
+-- value_count and last_written_at cover the organization's own values under
+-- either key, soft-deleted rows included: the rows the backfill and clear
+-- reach, as ListOrganizationsWith* reports them.
 WITH platform_copies AS (
   SELECT fa.encryption_key_org_encrypted, u.id AS unreadable_id
   FROM functions_access AS fa
@@ -120,7 +123,19 @@ SELECT
         AND p.organization_id = @organization_id::text
         AND (fa.encryption_key IS NOT NULL OR fa.encryption_key_org_encrypted IS NOT NULL)
     )::bigint AS unattributed,
-    COUNT(*)::bigint AS platform_copies
+    COUNT(*)::bigint AS platform_copies,
+    (
+      SELECT COUNT(*)
+      FROM functions_access AS fa
+      WHERE fa.organization_id = @organization_id::text
+        AND (fa.encryption_key IS NOT NULL OR fa.encryption_key_org_encrypted IS NOT NULL)
+    )::bigint AS value_count,
+    (
+      SELECT MAX(fa.updated_at)
+      FROM functions_access AS fa
+      WHERE fa.organization_id = @organization_id::text
+        AND (fa.encryption_key IS NOT NULL OR fa.encryption_key_org_encrypted IS NOT NULL)
+    )::timestamptz AS last_written_at
 FROM platform_copies AS k;
 
 -- name: ClearRunnerKeyPlatformCopies :one
@@ -153,3 +168,16 @@ SELECT
     COUNT(*) FILTER (WHERE cleared.platform_only)::bigint AS platform_only,
     COUNT(*) FILTER (WHERE NOT cleared.platform_only)::bigint AS beside_org_copy
 FROM cleared;
+
+-- name: ListOrganizationsWithRunnerKeys :many
+-- Every organization storing a function runner key under either key,
+-- soft-deleted rows included, with how many and the latest updated_at of the
+-- rows storing them. Rows without organization_id are left out.
+SELECT
+    fa.organization_id::text AS organization_id,
+    COUNT(*)::bigint AS value_count,
+    MAX(fa.updated_at)::timestamptz AS last_written_at
+FROM functions_access AS fa
+WHERE fa.organization_id IS NOT NULL
+  AND (fa.encryption_key IS NOT NULL OR fa.encryption_key_org_encrypted IS NOT NULL)
+GROUP BY fa.organization_id;

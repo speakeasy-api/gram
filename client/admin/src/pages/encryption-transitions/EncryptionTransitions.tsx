@@ -52,7 +52,15 @@ import {
   labelForUseCase,
 } from "@/lib/organizationEncryption";
 
-import type { EncryptionTransitionsSearch } from "./encryptionTransitionsSearch";
+import {
+  DEFAULT_SORT,
+  DEFAULT_VALUES,
+  TRANSITION_SORT_LABELS,
+  TRANSITION_SORTS,
+  VALUES_FILTER_LABELS,
+  VALUES_FILTERS,
+  type EncryptionTransitionsSearch,
+} from "./encryptionTransitionsSearch";
 
 const ALL = "all";
 
@@ -114,11 +122,15 @@ export function EncryptionTransitions(): JSX.Element {
   const router = useRouter();
 
   const page = search.page ?? 0;
+  const values = search.values ?? DEFAULT_VALUES;
+  const sort = search.sort ?? DEFAULT_SORT;
   const query = useQuery({
     ...organizationEncryptionTransitionsQuery({
       // Absent lists the server's first use case.
       useCase: search.useCase,
       state: search.state,
+      values,
+      sort,
       limit: PAGE_SIZE,
       offset: page * PAGE_SIZE,
     }),
@@ -166,33 +178,42 @@ export function EncryptionTransitions(): JSX.Element {
     const requested = useCase;
     const requestedSearch = search.useCase;
     try {
+      // "Next" follows the list on screen: the same values filter and order.
       // Disabled organizations are skipped, so page until enough are found.
-      const next: AdminOrganizationEncryptionTransitionRow[] = [];
-      for (let offset = 0; next.length < size; offset += NEXT_CANDIDATE_LIMIT) {
+      // A write between pages can move an organization onto a later page
+      // again, so candidates are keyed by id.
+      const next = new Map<string, AdminOrganizationEncryptionTransitionRow>();
+      for (let offset = 0; next.size < size; offset += NEXT_CANDIDATE_LIMIT) {
         const page = await client.fetchQuery(
           organizationEncryptionTransitionsQuery({
             useCase: requested,
             state: "platform_key",
+            values,
+            sort,
             limit: NEXT_CANDIDATE_LIMIT,
             offset,
           }),
         );
-        next.push(
-          ...page.organizations.filter(enrollable).slice(0, size - next.length),
-        );
+        for (const row of page.organizations.filter(enrollable)) {
+          if (next.size >= size) break;
+          next.set(row.organizationId, row);
+        }
         if (!page.hasMore) break;
       }
-      // Drop a response for a use case the admin has since left.
+      // Drop a response for a list the admin has since left.
       const current = router.state.location
         .search as EncryptionTransitionsSearch;
-      if (current.useCase !== requestedSearch) return;
-      setSelection({
-        useCase: requested,
-        rows: new Map(next.map((row) => [row.organizationId, row])),
-      });
-      if (next.length < size) {
+      if (
+        current.useCase !== requestedSearch ||
+        (current.values ?? DEFAULT_VALUES) !== values ||
+        (current.sort ?? DEFAULT_SORT) !== sort
+      ) {
+        return;
+      }
+      setSelection({ useCase: requested, rows: next });
+      if (next.size < size) {
         toast.info(
-          `Only ${pluralize(next.length, "organization")} can be enrolled.`,
+          `Only ${pluralize(next.size, "organization")} can be enrolled.`,
         );
       }
     } catch (e) {
@@ -272,7 +293,8 @@ export function EncryptionTransitions(): JSX.Element {
             platform key to its own key. New organizations that could not start
             on their own key appear in platform key. Enroll them here in
             batches; roll back and finalize one organization at a time from its
-            Encryption page.
+            Encryption page. The list shows organizations with values for the
+            use case, most recently written first, unless you ask for all.
           </p>
         </div>
       </div>
@@ -315,6 +337,53 @@ export function EncryptionTransitions(): JSX.Element {
             {TRANSITION_STATES.map((state) => (
               <SelectItem key={state} value={state}>
                 {TRANSITION_STATE_LABELS[state]} ({counts.get(state) ?? 0})
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <div
+          role="group"
+          aria-label="Organizations"
+          className="flex flex-wrap gap-2"
+        >
+          {VALUES_FILTERS.map((value) => (
+            <Button
+              key={value}
+              variant={values === value ? "secondary" : "outline"}
+              size="sm"
+              aria-pressed={values === value}
+              onClick={() =>
+                filterBy({
+                  ...search,
+                  values: value === DEFAULT_VALUES ? undefined : value,
+                  page: undefined,
+                })
+              }
+            >
+              {VALUES_FILTER_LABELS[value]}
+            </Button>
+          ))}
+        </div>
+        <Select
+          value={sort}
+          onValueChange={(value) =>
+            filterBy({
+              ...search,
+              sort:
+                value === DEFAULT_SORT
+                  ? undefined
+                  : TRANSITION_SORTS.find((candidate) => candidate === value),
+              page: undefined,
+            })
+          }
+        >
+          <SelectTrigger size="sm" aria-label="Sort" className="bg-card">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent position="popper" align="start">
+            {TRANSITION_SORTS.map((value) => (
+              <SelectItem key={value} value={value}>
+                {TRANSITION_SORT_LABELS[value]}
               </SelectItem>
             ))}
           </SelectContent>
@@ -428,6 +497,8 @@ export function EncryptionTransitions(): JSX.Element {
               </TableHead>
               <TableHead>Organization</TableHead>
               <TableHead>State</TableHead>
+              <TableHead className="text-right">Values</TableHead>
+              <TableHead>Last written</TableHead>
               <TableHead>State changed</TableHead>
               <TableHead className="text-right">Waiting (last run)</TableHead>
               <TableHead className="text-right">
@@ -439,12 +510,16 @@ export function EncryptionTransitions(): JSX.Element {
           <TableBody>
             {rows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-muted-foreground">
+                <TableCell colSpan={9} className="text-muted-foreground">
                   {query.isPending
                     ? "Loading..."
                     : query.isError
                       ? "Unable to load encryption transitions"
-                      : "No organization is in this state."}
+                      : values !== "present"
+                        ? "No organization is in this state."
+                        : search.state
+                          ? "No organization with values is in this state."
+                          : "No organization has values for this use case. Choose All to see every organization."}
                 </TableCell>
               </TableRow>
             ) : (
@@ -485,6 +560,12 @@ export function EncryptionTransitions(): JSX.Element {
                       >
                         {TRANSITION_PHASE_LABELS[phase]}
                       </Badge>
+                    </TableCell>
+                    <TableCell className="text-right text-sm">
+                      {row.valueCount.toLocaleString()}
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      {formatTimestamp(row.lastWrittenAt)}
                     </TableCell>
                     <TableCell className="text-sm">
                       {formatTimestamp(row.stateChangedAt)}

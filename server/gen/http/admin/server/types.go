@@ -3612,9 +3612,10 @@ type ListOrganizationEncryptionTransitionsResponseBody struct {
 	UseCase string `form:"use_case" json:"use_case" xml:"use_case"`
 	// Every use case that moves from the platform key to organization keys.
 	UseCases []string `form:"use_cases" json:"use_cases" xml:"use_cases"`
-	// The page of organizations, oldest first.
+	// The page of organizations, in the requested order.
 	Organizations []*AdminOrganizationEncryptionTransitionRowResponseBody `form:"organizations" json:"organizations" xml:"organizations"`
-	// How many organizations are in each state, across every page.
+	// How many organizations the values filter keeps are in each state, across
+	// every page.
 	StateCounts []*AdminOrganizationEncryptionStateCountResponseBody `form:"state_counts" json:"state_counts" xml:"state_counts"`
 	// Whether another page follows.
 	HasMore bool `form:"has_more" json:"has_more" xml:"has_more"`
@@ -31899,6 +31900,14 @@ type AdminOrganizationEncryptionTransitionRowResponseBody struct {
 	LastBackfillError *string `form:"last_backfill_error,omitempty" json:"last_backfill_error,omitempty" xml:"last_backfill_error,omitempty"`
 	// When the last clean verification pass started.
 	LastVerifiedAt *string `form:"last_verified_at,omitempty" json:"last_verified_at,omitempty" xml:"last_verified_at,omitempty"`
+	// How many values the organization stores for the use case under either key,
+	// soft-deleted rows included. A row storing values in two columns counts once
+	// in each.
+	ValueCount int64 `form:"value_count" json:"value_count" xml:"value_count"`
+	// The latest update of a row storing one of the organization's values. Any
+	// write to such a row moves it, such as a session's token refresh. Absent when
+	// the organization has none.
+	LastWrittenAt *string `form:"last_written_at,omitempty" json:"last_written_at,omitempty" xml:"last_written_at,omitempty"`
 }
 
 // AdminOrganizationEncryptionStateCountResponseBody is used to define fields
@@ -57689,10 +57698,12 @@ func NewGetOrganizationEncryptionPayload(organizationID string, adminSessionToke
 
 // NewListOrganizationEncryptionTransitionsPayload builds a admin service
 // listOrganizationEncryptionTransitions endpoint payload.
-func NewListOrganizationEncryptionTransitionsPayload(useCase *string, state *string, limit int, offset int, adminSessionToken *string) *admin.ListOrganizationEncryptionTransitionsPayload {
+func NewListOrganizationEncryptionTransitionsPayload(useCase *string, state *string, values string, sort string, limit int, offset int, adminSessionToken *string) *admin.ListOrganizationEncryptionTransitionsPayload {
 	v := &admin.ListOrganizationEncryptionTransitionsPayload{}
 	v.UseCase = useCase
 	v.State = state
+	v.Values = values
+	v.Sort = sort
 	v.Limit = limit
 	v.Offset = offset
 	v.AdminSessionToken = adminSessionToken

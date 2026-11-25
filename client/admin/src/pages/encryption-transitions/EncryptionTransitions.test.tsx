@@ -39,6 +39,7 @@ function aRow(
     slug: `org-${id}`,
     disabled: false,
     state: "platform_key",
+    valueCount: 1,
     ...overrides,
   };
 }
@@ -157,6 +158,65 @@ describe("EncryptionTransitions", () => {
         .getByRole("checkbox", { name: "Select Org c" })
         .getAttribute("data-state"),
     ).toBe("unchecked");
+    expect(
+      mocks.list,
+      "select next follows the values filter and order on screen",
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        limit: 200,
+        state: "platform_key",
+        values: "present",
+        sort: "last_written",
+      }),
+    );
+  });
+
+  it("lists organizations with values, most recently written first, by default", async () => {
+    mocks.list.mockResolvedValue(
+      aList([
+        aRow("a", {
+          valueCount: 1234,
+          lastWrittenAt: new Date("2026-03-02T12:00:00Z"),
+        }),
+      ]),
+    );
+    await mount();
+
+    expect(await screen.findByText("Org a")).toBeTruthy();
+    expect(mocks.list).toHaveBeenCalledWith(
+      expect.objectContaining({
+        values: "present",
+        sort: "last_written",
+      }),
+    );
+    expect(screen.getByRole("columnheader", { name: "Values" })).toBeTruthy();
+    expect(
+      screen.getByRole("columnheader", { name: "Last written" }),
+    ).toBeTruthy();
+    expect(screen.getByText((1234).toLocaleString())).toBeTruthy();
+    expect(
+      screen
+        .getByRole("button", { name: "With values" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+  });
+
+  it("lists every organization when asked for all", async () => {
+    mocks.list.mockResolvedValue(aList([aRow("a")]));
+    const { router } = await mount();
+
+    expect(await screen.findByText("Org a")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "All" }));
+
+    await waitFor(() =>
+      expect(mocks.list).toHaveBeenCalledWith(
+        expect.objectContaining({ values: "all", sort: "last_written" }),
+      ),
+    );
+    expect(router.state.location.search).toMatchObject({ values: "all" });
+    expect(
+      screen.getByRole("button", { name: "All" }).getAttribute("aria-pressed"),
+    ).toBe("true");
   });
 });
 
@@ -241,5 +301,65 @@ describe("EncryptionTransitions after leaving or switching", () => {
       screen.getByRole("button", { name: "Enroll selected (0)" }),
       "the late client-secrets candidates are not selected for session tokens",
     ).toBeTruthy();
+  });
+
+  it("drops a select-next response for a values filter the admin has left", async () => {
+    let answerAll: (
+      list: AdminOrganizationEncryptionTransitionList,
+    ) => void = () => {};
+    mocks.list.mockImplementation(
+      (request: { values?: string; limit?: number }) => {
+        if (request.limit === 200 && request.values === "all") {
+          return new Promise((resolve) => {
+            answerAll = resolve;
+          });
+        }
+        return Promise.resolve(aList([aRow("a"), aRow("b")]));
+      },
+    );
+    const { router } = await mount();
+    await router.navigate({
+      to: "/encryption-transitions",
+      search: { values: "all" },
+    });
+
+    expect(await screen.findByText("Org a")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Batch size"), {
+      target: { value: "2" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Select next in platform key" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "With values" }));
+    answerAll(aList([aRow("a"), aRow("b")]));
+    await new Promise((resolve) => {
+      setTimeout(resolve, 100);
+    });
+
+    expect(
+      screen.getByRole("button", { name: "Enroll selected (0)" }),
+      "candidates read for All are not selected under With values",
+    ).toBeTruthy();
+  });
+
+  it("drops the values filter from the URL when switching back to with values", async () => {
+    mocks.list.mockResolvedValue(aList([aRow("a")]));
+    const { router } = await mount();
+    await router.navigate({
+      to: "/encryption-transitions",
+      search: { values: "all" },
+    });
+
+    expect(await screen.findByText("Org a")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "With values" }));
+
+    await waitFor(() =>
+      expect(router.state.location.search).not.toHaveProperty("values"),
+    );
+    expect(
+      screen
+        .getByRole("button", { name: "With values" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
   });
 });

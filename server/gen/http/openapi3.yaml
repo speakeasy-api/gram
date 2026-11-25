@@ -6081,7 +6081,7 @@ paths:
             x-speakeasy-name-override: getOrganizationEncryption
     /admin/organizationEncryption.listTransitions:
         get:
-            description: Lists organizations by transition state for one use case, oldest first. Organizations never enrolled are in platform_key.
+            description: Lists organizations by transition state for one use case. Organizations never enrolled are in platform_key. By default it lists only organizations with values for the use case, most recently written first.
             operationId: adminListOrganizationEncryptionTransitions
             parameters:
                 - allowEmptyValue: true
@@ -6101,6 +6101,28 @@ paths:
                         - platform_key
                         - dual_write
                         - org_kms
+                    type: string
+                - allowEmptyValue: true
+                  description: present lists only organizations with at least one value for the use case under either key, soft-deleted rows included. all lists every organization.
+                  in: query
+                  name: values
+                  schema:
+                    default: present
+                    description: present lists only organizations with at least one value for the use case under either key, soft-deleted rows included. all lists every organization.
+                    enum:
+                        - present
+                        - all
+                    type: string
+                - allowEmptyValue: true
+                  description: last_written lists the most recently written organizations first, then organizations without values oldest first. oldest lists the oldest organizations first.
+                  in: query
+                  name: sort
+                  schema:
+                    default: last_written
+                    description: last_written lists the most recently written organizations first, then organizations without values oldest first. oldest lists the oldest organizations first.
+                    enum:
+                        - last_written
+                        - oldest
                     type: string
                 - allowEmptyValue: true
                   description: Organizations per page.
@@ -104843,12 +104865,12 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/AdminOrganizationEncryptionTransitionRow'
-                    description: The page of organizations, oldest first.
+                    description: The page of organizations, in the requested order.
                 state_counts:
                     type: array
                     items:
                         $ref: '#/components/schemas/AdminOrganizationEncryptionStateCount'
-                    description: How many organizations are in each state, across every page.
+                    description: How many organizations the values filter keeps are in each state, across every page.
                 use_case:
                     type: string
                     description: The use case listed.
@@ -104892,6 +104914,10 @@ components:
                     type: string
                     description: When the last clean verification pass started.
                     format: date-time
+                last_written_at:
+                    type: string
+                    description: The latest update of a row storing one of the organization's values. Any write to such a row moves it, such as a session's token refresh. Absent when the organization has none.
+                    format: date-time
                 name:
                     type: string
                     description: The organization name.
@@ -104916,6 +104942,10 @@ components:
                     type: string
                     description: When the state was entered.
                     format: date-time
+                value_count:
+                    type: integer
+                    description: How many values the organization stores for the use case under either key, soft-deleted rows included. A row storing values in two columns counts once in each.
+                    format: int64
             description: One organization's transition state for a use case, from stored state only.
             required:
                 - organization_id
@@ -104923,6 +104953,7 @@ components:
                 - slug
                 - disabled
                 - state
+                - value_count
         AdminOrganizationEncryptionUseCase:
             type: object
             properties:

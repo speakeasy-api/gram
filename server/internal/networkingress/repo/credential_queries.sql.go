@@ -108,7 +108,13 @@ SELECT
     )::bigint AS unreadable,
     COUNT(*) FILTER (
         WHERE n.credentials_encrypted IS NOT NULL
-    )::bigint AS platform_copies
+    )::bigint AS platform_copies,
+    COUNT(*) FILTER (
+        WHERE (n.credentials_encrypted IS NOT NULL OR n.credentials_org_encrypted IS NOT NULL)
+    )::bigint AS value_count,
+    MAX(n.updated_at) FILTER (
+        WHERE (n.credentials_encrypted IS NOT NULL OR n.credentials_org_encrypted IS NOT NULL)
+    )::timestamptz AS last_written_at
 FROM network_ingresses AS n
 LEFT JOIN organization_encryption_unreadable_values AS u
   ON u.organization_id = n.organization_id
@@ -123,16 +129,27 @@ type CountNetworkIngressCredentialCopiesRow struct {
 	Waiting        int64
 	Unreadable     int64
 	PlatformCopies int64
+	ValueCount     int64
+	LastWrittenAt  pgtype.Timestamptz
 }
 
 // The organization's credential counts for the backfill and finalize. Waiting
 // credentials recorded as unreadable count as unreadable only while the
 // recorded hash still matches the stored platform-key copy. organization_id is
 // NOT NULL, so nothing is unattributed.
+// value_count and last_written_at cover the organization's own values under
+// either key, soft-deleted rows included: the rows the backfill and clear
+// reach, as ListOrganizationsWith* reports them.
 func (q *Queries) CountNetworkIngressCredentialCopies(ctx context.Context, organizationID string) (CountNetworkIngressCredentialCopiesRow, error) {
 	row := q.db.QueryRow(ctx, countNetworkIngressCredentialCopies, organizationID)
 	var i CountNetworkIngressCredentialCopiesRow
-	err := row.Scan(&i.Waiting, &i.Unreadable, &i.PlatformCopies)
+	err := row.Scan(
+		&i.Waiting,
+		&i.Unreadable,
+		&i.PlatformCopies,
+		&i.ValueCount,
+		&i.LastWrittenAt,
+	)
 	return i, err
 }
 
@@ -215,6 +232,46 @@ func (q *Queries) ListNetworkIngressCredentialsWaiting(ctx context.Context, arg 
 	for rows.Next() {
 		var i ListNetworkIngressCredentialsWaitingRow
 		if err := rows.Scan(&i.ID, &i.PlatformCopy); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrganizationsWithNetworkIngressCredentials = `-- name: ListOrganizationsWithNetworkIngressCredentials :many
+SELECT
+    n.organization_id::text AS organization_id,
+    COUNT(*)::bigint AS value_count,
+    MAX(n.updated_at)::timestamptz AS last_written_at
+FROM network_ingresses AS n
+WHERE n.organization_id IS NOT NULL
+  AND (n.credentials_encrypted IS NOT NULL OR n.credentials_org_encrypted IS NOT NULL)
+GROUP BY n.organization_id
+`
+
+type ListOrganizationsWithNetworkIngressCredentialsRow struct {
+	OrganizationID string
+	ValueCount     int64
+	LastWrittenAt  pgtype.Timestamptz
+}
+
+// Every organization storing a network ingress credential under either key,
+// soft-deleted rows included, with how many and the latest updated_at of the
+// rows storing them. Rows without organization_id are left out.
+func (q *Queries) ListOrganizationsWithNetworkIngressCredentials(ctx context.Context) ([]ListOrganizationsWithNetworkIngressCredentialsRow, error) {
+	rows, err := q.db.Query(ctx, listOrganizationsWithNetworkIngressCredentials)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOrganizationsWithNetworkIngressCredentialsRow
+	for rows.Next() {
+		var i ListOrganizationsWithNetworkIngressCredentialsRow
+		if err := rows.Scan(&i.OrganizationID, &i.ValueCount, &i.LastWrittenAt); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

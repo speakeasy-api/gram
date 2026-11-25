@@ -5178,6 +5178,8 @@ func ParseEndpoint(
 		adminListOrganizationEncryptionTransitionsFlags                 = flag.NewFlagSet("list-organization-encryption-transitions", flag.ExitOnError)
 		adminListOrganizationEncryptionTransitionsUseCaseFlag           = adminListOrganizationEncryptionTransitionsFlags.String("use-case", "", "")
 		adminListOrganizationEncryptionTransitionsStateFlag             = adminListOrganizationEncryptionTransitionsFlags.String("state", "", "")
+		adminListOrganizationEncryptionTransitionsValuesFlag            = adminListOrganizationEncryptionTransitionsFlags.String("values", "present", "")
+		adminListOrganizationEncryptionTransitionsSortFlag              = adminListOrganizationEncryptionTransitionsFlags.String("sort", "last_written", "")
 		adminListOrganizationEncryptionTransitionsLimitFlag             = adminListOrganizationEncryptionTransitionsFlags.String("limit", "50", "")
 		adminListOrganizationEncryptionTransitionsOffsetFlag            = adminListOrganizationEncryptionTransitionsFlags.String("offset", "", "")
 		adminListOrganizationEncryptionTransitionsAdminSessionTokenFlag = adminListOrganizationEncryptionTransitionsFlags.String("admin-session-token", "", "")
@@ -13968,7 +13970,7 @@ func ParseEndpoint(
 				data, err = adminc.BuildGetOrganizationEncryptionPayload(*adminGetOrganizationEncryptionOrganizationIDFlag, *adminGetOrganizationEncryptionAdminSessionTokenFlag)
 			case "list-organization-encryption-transitions":
 				endpoint = c.ListOrganizationEncryptionTransitions()
-				data, err = adminc.BuildListOrganizationEncryptionTransitionsPayload(*adminListOrganizationEncryptionTransitionsUseCaseFlag, *adminListOrganizationEncryptionTransitionsStateFlag, *adminListOrganizationEncryptionTransitionsLimitFlag, *adminListOrganizationEncryptionTransitionsOffsetFlag, *adminListOrganizationEncryptionTransitionsAdminSessionTokenFlag)
+				data, err = adminc.BuildListOrganizationEncryptionTransitionsPayload(*adminListOrganizationEncryptionTransitionsUseCaseFlag, *adminListOrganizationEncryptionTransitionsStateFlag, *adminListOrganizationEncryptionTransitionsValuesFlag, *adminListOrganizationEncryptionTransitionsSortFlag, *adminListOrganizationEncryptionTransitionsLimitFlag, *adminListOrganizationEncryptionTransitionsOffsetFlag, *adminListOrganizationEncryptionTransitionsAdminSessionTokenFlag)
 			case "enroll-organization-encryption":
 				endpoint = c.EnrollOrganizationEncryption()
 				data, err = adminc.BuildEnrollOrganizationEncryptionPayload(*adminEnrollOrganizationEncryptionBodyFlag, *adminEnrollOrganizationEncryptionAdminSessionTokenFlag)
@@ -33980,7 +33982,7 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    list-tailscaleoauth-migration: Lists every organization with saved Tailscale OAuth credentials and where it stands in moving them to its organization key.`)
 	fmt.Fprintln(os.Stderr, `    run-tailscaleoauth-migration-step: Runs one step of moving an organization's saved Tailscale OAuth credentials to its organization key. enroll provisions the organization key and starts dual_write; backfill seals every waiting credential with the organization key and verifies both copies; finalize moves to org_kms once the backfill and verification are clean and the minimum time in dual_write has passed; clear_platform_copies then destroys the platform-key copies; rollback returns a dual_write organization to platform_key. Each step is safe to run again.`)
 	fmt.Fprintln(os.Stderr, `    get-organization-encryption: Reports an organization's encryption configuration and, for each use case that moves to organization keys, its transition state with live counts.`)
-	fmt.Fprintln(os.Stderr, `    list-organization-encryption-transitions: Lists organizations by transition state for one use case, oldest first. Organizations never enrolled are in platform_key.`)
+	fmt.Fprintln(os.Stderr, `    list-organization-encryption-transitions: Lists organizations by transition state for one use case. Organizations never enrolled are in platform_key. By default it lists only organizations with values for the use case, most recently written first.`)
 	fmt.Fprintln(os.Stderr, `    enroll-organization-encryption: Moves one organization's use case from platform_key to dual_write. Provisions the organization's key and data key first and changes nothing if that fails. Each enroll can mint a KMS key, so enroll several organizations one at a time.`)
 	fmt.Fprintln(os.Stderr, `    rollback-organization-encryption: Moves one organization's use case from dual_write back to platform_key. Both copies still exist in dual_write, so nothing is lost. Not available once the use case is in org_kms.`)
 	fmt.Fprintln(os.Stderr, `    run-organization-encryption: Starts a background run for one organization's use case: in dual_write it converts waiting values and verifies both copies, and in org_kms it finishes destroying the platform-key copies after finalize. Joins a run already in progress. Returns at once with the current state.`)
@@ -36690,6 +36692,8 @@ func adminListOrganizationEncryptionTransitionsUsage() {
 	fmt.Fprintf(os.Stderr, "%s [flags] admin list-organization-encryption-transitions", os.Args[0])
 	fmt.Fprint(os.Stderr, " -use-case STRING")
 	fmt.Fprint(os.Stderr, " -state STRING")
+	fmt.Fprint(os.Stderr, " -values STRING")
+	fmt.Fprint(os.Stderr, " -sort STRING")
 	fmt.Fprint(os.Stderr, " -limit INT")
 	fmt.Fprint(os.Stderr, " -offset INT")
 	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
@@ -36697,18 +36701,20 @@ func adminListOrganizationEncryptionTransitionsUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Lists organizations by transition state for one use case, oldest first. Organizations never enrolled are in platform_key.`)
+	fmt.Fprintln(os.Stderr, `Lists organizations by transition state for one use case. Organizations never enrolled are in platform_key. By default it lists only organizations with values for the use case, most recently written first.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -use-case STRING: `)
 	fmt.Fprintln(os.Stderr, `    -state STRING: `)
+	fmt.Fprintln(os.Stderr, `    -values STRING: `)
+	fmt.Fprintln(os.Stderr, `    -sort STRING: `)
 	fmt.Fprintln(os.Stderr, `    -limit INT: `)
 	fmt.Fprintln(os.Stderr, `    -offset INT: `)
 	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin list-organization-encryption-transitions --use-case \"abc123\" --state \"dual_write\" --limit 2 --offset 1 --admin-session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin list-organization-encryption-transitions --use-case \"abc123\" --state \"dual_write\" --values \"all\" --sort \"oldest\" --limit 2 --offset 1 --admin-session-token \"abc123\"")
 }
 
 func adminEnrollOrganizationEncryptionUsage() {

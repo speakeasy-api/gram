@@ -172,7 +172,8 @@ func TestBackfillVerifyAndFinalizeMoveCredentialsToTheOrganizationKey(t *testing
 	store := ingresscredentials.NewCopyStore(ti.conn)
 	counts, err := store.Count(t.Context(), ti.orgID)
 	require.NoError(t, err)
-	require.Equal(t, orgencryption.CopyCounts{Waiting: 1, Unreadable: 0, Unattributed: 0, PlatformCopies: 1}, counts)
+	require.False(t, counts.LastWrittenAt.IsZero())
+	require.Equal(t, orgencryption.CopyCounts{Waiting: 1, Unreadable: 0, Unattributed: 0, PlatformCopies: 1, Values: 1, LastWrittenAt: counts.LastWrittenAt}, counts)
 
 	ti.enroll(t)
 	result, err := orgencryption.NewRunner(testenv.NewLogger(t), ti.conn, ti.cipher, testenv.NewMeterProvider(t)).Run(t.Context(), ti.orgID, ingresscredentials.UseCase, []orgencryption.CopyStore{store})
@@ -213,5 +214,54 @@ func TestCopyStoreCountsUnreadableCredentials(t *testing.T) {
 
 	counts, err := store.Count(t.Context(), ti.orgID)
 	require.NoError(t, err)
-	require.Equal(t, orgencryption.CopyCounts{Waiting: 0, Unreadable: 1, Unattributed: 0, PlatformCopies: 1}, counts)
+	require.False(t, counts.LastWrittenAt.IsZero())
+	require.Equal(t, orgencryption.CopyCounts{Waiting: 0, Unreadable: 1, Unattributed: 0, PlatformCopies: 1, Values: 1, LastWrittenAt: counts.LastWrittenAt}, counts)
+}
+
+func TestCopyStoreReportsStoredCredentials(t *testing.T) {
+	t.Parallel()
+
+	ti := newTestInstance(t)
+	none := pgtype.Text{String: "", Valid: false}
+	plant := func(ingress repo.NetworkIngress, platform, org pgtype.Text) {
+		_, err := repo.New(ti.conn).SetNetworkIngressCredentialCopiesFixture(t.Context(), repo.SetNetworkIngressCredentialCopiesFixtureParams{
+			PlatformCopy: platform, OrgCopy: org, ID: ingress.ID, OrganizationID: ti.orgID,
+		})
+		require.NoError(t, err)
+	}
+
+	deleted := ti.createIngress(t)
+	plant(deleted, pgtype.Text{String: "platform-copy", Valid: true}, none)
+	_, err := repo.New(ti.conn).SoftDeleteNetworkIngress(t.Context(), ti.orgID)
+	require.NoError(t, err)
+	live := ti.createIngress(t)
+	plant(live, none, pgtype.Text{String: "org-copy", Valid: true})
+
+	lastWrittenAt := ti.stored(t, deleted.ID).UpdatedAt.Time
+	if liveAt := ti.stored(t, live.ID).UpdatedAt.Time; liveAt.After(lastWrittenAt) {
+		lastWrittenAt = liveAt
+	}
+
+	store := ingresscredentials.NewCopyStore(ti.conn)
+	listed, err := store.ListOrganizationsWithValues(t.Context())
+	require.NoError(t, err)
+	var organization orgencryption.OrganizationValues
+	for _, h := range listed {
+		if h.OrganizationID == ti.orgID {
+			organization = h
+		}
+	}
+	require.Equal(t, int64(2), organization.Values, "the soft-deleted ingress keeps its credentials")
+	require.True(t, lastWrittenAt.Equal(organization.LastWrittenAt), "listed %v, stored %v", organization.LastWrittenAt, lastWrittenAt)
+
+	counted, err := store.Count(t.Context(), ti.orgID)
+	require.NoError(t, err)
+	require.Equal(t, organization.Values, counted.Values)
+	require.True(t, organization.LastWrittenAt.Equal(counted.LastWrittenAt))
+
+	other := "org_" + uuid.NewString()
+	empty, err := store.Count(t.Context(), other)
+	require.NoError(t, err)
+	require.Zero(t, empty.Values)
+	require.True(t, empty.LastWrittenAt.IsZero())
 }

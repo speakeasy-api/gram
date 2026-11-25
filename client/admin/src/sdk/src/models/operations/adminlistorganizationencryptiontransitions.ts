@@ -19,6 +19,30 @@ export const State = {
  */
 export type State = ClosedEnum<typeof State>;
 
+/**
+ * present lists only organizations with at least one value for the use case under either key, soft-deleted rows included. all lists every organization.
+ */
+export const Values = {
+  Present: "present",
+  All: "all",
+} as const;
+/**
+ * present lists only organizations with at least one value for the use case under either key, soft-deleted rows included. all lists every organization.
+ */
+export type Values = ClosedEnum<typeof Values>;
+
+/**
+ * last_written lists the most recently written organizations first, then organizations without values oldest first. oldest lists the oldest organizations first.
+ */
+export const Sort = {
+  LastWritten: "last_written",
+  Oldest: "oldest",
+} as const;
+/**
+ * last_written lists the most recently written organizations first, then organizations without values oldest first. oldest lists the oldest organizations first.
+ */
+export type Sort = ClosedEnum<typeof Sort>;
+
 export type AdminListOrganizationEncryptionTransitionsRequest = {
   /**
    * The use case, such as oauth-client-secrets. Absent lists the first use case that moves to organization keys.
@@ -28,6 +52,14 @@ export type AdminListOrganizationEncryptionTransitionsRequest = {
    * Only organizations in this state.
    */
   state?: State | undefined;
+  /**
+   * present lists only organizations with at least one value for the use case under either key, soft-deleted rows included. all lists every organization.
+   */
+  values?: Values | undefined;
+  /**
+   * last_written lists the most recently written organizations first, then organizations without values oldest first. oldest lists the oldest organizations first.
+   */
+  sort?: Sort | undefined;
   /**
    * Organizations per page.
    */
@@ -42,9 +74,19 @@ export type AdminListOrganizationEncryptionTransitionsRequest = {
 export const State$outboundSchema: z.ZodMiniEnum<typeof State> = z.enum(State);
 
 /** @internal */
+export const Values$outboundSchema: z.ZodMiniEnum<typeof Values> = z.enum(
+  Values,
+);
+
+/** @internal */
+export const Sort$outboundSchema: z.ZodMiniEnum<typeof Sort> = z.enum(Sort);
+
+/** @internal */
 export type AdminListOrganizationEncryptionTransitionsRequest$Outbound = {
   use_case?: string | undefined;
   state?: string | undefined;
+  values: string;
+  sort: string;
   limit: number;
   offset: number;
 };
@@ -58,6 +100,8 @@ export const AdminListOrganizationEncryptionTransitionsRequest$outboundSchema:
     z.object({
       useCase: z.optional(z.string()),
       state: z.optional(State$outboundSchema),
+      values: z._default(Values$outboundSchema, "present"),
+      sort: z._default(Sort$outboundSchema, "last_written"),
       limit: z._default(z.int(), 50),
       offset: z._default(z.int(), 0),
     }),

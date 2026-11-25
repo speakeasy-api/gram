@@ -478,8 +478,9 @@ type Service interface {
 	// Reports an organization's encryption configuration and, for each use case
 	// that moves to organization keys, its transition state with live counts.
 	GetOrganizationEncryption(context.Context, *GetOrganizationEncryptionPayload) (res *AdminOrganizationEncryption, err error)
-	// Lists organizations by transition state for one use case, oldest first.
-	// Organizations never enrolled are in platform_key.
+	// Lists organizations by transition state for one use case. Organizations
+	// never enrolled are in platform_key. By default it lists only organizations
+	// with values for the use case, most recently written first.
 	ListOrganizationEncryptionTransitions(context.Context, *ListOrganizationEncryptionTransitionsPayload) (res *AdminOrganizationEncryptionTransitionList, err error)
 	// Moves one organization's use case from platform_key to dual_write.
 	// Provisions the organization's key and data key first and changes nothing if
@@ -1849,9 +1850,10 @@ type AdminOrganizationEncryptionTransitionList struct {
 	UseCase string
 	// Every use case that moves from the platform key to organization keys.
 	UseCases []string
-	// The page of organizations, oldest first.
+	// The page of organizations, in the requested order.
 	Organizations []*AdminOrganizationEncryptionTransitionRow
-	// How many organizations are in each state, across every page.
+	// How many organizations the values filter keeps are in each state, across
+	// every page.
 	StateCounts []*AdminOrganizationEncryptionStateCount
 	// Whether another page follows.
 	HasMore bool
@@ -1885,6 +1887,14 @@ type AdminOrganizationEncryptionTransitionRow struct {
 	LastBackfillError *string
 	// When the last clean verification pass started.
 	LastVerifiedAt *string
+	// How many values the organization stores for the use case under either key,
+	// soft-deleted rows included. A row storing values in two columns counts once
+	// in each.
+	ValueCount int64
+	// The latest update of a row storing one of the organization's values. Any
+	// write to such a row moves it, such as a session's token refresh. Absent when
+	// the organization has none.
+	LastWrittenAt *string
 }
 
 // AdminOrganizationEncryptionUseCase is the result type of the admin service
@@ -3734,6 +3744,13 @@ type ListOrganizationEncryptionTransitionsPayload struct {
 	UseCase *string
 	// Only organizations in this state.
 	State *string
+	// present lists only organizations with at least one value for the use case
+	// under either key, soft-deleted rows included. all lists every organization.
+	Values string
+	// last_written lists the most recently written organizations first, then
+	// organizations without values oldest first. oldest lists the oldest
+	// organizations first.
+	Sort string
 	// Organizations per page.
 	Limit int
 	// Organizations to skip.

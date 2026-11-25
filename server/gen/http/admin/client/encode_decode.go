@@ -31460,6 +31460,8 @@ func EncodeListOrganizationEncryptionTransitionsRequest(encoder func(*http.Reque
 		if p.State != nil {
 			values.Add("state", *p.State)
 		}
+		values.Add("values", p.Values)
+		values.Add("sort", p.Sort)
 		values.Add("limit", fmt.Sprintf("%v", p.Limit))
 		values.Add("offset", fmt.Sprintf("%v", p.Offset))
 		req.URL.RawQuery = values.Encode()
@@ -35044,6 +35046,8 @@ func unmarshalAdminOrganizationEncryptionTransitionRowResponseBodyToAdminAdminOr
 		LastBackfillUnreadable:  v.LastBackfillUnreadable,
 		LastBackfillError:       v.LastBackfillError,
 		LastVerifiedAt:          v.LastVerifiedAt,
+		ValueCount:              *v.ValueCount,
+		LastWrittenAt:           v.LastWrittenAt,
 	}
 
 	return res

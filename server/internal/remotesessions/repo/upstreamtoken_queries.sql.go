@@ -476,7 +476,15 @@ SELECT
           AND u.id IS NOT NULL
     )::bigint AS unreadable,
     0::bigint AS unattributed,
-    COUNT(*) FILTER (WHERE c.access_token_encrypted <> '')::bigint AS platform_copies
+    COUNT(*) FILTER (WHERE c.access_token_encrypted <> '')::bigint AS platform_copies,
+    COUNT(*) FILTER (
+        WHERE c.organization_id = $1::text
+          AND (c.access_token_encrypted <> '' OR c.access_token_org_encrypted IS NOT NULL)
+    )::bigint AS value_count,
+    MAX(c.updated_at) FILTER (
+        WHERE c.organization_id = $1::text
+          AND (c.access_token_encrypted <> '' OR c.access_token_org_encrypted IS NOT NULL)
+    )::timestamptz AS last_written_at
 FROM remote_session_ema_credentials AS c
 LEFT JOIN organization_encryption_unreadable_values AS u
   ON u.organization_id = c.organization_id
@@ -492,12 +500,17 @@ type CountEMACredentialAccessTokenCopiesRow struct {
 	Unreadable     int64
 	Unattributed   int64
 	PlatformCopies int64
+	ValueCount     int64
+	LastWrittenAt  pgtype.Timestamptz
 }
 
 // The organization's EMA access token counts. A slot's organization_id and
 // project_id are NULL together (remote_session_ema_credentials_project_ref_check),
 // so a slot without an organization belongs to none and is never
 // unattributed: it stays on the platform key.
+// value_count and last_written_at cover the organization's own values under
+// either key, soft-deleted rows included: the rows the backfill and clear
+// reach, as ListOrganizationsWith* reports them.
 func (q *Queries) CountEMACredentialAccessTokenCopies(ctx context.Context, organizationID string) (CountEMACredentialAccessTokenCopiesRow, error) {
 	row := q.db.QueryRow(ctx, countEMACredentialAccessTokenCopies, organizationID)
 	var i CountEMACredentialAccessTokenCopiesRow
@@ -506,6 +519,8 @@ func (q *Queries) CountEMACredentialAccessTokenCopies(ctx context.Context, organ
 		&i.Unreadable,
 		&i.Unattributed,
 		&i.PlatformCopies,
+		&i.ValueCount,
+		&i.LastWrittenAt,
 	)
 	return i, err
 }
@@ -531,7 +546,15 @@ SELECT
     COUNT(*) FILTER (
         WHERE s.organization_id = $1::text
           AND s.access_token_encrypted <> ''
-    )::bigint AS platform_copies
+    )::bigint AS platform_copies,
+    COUNT(*) FILTER (
+        WHERE s.organization_id = $1::text
+          AND (s.access_token_encrypted <> '' OR s.access_token_org_encrypted IS NOT NULL)
+    )::bigint AS value_count,
+    MAX(s.updated_at) FILTER (
+        WHERE s.organization_id = $1::text
+          AND (s.access_token_encrypted <> '' OR s.access_token_org_encrypted IS NOT NULL)
+    )::timestamptz AS last_written_at
 FROM remote_sessions AS s
 LEFT JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
 LEFT JOIN projects AS p ON p.id = c.project_id
@@ -550,6 +573,8 @@ type CountRemoteSessionAccessTokenCopiesRow struct {
 	Unreadable     int64
 	Unattributed   int64
 	PlatformCopies int64
+	ValueCount     int64
+	LastWrittenAt  pgtype.Timestamptz
 }
 
 // The organization's access token counts for the backfill and finalize. A
@@ -558,6 +583,9 @@ type CountRemoteSessionAccessTokenCopiesRow struct {
 // counts sessions without organization_id whose client belongs to the
 // organization, directly or through its project: the organization-scoped
 // queries never reach them.
+// value_count and last_written_at cover the organization's own values under
+// either key, soft-deleted rows included: the rows the backfill and clear
+// reach, as ListOrganizationsWith* reports them.
 func (q *Queries) CountRemoteSessionAccessTokenCopies(ctx context.Context, organizationID string) (CountRemoteSessionAccessTokenCopiesRow, error) {
 	row := q.db.QueryRow(ctx, countRemoteSessionAccessTokenCopies, organizationID)
 	var i CountRemoteSessionAccessTokenCopiesRow
@@ -566,6 +594,8 @@ func (q *Queries) CountRemoteSessionAccessTokenCopies(ctx context.Context, organ
 		&i.Unreadable,
 		&i.Unattributed,
 		&i.PlatformCopies,
+		&i.ValueCount,
+		&i.LastWrittenAt,
 	)
 	return i, err
 }
@@ -591,7 +621,15 @@ SELECT
     COUNT(*) FILTER (
         WHERE s.organization_id = $1::text
           AND s.refresh_token_encrypted <> ''
-    )::bigint AS platform_copies
+    )::bigint AS platform_copies,
+    COUNT(*) FILTER (
+        WHERE s.organization_id = $1::text
+          AND (s.refresh_token_encrypted <> '' OR s.refresh_token_org_encrypted IS NOT NULL)
+    )::bigint AS value_count,
+    MAX(s.updated_at) FILTER (
+        WHERE s.organization_id = $1::text
+          AND (s.refresh_token_encrypted <> '' OR s.refresh_token_org_encrypted IS NOT NULL)
+    )::timestamptz AS last_written_at
 FROM remote_sessions AS s
 LEFT JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
 LEFT JOIN projects AS p ON p.id = c.project_id
@@ -610,10 +648,15 @@ type CountRemoteSessionRefreshTokenCopiesRow struct {
 	Unreadable     int64
 	Unattributed   int64
 	PlatformCopies int64
+	ValueCount     int64
+	LastWrittenAt  pgtype.Timestamptz
 }
 
 // The organization's refresh token counts, under the same rules as
 // CountRemoteSessionAccessTokenCopies.
+// value_count and last_written_at cover the organization's own values under
+// either key, soft-deleted rows included: the rows the backfill and clear
+// reach, as ListOrganizationsWith* reports them.
 func (q *Queries) CountRemoteSessionRefreshTokenCopies(ctx context.Context, organizationID string) (CountRemoteSessionRefreshTokenCopiesRow, error) {
 	row := q.db.QueryRow(ctx, countRemoteSessionRefreshTokenCopies, organizationID)
 	var i CountRemoteSessionRefreshTokenCopiesRow
@@ -622,6 +665,8 @@ func (q *Queries) CountRemoteSessionRefreshTokenCopies(ctx context.Context, orga
 		&i.Unreadable,
 		&i.Unattributed,
 		&i.PlatformCopies,
+		&i.ValueCount,
+		&i.LastWrittenAt,
 	)
 	return i, err
 }
@@ -647,7 +692,15 @@ SELECT
     COUNT(*) FILTER (
         WHERE s.organization_id = $1::text
           AND s.identity_assertion_encrypted <> ''
-    )::bigint AS platform_copies
+    )::bigint AS platform_copies,
+    COUNT(*) FILTER (
+        WHERE s.organization_id = $1::text
+          AND (s.identity_assertion_encrypted <> '' OR s.identity_assertion_org_encrypted IS NOT NULL)
+    )::bigint AS value_count,
+    MAX(s.updated_at) FILTER (
+        WHERE s.organization_id = $1::text
+          AND (s.identity_assertion_encrypted <> '' OR s.identity_assertion_org_encrypted IS NOT NULL)
+    )::timestamptz AS last_written_at
 FROM trusted_issuer_sessions AS s
 LEFT JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
 LEFT JOIN organization_encryption_unreadable_values AS u
@@ -665,11 +718,16 @@ type CountTrustedIssuerSessionIdentityAssertionCopiesRow struct {
 	Unreadable     int64
 	Unattributed   int64
 	PlatformCopies int64
+	ValueCount     int64
+	LastWrittenAt  pgtype.Timestamptz
 }
 
 // The organization's counts for the value. Unattributed counts sessions
 // without organization_id whose trusted client belongs to the organization:
 // the organization-scoped queries never reach them.
+// value_count and last_written_at cover the organization's own values under
+// either key, soft-deleted rows included: the rows the backfill and clear
+// reach, as ListOrganizationsWith* reports them.
 func (q *Queries) CountTrustedIssuerSessionIdentityAssertionCopies(ctx context.Context, organizationID string) (CountTrustedIssuerSessionIdentityAssertionCopiesRow, error) {
 	row := q.db.QueryRow(ctx, countTrustedIssuerSessionIdentityAssertionCopies, organizationID)
 	var i CountTrustedIssuerSessionIdentityAssertionCopiesRow
@@ -678,6 +736,8 @@ func (q *Queries) CountTrustedIssuerSessionIdentityAssertionCopies(ctx context.C
 		&i.Unreadable,
 		&i.Unattributed,
 		&i.PlatformCopies,
+		&i.ValueCount,
+		&i.LastWrittenAt,
 	)
 	return i, err
 }
@@ -703,7 +763,15 @@ SELECT
     COUNT(*) FILTER (
         WHERE s.organization_id = $1::text
           AND s.nonce_encrypted <> ''
-    )::bigint AS platform_copies
+    )::bigint AS platform_copies,
+    COUNT(*) FILTER (
+        WHERE s.organization_id = $1::text
+          AND (s.nonce_encrypted <> '' OR s.nonce_org_encrypted IS NOT NULL)
+    )::bigint AS value_count,
+    MAX(s.updated_at) FILTER (
+        WHERE s.organization_id = $1::text
+          AND (s.nonce_encrypted <> '' OR s.nonce_org_encrypted IS NOT NULL)
+    )::timestamptz AS last_written_at
 FROM trusted_issuer_sessions AS s
 LEFT JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
 LEFT JOIN organization_encryption_unreadable_values AS u
@@ -721,11 +789,16 @@ type CountTrustedIssuerSessionNonceCopiesRow struct {
 	Unreadable     int64
 	Unattributed   int64
 	PlatformCopies int64
+	ValueCount     int64
+	LastWrittenAt  pgtype.Timestamptz
 }
 
 // The organization's counts for the value. Unattributed counts sessions
 // without organization_id whose trusted client belongs to the organization:
 // the organization-scoped queries never reach them.
+// value_count and last_written_at cover the organization's own values under
+// either key, soft-deleted rows included: the rows the backfill and clear
+// reach, as ListOrganizationsWith* reports them.
 func (q *Queries) CountTrustedIssuerSessionNonceCopies(ctx context.Context, organizationID string) (CountTrustedIssuerSessionNonceCopiesRow, error) {
 	row := q.db.QueryRow(ctx, countTrustedIssuerSessionNonceCopies, organizationID)
 	var i CountTrustedIssuerSessionNonceCopiesRow
@@ -734,6 +807,8 @@ func (q *Queries) CountTrustedIssuerSessionNonceCopies(ctx context.Context, orga
 		&i.Unreadable,
 		&i.Unattributed,
 		&i.PlatformCopies,
+		&i.ValueCount,
+		&i.LastWrittenAt,
 	)
 	return i, err
 }
@@ -759,7 +834,15 @@ SELECT
     COUNT(*) FILTER (
         WHERE s.organization_id = $1::text
           AND s.refresh_token_encrypted <> ''
-    )::bigint AS platform_copies
+    )::bigint AS platform_copies,
+    COUNT(*) FILTER (
+        WHERE s.organization_id = $1::text
+          AND (s.refresh_token_encrypted <> '' OR s.refresh_token_org_encrypted IS NOT NULL)
+    )::bigint AS value_count,
+    MAX(s.updated_at) FILTER (
+        WHERE s.organization_id = $1::text
+          AND (s.refresh_token_encrypted <> '' OR s.refresh_token_org_encrypted IS NOT NULL)
+    )::timestamptz AS last_written_at
 FROM trusted_issuer_sessions AS s
 LEFT JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
 LEFT JOIN organization_encryption_unreadable_values AS u
@@ -777,11 +860,16 @@ type CountTrustedIssuerSessionRefreshTokenCopiesRow struct {
 	Unreadable     int64
 	Unattributed   int64
 	PlatformCopies int64
+	ValueCount     int64
+	LastWrittenAt  pgtype.Timestamptz
 }
 
 // The organization's counts for the value. Unattributed counts sessions
 // without organization_id whose trusted client belongs to the organization:
 // the organization-scoped queries never reach them.
+// value_count and last_written_at cover the organization's own values under
+// either key, soft-deleted rows included: the rows the backfill and clear
+// reach, as ListOrganizationsWith* reports them.
 func (q *Queries) CountTrustedIssuerSessionRefreshTokenCopies(ctx context.Context, organizationID string) (CountTrustedIssuerSessionRefreshTokenCopiesRow, error) {
 	row := q.db.QueryRow(ctx, countTrustedIssuerSessionRefreshTokenCopies, organizationID)
 	var i CountTrustedIssuerSessionRefreshTokenCopiesRow
@@ -790,6 +878,8 @@ func (q *Queries) CountTrustedIssuerSessionRefreshTokenCopies(ctx context.Contex
 		&i.Unreadable,
 		&i.Unattributed,
 		&i.PlatformCopies,
+		&i.ValueCount,
+		&i.LastWrittenAt,
 	)
 	return i, err
 }
@@ -815,7 +905,15 @@ SELECT
     COUNT(*) FILTER (
         WHERE s.organization_id = $1::text
           AND s.upstream_subject_encrypted <> ''
-    )::bigint AS platform_copies
+    )::bigint AS platform_copies,
+    COUNT(*) FILTER (
+        WHERE s.organization_id = $1::text
+          AND (s.upstream_subject_encrypted <> '' OR s.upstream_subject_org_encrypted IS NOT NULL)
+    )::bigint AS value_count,
+    MAX(s.updated_at) FILTER (
+        WHERE s.organization_id = $1::text
+          AND (s.upstream_subject_encrypted <> '' OR s.upstream_subject_org_encrypted IS NOT NULL)
+    )::timestamptz AS last_written_at
 FROM trusted_issuer_sessions AS s
 LEFT JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
 LEFT JOIN organization_encryption_unreadable_values AS u
@@ -833,11 +931,16 @@ type CountTrustedIssuerSessionUpstreamSubjectCopiesRow struct {
 	Unreadable     int64
 	Unattributed   int64
 	PlatformCopies int64
+	ValueCount     int64
+	LastWrittenAt  pgtype.Timestamptz
 }
 
 // The organization's counts for the value. Unattributed counts sessions
 // without organization_id whose trusted client belongs to the organization:
 // the organization-scoped queries never reach them.
+// value_count and last_written_at cover the organization's own values under
+// either key, soft-deleted rows included: the rows the backfill and clear
+// reach, as ListOrganizationsWith* reports them.
 func (q *Queries) CountTrustedIssuerSessionUpstreamSubjectCopies(ctx context.Context, organizationID string) (CountTrustedIssuerSessionUpstreamSubjectCopiesRow, error) {
 	row := q.db.QueryRow(ctx, countTrustedIssuerSessionUpstreamSubjectCopies, organizationID)
 	var i CountTrustedIssuerSessionUpstreamSubjectCopiesRow
@@ -846,6 +949,8 @@ func (q *Queries) CountTrustedIssuerSessionUpstreamSubjectCopies(ctx context.Con
 		&i.Unreadable,
 		&i.Unattributed,
 		&i.PlatformCopies,
+		&i.ValueCount,
+		&i.LastWrittenAt,
 	)
 	return i, err
 }
@@ -1120,6 +1225,286 @@ func (q *Queries) ListOrganizationKeyTokenColumnsFixture(ctx context.Context) ([
 			return nil, err
 		}
 		items = append(items, org_column)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrganizationsWithEMACredentialAccessTokens = `-- name: ListOrganizationsWithEMACredentialAccessTokens :many
+SELECT
+    c.organization_id::text AS organization_id,
+    COUNT(*)::bigint AS value_count,
+    MAX(c.updated_at)::timestamptz AS last_written_at
+FROM remote_session_ema_credentials AS c
+WHERE c.organization_id IS NOT NULL
+  AND (c.access_token_encrypted <> '' OR c.access_token_org_encrypted IS NOT NULL)
+GROUP BY c.organization_id
+`
+
+type ListOrganizationsWithEMACredentialAccessTokensRow struct {
+	OrganizationID string
+	ValueCount     int64
+	LastWrittenAt  pgtype.Timestamptz
+}
+
+// Every organization storing an EMA access token under either key,
+// soft-deleted rows included, with how many and the latest updated_at of the
+// rows storing them. Rows without organization_id are left out.
+func (q *Queries) ListOrganizationsWithEMACredentialAccessTokens(ctx context.Context) ([]ListOrganizationsWithEMACredentialAccessTokensRow, error) {
+	rows, err := q.db.Query(ctx, listOrganizationsWithEMACredentialAccessTokens)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOrganizationsWithEMACredentialAccessTokensRow
+	for rows.Next() {
+		var i ListOrganizationsWithEMACredentialAccessTokensRow
+		if err := rows.Scan(&i.OrganizationID, &i.ValueCount, &i.LastWrittenAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrganizationsWithRemoteSessionAccessTokens = `-- name: ListOrganizationsWithRemoteSessionAccessTokens :many
+SELECT
+    s.organization_id::text AS organization_id,
+    COUNT(*)::bigint AS value_count,
+    MAX(s.updated_at)::timestamptz AS last_written_at
+FROM remote_sessions AS s
+WHERE s.organization_id IS NOT NULL
+  AND (s.access_token_encrypted <> '' OR s.access_token_org_encrypted IS NOT NULL)
+GROUP BY s.organization_id
+`
+
+type ListOrganizationsWithRemoteSessionAccessTokensRow struct {
+	OrganizationID string
+	ValueCount     int64
+	LastWrittenAt  pgtype.Timestamptz
+}
+
+// Every organization storing a remote session access token under either key,
+// soft-deleted rows included, with how many and the latest updated_at of the
+// rows storing them. Rows without organization_id are left out.
+func (q *Queries) ListOrganizationsWithRemoteSessionAccessTokens(ctx context.Context) ([]ListOrganizationsWithRemoteSessionAccessTokensRow, error) {
+	rows, err := q.db.Query(ctx, listOrganizationsWithRemoteSessionAccessTokens)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOrganizationsWithRemoteSessionAccessTokensRow
+	for rows.Next() {
+		var i ListOrganizationsWithRemoteSessionAccessTokensRow
+		if err := rows.Scan(&i.OrganizationID, &i.ValueCount, &i.LastWrittenAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrganizationsWithRemoteSessionRefreshTokens = `-- name: ListOrganizationsWithRemoteSessionRefreshTokens :many
+SELECT
+    s.organization_id::text AS organization_id,
+    COUNT(*)::bigint AS value_count,
+    MAX(s.updated_at)::timestamptz AS last_written_at
+FROM remote_sessions AS s
+WHERE s.organization_id IS NOT NULL
+  AND (s.refresh_token_encrypted <> '' OR s.refresh_token_org_encrypted IS NOT NULL)
+GROUP BY s.organization_id
+`
+
+type ListOrganizationsWithRemoteSessionRefreshTokensRow struct {
+	OrganizationID string
+	ValueCount     int64
+	LastWrittenAt  pgtype.Timestamptz
+}
+
+// Every organization storing a remote session refresh token under either key,
+// soft-deleted rows included, with how many and the latest updated_at of the
+// rows storing them. Rows without organization_id are left out.
+func (q *Queries) ListOrganizationsWithRemoteSessionRefreshTokens(ctx context.Context) ([]ListOrganizationsWithRemoteSessionRefreshTokensRow, error) {
+	rows, err := q.db.Query(ctx, listOrganizationsWithRemoteSessionRefreshTokens)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOrganizationsWithRemoteSessionRefreshTokensRow
+	for rows.Next() {
+		var i ListOrganizationsWithRemoteSessionRefreshTokensRow
+		if err := rows.Scan(&i.OrganizationID, &i.ValueCount, &i.LastWrittenAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrganizationsWithTrustedIssuerSessionIdentityAssertions = `-- name: ListOrganizationsWithTrustedIssuerSessionIdentityAssertions :many
+SELECT
+    s.organization_id::text AS organization_id,
+    COUNT(*)::bigint AS value_count,
+    MAX(s.updated_at)::timestamptz AS last_written_at
+FROM trusted_issuer_sessions AS s
+WHERE s.organization_id IS NOT NULL
+  AND (s.identity_assertion_encrypted <> '' OR s.identity_assertion_org_encrypted IS NOT NULL)
+GROUP BY s.organization_id
+`
+
+type ListOrganizationsWithTrustedIssuerSessionIdentityAssertionsRow struct {
+	OrganizationID string
+	ValueCount     int64
+	LastWrittenAt  pgtype.Timestamptz
+}
+
+// Every organization storing a trusted issuer identity assertion under either key,
+// soft-deleted rows included, with how many and the latest updated_at of the
+// rows storing them. Rows without organization_id are left out.
+func (q *Queries) ListOrganizationsWithTrustedIssuerSessionIdentityAssertions(ctx context.Context) ([]ListOrganizationsWithTrustedIssuerSessionIdentityAssertionsRow, error) {
+	rows, err := q.db.Query(ctx, listOrganizationsWithTrustedIssuerSessionIdentityAssertions)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOrganizationsWithTrustedIssuerSessionIdentityAssertionsRow
+	for rows.Next() {
+		var i ListOrganizationsWithTrustedIssuerSessionIdentityAssertionsRow
+		if err := rows.Scan(&i.OrganizationID, &i.ValueCount, &i.LastWrittenAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrganizationsWithTrustedIssuerSessionNonces = `-- name: ListOrganizationsWithTrustedIssuerSessionNonces :many
+SELECT
+    s.organization_id::text AS organization_id,
+    COUNT(*)::bigint AS value_count,
+    MAX(s.updated_at)::timestamptz AS last_written_at
+FROM trusted_issuer_sessions AS s
+WHERE s.organization_id IS NOT NULL
+  AND (s.nonce_encrypted <> '' OR s.nonce_org_encrypted IS NOT NULL)
+GROUP BY s.organization_id
+`
+
+type ListOrganizationsWithTrustedIssuerSessionNoncesRow struct {
+	OrganizationID string
+	ValueCount     int64
+	LastWrittenAt  pgtype.Timestamptz
+}
+
+// Every organization storing a trusted issuer nonce under either key,
+// soft-deleted rows included, with how many and the latest updated_at of the
+// rows storing them. Rows without organization_id are left out.
+func (q *Queries) ListOrganizationsWithTrustedIssuerSessionNonces(ctx context.Context) ([]ListOrganizationsWithTrustedIssuerSessionNoncesRow, error) {
+	rows, err := q.db.Query(ctx, listOrganizationsWithTrustedIssuerSessionNonces)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOrganizationsWithTrustedIssuerSessionNoncesRow
+	for rows.Next() {
+		var i ListOrganizationsWithTrustedIssuerSessionNoncesRow
+		if err := rows.Scan(&i.OrganizationID, &i.ValueCount, &i.LastWrittenAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrganizationsWithTrustedIssuerSessionRefreshTokens = `-- name: ListOrganizationsWithTrustedIssuerSessionRefreshTokens :many
+SELECT
+    s.organization_id::text AS organization_id,
+    COUNT(*)::bigint AS value_count,
+    MAX(s.updated_at)::timestamptz AS last_written_at
+FROM trusted_issuer_sessions AS s
+WHERE s.organization_id IS NOT NULL
+  AND (s.refresh_token_encrypted <> '' OR s.refresh_token_org_encrypted IS NOT NULL)
+GROUP BY s.organization_id
+`
+
+type ListOrganizationsWithTrustedIssuerSessionRefreshTokensRow struct {
+	OrganizationID string
+	ValueCount     int64
+	LastWrittenAt  pgtype.Timestamptz
+}
+
+// Every organization storing a trusted issuer refresh token under either key,
+// soft-deleted rows included, with how many and the latest updated_at of the
+// rows storing them. Rows without organization_id are left out.
+func (q *Queries) ListOrganizationsWithTrustedIssuerSessionRefreshTokens(ctx context.Context) ([]ListOrganizationsWithTrustedIssuerSessionRefreshTokensRow, error) {
+	rows, err := q.db.Query(ctx, listOrganizationsWithTrustedIssuerSessionRefreshTokens)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOrganizationsWithTrustedIssuerSessionRefreshTokensRow
+	for rows.Next() {
+		var i ListOrganizationsWithTrustedIssuerSessionRefreshTokensRow
+		if err := rows.Scan(&i.OrganizationID, &i.ValueCount, &i.LastWrittenAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrganizationsWithTrustedIssuerSessionUpstreamSubjects = `-- name: ListOrganizationsWithTrustedIssuerSessionUpstreamSubjects :many
+SELECT
+    s.organization_id::text AS organization_id,
+    COUNT(*)::bigint AS value_count,
+    MAX(s.updated_at)::timestamptz AS last_written_at
+FROM trusted_issuer_sessions AS s
+WHERE s.organization_id IS NOT NULL
+  AND (s.upstream_subject_encrypted <> '' OR s.upstream_subject_org_encrypted IS NOT NULL)
+GROUP BY s.organization_id
+`
+
+type ListOrganizationsWithTrustedIssuerSessionUpstreamSubjectsRow struct {
+	OrganizationID string
+	ValueCount     int64
+	LastWrittenAt  pgtype.Timestamptz
+}
+
+// Every organization storing a trusted issuer upstream subject under either key,
+// soft-deleted rows included, with how many and the latest updated_at of the
+// rows storing them. Rows without organization_id are left out.
+func (q *Queries) ListOrganizationsWithTrustedIssuerSessionUpstreamSubjects(ctx context.Context) ([]ListOrganizationsWithTrustedIssuerSessionUpstreamSubjectsRow, error) {
+	rows, err := q.db.Query(ctx, listOrganizationsWithTrustedIssuerSessionUpstreamSubjects)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOrganizationsWithTrustedIssuerSessionUpstreamSubjectsRow
+	for rows.Next() {
+		var i ListOrganizationsWithTrustedIssuerSessionUpstreamSubjectsRow
+		if err := rows.Scan(&i.OrganizationID, &i.ValueCount, &i.LastWrittenAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

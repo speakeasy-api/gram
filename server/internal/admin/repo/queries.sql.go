@@ -215,9 +215,17 @@ FROM organization_metadata om
 LEFT JOIN organization_encryption_transitions t
   ON t.organization_id = om.id
   AND t.use_case = $1
+WHERE NOT $2::boolean
+   OR om.id = ANY($3::text[])
 GROUP BY 1
 ORDER BY 1
 `
+
+type AdminCountOrganizationEncryptionTransitionStatesParams struct {
+	UseCase              string
+	WithValuesOnly       bool
+	ValueOrganizationIds []string
+}
 
 type AdminCountOrganizationEncryptionTransitionStatesRow struct {
 	State         string
@@ -225,9 +233,11 @@ type AdminCountOrganizationEncryptionTransitionStatesRow struct {
 }
 
 // How many organizations are in each transition state for one use case,
-// counting organizations without a row as platform_key.
-func (q *Queries) AdminCountOrganizationEncryptionTransitionStates(ctx context.Context, useCase string) ([]AdminCountOrganizationEncryptionTransitionStatesRow, error) {
-	rows, err := q.db.Query(ctx, adminCountOrganizationEncryptionTransitionStates, useCase)
+// counting organizations without a row as platform_key. with_values_only
+// counts just the organizations in value_organization_ids, as
+// AdminListOrganizationEncryptionTransitions lists them.
+func (q *Queries) AdminCountOrganizationEncryptionTransitionStates(ctx context.Context, arg AdminCountOrganizationEncryptionTransitionStatesParams) ([]AdminCountOrganizationEncryptionTransitionStatesRow, error) {
+	rows, err := q.db.Query(ctx, adminCountOrganizationEncryptionTransitionStates, arg.UseCase, arg.WithValuesOnly, arg.ValueOrganizationIds)
 	if err != nil {
 		return nil, err
 	}
@@ -1673,6 +1683,14 @@ func (q *Queries) AdminListOrganizationAssistants(ctx context.Context, organizat
 }
 
 const adminListOrganizationEncryptionTransitions = `-- name: AdminListOrganizationEncryptionTransitions :many
+WITH organizations_with_values AS (
+  SELECT v.organization_id, v.value_count, v.last_written_at
+  FROM ROWS FROM (
+    unnest($7::text[]),
+    unnest($8::bigint[]),
+    unnest($9::timestamptz[])
+  ) AS v(organization_id, value_count, last_written_at)
+)
 SELECT
   om.id AS organization_id,
   om.name,
@@ -1686,23 +1704,37 @@ SELECT
   t.last_backfill_remaining_count,
   t.last_backfill_unreadable_count,
   t.last_backfill_error,
-  t.last_verified_at
+  t.last_verified_at,
+  COALESCE(v.value_count, 0)::bigint AS value_count,
+  v.last_written_at::timestamptz AS last_written_at
 FROM organization_metadata om
 LEFT JOIN organization_encryption_transitions t
   ON t.organization_id = om.id
   AND t.use_case = $1
-WHERE $2::text IS NULL
-   OR COALESCE(t.state, 'platform_key') = $2::text
-ORDER BY om.created_at, om.id
-LIMIT $4
-OFFSET $3
+LEFT JOIN organizations_with_values v ON v.organization_id = om.id
+WHERE (NOT $2::boolean OR v.organization_id IS NOT NULL)
+  AND (
+    $3::text IS NULL
+    OR COALESCE(t.state, 'platform_key') = $3::text
+  )
+ORDER BY
+  CASE WHEN $4::boolean THEN v.last_written_at END DESC NULLS LAST,
+  om.created_at,
+  om.id
+LIMIT $6
+OFFSET $5
 `
 
 type AdminListOrganizationEncryptionTransitionsParams struct {
-	UseCase     string
-	State       pgtype.Text
-	OffsetValue int32
-	LimitValue  int32
+	UseCase              string
+	WithValuesOnly       bool
+	State                pgtype.Text
+	SortByLastWritten    bool
+	OffsetValue          int32
+	LimitValue           int32
+	ValueOrganizationIds []string
+	ValueCounts          []int64
+	ValueLastWrittenAt   []pgtype.Timestamptz
 }
 
 type AdminListOrganizationEncryptionTransitionsRow struct {
@@ -1719,18 +1751,30 @@ type AdminListOrganizationEncryptionTransitionsRow struct {
 	LastBackfillUnreadableCount pgtype.Int8
 	LastBackfillError           pgtype.Text
 	LastVerifiedAt              pgtype.Timestamptz
+	ValueCount                  int64
+	LastWrittenAt               pgtype.Timestamptz
 }
 
-// Every organization with its transition state for one use case, oldest first.
-// An organization without a transition row for the use case is in
-// platform_key, so the LEFT JOIN reports it there and the state filter matches
-// it. Pages with LIMIT and OFFSET: the list is staff-only and small.
+// Every organization with its transition state for one use case. An
+// organization without a transition row for the use case is in platform_key,
+// so the LEFT JOIN reports it there and the state filter matches it.
+//
+// The caller reads which organizations have values from the use case's copy
+// stores and passes them as three parallel arrays. with_values_only keeps just
+// those organizations; sort_by_last_written lists the most recently written
+// first, then every other organization oldest first. Pages with LIMIT and
+// OFFSET: the list is staff-only and small.
 func (q *Queries) AdminListOrganizationEncryptionTransitions(ctx context.Context, arg AdminListOrganizationEncryptionTransitionsParams) ([]AdminListOrganizationEncryptionTransitionsRow, error) {
 	rows, err := q.db.Query(ctx, adminListOrganizationEncryptionTransitions,
 		arg.UseCase,
+		arg.WithValuesOnly,
 		arg.State,
+		arg.SortByLastWritten,
 		arg.OffsetValue,
 		arg.LimitValue,
+		arg.ValueOrganizationIds,
+		arg.ValueCounts,
+		arg.ValueLastWrittenAt,
 	)
 	if err != nil {
 		return nil, err
@@ -1753,6 +1797,8 @@ func (q *Queries) AdminListOrganizationEncryptionTransitions(ctx context.Context
 			&i.LastBackfillUnreadableCount,
 			&i.LastBackfillError,
 			&i.LastVerifiedAt,
+			&i.ValueCount,
+			&i.LastWrittenAt,
 		); err != nil {
 			return nil, err
 		}

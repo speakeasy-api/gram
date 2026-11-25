@@ -147,6 +147,9 @@ LIMIT @limit_value;
 -- connections of the organization's projects stored without organization_id,
 -- and connections that still hold a plaintext token the marketplace token
 -- backfill has not moved. Either keeps the organization from finalizing.
+-- value_count and last_written_at cover the organization's own values under
+-- either key, soft-deleted rows included: the rows the backfill and clear
+-- reach, as ListOrganizationsWith* reports them.
 SELECT
     COUNT(*) FILTER (
         WHERE c.organization_id = @organization_id::text
@@ -174,7 +177,15 @@ SELECT
     COUNT(*) FILTER (
         WHERE c.organization_id = @organization_id::text
           AND c.marketplace_token_encrypted IS NOT NULL
-    )::bigint AS platform_copies
+    )::bigint AS platform_copies,
+    COUNT(*) FILTER (
+        WHERE c.organization_id = @organization_id::text
+          AND (c.marketplace_token_encrypted IS NOT NULL OR c.marketplace_token_org_encrypted IS NOT NULL)
+    )::bigint AS value_count,
+    MAX(c.updated_at) FILTER (
+        WHERE c.organization_id = @organization_id::text
+          AND (c.marketplace_token_encrypted IS NOT NULL OR c.marketplace_token_org_encrypted IS NOT NULL)
+    )::timestamptz AS last_written_at
 FROM plugin_github_connections AS c
 LEFT JOIN projects AS p ON p.id = c.project_id
 LEFT JOIN organization_encryption_unreadable_values AS u
@@ -234,3 +245,16 @@ SET
     marketplace_token_encrypted = sqlc.narg('platform_copy'),
     marketplace_token_org_encrypted = sqlc.narg('org_copy')
 WHERE c.id = @id;
+
+-- name: ListOrganizationsWithMarketplaceTokens :many
+-- Every organization storing a marketplace token under either key,
+-- soft-deleted rows included, with how many and the latest updated_at of the
+-- rows storing them. Rows without organization_id are left out.
+SELECT
+    c.organization_id::text AS organization_id,
+    COUNT(*)::bigint AS value_count,
+    MAX(c.updated_at)::timestamptz AS last_written_at
+FROM plugin_github_connections AS c
+WHERE c.organization_id IS NOT NULL
+  AND (c.marketplace_token_encrypted IS NOT NULL OR c.marketplace_token_org_encrypted IS NOT NULL)
+GROUP BY c.organization_id;

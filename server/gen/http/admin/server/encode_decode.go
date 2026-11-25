@@ -28117,6 +28117,8 @@ func DecodeListOrganizationEncryptionTransitionsRequest(mux goahttp.Muxer, decod
 		var (
 			useCase           *string
 			state             *string
+			values            string
+			sort              string
 			limit             int
 			offset            int
 			adminSessionToken *string
@@ -28135,6 +28137,24 @@ func DecodeListOrganizationEncryptionTransitionsRequest(mux goahttp.Muxer, decod
 			if !(*state == "platform_key" || *state == "dual_write" || *state == "org_kms") {
 				err = goa.MergeErrors(err, goa.InvalidEnumValueError("state", *state, []any{"platform_key", "dual_write", "org_kms"}))
 			}
+		}
+		valuesRaw := qp.Get("values")
+		if valuesRaw != "" {
+			values = valuesRaw
+		} else {
+			values = "present"
+		}
+		if !(values == "present" || values == "all") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("values", values, []any{"present", "all"}))
+		}
+		sortRaw := qp.Get("sort")
+		if sortRaw != "" {
+			sort = sortRaw
+		} else {
+			sort = "last_written"
+		}
+		if !(sort == "last_written" || sort == "oldest") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("sort", sort, []any{"last_written", "oldest"}))
 		}
 		{
 			limitRaw := qp.Get("limit")
@@ -28174,7 +28194,7 @@ func DecodeListOrganizationEncryptionTransitionsRequest(mux goahttp.Muxer, decod
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListOrganizationEncryptionTransitionsPayload(useCase, state, limit, offset, adminSessionToken)
+		payload = NewListOrganizationEncryptionTransitionsPayload(useCase, state, values, sort, limit, offset, adminSessionToken)
 		if payload.AdminSessionToken != nil {
 			if strings.Contains(*payload.AdminSessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -31699,6 +31719,8 @@ func marshalAdminAdminOrganizationEncryptionTransitionRowToAdminOrganizationEncr
 		LastBackfillUnreadable:  v.LastBackfillUnreadable,
 		LastBackfillError:       v.LastBackfillError,
 		LastVerifiedAt:          v.LastVerifiedAt,
+		ValueCount:              v.ValueCount,
+		LastWrittenAt:           v.LastWrittenAt,
 	}
 
 	return res
