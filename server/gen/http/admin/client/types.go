@@ -3494,6 +3494,33 @@ type GetHooksRolloutResponseBody struct {
 	RecentChanges []*AdminHooksRolloutChangeResponseBody `form:"recent_changes,omitempty" json:"recent_changes,omitempty" xml:"recent_changes,omitempty"`
 }
 
+// GetHooksReleaseProgressResponseBody is the type of the "admin" service
+// "getHooksReleaseProgress" endpoint HTTP response body.
+type GetHooksReleaseProgressResponseBody struct {
+	// The hooks generator version this server build publishes.
+	CurrentVersion *int `form:"current_version,omitempty" json:"current_version,omitempty" xml:"current_version,omitempty"`
+	// The hooks binary version this server build ships. Absent when unknown.
+	CurrentBinaryVersion *string `form:"current_binary_version,omitempty" json:"current_binary_version,omitempty" xml:"current_binary_version,omitempty"`
+	// Organizations with at least one marketplace repository.
+	Organizations *int64 `form:"organizations,omitempty" json:"organizations,omitempty" xml:"organizations,omitempty"`
+	// Of those, organizations whose next publish moves to current_version:
+	// canaries and organizations pinned at or above it.
+	OrganizationsCleared *int64 `form:"organizations_cleared,omitempty" json:"organizations_cleared,omitempty" xml:"organizations_cleared,omitempty"`
+	// Organizations pinned below current_version.
+	OrganizationsHeld *int64 `form:"organizations_held,omitempty" json:"organizations_held,omitempty" xml:"organizations_held,omitempty"`
+	// Organizations with no pin, which follow the legacy hooks-rollout PostHog
+	// flag the admin server cannot read.
+	OrganizationsOnLegacyFlag *int64 `form:"organizations_on_legacy_flag,omitempty" json:"organizations_on_legacy_flag,omitempty" xml:"organizations_on_legacy_flag,omitempty"`
+	// Marketplace repositories.
+	Repos *int64 `form:"repos,omitempty" json:"repos,omitempty" xml:"repos,omitempty"`
+	// Repositories whose last published hooks plugin carries current_version.
+	ReposOnCurrent *int64 `form:"repos_on_current,omitempty" json:"repos_on_current,omitempty" xml:"repos_on_current,omitempty"`
+	// Repositories per published hooks generator version, newest first.
+	RepoVersions []*AdminHooksReleaseRepoVersionResponseBody `form:"repo_versions,omitempty" json:"repo_versions,omitempty" xml:"repo_versions,omitempty"`
+	// Installs running the release. Absent when the hooks fleet is unavailable.
+	Fleet *AdminHooksReleaseFleetResponseBody `form:"fleet,omitempty" json:"fleet,omitempty" xml:"fleet,omitempty"`
+}
+
 // SetHooksRolloutDefaultResponseBody is the type of the "admin" service
 // "setHooksRolloutDefault" endpoint HTTP response body.
 type SetHooksRolloutDefaultResponseBody struct {
@@ -3723,9 +3750,10 @@ type ListOrganizationEncryptionTransitionsResponseBody struct {
 	UseCase *string `form:"use_case,omitempty" json:"use_case,omitempty" xml:"use_case,omitempty"`
 	// Every use case that moves from the platform key to organization keys.
 	UseCases []string `form:"use_cases,omitempty" json:"use_cases,omitempty" xml:"use_cases,omitempty"`
-	// The page of organizations, oldest first.
+	// The page of organizations, in the requested order.
 	Organizations []*AdminOrganizationEncryptionTransitionRowResponseBody `form:"organizations,omitempty" json:"organizations,omitempty" xml:"organizations,omitempty"`
-	// How many organizations are in each state, across every page.
+	// How many organizations the values filter keeps are in each state, across
+	// every page.
 	StateCounts []*AdminOrganizationEncryptionStateCountResponseBody `form:"state_counts,omitempty" json:"state_counts,omitempty" xml:"state_counts,omitempty"`
 	// Whether another page follows.
 	HasMore *bool `form:"has_more,omitempty" json:"has_more,omitempty" xml:"has_more,omitempty"`
@@ -27649,6 +27677,196 @@ type GetHooksRolloutGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// GetHooksReleaseProgressUnauthorizedResponseBody is the type of the "admin"
+// service "getHooksReleaseProgress" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetHooksReleaseProgressUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetHooksReleaseProgressForbiddenResponseBody is the type of the "admin"
+// service "getHooksReleaseProgress" endpoint HTTP response body for the
+// "forbidden" error.
+type GetHooksReleaseProgressForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetHooksReleaseProgressBadRequestResponseBody is the type of the "admin"
+// service "getHooksReleaseProgress" endpoint HTTP response body for the
+// "bad_request" error.
+type GetHooksReleaseProgressBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetHooksReleaseProgressNotFoundResponseBody is the type of the "admin"
+// service "getHooksReleaseProgress" endpoint HTTP response body for the
+// "not_found" error.
+type GetHooksReleaseProgressNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetHooksReleaseProgressConflictResponseBody is the type of the "admin"
+// service "getHooksReleaseProgress" endpoint HTTP response body for the
+// "conflict" error.
+type GetHooksReleaseProgressConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetHooksReleaseProgressUnsupportedMediaResponseBody is the type of the
+// "admin" service "getHooksReleaseProgress" endpoint HTTP response body for
+// the "unsupported_media" error.
+type GetHooksReleaseProgressUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetHooksReleaseProgressInvalidResponseBody is the type of the "admin"
+// service "getHooksReleaseProgress" endpoint HTTP response body for the
+// "invalid" error.
+type GetHooksReleaseProgressInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetHooksReleaseProgressInvariantViolationResponseBody is the type of the
+// "admin" service "getHooksReleaseProgress" endpoint HTTP response body for
+// the "invariant_violation" error.
+type GetHooksReleaseProgressInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetHooksReleaseProgressUnexpectedResponseBody is the type of the "admin"
+// service "getHooksReleaseProgress" endpoint HTTP response body for the
+// "unexpected" error.
+type GetHooksReleaseProgressUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetHooksReleaseProgressGatewayErrorResponseBody is the type of the "admin"
+// service "getHooksReleaseProgress" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetHooksReleaseProgressGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // SetHooksRolloutDefaultUnauthorizedResponseBody is the type of the "admin"
 // service "setHooksRolloutDefault" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -32702,6 +32920,43 @@ type AdminHooksRolloutChangeResponseBody struct {
 	SetAt *string `form:"set_at,omitempty" json:"set_at,omitempty" xml:"set_at,omitempty"`
 }
 
+// AdminHooksReleaseRepoVersionResponseBody is used to define fields on
+// response body types.
+type AdminHooksReleaseRepoVersionResponseBody struct {
+	// The hooks generator version last published, or empty for repositories that
+	// have never published the hooks plugin.
+	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
+	// Repositories on this version.
+	Repos *int64 `form:"repos,omitempty" json:"repos,omitempty" xml:"repos,omitempty"`
+}
+
+// AdminHooksReleaseFleetResponseBody is used to define fields on response body
+// types.
+type AdminHooksReleaseFleetResponseBody struct {
+	// Installs count when they sent a hook in this many full UTC days.
+	WindowDays *int `form:"window_days,omitempty" json:"window_days,omitempty" xml:"window_days,omitempty"`
+	// Installs seen in the window.
+	Installs *int64 `form:"installs,omitempty" json:"installs,omitempty" xml:"installs,omitempty"`
+	// Installs reporting exactly the binary version this build ships, on any
+	// endpoint.
+	InstallsOnCurrent *int64 `form:"installs_on_current,omitempty" json:"installs_on_current,omitempty" xml:"installs_on_current,omitempty"`
+	// Installs per binary version and status, newest first. A version can appear
+	// once per status, for example current and unsupported when some installs
+	// still send to a legacy endpoint.
+	Versions []*AdminHooksReleaseInstallVersionResponseBody `form:"versions,omitempty" json:"versions,omitempty" xml:"versions,omitempty"`
+}
+
+// AdminHooksReleaseInstallVersionResponseBody is used to define fields on
+// response body types.
+type AdminHooksReleaseInstallVersionResponseBody struct {
+	// The hooks binary version, or empty for installs that sent no version.
+	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
+	// How the version compares to the release Speakeasy ships.
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	// Installs whose latest version is this one.
+	Installs *int64 `form:"installs,omitempty" json:"installs,omitempty" xml:"installs,omitempty"`
+}
+
 // AdminTailscaleOAuthMigrationOrganizationResponseBody is used to define
 // fields on response body types.
 type AdminTailscaleOAuthMigrationOrganizationResponseBody struct {
@@ -32837,6 +33092,16 @@ type AdminOrganizationEncryptionTransitionRowResponseBody struct {
 	LastBackfillError *string `form:"last_backfill_error,omitempty" json:"last_backfill_error,omitempty" xml:"last_backfill_error,omitempty"`
 	// When the last clean verification pass started.
 	LastVerifiedAt *string `form:"last_verified_at,omitempty" json:"last_verified_at,omitempty" xml:"last_verified_at,omitempty"`
+	// How many values the organization stores for the use case under either key,
+	// soft-deleted rows included. A row storing values in two columns counts once
+	// in each.
+	ValueCount *int64 `form:"value_count,omitempty" json:"value_count,omitempty" xml:"value_count,omitempty"`
+	// The latest updated_at of a row storing one of the organization's values. A
+	// change that updates the row's updated_at moves it, such as a session's token
+	// refresh or an OpenRouter key's limit change; a write that leaves updated_at
+	// alone, such as a backfill seal, does not. Absent when the organization has
+	// none.
+	LastWrittenAt *string `form:"last_written_at,omitempty" json:"last_written_at,omitempty" xml:"last_written_at,omitempty"`
 }
 
 // AdminOrganizationEncryptionStateCountResponseBody is used to define fields
@@ -55857,6 +56122,184 @@ func NewGetHooksRolloutGatewayError(body *GetHooksRolloutGatewayErrorResponseBod
 	return v
 }
 
+// NewGetHooksReleaseProgressAdminHooksReleaseProgressOK builds a "admin"
+// service "getHooksReleaseProgress" endpoint result from a HTTP "OK" response.
+func NewGetHooksReleaseProgressAdminHooksReleaseProgressOK(body *GetHooksReleaseProgressResponseBody) *admin.AdminHooksReleaseProgress {
+	v := &admin.AdminHooksReleaseProgress{
+		CurrentVersion:            *body.CurrentVersion,
+		CurrentBinaryVersion:      body.CurrentBinaryVersion,
+		Organizations:             *body.Organizations,
+		OrganizationsCleared:      *body.OrganizationsCleared,
+		OrganizationsHeld:         *body.OrganizationsHeld,
+		OrganizationsOnLegacyFlag: *body.OrganizationsOnLegacyFlag,
+		Repos:                     *body.Repos,
+		ReposOnCurrent:            *body.ReposOnCurrent,
+	}
+	v.RepoVersions = make([]*admin.AdminHooksReleaseRepoVersion, len(body.RepoVersions))
+	for i, val := range body.RepoVersions {
+		if val == nil {
+			v.RepoVersions[i] = nil
+			continue
+		}
+		v.RepoVersions[i] = unmarshalAdminHooksReleaseRepoVersionResponseBodyToAdminAdminHooksReleaseRepoVersion(val)
+	}
+	if body.Fleet != nil {
+		v.Fleet = unmarshalAdminHooksReleaseFleetResponseBodyToAdminAdminHooksReleaseFleet(body.Fleet)
+	}
+
+	return v
+}
+
+// NewGetHooksReleaseProgressUnauthorized builds a admin service
+// getHooksReleaseProgress endpoint unauthorized error.
+func NewGetHooksReleaseProgressUnauthorized(body *GetHooksReleaseProgressUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetHooksReleaseProgressForbidden builds a admin service
+// getHooksReleaseProgress endpoint forbidden error.
+func NewGetHooksReleaseProgressForbidden(body *GetHooksReleaseProgressForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetHooksReleaseProgressBadRequest builds a admin service
+// getHooksReleaseProgress endpoint bad_request error.
+func NewGetHooksReleaseProgressBadRequest(body *GetHooksReleaseProgressBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetHooksReleaseProgressNotFound builds a admin service
+// getHooksReleaseProgress endpoint not_found error.
+func NewGetHooksReleaseProgressNotFound(body *GetHooksReleaseProgressNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetHooksReleaseProgressConflict builds a admin service
+// getHooksReleaseProgress endpoint conflict error.
+func NewGetHooksReleaseProgressConflict(body *GetHooksReleaseProgressConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetHooksReleaseProgressUnsupportedMedia builds a admin service
+// getHooksReleaseProgress endpoint unsupported_media error.
+func NewGetHooksReleaseProgressUnsupportedMedia(body *GetHooksReleaseProgressUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetHooksReleaseProgressInvalid builds a admin service
+// getHooksReleaseProgress endpoint invalid error.
+func NewGetHooksReleaseProgressInvalid(body *GetHooksReleaseProgressInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetHooksReleaseProgressInvariantViolation builds a admin service
+// getHooksReleaseProgress endpoint invariant_violation error.
+func NewGetHooksReleaseProgressInvariantViolation(body *GetHooksReleaseProgressInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetHooksReleaseProgressUnexpected builds a admin service
+// getHooksReleaseProgress endpoint unexpected error.
+func NewGetHooksReleaseProgressUnexpected(body *GetHooksReleaseProgressUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetHooksReleaseProgressGatewayError builds a admin service
+// getHooksReleaseProgress endpoint gateway_error error.
+func NewGetHooksReleaseProgressGatewayError(body *GetHooksReleaseProgressGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewSetHooksRolloutDefaultAdminHooksRolloutOK builds a "admin" service
 // "setHooksRolloutDefault" endpoint result from a HTTP "OK" response.
 func NewSetHooksRolloutDefaultAdminHooksRolloutOK(body *SetHooksRolloutDefaultResponseBody) *admin.AdminHooksRollout {
@@ -62709,6 +63152,48 @@ func ValidateGetHooksRolloutResponseBody(body *GetHooksRolloutResponseBody) (err
 			if err2 := ValidateAdminHooksRolloutChangeResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
+		}
+	}
+	return
+}
+
+// ValidateGetHooksReleaseProgressResponseBody runs the validations defined on
+// GetHooksReleaseProgressResponseBody
+func ValidateGetHooksReleaseProgressResponseBody(body *GetHooksReleaseProgressResponseBody) (err error) {
+	if body.CurrentVersion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("current_version", "body"))
+	}
+	if body.Organizations == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organizations", "body"))
+	}
+	if body.OrganizationsCleared == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organizations_cleared", "body"))
+	}
+	if body.OrganizationsHeld == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organizations_held", "body"))
+	}
+	if body.OrganizationsOnLegacyFlag == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organizations_on_legacy_flag", "body"))
+	}
+	if body.Repos == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("repos", "body"))
+	}
+	if body.ReposOnCurrent == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("repos_on_current", "body"))
+	}
+	if body.RepoVersions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("repo_versions", "body"))
+	}
+	for _, e := range body.RepoVersions {
+		if e != nil {
+			if err2 := ValidateAdminHooksReleaseRepoVersionResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	if body.Fleet != nil {
+		if err2 := ValidateAdminHooksReleaseFleetResponseBody(body.Fleet); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	return
@@ -94152,6 +94637,248 @@ func ValidateGetHooksRolloutGatewayErrorResponseBody(body *GetHooksRolloutGatewa
 	return
 }
 
+// ValidateGetHooksReleaseProgressUnauthorizedResponseBody runs the validations
+// defined on getHooksReleaseProgress_unauthorized_response_body
+func ValidateGetHooksReleaseProgressUnauthorizedResponseBody(body *GetHooksReleaseProgressUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetHooksReleaseProgressForbiddenResponseBody runs the validations
+// defined on getHooksReleaseProgress_forbidden_response_body
+func ValidateGetHooksReleaseProgressForbiddenResponseBody(body *GetHooksReleaseProgressForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetHooksReleaseProgressBadRequestResponseBody runs the validations
+// defined on getHooksReleaseProgress_bad_request_response_body
+func ValidateGetHooksReleaseProgressBadRequestResponseBody(body *GetHooksReleaseProgressBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetHooksReleaseProgressNotFoundResponseBody runs the validations
+// defined on getHooksReleaseProgress_not_found_response_body
+func ValidateGetHooksReleaseProgressNotFoundResponseBody(body *GetHooksReleaseProgressNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetHooksReleaseProgressConflictResponseBody runs the validations
+// defined on getHooksReleaseProgress_conflict_response_body
+func ValidateGetHooksReleaseProgressConflictResponseBody(body *GetHooksReleaseProgressConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetHooksReleaseProgressUnsupportedMediaResponseBody runs the
+// validations defined on
+// getHooksReleaseProgress_unsupported_media_response_body
+func ValidateGetHooksReleaseProgressUnsupportedMediaResponseBody(body *GetHooksReleaseProgressUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetHooksReleaseProgressInvalidResponseBody runs the validations
+// defined on getHooksReleaseProgress_invalid_response_body
+func ValidateGetHooksReleaseProgressInvalidResponseBody(body *GetHooksReleaseProgressInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetHooksReleaseProgressInvariantViolationResponseBody runs the
+// validations defined on
+// getHooksReleaseProgress_invariant_violation_response_body
+func ValidateGetHooksReleaseProgressInvariantViolationResponseBody(body *GetHooksReleaseProgressInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetHooksReleaseProgressUnexpectedResponseBody runs the validations
+// defined on getHooksReleaseProgress_unexpected_response_body
+func ValidateGetHooksReleaseProgressUnexpectedResponseBody(body *GetHooksReleaseProgressUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetHooksReleaseProgressGatewayErrorResponseBody runs the validations
+// defined on getHooksReleaseProgress_gateway_error_response_body
+func ValidateGetHooksReleaseProgressGatewayErrorResponseBody(body *GetHooksReleaseProgressGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateSetHooksRolloutDefaultUnauthorizedResponseBody runs the validations
 // defined on setHooksRolloutDefault_unauthorized_response_body
 func ValidateSetHooksRolloutDefaultUnauthorizedResponseBody(body *SetHooksRolloutDefaultUnauthorizedResponseBody) (err error) {
@@ -101287,6 +102014,63 @@ func ValidateAdminHooksRolloutChangeResponseBody(body *AdminHooksRolloutChangeRe
 	return
 }
 
+// ValidateAdminHooksReleaseRepoVersionResponseBody runs the validations
+// defined on AdminHooksReleaseRepoVersionResponseBody
+func ValidateAdminHooksReleaseRepoVersionResponseBody(body *AdminHooksReleaseRepoVersionResponseBody) (err error) {
+	if body.Version == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
+	}
+	if body.Repos == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("repos", "body"))
+	}
+	return
+}
+
+// ValidateAdminHooksReleaseFleetResponseBody runs the validations defined on
+// AdminHooksReleaseFleetResponseBody
+func ValidateAdminHooksReleaseFleetResponseBody(body *AdminHooksReleaseFleetResponseBody) (err error) {
+	if body.WindowDays == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("window_days", "body"))
+	}
+	if body.Installs == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("installs", "body"))
+	}
+	if body.InstallsOnCurrent == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("installs_on_current", "body"))
+	}
+	if body.Versions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("versions", "body"))
+	}
+	for _, e := range body.Versions {
+		if e != nil {
+			if err2 := ValidateAdminHooksReleaseInstallVersionResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateAdminHooksReleaseInstallVersionResponseBody runs the validations
+// defined on AdminHooksReleaseInstallVersionResponseBody
+func ValidateAdminHooksReleaseInstallVersionResponseBody(body *AdminHooksReleaseInstallVersionResponseBody) (err error) {
+	if body.Version == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
+	}
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.Installs == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("installs", "body"))
+	}
+	if body.Status != nil {
+		if !(*body.Status == "current" || *body.Status == "behind" || *body.Status == "unsupported" || *body.Status == "unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"current", "behind", "unsupported", "unknown"}))
+		}
+	}
+	return
+}
+
 // ValidateAdminTailscaleOAuthMigrationOrganizationResponseBody runs the
 // validations defined on AdminTailscaleOAuthMigrationOrganizationResponseBody
 func ValidateAdminTailscaleOAuthMigrationOrganizationResponseBody(body *AdminTailscaleOAuthMigrationOrganizationResponseBody) (err error) {
@@ -101436,6 +102220,9 @@ func ValidateAdminOrganizationEncryptionTransitionRowResponseBody(body *AdminOrg
 	if body.State == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("state", "body"))
 	}
+	if body.ValueCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("value_count", "body"))
+	}
 	if body.State != nil {
 		if !(*body.State == "platform_key" || *body.State == "dual_write" || *body.State == "org_kms") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.state", *body.State, []any{"platform_key", "dual_write", "org_kms"}))
@@ -101455,6 +102242,9 @@ func ValidateAdminOrganizationEncryptionTransitionRowResponseBody(body *AdminOrg
 	}
 	if body.LastVerifiedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_verified_at", *body.LastVerifiedAt, goa.FormatDateTime))
+	}
+	if body.LastWrittenAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_written_at", *body.LastWrittenAt, goa.FormatDateTime))
 	}
 	return
 }

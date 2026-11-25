@@ -259,7 +259,7 @@ func TestResourceForClientAtUpstream_OfferDecidesOverAssociation(t *testing.T) {
 	siblingServer := seedRemoteMcpServerForLogin(t, ctx, ti.conn, projectID, signIn, "offer-decides-b", sibling)
 	issuerID := seedRemoteIssuerWithURL(t, ctx, ti.conn, conv.ToNullUUID(projectID), conv.ToPGText(organizationID), "offer-decides-issuer", "https://issuer.example.com/offer-decides")
 	registration := seedProjectRemoteClientNoOrg(t, ctx, ti.conn, projectID, issuerID, "offer-decides-cid")
-	ensureAttachmentParent(t, ctx, ti.conn, registration, signIn)
+	seedLegacyIssuerClientLink(t, ctx, ti.conn, registration, signIn)
 	mgr := newResolveManager(t, ti.conn, testenv.NewEncryptionClient(t))
 	got, err := mgr.ResourceForClientAtUpstream(ctx, organizationID, registration, nil, sibling)
 	require.NoError(t, err)

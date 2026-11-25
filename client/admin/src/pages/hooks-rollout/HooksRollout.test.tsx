@@ -13,6 +13,7 @@ import { renderWithApp } from "@/test/harness";
 
 const mocks = vi.hoisted(() => ({
   getHooksRollout: vi.fn(),
+  getHooksReleaseProgress: vi.fn(),
   setHooksRolloutDefault: vi.fn(),
   startHooksRolloutStage: vi.fn(),
   pauseHooksRolloutStage: vi.fn(),
@@ -25,6 +26,7 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
   return {
     ...actual,
     getHooksRollout: mocks.getHooksRollout,
+    getHooksReleaseProgress: mocks.getHooksReleaseProgress,
     setHooksRolloutDefault: mocks.setHooksRolloutDefault,
     startHooksRolloutStage: mocks.startHooksRolloutStage,
     pauseHooksRolloutStage: mocks.pauseHooksRolloutStage,
@@ -87,6 +89,7 @@ const RUNNING: NonNullable<AdminHooksRollout["stage"]> = {
 
 beforeEach(() => {
   for (const mock of Object.values(mocks)) mock.mockReset();
+  mocks.getHooksReleaseProgress.mockReturnValue(new Promise(() => {}));
 });
 
 afterEach(() => {

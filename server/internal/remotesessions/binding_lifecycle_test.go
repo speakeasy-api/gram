@@ -25,7 +25,7 @@ import (
 // but only while its exact grant, owner, tenant and configuration remain live.
 func TestRemoteSessionSweeps_AttachmentReachParity(t *testing.T) {
 	t.Parallel()
-	states := []string{"detach", "session-revoked", "agent-suspended", "agent-revoked", "owner-reassignment", "owner-departed", "owner-deleted", "owner-transfer", "config-unlinked", "config-deleted", "source-deleted", "client-deleted", "registration-retired", "issuer-deleted", "project-deleted", "opt-out", "policy-disabled"}
+	states := []string{"detach", "session-revoked", "agent-suspended", "agent-revoked", "owner-reassignment", "owner-departed", "owner-deleted", "owner-transfer", "config-deleted", "source-deleted", "client-deleted", "registration-retired", "issuer-deleted", "project-deleted", "opt-out", "policy-disabled"}
 	for _, state := range states {
 		t.Run("refresh/"+state, func(t *testing.T) {
 			t.Parallel()
@@ -54,9 +54,9 @@ func checkAttachmentReachLifecycle(t *testing.T, state string, checkRecheck bool
 	source := createUserSessionIssuer(t, ctx, ti.conn, "attachment-source")
 	client := createRemoteClient(t, ctx, ti, issuer, config.String(), "attachment-client")
 	session := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject(auth.UserID), source.String(), client)
-	ensureAttachmentParent(t, ctx, ti.conn, session.RemoteSessionClientID, config)
 	binding, err := q.AttachPrincipalRemoteSessionBinding(ctx, repo.AttachPrincipalRemoteSessionBindingParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, PrincipalID: agent.ID, UserSessionIssuerID: config, RemoteSessionID: session.ID, SubjectUrn: session.SubjectUrn.String()})
 	require.NoError(t, err)
+	requireNoAttachmentParent(t, ctx, ti, session.RemoteSessionClientID, config)
 	fixtures := testrepo.New(ti.conn)
 	org := auth.ActiveOrganizationID
 	project := *auth.ProjectID
@@ -132,8 +132,6 @@ func checkAttachmentReachLifecycle(t *testing.T, state string, checkRecheck bool
 		_, err = testrepo.New(ti.conn).AddAttachmentReplacementOwnerMembershipFixture(ctx, auth.ActiveOrganizationID)
 		require.NoError(t, err)
 		_, err = agentrepo.New(ti.conn).TransferAgent(ctx, agentrepo.TransferAgentParams{ID: agent.ID, OrganizationID: auth.ActiveOrganizationID, OwnerUserID: "replacement-owner"})
-	case "config-unlinked":
-		_, err = testrepo.New(ti.conn).UnlinkAttachmentClientFixture(ctx, testrepo.UnlinkAttachmentClientFixtureParams{RemoteSessionClientID: session.RemoteSessionClientID, UserSessionIssuerID: config})
 	case "config-deleted", "source-deleted":
 		id := config
 		if state == "source-deleted" {

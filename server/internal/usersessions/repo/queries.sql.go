@@ -3778,7 +3778,7 @@ func (q *Queries) ListOrganizationUserSessionIssuers(ctx context.Context, arg Li
 }
 
 const listPrincipalRemoteSessionBindingRekeys = `-- name: ListPrincipalRemoteSessionBindingRekeys :many
-SELECT binding.id, binding.remote_session_client_id
+SELECT binding.id
 FROM principal_remote_session_bindings AS binding
 JOIN projects AS project ON project.id = binding.project_id AND project.organization_id = binding.organization_id AND NOT project.deleted
 JOIN agents AS a ON a.id = binding.principal_id AND a.organization_id = binding.organization_id AND NOT a.deleted
@@ -3830,30 +3830,25 @@ type ListPrincipalRemoteSessionBindingRekeysParams struct {
 	OrganizationID string
 }
 
-type ListPrincipalRemoteSessionBindingRekeysRow struct {
-	ID                    uuid.UUID
-	RemoteSessionClientID uuid.UUID
-}
-
 // The migration transaction has locked both issuers and already moved session
 // provenance. A duplicate attachment to the same login is left for source
 // issuer cleanup. Do not infer rekey eligibility from a junction row.
 // Keep the exact row even if its grant was reauthorized in place. Attachment
 // generation records the attach event; the current session generation is
 // locked here, as the exact session must not be revoked during the rekey.
-func (q *Queries) ListPrincipalRemoteSessionBindingRekeys(ctx context.Context, arg ListPrincipalRemoteSessionBindingRekeysParams) ([]ListPrincipalRemoteSessionBindingRekeysRow, error) {
+func (q *Queries) ListPrincipalRemoteSessionBindingRekeys(ctx context.Context, arg ListPrincipalRemoteSessionBindingRekeysParams) ([]uuid.UUID, error) {
 	rows, err := q.db.Query(ctx, listPrincipalRemoteSessionBindingRekeys, arg.TargetIssuerID, arg.SourceIssuerID, arg.OrganizationID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListPrincipalRemoteSessionBindingRekeysRow
+	var items []uuid.UUID
 	for rows.Next() {
-		var i ListPrincipalRemoteSessionBindingRekeysRow
-		if err := rows.Scan(&i.ID, &i.RemoteSessionClientID); err != nil {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
 			return nil, err
 		}
-		items = append(items, i)
+		items = append(items, id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

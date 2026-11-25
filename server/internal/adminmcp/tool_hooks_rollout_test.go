@@ -17,7 +17,12 @@ type recordingHooksRolloutReader struct {
 	organizationInput *gen.GetOrganizationHooksRolloutPayload
 	platform          *gen.AdminHooksRollout
 	organization      *gen.AdminOrganizationHooksRollout
+	progress          *gen.AdminHooksReleaseProgress
 	rolloutErr        error
+}
+
+func (r *recordingHooksRolloutReader) GetHooksReleaseProgress(context.Context, *gen.GetHooksReleaseProgressPayload) (*gen.AdminHooksReleaseProgress, error) {
+	return r.progress, r.rolloutErr
 }
 
 func (r *recordingHooksRolloutReader) GetHooksRollout(context.Context, *gen.GetHooksRolloutPayload) (*gen.AdminHooksRollout, error) {
@@ -84,6 +89,39 @@ func TestGetHooksRolloutBoundsOverrides(t *testing.T) {
 	require.True(t, out.OverridesTruncated)
 }
 
+func TestGetHooksReleaseProgressProjectsCounts(t *testing.T) {
+	t.Parallel()
+	binary := "0.3.58"
+	reads := &recordingHooksRolloutReader{progress: &gen.AdminHooksReleaseProgress{
+		CurrentVersion: 66, CurrentBinaryVersion: &binary,
+		Organizations: 3, OrganizationsCleared: 1, OrganizationsHeld: 1, OrganizationsOnLegacyFlag: 1,
+		Repos: 4, ReposOnCurrent: 2,
+		RepoVersions: []*gen.AdminHooksReleaseRepoVersion{{Version: "66", Repos: 2}, {Version: "", Repos: 2}},
+		Fleet: &gen.AdminHooksReleaseFleet{
+			WindowDays: 7, Installs: 5, InstallsOnCurrent: 3,
+			Versions: []*gen.AdminHooksReleaseInstallVersion{{Version: "0.3.58", Status: "current", Installs: 3}, {Version: "0.3.40", Status: "behind", Installs: 2}},
+		},
+	}}
+
+	status, body, data := callStaffReadTool(t, reads, "get_hooks_release_progress", `{}`)
+	require.Equal(t, http.StatusOK, status)
+	require.NotContains(t, body, `"isError":true`)
+	var out HooksReleaseProgress
+	require.NoError(t, json.Unmarshal(data, &out))
+	require.Equal(t, 66, out.CurrentVersion)
+	require.Equal(t, "0.3.58", out.CurrentBinaryVersion)
+	require.Equal(t, int64(1), out.OrganizationsCleared)
+	require.Equal(t, int64(2), out.ReposOnCurrent)
+	require.Equal(t, []HooksReleaseRepoVersion{{Version: "66", Repos: 2}, {Version: "", Repos: 2}}, out.RepoVersions)
+	require.NotNil(t, out.Fleet)
+	require.Equal(t, int64(3), out.Fleet.InstallsOnCurrent)
+	require.Len(t, out.Fleet.Versions, 2)
+
+	failing := &recordingHooksRolloutReader{rolloutErr: errors.New("database down")}
+	_, body, _ = callStaffReadTool(t, failing, "get_hooks_release_progress", `{}`)
+	require.Contains(t, body, `"isError":true`)
+}
+
 func TestGetOrganizationHooksRolloutReadsExactTarget(t *testing.T) {
 	t.Parallel()
 	effective, eligible := 41, false
@@ -136,5 +174,5 @@ func TestHooksRolloutAppearsInContext(t *testing.T) {
 	require.NotContains(t, body, `"isError":true`)
 	var out AdminContext
 	require.NoError(t, json.Unmarshal(data, &out))
-	require.Contains(t, out.Workflows, "inspect the hooks version rollout pins, the staged rollout and which hooks version an organization is cleared for")
+	require.Contains(t, out.Workflows, "inspect the hooks version rollout pins, the staged rollout, how far the current hooks release has reached, and which hooks version an organization is cleared for")
 }

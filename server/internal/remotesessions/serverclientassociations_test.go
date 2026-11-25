@@ -143,14 +143,14 @@ func TestMCPServerUpstreamClientAssociations(t *testing.T) {
 		require.Equal(t, []uuid.UUID{clientID}, associatedClients(t, ctx, ti.conn, projectID, serverID), "reconciling again must not duplicate the association")
 	})
 
-	t.Run("an attachment parent proves nothing about shared-issuer servers", func(t *testing.T) {
+	t.Run("a legacy link proves nothing about shared-issuer servers", func(t *testing.T) {
 		t.Parallel()
 
 		userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-assoc-shared")
 		first := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "assoc-shared-a")
 		second := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "assoc-shared-b")
 		clientID, _ := seedActiveClient(t, ctx, ti.conn, projectID, uuid.Nil, orgID, "rsi-assoc-shared")
-		ensureAttachmentParent(t, ctx, ti.conn, clientID, userIssuerID)
+		seedLegacyIssuerClientLink(t, ctx, ti.conn, clientID, userIssuerID)
 
 		resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
 		require.Empty(t, associatedClients(t, ctx, ti.conn, projectID, first), "a shared issuer's client must not be copied onto every server")
@@ -243,13 +243,12 @@ func TestMCPServerUpstreamClientAssociations(t *testing.T) {
 			"the other server on the same client keeps what it offers")
 	})
 
-	t.Run("a sole server can detach its offer without removing the attachment parent", func(t *testing.T) {
+	t.Run("a sole server can detach its offer without a legacy link", func(t *testing.T) {
 		t.Parallel()
 
 		userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-assoc-own")
 		serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "assoc-own")
 		clientID, _ := seedActiveClient(t, ctx, ti.conn, projectID, uuid.Nil, orgID, "rsi-assoc-own")
-		ensureAttachmentParent(t, ctx, ti.conn, clientID, userIssuerID)
 		associateServerClient(t, ctx, ti, serverID, clientID)
 
 		err := ti.service.DetachServerClientAssociation(ctx, &gen.DetachServerClientAssociationPayload{
@@ -258,7 +257,7 @@ func TestMCPServerUpstreamClientAssociations(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.Empty(t, associatedClients(t, ctx, ti.conn, projectID, serverID))
-		require.Equal(t, 1, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, clientID, userIssuerID), "detaching an offer preserves the attachment parent")
+		requireNoAttachmentParent(t, ctx, ti, clientID, userIssuerID)
 	})
 
 	t.Run("unbinding a client from the issuer preserves explicit server associations", func(t *testing.T) {
@@ -268,7 +267,7 @@ func TestMCPServerUpstreamClientAssociations(t *testing.T) {
 		first := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "assoc-unbind-a")
 		second := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "assoc-unbind-b")
 		clientID, _ := seedActiveClient(t, ctx, ti.conn, projectID, uuid.Nil, orgID, "rsi-assoc-unbind")
-		ensureAttachmentParent(t, ctx, ti.conn, clientID, userIssuerID)
+		seedLegacyIssuerClientLink(t, ctx, ti.conn, clientID, userIssuerID)
 		associate(t, ctx, ti.conn, orgID, projectID, first, clientID)
 		associate(t, ctx, ti.conn, orgID, projectID, second, clientID)
 
@@ -412,7 +411,6 @@ func TestDetachServerClientAssociation_EnforcedSoleConsumer(t *testing.T) {
 	userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-enforced-own")
 	serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "enforced-own")
 	clientID, _ := seedActiveClient(t, ctx, ti.conn, projectID, uuid.Nil, orgID, "rsi-enforced-own")
-	ensureAttachmentParent(t, ctx, ti.conn, clientID, userIssuerID)
 	associateServerClient(t, ctx, ti, serverID, clientID)
 	recordTypedClients(t, ctx, ti.conn, orgID, serverID)
 	require.Equal(t, []uuid.UUID{clientID}, associatedClients(t, ctx, ti.conn, projectID, serverID))
@@ -433,7 +431,7 @@ func TestDetachServerClientAssociation_EnforcedSoleConsumer(t *testing.T) {
 	require.Equal(t, associationsBefore+1, auditCount(audit.ActionRemoteSessionClientDetachMcpServer))
 
 	require.Empty(t, associatedClients(t, ctx, ti.conn, projectID, serverID))
-	require.Equal(t, 1, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, clientID, userIssuerID), "detaching an offer preserves the attachment parent")
+	requireNoAttachmentParent(t, ctx, ti, clientID, userIssuerID)
 	require.Equal(t, []uuid.UUID{adminClientID}, offeredAuthClients(t, ctx, ti.conn, serverID),
 		"only the link derived from the association is retired")
 	require.True(t, authClientLive(t, ctx, ti.conn, offered[0]))

@@ -1434,6 +1434,75 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       x-speakeasy-name-override: pauseHooksRolloutStage
+  /admin/hooksRollout.progress:
+    get:
+      tags:
+        - admin
+      summary: getHooksReleaseProgress admin
+      description: 'Returns how far the current hooks release has reached: organizations the rollout pins clear for it, marketplace repositories republished with it, and installs reporting its binary version.'
+      operationId: adminGetHooksReleaseProgress
+      responses:
+        "200":
+          description: OK response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminHooksReleaseProgress'
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'conflict: resource already exists'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: getHooksReleaseProgress
   /admin/hooksRollout.resumeStage:
     post:
       tags:
@@ -6289,7 +6358,7 @@ paths:
       x-speakeasy-name-override: getOrganizationEncryption
   /admin/organizationEncryption.listTransitions:
     get:
-      description: Lists organizations by transition state for one use case, oldest first. Organizations never enrolled are in platform_key.
+      description: Lists organizations by transition state for one use case. Organizations never enrolled are in platform_key. By default it lists only organizations with values for the use case, most recently written first.
       operationId: adminListOrganizationEncryptionTransitions
       parameters:
         - allowEmptyValue: true
@@ -6309,6 +6378,28 @@ paths:
               - platform_key
               - dual_write
               - org_kms
+            type: string
+        - allowEmptyValue: true
+          description: present lists only organizations with at least one value for the use case under either key, soft-deleted rows included. all lists every organization.
+          in: query
+          name: values
+          schema:
+            default: present
+            description: present lists only organizations with at least one value for the use case under either key, soft-deleted rows included. all lists every organization.
+            enum:
+              - present
+              - all
+            type: string
+        - allowEmptyValue: true
+          description: last_written lists the most recently written organizations first, then organizations without values oldest first. oldest lists the oldest organizations first. The list pages by offset, so an organization whose last write changes between page requests can repeat or be skipped.
+          in: query
+          name: sort
+          schema:
+            default: last_written
+            description: last_written lists the most recently written organizations first, then organizations without values oldest first. oldest lists the oldest organizations first. The list pages by offset, so an organization whose last write changes between page requests can repeat or be skipped.
+            enum:
+              - last_written
+              - oldest
             type: string
         - allowEmptyValue: true
           description: Organizations per page.
@@ -12227,6 +12318,114 @@ components:
         - version
         - status
         - installs
+    AdminHooksReleaseFleet:
+      type: object
+      properties:
+        installs:
+          type: integer
+          description: Installs seen in the window.
+          format: int64
+        installs_on_current:
+          type: integer
+          description: Installs reporting exactly the binary version this build ships, on any endpoint.
+          format: int64
+        versions:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminHooksReleaseInstallVersion'
+          description: Installs per binary version and status, newest first. A version can appear once per status, for example current and unsupported when some installs still send to a legacy endpoint.
+        window_days:
+          type: integer
+          description: Installs count when they sent a hook in this many full UTC days.
+          format: int64
+      description: Hooks installs across every organization, by binary version.
+      required:
+        - window_days
+        - installs
+        - installs_on_current
+        - versions
+    AdminHooksReleaseInstallVersion:
+      type: object
+      properties:
+        installs:
+          type: integer
+          description: Installs whose latest version is this one.
+          format: int64
+        version:
+          type: string
+          description: The hooks binary version, or empty for installs that sent no version.
+        status:
+          $ref: "#/components/schemas/AdminHooksReleaseInstallStatus"
+      description: Hooks installs reporting one binary version.
+      required:
+        - version
+        - status
+        - installs
+    AdminHooksReleaseProgress:
+      type: object
+      properties:
+        current_binary_version:
+          type: string
+          description: The hooks binary version this server build ships. Absent when unknown.
+        current_version:
+          type: integer
+          description: The hooks generator version this server build publishes.
+          format: int64
+        fleet:
+          $ref: '#/components/schemas/AdminHooksReleaseFleet'
+        organizations:
+          type: integer
+          description: Organizations with at least one marketplace repository.
+          format: int64
+        organizations_cleared:
+          type: integer
+          description: 'Of those, organizations whose next publish moves to current_version: canaries and organizations pinned at or above it.'
+          format: int64
+        organizations_held:
+          type: integer
+          description: Organizations pinned below current_version.
+          format: int64
+        organizations_on_legacy_flag:
+          type: integer
+          description: Organizations with no pin, which follow the legacy hooks-rollout PostHog flag the admin server cannot read.
+          format: int64
+        repo_versions:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminHooksReleaseRepoVersion'
+          description: Repositories per published hooks generator version, newest first.
+        repos:
+          type: integer
+          description: Marketplace repositories.
+          format: int64
+        repos_on_current:
+          type: integer
+          description: Repositories whose last published hooks plugin carries current_version.
+          format: int64
+      description: 'How far the current hooks release has reached: organizations cleared by the rollout pins, marketplace repositories republished with it, and installs running it.'
+      required:
+        - current_version
+        - organizations
+        - organizations_cleared
+        - organizations_held
+        - organizations_on_legacy_flag
+        - repos
+        - repos_on_current
+        - repo_versions
+    AdminHooksReleaseRepoVersion:
+      type: object
+      properties:
+        repos:
+          type: integer
+          description: Repositories on this version.
+          format: int64
+        version:
+          type: string
+          description: The hooks generator version last published, or empty for repositories that have never published the hooks plugin.
+      description: Marketplace repositories whose last published hooks plugin carries one hooks generator version.
+      required:
+        - version
+        - repos
     AdminHooksRollout:
       type: object
       properties:
@@ -13964,12 +14163,12 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AdminOrganizationEncryptionTransitionRow'
-          description: The page of organizations, oldest first.
+          description: The page of organizations, in the requested order.
         state_counts:
           type: array
           items:
             $ref: '#/components/schemas/AdminOrganizationEncryptionStateCount'
-          description: How many organizations are in each state, across every page.
+          description: How many organizations the values filter keeps are in each state, across every page.
         use_case:
           type: string
           description: The use case listed.
@@ -14013,6 +14212,10 @@ components:
           type: string
           description: When the last clean verification pass started.
           format: date-time
+        last_written_at:
+          type: string
+          description: The latest updated_at of a row storing one of the organization's values. A change that updates the row's updated_at moves it, such as a session's token refresh or an OpenRouter key's limit change; a write that leaves updated_at alone, such as a backfill seal, does not. Absent when the organization has none.
+          format: date-time
         name:
           type: string
           description: The organization name.
@@ -14037,6 +14240,10 @@ components:
           type: string
           description: When the state was entered.
           format: date-time
+        value_count:
+          type: integer
+          description: How many values the organization stores for the use case under either key, soft-deleted rows included. A row storing values in two columns counts once in each.
+          format: int64
       description: One organization's transition state for a use case, from stored state only.
       required:
         - organization_id
@@ -14044,6 +14251,7 @@ components:
         - slug
         - disabled
         - state
+        - value_count
     AdminOrganizationEncryptionUseCase:
       type: object
       properties:
@@ -18115,6 +18323,14 @@ components:
         - stage
         - default
         - legacy_flag
+    AdminHooksReleaseInstallStatus:
+      type: string
+      description: How the version compares to the release Speakeasy ships.
+      enum:
+        - current
+        - behind
+        - unsupported
+        - unknown
   securitySchemes:
     apikey_header_Authorization:
       type: apiKey

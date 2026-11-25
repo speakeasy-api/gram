@@ -210,7 +210,7 @@ func UsageCommands() []string {
 		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|get-server-metrics|update-server|rotate-server-key|delete-server)",
 		"unproxied-mcp (create-server|list-servers|get-server|delete-server)",
 		"usage (get-period-usage|get-meter-usage|get-spend-breakdown|get-tokens-under-management|set-billing-metadata|get-billing-email|set-billing-email|set-spend-cap|get-inference-spend-caps|get-usage-tiers|create-customer-session|get-stripe-checkout-status|create-stripe-checkout|get-stripe-subscription|get-payg-billing-summary|create-stripe-portal-session|cancel-stripe-subscription|resume-stripe-subscription|create-top-up-checkout)",
-		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-users|list-user-organizations|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|repair-inference-key|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|set-adoption-dashboard-url|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|describe-mcp-server-health|set-mcp-server-scope-pin|get-mcp-server-tool-calls|get-hook-clients|get-organization-hook-fleet|list-registry-promotion-candidates|get-registry-promotion-candidate|promote-registry-candidate|curate-registry-promotion-candidate|retry-registry-promotion-docs|get-registry-okta-candidates|list-registry-okta-unmapped|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published|list-onboarding-steps|get-onboarding-stack-options|get-organization-onboarding-stack|set-organization-onboarding-stack|list-onboarding-use-cases|create-onboarding-use-case|update-onboarding-use-case|delete-onboarding-use-case|list-onboarding-playbooks|create-onboarding-playbook|update-onboarding-playbook|delete-onboarding-playbook|clone-onboarding-playbook|get-organization-onboarding-playbook|assign-organization-onboarding-playbook|list-signup-offers|create-signup-offer|update-signup-offer|list-platform-mcp-feedback|get-stripe-subscription-candidate|set-stripe-subscription|list-customer-usage|list-upstreamoauth-migration-organizations|get-upstreamoauth-migration-status|run-upstreamoauth-migration|enable-upstream-auth-enforcement|disable-upstream-auth-enforcement|backfill-mcp-auth-grants|backfill-mcp-connect-grants|get-project-redeploy-preview|redeploy-project|list-custom-domains|list-platform-external-credentials|get-gcp-iam-platform-credential|create-gcp-iam-platform-credential|update-gcp-iam-platform-credential|verify-gcp-iam-platform-credential|delete-gcp-iam-platform-credential|get-memory-eval-options|list-memory-eval-runs|get-memory-eval-run|start-memory-eval-run|list-assistant-organizations|repair-organization-assistant-agent-names|list-organization-assistants|migrate-organization-assistant-identities|migrate-organization-assistants-to-kit|get-hooks-rollout|set-hooks-rollout-default|get-organization-hooks-rollout|set-organization-hooks-rollout|clear-organization-hooks-rollout|start-hooks-rollout-stage|pause-hooks-rollout-stage|resume-hooks-rollout-stage|cancel-hooks-rollout-stage|list-tailscaleoauth-migration|run-tailscaleoauth-migration-step|get-organization-encryption|list-organization-encryption-transitions|enroll-organization-encryption|rollback-organization-encryption|run-organization-encryption|finalize-organization-encryption)",
+		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-users|list-user-organizations|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|repair-inference-key|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|set-adoption-dashboard-url|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|describe-mcp-server-health|set-mcp-server-scope-pin|get-mcp-server-tool-calls|get-hook-clients|get-organization-hook-fleet|list-registry-promotion-candidates|get-registry-promotion-candidate|promote-registry-candidate|curate-registry-promotion-candidate|retry-registry-promotion-docs|get-registry-okta-candidates|list-registry-okta-unmapped|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published|list-onboarding-steps|get-onboarding-stack-options|get-organization-onboarding-stack|set-organization-onboarding-stack|list-onboarding-use-cases|create-onboarding-use-case|update-onboarding-use-case|delete-onboarding-use-case|list-onboarding-playbooks|create-onboarding-playbook|update-onboarding-playbook|delete-onboarding-playbook|clone-onboarding-playbook|get-organization-onboarding-playbook|assign-organization-onboarding-playbook|list-signup-offers|create-signup-offer|update-signup-offer|list-platform-mcp-feedback|get-stripe-subscription-candidate|set-stripe-subscription|list-customer-usage|list-upstreamoauth-migration-organizations|get-upstreamoauth-migration-status|run-upstreamoauth-migration|enable-upstream-auth-enforcement|disable-upstream-auth-enforcement|backfill-mcp-auth-grants|backfill-mcp-connect-grants|get-project-redeploy-preview|redeploy-project|list-custom-domains|list-platform-external-credentials|get-gcp-iam-platform-credential|create-gcp-iam-platform-credential|update-gcp-iam-platform-credential|verify-gcp-iam-platform-credential|delete-gcp-iam-platform-credential|get-memory-eval-options|list-memory-eval-runs|get-memory-eval-run|start-memory-eval-run|list-assistant-organizations|repair-organization-assistant-agent-names|list-organization-assistants|migrate-organization-assistant-identities|migrate-organization-assistants-to-kit|get-hooks-rollout|get-hooks-release-progress|set-hooks-rollout-default|get-organization-hooks-rollout|set-organization-hooks-rollout|clear-organization-hooks-rollout|start-hooks-rollout-stage|pause-hooks-rollout-stage|resume-hooks-rollout-stage|cancel-hooks-rollout-stage|list-tailscaleoauth-migration|run-tailscaleoauth-migration-step|get-organization-encryption|list-organization-encryption-transitions|enroll-organization-encryption|rollback-organization-encryption|run-organization-encryption|finalize-organization-encryption)",
 		"user-session-clients (create-user-session-client|update-user-session-client-redirect-ur-is|list-user-session-clients|get-user-session-client|refresh-user-session-client-cimd|revoke-user-session-client)",
 		"user-session-consents (list-user-session-consents|revoke-user-session-consent)",
 		"user-session-issuers-cimd-clients (list-presets|create-user-session-issuer-cimd-client|verify-url|list-user-session-issuer-cimd-clients|get-user-session-issuer-cimd-client|delete-user-session-issuer-cimd-client)",
@@ -5143,6 +5143,9 @@ func ParseEndpoint(
 		adminGetHooksRolloutFlags                 = flag.NewFlagSet("get-hooks-rollout", flag.ExitOnError)
 		adminGetHooksRolloutAdminSessionTokenFlag = adminGetHooksRolloutFlags.String("admin-session-token", "", "")
 
+		adminGetHooksReleaseProgressFlags                 = flag.NewFlagSet("get-hooks-release-progress", flag.ExitOnError)
+		adminGetHooksReleaseProgressAdminSessionTokenFlag = adminGetHooksReleaseProgressFlags.String("admin-session-token", "", "")
+
 		adminSetHooksRolloutDefaultFlags                 = flag.NewFlagSet("set-hooks-rollout-default", flag.ExitOnError)
 		adminSetHooksRolloutDefaultBodyFlag              = adminSetHooksRolloutDefaultFlags.String("body", "REQUIRED", "")
 		adminSetHooksRolloutDefaultAdminSessionTokenFlag = adminSetHooksRolloutDefaultFlags.String("admin-session-token", "", "")
@@ -5189,6 +5192,8 @@ func ParseEndpoint(
 		adminListOrganizationEncryptionTransitionsFlags                 = flag.NewFlagSet("list-organization-encryption-transitions", flag.ExitOnError)
 		adminListOrganizationEncryptionTransitionsUseCaseFlag           = adminListOrganizationEncryptionTransitionsFlags.String("use-case", "", "")
 		adminListOrganizationEncryptionTransitionsStateFlag             = adminListOrganizationEncryptionTransitionsFlags.String("state", "", "")
+		adminListOrganizationEncryptionTransitionsValuesFlag            = adminListOrganizationEncryptionTransitionsFlags.String("values", "present", "")
+		adminListOrganizationEncryptionTransitionsSortFlag              = adminListOrganizationEncryptionTransitionsFlags.String("sort", "last_written", "")
 		adminListOrganizationEncryptionTransitionsLimitFlag             = adminListOrganizationEncryptionTransitionsFlags.String("limit", "50", "")
 		adminListOrganizationEncryptionTransitionsOffsetFlag            = adminListOrganizationEncryptionTransitionsFlags.String("offset", "", "")
 		adminListOrganizationEncryptionTransitionsAdminSessionTokenFlag = adminListOrganizationEncryptionTransitionsFlags.String("admin-session-token", "", "")
@@ -6939,6 +6944,7 @@ func ParseEndpoint(
 	adminMigrateOrganizationAssistantIdentitiesFlags.Usage = adminMigrateOrganizationAssistantIdentitiesUsage
 	adminMigrateOrganizationAssistantsToKitFlags.Usage = adminMigrateOrganizationAssistantsToKitUsage
 	adminGetHooksRolloutFlags.Usage = adminGetHooksRolloutUsage
+	adminGetHooksReleaseProgressFlags.Usage = adminGetHooksReleaseProgressUsage
 	adminSetHooksRolloutDefaultFlags.Usage = adminSetHooksRolloutDefaultUsage
 	adminGetOrganizationHooksRolloutFlags.Usage = adminGetOrganizationHooksRolloutUsage
 	adminSetOrganizationHooksRolloutFlags.Usage = adminSetOrganizationHooksRolloutUsage
@@ -10397,6 +10403,9 @@ func ParseEndpoint(
 
 			case "get-hooks-rollout":
 				epf = adminGetHooksRolloutFlags
+
+			case "get-hooks-release-progress":
+				epf = adminGetHooksReleaseProgressFlags
 
 			case "set-hooks-rollout-default":
 				epf = adminSetHooksRolloutDefaultFlags
@@ -13964,6 +13973,9 @@ func ParseEndpoint(
 			case "get-hooks-rollout":
 				endpoint = c.GetHooksRollout()
 				data, err = adminc.BuildGetHooksRolloutPayload(*adminGetHooksRolloutAdminSessionTokenFlag)
+			case "get-hooks-release-progress":
+				endpoint = c.GetHooksReleaseProgress()
+				data, err = adminc.BuildGetHooksReleaseProgressPayload(*adminGetHooksReleaseProgressAdminSessionTokenFlag)
 			case "set-hooks-rollout-default":
 				endpoint = c.SetHooksRolloutDefault()
 				data, err = adminc.BuildSetHooksRolloutDefaultPayload(*adminSetHooksRolloutDefaultBodyFlag, *adminSetHooksRolloutDefaultAdminSessionTokenFlag)
@@ -13999,7 +14011,7 @@ func ParseEndpoint(
 				data, err = adminc.BuildGetOrganizationEncryptionPayload(*adminGetOrganizationEncryptionOrganizationIDFlag, *adminGetOrganizationEncryptionAdminSessionTokenFlag)
 			case "list-organization-encryption-transitions":
 				endpoint = c.ListOrganizationEncryptionTransitions()
-				data, err = adminc.BuildListOrganizationEncryptionTransitionsPayload(*adminListOrganizationEncryptionTransitionsUseCaseFlag, *adminListOrganizationEncryptionTransitionsStateFlag, *adminListOrganizationEncryptionTransitionsLimitFlag, *adminListOrganizationEncryptionTransitionsOffsetFlag, *adminListOrganizationEncryptionTransitionsAdminSessionTokenFlag)
+				data, err = adminc.BuildListOrganizationEncryptionTransitionsPayload(*adminListOrganizationEncryptionTransitionsUseCaseFlag, *adminListOrganizationEncryptionTransitionsStateFlag, *adminListOrganizationEncryptionTransitionsValuesFlag, *adminListOrganizationEncryptionTransitionsSortFlag, *adminListOrganizationEncryptionTransitionsLimitFlag, *adminListOrganizationEncryptionTransitionsOffsetFlag, *adminListOrganizationEncryptionTransitionsAdminSessionTokenFlag)
 			case "enroll-organization-encryption":
 				endpoint = c.EnrollOrganizationEncryption()
 				data, err = adminc.BuildEnrollOrganizationEncryptionPayload(*adminEnrollOrganizationEncryptionBodyFlag, *adminEnrollOrganizationEncryptionAdminSessionTokenFlag)
@@ -33991,6 +34003,7 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    migrate-organization-assistant-identities: Gives every assistant of one organization that has no dedicated agent its own agent, owned by the assistant's creator, and binds its triggers to workload identities. The agent starts with access to every MCP server and skill in the assistant's project, administration of the assistant, and project inference only when the creator has it. Assistants whose creator is no longer a member are skipped and reported. Idempotent, so it is safe to run again.`)
 	fmt.Fprintln(os.Stderr, `    migrate-organization-assistants-to-kit: Moves assistants of one organization from the default runtime to Kit. Only an assistant with a usable dedicated agent, a shared user-session issuer in its project, no work in flight, and no runtime still inside its warm window is switched; its previous runtimes are retired and stopped by the runtime janitor. Every other assistant is left unchanged and reported. Idempotent, so it is safe to run again.`)
 	fmt.Fprintln(os.Stderr, `    get-hooks-rollout: Returns the platform-wide hooks version rollout state: the version this build publishes, the default pin, canary organizations, organization overrides and recent changes.`)
+	fmt.Fprintln(os.Stderr, `    get-hooks-release-progress: Returns how far the current hooks release has reached: organizations the rollout pins clear for it, marketplace repositories republished with it, and installs reporting its binary version.`)
 	fmt.Fprintln(os.Stderr, `    set-hooks-rollout-default: Moves the default hooks rollout pin for every organization without an override. Customer organizations receive a hooks version on the next rollout sweep once the pin reaches it. Lowering the pin holds back later versions; it never downgrades a published hooks plugin.`)
 	fmt.Fprintln(os.Stderr, `    get-organization-hooks-rollout: Returns the hooks version rollout state for one organization.`)
 	fmt.Fprintln(os.Stderr, `    set-organization-hooks-rollout: Pins one organization to its own hooks version, regardless of the default pin.`)
@@ -34002,7 +34015,7 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    list-tailscaleoauth-migration: Lists every organization with saved Tailscale OAuth credentials and where it stands in moving them to its organization key.`)
 	fmt.Fprintln(os.Stderr, `    run-tailscaleoauth-migration-step: Runs one step of moving an organization's saved Tailscale OAuth credentials to its organization key. enroll provisions the organization key and starts dual_write; backfill seals every waiting credential with the organization key and verifies both copies; finalize moves to org_kms once the backfill and verification are clean and the minimum time in dual_write has passed; clear_platform_copies then destroys the platform-key copies; rollback returns a dual_write organization to platform_key. Each step is safe to run again.`)
 	fmt.Fprintln(os.Stderr, `    get-organization-encryption: Reports an organization's encryption configuration and, for each use case that moves to organization keys, its transition state with live counts.`)
-	fmt.Fprintln(os.Stderr, `    list-organization-encryption-transitions: Lists organizations by transition state for one use case, oldest first. Organizations never enrolled are in platform_key.`)
+	fmt.Fprintln(os.Stderr, `    list-organization-encryption-transitions: Lists organizations by transition state for one use case. Organizations never enrolled are in platform_key. By default it lists only organizations with values for the use case, most recently written first.`)
 	fmt.Fprintln(os.Stderr, `    enroll-organization-encryption: Moves one organization's use case from platform_key to dual_write. Provisions the organization's key and data key first and changes nothing if that fails. Each enroll can mint a KMS key, so enroll several organizations one at a time.`)
 	fmt.Fprintln(os.Stderr, `    rollback-organization-encryption: Moves one organization's use case from dual_write back to platform_key. Both copies still exist in dual_write, so nothing is lost. Not available once the use case is in org_kms.`)
 	fmt.Fprintln(os.Stderr, `    run-organization-encryption: Starts a background run for one organization's use case: in dual_write it converts waiting values and verifies both copies, and in org_kms it finishes destroying the platform-key copies after finalize. Joins a run already in progress. Returns at once with the current state.`)
@@ -36569,6 +36582,24 @@ func adminGetHooksRolloutUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin get-hooks-rollout --admin-session-token \"abc123\"")
 }
 
+func adminGetHooksReleaseProgressUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin get-hooks-release-progress", os.Args[0])
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Returns how far the current hooks release has reached: organizations the rollout pins clear for it, marketplace repositories republished with it, and installs reporting its binary version.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin get-hooks-release-progress --admin-session-token \"abc123\"")
+}
+
 func adminSetHooksRolloutDefaultUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] admin set-hooks-rollout-default", os.Args[0])
@@ -36792,6 +36823,8 @@ func adminListOrganizationEncryptionTransitionsUsage() {
 	fmt.Fprintf(os.Stderr, "%s [flags] admin list-organization-encryption-transitions", os.Args[0])
 	fmt.Fprint(os.Stderr, " -use-case STRING")
 	fmt.Fprint(os.Stderr, " -state STRING")
+	fmt.Fprint(os.Stderr, " -values STRING")
+	fmt.Fprint(os.Stderr, " -sort STRING")
 	fmt.Fprint(os.Stderr, " -limit INT")
 	fmt.Fprint(os.Stderr, " -offset INT")
 	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
@@ -36799,18 +36832,20 @@ func adminListOrganizationEncryptionTransitionsUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Lists organizations by transition state for one use case, oldest first. Organizations never enrolled are in platform_key.`)
+	fmt.Fprintln(os.Stderr, `Lists organizations by transition state for one use case. Organizations never enrolled are in platform_key. By default it lists only organizations with values for the use case, most recently written first.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -use-case STRING: `)
 	fmt.Fprintln(os.Stderr, `    -state STRING: `)
+	fmt.Fprintln(os.Stderr, `    -values STRING: `)
+	fmt.Fprintln(os.Stderr, `    -sort STRING: `)
 	fmt.Fprintln(os.Stderr, `    -limit INT: `)
 	fmt.Fprintln(os.Stderr, `    -offset INT: `)
 	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin list-organization-encryption-transitions --use-case \"abc123\" --state \"dual_write\" --limit 2 --offset 1 --admin-session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin list-organization-encryption-transitions --use-case \"abc123\" --state \"dual_write\" --values \"all\" --sort \"oldest\" --limit 2 --offset 1 --admin-session-token \"abc123\"")
 }
 
 func adminEnrollOrganizationEncryptionUsage() {

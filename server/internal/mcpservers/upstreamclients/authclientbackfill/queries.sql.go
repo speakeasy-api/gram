@@ -2335,6 +2335,59 @@ func (q *Queries) ListEMASameOriginServers(ctx context.Context, arg ListEMASameO
 	return items, nil
 }
 
+const listLegacySelectionIssuerEvidence = `-- name: ListLegacySelectionIssuerEvidence :many
+SELECT sel.id
+FROM (
+    SELECT unnest($1::uuid[]) AS selection_id,
+           unnest($2::uuid[]) AS client_id,
+           unnest($3::uuid[]) AS issuer_id
+) AS input
+JOIN upstream_client_selections AS sel ON sel.id = input.selection_id
+  AND sel.remote_session_client_id = input.client_id
+  AND sel.organization_id = $4::text AND NOT sel.deleted
+JOIN projects AS project ON project.id = sel.project_id
+  AND project.organization_id = sel.organization_id AND NOT project.deleted
+JOIN remote_session_clients AS client ON client.id = sel.remote_session_client_id AND NOT client.deleted
+  AND (client.project_id = project.id OR (client.project_id IS NULL AND (client.organization_id IS NULL OR client.organization_id = project.organization_id)))
+JOIN user_session_issuers AS issuer ON issuer.id = input.issuer_id AND NOT issuer.deleted
+  AND (issuer.project_id = project.id OR (issuer.project_id IS NULL AND issuer.organization_id = project.organization_id))
+JOIN remote_session_client_user_session_issuers AS link ON link.remote_session_client_id = client.id
+  AND link.user_session_issuer_id = issuer.id
+`
+
+type ListLegacySelectionIssuerEvidenceParams struct {
+	SelectionIds   []uuid.UUID
+	ClientIds      []uuid.UUID
+	IssuerIds      []uuid.UUID
+	OrganizationID string
+}
+
+// Only the retired workflow reads this evidence, once per mapping page.
+func (q *Queries) ListLegacySelectionIssuerEvidence(ctx context.Context, arg ListLegacySelectionIssuerEvidenceParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listLegacySelectionIssuerEvidence,
+		arg.SelectionIds,
+		arg.ClientIds,
+		arg.IssuerIds,
+		arg.OrganizationID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listLiveAgentAttachments = `-- name: ListLiveAgentAttachments :many
 SELECT
   b.id AS binding_id,
@@ -2956,14 +3009,14 @@ WITH scoped_live_credentials AS MATERIALIZED (
     FROM user_sessions AS session
     JOIN user_session_issuers AS issuer ON issuer.id = session.user_session_issuer_id
     LEFT JOIN projects AS project ON project.id = issuer.project_id
-    WHERE $5::uuid IS NOT NULL
-      AND issuer.id = $5::uuid
+    WHERE $4::uuid IS NOT NULL
+      AND issuer.id = $4::uuid
       AND issuer.deleted IS FALSE
       AND (
-        (issuer.project_id IS NULL AND issuer.organization_id = $2::text)
-        OR (issuer.project_id IS NOT NULL AND project.organization_id = $2::text AND project.deleted IS FALSE)
+        (issuer.project_id IS NULL AND issuer.organization_id = $1::text)
+        OR (issuer.project_id IS NOT NULL AND project.organization_id = $1::text AND project.deleted IS FALSE)
       )
-      AND (session.organization_id IS NULL OR session.organization_id = $2::text)
+      AND (session.organization_id IS NULL OR session.organization_id = $1::text)
       AND session.deleted IS FALSE
       AND session.refresh_expires_at > clock_timestamp()
 )
@@ -3027,13 +3080,6 @@ SELECT sel.id,
            AND (rsi.project_id = project.id OR (rsi.project_id IS NULL AND (rsi.organization_id IS NULL OR rsi.organization_id = project.organization_id)))
            AND c.deleted IS FALSE
        )::boolean AS registration_live,
-       ARRAY(
-         SELECT link.user_session_issuer_id
-         FROM remote_session_client_user_session_issuers AS link
-         WHERE NOT $1::boolean
-           AND link.remote_session_client_id = sel.remote_session_client_id
-         ORDER BY link.user_session_issuer_id
-       )::uuid[] AS registration_issuer_ids,
        ARRAY(
          SELECT ac.id
          FROM mcp_auth_clients AS ac
@@ -3248,13 +3294,13 @@ SELECT sel.id,
            )
        )::uuid[] AS ema_gateway_issuer_ids
 FROM upstream_client_selections AS sel
-WHERE sel.organization_id = $2::text
+WHERE sel.organization_id = $1::text
   AND sel.credential_kind = 'user_session'
   AND sel.deleted IS FALSE
-  AND ($3::uuid[] IS NULL
-       OR sel.mcp_server_id = ANY($3::uuid[]))
-  AND (NOT $4::boolean OR sel.auth_client_id IS NULL)
-  AND ($5::uuid IS NULL
+  AND ($2::uuid[] IS NULL
+       OR sel.mcp_server_id = ANY($2::uuid[]))
+  AND (NOT $3::boolean OR sel.auth_client_id IS NULL)
+  AND ($4::uuid IS NULL
        OR sel.credential_id IN (SELECT credential_id FROM scoped_live_credentials))
   -- A choice for a deleted server is kept as history but is never served
   -- again, so it is not live coverage.
@@ -3264,14 +3310,13 @@ WHERE sel.organization_id = $2::text
     WHERE live_server.id = sel.mcp_server_id
       AND live_server.deleted IS FALSE
   )
-  AND sel.id > $6::uuid
-  AND ($7::uuid IS NULL OR sel.id = $7::uuid)
+  AND sel.id > $5::uuid
+  AND ($6::uuid IS NULL OR sel.id = $6::uuid)
 ORDER BY sel.id
-LIMIT $8::int
+LIMIT $7::int
 `
 
 type ListSelectionMappingsParams struct {
-	TypedOfferRepair         bool
 	OrganizationID           string
 	ScopeMcpServerIds        []uuid.UUID
 	OnlyUnmapped             bool
@@ -3294,7 +3339,6 @@ type ListSelectionMappingsRow struct {
 	ServerHasAssociations  bool
 	RegistrationAssociated bool
 	RegistrationLive       bool
-	RegistrationIssuerIds  []uuid.UUID
 	CandidateIds           []uuid.UUID
 	ServerHasOauthClients  bool
 	EmaGatewayIssuerIds    []uuid.UUID
@@ -3308,8 +3352,7 @@ type ListSelectionMappingsRow struct {
 //
 // What the upstream client choice reads today (GetUpstreamClientSelection):
 // whether the server has any upstream OAuth client association, whether the
-// chosen registration is live and associated with the server, the user
-// session issuers the registration is bound to, and whether the choice names
+// chosen registration is live and associated with the server, and whether the choice names
 // the server's headers, which reads as no-auth.
 //
 // The typed auth clients: an OAuth choice can name the live, enabled
@@ -3328,7 +3371,6 @@ type ListSelectionMappingsRow struct {
 // is canonical; legacy sessions may omit their denormalized organization.
 func (q *Queries) ListSelectionMappings(ctx context.Context, arg ListSelectionMappingsParams) ([]ListSelectionMappingsRow, error) {
 	rows, err := q.db.Query(ctx, listSelectionMappings,
-		arg.TypedOfferRepair,
 		arg.OrganizationID,
 		arg.ScopeMcpServerIds,
 		arg.OnlyUnmapped,
@@ -3357,7 +3399,6 @@ func (q *Queries) ListSelectionMappings(ctx context.Context, arg ListSelectionMa
 			&i.ServerHasAssociations,
 			&i.RegistrationAssociated,
 			&i.RegistrationLive,
-			&i.RegistrationIssuerIds,
 			&i.CandidateIds,
 			&i.ServerHasOauthClients,
 			&i.EmaGatewayIssuerIds,
@@ -5013,13 +5054,9 @@ func (q *Queries) RevokeAttachmentConnectionFixture(ctx context.Context, binding
 }
 
 const seedAgentAttachmentFixture = `-- name: SeedAgentAttachmentFixture :one
-WITH link AS (
-  INSERT INTO remote_session_client_user_session_issuers (remote_session_client_id, user_session_issuer_id)
-  VALUES ($4, $7)
-  ON CONFLICT DO NOTHING
-), session AS (
+WITH session AS (
   INSERT INTO remote_sessions (subject_urn, user_session_issuer_id, remote_session_client_id, organization_id, access_token_encrypted)
-  VALUES ($8::text, $7, $4,
+  VALUES ($7::text, $8, $4,
     (SELECT org.id FROM remote_session_clients AS client
      LEFT JOIN projects AS project ON project.id = client.project_id
      JOIN organization_metadata AS org ON org.id = COALESCE(project.organization_id, client.organization_id)
@@ -5043,8 +5080,8 @@ type SeedAgentAttachmentFixtureParams struct {
 	RemoteSessionClientID uuid.UUID
 	GenerationOffset      int64
 	AttachedBy            string
-	UserSessionIssuerID   uuid.UUID
 	ConnectionSubject     string
+	UserSessionIssuerID   uuid.UUID
 }
 
 func (q *Queries) SeedAgentAttachmentFixture(ctx context.Context, arg SeedAgentAttachmentFixtureParams) (uuid.UUID, error) {
@@ -5055,8 +5092,8 @@ func (q *Queries) SeedAgentAttachmentFixture(ctx context.Context, arg SeedAgentA
 		arg.RemoteSessionClientID,
 		arg.GenerationOffset,
 		arg.AttachedBy,
-		arg.UserSessionIssuerID,
 		arg.ConnectionSubject,
+		arg.UserSessionIssuerID,
 	)
 	var id uuid.UUID
 	err := row.Scan(&id)

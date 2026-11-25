@@ -132,7 +132,7 @@ func TestResyncIgnoresAttachmentCompatibilityParents(t *testing.T) {
 	target, _ := sourceBackedTarget(t, ctx, ti, "typed-capture-target", userIssuerID)
 	providerID := createServerIdentityProvider(t, ctx, ti, "typed-capture-provider", "", false, []string{"none"})
 	registration := createServerIdentityClient(t, ctx, ti, "typed-capture-client", providerID, false)
-	ensureAttachmentParent(t, ctx, ti.conn, registration, userIssuerID)
+	seedLegacyIssuerClientLink(t, ctx, ti.conn, registration, userIssuerID)
 
 	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, orgID, projectID, []uuid.UUID{userIssuerID}))
 
