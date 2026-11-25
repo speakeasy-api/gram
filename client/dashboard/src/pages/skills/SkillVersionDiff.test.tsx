@@ -19,15 +19,18 @@ function render(ui: ReactNode) {
 const stored = vi.hoisted(
   () => new Map<string, { content: Uint8Array } | undefined>(),
 );
+const fetched = vi.hoisted(() => new Set<string>());
 
 vi.mock("@gram/client/react-query/skillVersionFile.js", () => ({
   useSkillVersionFile: (
-    request: { versionId: string; path: string },
+    request: { skillId: string; versionId: string; path: string },
     _security: unknown,
     options: { enabled?: boolean },
   ) => {
     if (options.enabled === false) return { isPending: true, error: null };
-    const data = stored.get(`${request.versionId}:${request.path}`);
+    const key = `${request.skillId}:${request.versionId}:${request.path}`;
+    fetched.add(key);
+    const data = stored.get(key);
     return { data, isPending: !data, error: null };
   },
 }));
@@ -45,10 +48,19 @@ vi.mock("./SkillTextDiff", () => ({
   ),
 }));
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  stored.clear();
+  fetched.clear();
+});
 
-function file(path: string, sha256: string, contentType = "text/plain") {
-  return { path, sha256, sizeBytes: 10, contentType };
+function file(
+  path: string,
+  sha256: string,
+  contentType = "text/plain",
+  sizeBytes = 10,
+) {
+  return { path, sha256, sizeBytes, contentType };
 }
 
 function version(
@@ -80,8 +92,8 @@ describe("SkillVersionDiff", () => {
   });
 
   it("lists added, removed, and changed files and diffs the selected one", async () => {
-    stored.set("old:scripts/run.py", { content: strToU8("print(1)") });
-    stored.set("new:scripts/run.py", { content: strToU8("print(2)") });
+    stored.set("skill_a:old:scripts/run.py", { content: strToU8("print(1)") });
+    stored.set("skill_a:new:scripts/run.py", { content: strToU8("print(2)") });
     render(
       <SkillVersionDiff
         skillId="skill_a"
@@ -116,10 +128,7 @@ describe("SkillVersionDiff", () => {
     expect(diff.getAttribute("data-lang")).toBe("python");
   });
 
-  it("explains that binary files have no line diff", async () => {
-    stored.set("new:assets/logo.png", {
-      content: new Uint8Array([0x89, 0x50, 0x00]),
-    });
+  it("explains that binary files have no line diff without fetching them", async () => {
     render(
       <SkillVersionDiff
         skillId="skill_a"
@@ -133,5 +142,45 @@ describe("SkillVersionDiff", () => {
     expect(
       await screen.findByText(/is not a text file, so there is no line diff/),
     ).toBeTruthy();
+    expect(fetched.size).toBe(0);
+  });
+
+  it("does not fetch text files too large to diff", async () => {
+    render(
+      <SkillVersionDiff
+        skillId="skill_a"
+        older={version("old", "same", [
+          file("references/big.md", "1", "text/markdown", 10),
+        ])}
+        newer={version("new", "same", [
+          file("references/big.md", "2", "text/markdown", 2 * 1024 * 1024),
+        ])}
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: /references\/big\.md/ }),
+    );
+    expect(await screen.findByText(/is too large to diff here/)).toBeTruthy();
+    expect(fetched.size).toBe(0);
+  });
+
+  it("requests both sides of a diff scoped to the skill", async () => {
+    stored.set("skill_a:old:notes.md", { content: strToU8("a") });
+    stored.set("skill_a:new:notes.md", { content: strToU8("b") });
+    render(
+      <SkillVersionDiff
+        skillId="skill_a"
+        older={version("old", "same", [file("notes.md", "1")])}
+        newer={version("new", "same", [file("notes.md", "2")])}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /notes\.md/ }));
+    expect((await screen.findByTestId("text-diff")).textContent).toContain(
+      "a→b",
+    );
+    expect([...fetched].sort()).toEqual([
+      "skill_a:new:notes.md",
+      "skill_a:old:notes.md",
+    ]);
   });
 });

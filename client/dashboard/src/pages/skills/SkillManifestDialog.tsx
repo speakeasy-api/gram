@@ -32,7 +32,7 @@ import {
   isSkillScript,
   parseSkillUpload,
   readSkillFolder,
-  readSkillZip,
+  readSkillZipFile,
   rootNameWarning,
   SkillUploadError,
   validateSkillFiles,
@@ -470,11 +470,7 @@ export function SkillManifestDialog({
                         onChange={(event) => {
                           const zip = event.currentTarget.files?.[0];
                           if (zip) {
-                            void handleSkillUpload(async () =>
-                              readSkillZip(
-                                new Uint8Array(await zip.arrayBuffer()),
-                              ),
-                            );
+                            void handleSkillUpload(() => readSkillZipFile(zip));
                           }
                           event.currentTarget.value = "";
                         }}

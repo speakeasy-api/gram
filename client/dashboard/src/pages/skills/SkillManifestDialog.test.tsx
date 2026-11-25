@@ -588,6 +588,17 @@ describe("SkillManifestDialog", () => {
         expect(testState.addVersion.mutateAsync).toHaveBeenCalledOnce(),
       );
       expect(testState.queryClient.fetchQuery).toHaveBeenCalledOnce();
+      expect(testState.queryClient.fetchQuery).toHaveBeenCalledWith(
+        expect.objectContaining({
+          queryKey: expect.arrayContaining([
+            expect.objectContaining({
+              skillId: "skill_a",
+              versionId: "version_source",
+              path: "references/REFERENCE.md",
+            }),
+          ]),
+        }),
+      );
       expect(lastAddVersionBody().files).toEqual([
         {
           path: "references/REFERENCE.md",

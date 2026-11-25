@@ -63,6 +63,70 @@ function isManifestPath(path: string): boolean {
 }
 
 /**
+ * Normalizes separators, drops folders and system files, and strips a single
+ * wrapping folder. Each entry keeps the path it was read under in `source`.
+ */
+function normalizeUploadEntries<T extends { path: string }>(
+  rawEntries: ReadonlyArray<T>,
+): { entries: Array<T & { source: string }>; rootDir: string | null } {
+  const entries = rawEntries
+    .map((entry) => ({
+      ...entry,
+      source: entry.path,
+      path: entry.path.replace(/\\/g, "/"),
+    }))
+    .filter((entry) => entry.path !== "" && !entry.path.endsWith("/"))
+    .filter((entry) => !isSystemJunk(entry.path));
+
+  let rootDir: string | null = null;
+  const firstSegments = new Set(entries.map((e) => e.path.split("/")[0]));
+  const allNested = entries.every((e) => e.path.includes("/"));
+  if (entries.length > 0 && firstSegments.size === 1 && allNested) {
+    rootDir = [...firstSegments][0] ?? null;
+  }
+  return {
+    entries: entries.map((entry) => ({
+      ...entry,
+      path: rootDir ? entry.path.slice(rootDir.length + 1) : entry.path,
+    })),
+    rootDir,
+  };
+}
+
+/**
+ * Picks which entries of a folder or zip to read, from their sizes alone, so
+ * an upload that breaks the count or size limits never has its bytes loaded.
+ * SKILL.md is read whenever it fits. Supporting files are read only when the
+ * whole set is within the limits; otherwise validation rejects the upload
+ * from the sizes alone. Returns the original paths to read.
+ */
+function selectEntriesToRead(
+  listing: ReadonlyArray<{ path: string; sizeBytes: number }>,
+): Set<string> {
+  const { entries } = normalizeUploadEntries(listing);
+  const toRead = new Set<string>();
+  const supporting: typeof entries = [];
+  for (const entry of entries) {
+    if (isManifestPath(entry.path)) {
+      if (entry.sizeBytes <= MAX_SKILL_MANIFEST_BYTES) toRead.add(entry.source);
+    } else {
+      supporting.push(entry);
+    }
+  }
+  const total = supporting.reduce((sum, entry) => sum + entry.sizeBytes, 0);
+  if (
+    supporting.length > MAX_SKILL_FILES ||
+    total > MAX_SKILL_FILES_TOTAL_BYTES
+  ) {
+    return toRead;
+  }
+  for (const entry of supporting) {
+    if (entry.sizeBytes <= MAX_SKILL_FILE_BYTES) toRead.add(entry.source);
+  }
+  return toRead;
+}
+
+/**
  * Turns the raw entries of a folder or zip into a SKILL.md plus supporting
  * files. A single wrapping folder is stripped, so `my-skill/SKILL.md` and
  * `SKILL.md` both work. Throws SkillUploadError when there is no manifest.
@@ -70,25 +134,11 @@ function isManifestPath(path: string): boolean {
 export function parseSkillUpload(
   rawEntries: SkillUploadEntry[],
 ): ParsedSkillUpload {
-  const entries = rawEntries
-    .map((entry) => ({ ...entry, path: entry.path.replace(/\\/g, "/") }))
-    .filter((entry) => entry.path !== "" && !entry.path.endsWith("/"))
-    .filter((entry) => !isSystemJunk(entry.path));
+  const { entries: relative, rootDir } = normalizeUploadEntries(rawEntries);
 
-  if (entries.length === 0) {
+  if (relative.length === 0) {
     throw new SkillUploadError("The upload is empty.");
   }
-
-  let rootDir: string | null = null;
-  const firstSegments = new Set(entries.map((e) => e.path.split("/")[0]));
-  const allNested = entries.every((e) => e.path.includes("/"));
-  if (firstSegments.size === 1 && allNested) {
-    rootDir = [...firstSegments][0] ?? null;
-  }
-  const relative = entries.map((entry) => ({
-    ...entry,
-    path: rootDir ? entry.path.slice(rootDir.length + 1) : entry.path,
-  }));
 
   const manifestEntry = relative.find((entry) => isManifestPath(entry.path));
   if (!manifestEntry) {
@@ -219,8 +269,13 @@ export function manifestNameFromContent(content: string): string | null {
     const match = /^name:\s*(.*?)\s*$/.exec(line);
     if (match) {
       const value = match[1] ?? "";
-      const unquoted = value.replace(/^(["'])(.*)\1$/, "$2");
-      return unquoted === "" ? null : unquoted;
+      // A quoted scalar may be followed by a comment; a plain scalar ends
+      // where a comment (" #") begins.
+      const quoted = /^(["'])(.*?)\1(?:\s+#.*)?$/.exec(value);
+      const name = quoted
+        ? (quoted[2] ?? "")
+        : value.replace(/(?:^|\s+)#.*$/, "").trim();
+      return name === "" ? null : name;
     }
   }
   return null;
@@ -240,19 +295,32 @@ export function rootNameWarning(
   return `The skill is named "${name}" but its folder is "${rootDir}". The Agent Skills spec expects them to match.`;
 }
 
-/** Reads an uploaded .zip into entries without inflating oversized files. */
+/**
+ * The largest .zip the dashboard will open. A valid skill holds at most about
+ * 10 MB of files, so this leaves room for archive overhead and system files
+ * while refusing to load an arbitrarily large archive into memory.
+ */
+export const MAX_SKILL_ZIP_BYTES = 32 * 1024 * 1024;
+
+/**
+ * Reads an uploaded .zip into entries. The archive is listed first and only
+ * the entries selectEntriesToRead allows are inflated, so an oversized upload
+ * or a zip bomb cannot exhaust memory before validation rejects it.
+ */
 export function readSkillZip(bytes: Uint8Array): SkillUploadEntry[] {
   const sizes = new Map<string, number>();
   let unzipped: Record<string, Uint8Array>;
   try {
-    unzipped = unzipSync(bytes, {
+    unzipSync(bytes, {
       filter: (file) => {
         sizes.set(file.name, file.originalSize);
-        // Skip inflating anything that would be rejected anyway, which also
-        // keeps a zip bomb from exhausting memory.
-        return file.originalSize <= MAX_SKILL_FILE_BYTES;
+        return false;
       },
     });
+    const toRead = selectEntriesToRead(
+      [...sizes].map(([path, sizeBytes]) => ({ path, sizeBytes })),
+    );
+    unzipped = unzipSync(bytes, { filter: (file) => toRead.has(file.name) });
   } catch {
     throw new SkillUploadError(
       "The selected file is not a valid .zip archive.",
@@ -265,18 +333,38 @@ export function readSkillZip(bytes: Uint8Array): SkillUploadEntry[] {
   }));
 }
 
-/** Reads the files picked through a folder input. */
+/** Reads a picked .zip file, refusing archives over MAX_SKILL_ZIP_BYTES. */
+export async function readSkillZipFile(
+  file: Pick<Blob, "size" | "arrayBuffer">,
+): Promise<SkillUploadEntry[]> {
+  if (file.size > MAX_SKILL_ZIP_BYTES) {
+    throw new SkillUploadError(
+      `The .zip is ${formatFileSize(file.size)}. Archives must be ${formatFileSize(MAX_SKILL_ZIP_BYTES)} or smaller.`,
+    );
+  }
+  return readSkillZip(new Uint8Array(await file.arrayBuffer()));
+}
+
+/**
+ * Reads the files picked through a folder input. Sizes are known before any
+ * bytes are read, so only the files selectEntriesToRead allows are loaded.
+ */
 export async function readSkillFolder(
   files: ArrayLike<File>,
 ): Promise<SkillUploadEntry[]> {
+  const picked = Array.from(files).map((file) => ({
+    file,
+    path: file.webkitRelativePath || file.name,
+    sizeBytes: file.size,
+  }));
+  const toRead = selectEntriesToRead(picked);
   return Promise.all(
-    Array.from(files).map(async (file) => ({
-      path: file.webkitRelativePath || file.name,
-      content:
-        file.size <= MAX_SKILL_FILE_BYTES
-          ? new Uint8Array(await file.arrayBuffer())
-          : null,
-      sizeBytes: file.size,
+    picked.map(async ({ file, path, sizeBytes }) => ({
+      path,
+      content: toRead.has(path)
+        ? new Uint8Array(await file.arrayBuffer())
+        : null,
+      sizeBytes,
     })),
   );
 }

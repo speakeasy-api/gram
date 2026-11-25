@@ -111,6 +111,21 @@ describe("SkillFileViewer", () => {
     expect(screen.getByText(/agents can run this file/)).toBeTruthy();
   });
 
+  it("shows SVG source instead of rendering it, whatever the extension case", () => {
+    testState.data = { content: strToU8("<svg></svg>") };
+    render(
+      <SkillFileViewer
+        skillId="skill_a"
+        versionId="version_a"
+        file={file("assets/LOGO.SVG", "image/svg+xml")}
+      />,
+    );
+    expect(screen.queryByRole("img")).toBeNull();
+    const code = screen.getByTestId("code");
+    expect(code.textContent).toBe("<svg></svg>");
+    expect(code.getAttribute("data-language")).toBe("xml");
+  });
+
   it("offers a download for binary files", () => {
     testState.data = { content: new Uint8Array([0, 1, 2, 3]) };
     render(

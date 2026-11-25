@@ -10,7 +10,10 @@ import {
   MAX_SKILL_FILE_BYTES,
   MAX_SKILL_FILES,
   parseSkillUpload,
+  MAX_SKILL_ZIP_BYTES,
+  readSkillFolder,
   readSkillZip,
+  readSkillZipFile,
   rootNameWarning,
   type SkillUploadEntry,
   SkillUploadError,
@@ -126,10 +129,103 @@ describe("readSkillZip", () => {
     ]);
   });
 
+  it("inflates no supporting files when the set breaks the total limit", () => {
+    // Each file is under the per-file cap, but together they exceed 10 MB.
+    const chunk = new Uint8Array(4 * 1024 * 1024);
+    const zip = zipSync({
+      "SKILL.md": strToU8(MANIFEST),
+      "assets/a.bin": chunk,
+      "assets/b.bin": chunk,
+      "assets/c.bin": chunk,
+    });
+    const entries = readSkillZip(zip);
+    expect(entries.find((e) => e.path === "SKILL.md")?.content).not.toBeNull();
+    for (const name of ["a", "b", "c"]) {
+      const found = entries.find((e) => e.path === `assets/${name}.bin`);
+      expect(found?.content).toBeNull();
+      expect(found?.sizeBytes).toBe(chunk.byteLength);
+    }
+    const parsed = parseSkillUpload(entries);
+    expect(validateSkillFiles(parsed.files)).toEqual([
+      "Supporting files add up to 12 MB. The total must be 10 MB or smaller.",
+    ]);
+  });
+
+  it("inflates no supporting files when there are too many", () => {
+    const files: Record<string, Uint8Array> = {
+      "my-skill/SKILL.md": strToU8(MANIFEST),
+    };
+    for (let i = 0; i <= MAX_SKILL_FILES; i += 1) {
+      files[`my-skill/refs/${i}.md`] = strToU8("x");
+    }
+    const entries = readSkillZip(zipSync(files));
+    const parsed = parseSkillUpload(entries);
+    expect(parsed.manifest).toBe(MANIFEST);
+    expect(parsed.files).toHaveLength(MAX_SKILL_FILES + 1);
+    expect(
+      parsed.files.every((f) => f.kind === "new" && f.content.byteLength === 0),
+    ).toBe(true);
+  });
+
+  it("refuses an archive over the size cap without reading it", async () => {
+    let read = false;
+    const file = {
+      size: MAX_SKILL_ZIP_BYTES + 1,
+      arrayBuffer: () => {
+        read = true;
+        return Promise.resolve(new ArrayBuffer(0));
+      },
+    };
+    await expect(readSkillZipFile(file)).rejects.toThrow(SkillUploadError);
+    expect(read).toBe(false);
+  });
+
   it("reports a file that is not a zip", () => {
     expect(() => readSkillZip(strToU8("not a zip"))).toThrow(
       "The selected file is not a valid .zip archive.",
     );
+  });
+});
+
+describe("readSkillFolder", () => {
+  function pickedFile(path: string, size: number, text = "x") {
+    const reads: string[] = [];
+    const file = {
+      name: path.split("/").pop(),
+      webkitRelativePath: path,
+      size,
+      arrayBuffer: () => {
+        reads.push(path);
+        return Promise.resolve(strToU8(text).slice().buffer);
+      },
+    } as unknown as File;
+    return { file, reads };
+  }
+
+  it("reads the manifest and supporting files within the limits", async () => {
+    const manifest = pickedFile("my-skill/SKILL.md", MANIFEST.length, MANIFEST);
+    const ref = pickedFile("my-skill/refs/a.md", 1);
+    const parsed = parseSkillUpload(
+      await readSkillFolder([manifest.file, ref.file]),
+    );
+    expect(parsed.manifest).toBe(MANIFEST);
+    expect(ref.reads).toEqual(["my-skill/refs/a.md"]);
+  });
+
+  it("reads only the manifest when the folder breaks the total limit", async () => {
+    const manifest = pickedFile("my-skill/SKILL.md", MANIFEST.length, MANIFEST);
+    const big = [0, 1, 2].map((i) =>
+      pickedFile(`my-skill/assets/${i}.bin`, 4 * 1024 * 1024),
+    );
+    const entries = await readSkillFolder([
+      manifest.file,
+      ...big.map((b) => b.file),
+    ]);
+    expect(manifest.reads).toHaveLength(1);
+    expect(big.flatMap((b) => b.reads)).toEqual([]);
+    expect(validateSkillFiles(parseSkillUpload(entries).files)).toEqual([
+      "Supporting files add up to 12 MB. The total must be 10 MB or smaller.",
+    ]);
   });
 });
 
@@ -197,6 +293,20 @@ describe("manifest name", () => {
     expect(manifestNameFromContent("---\ndescription: x\n---\nname: y")).toBe(
       null,
     );
+  });
+
+  it("ignores YAML comments after the name", () => {
+    expect(
+      manifestNameFromContent("---\nname: pdf-tools # the folder\n---\n"),
+    ).toBe("pdf-tools");
+    expect(
+      manifestNameFromContent("---\nname: 'pdf-tools'  # quoted\n---\n"),
+    ).toBe("pdf-tools");
+    expect(manifestNameFromContent("---\nname: a#b\n---\n")).toBe("a#b");
+    expect(manifestNameFromContent("---\nname: # none\n---\n")).toBeNull();
+    expect(
+      rootNameWarning("---\nname: pdf-tools # c\n---\n", "pdf-tools"),
+    ).toBeNull();
   });
 
   it("warns only when the folder name differs", () => {

@@ -6,7 +6,7 @@ import type { SkillVersion } from "@gram/client/models/components/skillversion.j
 import { useSkillVersionFile } from "@gram/client/react-query/skillVersionFile.js";
 import { lazy, Suspense, useState, type ReactNode } from "react";
 import { ErrorBoundary } from "react-error-boundary";
-import { ScriptLabel } from "./SkillFiles";
+import { MAX_PREVIEW_BYTES, ScriptLabel } from "./SkillFiles";
 import {
   bytesFromContent,
   decodeTextContent,
@@ -198,22 +198,32 @@ function useVersionFileText(
   skillId: string,
   version: SkillVersion,
   file: SkillFileChange["before"],
+  enabled: boolean,
 ) {
+  const fetchFile = enabled && !!file;
   const query = useSkillVersionFile(
     { skillId, versionId: version.id, path: file?.path ?? "" },
     undefined,
-    { enabled: !!file, staleTime: Infinity, throwOnError: false },
+    { enabled: fetchFile, staleTime: Infinity, throwOnError: false },
   );
-  const text =
-    query.data && file && isLikelyTextFile(file)
-      ? decodeTextContent(bytesFromContent(query.data.content))
-      : null;
+  const text = query.data
+    ? decodeTextContent(bytesFromContent(query.data.content))
+    : null;
   return {
-    loading: !!file && query.isPending,
+    loading: fetchFile && query.isPending,
     error: query.error,
     // A missing side diffs against an empty file.
     text: file ? text : "",
   };
+}
+
+function NoLineDiff({ change }: { change: SkillFileChange }): JSX.Element {
+  return (
+    <Text small muted>
+      {change.path} is not a text file, so there is no line diff. Size:{" "}
+      {sizeDetail(change)}.
+    </Text>
+  );
 }
 
 /** A line diff of one supporting file between two versions. */
@@ -228,21 +238,34 @@ function SkillFileDiff({
   newer: SkillVersion;
   change: SkillFileChange;
 }): JSX.Element {
-  const before = useVersionFileText(skillId, older, change.before);
-  const after = useVersionFileText(skillId, newer, change.after);
+  // Decide from the metadata whether a line diff is possible, so binaries and
+  // large files are never downloaded just to be discarded.
+  const sides = [change.before, change.after].filter((f) => f !== undefined);
+  const notText = sides.some((f) => !isLikelyTextFile(f));
+  const tooLarge = sides.some((f) => f.sizeBytes > MAX_PREVIEW_BYTES);
+  const canDiff = !notText && !tooLarge;
+  const before = useVersionFileText(skillId, older, change.before, canDiff);
+  const after = useVersionFileText(skillId, newer, change.after, canDiff);
   const error = before.error ?? after.error;
 
+  if (notText) {
+    return <NoLineDiff change={change} />;
+  }
+  if (tooLarge) {
+    return (
+      <Text small muted>
+        {change.path} is too large to diff here. Files over{" "}
+        {formatFileSize(MAX_PREVIEW_BYTES)} have no line diff. Size:{" "}
+        {sizeDetail(change)}.
+      </Text>
+    );
+  }
   if (error) {
     return <ErrorAlert title="Unable to load this file" error={error} />;
   }
   if (before.loading || after.loading) return <SkeletonParagraph lines={8} />;
   if (before.text === null || after.text === null) {
-    return (
-      <Text small muted>
-        {change.path} is not a text file, so there is no line diff. Size:{" "}
-        {sizeDetail(change)}.
-      </Text>
-    );
+    return <NoLineDiff change={change} />;
   }
   return (
     <SkillTextDiff

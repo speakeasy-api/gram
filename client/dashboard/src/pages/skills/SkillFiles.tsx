@@ -26,7 +26,7 @@ import {
 
 // Highlighting a multi-megabyte file freezes the tab; larger text files are
 // offered as a download instead.
-const MAX_PREVIEW_BYTES = 512 * 1024;
+export const MAX_PREVIEW_BYTES = 512 * 1024;
 
 const SCRIPT_HINT =
   "Agents can run files in scripts/. Review them before distributing this skill.";
@@ -156,7 +156,10 @@ function FilePreview({
   bytes: Uint8Array;
 }): JSX.Element {
   const text = isLikelyTextFile(file) ? decodeTextContent(bytes) : null;
-  if (file.contentType.startsWith("image/") && !file.path.endsWith(".svg")) {
+  if (
+    file.contentType.startsWith("image/") &&
+    !file.path.toLowerCase().endsWith(".svg")
+  ) {
     return <ImagePreview file={file} bytes={bytes} />;
   }
   if (text === null) {
