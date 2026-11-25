@@ -62,8 +62,10 @@ WHERE m.id = ANY(@message_ids::uuid[]) AND m.project_id = @project_id AND p.orga
 DELETE FROM chat_message_transcript_tool_calls WHERE message_id = @message_id AND project_id = @project_id;
 
 -- name: InsertToolCallIDs :exec
--- The chat and project come from the captured shadow and its message, never
--- from the caller, so a row cannot disagree with the message it describes.
+-- The chat and project come from the captured shadow and its message, not
+-- from the caller, so a row cannot name another chat or project than its
+-- message. The tool-call IDs are the caller's, parsed from the snapshot that
+-- capture just sealed.
 INSERT INTO chat_message_transcript_tool_calls (message_id, tool_call_id, chat_id, project_id)
 SELECT t.message_id, ids.tool_call_id, m.chat_id, t.project_id
 FROM chat_message_transcripts t

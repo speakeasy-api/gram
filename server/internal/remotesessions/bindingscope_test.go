@@ -8,71 +8,7 @@ import (
 
 	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/remotesessions"
-	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
-
-// A binding change on an organization-level issuer reaches servers in every
-// project that sits on it, so the writer re-decides each of them in its own
-// transaction rather than leaving the others to a later resync.
-func TestClientBindingWritersReachEveryProjectOnAnOrganizationIssuer(t *testing.T) {
-	t.Parallel()
-
-	t.Run("attaching captures the client on another project's sole server", func(t *testing.T) {
-		t.Parallel()
-		ctx, ti := newTestService(t)
-		authCtx, ok := contextvalues.GetAuthContext(ctx)
-		require.True(t, ok)
-		orgID := authCtx.ActiveOrganizationID
-
-		orgUserIssuer := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "scope-attach-usi")
-		otherProject := createProject(t, ctx, ti.conn, "scope-attach-other")
-		other := seedServerOnIssuer(t, ctx, ti.conn, otherProject, orgUserIssuer, "scope-attach-other")
-		provider := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, orgID, "scope-attach-provider")
-		client := seedOrgLevelRemoteClient(t, ctx, ti.conn, orgID, provider, "scope-attach-cid")
-
-		_, err := ti.service.AttachLegacyIssuerForTest(ctx, &remotesessions.LegacyIssuerBindingForTest{
-			ID:                  client.String(),
-			UserSessionIssuerID: orgUserIssuer.String(),
-		})
-		require.NoError(t, err)
-
-		require.Equal(t, []uuid.UUID{client}, associatedClients(t, ctx, ti.conn, otherProject, other))
-		require.NotEmpty(t, offeredAuthClients(t, ctx, ti.conn, other))
-	})
-
-	t.Run("detaching leaves another project's explicit offer", func(t *testing.T) {
-		t.Parallel()
-		ctx, ti := newTestService(t)
-		authCtx, ok := contextvalues.GetAuthContext(ctx)
-		require.True(t, ok)
-		orgID := authCtx.ActiveOrganizationID
-
-		orgUserIssuer := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "scope-detach-usi")
-		otherProject := createProject(t, ctx, ti.conn, "scope-detach-other")
-		other := seedServerOnIssuer(t, ctx, ti.conn, otherProject, orgUserIssuer, "scope-detach-other")
-		provider := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, orgID, "scope-detach-provider")
-		client := seedOrgLevelRemoteClient(t, ctx, ti.conn, orgID, provider, "scope-detach-cid")
-		// The compatibility parent is only the detach target; the offer belongs to the server.
-		require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-			RemoteSessionClientID: client, UserSessionIssuerID: orgUserIssuer,
-		}))
-		associateClient(t, ctx, ti.conn, orgID, otherProject, other, client)
-		recordTypedClients(t, ctx, ti.conn, orgID, other)
-		require.Equal(t, []uuid.UUID{client}, associatedClients(t, ctx, ti.conn, otherProject, other))
-		offers := offeredAuthClients(t, ctx, ti.conn, other)
-		require.Len(t, offers, 1)
-
-		_, err := ti.service.DetachLegacyIssuerForTest(ctx, &remotesessions.LegacyIssuerBindingForTest{
-			ID:                  client.String(),
-			UserSessionIssuerID: orgUserIssuer.String(),
-		})
-		require.NoError(t, err)
-		require.Zero(t, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, client, orgUserIssuer))
-		require.Equal(t, []uuid.UUID{client}, associatedClients(t, ctx, ti.conn, otherProject, other))
-		require.Equal(t, offers, offeredAuthClients(t, ctx, ti.conn, other))
-	})
-}
 
 // Deleting a client removes its associations and retires the typed links
 // derived from them before the deletion returns.

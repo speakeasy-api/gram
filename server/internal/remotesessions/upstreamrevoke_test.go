@@ -221,12 +221,6 @@ func seedRevocableSession(
 	})
 	require.NoError(t, err)
 
-	err = q.AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: client.ID,
-		UserSessionIssuerID:   userIssuer,
-	})
-	require.NoError(t, err)
-
 	accessToken := slug + "-access"
 	accessEnc, err := enc.Encrypt([]byte(accessToken))
 	require.NoError(t, err)
@@ -323,12 +317,6 @@ func seedRevocableClient(
 		ClientIDIssuedAt:        conv.ToPGTimestamptz(time.Now()),
 		ClientSecretExpiresAt:   pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		TokenEndpointAuthMethod: conv.ToPGTextEmpty("client_secret_post"),
-	})
-	require.NoError(t, err)
-
-	err = q.AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: client.ID,
-		UserSessionIssuerID:   userIssuer,
 	})
 	require.NoError(t, err)
 

@@ -158,8 +158,10 @@ type InsertToolCallIDsParams struct {
 	ProjectID   uuid.UUID
 }
 
-// The chat and project come from the captured shadow and its message, never
-// from the caller, so a row cannot disagree with the message it describes.
+// The chat and project come from the captured shadow and its message, not
+// from the caller, so a row cannot name another chat or project than its
+// message. The tool-call IDs are the caller's, parsed from the snapshot that
+// capture just sealed.
 func (q *Queries) InsertToolCallIDs(ctx context.Context, arg InsertToolCallIDsParams) error {
 	_, err := q.db.Exec(ctx, insertToolCallIDs, arg.ToolCallIds, arg.MessageID, arg.ProjectID)
 	return err

@@ -58,6 +58,10 @@ export type GetObservabilityOverviewPayload = {
    */
   to: Date;
   /**
+   * Whether only tool call figures are needed (default: false). When true, chat, token, cost and session duration fields are returned as 0, and figures may be aligned to 15-minute boundaries.
+   */
+  toolCallsOnly?: boolean | undefined;
+  /**
    * Optional toolset/MCP server slug filter
    */
   toolsetSlug?: string | undefined;
@@ -81,6 +85,7 @@ export type GetObservabilityOverviewPayload$Outbound = {
   meta_mcp_server_id?: string | undefined;
   remote_mcp_server_id?: string | undefined;
   to: string;
+  tool_calls_only: boolean;
   toolset_slug?: string | undefined;
   user_id?: string | undefined;
 };
@@ -103,6 +108,7 @@ export const GetObservabilityOverviewPayload$outboundSchema: z.ZodMiniType<
     metaMcpServerId: z.optional(z.string()),
     remoteMcpServerId: z.optional(z.string()),
     to: z.pipe(z.date(), z.transform(v => v.toISOString())),
+    toolCallsOnly: z._default(z.boolean(), false),
     toolsetSlug: z.optional(z.string()),
     userId: z.optional(z.string()),
   }),
@@ -118,6 +124,7 @@ export const GetObservabilityOverviewPayload$outboundSchema: z.ZodMiniType<
       mcpServerId: "mcp_server_id",
       metaMcpServerId: "meta_mcp_server_id",
       remoteMcpServerId: "remote_mcp_server_id",
+      toolCallsOnly: "tool_calls_only",
       toolsetSlug: "toolset_slug",
       userId: "user_id",
     });

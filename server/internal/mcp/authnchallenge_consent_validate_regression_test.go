@@ -25,7 +25,7 @@ func TestConsentValidationRejectsAnUnofferedGatewayRegistration(t *testing.T) {
 	t.Parallel()
 	ctx, fx := seedMetaValidationFixture(t, "validate-duplicate-meta")
 	projectID, orgID := consentTestTenant(t, ctx)
-	duplicate := createConsentRemoteClient(t, ctx, fx.ti.conn, projectID, orgID, "validate-duplicate-other", "", []uuid.UUID{fx.endpoint.UserSessionIssuerID})
+	duplicate := createConsentRemoteClient(t, ctx, fx.ti.conn, projectID, orgID, "validate-duplicate-other", "")
 	insertQualifiedRemoteSessionToken(t, ctx, fx.ti, fx.endpoint.UserSessionIssuerID, duplicate, fx.subject, "token-duplicate-other", fx.member.url)
 	_, err := postValidate(t, fx, duplicate)
 	var shareable *oops.ShareableError
@@ -41,7 +41,7 @@ func TestConsentValidationVerifiesAnOfferedGatewayMemberBesideAnotherProvidersDu
 	ctx, fx := seedMetaValidationFixture(t, "validate-associated-meta")
 	projectID, orgID := consentTestTenant(t, ctx)
 
-	first := createConsentRemoteClient(t, ctx, fx.ti.conn, projectID, orgID, "validate-associated-other", "", []uuid.UUID{fx.endpoint.UserSessionIssuerID})
+	first := createConsentRemoteClient(t, ctx, fx.ti.conn, projectID, orgID, "validate-associated-other", "")
 	otherIssuer := clientRemoteIssuerID(t, ctx, fx.ti.conn, projectID, orgID, first)
 	q := remotesessionsrepo.New(fx.ti.conn)
 	second, err := q.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
@@ -53,10 +53,6 @@ func TestConsentValidationVerifiesAnOfferedGatewayMemberBesideAnotherProvidersDu
 		CallbackBaseUrl:       conv.ToPGTextEmpty(""),
 	})
 	require.NoError(t, err)
-	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: second.ID,
-		UserSessionIssuerID:   fx.endpoint.UserSessionIssuerID,
-	}))
 
 	sibling := newValidationMember(t)
 	server := createMetaMember(t, ctx, fx.ti.conn, projectID, fx.endpoint.MetaMcpServerID.UUID, "validate-associated-sibling", sibling.url, conv.ToNullUUID(otherIssuer), 1)
@@ -93,10 +89,6 @@ func TestConsentValidationVerifiesATypedOfferBesideASameProviderClientUnderEnfor
 		CallbackBaseUrl:       conv.ToPGTextEmpty(""),
 	})
 	require.NoError(t, err)
-	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: duplicate.ID,
-		UserSessionIssuerID:   fx.endpoint.UserSessionIssuerID,
-	}))
 	insertQualifiedRemoteSessionToken(t, ctx, fx.ti, fx.endpoint.UserSessionIssuerID, duplicate.ID, fx.subject, "token-typed-duplicate", fx.member.url)
 
 	requireValidated(t, fx)
@@ -110,7 +102,7 @@ func TestConsentValidationProbesWithTheCardsOwnCredentialBesideAnotherClients(t 
 	t.Parallel()
 	ctx, fx := seedStandaloneValidationFixture(t, "validate-duplicate-standalone")
 	projectID, orgID := consentTestTenant(t, ctx)
-	other := createConsentRemoteClient(t, ctx, fx.ti.conn, projectID, orgID, "validate-duplicate-other", "", []uuid.UUID{fx.endpoint.UserSessionIssuerID})
+	other := createConsentRemoteClient(t, ctx, fx.ti.conn, projectID, orgID, "validate-duplicate-other", "")
 	insertQualifiedRemoteSessionToken(t, ctx, fx.ti, fx.endpoint.UserSessionIssuerID, other, fx.subject, "token-duplicate-other", fx.member.url)
 	requireValidated(t, fx)
 	requireProbe(t, fx.member.drain(), "token-validate-duplicate-standalone", true, true)
@@ -134,10 +126,10 @@ func TestConsentValidationStandaloneTunnelWillNotProbeWithAnotherCardsCredential
 	endpoint, stateID, subject := mintFirstPartyConsentState(t, ctx, ti, projectID, orgID, shared, "validate-selected-tunnel")
 	endpoint.McpServerID = conv.ToNullUUID(server.ID)
 
-	owner := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "validate-selected-tunnel", "", []uuid.UUID{shared})
+	owner := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "validate-selected-tunnel", "")
 	seedConsentAuthOffer(t, ctx, ti, orgID, projectID, server.ID, owner, authz.AuthClientTypeRemoteSession)
 	insertQualifiedRemoteSessionToken(t, ctx, ti, shared, owner, subject, "token-owner", "")
-	foreign := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "validate-selected-foreign", "", []uuid.UUID{shared})
+	foreign := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "validate-selected-foreign", "")
 	seedConsentAuthOffer(t, ctx, ti, orgID, projectID, server.ID, foreign, authz.AuthClientTypeRemoteSession)
 	insertQualifiedRemoteSessionToken(t, ctx, ti, shared, foreign, subject, "token-foreign", "")
 
@@ -189,7 +181,7 @@ func TestConsentValidationDirectServerScopesTypedOffers(t *testing.T) {
 				unrelated = newValidationMember(t)
 				resource = unrelated.url
 				boundServer = createPublicRemoteMcpServer(t, ctx, fx.ti.conn, projectID, fx.endpoint.UserSessionIssuerID, prefix+"-sibling", resource)
-				first = createConsentRemoteClient(t, ctx, fx.ti.conn, projectID, orgID, prefix+"-other", "", []uuid.UUID{fx.endpoint.UserSessionIssuerID})
+				first = createConsentRemoteClient(t, ctx, fx.ti.conn, projectID, orgID, prefix+"-other", "")
 				seedConsentAuthOffer(t, ctx, fx.ti, orgID, projectID, boundServer, first, authz.AuthClientTypeRemoteSession)
 				insertQualifiedRemoteSessionToken(t, ctx, fx.ti, fx.endpoint.UserSessionIssuerID, first, fx.subject, "token-other", resource)
 			}
@@ -199,9 +191,6 @@ func TestConsentValidationDirectServerScopesTypedOffers(t *testing.T) {
 				ClientID: prefix + "-duplicate", ClientIDIssuedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
 			})
 			require.NoError(t, err)
-			require.NoError(t, remotesessionsrepo.New(fx.ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
-				RemoteSessionClientID: duplicate.ID, UserSessionIssuerID: fx.endpoint.UserSessionIssuerID,
-			}))
 			seedConsentAuthOffer(t, ctx, fx.ti, orgID, projectID, boundServer, duplicate.ID, authz.AuthClientTypeRemoteSession)
 			insertQualifiedRemoteSessionToken(t, ctx, fx.ti, fx.endpoint.UserSessionIssuerID, duplicate.ID, fx.subject, "token-duplicate", resource)
 

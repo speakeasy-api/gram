@@ -93,8 +93,8 @@ func TestServePublic_MetaEndpoint_ConnectionStatus_GatedReportsPerMemberSignIn(t
 	_, connectedIssuerID := seedTunneledMetaMember(t, ctx, ti, projectID, meta.ID, "Connected member", "member-connected", 0, "")
 	_, unconnectedIssuerID := seedTunneledMetaMember(t, ctx, ti, projectID, meta.ID, "Unconnected member", "member-unconnected", 1, "")
 
-	connectedClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "status-connected", "", []uuid.UUID{sharedIssuerID, connectedIssuerID})
-	unconnectedClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "status-unconnected", "", []uuid.UUID{sharedIssuerID, unconnectedIssuerID})
+	connectedClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "status-connected", "")
+	unconnectedClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "status-unconnected", "")
 	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, orgID, projectID, []uuid.UUID{connectedIssuerID, unconnectedIssuerID}))
 
 	subject := createTestUser(t, ctx, ti, "status-user-"+uuid.NewString())
@@ -129,8 +129,8 @@ func TestServePublic_MetaEndpoint_ConnectionStatus_HostedUsesAssignedGrant(t *te
 	sibling := seedHostedMetaMember(t, ctx, ti, gateway.ID, "Second hosted", 1, mcpservers.VisibilityPublic)
 	missing := seedHostedMetaMember(t, ctx, ti, gateway.ID, "Missing placement", 2, mcpservers.VisibilityPublic)
 	open := seedHostedMetaMember(t, ctx, ti, gateway.ID, "No upstream", 3, mcpservers.VisibilityPublic)
-	firstClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "assigned-hosted", "", nil)
-	siblingClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "sibling-hosted", "", []uuid.UUID{signIn})
+	firstClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "assigned-hosted", "")
+	siblingClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "sibling-hosted", "")
 	placements := upstreamclientsrepo.New(ti.conn)
 	for memberID, clientID := range map[uuid.UUID]uuid.UUID{first.serverID: firstClient, sibling.serverID: siblingClient} {
 		_, err := placements.AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{
@@ -174,7 +174,7 @@ func TestServePublic_MetaEndpoint_ConnectionStatus_RemoteMemberRoutedWithoutIssu
 	routed := createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member-routed", routedURL, uuid.NullUUID{}, 0)
 	open := createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member-open", "https://open.example.com/mcp/"+uuid.NewString(), uuid.NullUUID{}, 1)
 
-	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "status-routed", "", []uuid.UUID{sharedIssuerID})
+	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "status-routed", "")
 	subject := createTestUser(t, ctx, ti, "status-user-"+uuid.NewString())
 	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, clientID, subject, "token-routed", routedURL)
 	typed := seedTypedSessionClient(t, ctx, ti, orgID, projectID, routed.mcpServerID, clientID, "remote_session", subject)

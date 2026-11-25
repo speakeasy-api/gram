@@ -143,20 +143,6 @@ func TestMCPServerUpstreamClientAssociations(t *testing.T) {
 		require.Equal(t, []uuid.UUID{clientID}, associatedClients(t, ctx, ti.conn, projectID, serverID), "reconciling again must not duplicate the association")
 	})
 
-	t.Run("a legacy link proves nothing about shared-issuer servers", func(t *testing.T) {
-		t.Parallel()
-
-		userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-assoc-shared")
-		first := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "assoc-shared-a")
-		second := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "assoc-shared-b")
-		clientID, _ := seedActiveClient(t, ctx, ti.conn, projectID, uuid.Nil, orgID, "rsi-assoc-shared")
-		seedLegacyIssuerClientLink(t, ctx, ti.conn, clientID, userIssuerID)
-
-		resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
-		require.Empty(t, associatedClients(t, ctx, ti.conn, projectID, first), "a shared issuer's client must not be copied onto every server")
-		require.Empty(t, associatedClients(t, ctx, ti.conn, projectID, second))
-	})
-
 	t.Run("two servers on one issuer keep different clients", func(t *testing.T) {
 		t.Parallel()
 
@@ -257,7 +243,6 @@ func TestMCPServerUpstreamClientAssociations(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.Empty(t, associatedClients(t, ctx, ti.conn, projectID, serverID))
-		requireNoAttachmentParent(t, ctx, ti, clientID, userIssuerID)
 	})
 
 	t.Run("unbinding a client from the issuer preserves explicit server associations", func(t *testing.T) {
@@ -267,17 +252,9 @@ func TestMCPServerUpstreamClientAssociations(t *testing.T) {
 		first := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "assoc-unbind-a")
 		second := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "assoc-unbind-b")
 		clientID, _ := seedActiveClient(t, ctx, ti.conn, projectID, uuid.Nil, orgID, "rsi-assoc-unbind")
-		seedLegacyIssuerClientLink(t, ctx, ti.conn, clientID, userIssuerID)
 		associate(t, ctx, ti.conn, orgID, projectID, first, clientID)
 		associate(t, ctx, ti.conn, orgID, projectID, second, clientID)
 
-		_, err := repo.New(ti.conn).DetachProjectRemoteSessionClientFromUserSessionIssuer(ctx, repo.DetachProjectRemoteSessionClientFromUserSessionIssuerParams{
-			RemoteSessionClientID: clientID,
-			UserSessionIssuerID:   userIssuerID,
-			ProjectID:             projectID,
-			OrganizationID:        orgID,
-		})
-		require.NoError(t, err)
 		resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
 
 		require.Equal(t, []uuid.UUID{clientID}, associatedClients(t, ctx, ti.conn, projectID, first))
@@ -352,7 +329,6 @@ func TestCommitServerIdentityConfigurationAssociatesOnlyTheTargetServer(t *testi
 	require.NoError(t, err)
 
 	require.Equal(t, []uuid.UUID{clientID}, associatedClients(t, ctx, ti.conn, projectID, targetID))
-	requireNoAttachmentParent(t, ctx, ti, clientID, userIssuerID)
 	require.NotEmpty(t, offeredAuthClients(t, ctx, ti.conn, targetID))
 	require.Empty(t, associatedClients(t, ctx, ti.conn, projectID, siblingID), "configuring one server must not associate the issuer's other servers")
 
@@ -431,7 +407,6 @@ func TestDetachServerClientAssociation_EnforcedSoleConsumer(t *testing.T) {
 	require.Equal(t, associationsBefore+1, auditCount(audit.ActionRemoteSessionClientDetachMcpServer))
 
 	require.Empty(t, associatedClients(t, ctx, ti.conn, projectID, serverID))
-	requireNoAttachmentParent(t, ctx, ti, clientID, userIssuerID)
 	require.Equal(t, []uuid.UUID{adminClientID}, offeredAuthClients(t, ctx, ti.conn, serverID),
 		"only the link derived from the association is retired")
 	require.True(t, authClientLive(t, ctx, ti.conn, offered[0]))

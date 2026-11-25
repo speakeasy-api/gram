@@ -70,5 +70,5 @@ func TestTrustedGlobalMaintenancePreservesCredentialTenants(t *testing.T) {
 	require.Equal(t, map[uuid.UUID]uuid.UUID{firstServer: uuid.Nil}, f.selections(firstCredential))
 	require.Equal(t, map[uuid.UUID]uuid.UUID{secondServer: uuid.Nil}, other.selections(secondCredential))
 	tx := testenv.BeginTx(t, ctx, f.pool)
-	require.Error(t, ReconcileIssuerInLockedTransaction(ctx, tx, "", firstIssuer))
+	require.Error(t, RecordTypedIssuerScopeInLockedTransaction(ctx, tx, "", firstIssuer, nil, nil))
 }

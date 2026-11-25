@@ -120,7 +120,7 @@ func TestConsentInventory_ChainedServiceLoadsToolsBeforeApproval(t *testing.T) {
 			state.AuthorizerImpersonated = &tc.impersonated
 			require.NoError(t, fx.ti.authnChallengeCache.Store(ctx, state))
 
-			fx.clientA = createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "chained-picker", "", []uuid.UUID{fx.shared})
+			fx.clientA = createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "chained-picker", "")
 			var authClientID uuid.UUID
 			if tc.legacy {
 				fx.ti.service.manual = true
@@ -234,7 +234,7 @@ func seedLoggedChainedConsent(t *testing.T, tag string) (context.Context, consen
 	endpoint.UpstreamResource = consentChainedUpstream
 	fx := consentActionFixture{ti: ti, endpoint: endpoint, stateID: stateID, projectID: projectID, orgID: orgID, shared: issuerID, subject: subject, clientA: uuid.Nil, clientB: uuid.Nil, clientC: uuid.Nil, clientD: uuid.Nil}
 	registerPageClient(t, ctx, fx)
-	fx.clientA = createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, tag, "", []uuid.UUID{issuerID})
+	fx.clientA = createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, tag, "")
 	authClientID := seedConsentAuthOffer(t, ctx, ti, orgID, projectID, serverID, fx.clientA, authz.AuthClientTypeEMA)
 	seedUserMCPConnectGrant(t, ctx, ti.conn, orgID, subject.ID, serverID.String())
 	return ctx, fx, clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, fx.clientA), authClientID, logs
@@ -295,7 +295,7 @@ func TestConsentPage_LinkedServiceDoesNotDeferToolInventory(t *testing.T) {
 	ctx, fx := standaloneConsent(t, "aim524-linked-page", consentChainedUpstream, func(ctx context.Context, ti *testInstance, projectID, issuerID uuid.UUID, slug string) uuid.UUID {
 		return attachConsentRemoteMcpServer(t, ctx, ti.conn, projectID, issuerID, slug, consentChainedUpstream)
 	})
-	fx.clientA = createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim524-linked-page", "", []uuid.UUID{fx.shared})
+	fx.clientA = createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim524-linked-page", "")
 	seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, fx.endpoint.McpServerID.UUID, fx.clientA, authz.AuthClientTypeRemoteSession)
 	seedUserMCPConnectGrant(t, ctx, fx.ti.conn, fx.orgID, fx.subject.ID, fx.endpoint.McpServerID.UUID.String())
 	grant(t, ctx, fx, fx.clientA, consentChainedUpstream)
@@ -309,7 +309,7 @@ func TestConsentPage_UnconnectedUnchainedServicesDoNotDefer(t *testing.T) {
 	ctx, fx, issuer := seedChainedConsentEndpoint(t, "aim524-unchained-page")
 	setConsentGovernor(t, fx, issuer)
 	// A second unlinked card keeps the page from auto-connecting the first.
-	fx.clientB = createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim524-unchained-page-b", "", []uuid.UUID{fx.shared})
+	fx.clientB = createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim524-unchained-page-b", "")
 	seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, fx.endpoint.McpServerID.UUID, fx.clientB, authz.AuthClientTypeRemoteSession)
 
 	page := renderToolsIsland(t, fx)
@@ -322,7 +322,7 @@ func TestConsentPage_ConnectedCardBesideChainedCardDoesNotDefer(t *testing.T) {
 
 	ctx, fx, issuer := seedChainedConsentEndpoint(t, "aim524-mixed-page")
 	setConsentGovernor(t, fx, issuer, consentChainedUpstream)
-	fx.clientB = createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim524-mixed-page-b", "", []uuid.UUID{fx.shared})
+	fx.clientB = createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim524-mixed-page-b", "")
 	seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, fx.endpoint.McpServerID.UUID, fx.clientB, authz.AuthClientTypeRemoteSession)
 	grant(t, ctx, fx, fx.clientB, consentChainedUpstream)
 
