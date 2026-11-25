@@ -20,7 +20,7 @@ import { Text } from "@/components/ui/Text";
 import { TextArea } from "@/components/ui/Textarea";
 import { useProject } from "@/contexts/Auth";
 import { cn } from "@/lib/utils";
-import { ServiceError } from "@gram/client/models/errors/serviceerror.js";
+import { describeApiError } from "@/lib/api-error";
 import type { ListShadowMCPInventoryResponse } from "@gram/client/models/operations/listshadowmcpinventory.js";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
@@ -143,12 +143,16 @@ export function EditShadowMCPPolicyDialog({
     throwOnError: false,
   });
   const rolesQuery = useRoles(undefined, undefined, { throwOnError: false });
-  const createPolicy = useRiskCreatePolicyMutation();
-  const updatePolicy = useRiskPoliciesUpdateMutation();
-  const removePolicy = useRiskPoliciesDeleteMutation();
-  const createRequest = useCreateMcpApprovalRequestMutation();
-  const promoteRequest = usePromoteMcpApprovalRequestMutation();
-  const decide = useRecordMcpApprovalDecisionMutation();
+  const createPolicy = useRiskCreatePolicyMutation({ onError: () => {} });
+  const updatePolicy = useRiskPoliciesUpdateMutation({ onError: () => {} });
+  const removePolicy = useRiskPoliciesDeleteMutation({ onError: () => {} });
+  const createRequest = useCreateMcpApprovalRequestMutation({
+    onError: () => {},
+  });
+  const promoteRequest = usePromoteMcpApprovalRequestMutation({
+    onError: () => {},
+  });
+  const decide = useRecordMcpApprovalDecisionMutation({ onError: () => {} });
 
   // The policy as it was when the dialog opened. Saving refreshes the live
   // policy before the dialog finishes closing, and comparing against that
@@ -342,11 +346,11 @@ export function EditShadowMCPPolicyDialog({
     for (const server of keptServers) {
       try {
         await recordKeepDecision(server, keepDecision, note);
-      } catch {
+      } catch (err) {
         await refresh();
         setSaving(false);
         setError(
-          `Recording a decision on ${shadowMCPServerLabel(server)} failed, so the policy was not changed. Servers decided before it keep their decision. Try again.`,
+          `Recording a decision on ${shadowMCPServerLabel(server)} failed, so the policy was not changed. ${describeApiError(err).message} Servers decided before it keep their decision.`,
         );
         return;
       }
@@ -533,10 +537,7 @@ function policyErrorMessage(err: unknown, kept: number): string {
     kept > 0
       ? ` The ${kept === 1 ? "decision" : `${kept} decisions`} you picked ${kept === 1 ? "was" : "were"} recorded.`
       : "";
-  if (err instanceof ServiceError && err.message) {
-    return `The policy was not changed. ${err.message}${decided}`;
-  }
-  return `The policy could not be changed. Try again.${decided}`;
+  return `The policy was not changed. ${describeApiError(err).message}${decided}`;
 }
 
 function policyChangedSince(

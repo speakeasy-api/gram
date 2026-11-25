@@ -6,6 +6,7 @@
 
 import type { Role } from "@gram/client/models/components/role.js";
 import type { RoleGrant as SdkRoleGrant } from "@gram/client/models/components/rolegrant.js";
+import type { Disposition } from "@gram/client/models/components/selector.js";
 
 import {
   isPresentableScope,
@@ -93,6 +94,53 @@ export function reviewNeedsConfirmation(
   return (
     added.some((p) => p.sensitive) || (newHolders?.sensitive.length ?? 0) > 0
   );
+}
+
+/**
+ * Tool kinds a save stops covering on MCP Connect. A read-only rule covers
+ * read-only tools added later and the tool list replacing it does not, so the
+ * review has to say so.
+ */
+export function removedToolKindRules(
+  removeGrants: readonly SdkRoleGrant[],
+  after: readonly SdkRoleGrant[],
+): Disposition[] {
+  const kinds = new Set<Disposition>();
+  for (const grant of removeGrants) {
+    if (grant.scope !== "mcp:connect") continue;
+    for (const selector of grant.selectors ?? []) {
+      if (!selector.disposition || namesOneTool(selector)) continue;
+      if (!connectStillCoversKind(after, selector)) {
+        kinds.add(selector.disposition);
+      }
+    }
+  }
+  return [...kinds];
+}
+
+// A tool of "*" matches every tool, so { disposition, tool: "*" } is a kind rule.
+function namesOneTool(selector: Selector): boolean {
+  return !!selector.tool && selector.tool !== "*";
+}
+
+function connectStillCoversKind(
+  after: readonly SdkRoleGrant[],
+  removed: Selector,
+): boolean {
+  return after.some((grant) => {
+    if (grant.scope !== "mcp:connect") return false;
+    const selectors = grant.selectors ?? [];
+    if (selectors.length === 0) return true;
+    return selectors.some(
+      (selector) =>
+        !namesOneTool(selector) &&
+        (!selector.disposition ||
+          selector.disposition === removed.disposition) &&
+        (selector.resourceId === removed.resourceId ||
+          selector.resourceId === "*") &&
+        (!selector.projectId || selector.projectId === removed.projectId),
+    );
+  });
 }
 
 /**

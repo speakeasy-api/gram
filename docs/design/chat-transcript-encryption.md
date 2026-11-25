@@ -7,8 +7,10 @@ payloads through the existing organization-scoped KMS/envelope-encryption servic
 `server/internal/chat/transcriptstore` persists encrypted shadow copies, verifies
 reads, and backfills a bounded project-scoped page at a time. Shared message writers
 can capture these copies atomically with the original message and outbox events.
-**Ordinary transcript readers still use legacy data. Plaintext and existing assets
-are not removed.** The `chat-transcripts` use case has an independent DEK per
+**Only the dashboard chat load (`chat.load`) can read through shadows, and only
+for projects that capture shadows; messages without a shadow fall back to
+plaintext. Every other reader still uses legacy data.
+Plaintext and existing assets are not removed.** The `chat-transcripts` use case has an independent DEK per
 organization; it does not reuse OAuth or gateway-state keys.
 
 The ticket requires per-customer encryption of `content`, `content_raw`,
@@ -96,6 +98,49 @@ are fingerprint hints, not ciphertext-authentication or cutover evidence.
 Direct SQL updates outside the shared writer can make a shadow stale. Verified
 reads reject it, and a subsequent backfill refreshes it. Before encrypted-only
 rollout, migrate those writes too and establish a fenced plaintext-removal protocol.
+
+## Shadow reads
+
+Reads use the capture allowlist, so no project reads shadows that capture
+stopped keeping current. For every project that captures shadows, `chat.load`
+opens each page's message bodies with `Store.LoadMany` and serves the opened
+`content`, `content_raw` and `tool_calls` in place of the plaintext columns.
+
+`LoadMany` leaves out any message that has no shadow at all, and `chat.load`
+serves that message's plaintext body. Messages written before capture began, or
+by writers that do not seal yet, still load. The read metric counts them under
+the `plaintext_fallback` outcome, so coverage gaps stay visible. A shadow that
+exists but is stale or fails authentication fails the whole page with an
+unexpected error: it means capture or the data is broken, and plaintext must not
+hide that. Its codec uses the process's committed data key cache, so a warm page
+makes no KMS call, and a page with no shadows makes no key lookup at all.
+
+Direct SQL writers (see the scope table below) do not seal yet. If one edits a
+message that already has a shadow, that shadow goes stale and the read fails
+until the message is captured again.
+
+Removing a project from the allowlist stops both capture and shadow reads.
+A message that already had a shadow and is edited while the project is off
+keeps a stale shadow, so before adding the project back, recapture its
+messages with a backfill. Otherwise each such message fails its page as soon
+as the project is back on the allowlist. Messages first written while it was
+off have no shadow and fall back to plaintext as usual.
+
+Any other read error, such as a failed key unwrap or a database error, also
+fails the page. Plaintext is never served in place of an existing shadow.
+
+While plaintext is kept, a shadow that does not match its plaintext row is
+counted under the `stale` read outcome, and a prod Datadog monitor pages on
+any occurrence. That check goes away with the plaintext.
+
+Messages whose body exceeds the inline limit keep it in a raw content asset.
+The shadow covers only the inline columns, so `chat.load` still reads those
+bodies from the plaintext asset; encrypting assets is tracked under "Raw content
+assets" below.
+
+Capture and reads emit `chat.transcript_shadow.capture.*` and
+`chat.transcript_shadow.read.*` (duration and message count, by project and
+outcome) and `transcriptstore.Capture` / `transcriptstore.LoadMany` spans.
 
 ## Scope that still needs implementation
 

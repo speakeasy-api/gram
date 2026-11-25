@@ -175,7 +175,7 @@ func (s *Service) serveIdentityChainingCheck(w http.ResponseWriter, r *http.Requ
 	)
 
 	if code, refused := chainingRefusalCode(outcome.Reason); refused && result.Status == chainCheckRejected {
-		s.recordRefusedConsent(ctx, logger, challengeState.connectionAttempt(endpoint), client.ID, refusedSignIn, code,
+		s.recordRefusedConsent(ctx, logger, challengeState.connectionAttempt(s.aiCatalog.SnapshotFor(ctx), endpoint), client.ID, refusedSignIn, code,
 			mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Subject(challengeState.Subject),
 			mcpconnectionattempts.Provider(client.IssuerURL), mcpconnectionattempts.RemoteSessionClient(client.ID))
 	}

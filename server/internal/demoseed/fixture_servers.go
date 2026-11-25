@@ -242,7 +242,7 @@ func wireLocalUpstreams(ctx context.Context, logger *slog.Logger, tx pgx.Tx, opt
 		return errors.New("wire local upstreams: an encryption client is required")
 	}
 	spec := LocalSpec()
-	s := &seeder{spec: spec, q: repo.New(tx), logger: logger, enc: opts.Encryption, assistantIssuer: "", serverURL: opts.ServerURL, now: time.Now(), signalSequences: nil}
+	s := &seeder{spec: spec, catalog: nil, q: repo.New(tx), logger: logger, enc: opts.Encryption, assistantIssuer: "", serverURL: opts.ServerURL, now: time.Now(), signalSequences: nil}
 
 	// The Enterprise Sign-In (ID-JAG) Server: signed in through the dev-idp,
 	// it reaches the fixture's EMA endpoint with a token Speakeasy obtains by

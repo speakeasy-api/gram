@@ -57,16 +57,20 @@ func IsPlaceholderTitle(title string) bool {
 }
 
 // DerivedTitle renders the stand-in title a capture path stores for a chat it
-// opens with content in hand. IsDerivedTitle recognizes the result, so every
-// path that derives a title must go through this function.
+// opens with content in hand: the human text after any leading harness
+// envelopes, trimmed and cut to MaxDerivedTitleRunes. It returns "" when the
+// content is only envelopes, so the caller can seed its surface placeholder
+// instead. IsDerivedTitle recognizes the result, so every path that derives a
+// title must go through this function.
 func DerivedTitle(content string) string {
-	return conv.TruncateString(strings.TrimSpace(content), MaxDerivedTitleRunes)
+	return conv.TruncateString(strings.TrimSpace(StripLeadingEnvelopes(content)), MaxDerivedTitleRunes)
 }
 
 // IsDerivedTitle reports whether title is the stand-in DerivedTitle would
 // produce for any of the supplied message bodies. A generated or source-chosen
 // title that happens to equal a message's opening is indistinguishable from a
-// stand-in and is regenerated.
+// stand-in and is regenerated. A stored stand-in can hold the raw opening,
+// envelope included, so both the raw and the stripped content are matched.
 func IsDerivedTitle(title string, contents ...string) bool {
 	if title == "" {
 		return false
@@ -78,9 +82,18 @@ func IsDerivedTitle(title string, contents ...string) bool {
 	// A stand-in is its source trimmed, cut to MaxDerivedTitleRunes. Checking
 	// the prefix avoids decoding every multi-kilobyte message into runes.
 	truncated := titleRunes == MaxDerivedTitleRunes
-	for _, content := range contents {
+	matches := func(content string) bool {
 		content = strings.TrimSpace(content)
-		if content == title || (truncated && strings.HasPrefix(content, title)) {
+		return content == title || (truncated && strings.HasPrefix(content, title))
+	}
+	for _, content := range contents {
+		// Both forms a stand-in comes from are substrings of the content, so
+		// this exact check spares the envelope regex on every unrelated
+		// (often multi-kilobyte) message.
+		if !strings.Contains(content, title) {
+			continue
+		}
+		if matches(content) || matches(StripLeadingEnvelopes(content)) {
 			return true
 		}
 	}

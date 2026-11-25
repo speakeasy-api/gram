@@ -469,4 +469,12 @@ func TestHostedMemberStatusUsesOnlyAssignedRegistration(t *testing.T) {
 	status, err = service.memberConnectionStatus(t.Context(), principal, target)
 	require.NoError(t, err)
 	require.Equal(t, MCPConnectionStateActive, status.State)
+
+	reader.authStatuses = map[uuid.UUID]remotesessions.RemoteSessionState{assigned: {SignInUnreadable: true}}
+	service.withMemberMCPConnectionReader(reader)
+	status, err = service.memberConnectionStatus(t.Context(), principal, target)
+	require.NoError(t, err)
+	require.Equal(t, MCPConnectionStateReauthorizationRequired, status.State)
+	require.Equal(t, "sign_in_unreadable", status.Reason)
+	require.Equal(t, "reconnect", status.NextAction)
 }

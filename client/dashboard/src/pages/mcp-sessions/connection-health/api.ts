@@ -2,6 +2,7 @@ import { useProject, useSession } from "@/contexts/Auth";
 import { nextScheduleBoundaryDelay } from "@/components/killswitch/killswitch-view-model";
 import { useKillswitchAccess } from "@/hooks/useKillswitchAccess";
 import { isExpectedAPIError } from "@/lib/errors";
+import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useKillswitches } from "@gram/client/react-query/killswitches.js";
 import {
@@ -14,10 +15,6 @@ import {
 } from "@tanstack/react-query";
 import { useState } from "react";
 import { presetWindow } from "./filters";
-import {
-  fixtureGetSuspectedProblem,
-  fixtureListSuspectedProblems,
-} from "./problem-fixtures";
 import * as sdk from "./sdk";
 import type {
   ActiveKillswitch,
@@ -295,37 +292,53 @@ export function useAttemptHere(
   };
 }
 
-/** Suspected problems are made-up sample data until their API ships. */
-export const SUSPECTED_PROBLEMS_ARE_SAMPLE = true;
+// Grouping is costly and changes slowly; a 503 means it ran out of time and will again right away.
+export const problemRetry = (failures: number, error: Error): boolean =>
+  retry(failures, error) && !isUnavailable(error);
 
-/** FIXTURES: suspected problems have no detector or API yet. */
+const PROBLEM_QUERY = {
+  staleTime: 60_000,
+  refetchOnWindowFocus: false,
+  retry: problemRetry,
+  throwOnError: false,
+} as const;
+
+export function isUnavailable(error: unknown): boolean {
+  return error instanceof GramError && error.statusCode === 503;
+}
+
 export function useSuspectedProblems(
   scope: Scope,
   part?: ProblemPart,
 ): UseQueryResult<ListSuspectedProblemsResponse> {
-  const { projectId } = useClient();
+  const { client, gramProject, projectId } = useClient();
   return useQuery({
     queryKey: [ROOT, projectId, "listSuspectedProblems", scope, part],
     queryFn: () =>
-      fixtureListSuspectedProblems({
+      sdk.listSuspectedProblems(client, gramProject, {
         userSessionIssuerId: scope.providerId,
         serverId: scope.serverId,
         part,
       }),
-    throwOnError: false,
+    ...PROBLEM_QUERY,
   });
 }
 
-/** FIXTURES: see useSuspectedProblems. */
 export function useSuspectedProblem(
+  scope: Scope,
   id: string | null,
 ): UseQueryResult<GetSuspectedProblemResponse> {
-  const { projectId } = useClient();
+  const { client, gramProject, projectId } = useClient();
   return useQuery({
-    queryKey: [ROOT, projectId, "getSuspectedProblem", id],
-    queryFn: () => fixtureGetSuspectedProblem({ id: id ?? "" }),
+    queryKey: [ROOT, projectId, "getSuspectedProblem", scope, id],
+    queryFn: () =>
+      sdk.getSuspectedProblem(client, gramProject, {
+        userSessionIssuerId: scope.providerId,
+        serverId: scope.serverId,
+        id: id ?? "",
+      }),
     enabled: !!id,
-    throwOnError: false,
+    ...PROBLEM_QUERY,
   });
 }
 

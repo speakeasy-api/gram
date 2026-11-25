@@ -14,11 +14,11 @@ import {
 } from "./accessRows";
 
 const catalog: ToolSelectionTool[] = [
-  { name: "a", annotations: ["read_only"] },
-  { name: "b", annotations: ["read_only"] },
-  { name: "c", annotations: ["destructive"] },
-  { name: "d", annotations: [] },
-  { name: "e", annotations: [] },
+  { name: "a", disposition: "read_only" },
+  { name: "b", disposition: "read_only" },
+  { name: "c", disposition: "destructive" },
+  { name: "d", disposition: "unannotated" },
+  { name: "e", disposition: "unannotated" },
 ];
 
 function entry(

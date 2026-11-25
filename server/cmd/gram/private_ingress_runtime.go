@@ -109,6 +109,11 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	}
 	r.DB = db
 	r.cleanup = append(r.cleanup, func(context.Context) error { db.Close(); return nil })
+	aiCatalog, stopAICatalog, err := startAICatalog(ctx, db, logger, meterProvider)
+	if err != nil {
+		return nil, err
+	}
+	r.cleanup = append(r.cleanup, func(context.Context) error { stopAICatalog(); return nil })
 	chDB, stop, err := newClickhouseClient(ctx, logger, c)
 	if err != nil {
 		return nil, err
@@ -188,18 +193,19 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 		return nil, err
 	}
 	aiProviderKeys := orgEncryption.AIProviderKeys(logger, enc)
+	orEndpoints := openrouter.EndpointsFor(PullPartition(ctx))
 	var openRouter openrouter.Provisioner
 	if c.String("environment") == "local" {
 		openRouter = openrouter.NewDevelopment(c.String("openrouter-dev-key"))
 	} else {
-		openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), c.String("openrouter-provisioning-key"), productFeatures, billingTracker, enc, staffOrg, openrouter.WithAIProviderKeys(aiProviderKeys))
+		openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), PullPartition(ctx), c.String("openrouter-provisioning-key"), productFeatures, billingTracker, enc, staffOrg, openrouter.WithAIProviderKeys(aiProviderKeys))
 	}
 	tigrisStore, stop, err := newTigrisStore(ctx, c, logger)
 	if err != nil {
 		return nil, err
 	}
 	r.cleanup = append(r.cleanup, stop)
-	functionsOrchestrator, stop, err := newFunctionOrchestrator(c, logger, tracerProvider, guardianPolicy, db, assetStorage, tigrisStore, enc)
+	functionsOrchestrator, stop, err := newFunctionOrchestrator(c, logger, tracerProvider, guardianPolicy, db, assetStorage, tigrisStore, orgEncryption.RunnerKeys(logger, enc))
 	if err != nil {
 		return nil, err
 	}
@@ -253,10 +259,10 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	r.cleanup = append(r.cleanup, efficacySignaler.Shutdown, analysisSignaler.Shutdown)
 	chatWriter.AddObserver(efficacy.NewObserver(logger, efficacySignaler))
 	chatWriter.AddObserver(analysis.NewObserver(logger, analysisSignaler))
-	completions := openrouter.NewUnifiedClient(logger, guardianPolicy, openRouter, modelkeys.NewResolver(db, aiProviderKeys, openRouter), chat.NewChatMessageCaptureStrategy(logger, meterProvider, db, chatWriter), chat.NewDefaultUsageTrackingStrategy(db, logger, billingTracker), &background.TemporalChatTitleGenerator{TemporalEnv: r.Temporal}, telemLogger)
+	completions := openrouter.NewUnifiedClient(logger, guardianPolicy, orEndpoints, openRouter, modelkeys.NewResolver(db, aiProviderKeys, openRouter), chat.NewChatMessageCaptureStrategy(logger, meterProvider, db, chatWriter), chat.NewDefaultUsageTrackingStrategy(db, logger, billingTracker), &background.TemporalChatTitleGenerator{TemporalEnv: r.Temporal}, telemLogger)
 	shadowMCPClient := shadowmcp.NewClient(logger, db, cacheImpl, serverURL).WithFeatureFlags(featureFlags)
 	mcpRiskEvaluator, mcpRiskScanner, err := newMCPRiskEvaluator(
-		c, logger, tracerProvider, meterProvider, db, enc, redisClient, featureFlags, enforcementDispatcher, completions, guardianPolicy, openRouter, publishers, shadowMCPClient, toolIOLogsEnabled,
+		c, logger, tracerProvider, meterProvider, db, enc, redisClient, featureFlags, enforcementDispatcher, completions, guardianPolicy, openRouter, orEndpoints, publishers, shadowMCPClient, toolIOLogsEnabled,
 		// The approval routes are not served behind private ingress, so
 		// require_approval policies deny here with a clear message instead of
 		// pointing agents at a server they may not reach.
@@ -294,7 +300,7 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	if err != nil {
 		return nil, err
 	}
-	contextWindowResolver := openrouter.NewContextWindowResolver(logger, guardianPolicy, cacheImpl)
+	contextWindowResolver := openrouter.NewContextWindowResolver(logger, guardianPolicy, cacheImpl, orEndpoints)
 	assistantsCore := assistants.NewServiceCore(logger, tracerProvider, meterProvider, db, guardianPolicy, enc, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemLogger, contextWindowResolver, auditLogger, assistantIdentities, authzEngine)
 	assistantsCore.SetWakeCanceller(triggerApp)
 	assistantsCore.SetDashboardIngestor(triggerApp)
@@ -318,7 +324,7 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	}
 	clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
 	clientAssertionSigner.PinManagedSigner(c.String(identityProviderSigningServiceAccount))
-	if err := configureTranscriptShadow(ctx, c, db, chatWriter, orgEncryption); err != nil {
+	if _, err := configureTranscriptShadow(ctx, c, db, chatWriter, orgEncryption, tracerProvider, meterProvider); err != nil {
 		return nil, err
 	}
 	issuerGate := newInternalSessionIssuerGate(c, db, featureFlags, false)
@@ -346,6 +352,7 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	r.cleanup = append(r.cleanup, stopTunnelMetrics)
 	mcpService, err := newMCPService(c, mcpServiceDependencies{
 		Connections:      connectionRecorder,
+		AICatalog:        aiCatalog,
 		CallerAssertions: callerAssertions,
 		IssuerGate:       issuerGate, IssuerSigner: issuerSigner,
 		Logger: logger, Tracer: tracerProvider, Meter: meterProvider, DB: db, Redis: redisClient,
@@ -375,7 +382,7 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	mcpService.StartRemoteSessionRecheck(ctx)
 	admission := networkingress.NewExpansionAdmission(productFeatures, false, c.Bool("network-ingress-enabled"))
 	metadata := mcpmetadata.NewService(logger, tracerProvider, meterProvider, db, sessionManager, serverURL, siteURL, cacheImpl, authzEngine, auditLogger, admission.CheckExpansion)
-	r.Runtime, err = buildMCPServerRuntime(mcpServerRuntimeDependencies{MCP: mcpService, Metadata: metadata})
+	r.Runtime, err = buildMCPServerRuntime(mcpServerRuntimeDependencies{AICatalog: aiCatalog, MCP: mcpService, Metadata: metadata})
 	if err != nil {
 		return nil, err
 	}

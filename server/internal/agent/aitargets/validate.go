@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"math"
 	"net/url"
 	"regexp"
@@ -12,6 +11,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 )
 
 // These bounds are mirrored by the device agent's decode-time validator and
@@ -52,8 +53,21 @@ var (
 // ErrInvalidTarget is wrapped by every validation failure.
 var ErrInvalidTarget = errors.New("invalid ai scan target")
 
+// ValidateCatalog checks every enabled document URL and the device-facing projection of a catalog snapshot.
+func ValidateCatalog(catalog *aivendors.Snapshot) error {
+	for _, preset := range catalog.Catalog() {
+		if !preset.Enabled {
+			continue
+		}
+		if err := validateMetadataURL(preset.URL, ""); err != nil {
+			return fmt.Errorf("%w: product %q: document %w", ErrInvalidTarget, preset.ProductID, err)
+		}
+	}
+	return ValidateServed(catalog, Defaults(catalog))
+}
+
 // Validate checks the count bound, id uniqueness, and every per-target rule.
-func Validate(targets []Target) error {
+func Validate(catalog *aivendors.Snapshot, targets []Target) error {
 	if len(targets) > MaxTargets {
 		return fmt.Errorf("%w: %d targets exceeds the maximum of %d", ErrInvalidTarget, len(targets), MaxTargets)
 	}
@@ -65,7 +79,7 @@ func Validate(targets []Target) error {
 	vendorKeys := make(map[string]string, len(targets))
 	clientIDs := make(map[string]string, len(targets))
 	for _, target := range targets {
-		if err := ValidateTarget(target); err != nil {
+		if err := ValidateTarget(catalog, target); err != nil {
 			return err
 		}
 		if _, duplicate := seen[target.ID]; duplicate {
@@ -91,12 +105,12 @@ func Validate(targets []Target) error {
 	return nil
 }
 
-// ValidateServed checks the set that would be served after a write: the
+// ValidateServed checks the set served after catalog and organization overlays: the
 // per-target rules plus the count and encoded-size caps agents enforce. The
 // size is measured at the widest list_version so a later revision cannot
 // push an accepted set over the cap.
-func ValidateServed(targets []Target) error {
-	if err := Validate(targets); err != nil {
+func ValidateServed(catalog *aivendors.Snapshot, targets []Target) error {
+	if err := Validate(catalog, targets); err != nil {
 		return err
 	}
 	data, err := json.Marshal(NewSnapshot(math.MaxInt32, targets).Envelope())
@@ -111,7 +125,7 @@ func ValidateServed(targets []Target) error {
 
 // ValidateTarget checks one target against the rules the device agent
 // enforces on receipt.
-func ValidateTarget(target Target) error {
+func ValidateTarget(catalog *aivendors.Snapshot, target Target) error {
 	if !targetIDPattern.MatchString(target.ID) {
 		return fmt.Errorf("%w: id %q must match %s", ErrInvalidTarget, target.ID, targetIDPattern)
 	}
@@ -154,7 +168,7 @@ func ValidateTarget(target Target) error {
 	if len(sig.BundleIDs)+len(sig.Binaries)+len(sig.ConfigDirs) == 0 {
 		return fail("at least one install signature (bundle id, binary, or config dir) is required")
 	}
-	return validateGatewayClient(target.Category, target.GatewayClient, fail)
+	return validateGatewayClient(catalog, target.Category, target.GatewayClient, fail)
 }
 
 func isSpaceOrControl(r rune) bool {
@@ -165,7 +179,7 @@ func isSpaceOrControl(r rune) bool {
 // server can actually produce — a catalog vendor key, or a CIMD document URL
 // it can verify — so a matcher that could never match is rejected at write
 // time rather than read as a silently inert block.
-func validateGatewayClient(category Category, gateway GatewayClient, fail func(string, ...any) error) error {
+func validateGatewayClient(catalog *aivendors.Snapshot, category Category, gateway GatewayClient, fail func(string, ...any) error) error {
 	// A harness and an assistant both call Speakeasy's MCP gateway, so both can
 	// name a caller. An open model run locally is software on a laptop and
 	// nothing else, so a matcher on one would name a caller that cannot exist.
@@ -187,7 +201,7 @@ func validateGatewayClient(category Category, gateway GatewayClient, fail func(s
 		if !vendorKeyPattern.MatchString(key) {
 			return fail("cimd vendor key %q must match %s", key, vendorKeyPattern)
 		}
-		if !aivendors.BlockableVendorKey(key) {
+		if !catalog.BlockableVendorKey(key) {
 			return fail("cimd vendor key %q does not name a single CIMD-publishing vendor Speakeasy can recognize at the gateway; name the client id metadata document url instead", key)
 		}
 	}
@@ -198,18 +212,8 @@ func validateGatewayClient(category Category, gateway GatewayClient, fail func(s
 	// all, so nobody can record a block that looks real and covers one
 	// laptop's registration.
 	for _, id := range gateway.OAuthClientIDs {
-		switch {
-		case id == "":
-			return fail("client id metadata document url must not be empty")
-		case utf8.RuneCountInString(id) > MaxOAuthClientIDLength:
-			return fail("client id metadata document url %q exceeds %d characters", id, MaxOAuthClientIDLength)
-		case strings.ContainsFunc(id, isSpaceOrControl):
-			return fail("client id metadata document url %q must not contain whitespace or control characters", id)
-		case !strings.HasPrefix(id, "https://"):
-			return fail("client id metadata document url %q must be an https URL; only CIMD-published clients can be blocked at the gateway", id)
-		}
-		if err := validateClientIDURLShape(id); err != nil {
-			return fail("client id metadata document url %q %s", id, err)
+		if err := validateMetadataURL(id, "; only CIMD-published clients can be blocked at the gateway"); err != nil {
+			return fail("%v", err)
 		}
 	}
 	for _, name := range gateway.ClientInfoNames {
@@ -219,6 +223,24 @@ func validateGatewayClient(category Category, gateway GatewayClient, fail func(s
 		case utf8.RuneCountInString(name) > MaxClientInfoNameLength:
 			return fail("client info name %q exceeds %d characters", name, MaxClientInfoNameLength)
 		}
+	}
+	return nil
+}
+
+// validateMetadataURL holds a CIMD URL or catalog pattern to the client_id rules; httpsReason explains the https rule.
+func validateMetadataURL(id, httpsReason string) error {
+	switch {
+	case id == "":
+		return errors.New("client id metadata document url must not be empty")
+	case utf8.RuneCountInString(id) > MaxOAuthClientIDLength:
+		return fmt.Errorf("client id metadata document url %q exceeds %d characters", id, MaxOAuthClientIDLength)
+	case strings.ContainsFunc(id, isSpaceOrControl):
+		return fmt.Errorf("client id metadata document url %q must not contain whitespace or control characters", id)
+	case !strings.HasPrefix(id, "https://"):
+		return fmt.Errorf("client id metadata document url %q must be an https URL%s", id, httpsReason)
+	}
+	if err := validateClientIDURLShape(id); err != nil {
+		return fmt.Errorf("client id metadata document url %q %w", id, err)
 	}
 	return nil
 }

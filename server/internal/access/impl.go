@@ -12,6 +12,7 @@ import (
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -21,6 +22,7 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/access/server"
 	"github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -51,6 +53,8 @@ type CanonicalFoldGate interface {
 }
 
 type Service struct {
+	aiCatalog *aivendors.Store
+
 	tracer trace.Tracer
 	logger *slog.Logger
 	db     *pgxpool.Pool
@@ -97,7 +101,7 @@ func (s *Service) canonicalFoldOrg(ctx context.Context, orgID string) string {
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(
+func NewService(aiCatalog *aivendors.Store,
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
 	db *pgxpool.Pool,
@@ -114,6 +118,7 @@ func NewService(
 	logger = logger.With(attr.SlogComponent("access"))
 
 	return &Service{
+		aiCatalog:  aiCatalog,
 		tracer:     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/access"),
 		logger:     logger,
 		db:         db,
@@ -1681,7 +1686,14 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 	if err != nil {
 		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
 	}
+	result, _, err := s.requestAccess(ctx, ac, payload, isMemberCaller(ctx, ac))
+	return result, err
+}
 
+// requestAccess stores the request when member is true and the rollout is on,
+// then emails the organization's administrators unless the request was
+// already pending. It reports whether a new request was stored.
+func (s *Service) requestAccess(ctx context.Context, ac *contextvalues.AuthContext, payload *gen.RequestAccessPayload, member bool) (*gen.RequestAccessResult, bool, error) {
 	logger := s.logger.With(
 		attr.SlogOrganizationID(ac.ActiveOrganizationID),
 		attr.SlogUserID(ac.UserID),
@@ -1694,67 +1706,69 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 	// Get the requester's info
 	requester, err := usersrepo.New(s.db).GetUser(ctx, ac.UserID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "get requester info").LogError(ctx, logger)
+		return nil, false, oops.E(oops.CodeUnexpected, err, "get requester info").LogError(ctx, logger)
 	}
 
 	// Get organization info
 	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "get organization info").LogError(ctx, logger)
+		return nil, false, oops.E(oops.CodeUnexpected, err, "get organization info").LogError(ctx, logger)
 	}
 
-	stored, err := s.recordAccessRequest(ctx, ac, payload)
+	stored, err := s.recordAccessRequest(ctx, ac, payload, member)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
+	created := false
 	var storedView *gen.AccessRequest
 	if stored != nil {
 		storedView = stored.view
+		created = stored.created
 		if !stored.created {
-			return &gen.RequestAccessResult{SentToCount: 0, Request: storedView}, nil
+			return &gen.RequestAccessResult{SentToCount: 0, Request: storedView}, false, nil
 		}
 	}
 
 	// Get active organization administrators.
 	admins, err := repo.New(s.db).ListActiveOrganizationAdmins(ctx, ac.ActiveOrganizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list organization administrators").LogError(ctx, logger)
+		return nil, false, oops.E(oops.CodeUnexpected, err, "list organization administrators").LogError(ctx, logger)
 	}
 
 	if len(admins) == 0 {
 		logger.WarnContext(ctx, "no org admins found to notify for access request")
-		return &gen.RequestAccessResult{SentToCount: 0, Request: storedView}, nil
+		return &gen.RequestAccessResult{SentToCount: 0, Request: storedView}, created, nil
 	}
 
-	// Build the manage access link. The query params let the dashboard open a
-	// pre-filled grant dialog for the requester and scope. Resolve an MCP's
-	// project from the tenant-qualified resource rather than trusting browser
-	// state or a client-supplied project id.
-	manageAccessLink := ""
-	if siteURL := s.orgHosts.SiteURL(org.DefaultHost); siteURL != nil {
-		accessURL := siteURL.JoinPath(org.Slug, "access", "roles")
-		q := url.Values{}
-		q.Set("grant_user", ac.UserID)
-		q.Set("scope", payload.Scope)
-		if storedView != nil {
-			q.Set("request", storedView.ID)
-		}
-		if payload.ResourceID != nil && *payload.ResourceID != "" {
-			q.Set("resource_id", *payload.ResourceID)
-			if strings.HasPrefix(payload.Scope, "mcp:") {
-				projectID, resolveErr := s.resourceProjectID(ctx, ac.ActiveOrganizationID, *payload.ResourceID)
-				if resolveErr != nil {
-					logger.WarnContext(ctx, "could not resolve MCP project for access request link",
-						attr.SlogError(resolveErr),
-					)
-				} else {
-					q.Set("project_id", projectID)
-				}
-			}
-		}
-		accessURL.RawQuery = q.Encode()
-		manageAccessLink = accessURL.String()
+	// The query params let the dashboard open a pre-filled grant dialog for
+	// the requester and scope. Resolve an MCP's project from the
+	// tenant-qualified resource rather than trusting browser state or a
+	// client-supplied project id.
+	link := accessLink{
+		OrgSlug:         org.Slug,
+		DefaultHost:     org.DefaultHost,
+		Tab:             accessLinkTabRoles,
+		RequesterUserID: ac.UserID,
+		Scope:           payload.Scope,
+		ResourceID:      conv.PtrValOr(payload.ResourceID, ""),
+		ProjectID:       "",
+		RequestID:       "",
 	}
+	if storedView != nil {
+		link.RequestID = storedView.ID
+	}
+	// Without a site URL there is no link, so the project need not be read.
+	if s.orgHosts.SiteURL(org.DefaultHost) != nil && link.ResourceID != "" && strings.HasPrefix(payload.Scope, "mcp:") {
+		projectID, resolveErr := s.resourceProjectID(ctx, ac.ActiveOrganizationID, link.ResourceID)
+		if resolveErr != nil {
+			logger.WarnContext(ctx, "could not resolve MCP project for access request link",
+				attr.SlogError(resolveErr),
+			)
+		} else {
+			link.ProjectID = projectID
+		}
+	}
+	manageAccessLink := s.accessLinkURL(link)
 
 	// Name the permission the way the role editor does, so the admin reads
 	// "View tool logs" rather than a slug. An unknown slug is sent as is.
@@ -1796,7 +1810,7 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 			attr.SlogAccessRequestAdminCount(len(admins)),
 			attr.SlogAccessRequestScope(payload.Scope),
 		)
-		return &gen.RequestAccessResult{SentToCount: 0, Request: storedView}, nil
+		return &gen.RequestAccessResult{SentToCount: 0, Request: storedView}, created, nil
 	}
 
 	logger.InfoContext(ctx, "access request emails sent",
@@ -1805,7 +1819,66 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 		attr.SlogAccessRequestScope(payload.Scope),
 	)
 
-	return &gen.RequestAccessResult{SentToCount: sentCount, Request: storedView}, nil
+	return &gen.RequestAccessResult{SentToCount: sentCount, Request: storedView}, created, nil
+}
+
+// Access page tabs an access request link can open on.
+const (
+	accessLinkTabRoles    = "roles"
+	accessLinkTabRequests = "requests"
+)
+
+// accessLink is a dashboard link that opens a pre-filled grant dialog on an
+// Access page tab.
+type accessLink struct {
+	// OrgSlug and DefaultHost name the organization and the host its
+	// dashboard is served on.
+	OrgSlug     string
+	DefaultHost pgtype.Text
+
+	// Tab is the Access page tab, one of the accessLinkTab constants.
+	Tab string
+
+	// RequesterUserID is the member the dialog grants to.
+	RequesterUserID string
+
+	// Scope is the scope the dialog grants.
+	Scope string
+
+	// ResourceID is the resource the scope applies to, or empty for every
+	// resource of its kind.
+	ResourceID string
+
+	// ProjectID is the project an MCP resource belongs to, resolved from the
+	// tenant-qualified resource, or empty.
+	ProjectID string
+
+	// RequestID is the stored request the dialog decides, or empty.
+	RequestID string
+}
+
+// accessLinkURL renders link, or returns empty when the deployment has no
+// site URL.
+func (s *Service) accessLinkURL(link accessLink) string {
+	siteURL := s.orgHosts.SiteURL(link.DefaultHost)
+	if siteURL == nil {
+		return ""
+	}
+	accessURL := siteURL.JoinPath(link.OrgSlug, "access", link.Tab)
+	q := url.Values{}
+	q.Set("grant_user", link.RequesterUserID)
+	q.Set("scope", link.Scope)
+	if link.RequestID != "" {
+		q.Set("request", link.RequestID)
+	}
+	if link.ResourceID != "" {
+		q.Set("resource_id", link.ResourceID)
+	}
+	if link.ProjectID != "" {
+		q.Set("project_id", link.ProjectID)
+	}
+	accessURL.RawQuery = q.Encode()
+	return accessURL.String()
 }
 
 // ListIdentityAccess returns the MCP servers and skills accessible to a user

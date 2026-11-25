@@ -12,7 +12,6 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/associationbackfill"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/executionprofiles"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/selectionbackfill"
@@ -101,7 +100,7 @@ func (o *migrationOrg) session(userIssuerID uuid.UUID) uuid.UUID {
 		SubjectUrn:          urn.NewUserSubject("user-" + uuid.NewString()[:8]),
 		Jti:                 id.String(),
 		RefreshExpiresAt:    pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true},
-		CredentialID:        uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		CredentialID:        uuid.NullUUID{UUID: id, Valid: true},
 	}))
 	return id
 }
@@ -219,17 +218,36 @@ func TestUpstreamOAuthMigration_ReportsAnAuthClientRunInProgress(t *testing.T) {
 	require.Empty(t, status.AuthClients.Warnings)
 }
 
-// seedCoveredMigrationFixture makes a historical, fully migrated tenant for
-// the compatibility status and enforcement tests, without calling staff APIs.
-func seedCoveredMigrationFixture(t *testing.T, ctx context.Context, db *pgxpool.Pool, org string) {
+// seedCoveredMigrationFixture records the configuration and choice used by typed serving.
+func seedCoveredMigrationFixture(t *testing.T, ctx context.Context, db *pgxpool.Pool, org *migrationOrg, server, registration, credential uuid.UUID) {
 	t.Helper()
-	_, err := associationbackfill.Run(ctx, db, associationbackfill.Options{OrganizationID: org, Apply: true, PageSize: 0})
+	tx := testenv.BeginTx(t, ctx, db)
+	q := authclientbackfill.New(tx)
+	_, err := q.SeedAssociationFixture(ctx, authclientbackfill.SeedAssociationFixtureParams{OrganizationID: org.id, ProjectID: org.projectID, McpServerID: server, RemoteSessionClientID: registration})
 	require.NoError(t, err)
-	_, err = selectionbackfill.Run(ctx, db, selectionbackfill.Options{OrganizationID: org, Apply: true, PageSize: 0})
+	client := authclientbackfill.OAuthClientID(org.id, registration, authclientbackfill.TypeRemoteSession)
+	_, err = q.CreateAuthClient(ctx, authclientbackfill.CreateAuthClientParams{
+		ID: client, OrganizationID: org.id, ProjectID: uuid.NullUUID{UUID: org.projectID, Valid: true},
+		ClientType: "remote_session", Name: "Fixture sign-in", RemoteSessionClientID: registration,
+	})
 	require.NoError(t, err)
-	report, err := authclientbackfill.Run(ctx, db, authclientbackfill.Options{OrganizationID: org, Apply: true, PageSize: 0, TypedOnly: false})
-	require.NoError(t, err)
-	require.Empty(t, report.PhaseErrors)
+	require.NoError(t, q.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{OrganizationID: org.id, ProjectID: org.projectID, McpServerID: server, AuthClientID: client, Source: "backfill"}))
+	require.NoError(t, q.SeedUpstreamSelectionFixture(ctx, authclientbackfill.SeedUpstreamSelectionFixtureParams{OrganizationID: org.id, ProjectID: org.projectID, McpServerID: server, CredentialID: credential, AuthClientID: uuid.NullUUID{UUID: client, Valid: true}}))
+	require.NoError(t, authclientbackfill.ProvisionFromTypedOffers(ctx, tx, org.id))
+	require.NoError(t, tx.Commit(ctx))
+}
+
+func TestCountReconnectCredentials(t *testing.T) {
+	t.Parallel()
+	duplicate := uuid.New()
+	gaps := []authclientbackfill.SelectionGap{
+		{CredentialID: duplicate, Outcome: authclientbackfill.SelectionAmbiguous},
+		{CredentialID: duplicate, Outcome: authclientbackfill.SelectionUnusable},
+		{CredentialID: uuid.New(), Outcome: authclientbackfill.SelectionStaleNoAuth},
+		{CredentialID: uuid.New(), Outcome: authclientbackfill.SelectionNoClient},
+		{CredentialID: uuid.New(), Outcome: authclientbackfill.SelectionSkippedRace},
+	}
+	require.EqualValues(t, 2, countReconnectCredentials(gaps))
 }
 
 func TestUpstreamOAuthMigration_StaffCannotRunRetiredMigration(t *testing.T) {

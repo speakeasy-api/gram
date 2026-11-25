@@ -776,9 +776,9 @@ func TestServeConsentAction_NonMetaEndpointKeepsPerClientDerivation(t *testing.T
 	require.Equal(t, consentUpstreamA, postConnectAction(t, fx, clientID).Query().Get("resource"))
 }
 
-// The issuer derived by resync cannot authorize login after its typed offers
+// The restamped issuer cannot authorize login after its typed offers
 // are removed. Adding an exact offer makes that registration eligible again.
-func TestServeConsentAction_MetaMCPConnectRequiresATypedOfferAfterResync(t *testing.T) {
+func TestServeConsentAction_MetaMCPConnectRequiresATypedOfferAfterRestamp(t *testing.T) {
 	t.Parallel()
 
 	ctx, fx, metaServerID := seedMetaConsentEndpoint(t, "aim87-composed-gw")

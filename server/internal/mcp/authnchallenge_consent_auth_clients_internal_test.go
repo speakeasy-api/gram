@@ -1,6 +1,8 @@
 package mcp
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/google/uuid"
@@ -39,6 +41,15 @@ func TestSelectConsentAuthClientPreselection(t *testing.T) {
 	}
 
 	require.Equal(t, engineering, selected(uuid.Nil, uuid.Nil, nil), "shared clients come first, by name")
+	withOutage := func(options []consentAuthClientOption) {
+		for i := range options {
+			if options[i].ID == engineering {
+				options[i].unavailable = true
+			}
+		}
+	}
+	require.Equal(t, marketing, selected(uuid.Nil, uuid.Nil, withOutage), "a healthy option wins over the default during an outage")
+	require.Equal(t, engineering, selected(engineering, uuid.Nil, withOutage), "an outage option is still explicitly selectable")
 	require.Equal(t, personal, selected(uuid.Nil, personal, nil), "a still-usable remembered choice wins over the order")
 	require.Equal(t, forwarded, selected(forwarded, personal, nil), "the person's pick wins over the remembered choice")
 	require.Equal(t, engineering, selected(uuid.Nil, uuid.New(), nil), "a remembered client no longer offered is ignored")
@@ -53,6 +64,10 @@ func TestSelectConsentAuthClientPreselection(t *testing.T) {
 	}
 	require.Equal(t, uuid.Nil, selected(uuid.Nil, personal, shareRegistration), "a remembered offer does not disambiguate a shared registration")
 	require.Equal(t, marketing, selected(marketing, personal, shareRegistration), "an exact pick disambiguates even when another offer was remembered")
+	require.Equal(t, uuid.Nil, selected(uuid.Nil, uuid.Nil, func(options []consentAuthClientOption) {
+		withOutage(options)
+		shareRegistration(options)
+	}), "an ambiguous healthy default requires an explicit choice rather than silently selecting another credential")
 
 	ema := uuid.New()
 	withEMA := func(options []consentAuthClientOption) {
@@ -145,6 +160,28 @@ func TestConsentAuthChoices(t *testing.T) {
 
 		auth = choices(t, f, user, nil, uuid.Nil)
 		require.Equal(t, consentClientSetup, auth.Options[0].State, "a registration this sign-in cannot connect needs setup")
+	})
+
+	t.Run("gateway never picks a refused connection during an outage", func(t *testing.T) {
+		t.Parallel()
+		f := newAuthClientFixture(t, pool)
+		shared := staticClient(f)
+		personal := f.adminClient(authClientTypeRemoteSession, validUUID(f.registration))
+		endpoint := &ResolvedMcpEndpoint{OrganizationID: f.orgID}
+		members := []metaMember{{serverID: f.serverID, projectID: f.projectID, slug: "source", backend: metaMemberBackendProxied}}
+		r := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/?auth_client.source="+personal.String(), nil)
+		cards := []remoteSessionCard{{ClientID: f.registration.String(), Connected: true, Unavailable: true}}
+
+		got, err := f.service.gatewayConsentAuthChoices(t.Context(), r, endpoint, user, members, cards)
+		require.NoError(t, err)
+		require.NotNil(t, got[f.serverID].Selected())
+		require.Equal(t, personal, got[f.serverID].Selected().ID, "an explicitly picked outage option is still eligible")
+
+		cards[0].Rejected = true
+		got, err = f.service.gatewayConsentAuthChoices(t.Context(), r, endpoint, user, members, cards)
+		require.NoError(t, err)
+		require.NotNil(t, got[f.serverID].Selected())
+		require.Equal(t, shared, got[f.serverID].Selected().ID, "the rejected option cannot be picked even during the outage")
 	})
 
 	t.Run("an expired personal connection asks to be reconnected", func(t *testing.T) {

@@ -237,6 +237,8 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		if cerr != nil {
 			return cerr
 		}
+		// No matching grant is an idempotent no-op. Only a typed offer can
+		// authorize disconnecting this subject’s grant across issuers.
 		var derr error
 		if projectID, ok := offered[client.ID]; ok {
 			_, derr = s.remoteChallengeMgr.DisconnectAuthClientRemoteSession(ctx, subject, projectID, endpoint.OrganizationID, client.ID)
@@ -275,11 +277,11 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		var result remotesessions.RefreshResult
 		var refreshErr error
 		if projectID, ok := offered[client.ID]; ok {
-			result, refreshErr = s.remoteChallengeMgr.RefreshAuthClientRemoteSession(ctx, consentRefreshAttribution(r, endpoint, challengeState), subject, projectID, endpoint.OrganizationID, client.ID)
+			result, refreshErr = s.remoteChallengeMgr.RefreshAuthClientRemoteSession(ctx, consentRefreshAttribution(s.aiCatalog.SnapshotFor(ctx), r, endpoint, challengeState), subject, projectID, endpoint.OrganizationID, client.ID)
 		} else {
 			result, refreshErr = s.remoteChallengeMgr.RefreshRemoteSession(
 				ctx,
-				consentRefreshAttribution(r, endpoint, challengeState),
+				consentRefreshAttribution(s.aiCatalog.SnapshotFor(ctx), r, endpoint, challengeState),
 				subject,
 				endpoint.clientProjectID(*client),
 				endpoint.OrganizationID,
@@ -342,8 +344,8 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 
 	case "set_auto_refresh":
 		// Page-level "Auto refresh": persist the choice for every bound client.
-		// Clients without a stored session update zero rows; their preference
-		// rides the next connect instead. Managed policies ignore this action:
+		// Clients without a matching grant update zero rows. Without a typed
+		// offer, a grant issued on a different sign-in does not match. Managed policies ignore this action:
 		// their effective value comes from organization policy, while the stored
 		// user preference remains intact if the organization later restores
 		// user-controlled refresh.
@@ -432,9 +434,9 @@ func (s *Service) buildRemoteConnectURL(
 	focusServer string,
 ) (string, bool, error) {
 	ctx := r.Context()
-	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(challengeState.ClientID, mcpconnectionattempts.ClientIDAdmitted)), mcpconnectionattempts.StepProviderSignIn,
+	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(s.aiCatalog.SnapshotFor(ctx), challengeState.ClientID, mcpconnectionattempts.ClientIDAdmitted)), mcpconnectionattempts.StepProviderSignIn,
 		mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Provider(client.IssuerURL), mcpconnectionattempts.RemoteSessionClient(client.ID), mcpconnectionattempts.Subject(challengeState.Subject))
-	t.Attach(challengeState.connectionAttempt(endpoint))
+	t.Attach(challengeState.connectionAttempt(s.aiCatalog.SnapshotFor(ctx), endpoint))
 	defer t.Finish(ctx)
 	// Resolve a stored gateway's proxied resource before falling back to a
 	// hosted member, unless consent explicitly identifies that hosted member.
@@ -464,6 +466,10 @@ func (s *Service) buildRemoteConnectURL(
 		if errors.Is(rerr, remotesessions.ErrTypedAuthorizationDenied) {
 			t.Refuse(ctx, remotesessions.TypedAuthorizationHappened(rerr))
 			return "", false, oops.E(oops.CodeForbidden, rerr, "connection is not authorized for this server").LogWarn(ctx, logger)
+		}
+		if errors.Is(rerr, remotesessions.ErrTypedAuthorizationChanged) {
+			t.Refuse(ctx, remotesessions.TypedAuthorizationHappened(rerr))
+			return "", false, oops.E(oops.CodeConflict, rerr, "server upstream configuration changed; refresh and try again").LogWarn(ctx, logger)
 		}
 		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return "", false, oops.E(oops.CodeUnexpected, rerr, "select upstream login server").LogError(ctx, logger)
@@ -557,7 +563,7 @@ func (s *Service) buildRemoteConnectURL(
 		Authority:           challengeState.Endpoint.Authority,
 		BrowserCookieID:     "",
 		BrowserHash:         "",
-		Attempt:             challengeState.connectionAttempt(endpoint),
+		Attempt:             challengeState.connectionAttempt(s.aiCatalog.SnapshotFor(ctx), endpoint),
 		ClientRequest:       mcpconnectionattempts.FromRequest(r),
 		ClientName:          s.forwardedClientName(ctx, logger, endpoint, challengeState, client),
 	}
@@ -640,7 +646,7 @@ func (s *Service) forwardedClientName(ctx context.Context, logger *slog.Logger, 
 		challengeState.Subject == nil || challengeState.Subject.Kind != urn.SessionSubjectKindAnonymous {
 		return ""
 	}
-	row, err := s.resolveUserSessionClient(ctx, logger, endpoint, challengeState.ClientID, lookupClientOnly)
+	row, err := s.resolveUserSessionClient(ctx, logger, endpoint, s.aiCatalog.SnapshotFor(ctx), challengeState.ClientID, lookupClientOnly)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		logger.DebugContext(ctx, "mcp client to forward the name of not found", attr.SlogError(err))

@@ -39,7 +39,7 @@ func TestPlatformWorkloadResourceSeparation(t *testing.T) {
 	w, err := servePlatformHTTP(t, f.ti, slug, toolsListBody(), token)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
-	_, err = servePlatformHTTP(t, f.ti, platformtools.ManagedAssistantPlatformToolsetSlug, toolsListBody(), token)
+	_, err = servePlatformHTTP(t, f.ti, platformtools.PlatformMCPReadToolsetSlug, toolsListBody(), token)
 	require.Error(t, err, "a token for one builtin cannot reach another")
 	_, handled, err := f.ti.service.AuthorizeWorkloadInference(t.Context(), token)
 	require.NoError(t, err)

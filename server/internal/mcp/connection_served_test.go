@@ -173,8 +173,8 @@ func TestGatewayMemberServedRecordsTheConnection(t *testing.T) {
 	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-served", "", []uuid.UUID{issuerID})
 	member := createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", upstream.url, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)), 0)
 	subject := createTestUser(t, ctx, ti, "meta-served-user-"+uuid.NewString())
-	typed := seedTypedSessionClient(t, ctx, ti, orgID, projectID, member.mcpServerID, clientID, "remote_session", subject)
-	bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject, metaServingChoice{organizationID: orgID, serverID: member.mcpServerID, clientID: typed})
+	typedClient := seedTypedSessionClient(t, ctx, ti, orgID, projectID, member.mcpServerID, clientID, "remote_session", subject)
+	bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject, metaServingChoice{organizationID: orgID, serverID: member.mcpServerID, clientID: typedClient})
 	insertQualifiedRemoteSessionToken(t, ctx, ti, issuerID, clientID, subject, "token-served", upstream.url)
 
 	_, isError := metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
@@ -216,8 +216,8 @@ func TestGatewayMemberFailureNamesTheServiceSignIn(t *testing.T) {
 	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-refused", "", []uuid.UUID{issuerID})
 	member := createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", deny.URL, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)), 0)
 	subject := createTestUser(t, ctx, ti, "meta-refused-user-"+uuid.NewString())
-	typed := seedTypedSessionClient(t, ctx, ti, orgID, projectID, member.mcpServerID, clientID, "remote_session", subject)
-	bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject, metaServingChoice{organizationID: orgID, serverID: member.mcpServerID, clientID: typed})
+	typedClient := seedTypedSessionClient(t, ctx, ti, orgID, projectID, member.mcpServerID, clientID, "remote_session", subject)
+	bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject, metaServingChoice{organizationID: orgID, serverID: member.mcpServerID, clientID: typedClient})
 	insertQualifiedRemoteSessionToken(t, ctx, ti, issuerID, clientID, subject, "token-refused", deny.URL)
 
 	_, isError := metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
@@ -258,8 +258,8 @@ func TestGatewayMemberErrorResultIsNotServed(t *testing.T) {
 	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-tool-error", "", []uuid.UUID{issuerID})
 	member := createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", upstream.URL, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)), 0)
 	subject := createTestUser(t, ctx, ti, "meta-tool-error-user-"+uuid.NewString())
-	typed := seedTypedSessionClient(t, ctx, ti, orgID, projectID, member.mcpServerID, clientID, "remote_session", subject)
-	bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject, metaServingChoice{organizationID: orgID, serverID: member.mcpServerID, clientID: typed})
+	typedClient := seedTypedSessionClient(t, ctx, ti, orgID, projectID, member.mcpServerID, clientID, "remote_session", subject)
+	bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject, metaServingChoice{organizationID: orgID, serverID: member.mcpServerID, clientID: typedClient})
 	insertQualifiedRemoteSessionToken(t, ctx, ti, issuerID, clientID, subject, "token-tool-error", upstream.URL)
 
 	text, isError := metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))

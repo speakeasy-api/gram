@@ -31,7 +31,7 @@ func TestUpstreamAuthEnforcement_RefusedUntilCovered(t *testing.T) {
 	status, err := svc.GetUpstreamOAuthMigrationStatus(ctx, &gen.GetUpstreamOAuthMigrationStatusPayload{OrganizationID: org.id})
 	require.NoError(t, err)
 	require.False(t, status.Enforcement.Ready)
-	require.Contains(t, status.Enforcement.Blockers, "The upstream OAuth migration is incomplete.")
+	require.Contains(t, status.Enforcement.Blockers, "Typed auth clients are not all recorded.")
 
 	_, err = svc.EnableUpstreamAuthEnforcement(ctx, &gen.EnableUpstreamAuthEnforcementPayload{OrganizationID: org.id, ShadowParityConfirmed: true, CrossOrganizationDenialCommunicated: true})
 	var shareable *oops.ShareableError
@@ -49,11 +49,10 @@ func TestUpstreamAuthEnforcement_EnablesOnceCoveredAndRejectsRollback(t *testing
 	ctx = contextvalues.SetAdminAuthContext(ctx, &contextvalues.AdminAuthContext{OIDCSubject: "staff-test"})
 	org := newMigrationOrg(t, ctx, db, "enforce-covered")
 	issuer := org.issuer()
-	org.client(issuer)
-	org.server(issuer)
-	org.session(issuer)
-
-	seedCoveredMigrationFixture(t, ctx, db, org.id)
+	registration := org.client(issuer)
+	server := org.server(issuer)
+	credential := org.session(issuer)
+	seedCoveredMigrationFixture(t, ctx, db, org, server, registration, credential)
 	status, err := svc.GetUpstreamOAuthMigrationStatus(ctx, &gen.GetUpstreamOAuthMigrationStatusPayload{OrganizationID: org.id})
 	require.NoError(t, err)
 	require.True(t, status.Enforcement.Ready, status.Enforcement.Blockers)
@@ -121,6 +120,7 @@ func TestUpstreamAuthEnforcement_EachCoverageGapBlocks(t *testing.T) {
 		change  func(*gen.AdminUpstreamOAuthMigrationStatus)
 		blocker string
 	}{
+		"incomplete typed clients":   {func(s *gen.AdminUpstreamOAuthMigrationStatus) { s.Migrated, s.AuthClients.Complete = false, false }, "Typed auth clients are not all recorded."},
 		"pending selection mappings": {func(s *gen.AdminUpstreamOAuthMigrationStatus) { s.AuthClients.PendingSelectionMappings = new(int64(1)) }, "Credential choices still need their auth client named."},
 		"pending default grants":     {func(s *gen.AdminUpstreamOAuthMigrationStatus) { s.AuthClients.PendingGrants = new(int64(1)) }, "Default auth permissions are not all granted."},
 		"pending profile versions": {func(s *gen.AdminUpstreamOAuthMigrationStatus) {
@@ -144,10 +144,10 @@ func TestUpstreamAuthEnforcement_RequiresCrossOrganizationNotice(t *testing.T) {
 	ctx = contextvalues.SetAdminAuthContext(ctx, &contextvalues.AdminAuthContext{OIDCSubject: "staff-test"})
 	org := newMigrationOrg(t, ctx, db, "enforce-notice")
 	issuer := org.issuer()
-	org.client(issuer)
-	org.server(issuer)
-	org.session(issuer)
-	seedCoveredMigrationFixture(t, ctx, db, org.id)
+	registration := org.client(issuer)
+	server := org.server(issuer)
+	credential := org.session(issuer)
+	seedCoveredMigrationFixture(t, ctx, db, org, server, registration, credential)
 
 	_, err := svc.EnableUpstreamAuthEnforcement(ctx, &gen.EnableUpstreamAuthEnforcementPayload{OrganizationID: org.id, ShadowParityConfirmed: true, CrossOrganizationDenialCommunicated: false})
 	var shareable *oops.ShareableError

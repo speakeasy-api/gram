@@ -67,7 +67,6 @@ func testOrganizationGatewayTypedPersonalConsentExecution(t *testing.T, clientTy
 		seedUserMCPConnectGrant(t, ctx, ti.conn, ac.ActiveOrganizationID, fx.subject.ID, id.String())
 	}
 	ti.service.manual = true
-	ti.service.SetAuthClientPermitted(true)
 	_, err := featuresrepo.New(ti.conn).EnableFeature(ctx, featuresrepo.EnableFeatureParams{OrganizationID: ac.ActiveOrganizationID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
 	require.NoError(t, err)
 	mcp.ResetAuthEnforcementForTest(ti.service.Service)

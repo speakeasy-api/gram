@@ -20,9 +20,8 @@ import (
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
-// An enforced migration cannot infer an upstream offer from the target's
-// compatibility FK parents, even if the moved server is its only consumer.
-func TestOrganizationUserSessionIssuerMigrateDoesNotInheritTargetClientsUnderEnforcement(t *testing.T) {
+// Consolidating downstream issuers does not configure a new upstream for moved servers.
+func TestOrganizationUserSessionIssuerMigrateDoesNotInheritAssociations(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -87,7 +86,7 @@ func TestOrganizationUserSessionIssuerMigrateDoesNotInheritTargetClientsUnderEnf
 
 			associations, err := upstreamclientsrepo.New(ti.conn).ListMCPServerRemoteSessionClients(ctx, upstreamclientsrepo.ListMCPServerRemoteSessionClientsParams{McpServerID: moved, ProjectID: projectID})
 			require.NoError(t, err)
-			require.Empty(t, associations, "moving a downstream issuer must not configure a new upstream offer")
+			require.Empty(t, associations, "issuer consolidation must not promote target links into server associations")
 		})
 	}
 }

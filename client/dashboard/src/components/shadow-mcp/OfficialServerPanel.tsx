@@ -26,6 +26,8 @@ import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { useRBAC } from "@/hooks/useRBAC";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
+import { describeApiError } from "@/lib/api-error";
+import { handleError } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 import { CatalogLogo } from "@/pages/catalog/CatalogLogo";
 import { type CatalogServer, useListMCPCatalog } from "@/pages/catalog/hooks";
@@ -284,8 +286,11 @@ function LinkedPanel({ server }: { server: ShadowMCPInventoryServer }) {
     try {
       await save(previous);
       toast.success(`“${official.name}” is the official server again`);
-    } catch {
-      toast.error("Could not restore the official server. Try again.");
+    } catch (err) {
+      handleError(err, {
+        title: "Couldn't restore the official server",
+        customAction: { label: "Retry", onClick: () => void restoreLink() },
+      });
     }
   };
 
@@ -295,8 +300,8 @@ function LinkedPanel({ server }: { server: ShadowMCPInventoryServer }) {
       toast.success(done, {
         action: { label: "Undo", onClick: () => void restoreLink() },
       });
-    } catch {
-      toast.error("Could not change the official server. Try again.");
+    } catch (err) {
+      handleError(err, { title: "Couldn't change the official server" });
     }
   };
 
@@ -559,12 +564,13 @@ function UnlinkedPanel({
   const organization = useOrganization();
   const project = useProject();
   const telemetry = useTelemetry();
-  const probe = useProbeRemoteMcpURLMutation();
+  const probe = useProbeRemoteMcpURLMutation({ onError: () => {} });
   const { save, isPending: linking } = useSaveShadowMCPOfficialServer();
   const { hasScope, isLoading: rbacLoading } = useRBAC();
   const canCreateServer = !rbacLoading && hasScope("mcp:write", project.id);
   const [result, setResult] = useState<ProbeURLResult | null>(null);
   const [checkFailed, setCheckFailed] = useState(false);
+  const [checkFailedReason, setCheckFailedReason] = useState("");
   const [searchParams, setSearchParams] = useSearchParams();
   // Keyed by project and server so a request sent for one server never
   // reads as sent for another. It only remembers that this browser asked;
@@ -590,8 +596,9 @@ function UnlinkedPanel({
         if (latestUrl.current !== target) return;
         setResult(response);
       })
-      .catch(() => {
+      .catch((err: unknown) => {
         if (latestUrl.current !== target) return;
+        setCheckFailedReason(describeApiError(err).message);
         setCheckFailed(true);
       });
   };
@@ -658,8 +665,8 @@ function UnlinkedPanel({
           : { serverUrl: url, mcpServerId: suggested.mcpServerId },
       );
       toast.success(`“${suggested.name}” is now the official server`);
-    } catch {
-      toast.error("Could not make the server official. Try again.");
+    } catch (err) {
+      handleError(err, { title: "Couldn't make the server official" });
     }
   };
 
@@ -667,8 +674,8 @@ function UnlinkedPanel({
     try {
       await save({ serverUrl: url });
       toast.success("Direct connection no longer kept");
-    } catch {
-      toast.error("Could not change the official server. Try again.");
+    } catch (err) {
+      handleError(err, { title: "Couldn't change the official server" });
     }
   };
 
@@ -702,7 +709,7 @@ function UnlinkedPanel({
       {checkFailed ? (
         <div className="flex flex-wrap items-center gap-3">
           <Text muted small>
-            The server could not be checked. Try again.
+            The server could not be checked. {checkFailedReason}
           </Text>
           <Button variant="secondary" size="sm" onClick={() => runChecks(url)}>
             <Button.Text>Check again</Button.Text>
@@ -952,8 +959,8 @@ function LinkAnotherServer({
       toast.success(
         `“${chosen?.label ?? "The server"}” is now the official server`,
       );
-    } catch {
-      toast.error("Could not make the server official. Try again.");
+    } catch (err) {
+      handleError(err, { title: "Couldn't make the server official" });
     }
   };
 

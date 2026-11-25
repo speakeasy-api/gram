@@ -187,6 +187,45 @@ func (q *Queries) AdminBulkUpdateAccountType(ctx context.Context, arg AdminBulkU
 	return items, nil
 }
 
+const adminCountOrganizationEncryptionTransitionStates = `-- name: AdminCountOrganizationEncryptionTransitionStates :many
+SELECT
+  COALESCE(t.state, 'platform_key')::text AS state,
+  count(*) AS organizations
+FROM organization_metadata om
+LEFT JOIN organization_encryption_transitions t
+  ON t.organization_id = om.id
+  AND t.use_case = $1
+GROUP BY 1
+ORDER BY 1
+`
+
+type AdminCountOrganizationEncryptionTransitionStatesRow struct {
+	State         string
+	Organizations int64
+}
+
+// How many organizations are in each transition state for one use case,
+// counting organizations without a row as platform_key.
+func (q *Queries) AdminCountOrganizationEncryptionTransitionStates(ctx context.Context, useCase string) ([]AdminCountOrganizationEncryptionTransitionStatesRow, error) {
+	rows, err := q.db.Query(ctx, adminCountOrganizationEncryptionTransitionStates, useCase)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminCountOrganizationEncryptionTransitionStatesRow
+	for rows.Next() {
+		var i AdminCountOrganizationEncryptionTransitionStatesRow
+		if err := rows.Scan(&i.State, &i.Organizations); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const adminCountOrganizations = `-- name: AdminCountOrganizations :one
 WITH search AS (
     -- Identical to AdminListOrganizations, escaping included: a pasted id that
@@ -847,6 +886,26 @@ func (q *Queries) AdminGetProjectDetailByID(ctx context.Context, id uuid.UUID) (
 		&i.ApiKeyCount,
 		&i.AssistantCount,
 	)
+	return i, err
+}
+
+const adminGetTailscaleOAuthMigrationOrganization = `-- name: AdminGetTailscaleOAuthMigrationOrganization :one
+SELECT o.id, o.name, o.slug
+FROM organization_metadata AS o
+WHERE o.id = $1
+`
+
+type AdminGetTailscaleOAuthMigrationOrganizationRow struct {
+	ID   string
+	Name string
+	Slug string
+}
+
+// The organization a Tailscale OAuth client migration step targets.
+func (q *Queries) AdminGetTailscaleOAuthMigrationOrganization(ctx context.Context, id string) (AdminGetTailscaleOAuthMigrationOrganizationRow, error) {
+	row := q.db.QueryRow(ctx, adminGetTailscaleOAuthMigrationOrganization, id)
+	var i AdminGetTailscaleOAuthMigrationOrganizationRow
+	err := row.Scan(&i.ID, &i.Name, &i.Slug)
 	return i, err
 }
 
@@ -1593,6 +1652,98 @@ func (q *Queries) AdminListOrganizationAssistants(ctx context.Context, organizat
 	return items, nil
 }
 
+const adminListOrganizationEncryptionTransitions = `-- name: AdminListOrganizationEncryptionTransitions :many
+SELECT
+  om.id AS organization_id,
+  om.name,
+  om.slug,
+  (om.disabled_at IS NOT NULL)::boolean AS disabled,
+  COALESCE(t.state, 'platform_key')::text AS state,
+  t.state_changed_at,
+  t.platform_copies_cleared_at,
+  t.last_backfill_started_at,
+  t.last_backfill_completed_at,
+  t.last_backfill_remaining_count,
+  t.last_backfill_unreadable_count,
+  t.last_backfill_error,
+  t.last_verified_at
+FROM organization_metadata om
+LEFT JOIN organization_encryption_transitions t
+  ON t.organization_id = om.id
+  AND t.use_case = $1
+WHERE $2::text IS NULL
+   OR COALESCE(t.state, 'platform_key') = $2::text
+ORDER BY om.created_at, om.id
+LIMIT $4
+OFFSET $3
+`
+
+type AdminListOrganizationEncryptionTransitionsParams struct {
+	UseCase     string
+	State       pgtype.Text
+	OffsetValue int32
+	LimitValue  int32
+}
+
+type AdminListOrganizationEncryptionTransitionsRow struct {
+	OrganizationID              string
+	Name                        string
+	Slug                        string
+	Disabled                    bool
+	State                       string
+	StateChangedAt              pgtype.Timestamptz
+	PlatformCopiesClearedAt     pgtype.Timestamptz
+	LastBackfillStartedAt       pgtype.Timestamptz
+	LastBackfillCompletedAt     pgtype.Timestamptz
+	LastBackfillRemainingCount  pgtype.Int8
+	LastBackfillUnreadableCount pgtype.Int8
+	LastBackfillError           pgtype.Text
+	LastVerifiedAt              pgtype.Timestamptz
+}
+
+// Every organization with its transition state for one use case, oldest first.
+// An organization without a transition row for the use case is in
+// platform_key, so the LEFT JOIN reports it there and the state filter matches
+// it. Pages with LIMIT and OFFSET: the list is staff-only and small.
+func (q *Queries) AdminListOrganizationEncryptionTransitions(ctx context.Context, arg AdminListOrganizationEncryptionTransitionsParams) ([]AdminListOrganizationEncryptionTransitionsRow, error) {
+	rows, err := q.db.Query(ctx, adminListOrganizationEncryptionTransitions,
+		arg.UseCase,
+		arg.State,
+		arg.OffsetValue,
+		arg.LimitValue,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListOrganizationEncryptionTransitionsRow
+	for rows.Next() {
+		var i AdminListOrganizationEncryptionTransitionsRow
+		if err := rows.Scan(
+			&i.OrganizationID,
+			&i.Name,
+			&i.Slug,
+			&i.Disabled,
+			&i.State,
+			&i.StateChangedAt,
+			&i.PlatformCopiesClearedAt,
+			&i.LastBackfillStartedAt,
+			&i.LastBackfillCompletedAt,
+			&i.LastBackfillRemainingCount,
+			&i.LastBackfillUnreadableCount,
+			&i.LastBackfillError,
+			&i.LastVerifiedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const adminListOrganizationMembers = `-- name: AdminListOrganizationMembers :many
 SELECT
     u.id,
@@ -2316,6 +2467,44 @@ func (q *Queries) AdminListRegistryOktaMappings(ctx context.Context) ([]AdminLis
 	for rows.Next() {
 		var i AdminListRegistryOktaMappingsRow
 		if err := rows.Scan(&i.RegistryEntryID, &i.EntryName, &i.OinName); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminListTailscaleOAuthMigrationOrganizations = `-- name: AdminListTailscaleOAuthMigrationOrganizations :many
+SELECT DISTINCT o.id, o.name, o.slug
+FROM network_ingresses AS n
+JOIN organization_metadata AS o ON o.id = n.organization_id
+WHERE n.credentials_encrypted IS NOT NULL
+   OR n.credentials_org_encrypted IS NOT NULL
+ORDER BY o.name, o.id
+`
+
+type AdminListTailscaleOAuthMigrationOrganizationsRow struct {
+	ID   string
+	Name string
+	Slug string
+}
+
+// Organizations with saved network ingress credentials in either copy,
+// soft-deleted ingresses included, for the temporary Tailscale OAuth client
+// move to organization keys.
+func (q *Queries) AdminListTailscaleOAuthMigrationOrganizations(ctx context.Context) ([]AdminListTailscaleOAuthMigrationOrganizationsRow, error) {
+	rows, err := q.db.Query(ctx, adminListTailscaleOAuthMigrationOrganizations)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListTailscaleOAuthMigrationOrganizationsRow
+	for rows.Next() {
+		var i AdminListTailscaleOAuthMigrationOrganizationsRow
+		if err := rows.Scan(&i.ID, &i.Name, &i.Slug); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

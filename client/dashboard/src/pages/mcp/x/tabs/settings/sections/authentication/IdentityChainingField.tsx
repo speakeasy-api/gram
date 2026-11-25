@@ -872,7 +872,7 @@ export function IdentityChainingField({
               {signIn.name}
             </Text>
             <SettingsLink to={`#${MCP_SESSIONS_SECTION_ID}`}>
-              Change in Sessions
+              Change in MCP sign-in
             </SettingsLink>
           </div>
         </ChainLink>
@@ -982,7 +982,7 @@ export function IdentityChainingField({
                 className="underline underline-offset-4"
                 to={`#${MCP_SESSIONS_SECTION_ID}`}
               >
-                change the sign-in in Sessions
+                change it in MCP sign-in
               </Link>
               .
             </Text>

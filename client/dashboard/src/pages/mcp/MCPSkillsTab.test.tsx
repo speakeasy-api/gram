@@ -1,6 +1,12 @@
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import type { FeatureFlagResult } from "@/hooks/useFeatureFlag";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -312,7 +318,11 @@ describe("MCPSkillsTabRoute", () => {
     renderTab(
       <MCPSkillsTabRoute mcpServer={mcpServer} mcpServerSlug="toolset-a" />,
     );
-    expect(screen.getByText("Access restricted")).toBeDefined();
+    expect(
+      within(screen.getByRole("alert")).getByRole("heading", {
+        name: "You don't have access to this page",
+      }),
+    ).toBeDefined();
     expect(state.links).not.toHaveBeenCalled();
   });
 

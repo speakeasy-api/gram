@@ -2,9 +2,9 @@
 // a remote_session is one upstream grant per (subject_urn,
 // remote_session_client_id) and its user_session_issuer_id is provenance
 // only. Every bound user_session_issuer must see and control the same
-// credential — status, disconnect, auto-refresh, explicit refresh, revoke
-// cascade, and keepalive eligibility — while an unbound issuer must be
-// refused (fail closed) by the tenant-scoped client binding.
+// credential — status, disconnect, auto-refresh, explicit refresh, and keepalive
+// eligibility — while an unbound issuer must be refused. Subject revocation
+// separately requires exact grant provenance or a persisted typed choice.
 //
 // The fixtures mint the credential through issuer A ("provenance") and then
 // bind the same client to a sibling issuer B; the assertions drive each
@@ -317,7 +317,8 @@ func TestSoftDeleteSubjectSessions_RequiresPersistedTypedChoiceOnSiblingIssuer(t
 
 	ctx, ti := newTestService(t)
 	fx := seedRevocableSession(t, ctx, ti, "shared-revoke-cascade", "", "s3cret", true)
-	sibling := bindSiblingIssuer(t, ctx, ti, fx.clientID, "usi-shared-revoke-sibling")
+	sibling := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "usi-shared-revoke-sibling")
+	require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: fx.clientID, UserSessionIssuerID: sibling}))
 
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
@@ -348,9 +349,34 @@ func TestSoftDeleteSubjectSessions_RequiresPersistedTypedChoiceOnSiblingIssuer(t
 	require.NoError(t, authclientbackfill.New(ti.conn).SeedUpstreamSelectionFixture(ctx, authclientbackfill.SeedUpstreamSelectionFixtureParams{
 		ProjectID: fx.projectID, OrganizationID: fx.organizationID, CredentialID: credentialID, McpServerID: server, AuthClientID: conv.ToNullUUID(typed),
 	}))
-	creds, err = revoker.SoftDeleteSubjectSessions(ctx, ti.conn, fx.subject, sibling, fx.projectID, fx.organizationID, sessionID)
+	unselectedID := uuid.New()
+	require.NoError(t, selectionbackfill.New(ti.conn).SeedUserSessionFixture(ctx, selectionbackfill.SeedUserSessionFixtureParams{
+		ID: unselectedID, ProjectID: conv.ToNullUUID(fx.projectID), OrganizationID: conv.ToPGText(fx.organizationID),
+		UserSessionIssuerID: sibling, SubjectUrn: fx.subject, Jti: uuid.NewString(), RefreshExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true}, CredentialID: conv.ToNullUUID(uuid.New()),
+	}))
+	_, err = usersessionsrepo.New(ti.conn).RevokeUserSession(ctx, usersessionsrepo.RevokeUserSessionParams{ID: unselectedID, ProjectID: fx.projectID, OrganizationID: fx.organizationID})
 	require.NoError(t, err)
-	require.Len(t, creds, 1, "the exact downstream credential's current choice reaches the same subject's grant")
+	creds, err = revoker.SoftDeleteSubjectSessions(ctx, ti.conn, fx.subject, sibling, fx.projectID, fx.organizationID, unselectedID)
+	require.NoError(t, err)
+	require.Empty(t, creds, "a different revoked credential for the same subject cannot borrow the selected credential's choice")
+
+	otherSubject := urn.NewUserSubject("other-grant-owner")
+	other := insertRemoteSession(t, ctx, ti.conn, otherSubject, fx.userIssuerID.String(), fx.clientID.String())
+	creds, err = revoker.SoftDeleteSubjectSessions(ctx, ti.conn, otherSubject, sibling, fx.projectID, fx.organizationID, sessionID)
+	require.NoError(t, err)
+	require.Empty(t, creds, "a recorded choice for one subject cannot retire another subject's grant on the same registration")
+	stillLive, err := repo.New(ti.conn).GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: otherSubject, RemoteSessionClientID: fx.clientID})
+	require.NoError(t, err)
+	require.Equal(t, other.ID, stillLive.ID)
+
+	otherProject := createProject(t, ctx, ti.conn, "shared-revoke-other-project")
+	creds, err = revoker.SoftDeleteSubjectSessions(ctx, ti.conn, fx.subject, sibling, otherProject, fx.organizationID, sessionID)
+	require.NoError(t, err)
+	require.Empty(t, creds, "another project's revoke scope must not borrow the recorded choice")
+
+	creds, err = revoker.SoftDeleteSubjectSessionsForCredentials(ctx, ti.conn, fx.subject, sibling, uuid.Nil, fx.organizationID, []uuid.UUID{unselectedID, sessionID})
+	require.NoError(t, err)
+	require.Len(t, creds, 1, "the batch preserves the later revoked credential’s recorded choice")
 	require.Equal(t, fx.clientID, creds[0].RemoteSessionClientID)
 
 	creds, err = revoker.SoftDeleteSubjectSessions(ctx, ti.conn, fx.subject, sibling, fx.projectID, fx.organizationID, sessionID)

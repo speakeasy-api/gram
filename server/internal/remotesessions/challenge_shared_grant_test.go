@@ -165,7 +165,7 @@ func TestRemoteSessionStatuses_FindsGrantMintedByDifferentIssuer(t *testing.T) {
 	require.Equal(t, remotesessions.RemoteSessionActive, statuses[fx.clientID].Status)
 }
 
-func TestSetRemoteSessionAutoRefresh_FindsGrantMintedByDifferentIssuer(t *testing.T) {
+func TestSetAuthClientRemoteSessionAutoRefresh_FindsGrantMintedByDifferentIssuer(t *testing.T) {
 	t.Parallel()
 
 	ctx, fx := seedSharedGrantAcrossIssuers(t)
@@ -175,7 +175,11 @@ func TestSetRemoteSessionAutoRefresh_FindsGrantMintedByDifferentIssuer(t *testin
 	bound := listBoundClientIDs(t, ctx, fx, fx.issuerB)
 	requireBoundClient(t, bound, fx.clientID)
 
-	n, err := fx.mgr.SetAuthClientRemoteSessionAutoRefresh(ctx, fx.subject, fx.projectID, fx.organizationID, fx.clientID, true)
+	n, err := fx.mgr.SetRemoteSessionAutoRefresh(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerB, fx.clientID, true)
+	require.NoError(t, err)
+	require.Zero(t, n, "a compatibility link must not authorize a cross-issuer preference change")
+
+	n, err = fx.mgr.SetAuthClientRemoteSessionAutoRefresh(ctx, fx.subject, fx.projectID, fx.organizationID, fx.clientID, true)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), n)
 
@@ -188,7 +192,7 @@ func TestSetRemoteSessionAutoRefresh_FindsGrantMintedByDifferentIssuer(t *testin
 	require.Equal(t, fx.issuerA, active.UserSessionIssuerID)
 }
 
-func TestDisconnectRemoteSession_FindsGrantMintedByDifferentIssuer(t *testing.T) {
+func TestDisconnectAuthClientRemoteSession_FindsGrantMintedByDifferentIssuer(t *testing.T) {
 	t.Parallel()
 
 	ctx, fx := seedSharedGrantAcrossIssuers(t)
@@ -196,7 +200,11 @@ func TestDisconnectRemoteSession_FindsGrantMintedByDifferentIssuer(t *testing.T)
 	bound := listBoundClientIDs(t, ctx, fx, fx.issuerB)
 	requireBoundClient(t, bound, fx.clientID)
 
-	n, err := fx.mgr.DisconnectAuthClientRemoteSession(ctx, fx.subject, fx.projectID, fx.organizationID, fx.clientID)
+	n, err := fx.mgr.DisconnectRemoteSession(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerB, fx.clientID)
+	require.NoError(t, err)
+	require.Zero(t, n, "a compatibility link must not authorize a cross-issuer disconnect")
+
+	n, err = fx.mgr.DisconnectAuthClientRemoteSession(ctx, fx.subject, fx.projectID, fx.organizationID, fx.clientID)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), n)
 

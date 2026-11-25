@@ -60,12 +60,8 @@ func TestOrganizationUserSessionIssuerMigrateCreatesNoAuthClientForTypedServers(
 	}
 }
 
-// A registration still bound to a source issuer that no live server uses was
-// left behind by earlier configuration. Consolidation leaves that binding
-// behind, enforced or not, and the preview lists it as dropped: carried to the
-// target, it would become a client the target's only server serves from
-// without anyone having configured it there. Without a leftover binding the
-// same consolidation changes nothing about that server.
+// A leftover issuer link is neither a typed offer nor a preview impact.
+// Consolidation leaves the target server's configured offer unchanged.
 func TestOrganizationUserSessionIssuerMigrateLeavesLeftoverSourceBindingBehind(t *testing.T) {
 	t.Parallel()
 	for _, enforced := range []bool{false, true} {
@@ -110,9 +106,13 @@ func TestOrganizationUserSessionIssuerMigrateLeavesLeftoverSourceBindingBehind(t
 				require.NoError(t, err)
 				assert.Len(t, clientsAfter, 1)
 				if leftover {
-					bound, err := remotesessionsrepo.New(ti.conn).CountRemoteSessionClientUserSessionIssuerBindings(ctx, remotesessionsrepo.CountRemoteSessionClientUserSessionIssuerBindingsParams{RemoteSessionClientID: stale, UserSessionIssuerID: targetID})
+					remoteRepo := remotesessionsrepo.New(ti.conn)
+					bound, err := remoteRepo.CountRemoteSessionClientUserSessionIssuerBindings(ctx, remotesessionsrepo.CountRemoteSessionClientUserSessionIssuerBindingsParams{RemoteSessionClientID: stale, UserSessionIssuerID: targetID})
 					require.NoError(t, err)
 					assert.Zero(t, bound, "the leftover binding stays behind with the source")
+					sourceBound, err := remoteRepo.CountRemoteSessionClientUserSessionIssuerBindings(ctx, remotesessionsrepo.CountRemoteSessionClientUserSessionIssuerBindingsParams{RemoteSessionClientID: stale, UserSessionIssuerID: sourceID})
+					require.NoError(t, err)
+					assert.EqualValues(t, 1, sourceBound, "consolidation does not delete source issuer-client links")
 				}
 
 				// A credential issued after consolidation takes the path issuance
@@ -144,9 +144,9 @@ func TestOrganizationUserSessionIssuerMigrateLeavesLeftoverSourceBindingBehind(t
 	}
 }
 
-// A server that moves onto a target with no other consumer keeps its offers.
-// It does not inherit either issuer's compatibility parents.
-func TestOrganizationUserSessionIssuerMigrateMovedSoleConsumerSkipsLeftoverSourceBinding(t *testing.T) {
+// A server keeps its configured offer, but a downstream issuer move does not
+// turn leftover links at either issuer into upstream offers.
+func TestOrganizationUserSessionIssuerMigrateMovedSoleConsumerKeepsOnlyConfiguredOffer(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 	auth, ok := contextvalues.GetAuthContext(ctx)
@@ -162,10 +162,9 @@ func TestOrganizationUserSessionIssuerMigrateMovedSoleConsumerSkipsLeftoverSourc
 	_, err := ti.service.MigrateIssuer(ctx, confirmedMigratePayload(t, ctx, ti, sourceID.String(), targetID.String()))
 	require.NoError(t, err)
 
-	want := []uuid.UUID{ownRegistration}
 	registrations, err := authclientbackfill.New(ti.conn).ListOAuthClientsOfServers(ctx, authclientbackfill.ListOAuthClientsOfServersParams{OrganizationID: auth.ActiveOrganizationID, McpServerIds: []uuid.UUID{movedServer}})
 	require.NoError(t, err)
-	assert.Equal(t, want, registrations)
+	assert.Equal(t, []uuid.UUID{ownRegistration}, registrations)
 }
 
 func leftoverEnableEnforcement(t *testing.T, ctx context.Context, ti *testInstance, enforced bool) {

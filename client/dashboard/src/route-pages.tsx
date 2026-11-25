@@ -6,7 +6,11 @@ import type {
   OrgRouteStructure,
   RouteStructure,
 } from "./routes";
-import { SetupTaskRedirect, SetupWizard } from "./route-pages.lazy";
+import {
+  PrototypePage,
+  SetupTaskRedirect,
+  SetupWizard,
+} from "./route-pages.lazy";
 import Channels from "./pages/channels/Channels";
 import AssistantPage from "./pages/assistants/Assistant";
 import AssistantsIndex, { AssistantsRoot } from "./pages/assistants/Assistants";
@@ -157,6 +161,7 @@ import RiskOverviewRedirect from "./pages/security/RiskOverviewRedirect";
 import Watchdog, { WatchdogRoot } from "./pages/security/watchdog/Watchdog";
 import SignalDetail from "./pages/security/watchdog/SignalDetail";
 import RiskEventsPage from "./pages/security/RiskEventsPage";
+import IntentPolicies from "./pages/security/intent-policies/IntentPolicies";
 import {
   ShadowAIRoot,
   ShadowAISectionRedirect,
@@ -379,6 +384,7 @@ const ROUTE_PAGES: PageTree<RouteStructure> = {
           teamAccess: {},
           guardrails: {},
           sessions: {},
+          feedback: {},
           settings: {},
           authentication: {},
           performance: {},
@@ -612,6 +618,9 @@ const ROUTE_PAGES: PageTree<RouteStructure> = {
   riskEvents: {
     component: RiskEventsPage,
   },
+  intentPolicies: {
+    component: IntentPolicies,
+  },
   shadowAI: {
     component: ShadowAIRoot,
     indexComponent: ShadowAISectionRedirect,
@@ -692,6 +701,9 @@ const ROUTE_PAGES: PageTree<RouteStructure> = {
     component: Settings,
   },
   docs: {},
+  prototype: {
+    component: PrototypePage,
+  },
 };
 
 const ORG_ROUTE_PAGES: PageTree<OrgRouteStructure> = {

@@ -1,6 +1,5 @@
 import { invalidateAllServerClientAssociations } from "@gram/client/react-query/serverClientAssociations.js";
 import { AssetImageUploadField } from "@/components/asset-image-upload-field";
-import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import {
@@ -44,13 +43,6 @@ import {
   useRemoteSessionIssuers,
 } from "@gram/client/react-query/remoteSessionIssuers.js";
 import { invalidateAllUserSessionIssuers } from "@gram/client/react-query/userSessionIssuers.js";
-import {
-  invalidateSharedIssuerImpact,
-  needsSharedIssuerConfirm,
-  sharedIssuerChangeBlocked,
-  useSharedIssuerImpact,
-} from "@/lib/remote-identity/model/upstreamRepointing";
-import { RepointedServersNotice } from "./RepointedServersNotice";
 import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -572,7 +564,6 @@ export function AttachRemoteIdentityProviderSheet({
         invalidateAllRemoteSessionIssuers(queryClient, { refetchType: "all" }),
         invalidateAllRemoteSessionClients(queryClient, { refetchType: "all" }),
         invalidateAllServerClientAssociations(queryClient),
-        invalidateSharedIssuerImpact(queryClient),
         target.invalidate(queryClient),
       ]);
 
@@ -769,36 +760,8 @@ export function AttachRemoteIdentityProviderSheet({
     clientId,
   ]);
 
-  // Linking another provider changes the upstream derived for every server
-  // sharing this user session issuer, in any project for an organization one.
-  const sharedIssuerId = userSessionIssuer?.id;
-  const sharedIssuerImpact = useSharedIssuerImpact(
-    open && sharedIssuerId && submittable
-      ? {
-          userSessionIssuerId: sharedIssuerId,
-          mcpServerId: target.mcpServerId,
-          change: "attach",
-          providerId: mode === "select" ? selectedIssuerId : undefined,
-        }
-      : null,
-  );
-  const repointLookupPending = sharedIssuerImpact.pending;
-  const [confirmRepointOpen, setConfirmRepointOpen] = useState(false);
-  useEffect(() => {
-    setConfirmRepointOpen(false);
-  }, [open]);
-
   const handleSubmit = () => {
-    if (submitting || logoUploading) return;
-    if (prepared) {
-      attachMutation.mutate();
-      return;
-    }
-    if (!submittable) return;
-    if (needsSharedIssuerConfirm(sharedIssuerImpact)) {
-      setConfirmRepointOpen(true);
-      return;
-    }
+    if (submitting || logoUploading || (!prepared && !submittable)) return;
     attachMutation.mutate();
   };
 
@@ -1068,6 +1031,18 @@ export function AttachRemoteIdentityProviderSheet({
           )}
 
           <SheetFooter className="flex-row items-center justify-end gap-2 border-t px-6 py-4">
+            {prepared && !prepared.attached && attachMutation.isError && (
+              <Button
+                variant="secondary"
+                disabled={submitting}
+                onClick={() => {
+                  setPrepared(null);
+                  attachMutation.reset();
+                }}
+              >
+                <Button.Text>Choose a different registration</Button.Text>
+              </Button>
+            )}
             <Button
               variant="secondary"
               disabled={submitting}
@@ -1078,9 +1053,7 @@ export function AttachRemoteIdentityProviderSheet({
             <Button
               variant="primary"
               disabled={
-                submitting ||
-                logoUploading ||
-                (!prepared && (!submittable || repointLookupPending))
+                submitting || logoUploading || (!prepared && !submittable)
               }
               onClick={handleSubmit}
             >
@@ -1095,42 +1068,6 @@ export function AttachRemoteIdentityProviderSheet({
           </SheetFooter>
         </SheetContent>
       </Sheet>
-      <Dialog open={confirmRepointOpen} onOpenChange={setConfirmRepointOpen}>
-        <Dialog.Content className="max-w-md">
-          <Dialog.Header>
-            <Dialog.Title>Change the upstream of other servers?</Dialog.Title>
-            <Dialog.Description className="sr-only">
-              Attaching changes the upstream of other servers.
-            </Dialog.Description>
-          </Dialog.Header>
-          <RepointedServersNotice
-            impact={sharedIssuerImpact}
-            projectId={target.projectId}
-          />
-          <Dialog.Footer>
-            <Button
-              variant="secondary"
-              onClick={() => setConfirmRepointOpen(false)}
-            >
-              <Button.Text>Cancel</Button.Text>
-            </Button>
-            <Button
-              variant="destructive-primary"
-              disabled={
-                submitting ||
-                repointLookupPending ||
-                sharedIssuerChangeBlocked(sharedIssuerImpact)
-              }
-              onClick={() => {
-                setConfirmRepointOpen(false);
-                attachMutation.mutate();
-              }}
-            >
-              <Button.Text>Attach authorization server</Button.Text>
-            </Button>
-          </Dialog.Footer>
-        </Dialog.Content>
-      </Dialog>
     </>
   );
 }

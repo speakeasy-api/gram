@@ -15,7 +15,7 @@ export interface McpServerAuthenticationReadiness {
   unavailable: boolean;
   description: string;
   upstreamAuthQuery: ReturnType<typeof useMcpServerAuthentication>;
-  needsHeaderCleanup: boolean;
+  hasLegacyForwardedAuthorization: boolean;
   identityProbeStatus: ReturnType<typeof useUpstreamProbe>;
 }
 
@@ -57,7 +57,7 @@ export function useMcpServerAuthenticationReadiness(
       throwOnError: false,
     },
   );
-  const needsHeaderCleanup =
+  const hasLegacyForwardedAuthorization =
     remote &&
     !sourceHeaders.isError &&
     !upstreamAuthQuery.isError &&
@@ -112,7 +112,7 @@ export function useMcpServerAuthenticationReadiness(
         (status !== undefined && !knownStatus)),
     description,
     upstreamAuthQuery,
-    needsHeaderCleanup,
+    hasLegacyForwardedAuthorization,
     identityProbeStatus,
   };
 }

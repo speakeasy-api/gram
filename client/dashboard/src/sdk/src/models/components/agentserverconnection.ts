@@ -9,6 +9,10 @@ import * as openEnums from "../../types/enums.js";
 import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  AgentAccessRequestTarget,
+  AgentAccessRequestTarget$inboundSchema,
+} from "./agentaccessrequesttarget.js";
 
 /**
  * `connected`: the user is signed in. `not_connected`: the user has not signed in. `reauthorization_required`: a sign-in exists but must be renewed. `not_required`: the server needs no sign-in from the user. `setup_required`: an administrator must finish the server's sign-in setup first. `no_access`: the user lacks permission to connect to the server. `unknown`: the state can't be determined, for example for a gateway.
@@ -43,6 +47,10 @@ export type AgentServerConnection = {
    */
   id: string;
   /**
+   * The exact access a device agent asks for with requestAccess.
+   */
+  requestAccess?: AgentAccessRequestTarget | undefined;
+  /**
    * Page where the user can ask an administrator for access to this server. Present only when state is no_access and the organization accepts access requests.
    */
   requestAccessUrl?: string | undefined;
@@ -67,12 +75,14 @@ export const AgentServerConnection$inboundSchema: z.ZodMiniType<
     connect_url: z.optional(z.string()),
     hidden: z.optional(z.boolean()),
     id: z.string(),
+    request_access: z.optional(AgentAccessRequestTarget$inboundSchema),
     request_access_url: z.optional(z.string()),
     state: AgentServerConnectionState$inboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       "connect_url": "connectUrl",
+      "request_access": "requestAccess",
       "request_access_url": "requestAccessUrl",
     });
   }),

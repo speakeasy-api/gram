@@ -248,10 +248,10 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 		res, resolveErr := s.resolveMemberAuthChoice(ctx, endpoint, *member, memberAuth[member.serverID], subject)
 		s.applyMemberAuthClient(ctx, endpoint.OrganizationID, member, res, resolveErr)
 	}
-	gate.memberChoices = &memberChoices{selector: nil, consentPreview: false, subject: subject, profile: false, unchosen: false, metaServerID: endpoint.MetaMcpServerID, onlyChosen: false, readOnly: false, chosen: nil, resolve: func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+	gate.memberChoices = &memberChoices{selector: nil, consentPreview: true, subject: subject, profile: false, unchosen: false, metaServerID: endpoint.MetaMcpServerID, onlyChosen: false, readOnly: false, chosen: nil, resolve: func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 		return s.remoteChallengeMgr.ResolveAuthClientAccessTokens(ctx, remotesessions.AuthClientTokenRequest{
 			ProjectID: member.projectID, OrganizationID: endpoint.OrganizationID, UserSessionIssuerID: endpoint.UserSessionIssuerID,
-			Subject: subject, RegistrationID: member.chosenClientID.UUID, SkipUnusable: true, Attribution: consentRefreshAttribution(r, endpoint, challengeState),
+			Subject: subject, RegistrationID: member.chosenClientID.UUID, SkipUnusable: true, Attribution: consentRefreshAttribution(s.aiCatalog.SnapshotFor(ctx), r, endpoint, challengeState),
 		})
 	}, mu: sync.Mutex{}, byServer: map[uuid.UUID]*memberTokens{}}
 	var signInID uuid.UUID
@@ -333,6 +333,11 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 		toolMembers[member.slug] = connectionCatalogMember{ServerID: member.serverID, ProjectID: member.projectID, BackendHash: backendHashes[member.serverID].hash, TypedBackendHash: backendHashes[member.serverID].typedHash, TypedApproval: false, Auth: authBinding}
 	}
 	for _, tool := range inventory {
+		// Local tools are not approved one by one: access to them follows
+		// access to the member, so they are never part of what is consented.
+		if tool.local {
+			continue
+		}
 		var hints []string
 		if a := tool.entry.Annotations; a != nil {
 			hints = trueAnnotationValues(&types.ToolAnnotations{Title: nil, ReadOnlyHint: a.ReadOnlyHint, DestructiveHint: a.DestructiveHint, IdempotentHint: a.IdempotentHint, OpenWorldHint: a.OpenWorldHint})

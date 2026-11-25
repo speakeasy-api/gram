@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -907,4 +908,29 @@ func TestRemoveClientFromMcpServer_StopsServerOfferingIt(t *testing.T) {
 
 	require.Empty(t, offeredAuthClients(t, ctx, ti.conn, serverID),
 		"removing the client from the server retires the link derived from it")
+}
+
+func TestRemoveClientFromMcpServer_RevokesDerivedHostedOffer(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	projectID, orgID := projectIDFromContext(t, ctx), activeOrganizationID(t, ctx)
+	enforceUpstreamAuth(t, ctx, ti.conn, orgID)
+	issuer := createUserSessionIssuer(t, ctx, ti.conn, "admin-hosted-detach")
+	server := (attachFixture{ti: ti, projectID: projectID, orgID: orgID}).hostedServer(t, ctx, "admin-hosted-detach", conv.ToNullUUID(issuer))
+	client, _ := seedActiveClient(t, ctx, ti.conn, projectID, uuid.Nil, orgID, "admin-hosted-detach")
+	associateServerClient(t, ctx, ti, server, client)
+	recordTypedClients(t, ctx, ti.conn, orgID, server)
+	require.Len(t, offeredAuthClients(t, ctx, ti.conn, server), 1)
+	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAuthClientDetachMcpServer)
+	require.NoError(t, err)
+	require.NoError(t, ti.service.RemoveClientFromMcpServer(ctx, &orgclientsgen.RemoveClientFromMcpServerPayload{
+		ClientID: client.String(), McpServerID: server.String(), SessionToken: nil, ApikeyToken: nil,
+	}))
+	require.Empty(t, offeredAuthClients(t, ctx, ti.conn, server))
+	row, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: server, ProjectID: projectID})
+	require.NoError(t, err)
+	require.True(t, row.RequiresUpstreamAuth.Valid && row.RequiresUpstreamAuth.Bool, "detaching a credential does not opt the hosted server out")
+	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAuthClientDetachMcpServer)
+	require.NoError(t, err)
+	require.Equal(t, before+1, after)
 }
