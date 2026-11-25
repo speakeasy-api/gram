@@ -5663,8 +5663,8 @@ ON user_session_issuer_cimd_clients (organization_id);
 -- cimd_client_candidates is the staff review queue of CIMD client URLs seen on
 -- open-mode issuers that no catalog document covers. Global, like ai_products:
 -- no project_id or organization_id. One row per URL, never deleted, so a
--- decision sticks and a dismissed URL is not raised again. Status values are
--- validated in application code.
+-- dismissed URL is not raised again. Status values are validated in
+-- application code.
 CREATE TABLE IF NOT EXISTS cimd_client_candidates (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   url TEXT NOT NULL CHECK (url <> ''),
@@ -5684,13 +5684,13 @@ CREATE TABLE IF NOT EXISTS cimd_client_candidates (
   CONSTRAINT cimd_client_candidates_document_id_fkey FOREIGN KEY (document_id) REFERENCES ai_product_cimd_documents (id) ON DELETE SET NULL
 );
 
-COMMENT ON TABLE cimd_client_candidates IS 'Staff review queue of CIMD client URLs no catalog document covers. One row per URL; the decision is permanent.';
+COMMENT ON TABLE cimd_client_candidates IS 'Staff review queue of CIMD client URLs no catalog document covers. One row per URL; rows are never deleted.';
 COMMENT ON COLUMN cimd_client_candidates.id IS '@access: confidential';
 COMMENT ON COLUMN cimd_client_candidates.url IS 'The client_id the client presented, stored exactly as received.
 @access: restricted';
 COMMENT ON COLUMN cimd_client_candidates.client_name IS 'client_name from the fetched metadata document; null when absent.
 @access: opaque-confidential';
-COMMENT ON COLUMN cimd_client_candidates.status IS 'One of pending, approved, dismissed, customer_specific. Only pending rows are open; the others never return to pending.
+COMMENT ON COLUMN cimd_client_candidates.status IS 'One of pending, approved, dismissed, customer_specific; validated in application code.
 @access: confidential';
 COMMENT ON COLUMN cimd_client_candidates.reason IS 'Staff note recorded with the decision.
 @access: opaque-restricted';
