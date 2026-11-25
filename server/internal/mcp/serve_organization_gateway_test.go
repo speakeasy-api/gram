@@ -283,7 +283,9 @@ func TestServeOrganizationGateway_DirectConnectionListsMemberTools(t *testing.T)
 	// An explicit no-upstream server and a required server with no placement
 	// look the same to issuer-wide credential lookup. Only the first can run.
 	for _, required := range []bool{false, true} {
-		_, err = ti.conn.Exec(ctx, `UPDATE mcp_servers SET requires_upstream_auth = $1 WHERE id = $2 AND project_id = $3`, required, hosted.serverID, *authCtx.ProjectID)
+		err = testrepo.New(ti.conn).SetMCPServerRequiresUpstreamAuthFixture(ctx, testrepo.SetMCPServerRequiresUpstreamAuthFixtureParams{
+			ID: hosted.serverID, RequiresUpstreamAuth: pgtype.Bool{Bool: required, Valid: true},
+		})
 		require.NoError(t, err)
 		w, err = serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, bearer, makeMetaRPCBody(t, "tools/call", map[string]any{
 			"name": hosted.slug + "--alpha", "arguments": map[string]any{},

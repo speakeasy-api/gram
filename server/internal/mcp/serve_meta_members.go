@@ -518,7 +518,7 @@ func (s *Service) resolveOrganizationMemberSnapshotWithRecheck(
 		// Hosted serving checks the exact placement at dispatch, after member
 		// and toolset permission checks. Consent retains the compatibility
 		// inventory used by the existing writers and callback.
-		if recheck == nil && needsOAuth && userSessionIssuerID != uuid.Nil && !(serving && member.backend == metaMemberBackendHosted) {
+		if recheck == nil && needsOAuth && userSessionIssuerID != uuid.Nil && (!serving || member.backend != metaMemberBackendHosted) {
 			if serving && !servingClientsLoaded {
 				servingClientsLoaded = true
 				clients, servingClientsErr = s.remoteChallengeMgr.ListOrganizationClients(ctx, organizationID, userSessionIssuerID)
