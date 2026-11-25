@@ -83,6 +83,11 @@ func TestSplit_RejectsMalformedDiffs(t *testing.T) {
 		{name: "hunk before headers", diff: "@@ -1 +1 @@\n-a\n+b\n"},
 		{name: "truncated hunk", diff: "--- a/SKILL.md\n+++ b/SKILL.md\n@@ -1,2 +1,2 @@\n-a\n+b\n"},
 		{name: "text before headers", diff: "not a diff\n"},
+		// Each overruns one side while the other side is still open, so the
+		// hunk never looks finished early: only the per-side guard catches it.
+		{name: "extra removed line", diff: "--- a/SKILL.md\n+++ b/SKILL.md\n@@ -1 +1,2 @@\n-a\n-b\n+x\n+y\n"},
+		{name: "extra added line", diff: "--- a/SKILL.md\n+++ b/SKILL.md\n@@ -1,2 +1 @@\n+x\n+y\n-a\n-b\n"},
+		{name: "extra context line", diff: "--- a/SKILL.md\n+++ b/SKILL.md\n@@ -1 +1,3 @@\n-a\n c\n+x\n+y\n"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

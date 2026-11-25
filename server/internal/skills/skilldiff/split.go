@@ -100,13 +100,24 @@ type diffSplitter struct {
 
 func (s *diffSplitter) line(line string) error {
 	if s.oldLeft > 0 || s.newLeft > 0 {
+		// A line beyond its side's declared count would drive that counter
+		// negative and let the hunk end early without notice.
 		switch line[0] {
 		case ' ':
+			if s.oldLeft == 0 || s.newLeft == 0 {
+				return fmt.Errorf("%w: hunk has more lines than its counts", ErrMalformed)
+			}
 			s.oldLeft--
 			s.newLeft--
 		case '-':
+			if s.oldLeft == 0 {
+				return fmt.Errorf("%w: hunk has more removed lines than its counts", ErrMalformed)
+			}
 			s.oldLeft--
 		case '+':
+			if s.newLeft == 0 {
+				return fmt.Errorf("%w: hunk has more added lines than its counts", ErrMalformed)
+			}
 			s.newLeft--
 		case '\\':
 		default:
