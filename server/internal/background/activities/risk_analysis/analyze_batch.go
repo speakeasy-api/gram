@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"log/slog"
 	"sync"
 	"time"
@@ -41,6 +42,9 @@ import (
 // and dropped. Disabled rules, builtin presets and exclusions are applied by
 // the ClickHouse findings writer.
 type AnalyzeBatch struct {
+	// transcripts reads message bodies, opening encrypted shadows for the
+	// projects that keep them. Nil reads plaintext.
+	transcripts        *transcriptstore.Transcripts
 	logger             *slog.Logger
 	tracer             trace.Tracer
 	metrics            *riskMetrics
@@ -64,6 +68,13 @@ type AnalyzeBatch struct {
 }
 
 type contentPartAssetReader = blobio.Reader
+
+// WithTranscripts makes batch analysis read message bodies through
+// transcripts.
+func (a *AnalyzeBatch) WithTranscripts(transcripts *transcriptstore.Transcripts) *AnalyzeBatch {
+	a.transcripts = transcripts
+	return a
+}
 
 func NewAnalyzeBatch(
 	logger *slog.Logger,
@@ -309,10 +320,7 @@ func (a *AnalyzeBatch) fetchContent(ctx context.Context, args AnalyzeBatchArgs) 
 	queries := repo.New(a.db)
 	messages := []batchMessage{}
 	if len(args.MessageIDs) > 0 {
-		rows, err := queries.GetMessageContentBatch(ctx, repo.GetMessageContentBatchParams{
-			Ids:       args.MessageIDs,
-			ProjectID: uuid.NullUUID{UUID: args.ProjectID, Valid: true},
-		})
+		rows, err := a.transcripts.GetMessageContentBatch(ctx, a.db, args.ProjectID, args.MessageIDs)
 		if err != nil {
 			fetchSpan.SetStatus(codes.Error, err.Error())
 			return nil, fmt.Errorf("get message content batch: %w", err)

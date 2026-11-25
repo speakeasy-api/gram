@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"log/slog"
 	"strings"
 
@@ -54,14 +55,21 @@ type RevealMatcher struct {
 	// findings anchored to a content part are then unreconstructable and are
 	// refused by the match-length gate.
 	assetStorage blobio.Reader
+	// db and transcripts read the anchored message's body, opening its
+	// encrypted shadow when the project keeps one.
+	db          transcriptstore.DBTX
+	transcripts *transcriptstore.Transcripts
 }
 
-// NewRevealMatcher assembles a matcher from its dependencies.
-func NewRevealMatcher(logger *slog.Logger, repoQueries *repo.Queries, assetStorage blobio.Reader) *RevealMatcher {
+// NewRevealMatcher assembles a matcher from its dependencies. A nil
+// transcripts reads message bodies from plaintext.
+func NewRevealMatcher(logger *slog.Logger, db repo.DBTX, transcripts *transcriptstore.Transcripts, assetStorage blobio.Reader) *RevealMatcher {
 	return &RevealMatcher{
 		logger:       logger,
-		repo:         repoQueries,
+		repo:         repo.New(db),
 		assetStorage: assetStorage,
+		db:           db,
+		transcripts:  transcripts,
 	}
 }
 
@@ -108,10 +116,7 @@ func (m *RevealMatcher) LoadAnchor(ctx context.Context, projectID uuid.UUID, row
 	var anchor RevealAnchor
 
 	if msgID, err := uuid.Parse(row.ChatMessageID); err == nil {
-		msg, err := m.repo.GetChatMessageForUnmask(ctx, repo.GetChatMessageForUnmaskParams{
-			ID:        msgID,
-			ProjectID: uuid.NullUUID{UUID: projectID, Valid: true},
-		})
+		msg, err := m.transcripts.GetChatMessageForUnmask(ctx, m.db, projectID, msgID)
 		if err != nil {
 			if !errors.Is(err, pgx.ErrNoRows) {
 				m.logger.WarnContext(ctx, "load chat message for unmask", attr.SlogError(err), attr.SlogMessageID(row.ChatMessageID))

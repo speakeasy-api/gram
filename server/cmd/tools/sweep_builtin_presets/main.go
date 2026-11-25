@@ -462,7 +462,7 @@ func sweepClickHouse(ctx context.Context, pool *pgxpool.Pool, ch *chrepo.Queries
 		policyID = cfg.policyID.UUID.String()
 	}
 	policyCache := map[uuid.UUID]policySweepFilters{}
-	reveal := risk.NewRevealMatcher(slog.Default(), riskrepo.New(pool), assetStorage)
+	reveal := risk.NewRevealMatcher(slog.Default(), pool, nil, assetStorage)
 	provenance := "preset:" + lib.Version() + " "
 
 	for {

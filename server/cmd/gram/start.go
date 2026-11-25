@@ -1265,7 +1265,7 @@ func newStartCommand() *cli.Command {
 			// L1 prompt-injection engine is the LLM judge (POC-193). A completions
 			// client is always constructed, so the judge is always available.
 			hookJudgeLimiter := openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient))
-			hookPIScanner := promptinjection.NewScanner(logger, newPICascade(ctx, logger, tracerProvider, meterProvider, completionsClient, guardianPolicy, openRouter, orEndpoints, db).Classify)
+			hookPIScanner := promptinjection.NewScanner(logger, newPICascade(ctx, logger, tracerProvider, meterProvider, completionsClient, guardianPolicy, openRouter, orEndpoints, db, transcripts).Classify)
 
 			hookPromptJudge := ppopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, hookJudgeLimiter).Evaluate
 			hookPromptPolicyScanner := promptpolicy.NewScanner(logger, hookPromptJudge)
@@ -2349,7 +2349,7 @@ func newStartCommand() *cli.Command {
 					close(workerInterruptCh)
 				})
 				group.Go(func() {
-					piScanner := promptinjection.NewScanner(logger, newPICascade(ctx, logger, tracerProvider, meterProvider, completionsClient, guardianPolicy, openRouter, orEndpoints, db).Classify)
+					piScanner := promptinjection.NewScanner(logger, newPICascade(ctx, logger, tracerProvider, meterProvider, completionsClient, guardianPolicy, openRouter, orEndpoints, db, transcripts).Classify)
 
 					var slackDirectoryRefresher slackdirectoryconnections.TokenRefresher
 					if id, secret := c.String("slack-client-id"), c.String("slack-client-secret"); id != "" && id != "unset" && secret != "" && secret != "unset" {

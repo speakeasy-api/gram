@@ -104,6 +104,166 @@ func (q *Queries) GetChatEntryTotals(ctx context.Context, arg GetChatEntryTotals
 	return i, err
 }
 
+const getChatMessageForUnmask = `-- name: GetChatMessageForUnmask :one
+SELECT cm.id, cm.chat_id, cm.role, cm.content, cm.tool_calls, cm.created_at,
+  t.ciphertext AS shadow_ciphertext,
+  COALESCE(t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,cm.content,cm.content_raw IS NULL,cm.content_raw,cm.tool_calls IS NULL,cm.tool_calls,cm.tool_outcome_notes,cm.tool_call_summaries IS NULL,cm.tool_call_summaries,cm.storage_error)::text,'UTF8')), false)::boolean AS shadow_current
+FROM chat_messages cm
+LEFT JOIN chat_message_transcripts t ON t.message_id = cm.id AND t.project_id = cm.project_id AND $1::boolean
+WHERE cm.id = $2
+  AND cm.project_id = $3
+  -- Nothing in the schema ties a message's project_id to its chat's, so a
+  -- message pointing at a chat in another project is rejected outright: the
+  -- chat:read gate is evaluated against the finding's chat id, and serving
+  -- content anchored in a foreign chat would bypass it.
+  AND EXISTS (
+    SELECT 1
+    FROM chats c
+    WHERE c.id = cm.chat_id
+      AND c.project_id = cm.project_id
+  )
+`
+
+type GetChatMessageForUnmaskParams struct {
+	OpenShadows bool
+	ID          uuid.UUID
+	ProjectID   uuid.NullUUID
+}
+
+type GetChatMessageForUnmaskRow struct {
+	ID               uuid.UUID
+	ChatID           uuid.UUID
+	Role             string
+	Content          string
+	ToolCalls        []byte
+	CreatedAt        pgtype.Timestamptz
+	ShadowCiphertext pgtype.Text
+	ShadowCurrent    bool
+}
+
+// Source material for the ClickHouse-backed reveal path: the anchored chat
+// message's recorded content and tool calls, which the reveal reconstructs the
+// raw match from (see unmask_ch.go). role gates the scan-surface composition
+// exactly like batch analysis (only assistant tool-request messages compose
+// tool-call arguments into the scanned text). chat_id backs the chat:read
+// authorization check when the ClickHouse row carries no denormalized chat id.
+func (q *Queries) GetChatMessageForUnmask(ctx context.Context, arg GetChatMessageForUnmaskParams) (GetChatMessageForUnmaskRow, error) {
+	row := q.db.QueryRow(ctx, getChatMessageForUnmask, arg.OpenShadows, arg.ID, arg.ProjectID)
+	var i GetChatMessageForUnmaskRow
+	err := row.Scan(
+		&i.ID,
+		&i.ChatID,
+		&i.Role,
+		&i.Content,
+		&i.ToolCalls,
+		&i.CreatedAt,
+		&i.ShadowCiphertext,
+		&i.ShadowCurrent,
+	)
+	return i, err
+}
+
+const getJudgeMessageWindow = `-- name: GetJudgeMessageWindow :many
+WITH target AS (
+  SELECT cm.id, cm.chat_id, cm.project_id, cm.role, cm.content, cm.tool_calls, cm.created_at, cm.seq, cm.generation FROM chat_messages cm
+  JOIN chats c ON c.id = cm.chat_id AND c.project_id = cm.project_id
+  JOIN projects p ON p.id = c.project_id
+  WHERE cm.id = $1::uuid AND cm.project_id = $3::uuid
+    AND p.organization_id = $4::text
+)
+SELECT evidence.id, evidence.chat_id, evidence.role, evidence.content, evidence.tool_calls,
+  t.ciphertext AS shadow_ciphertext,
+  COALESCE(t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')), false)::boolean AS shadow_current
+FROM (
+SELECT n.id, n.chat_id, n.project_id, n.role, n.content, n.tool_calls, n.created_at, n.seq FROM target t
+JOIN LATERAL (
+  (SELECT prev.id, prev.chat_id, prev.project_id, prev.role, prev.content, prev.tool_calls, prev.created_at, prev.seq FROM chat_messages prev
+   WHERE prev.chat_id = t.chat_id AND prev.project_id = t.project_id AND prev.generation = t.generation
+     AND (prev.created_at, prev.seq) < (t.created_at, t.seq)
+   ORDER BY prev.created_at DESC, prev.seq DESC LIMIT 2)
+  UNION ALL
+  SELECT t.id, t.chat_id, t.project_id, t.role, t.content, t.tool_calls, t.created_at, t.seq
+  UNION ALL
+  (SELECT next.id, next.chat_id, next.project_id, next.role, next.content, next.tool_calls, next.created_at, next.seq FROM chat_messages next
+   WHERE next.chat_id = t.chat_id AND next.project_id = t.project_id AND next.generation = t.generation
+     AND (next.created_at, next.seq) > (t.created_at, t.seq)
+   ORDER BY next.created_at, next.seq LIMIT 2)
+) n ON TRUE
+UNION ALL
+(SELECT recent.id, recent.chat_id, recent.project_id, recent.role, recent.content, recent.tool_calls, recent.created_at, recent.seq FROM chat_messages recent
+ JOIN chats c ON c.id = recent.chat_id AND c.project_id = recent.project_id
+ JOIN projects p ON p.id = c.project_id
+ WHERE $1::uuid = '00000000-0000-0000-0000-000000000000'::uuid
+   AND recent.chat_id = $2::uuid AND recent.project_id = $3::uuid
+   AND p.organization_id = $4::text
+   AND recent.generation = (SELECT MAX(latest.generation) FROM chat_messages latest
+     WHERE latest.chat_id = $2::uuid AND latest.project_id = $3::uuid)
+ ORDER BY recent.created_at DESC, recent.seq DESC LIMIT 4)
+) evidence
+LEFT JOIN chat_message_transcripts t ON t.message_id = evidence.id AND t.project_id = evidence.project_id AND $5::boolean
+LEFT JOIN chat_messages m ON m.id = t.message_id
+ORDER BY evidence.created_at, evidence.seq
+`
+
+type GetJudgeMessageWindowParams struct {
+	AnchorID       uuid.UUID
+	ChatID         uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	OpenShadows    bool
+}
+
+type GetJudgeMessageWindowRow struct {
+	ID               uuid.UUID
+	ChatID           uuid.UUID
+	Role             string
+	Content          string
+	ToolCalls        []byte
+	ShadowCiphertext pgtype.Text
+	ShadowCurrent    bool
+}
+
+// Two bounded index probes around a tenant-validated anchor. Keep the target
+// even when no neighbors exist; an absent target is never a valid window.
+// Tool evidence remains valid JSON: one overflow call/rune preserves truncation
+// indicators in the renderer without transferring the full stored payload.
+// The judge reads at most 4001 characters of each body and nine tool calls;
+// transcriptstore applies those caps in Go after opening the shadows, so
+// plaintext and shadows are capped the same way.
+func (q *Queries) GetJudgeMessageWindow(ctx context.Context, arg GetJudgeMessageWindowParams) ([]GetJudgeMessageWindowRow, error) {
+	rows, err := q.db.Query(ctx, getJudgeMessageWindow,
+		arg.AnchorID,
+		arg.ChatID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.OpenShadows,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetJudgeMessageWindowRow
+	for rows.Next() {
+		var i GetJudgeMessageWindowRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ChatID,
+			&i.Role,
+			&i.Content,
+			&i.ToolCalls,
+			&i.ShadowCiphertext,
+			&i.ShadowCurrent,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getKitProjectionMessage = `-- name: GetKitProjectionMessage :one
 SELECT m.id, m.seq, m.chat_id, m.project_id, m.role, m.content, m.content_raw, m.content_asset_url, m.model, m.message_id, m.finish_reason, m.tool_calls, m.prompt_tokens, m.completion_tokens, m.total_tokens, m.storage_error, m.user_id, m.external_user_id, m.external_message_id, m.origin, m.user_agent, m.ip_address, m.source, m.tool_call_id, m.tool_urn, m.tool_outcome, m.tool_outcome_notes, m.tool_call_summaries, m.content_hash, m.generation, m.capture_kind, m.original_message_id, m.replayed, m.created_at, m.risk_analyzed_at, t.ciphertext AS shadow_ciphertext,
   COALESCE(t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')), false)::boolean AS shadow_current
@@ -167,6 +327,141 @@ func (q *Queries) GetKitProjectionMessage(ctx context.Context, arg GetKitProject
 		&i.ShadowCurrent,
 	)
 	return i, err
+}
+
+const getMessageContentBatch = `-- name: GetMessageContentBatch :many
+SELECT cm.id, cm.chat_id, cm.role, cm.content, cm.tool_calls, cm.created_at, cm.source,
+  COALESCE(NULLIF(cm.user_id, ''), CASE WHEN c.deleted IS FALSE THEN NULLIF(c.user_id, '') END, '')::TEXT AS chat_user_id,
+  COALESCE(prior_user_request.content, '')::TEXT AS prior_user_request,
+  COALESCE(recent_tool.content, '')::TEXT AS recent_untrusted_content,
+  COALESCE(prior_user_request.id, '00000000-0000-0000-0000-000000000000'::uuid)::uuid AS prior_user_request_id,
+  COALESCE(recent_tool.id, '00000000-0000-0000-0000-000000000000'::uuid)::uuid AS recent_untrusted_content_id,
+  t.ciphertext AS shadow_ciphertext,
+  COALESCE(t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,cm.content,cm.content_raw IS NULL,cm.content_raw,cm.tool_calls IS NULL,cm.tool_calls,cm.tool_outcome_notes,cm.tool_call_summaries IS NULL,cm.tool_call_summaries,cm.storage_error)::text,'UTF8')), false)::boolean AS shadow_current,
+  tp.ciphertext AS prior_shadow_ciphertext,
+  COALESCE(tp.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,mp.content,mp.content_raw IS NULL,mp.content_raw,mp.tool_calls IS NULL,mp.tool_calls,mp.tool_outcome_notes,mp.tool_call_summaries IS NULL,mp.tool_call_summaries,mp.storage_error)::text,'UTF8')), false)::boolean AS prior_shadow_current,
+  tr.ciphertext AS recent_shadow_ciphertext,
+  COALESCE(tr.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,mr.content,mr.content_raw IS NULL,mr.content_raw,mr.tool_calls IS NULL,mr.tool_calls,mr.tool_outcome_notes,mr.tool_call_summaries IS NULL,mr.tool_call_summaries,mr.storage_error)::text,'UTF8')), false)::boolean AS recent_shadow_current
+FROM chat_messages cm
+JOIN chats c ON c.id = cm.chat_id
+  AND c.project_id = cm.project_id
+LEFT JOIN LATERAL (
+  SELECT prev.id, LEFT(prev.content, 4000) AS content, prev.created_at, prev.seq
+  FROM chat_messages prev
+  WHERE prev.chat_id = cm.chat_id
+    AND prev.project_id = cm.project_id
+    AND prev.role = 'user'
+    AND (prev.created_at, prev.seq) < (cm.created_at, cm.seq)
+  ORDER BY prev.created_at DESC, prev.seq DESC
+  LIMIT 1
+) prior_user_request ON TRUE
+LEFT JOIN LATERAL (
+  SELECT prev.id, LEFT(prev.content, 4000) AS content
+  FROM chat_messages prev
+  WHERE prev.chat_id = cm.chat_id
+    AND prev.project_id = cm.project_id
+    AND prev.role = 'tool'
+    AND (prev.created_at, prev.seq) < (cm.created_at, cm.seq)
+    AND (prev.created_at, prev.seq) > (prior_user_request.created_at, prior_user_request.seq)
+  ORDER BY prev.created_at DESC, prev.seq DESC
+  LIMIT 1
+) recent_tool ON TRUE
+LEFT JOIN chat_message_transcripts t ON t.message_id = cm.id AND t.project_id = cm.project_id AND $1::boolean
+LEFT JOIN chat_message_transcripts tp ON tp.message_id = prior_user_request.id AND tp.project_id = cm.project_id AND $1::boolean
+LEFT JOIN chat_messages mp ON mp.id = tp.message_id
+LEFT JOIN chat_message_transcripts tr ON tr.message_id = recent_tool.id AND tr.project_id = cm.project_id AND $1::boolean
+LEFT JOIN chat_messages mr ON mr.id = tr.message_id
+WHERE cm.id = ANY($2::uuid[])
+  AND cm.project_id = $3
+`
+
+type GetMessageContentBatchParams struct {
+	OpenShadows bool
+	Ids         []uuid.UUID
+	ProjectID   uuid.NullUUID
+}
+
+type GetMessageContentBatchRow struct {
+	ID                       uuid.UUID
+	ChatID                   uuid.UUID
+	Role                     string
+	Content                  string
+	ToolCalls                []byte
+	CreatedAt                pgtype.Timestamptz
+	Source                   pgtype.Text
+	ChatUserID               string
+	PriorUserRequest         string
+	RecentUntrustedContent   string
+	PriorUserRequestID       uuid.UUID
+	RecentUntrustedContentID uuid.UUID
+	ShadowCiphertext         pgtype.Text
+	ShadowCurrent            bool
+	PriorShadowCiphertext    pgtype.Text
+	PriorShadowCurrent       bool
+	RecentShadowCiphertext   pgtype.Text
+	RecentShadowCurrent      bool
+}
+
+// The scanned user's id rides along so the LLM judge's completion telemetry
+// can attribute scanning volume to whose traffic was analyzed. Same
+// attribution rule as the risk overview top users: the message's own user_id
+// wins, the chat owner's is the fallback — and a soft-deleted chat's owner
+// never is, while its messages remain eligible for scanning.
+// The lateral probes capture bounded causal context at the same event read:
+// the latest preceding user request and the latest tool result strictly after
+// that request. chat_messages_chat_id_created_at_idx supports both reverse
+// time probes; seq deterministically orders equal timestamps.
+//
+// created_at bounds the shadow-MCP scanner's ClickHouse provenance lookup to
+// the batch's own time range, keeping that query on the telemetry table's
+// time-ordered primary key instead of scanning the full retention window.
+//
+// source names the agent that recorded the message (Codex, Cursor, the ingest
+// adapter, ...). The shadow-MCP scanner attributes its provenance-resolution
+// metric to it, which is the one attribution available when the call resolved
+// to no telemetry row at all — precisely the population that metric exists to
+// measure.
+// Both message queries validate their chat against the row's project before
+// returning linkage. Content-part parents additionally must belong to the
+// content part's chat, so corrupt cross-tenant or cross-chat ids never leave
+// this boundary.
+func (q *Queries) GetMessageContentBatch(ctx context.Context, arg GetMessageContentBatchParams) ([]GetMessageContentBatchRow, error) {
+	rows, err := q.db.Query(ctx, getMessageContentBatch, arg.OpenShadows, arg.Ids, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetMessageContentBatchRow
+	for rows.Next() {
+		var i GetMessageContentBatchRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ChatID,
+			&i.Role,
+			&i.Content,
+			&i.ToolCalls,
+			&i.CreatedAt,
+			&i.Source,
+			&i.ChatUserID,
+			&i.PriorUserRequest,
+			&i.RecentUntrustedContent,
+			&i.PriorUserRequestID,
+			&i.RecentUntrustedContentID,
+			&i.ShadowCiphertext,
+			&i.ShadowCurrent,
+			&i.PriorShadowCiphertext,
+			&i.PriorShadowCurrent,
+			&i.RecentShadowCiphertext,
+			&i.RecentShadowCurrent,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getProjectOrganizationID = `-- name: GetProjectOrganizationID :one

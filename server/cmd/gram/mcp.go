@@ -350,6 +350,10 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	// the Temporal-backed observers `gram start` attaches.
 	chatWriter, stop := chat.NewChatMessageWriter(logger, db, assetStorage)
 	shutdown.funcs = append(shutdown.funcs, stop)
+	transcripts, err := configureTranscriptShadow(ctx, c, db, chatWriter, orgEncryption, tracerProvider, meterProvider)
+	if err != nil {
+		return err
+	}
 	completions := openrouter.NewUnifiedClient(logger, guardianPolicy, orEndpoints, openRouter, modelkeys.NewResolver(db, aiProviderKeys, openRouter),
 		chat.NewChatMessageCaptureStrategy(logger, meterProvider, db, chatWriter), chat.NewDefaultUsageTrackingStrategy(db, logger, billingTracker), nil, telemLogger)
 	memoryService := memory.NewMemoryService(logger, tracerProvider, meterProvider, db, completions, auditLogger)
@@ -358,7 +362,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	approvalService := approval.NewService(logger, db, serverURL, auditLogger)
 	mcpRiskEvaluator, mcpRiskScanner, err := newMCPRiskEvaluator(
 		c, logger, tracerProvider, meterProvider, db, enc, redisClient, featureFlags, enforcementDispatcher, completions, guardianPolicy, openRouter, orEndpoints, publishers, shadowMCPClient, toolIOLogsEnabled,
-		approvalService,
+		approvalService, transcripts,
 	)
 	if err != nil {
 		return err
@@ -382,9 +386,6 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	}
 	clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
 	clientAssertionSigner.PinManagedSigner(c.String(identityProviderSigningServiceAccount))
-	if _, err := configureTranscriptShadow(ctx, c, db, chatWriter, orgEncryption, tracerProvider, meterProvider); err != nil {
-		return err
-	}
 	issuerGate := newInternalSessionIssuerGate(c, db, featureFlags, false)
 	issuerSigner := internalsessionissuers.NewSigner(logger, tracerProvider, meterProvider, db, issuerGate, gcpIdentity, kmsSigningClients, internalIssuerSignerConfig(c, callbackOrigins.Outbound))
 	issuerGate.SetSigningAuthority(issuerSigner.CheckAuthority)

@@ -47,7 +47,7 @@ func testCascade(t *testing.T, probability float64, response string) (*Cascade, 
 	}
 	jev.On("Evaluate", mock.Anything, "org-a", mock.Anything, mock.Anything).Return(typesafe.Result{Probabilities: probabilities, Model: typesafe.Model, InputTokens: 10, OutputTokens: 1, CostUSD: 0.001}, nil)
 	client := &fakeCompletionClient{responder: func(string) string { return response }}
-	cascade := NewCascade(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), client, jev, judgemessage.NewWindowLoader(nil).Load)
+	cascade := NewCascade(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), client, jev, judgemessage.NewWindowLoader(nil, nil).Load)
 	return cascade, client
 }
 

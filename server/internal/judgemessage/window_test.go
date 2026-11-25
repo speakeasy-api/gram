@@ -2,13 +2,13 @@ package judgemessage
 
 import (
 	"encoding/json"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"strings"
 	"testing"
 	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/message"
-	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/stretchr/testify/require"
 )
 
@@ -16,7 +16,7 @@ func TestWindowPreservesTargetAndNeighbors(t *testing.T) {
 	t.Parallel()
 	target := New(message.ToolResponse, "read_file", "target content")
 	target.AnchorID = uuid.New()
-	rows := []repo.GetJudgeMessageWindowRow{
+	rows := []transcriptstore.JudgeWindowMessage{
 		{ID: uuid.New(), Role: "user", Content: "review this example", ToolCalls: "[]"},
 		{ID: uuid.New(), Role: "assistant", Content: "", ToolCalls: `[{"function":{"name":"read_file","arguments":"{}"}}]`},
 		{ID: target.AnchorID, Role: "tool", Content: "stored target", ToolCalls: "[]"},
@@ -43,9 +43,9 @@ func TestWindowMissingAnchorIsNotClean(t *testing.T) {
 func TestWindowLiveHistoryAppendsTarget(t *testing.T) {
 	t.Parallel()
 	target := New(message.User, "", "target")
-	rows := make([]repo.GetJudgeMessageWindowRow, 4)
+	rows := make([]transcriptstore.JudgeWindowMessage, 4)
 	for i := range rows {
-		rows[i] = repo.GetJudgeMessageWindowRow{ID: uuid.New(), Role: "user", Content: "history", ToolCalls: "[]"}
+		rows[i] = transcriptstore.JudgeWindowMessage{ID: uuid.New(), Role: "user", Content: "history", ToolCalls: "[]"}
 	}
 	window, err := windowFromRows(target, rows)
 	require.NoError(t, err)
@@ -56,7 +56,7 @@ func TestWindowLiveHistoryAppendsTarget(t *testing.T) {
 
 func TestWindowUnlinkedDoesNotQuery(t *testing.T) {
 	t.Parallel()
-	window, err := NewWindowLoader(nil).Load(t.Context(), "", "", New(message.User, "", "target"))
+	window, err := NewWindowLoader(nil, nil).Load(t.Context(), "", "", New(message.User, "", "target"))
 	require.NoError(t, err)
 	require.Len(t, window.Messages, 1)
 }
@@ -64,7 +64,7 @@ func TestWindowUnlinkedDoesNotQuery(t *testing.T) {
 func TestWindowReportsTruncatedContext(t *testing.T) {
 	t.Parallel()
 	target := New(message.User, "", "target")
-	window, err := windowFromRows(target, []repo.GetJudgeMessageWindowRow{{ID: uuid.New(), Role: "tool", Content: strings.Repeat("界", MaxTrajectoryBodyRunes+1), ToolCalls: "[]"}})
+	window, err := windowFromRows(target, []transcriptstore.JudgeWindowMessage{{ID: uuid.New(), Role: "tool", Content: strings.Repeat("界", MaxTrajectoryBodyRunes+1), ToolCalls: "[]"}})
 	require.NoError(t, err)
 	require.True(t, window.Messages[0].BodyTruncated)
 	require.LessOrEqual(t, utf8.RuneCountInString(window.Messages[0].Body), MaxTrajectoryBodyRunes)
@@ -74,7 +74,7 @@ func TestWindowReportsTruncatedContext(t *testing.T) {
 
 func TestWindowMalformedToolContextFails(t *testing.T) {
 	t.Parallel()
-	_, err := windowFromRows(New(message.User, "", "target"), []repo.GetJudgeMessageWindowRow{{ID: uuid.New(), Role: "assistant", Content: "", ToolCalls: "[{"}})
+	_, err := windowFromRows(New(message.User, "", "target"), []transcriptstore.JudgeWindowMessage{{ID: uuid.New(), Role: "assistant", Content: "", ToolCalls: "[{"}})
 	require.Error(t, err)
 }
 
@@ -82,7 +82,7 @@ func TestWindowLegacyToolCalls(t *testing.T) {
 	t.Parallel()
 	calls, err := json.Marshal(`[{"function":{"name":"read_file","arguments":"{}"}}]`)
 	require.NoError(t, err)
-	window, err := windowFromRows(New(message.User, "", "target"), []repo.GetJudgeMessageWindowRow{{ID: uuid.New(), Role: "assistant", Content: "", ToolCalls: string(calls)}})
+	window, err := windowFromRows(New(message.User, "", "target"), []transcriptstore.JudgeWindowMessage{{ID: uuid.New(), Role: "assistant", Content: "", ToolCalls: string(calls)}})
 	require.NoError(t, err)
 	require.Equal(t, "read_file", window.Messages[0].ToolCalls[0].Tool.Name)
 	require.Equal(t, "{}", window.Messages[0].ToolCalls[0].Arguments)

@@ -22,6 +22,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"log/slog"
 	"regexp"
 	"strings"
@@ -89,10 +90,13 @@ type ReconcileArgs struct {
 // Reconcile flags/unflags stored findings to match an exclusion's current
 // state, in Postgres and ClickHouse.
 type Reconcile struct {
-	logger *slog.Logger
-	tracer trace.Tracer
-	db     *pgxpool.Pool
-	ch     *chrepo.Queries
+	// transcripts reads anchored message bodies for regex reconcile, opening
+	// encrypted shadows for the projects that keep them.
+	transcripts *transcriptstore.Transcripts
+	logger      *slog.Logger
+	tracer      trace.Tracer
+	db          *pgxpool.Pool
+	ch          *chrepo.Queries
 	// disableRiskRetroReconcile explicitly disables the ClickHouse phases.
 	disableRiskRetroReconcile bool
 	// fingerprinter matches exact-value exclusions against the tenant
@@ -106,6 +110,13 @@ type Reconcile struct {
 
 	chRows    metric.Int64Counter
 	chSkipped metric.Int64Counter
+}
+
+// WithTranscripts makes regex reconcile read anchored message bodies from
+// encrypted shadows for the projects that keep them.
+func (a *Reconcile) WithTranscripts(transcripts *transcriptstore.Transcripts) *Reconcile {
+	a.transcripts = transcripts
+	return a
 }
 
 func NewReconcile(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, ch *chrepo.Queries, fingerprinter risk.Fingerprinter, assetStorage blobio.Reader, disableRiskRetroReconcile bool) *Reconcile {
@@ -656,7 +667,7 @@ func (a *Reconcile) forEachRegexCandidate(
 // no unmask audit entry is written, mirroring scan-time matching.
 func (a *Reconcile) chApplyRegex(ctx context.Context, run *chRun, ex repo.RiskExclusion, re *regexp.Regexp, startDay string) error {
 	predicate := regexPredicate(ex)
-	reveal := risk.NewRevealMatcher(a.logger, repo.New(a.db), a.assetStorage)
+	reveal := risk.NewRevealMatcher(a.logger, a.db, a.transcripts, a.assetStorage)
 
 	var total int
 	for _, day := range run.days(startDay) {
@@ -729,7 +740,7 @@ func (a *Reconcile) chApplyRegex(ctx context.Context, run *chRun, ex repo.RiskEx
 // never make.
 func (a *Reconcile) chReverseRegex(ctx context.Context, run *chRun, ex repo.RiskExclusion, re *regexp.Regexp, startDay string) error {
 	scopeKeep := regexPredicate(ex).KeepScope()
-	reveal := risk.NewRevealMatcher(a.logger, repo.New(a.db), a.assetStorage)
+	reveal := risk.NewRevealMatcher(a.logger, a.db, a.transcripts, a.assetStorage)
 
 	var total uint64
 	var kept int

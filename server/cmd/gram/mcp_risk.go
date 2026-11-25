@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -93,13 +94,14 @@ func newMCPRiskEvaluator(
 	shadowMCPClient *shadowmcp.Client,
 	toolIOLogsEnabled telemetry.FeatureChecker,
 	approvals mcpriskscan.ApprovalGate,
+	transcripts *transcriptstore.Transcripts,
 ) (*mcpriskscan.Evaluator, *risk.Scanner, error) {
 	var piiScanner ra.PIIScanner
 	if presidioURL := c.String("presidio-analyzer-url"); presidioURL != "" {
 		piiScanner = ra.NewPresidioClient(presidioURL, tracerProvider, meterProvider, logger)
 	}
 	judgeLimiter := gramopenrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient))
-	piScanner := promptinjection.NewScanner(logger, newPICascade(c.Context, logger, tracerProvider, meterProvider, completions, guardianPolicy, provisioner, orEndpoints, db).Classify)
+	piScanner := promptinjection.NewScanner(logger, newPICascade(c.Context, logger, tracerProvider, meterProvider, completions, guardianPolicy, provisioner, orEndpoints, db, transcripts).Classify)
 	promptPolicyScanner := promptpolicy.NewScanner(logger, ppopenrouter.New(logger, tracerProvider, meterProvider, completions, judgeLimiter).Evaluate)
 	celEngine, err := celenv.New()
 	if err != nil {

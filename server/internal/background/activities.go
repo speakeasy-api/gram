@@ -301,6 +301,7 @@ func NewActivities(
 	if err != nil {
 		panic(fmt.Errorf("new analyze batch: %w", err))
 	}
+	analyzeBatch.WithTranscripts(transcripts)
 
 	telemetryLogPublisher := telemetry.NewLogPublisher(logger, tracerProvider, meterProvider, publishers.TelemetryLogs)
 
@@ -483,7 +484,7 @@ func NewActivities(
 		fetchUnanalyzedMessages:          risk_analysis.NewFetchUnanalyzed(logger, tracerProvider, db),
 		analyzeBatch:                     analyzeBatch,
 		markMessagesAnalyzed:             risk_analysis.NewMarkMessagesAnalyzed(logger, tracerProvider, db),
-		reconcileExclusion:               risk_exclusion.NewReconcile(logger, tracerProvider, meterProvider, db, riskFindingsCH, riskFingerprinter, assetStorage, disableRiskRetroReconcile),
+		reconcileExclusion:               risk_exclusion.NewReconcile(logger, tracerProvider, meterProvider, db, riskFindingsCH, riskFingerprinter, assetStorage, disableRiskRetroReconcile).WithTranscripts(transcripts),
 		skillObservationReconciler:       activities.NewSkillObservationReconciler(db, telemetryRepo),
 		cleanRiskPolicyResults:           risk_policy.NewCleanup(logger, tracerProvider, db),
 		admitAssistantThreads:            activities.NewAdmitAssistantThreads(assistantsCore),

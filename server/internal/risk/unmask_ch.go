@@ -79,7 +79,7 @@ func (s *Service) unmaskRiskResultFromClickHouse(ctx context.Context, authCtx *c
 		return s.finishRiskResultUnmask(ctx, authCtx, row.ID, chatID, match)
 	}
 
-	reveal := NewRevealMatcher(s.logger, s.repo, s.assetStorage)
+	reveal := NewRevealMatcher(s.logger, s.db, s.transcripts, s.assetStorage)
 	anchor := reveal.LoadAnchor(ctx, projectID, row)
 
 	// The chat gate runs on the ingest-stamped chat id, falling back to the
