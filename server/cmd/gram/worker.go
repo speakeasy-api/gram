@@ -365,7 +365,7 @@ func newWorkerCommand() *cli.Command {
 	flags = append(flags, assistantRuntimeFlags()...)
 	flags = append(flags, identityProviderConnectionFlags()...)
 	flags = append(flags, orgEncryptionFlags()...)
-	flags = append(flags, transcriptShadowFlag(), transcriptShadowReadFlag())
+	flags = append(flags, transcriptShadowFlag())
 	flags = append(flags, pluginsFlags()...)
 	flags = append(flags, pluginPublicationEmitFlag())
 	flags = append(flags, posthogFlags()...)
@@ -924,7 +924,7 @@ func newWorkerCommand() *cli.Command {
 				SlackDirectoryTokenRefresher:   slackDirectoryRefresher,
 				ChatMessageWriter:              chatWriter,
 				TranscriptShadow:               shadow.Store,
-				TranscriptShadowReadProjectIDs: shadow.ReadProjectIDs,
+				TranscriptShadowProjectIDs:     shadow.ProjectIDs,
 				ChatClient:                     chatClient,
 				OpenRouter:                     openRouter,
 				OpenRouterSpend:                openRouter,

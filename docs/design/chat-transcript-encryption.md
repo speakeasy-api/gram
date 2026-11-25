@@ -9,8 +9,8 @@ reads, and backfills a bounded project-scoped page at a time. Shared message wri
 can capture these copies atomically with the original message and outbox events.
 **Only the dashboard chat load (`chat.load`) and risk batch scans
 (`risk_analysis.AnalyzeBatch`, which opens each batch and its context messages
-in one `LoadMany` call) can read through shadows, and only for projects on the
-read allowlist; messages without a shadow fall back to plaintext. Every other
+in one `LoadMany` call) can read through shadows, and only for projects that
+capture shadows; messages without a shadow fall back to plaintext. Every other
 reader, including risk reveals and exclusion reconciles, still uses legacy data.
 Plaintext and existing assets are not removed.** The `chat-transcripts` use case has an independent DEK per
 organization; it does not reuse OAuth or gateway-state keys.
@@ -103,12 +103,10 @@ rollout, migrate those writes too and establish a fenced plaintext-removal proto
 
 ## Shadow reads
 
-`--chat-transcript-shadow-read-project-ids`
-(`GRAM_CHAT_TRANSCRIPT_SHADOW_READ_PROJECT_IDS`) is a second, server-only
-allowlist. Every project on it must also be on the capture allowlist, or the
-server refuses to start. For these projects `chat.load` opens each page's message
-bodies with `Store.LoadMany` and serves the opened `content`, `content_raw` and
-`tool_calls` in place of the plaintext columns.
+Reads use the capture allowlist, so no project reads shadows that capture
+stopped keeping current. For every project that captures shadows, `chat.load`
+opens each page's message bodies with `Store.LoadMany` and serves the opened
+`content`, `content_raw` and `tool_calls` in place of the plaintext columns.
 
 `LoadMany` leaves out any message that has no shadow at all, and `chat.load`
 serves that message's plaintext body. Messages written before capture began, or

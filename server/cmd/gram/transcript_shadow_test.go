@@ -23,7 +23,7 @@ func newTranscriptShadowCLIContext(t *testing.T, values map[string]string) *cli.
 	// Apply the flags without their environment variables, so a developer's
 	// shell cannot change what these tests see. Parallel tests cannot use
 	// t.Setenv, so the isolation lives here.
-	for _, f := range []cli.Flag{transcriptShadowFlag(), transcriptShadowReadFlag()} {
+	for _, f := range []cli.Flag{transcriptShadowFlag()} {
 		sliceFlag, ok := f.(*cli.StringSliceFlag)
 		require.True(t, ok)
 		withoutEnv := *sliceFlag
@@ -39,43 +39,12 @@ func newTranscriptShadowCLIContext(t *testing.T, values map[string]string) *cli.
 func TestTranscriptShadowDisabled(t *testing.T) {
 	t.Setenv("GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS", "")
 	require.NoError(t, os.Unsetenv("GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS"))
-	t.Setenv("GRAM_CHAT_TRANSCRIPT_SHADOW_READ_PROJECT_IDS", "")
-	require.NoError(t, os.Unsetenv("GRAM_CHAT_TRANSCRIPT_SHADOW_READ_PROJECT_IDS"))
 	c := newTranscriptShadowCLIContext(t, nil)
 	require.Empty(t, c.StringSlice(chatTranscriptShadowProjectIDsFlag))
 	shadow, err := configureTranscriptShadow(t.Context(), c, nil, nil, orgEncryptionDeps{}, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t))
 	require.NoError(t, err)
 	require.Nil(t, shadow.Store)
-	require.Empty(t, shadow.ReadProjectIDs)
-}
-
-func TestTranscriptShadowReadProjectsMustCapture(t *testing.T) {
-	t.Parallel()
-	first := uuid.MustParse("10000000-0000-4000-8000-000000000001")
-	second := uuid.MustParse("10000000-0000-4000-8000-000000000002")
-
-	ids, err := transcriptShadowReadProjects([]uuid.UUID{first, second}, []string{second.String(), second.String()})
-	require.NoError(t, err)
-	require.Equal(t, []uuid.UUID{second}, ids)
-
-	ids, err = transcriptShadowReadProjects([]uuid.UUID{first}, nil)
-	require.NoError(t, err)
-	require.Empty(t, ids)
-
-	_, err = transcriptShadowReadProjects([]uuid.UUID{first}, []string{second.String()})
-	require.EqualError(t, err, "a chat transcript shadow read project does not capture shadows")
-	require.NotContains(t, err.Error(), second.String())
-
-	_, err = transcriptShadowReadProjects([]uuid.UUID{first}, []string{"not-a-uuid"})
-	require.Error(t, err)
-}
-
-func TestTranscriptShadowRejectsReadsWithoutCapture(t *testing.T) {
-	t.Setenv("GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS", "")
-	require.NoError(t, os.Unsetenv("GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS"))
-	c := newTranscriptShadowCLIContext(t, map[string]string{chatTranscriptShadowReadProjectsFlag: "10000000-0000-4000-8000-000000000001"})
-	_, err := configureTranscriptShadow(t.Context(), c, nil, nil, orgEncryptionDeps{}, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t))
-	require.EqualError(t, err, "chat transcript shadow reads require the same projects to capture shadows")
+	require.Empty(t, shadow.ProjectIDs)
 }
 
 func TestTranscriptShadowProjectIDs(t *testing.T) {
@@ -122,14 +91,6 @@ func TestTranscriptShadowFlags(t *testing.T) {
 	}
 	for _, command := range []*cli.Command{newStartCommand(), newWorkerCommand(), newMCPCommand(), newNetworkIngressServerCommand()} {
 		requireFlag(t, command.Flags, chatTranscriptShadowProjectIDsFlag)
-	}
-	// The server serves chat reads; the worker runs risk batch scans.
-	requireFlag(t, newStartCommand().Flags, chatTranscriptShadowReadProjectsFlag)
-	requireFlag(t, newWorkerCommand().Flags, chatTranscriptShadowReadProjectsFlag)
-	for _, command := range []*cli.Command{newMCPCommand(), newNetworkIngressServerCommand(), newAdminCommand()} {
-		for _, item := range command.Flags {
-			require.NotContains(t, item.Names(), chatTranscriptShadowReadProjectsFlag, command.Name)
-		}
 	}
 }
 

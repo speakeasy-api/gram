@@ -7,15 +7,14 @@ import (
 )
 
 const (
-	chatTranscriptShadowProjectIDsFlag   = "chat-transcript-shadow-project-ids"
-	chatTranscriptShadowReadProjectsFlag = "chat-transcript-shadow-read-project-ids"
-	orgEncryptionKMSKeyRingFlag          = "org-encryption-kms-key-ring"
-	orgEncryptionCredentialIDFlag        = "org-encryption-credential-id"
-	orgEncryptionServiceAccountFlag      = "org-encryption-service-account"
-	orgEncryptionSwitchGracePeriodFlag   = "org-encryption-switch-grace-period"
-	orgEncryptionManagedKeyRetention     = "org-encryption-managed-key-retention"
-	orgEncryptionDisabledFlag            = "org-encryption-disabled"
-	orgEncryptionKMSKeyRingLocalDefault  = "projects/gram-local/locations/global/keyRings/org-encryption"
+	chatTranscriptShadowProjectIDsFlag  = "chat-transcript-shadow-project-ids"
+	orgEncryptionKMSKeyRingFlag         = "org-encryption-kms-key-ring"
+	orgEncryptionCredentialIDFlag       = "org-encryption-credential-id"
+	orgEncryptionServiceAccountFlag     = "org-encryption-service-account"
+	orgEncryptionSwitchGracePeriodFlag  = "org-encryption-switch-grace-period"
+	orgEncryptionManagedKeyRetention    = "org-encryption-managed-key-retention"
+	orgEncryptionDisabledFlag           = "org-encryption-disabled"
+	orgEncryptionKMSKeyRingLocalDefault = "projects/gram-local/locations/global/keyRings/org-encryption"
 )
 
 // orgEncryptionFlags configures organization encryption for processes that
@@ -68,18 +67,7 @@ func orgEncryptionServiceFlags() []cli.Flag {
 func transcriptShadowFlag() cli.Flag {
 	return &cli.StringSliceFlag{
 		Name:    chatTranscriptShadowProjectIDsFlag,
-		Usage:   "Explicit project UUIDs to write encrypted chat transcript shadow copies for; retains plaintext and does not backfill existing messages. Disabled by default.",
+		Usage:   "Explicit project UUIDs to write encrypted chat transcript shadow copies for, and whose chat reads open them; retains plaintext and does not backfill existing messages. Messages without a shadow are served from plaintext; a stale or unauthentic shadow fails the read. Disabled by default.",
 		EnvVars: []string{"GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS"},
-	}
-}
-
-// transcriptShadowReadFlag routes chat reads through encrypted shadows. The
-// server registers it for chat loads and its in-process worker, and the worker
-// for risk batch scans.
-func transcriptShadowReadFlag() cli.Flag {
-	return &cli.StringSliceFlag{
-		Name:    chatTranscriptShadowReadProjectsFlag,
-		Usage:   "Explicit project UUIDs whose chat reads and risk batch scans open encrypted transcript shadows instead of plaintext. Each must also be in --" + chatTranscriptShadowProjectIDsFlag + ". Messages without a shadow are served from plaintext; a stale or unauthentic shadow fails the read. Disabled by default.",
-		EnvVars: []string{"GRAM_CHAT_TRANSCRIPT_SHADOW_READ_PROJECT_IDS"},
 	}
 }
