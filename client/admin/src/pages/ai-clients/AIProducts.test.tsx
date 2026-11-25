@@ -119,9 +119,9 @@ beforeEach(() => {
         (product) =>
           (includeDeleted || !product.deleted) &&
           (!query ||
-            `${product.displayName} ${product.id}`
-              .toLowerCase()
-              .includes(query.toLowerCase())),
+            [product.displayName, product.id].some((field) =>
+              field.toLowerCase().includes(query.toLowerCase()),
+            )),
       ),
       truncated: false,
     }),
