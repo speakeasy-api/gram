@@ -108,7 +108,7 @@ func seedChainedConsentEndpoint(t *testing.T, tag string) (context.Context, cons
 	ctx, fx := standaloneConsent(t, tag, consentChainedUpstream, func(ctx context.Context, ti *testInstance, projectID, issuerID uuid.UUID, slug string) uuid.UUID {
 		return attachConsentRemoteMcpServer(t, ctx, ti.conn, projectID, issuerID, slug, consentChainedUpstream)
 	})
-	fx.clientA = createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, tag, "", []uuid.UUID{fx.shared})
+	fx.clientA = createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, tag, "")
 	seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, fx.endpoint.McpServerID.UUID, fx.clientA, authz.AuthClientTypeEMA)
 	seedPrincipalMCPConnectGrant(t, ctx, fx.ti, fx.orgID, urn.NewPrincipal(urn.PrincipalTypeUser, fx.subject.ID), fx.endpoint.McpServerID.UUID)
 	return ctx, fx, clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, fx.clientA)
@@ -246,7 +246,7 @@ func TestConsentPage_DirectTunneledServiceIsManaged(t *testing.T) {
 		serverID = createTunneledServer(t, ctx, ti, projectID, issuerID, slug, identifier)
 		return serverID
 	})
-	fx.clientA = createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim480-tunnel-chained", "", []uuid.UUID{fx.shared})
+	fx.clientA = createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim480-tunnel-chained", "")
 	seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, serverID, fx.clientA, authz.AuthClientTypeEMA)
 	issuer := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, fx.clientA)
 	stampRemoteSessionIssuer(t, ctx, fx.ti.conn, fx.projectID, serverID, conv.ToNullUUID(issuer))

@@ -20,7 +20,8 @@ CREATE TABLE "chat_message_transcript_tool_calls" (
   "project_id" uuid NOT NULL,
   "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY ("message_id", "tool_call_id"),
-  CONSTRAINT "chat_message_transcript_tool_calls_message_id_fkey" FOREIGN KEY ("message_id") REFERENCES "chat_message_transcripts" ("message_id") ON UPDATE NO ACTION ON DELETE CASCADE
+  CONSTRAINT "chat_message_transcript_tool_calls_message_id_fkey" FOREIGN KEY ("message_id") REFERENCES "chat_message_transcripts" ("message_id") ON UPDATE NO ACTION ON DELETE CASCADE,
+  CONSTRAINT "chat_message_transcript_tool_calls_project_id_message_id_fkey" FOREIGN KEY ("project_id", "message_id") REFERENCES "chat_messages" ("project_id", "id") ON UPDATE NO ACTION ON DELETE CASCADE
 );
 -- Create index "chat_message_transcript_tool_calls_chat_id_tool_call_id_idx" to table: "chat_message_transcript_tool_calls"
 CREATE INDEX "chat_message_transcript_tool_calls_chat_id_tool_call_id_idx" ON "chat_message_transcript_tool_calls" ("chat_id", "tool_call_id");

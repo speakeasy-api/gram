@@ -196,6 +196,7 @@ export function GatewayActivitySection({
                   to,
                   metaMcpServerId,
                   includeTimeSeries: true,
+                  toolCallsOnly: true,
                 },
               })
             : telemetryGetProjectGatewayOverview(client, {

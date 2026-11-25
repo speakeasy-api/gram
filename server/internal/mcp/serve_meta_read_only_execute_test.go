@@ -168,7 +168,7 @@ func seedReadOnlyProxiedGateway(t *testing.T, ctx context.Context, ti *testInsta
 	upstream := newRecordingUpstream(t, "ping")
 	serverID := seedMetaMemberWithUpstream(t, ctx, ti.conn, projectID, meta.ID, "Member A", "member-a", 0, upstream.url)
 
-	client := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-read-only-a", "", []uuid.UUID{issuerID})
+	client := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-read-only-a", "")
 	subject := createTestUser(t, ctx, ti, "meta-read-only-user-"+uuid.NewString())
 	insertQualifiedRemoteSessionToken(t, ctx, ti, issuerID, client, subject, "token-member-a", upstream.url)
 
