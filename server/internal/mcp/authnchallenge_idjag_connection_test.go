@@ -223,15 +223,15 @@ func TestIDJAGExchangeRecordsRefusals(t *testing.T) {
 			status: http.StatusBadRequest, body: `{"error":"invalid_target","error_description":"resource is not available to this user"}`,
 			what: mcpconnectionattempts.CodeNoServerAccess, who: mcpconnectionattempts.WhoAdmin, detail: "resource_not_available", subject: true,
 		},
-		"upstream choice the organization does not take": {
+		"upstream choice for an unreachable server": {
 			granted: true,
 			form: func(f idJAGOutageFixture, assertion string) url.Values {
 				form := idJAGForm(f.clientID, assertion)
 				form.Set("upstream_auth_client", uuid.NewString()+":none")
 				return form
 			},
-			status: http.StatusBadRequest, body: `{"error":"invalid_request","error_description":"upstream_auth_client is not accepted for this organization yet"}`,
-			what: mcpconnectionattempts.CodeUpstreamCredentialChoice, who: mcpconnectionattempts.WhoApp, detail: "choice_not_accepted", subject: true,
+			status: http.StatusBadRequest, body: `{"error":"invalid_request","error_description":"upstream_auth_client names a server this token does not reach"}`,
+			what: mcpconnectionattempts.CodeCredentialChoiceInvalid, who: mcpconnectionattempts.WhoApp, detail: "choice_server_not_reached", subject: true,
 		},
 		"malformed upstream choice": {
 			granted: true,

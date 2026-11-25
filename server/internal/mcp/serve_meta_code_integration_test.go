@@ -576,9 +576,9 @@ func TestCodeModeReconnectUpdatesFrozenCatalog(t *testing.T) {
 			var permitCallers func() []string
 			if tc.typedAuth {
 				permitCallers = ti.service.RecordAuthClientPermitCallers()
-				_, err := productfeaturesrepo.New(ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: auth.ActiveOrganizationID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
-				require.NoError(t, err)
 			}
+			_, err := productfeaturesrepo.New(ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: auth.ActiveOrganizationID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
+			require.NoError(t, err)
 			other := newCatalogUpstream(t, 2)
 			// Different servers can have the same display name.
 			seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "tracker", "other-tracker", 1, other.url)

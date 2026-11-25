@@ -204,7 +204,7 @@ func TestCatalogConsentDescribeAndStatusFollowTheCall(t *testing.T) {
 			}
 			for _, mode := range modes {
 				gate.catalogRef.Mode = mode
-				row := s.memberSignInStatus(t.Context(), logger, gate, member, nil)
+				row := s.memberSignInStatus(t.Context(), logger, gate, member, nil, nil)
 				require.Nil(t, row.Outage, mode)
 				require.Equal(t, unnamed, row.Detail, mode)
 				require.Equal(t, wantStatus, row.Status, mode)
@@ -351,7 +351,7 @@ func TestCatalogConsentStatusReadsRecordNothing(t *testing.T) {
 	approveChangedMember(gate, &member, toolfilter.CatalogModeLive, false)
 	backend := &metaCodeBackend{service: s}
 
-	require.Equal(t, metamcp.SignInNeedsConsent, s.memberSignInStatus(t.Context(), logger, gate, member, nil).Status)
+	require.Equal(t, metamcp.SignInNeedsConsent, s.memberSignInStatus(t.Context(), logger, gate, member, nil, nil).Status)
 	require.Equal(t, "required", backend.knownConnectionState(t.Context(), gate, member, nil).Consent)
 	_, err := backend.connectRefusal(t.Context(), gate, member)
 	require.NoError(t, err)

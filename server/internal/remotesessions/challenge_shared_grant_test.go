@@ -160,7 +160,7 @@ func TestRemoteSessionStatuses_FindsGrantMintedByDifferentIssuer(t *testing.T) {
 	require.Equal(t, remotesessions.RemoteSessionActive, statuses[fx.clientID].Status)
 }
 
-func TestSetRemoteSessionAutoRefresh_FindsGrantMintedByDifferentIssuer(t *testing.T) {
+func TestSetAuthClientRemoteSessionAutoRefresh_FindsGrantMintedByDifferentIssuer(t *testing.T) {
 	t.Parallel()
 
 	ctx, fx := seedSharedGrantAcrossIssuers(t)
@@ -171,6 +171,10 @@ func TestSetRemoteSessionAutoRefresh_FindsGrantMintedByDifferentIssuer(t *testin
 	requireBoundClient(t, bound, fx.clientID)
 
 	n, err := fx.mgr.SetRemoteSessionAutoRefresh(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerB, fx.clientID, true)
+	require.NoError(t, err)
+	require.Zero(t, n, "a compatibility link must not authorize a cross-issuer preference change")
+
+	n, err = fx.mgr.SetAuthClientRemoteSessionAutoRefresh(ctx, fx.subject, fx.projectID, fx.organizationID, fx.clientID, true)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), n)
 
@@ -183,7 +187,7 @@ func TestSetRemoteSessionAutoRefresh_FindsGrantMintedByDifferentIssuer(t *testin
 	require.Equal(t, fx.issuerA, active.UserSessionIssuerID)
 }
 
-func TestDisconnectRemoteSession_FindsGrantMintedByDifferentIssuer(t *testing.T) {
+func TestDisconnectAuthClientRemoteSession_FindsGrantMintedByDifferentIssuer(t *testing.T) {
 	t.Parallel()
 
 	ctx, fx := seedSharedGrantAcrossIssuers(t)
@@ -192,6 +196,10 @@ func TestDisconnectRemoteSession_FindsGrantMintedByDifferentIssuer(t *testing.T)
 	requireBoundClient(t, bound, fx.clientID)
 
 	n, err := fx.mgr.DisconnectRemoteSession(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerB, fx.clientID)
+	require.NoError(t, err)
+	require.Zero(t, n, "a compatibility link must not authorize a cross-issuer disconnect")
+
+	n, err = fx.mgr.DisconnectAuthClientRemoteSession(ctx, fx.subject, fx.projectID, fx.organizationID, fx.clientID)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), n)
 
@@ -306,7 +314,7 @@ func TestRemoteSessionStatuses_FindsGrantAfterMintingIssuerSoftDeleted(t *testin
 	require.Equal(t, remotesessions.RemoteSessionActive, statuses[fx.clientID].Status)
 }
 
-func TestSetRemoteSessionAutoRefresh_FindsGrantAfterMintingIssuerSoftDeleted(t *testing.T) {
+func TestSetAuthClientRemoteSessionAutoRefresh_FindsGrantAfterMintingIssuerSoftDeleted(t *testing.T) {
 	t.Parallel()
 
 	ctx, fx := seedSharedGrantThenSoftDeleteMintingIssuer(t)
@@ -314,7 +322,7 @@ func TestSetRemoteSessionAutoRefresh_FindsGrantAfterMintingIssuerSoftDeleted(t *
 	bound := listBoundClientIDs(t, ctx, fx, fx.issuerB)
 	requireBoundClient(t, bound, fx.clientID)
 
-	n, err := fx.mgr.SetRemoteSessionAutoRefresh(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerB, fx.clientID, true)
+	n, err := fx.mgr.SetAuthClientRemoteSessionAutoRefresh(ctx, fx.subject, fx.projectID, fx.organizationID, fx.clientID, true)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), n)
 
@@ -326,7 +334,7 @@ func TestSetRemoteSessionAutoRefresh_FindsGrantAfterMintingIssuerSoftDeleted(t *
 	require.True(t, active.AutoRefresh)
 }
 
-func TestDisconnectRemoteSession_FindsGrantAfterMintingIssuerSoftDeleted(t *testing.T) {
+func TestDisconnectAuthClientRemoteSession_FindsGrantAfterMintingIssuerSoftDeleted(t *testing.T) {
 	t.Parallel()
 
 	ctx, fx := seedSharedGrantThenSoftDeleteMintingIssuer(t)
@@ -334,7 +342,7 @@ func TestDisconnectRemoteSession_FindsGrantAfterMintingIssuerSoftDeleted(t *test
 	bound := listBoundClientIDs(t, ctx, fx, fx.issuerB)
 	requireBoundClient(t, bound, fx.clientID)
 
-	n, err := fx.mgr.DisconnectRemoteSession(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerB, fx.clientID)
+	n, err := fx.mgr.DisconnectAuthClientRemoteSession(ctx, fx.subject, fx.projectID, fx.organizationID, fx.clientID)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), n)
 
@@ -433,7 +441,7 @@ func TestListClients_ResolvesSharedClientThroughSecondIssuer(t *testing.T) {
 
 	// ListClients is the allowlist ServeConsentAction re-resolves posted
 	// client_id against. A UUID from another project is not returned, so a
-	// crafted form posting it never reaches SetRemoteSessionAutoRefresh.
+	// crafted form posting it never reaches the typed preference write.
 
 	statuses, err := fx.mgr.RemoteSessionStatuses(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerB)
 	require.NoError(t, err)
@@ -442,7 +450,7 @@ func TestListClients_ResolvesSharedClientThroughSecondIssuer(t *testing.T) {
 	require.False(t, leaked)
 
 	for _, clientID := range bound {
-		n, err := fx.mgr.SetRemoteSessionAutoRefresh(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerB, clientID, true)
+		n, err := fx.mgr.SetAuthClientRemoteSessionAutoRefresh(ctx, fx.subject, fx.projectID, fx.organizationID, clientID, true)
 		require.NoError(t, err)
 		require.Equal(t, int64(1), n)
 	}

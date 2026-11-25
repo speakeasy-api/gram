@@ -17,6 +17,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	authclientfixtures "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -454,4 +456,52 @@ func TestSharedAuthorizationServer_MetadataOmitsIDJAG(t *testing.T) {
 			require.NotContains(t, metadata.Profiles, oauthwire.GrantProfileIDJAG)
 		})
 	}
+}
+
+func TestSharedAuthorizationServer_IDJAGRecordsTypedUpstreamChoice(t *testing.T) {
+	t.Parallel()
+	ctx, ti, signer, f := sharedIDJAGFixture(t)
+	auth := requireProjectAuthContext(t, ctx)
+	slug := "idjag-typed-choice"
+	serverID := attachConsentRemoteMcpServer(t, ctx, ti.conn, *auth.ProjectID, f.issuer.ID, slug, "https://mcp.example.test/stream")
+	_, err := mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{ProjectID: *auth.ProjectID, McpServerID: conv.ToNullUUID(serverID), Slug: slug})
+	require.NoError(t, err)
+	seedPrincipalMCPConnectGrant(t, ctx, ti, auth.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, mockidp.MockUserID), serverID)
+	clientID := seedStaticIssuanceOffer(t, ctx, ti, auth.ActiveOrganizationID, *auth.ProjectID, serverID)
+	resource := f.resource(ti, slug)
+	form := url.Values{
+		oauthwire.ParamGrantType: {oauthwire.GrantTypeJWTBearer},
+		oauthwire.ParamClientID:  {f.client.ClientID},
+		oauthwire.ParamAssertion: {signer.sign(t, sharedTestUpstreamIssuer, f.issuerURL, resource, f.client.ClientID, mockidp.MockUserEmail, uuid.NewString())},
+		oauthwire.ParamResource:  {resource},
+		"upstream_auth_client":   {serverID.String() + ":" + clientID.String()},
+	}
+	w := sharedToken(t, ctx, ti, f.issuer.ID.String(), form)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	requireIssuedTypedChoice(t, ctx, ti, f.issuer.ID, serverID, clientID, w.Body.Bytes())
+}
+
+func seedStaticIssuanceOffer(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, projectID, serverID uuid.UUID) uuid.UUID {
+	t.Helper()
+	ti.service.SetAuthClientPermitted(true)
+	fixtures := authclientfixtures.New(ti.conn)
+	clientID, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: organizationID, ProjectID: conv.ToNullUUID(projectID), ClientType: "static_credential", Source: "admin", RemoteSessionClientID: uuid.NullUUID{}})
+	require.NoError(t, err)
+	require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: projectID, OrganizationID: organizationID, McpServerID: serverID, AuthClientID: clientID, Source: "admin"}))
+	require.NoError(t, fixtures.SeedAuthClientHeaderFixture(ctx, authclientfixtures.SeedAuthClientHeaderFixtureParams{AuthClientID: clientID, OrganizationID: organizationID, Name: "X-Test-Header", Value: conv.ToPGText("example")}))
+	return clientID
+}
+
+func requireIssuedTypedChoice(t *testing.T, ctx context.Context, ti *testInstance, issuerID, serverID, clientID uuid.UUID, response []byte) {
+	t.Helper()
+	claims := accessTokenClaims(t, response)
+	jti, ok := claims["jti"].(string)
+	require.True(t, ok)
+	policy, err := usersessionsrepo.New(ti.conn).GetUserSessionPolicyByJTI(ctx, usersessionsrepo.GetUserSessionPolicyByJTIParams{UserSessionIssuerID: issuerID, Jti: jti})
+	require.NoError(t, err)
+	choice, err := authclientfixtures.New(ti.conn).GetSelectionFixture(ctx, authclientfixtures.GetSelectionFixtureParams{CredentialID: policy.CredentialID, McpServerID: serverID})
+	require.NoError(t, err)
+	require.Equal(t, conv.ToNullUUID(clientID), choice.AuthClientID)
+	require.False(t, choice.RemoteSessionClientID.Valid)
+	require.False(t, choice.NoAuth)
 }

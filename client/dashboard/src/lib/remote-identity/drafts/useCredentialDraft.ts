@@ -1,15 +1,12 @@
 import type { RemoteMcpServerHeader } from "@gram/client/models/components/remotemcpserverheader.js";
-import type { useCreateRemoteMcpServerHeaderMutation } from "@gram/client/react-query/createRemoteMcpServerHeader.js";
-import type { useUpdateRemoteMcpServerHeaderMutation } from "@gram/client/react-query/updateRemoteMcpServerHeader.js";
 import { useForm, useStore } from "@tanstack/react-form";
 import { useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
 import {
   credentialFromHeader,
   encodeBasicCredential,
   type AgentCredentialFormat,
 } from "../model/credential";
-import { REDACTED_SECRET, secretToWireValue } from "../model/secret";
+import { secretToWireValue } from "../model/secret";
 
 /** Bullets rather than the literal secret, capped so a long token can't wrap
  * the preview into a paragraph. */
@@ -157,90 +154,5 @@ export function useAgentCredentialFields(
     isValid:
       format !== "client-credentials" && authorizationValue.trim() !== "",
     clear: (): void => form.reset(defaultValues),
-  };
-}
-
-export type AgentCredentialDraft = AgentCredentialFields & {
-  canSave: boolean;
-  saving: boolean;
-  save: () => Promise<boolean>;
-};
-
-/**
- * Owns the static Authorization credential every caller of this server shares.
- * The value is written to the backing Remote MCP source, so the section's Save
- * drives it rather than a button of its own.
- */
-export function useAgentCredentialDraft({
-  remoteMcpServerId,
-  authorizationHeader,
-  onSaved,
-  createHeader,
-  updateHeader,
-}: {
-  remoteMcpServerId: string;
-  authorizationHeader: RemoteMcpServerHeader | undefined;
-  onSaved: () => Promise<boolean>;
-  createHeader: ReturnType<typeof useCreateRemoteMcpServerHeaderMutation>;
-  updateHeader: ReturnType<typeof useUpdateRemoteMcpServerHeaderMutation>;
-}): AgentCredentialDraft {
-  const fields = useAgentCredentialFields(authorizationHeader);
-  const { authorizationValue, format, clear } = fields;
-  const saving = createHeader.isPending || updateHeader.isPending;
-
-  const save = async (): Promise<boolean> => {
-    if (format === "client-credentials" || authorizationValue.trim() === "") {
-      return false;
-    }
-    try {
-      if (authorizationHeader) {
-        const preserveRedacted = authorizationValue === REDACTED_SECRET;
-        await updateHeader.mutateAsync({
-          request: {
-            updateServerHeaderForm: {
-              id: authorizationHeader.id,
-              name: "Authorization",
-              isRequired: true,
-              isSecret: true,
-              value: preserveRedacted ? undefined : authorizationValue,
-            },
-          },
-        });
-      } else {
-        await createHeader.mutateAsync({
-          request: {
-            createServerHeaderForm: {
-              remoteMcpServerId,
-              name: "Authorization",
-              isRequired: true,
-              isSecret: true,
-              value: authorizationValue,
-            },
-          },
-        });
-      }
-      const refreshed = await onSaved();
-      if (!refreshed) {
-        toast.warning("Credential saved, but headers could not be refreshed.");
-        return true;
-      }
-      clear();
-      toast.success("Shared credential updated");
-      return true;
-    } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Failed to update shared credential",
-      );
-      return false;
-    }
-  };
-
-  return {
-    ...fields,
-    canSave: fields.isDirty && fields.isValid,
-    saving,
-    save,
   };
 }

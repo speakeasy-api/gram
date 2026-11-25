@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -91,7 +92,14 @@ func TestRefreshSweep_AttachmentOnlyLifecycle(t *testing.T) {
 				}
 				_, err = testrepo.New(ti.conn).SoftDeleteAttachmentConfigFixture(ctx, testrepo.SoftDeleteAttachmentConfigFixtureParams{ID: id, ProjectID: uuid.NullUUID{UUID: *auth.ProjectID, Valid: true}})
 			case "client-deleted":
-				_, err = testrepo.New(ti.conn).SoftDeleteAttachmentClientFixture(ctx, testrepo.SoftDeleteAttachmentClientFixtureParams{ID: session.RemoteSessionClientID, ProjectID: uuid.NullUUID{UUID: *auth.ProjectID, Valid: true}})
+				err = ti.service.DeleteRemoteSessionClient(ctx, &clientsgen.DeleteRemoteSessionClientPayload{ID: client, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+				require.NoError(t, err)
+				fixtures := testrepo.New(ti.conn)
+				_, err = fixtures.GetPrincipalRemoteSessionBindingSessionFixture(ctx, binding.ID)
+				require.NoError(t, err, "registration deletion physically removed the attachment")
+				active, err := fixtures.CountActivePrincipalRemoteSessionBindingsForSessionFixture(ctx, session.ID)
+				require.NoError(t, err)
+				require.Zero(t, active, "registration deletion did not retire the attachment")
 			case "issuer-deleted":
 				_, err = testrepo.New(ti.conn).SoftDeleteAttachmentIssuerFixture(ctx, testrepo.SoftDeleteAttachmentIssuerFixtureParams{ID: uuid.MustParse(issuer), ProjectID: uuid.NullUUID{UUID: *auth.ProjectID, Valid: true}})
 			case "project-deleted":

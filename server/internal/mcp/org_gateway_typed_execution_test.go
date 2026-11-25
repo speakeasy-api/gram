@@ -33,15 +33,25 @@ import (
 // consent grant becomes a runtime session. Selecting one must not widen its catalog.
 func TestOrganizationGatewayTypedPersonalConsentExecution(t *testing.T) {
 	t.Parallel()
-	for _, clientType := range []string{authz.AuthClientTypeRemoteSession, authz.AuthClientTypeEMA} {
-		t.Run(clientType, func(t *testing.T) {
+	for _, tc := range []struct {
+		name, clientType                   string
+		picker, alternate, repeat, inspect bool
+	}{
+		{name: "personal picker", clientType: authz.AuthClientTypeRemoteSession, picker: true, alternate: true},
+		{name: "gateway Inspect chooses OAuth over static", clientType: authz.AuthClientTypeRemoteSession, picker: true, inspect: true},
+		{name: "EMA picker", clientType: authz.AuthClientTypeEMA, picker: true, alternate: true},
+		{name: "sole EMA", clientType: authz.AuthClientTypeEMA},
+		{name: "default EMA with another offer", clientType: authz.AuthClientTypeEMA, alternate: true},
+		{name: "repeat consent to EMA", clientType: authz.AuthClientTypeEMA, repeat: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			testOrganizationGatewayTypedPersonalConsentExecution(t, clientType)
+			testOrganizationGatewayTypedPersonalConsentExecution(t, tc.clientType, tc.picker, tc.alternate, tc.repeat, tc.inspect)
 		})
 	}
 }
 
-func testOrganizationGatewayTypedPersonalConsentExecution(t *testing.T, clientType string) {
+func testOrganizationGatewayTypedPersonalConsentExecution(t *testing.T, clientType string, picker, alternate, repeat, inspect bool) {
 	t.Helper()
 	ctx, ti := newTestMCPService(t)
 	fx := seedOrganizationGateway(t, ctx, ti)
@@ -62,7 +72,14 @@ func testOrganizationGatewayTypedPersonalConsentExecution(t *testing.T, clientTy
 	mcp.ResetAuthEnforcementForTest(ti.service.Service)
 	clients := authclientsrepo.New(ti.conn)
 	var selectedClient uuid.UUID
-	for i, token := range []string{"unselected-personal-token", "selected-personal-token"} {
+	tokens := []string{"selected-personal-token"}
+	if picker && alternate {
+		tokens = append([]string{"unselected-personal-token"}, tokens...)
+	}
+	if (!picker && alternate) || inspect {
+		seedStaticIssuanceOffer(t, ctx, ti, ac.ActiveOrganizationID, projectID, serverID)
+	}
+	for i, token := range tokens {
 		// No registration is attached to the organization issuer.
 		registration := createConsentRemoteClient(t, ctx, ti.conn, projectID, ac.ActiveOrganizationID, "typed-"+uuid.NewString(), "", nil)
 		require.NoError(t, testrepo.New(ti.conn).InsertMCPServerRemoteSessionClientFixture(ctx, testrepo.InsertMCPServerRemoteSessionClientFixtureParams{ProjectID: projectID, OrganizationID: ac.ActiveOrganizationID, McpServerID: serverID, RemoteSessionClientID: registration}))
@@ -77,74 +94,143 @@ func testOrganizationGatewayTypedPersonalConsentExecution(t *testing.T, clientTy
 			insertQualifiedRemoteSessionToken(t, ctx, ti, fx.issuerID, registration, fx.subject, token, upstream.url)
 		}
 		seedPrincipalGrant(t, ctx, ti, ac.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, fx.subject.ID), authz.ScopeMCPAuth, client.ID.String())
-		if i == 1 {
+		if i == len(tokens)-1 {
 			selectedClient = client.ID
 			if clientType == authz.AuthClientTypeEMA {
 				ti.service.SetIdentityChainer(&singleUpstreamChainer{issuer: clientRemoteIssuerID(t, ctx, ti.conn, projectID, ac.ActiveOrganizationID, registration), upstream: upstream.url, usable: true})
 			}
 		}
 	}
-	client, err := usersessionsrepo.New(ti.conn).CreateUserSessionClient(ctx, usersessionsrepo.CreateUserSessionClientParams{UserSessionIssuerID: fx.issuerID, ClientID: "typed-consent-" + uuid.NewString(), ClientName: "Typed consent", RedirectUris: []string{"http://localhost:3000/callback"}, TokenEndpointAuthMethod: "none"})
+	clientID, callback := "typed-consent-"+uuid.NewString(), "http://localhost:3000/callback"
+	if inspect {
+		clientID, callback = "speakeasy-dashboard-inspect", "https://dashboard.example.test/inspect/oauth/callback"
+		ti.service.SetPlatformHosts(map[string]string{"dashboard.example.test": "https://dashboard.example.test"})
+	}
+	client, err := usersessionsrepo.New(ti.conn).CreateUserSessionClient(ctx, usersessionsrepo.CreateUserSessionClientParams{UserSessionIssuerID: fx.issuerID, ClientID: clientID, ClientName: "Typed consent", RedirectUris: []string{callback}, TokenEndpointAuthMethod: "none"})
 	require.NoError(t, err)
 	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, fx.organizationSlug, "mcp/gateway")
 	require.NoError(t, err)
-	stateID := uuid.NewString()
-	challenge := sha256.Sum256([]byte(gatewayConsentVerifier))
-	require.NoError(t, ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{ID: stateID, UserSessionIssuerID: fx.issuerID, Endpoint: mcp.EndpointRef{McpSlug: endpoint.Slug, RouteBase: endpoint.RouteBase, MetaMcpServerID: endpoint.MetaMcpServerID}, ClientID: client.ClientID, RedirectURI: client.RedirectUris[0], CodeChallenge: base64.RawURLEncoding.EncodeToString(challenge[:]), CodeChallengeMethod: "S256", CSRFToken: "csrf-token", Subject: &fx.subject, AuthorizerUserID: fx.subject.ID, AuthorizerImpersonated: new(false), CreatedAt: time.Now(), AutoConnectDone: true}))
-	path := "/mcp/gateway/" + fx.organizationSlug
-	query := url.Values{"state": {stateID}, "auth_client.typed-personal": {selectedClient.String()}}
-	page := httptest.NewRecorder()
-	require.NoError(t, ti.service.ServeConsent(page, httptest.NewRequest(http.MethodGet, path+"/connect?"+query.Encode(), nil).WithContext(ctx), endpoint))
-	require.Equal(t, http.StatusOK, page.Code)
-	inventory := gatewayInventoryFromPage(t, page.Body.String())
-	names := make([]string, 0, len(inventory.Tools))
-	for _, tool := range inventory.Tools {
-		names = append(names, tool.Name)
-	}
-	require.Contains(t, names, "typed-personal--ping", "member outcomes: %+v", inventory.MemberOutcomes)
-	require.Contains(t, names, "typed-excluded--other")
-	form := url.Values{"state": {stateID}, "csrf_token": {"csrf-token"}, "action": {"approve"}, "tool_inventory_id": {inventory.Attempt}, "discovery_mode": {string(metamcp.DiscoveryModeProgressive)}, "tool_catalog_mode": {string(toolfilter.CatalogModeCached)}, "tool_filtering": {"on"}, "tools": {"typed-personal--ping"}, "auth_client.typed-personal": {selectedClient.String()}}
-	request := httptest.NewRequest(http.MethodPost, path+"/connect", strings.NewReader(form.Encode())).WithContext(ctx)
-	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	approved := httptest.NewRecorder()
-	require.NoError(t, ti.service.ServeConsent(approved, request, endpoint))
-	require.Equal(t, http.StatusSeeOther, approved.Code, approved.Body.String())
-	location, err := url.Parse(approved.Header().Get("Location"))
-	require.NoError(t, err)
-	code := location.Query().Get("code")
-	require.NotEmpty(t, code)
-	grants := cache.NewTypedObjectCache[mcp.UserSessionGrant](ti.logger, ti.cacheAdapter, cache.SuffixNone)
-	grant, err := grants.Get(ctx, "gatewayCatalogGrant:"+fx.issuerID.String()+":"+code)
-	require.NoError(t, err)
-	require.NotNil(t, grant.GatewayPolicy)
-	rawPolicy, err := json.Marshal(grant.GatewayPolicy)
-	require.NoError(t, err)
-	policy, err := toolfilter.ParseSessionPolicy(rawPolicy)
-	require.NoError(t, err)
-	require.NotNil(t, policy.Catalog)
-	require.NotNil(t, policy.Selection)
-	require.True(t, policy.Selection.AllowsName("typed-personal--ping"))
-	require.False(t, policy.Selection.AllowsName("typed-excluded--other"))
-	tokenForm := url.Values{"grant_type": {"authorization_code"}, "code": {code}, "client_id": {client.ClientID}, "redirect_uri": {client.RedirectUris[0]}, "code_verifier": {gatewayConsentVerifier}}
-	request = httptest.NewRequest(http.MethodPost, path+"/token", strings.NewReader(tokenForm.Encode())).WithContext(ctx)
-	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	issued := httptest.NewRecorder()
-	require.NoError(t, ti.service.ServeToken(issued, request, endpoint))
-	require.Equal(t, http.StatusOK, issued.Code, issued.Body.String())
-	var tokens struct {
-		AccessToken string `json:"access_token"`
-	}
-	require.NoError(t, json.Unmarshal(issued.Body.Bytes(), &tokens))
-	require.NotEmpty(t, tokens.AccessToken)
-	for _, name := range []string{"typed-personal--ping", "typed-excluded--other"} {
-		response, err := serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, tokens.AccessToken, makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute_tool", "arguments": map[string]any{"name": name, "arguments": map[string]any{}}}))
+	statusFor := func(token string) metamcp.ConnectionStatusServer {
+		t.Helper()
+		body := makeMetaRPCBody(t, "tools/call", map[string]any{"name": metamcp.ToolConnectionStatus, "arguments": map[string]any{}})
+		w, err := serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, token, body)
 		require.NoError(t, err)
-		require.Equal(t, http.StatusOK, response.Code, response.Body.String())
-		text, isError := metaToolResultText(t, decodeRPCResponse(t, response))
-		require.Equal(t, name != "typed-personal--ping", isError, text)
-		if !isError {
-			require.Contains(t, text, "pong from ping")
+		var result struct {
+			StructuredContent metamcp.ConnectionStatusResult `json:"structuredContent"`
 		}
+		require.NoError(t, json.Unmarshal(decodeRPCResponse(t, w)["result"], &result))
+		for _, member := range result.StructuredContent.Servers {
+			if member.Slug == "typed-personal" {
+				return member
+			}
+		}
+		t.Fatal("gateway Inspect status did not include the OAuth member")
+		return metamcp.ConnectionStatusServer{}
+	}
+	if inspect {
+		// A mint-shaped progressive session has no reviewed choice, even
+		// though this viewer already has an OAuth connection.
+		status := statusFor(mintOrganizationGatewayBearerWithPolicy(t, ctx, ti, fx, metamcp.DiscoveryModeProgressive))
+		require.Equal(t, metamcp.SignInNeedsConsent, status.Status)
+		require.Contains(t, status.Detail, "Choose a connection")
+	}
+	approveAndCall := func() {
+		t.Helper()
+		stateID := uuid.NewString()
+		challenge := sha256.Sum256([]byte(gatewayConsentVerifier))
+		require.NoError(t, ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{ID: stateID, UserSessionIssuerID: fx.issuerID, Endpoint: mcp.EndpointRef{McpSlug: endpoint.Slug, RouteBase: endpoint.RouteBase, MetaMcpServerID: endpoint.MetaMcpServerID}, ClientID: client.ClientID, RedirectURI: client.RedirectUris[0], CodeChallenge: base64.RawURLEncoding.EncodeToString(challenge[:]), CodeChallengeMethod: "S256", CSRFToken: "csrf-token", Subject: &fx.subject, AuthorizerUserID: fx.subject.ID, AuthorizerImpersonated: new(false), CreatedAt: time.Now(), AutoConnectDone: true}))
+		path := "/mcp/gateway/" + fx.organizationSlug
+		query := url.Values{"state": {stateID}}
+		if picker {
+			query.Set("auth_client.typed-personal", selectedClient.String())
+		}
+		page := httptest.NewRecorder()
+		require.NoError(t, ti.service.ServeConsent(page, httptest.NewRequest(http.MethodGet, path+"/connect?"+query.Encode(), nil).WithContext(ctx), endpoint))
+		require.Equal(t, http.StatusOK, page.Code)
+		if inspect {
+			require.Contains(t, page.Body.String(), `data-gateway="true"`)
+			require.Contains(t, page.Body.String(), "Progressive (dashboard Inspect)")
+			require.NotContains(t, page.Body.String(), `name="discovery_mode"`)
+		}
+		inventory := gatewayInventoryFromPage(t, page.Body.String())
+		names := make([]string, 0, len(inventory.Tools))
+		for _, tool := range inventory.Tools {
+			names = append(names, tool.Name)
+		}
+		require.Contains(t, names, "typed-personal--ping", "member outcomes: %+v", inventory.MemberOutcomes)
+		require.Contains(t, names, "typed-excluded--other")
+		form := url.Values{"state": {stateID}, "csrf_token": {"csrf-token"}, "action": {"approve"}, "tool_inventory_id": {inventory.Attempt}, "discovery_mode": {string(metamcp.DiscoveryModeProgressive)}, "tool_catalog_mode": {string(toolfilter.CatalogModeCached)}, "tool_filtering": {"on"}, "tools": {"typed-personal--ping"}}
+		if picker {
+			form.Set("auth_client.typed-personal", selectedClient.String())
+		}
+		if inspect {
+			// Even a posted mode cannot make the reviewed Inspect bearer lose
+			// its status and progressive discovery tools.
+			form.Set("discovery_mode", "code_mode")
+		}
+		request := httptest.NewRequest(http.MethodPost, path+"/connect", strings.NewReader(form.Encode())).WithContext(ctx)
+		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		approved := httptest.NewRecorder()
+		require.NoError(t, ti.service.ServeConsent(approved, request, endpoint))
+		require.Equal(t, http.StatusSeeOther, approved.Code, approved.Body.String())
+		location, err := url.Parse(approved.Header().Get("Location"))
+		require.NoError(t, err)
+		code := location.Query().Get("code")
+		require.NotEmpty(t, code)
+		grants := cache.NewTypedObjectCache[mcp.UserSessionGrant](ti.logger, ti.cacheAdapter, cache.SuffixNone)
+		grant, err := grants.Get(ctx, "gatewayCatalogGrant:"+fx.issuerID.String()+":"+code)
+		require.NoError(t, err)
+		require.NotNil(t, grant.GatewayPolicy)
+		rawPolicy, err := json.Marshal(grant.GatewayPolicy)
+		require.NoError(t, err)
+		policy, err := toolfilter.ParseSessionPolicy(rawPolicy)
+		require.NoError(t, err)
+		require.NotNil(t, policy.Catalog)
+		if inspect {
+			require.NotNil(t, policy.Gateway)
+			require.NotNil(t, policy.Gateway.DiscoveryMode)
+			require.Equal(t, metamcp.DiscoveryModeProgressive, *policy.Gateway.DiscoveryMode)
+		}
+		require.NotNil(t, policy.Selection)
+		require.True(t, policy.Selection.AllowsName("typed-personal--ping"))
+		require.False(t, policy.Selection.AllowsName("typed-excluded--other"))
+		tokenForm := url.Values{"grant_type": {"authorization_code"}, "code": {code}, "client_id": {client.ClientID}, "redirect_uri": {client.RedirectUris[0]}, "code_verifier": {gatewayConsentVerifier}}
+		request = httptest.NewRequest(http.MethodPost, path+"/token", strings.NewReader(tokenForm.Encode())).WithContext(ctx)
+		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		issued := httptest.NewRecorder()
+		require.NoError(t, ti.service.ServeToken(issued, request, endpoint))
+		require.Equal(t, http.StatusOK, issued.Code, issued.Body.String())
+		var tokens struct {
+			AccessToken string `json:"access_token"`
+		}
+		require.NoError(t, json.Unmarshal(issued.Body.Bytes(), &tokens))
+		require.NotEmpty(t, tokens.AccessToken)
+		claims := accessTokenClaims(t, issued.Body.Bytes())
+		jti, ok := claims["jti"].(string)
+		require.True(t, ok)
+		session, err := usersessionsrepo.New(ti.conn).GetUserSessionPolicyByJTI(ctx, usersessionsrepo.GetUserSessionPolicyByJTIParams{UserSessionIssuerID: fx.issuerID, Jti: jti})
+		require.NoError(t, err)
+		choice, err := authclientfixtures.New(ti.conn).GetSelectionFixture(ctx, authclientfixtures.GetSelectionFixtureParams{CredentialID: session.CredentialID, McpServerID: serverID})
+		require.NoError(t, err)
+		require.Equal(t, conv.ToNullUUID(selectedClient), choice.AuthClientID)
+		if inspect {
+			require.Equal(t, metamcp.SignInVerifiedAtConsent, statusFor(tokens.AccessToken).Status)
+		}
+
+		for _, name := range []string{"typed-personal--ping", "typed-excluded--other"} {
+			response, err := serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, tokens.AccessToken, makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute_tool", "arguments": map[string]any{"name": name, "arguments": map[string]any{}}}))
+			require.NoError(t, err)
+			require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+			text, isError := metaToolResultText(t, decodeRPCResponse(t, response))
+			require.Equal(t, name != "typed-personal--ping", isError, text)
+			if !isError {
+				require.Contains(t, text, "pong from ping")
+			}
+		}
+	}
+	approveAndCall()
+	if repeat {
+		approveAndCall()
 	}
 	expectedToken := "selected-personal-token"
 	if clientType == authz.AuthClientTypeEMA {
