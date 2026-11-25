@@ -150,6 +150,9 @@ func testOrganizationGatewayTypedPersonalConsentExecution(t *testing.T, clientTy
 			require.Contains(t, page.Body.String(), `data-gateway="true"`)
 			require.Contains(t, page.Body.String(), "Progressive (dashboard Inspect)")
 			require.NotContains(t, page.Body.String(), `name="discovery_mode"`)
+		} else {
+			require.Contains(t, page.Body.String(), `name="discovery_mode"`, "ordinary gateway consent keeps the discovery mode picker")
+			require.NotContains(t, page.Body.String(), "Progressive (dashboard Inspect)")
 		}
 		inventory := gatewayInventoryFromPage(t, page.Body.String())
 		names := make([]string, 0, len(inventory.Tools))
