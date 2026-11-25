@@ -96,10 +96,9 @@ func TestResolveAssistantMCPServers_MisconfiguredToolsetIsOmitted(t *testing.T) 
 	require.Equal(t, "_p-"+platformtools.AssistantsPlatformToolsetSlug, servers[1].ID)
 }
 
-// The managed assistant is granted the managed-assistant platform toolset (the
-// dashboard egress tool) in addition to the always-on assistants toolset; a
-// non-managed assistant is given only the assistants slug, so it never sees a
-// managed-assistant server.
+// The managed assistant is granted the Platform MCP read toolset in addition
+// to the always-on assistants toolset; a non-managed assistant is given only
+// the assistants slug, so it never sees a managed-only server.
 func TestResolveAssistantMCPServers_GrantsEachRequestedPlatformToolset(t *testing.T) {
 	t.Parallel()
 
@@ -108,13 +107,13 @@ func TestResolveAssistantMCPServers_GrantsEachRequestedPlatformToolset(t *testin
 
 	servers := resolveAssistantMCPServers(context.Background(), testenv.NewLogger(t), serverURL, nil, []string{
 		platformtools.AssistantsPlatformToolsetSlug,
-		platformtools.ManagedAssistantPlatformToolsetSlug,
+		platformtools.PlatformMCPReadToolsetSlug,
 	})
 	require.Len(t, servers, 2)
 	require.Equal(t, "_p-"+platformtools.AssistantsPlatformToolsetSlug, servers[0].ID)
-	require.Equal(t, "_p-"+platformtools.ManagedAssistantPlatformToolsetSlug, servers[1].ID)
+	require.Equal(t, "_p-"+platformtools.PlatformMCPReadToolsetSlug, servers[1].ID)
 	require.Equal(t,
-		"https://gram.test/platform/mcp/"+platformtools.ManagedAssistantPlatformToolsetSlug,
+		"https://gram.test/platform/mcp/"+platformtools.PlatformMCPReadToolsetSlug,
 		servers[1].URL,
 	)
 }

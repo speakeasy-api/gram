@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	featuresrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 	"github.com/stretchr/testify/require"
 )
@@ -66,7 +67,6 @@ func testOrganizationGatewayTypedPersonalConsentExecution(t *testing.T, clientTy
 		seedUserMCPConnectGrant(t, ctx, ti.conn, ac.ActiveOrganizationID, fx.subject.ID, id.String())
 	}
 	ti.service.manual = true
-	ti.service.SetAuthClientPermitted(true)
 	_, err := featuresrepo.New(ti.conn).EnableFeature(ctx, featuresrepo.EnableFeatureParams{OrganizationID: ac.ActiveOrganizationID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
 	require.NoError(t, err)
 	mcp.ResetAuthEnforcementForTest(ti.service.Service)
@@ -93,6 +93,7 @@ func testOrganizationGatewayTypedPersonalConsentExecution(t *testing.T, clientTy
 		if clientType == authz.AuthClientTypeRemoteSession {
 			insertQualifiedRemoteSessionToken(t, ctx, ti, fx.issuerID, registration, fx.subject, token, upstream.url)
 		}
+		seedPrincipalGrant(t, ctx, ti, ac.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, fx.subject.ID), authz.ScopeMCPAuth, client.ID.String())
 		if i == len(tokens)-1 {
 			selectedClient = client.ID
 			if clientType == authz.AuthClientTypeEMA {
@@ -137,7 +138,7 @@ func testOrganizationGatewayTypedPersonalConsentExecution(t *testing.T, clientTy
 		t.Helper()
 		stateID := uuid.NewString()
 		challenge := sha256.Sum256([]byte(gatewayConsentVerifier))
-		require.NoError(t, ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{ID: stateID, UserSessionIssuerID: fx.issuerID, Endpoint: mcp.EndpointRef{McpSlug: endpoint.Slug, RouteBase: endpoint.RouteBase, MetaMcpServerID: endpoint.MetaMcpServerID}, ClientID: client.ClientID, RedirectURI: client.RedirectUris[0], CodeChallenge: base64.RawURLEncoding.EncodeToString(challenge[:]), CodeChallengeMethod: "S256", CSRFToken: "csrf-token", Subject: &fx.subject, CreatedAt: time.Now(), AutoConnectDone: true}))
+		require.NoError(t, ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{ID: stateID, UserSessionIssuerID: fx.issuerID, Endpoint: mcp.EndpointRef{McpSlug: endpoint.Slug, RouteBase: endpoint.RouteBase, MetaMcpServerID: endpoint.MetaMcpServerID}, ClientID: client.ClientID, RedirectURI: client.RedirectUris[0], CodeChallenge: base64.RawURLEncoding.EncodeToString(challenge[:]), CodeChallengeMethod: "S256", CSRFToken: "csrf-token", Subject: &fx.subject, AuthorizerUserID: fx.subject.ID, AuthorizerImpersonated: new(false), CreatedAt: time.Now(), AutoConnectDone: true}))
 		path := "/mcp/gateway/" + fx.organizationSlug
 		query := url.Values{"state": {stateID}}
 		if picker {
@@ -150,13 +151,16 @@ func testOrganizationGatewayTypedPersonalConsentExecution(t *testing.T, clientTy
 			require.Contains(t, page.Body.String(), `data-gateway="true"`)
 			require.Contains(t, page.Body.String(), "Progressive (dashboard Inspect)")
 			require.NotContains(t, page.Body.String(), `name="discovery_mode"`)
+		} else {
+			require.Contains(t, page.Body.String(), `name="discovery_mode"`, "ordinary gateway consent keeps the discovery mode picker")
+			require.NotContains(t, page.Body.String(), "Progressive (dashboard Inspect)")
 		}
 		inventory := gatewayInventoryFromPage(t, page.Body.String())
 		names := make([]string, 0, len(inventory.Tools))
 		for _, tool := range inventory.Tools {
 			names = append(names, tool.Name)
 		}
-		require.Contains(t, names, "typed-personal--ping")
+		require.Contains(t, names, "typed-personal--ping", "member outcomes: %+v", inventory.MemberOutcomes)
 		require.Contains(t, names, "typed-excluded--other")
 		form := url.Values{"state": {stateID}, "csrf_token": {"csrf-token"}, "action": {"approve"}, "tool_inventory_id": {inventory.Attempt}, "discovery_mode": {string(metamcp.DiscoveryModeProgressive)}, "tool_catalog_mode": {string(toolfilter.CatalogModeCached)}, "tool_filtering": {"on"}, "tools": {"typed-personal--ping"}}
 		if picker {

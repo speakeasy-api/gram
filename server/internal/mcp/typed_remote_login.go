@@ -32,14 +32,8 @@ func (s *Service) ValidateRemoteLoginTypedAuthorization(ctx context.Context, sta
 	if a.Subject.Kind != urn.SessionSubjectKindUser && a.Subject.Kind != urn.SessionSubjectKindAgent {
 		return fmt.Errorf("%w: typed login requires a represented subject", remotesessions.ErrTypedAuthorizationInvalid)
 	}
-	enforced, err := s.consentAuthChoicesEnforced(ctx, a.OrganizationID)
-	if err != nil {
-		return fmt.Errorf("load typed authorization mode: %w", err)
-	}
-	if !enforced {
-		return fmt.Errorf("%w: typed login authorization is no longer enforced", remotesessions.ErrTypedAuthorizationChanged)
-	}
-	if state.McpServerID.Valid && state.McpServerID.UUID != a.ServerID {
+	if (state.McpServerID.Valid && state.McpServerID.UUID != a.ServerID) ||
+		(state.ResourceMcpServerID.Valid && state.ResourceMcpServerID.UUID != a.ServerID) {
 		return fmt.Errorf("%w: typed login server changed", remotesessions.ErrTypedAuthorizationChanged)
 	}
 	server, err := mcpserversrepo.New(s.db).GetMCPServerByIDAndOrganizationID(ctx, mcpserversrepo.GetMCPServerByIDAndOrganizationIDParams{ID: a.ServerID, OrganizationID: a.OrganizationID})
@@ -51,6 +45,9 @@ func (s *Service) ValidateRemoteLoginTypedAuthorization(ctx context.Context, sta
 	}
 	if server.ProjectID != a.ProjectID {
 		return fmt.Errorf("%w: typed login project changed", remotesessions.ErrTypedAuthorizationChanged)
+	}
+	if server.Visibility != mcpservers.VisibilityPublic && server.Visibility != mcpservers.VisibilityPrivate {
+		return fmt.Errorf("%w: typed login server is no longer available", remotesessions.ErrTypedAuthorizationChanged)
 	}
 	// Only fields consumed by subject admission are needed here.
 	//nolint:exhaustruct_v5 // Callback subject admission does not resolve an endpoint.
@@ -73,7 +70,7 @@ func (s *Service) ValidateRemoteLoginTypedAuthorization(ctx context.Context, sta
 	if !decision.Allowed {
 		return fmt.Errorf("%w: typed login server access is no longer authorized", remotesessions.ErrTypedAuthorizationDenied)
 	}
-	res, err := s.resolveAuthClientChoiceForConsent(ctx, a.OrganizationID, a.ServerID, a.ProjectID, a.AuthClientID, a.Subject)
+	res, err := s.resolveAuthClientChoiceForConsent(withTypedConsentAuth(ctx), a.OrganizationID, a.ServerID, a.ProjectID, a.AuthClientID, a.Subject)
 	if err != nil {
 		return fmt.Errorf("authorize typed login: %w", err)
 	}
@@ -84,11 +81,23 @@ func (s *Service) ValidateRemoteLoginTypedAuthorization(ctx context.Context, sta
 	return nil
 }
 
-func (s *Service) remoteLoginTypedAuthorization(ctx context.Context, endpoint *ResolvedMcpEndpoint, challenge AuthnChallengeState, client remotesessions.Client, member chosenMetaMember) (*remotesessions.TypedAuthorization, error) {
-	enforced, err := s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)
-	if err != nil || !enforced {
-		return nil, err
+// typedLoginResource reads the target of the exact authorized server rather
+// than inferring a destination from the registration's other attachments.
+func (s *Service) typedLoginResource(ctx context.Context, authorization *remotesessions.TypedAuthorization) (string, error) {
+	server, err := mcpserversrepo.New(s.db).GetMCPServerByIDAndOrganizationID(ctx, mcpserversrepo.GetMCPServerByIDAndOrganizationIDParams{ID: authorization.ServerID, OrganizationID: authorization.OrganizationID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", remotesessions.ErrTypedAuthorizationChanged
 	}
+	if err != nil {
+		return "", fmt.Errorf("load typed login resource server: %w", err)
+	}
+	if server.ProjectID != authorization.ProjectID || (!server.RemoteMcpServerID.Valid && !server.TunneledMcpServerID.Valid) {
+		return "", remotesessions.ErrTypedAuthorizationChanged
+	}
+	return s.resolveUpstreamResource(ctx, s.logger, authorization.ProjectID, &server)
+}
+
+func (s *Service) remoteLoginTypedAuthorization(ctx context.Context, endpoint *ResolvedMcpEndpoint, challenge AuthnChallengeState, client remotesessions.Client, member chosenMetaMember) (*remotesessions.TypedAuthorization, error) {
 	serverID, projectID := endpoint.McpServerID, endpoint.ProjectID
 	if member.serverID.Valid {
 		serverID, projectID = member.serverID, member.projectID

@@ -34,7 +34,7 @@ import (
 // can be granted. It does not consult the process's served toolsets: the token
 // endpoint may run in a process that issues tokens without serving the tools.
 func (s *Service) platformWorkloadResource(resource string) (string, bool) {
-	for _, slug := range []string{platformtools.AssistantsPlatformToolsetSlug, platformtools.ManagedAssistantPlatformToolsetSlug, platformtools.PlatformMCPReadToolsetSlug} {
+	for _, slug := range []string{platformtools.AssistantsPlatformToolsetSlug, platformtools.PlatformMCPReadToolsetSlug} {
 		if resource == platformtools.PlatformToolsetURL(s.serverURL, slug) {
 			return slug, true
 		}

@@ -2,6 +2,7 @@ import { Text } from "@/components/ui/Text";
 import { Stack } from "@/components/ui/Stack";
 import { toast } from "sonner";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
+import { describeApiError } from "./api-error";
 import { denialFromError, denialMessage } from "./denial";
 
 interface ErrorHandlerOptions {
@@ -62,11 +63,14 @@ export function handleError(
   // A refusal the authz engine explained is shown as the permission that is
   // missing, not as "permission denied".
   const denial = denialFromError(error);
+  // The SDK's fallback message is a dump of the raw response ("API error
+  // occurred: …"); describeApiError keeps the API's own message and swaps a
+  // dump for plain fallback copy.
   const errorMessage = denial
     ? denialMessage(denial)
     : typeof error === "string"
       ? error
-      : toError(error).message;
+      : describeApiError(error).message;
   const title = options.title ?? (denial ? "Permission needed" : "Error");
 
   // A 4xx from the API is the server answering a request it understood —

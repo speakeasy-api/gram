@@ -26,7 +26,6 @@ export type Join = OpenEnum<typeof Join>;
  * How the label compares to values.
  */
 export const IntentConditionOp = {
-  Unknown: "",
   Is: "is",
   IsNot: "is not",
   Includes: "includes",
@@ -43,17 +42,13 @@ export type IntentCondition = {
    */
   join: Join;
   /**
-   * Label key the clause reads. Empty for a shell command pattern.
+   * Label key the clause reads.
    */
   label: string;
   /**
    * How the label compares to values.
    */
   op: IntentConditionOp;
-  /**
-   * Regular expression a shell command must match, for a pattern clause.
-   */
-  pattern: string;
   /**
    * Values compared: "true" for a yes/no label, else option keys. Several read as any of.
    */
@@ -78,7 +73,6 @@ export const IntentCondition$inboundSchema: z.ZodMiniType<
   join: Join$inboundSchema,
   label: z.string(),
   op: IntentConditionOp$inboundSchema,
-  pattern: z.string(),
   values: z.array(z.string()),
 });
 

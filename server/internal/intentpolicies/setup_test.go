@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -41,14 +42,18 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// geminiStub answers every object completion with a fixed JSON body.
+// geminiStub answers object completions with canned label sets by prompt content.
 type geminiStub struct {
 	openrouter.CompletionClient
 	body string
 }
 
-func (g geminiStub) GetObjectCompletion(context.Context, openrouter.ObjectCompletionRequest) (*openrouter.CompletionResponse, error) {
-	content := or.CreateChatAssistantMessageContentStr(g.body)
+func (g geminiStub) GetObjectCompletion(_ context.Context, req openrouter.ObjectCompletionRequest) (*openrouter.CompletionResponse, error) {
+	body := g.body
+	if strings.Contains(req.Prompt, "git push --force") {
+		body = geminiRemoteDestruction
+	}
+	content := or.CreateChatAssistantMessageContentStr(body)
 	msg := or.CreateChatMessagesAssistant(or.ChatAssistantMessage{
 		Role:             or.ChatAssistantMessageRoleAssistant,
 		Content:          optionalnullable.From(&content),
@@ -69,20 +74,25 @@ func (g geminiStub) GetObjectCompletion(context.Context, openrouter.ObjectComple
 		Usage:        openrouter.Usage{PromptTokens: 100, CompletionTokens: 50, TotalTokens: 150, Cost: &cost},
 		FinishReason: nil,
 		ToolCalls:    nil,
-		Content:      g.body,
+		Content:      body,
 	}, nil
 }
 
 const geminiBenign = `{
 	"effect_class": {"value": ["read"], "confidence": 0.9, "rationale": "Lists files."},
-	"carries_secret": {"value": false, "confidence": 0.9, "rationale": "None."},
-	"executes_remote_code_inline": {"value": false, "confidence": 0.9, "rationale": "None."},
-	"touches_credential_store": {"value": false, "confidence": 0.9, "rationale": "None."},
-	"touches_persistence": {"value": false, "confidence": 0.9, "rationale": "None."},
-	"history_rewrite": {"value": false, "confidence": 0.9, "rationale": "None."},
-	"carries_personal_data": {"value": false, "confidence": 0.9, "rationale": "None."},
-	"destructive_target": {"value": "none", "confidence": 0.9, "rationale": "Not destructive."},
-	"publishes_artifact": {"value": false, "confidence": 0.9, "rationale": "None."},
+	"target_locations": {"value": ["workspace"], "confidence": 0.9, "rationale": "Workspace."},
+	"payload_data": {"value": [], "confidence": 0.9, "rationale": "None."},
+	"exec_code_origin": {"value": "none", "confidence": 0.9, "rationale": "Not exec."},
+	"audience": {"value": "none", "confidence": 0.9, "rationale": "Not outbound."},
+	"effect_coverage": {"value": "understood", "confidence": 0.9, "rationale": "Clear."}
+}`
+
+const geminiRemoteDestruction = `{
+	"effect_class": {"value": ["destructive", "outbound"], "confidence": 0.9, "rationale": "Force-pushes a remote branch."},
+	"target_locations": {"value": ["remote"], "confidence": 0.9, "rationale": "Targets remote git ref."},
+	"payload_data": {"value": [], "confidence": 0.9, "rationale": "None."},
+	"exec_code_origin": {"value": "none", "confidence": 0.9, "rationale": "Not exec."},
+	"audience": {"value": "group", "confidence": 0.9, "rationale": "Shared repository."},
 	"effect_coverage": {"value": "understood", "confidence": 0.9, "rationale": "Clear."}
 }`
 

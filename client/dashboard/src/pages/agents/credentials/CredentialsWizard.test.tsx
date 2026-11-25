@@ -432,7 +432,7 @@ function setup(initialPlatformKey?: string, initialEntry = "/") {
 }
 
 async function continueFromAuthentication() {
-  await screen.findByRole("heading", { name: "Server sign-in" });
+  await screen.findByRole("heading", { name: "MCP sign-in" });
   const next = screen.getByRole("button", { name: "Continue" });
   await waitFor(() => expect(next.hasAttribute("disabled")).toBe(false));
   fireEvent.click(next);
@@ -2495,9 +2495,7 @@ describe("Editing an agent that already exists", () => {
       expect(
         screen.queryByRole("button", { name: /MCP Selection/ }),
       ).toBeNull();
-      expect(
-        screen.queryByRole("button", { name: /Server sign-in/ }),
-      ).toBeNull();
+      expect(screen.queryByRole("button", { name: /MCP sign-in/ })).toBeNull();
       const current = screen.getByRole("button", { name: /Agent sign-in/ });
       expect(current.getAttribute("aria-current")).toBe("step");
       expect(screen.getByRole("button", { name: /Install/ })).toBeTruthy();
@@ -3829,9 +3827,9 @@ describe("Editing an agent that already exists", () => {
   });
 });
 
-// The agent page's Server sign-in tab: the servers and their sign-in, changed in
+// The agent page's MCP sign-in tab: the servers and their sign-in, changed in
 // place rather than by walking the setup wizard again.
-describe("The Server sign-in tab", () => {
+describe("The MCP sign-in tab", () => {
   const agent = {
     id: "agent_one",
     name: "Release Bot",
@@ -3908,9 +3906,7 @@ describe("The Server sign-in tab", () => {
     expect(screen.queryByText(/Step \d of/i)).toBeNull();
     // The tab already says what it is, so the step's own heading is gone,
     // and the diagram marks the tab rather than a step.
-    expect(
-      screen.queryByRole("heading", { name: "Server sign-in" }),
-    ).toBeNull();
+    expect(screen.queryByRole("heading", { name: "MCP sign-in" })).toBeNull();
     expect(screen.getAllByText("This tab").length).toBeGreaterThan(0);
     expect(screen.queryByText("This step")).toBeNull();
   });
@@ -4077,7 +4073,7 @@ describe("Servers that sign in as a person", () => {
     expect(screen.queryByText(/owner@upstream.test/)).toBeNull();
     fireEvent.click(screen.getByRole("checkbox", { name: "Linear" }));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    await screen.findByRole("heading", { name: "Server sign-in" });
+    await screen.findByRole("heading", { name: "MCP sign-in" });
     expect(
       (await screen.findAllByText(/Your connection|Uses your connection/))
         .length,
@@ -4226,7 +4222,7 @@ describe("Servers that sign in as a person", () => {
       await waitFor(() => expect(server.hasAttribute("disabled")).toBe(false));
       fireEvent.click(server);
       fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-      await screen.findByRole("heading", { name: "Server sign-in" });
+      await screen.findByRole("heading", { name: "MCP sign-in" });
       const next = screen.getByRole("button", { name: "Continue" });
       await waitFor(() => expect(next.hasAttribute("disabled")).toBe(true));
       fireEvent.click(next);
@@ -4291,7 +4287,7 @@ describe("Servers that sign in as a person", () => {
     await reachServers();
     fireEvent.click(screen.getByRole("checkbox", { name: "Linear" }));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    await screen.findByRole("heading", { name: "Server sign-in" });
+    await screen.findByRole("heading", { name: "MCP sign-in" });
     expect(
       await screen.findByRole("button", { name: /Linear.*Shared credential/ }),
     ).toBeTruthy();
@@ -4383,7 +4379,7 @@ describe("Servers that sign in as a person", () => {
     expect(mocks.attach).toHaveBeenCalledTimes(1);
   });
 
-  describe("on an existing agent's Server sign-in tab", () => {
+  describe("on an existing agent's MCP sign-in tab", () => {
     const agent = {
       id: "agent_one",
       name: "Release Bot",
@@ -4480,7 +4476,7 @@ describe("Servers that sign in as a person", () => {
     await reachServers();
     fireEvent.click(screen.getByRole("checkbox", { name: "Linear" }));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    await screen.findByRole("heading", { name: "Server sign-in" });
+    await screen.findByRole("heading", { name: "MCP sign-in" });
     expect(
       await screen.findByRole("button", {
         name: /Linear.*Could not check connection/,
@@ -4495,11 +4491,9 @@ describe("Servers that sign in as a person", () => {
     await reachServers();
     fireEvent.click(screen.getByRole("checkbox", { name: "Linear" }));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    await screen.findByRole("heading", { name: "Server sign-in" });
+    await screen.findByRole("heading", { name: "MCP sign-in" });
     fireEvent.click(screen.getByRole("button", { name: "Remove Linear" }));
-    expect(
-      screen.getByRole("heading", { name: "Server sign-in" }),
-    ).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "MCP sign-in" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Remove Linear" })).toBeNull();
     expect(
       screen.getByRole("button", { name: "Continue" }).hasAttribute("disabled"),
@@ -4511,7 +4505,7 @@ describe("Servers that sign in as a person", () => {
     await reachServers();
     fireEvent.click(await enabledAllServers());
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    await screen.findByRole("heading", { name: "Server sign-in" });
+    await screen.findByRole("heading", { name: "MCP sign-in" });
     expect(
       (await screen.findByText(/No usable connection available for/))
         .textContent,

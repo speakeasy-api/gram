@@ -210,6 +210,24 @@ func (s *Service) memberSignInStatus(ctx context.Context, logger *slog.Logger, g
 		}
 	}
 	if member.backend == metaMemberBackendHosted {
+		if gate.projectTokens != nil && gate.agentID == uuid.Nil {
+			tokens, err := s.resolveMemberTokens(ctx, gate, member)
+			switch {
+			case errors.Is(err, remotesessions.ErrClientCredentialMisconfigured), errors.Is(err, remotesessions.ErrClientCredentialUnavailable),
+				errors.Is(err, remotesessions.ErrStoredSignInUnreadable), errors.Is(err, remotesessions.ErrRemoteSessionUnavailable):
+				return memberFailureSignIn(ctx, *gate, member, metaMemberClientCredentialError(member, err))
+			case errors.Is(err, remotesessions.ErrChosenClientUnbound), errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured):
+				return signInRow(metamcp.SignInActionRequired, "Ask an administrator to check this server's upstream registration.", nil)
+			case errors.Is(err, remotesessions.ErrNoValidToken):
+				return notConnectedRow(gate, true)
+			case err != nil:
+				return memberFailureSignIn(ctx, *gate, member, err)
+			case len(tokens) == 0:
+				return signInRow(metamcp.SignInNotRequired, "", nil)
+			default:
+				return signInRow(metamcp.SignInConnected, "", nil)
+			}
+		}
 		if !member.remoteSessionIssuerID.Valid {
 			return signInRow(metamcp.SignInNotRequired, "", nil)
 		}
@@ -350,10 +368,17 @@ func (s *Service) memberAuthRequirements(organizationID string, members []metaMe
 	}
 }
 
+type memberNotConnectedError struct{ memberCredentialError }
+
+func (e memberNotConnectedError) Unwrap() error { return e.memberCredentialError }
+
 // memberFailureSignIn keeps an outage from reading as a broken sign-in. On an
 // agent gateway, a missing or unusable connection is a row the agent's
 // sign-in step fixes.
 func memberFailureSignIn(ctx context.Context, gate metaGateContext, member metaMember, err error) metamcp.ConnectionStatusServer {
+	if _, notConnected := errors.AsType[memberNotConnectedError](err); notConnected {
+		return signInRow(metamcp.SignInNotConnected, "", nil)
+	}
 	if failure, ok := errors.AsType[memberConnectionError](err); ok && failure.code == mcpconnectionattempts.CodeStoredSignInUnreadable {
 		if gate.agentFix != nil {
 			row := signInRow(metamcp.SignInError, agentDetailNeedsReauth, nil)

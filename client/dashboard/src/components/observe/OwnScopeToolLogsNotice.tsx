@@ -14,12 +14,13 @@ export function OwnScopeToolLogsNotice(): JSX.Element {
     <Alert title={null} className="shrink-0">
       <div className="flex flex-col items-start gap-2">
         <span>
-          Showing your sessions and your agents&apos; activity. Ask an admin for
-          the View tool logs permission to see every member&apos;s.
+          Showing your sessions and your agents&apos; activity. You don&apos;t
+          have access to every member&apos;s tool logs, but you can request it.
         </span>
         <RequestScopeAccess
           scopes={["log:read"]}
           resourceId={project.id}
+          resourceName={project.name}
           align="start"
         />
       </div>

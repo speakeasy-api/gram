@@ -84,7 +84,7 @@ describe("identityRailItems", () => {
     expect(titles["sign-in"]).toBe("Agent sign-in");
     // Its servers and their sign-in are changed here, not by walking the
     // setup wizard again; its activity is the record of changes to it.
-    expect(titles["mcp-sign-in"]).toBe("Server sign-in");
+    expect(titles["mcp-sign-in"]).toBe("MCP sign-in");
     expect(titles["audit-trail"]).toBe("Audit trail");
   });
 

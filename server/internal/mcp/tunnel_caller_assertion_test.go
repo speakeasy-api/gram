@@ -104,9 +104,10 @@ func TestPrivateTunnelAssertionAudienceTracksSavedResource(t *testing.T) {
 	t.Cleanup(upstream.Close)
 	require.NoError(t, ti.tunnelRoutes.Publish(ctx, tunnelID.String(), upstream.URL, time.Hour))
 	subject := urn.NewUserSubject(auth.UserID)
-	bearer := mintMetaIssuerBearer(t, ti, slug, sessionIssuer, subject)
 	remoteClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, auth.ActiveOrganizationID, "assertion-routing", "", []uuid.UUID{sessionIssuer})
 	stampRemoteSessionIssuer(t, ctx, ti.conn, projectID, serverID, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, auth.ActiveOrganizationID, remoteClient)))
+	typed := seedTypedSessionClient(t, ctx, ti, auth.ActiveOrganizationID, projectID, serverID, remoteClient, "remote_session", subject)
+	bearer := mintMetaIssuerBearer(t, ti, slug, sessionIssuer, subject, metaServingChoice{organizationID: auth.ActiveOrganizationID, serverID: serverID, clientID: typed})
 	oldResource := "https://mcp.internal.example.com/a%2Fb?tenant=example/"
 	exactResource := "https://mcp.internal.example.com/a%2Fb/?tenant=example/"
 	seenIDs := map[string]bool{}
@@ -133,7 +134,14 @@ func TestPrivateTunnelAssertionAudienceTracksSavedResource(t *testing.T) {
 		route.URLParams.Add("mcpSlug", slug)
 		request = request.WithContext(context.WithValue(requestCtx, chi.RouteCtxKey, route))
 		response := httptest.NewRecorder()
-		require.NoError(t, ti.service.ServePublic(response, request))
+		before := gateway.forwardCount()
+		err = ti.service.ServePublic(response, request)
+		if tc.authorization == "" {
+			requireReconnect(t, response, err, slug)
+			require.Equal(t, before, gateway.forwardCount(), "a grant for a different resource never dials the tunnel")
+			continue
+		}
+		require.NoError(t, err)
 		require.Equal(t, http.StatusOK, response.Code, response.Body.String())
 		headers, _ := tunnelForwards(gateway)
 		forwarded := headers[len(headers)-1]
@@ -286,6 +294,7 @@ func testPrivateTunnelConsentAssertion(t *testing.T, resource string) {
 	// list, and detached DELETE paths with the same live consent proof.
 	remoteClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, endpoint.OrganizationID, "assertion-upstream", "", []uuid.UUID{sessionIssuer.ID})
 	stampRemoteSessionIssuer(t, ctx, ti.conn, projectID, serverID, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, endpoint.OrganizationID, remoteClient)))
+	seedConsentAuthOffer(t, ctx, ti, endpoint.OrganizationID, projectID, serverID, remoteClient, "remote_session")
 	insertQualifiedRemoteSessionToken(t, ctx, ti, sessionIssuer.ID, remoteClient, *state.Subject, "upstream-oauth", resource)
 	state.CSRFToken = "csrf-token"
 	require.NoError(t, ti.authnChallengeCache.Store(ctx, state))

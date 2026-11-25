@@ -497,8 +497,11 @@ func claudeTranscriptPayload(upload *claudeTranscriptUpload) *gen.IngestPayload 
 // it once an assistant turn is stored.
 func claudeTranscriptTitle(rows []claudeTranscriptRow, hookSource string) string {
 	for _, row := range rows {
-		if row.role == "user" && strings.TrimSpace(row.content) != "" {
-			return chat.DerivedTitle(row.content)
+		if row.role != "user" {
+			continue
+		}
+		if title := chat.DerivedTitle(row.content); title != "" {
+			return title
 		}
 	}
 	return canonicalPlaceholderTitle(hookSource)

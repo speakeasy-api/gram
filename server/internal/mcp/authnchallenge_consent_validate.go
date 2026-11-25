@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
@@ -365,7 +366,7 @@ func (s *Service) probeRemoteSession(
 		}
 		return s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, attribution, member.projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
 	}
-	probeCtx, target, err := s.resolveValidationTarget(ctx, logger, endpoint, challengeState, client, tokens, memberTokens)
+	probeCtx, target, err := s.resolveValidationTarget(ctx, logger, endpoint, challengeState, client, tokens, memberTokens, nil)
 	switch {
 	case errors.Is(err, errRemoteSessionUnroutable):
 		return oops.E(oops.CodeBadRequest, err, "This connection is not used by any server behind this endpoint, so it cannot be verified.").LogWarn(ctx, logger)
@@ -376,6 +377,11 @@ func (s *Service) probeRemoteSession(
 		return oops.E(oops.CodeUnexpected, err, "resolve validation target").LogError(ctx, logger)
 	}
 
+	return s.runRemoteSessionProbe(ctx, probeCtx, logger, fromRequest, endpoint, challengeState, client, entry, tokenProjectID, target, trigger)
+}
+
+func (s *Service) runRemoteSessionProbe(ctx, probeCtx context.Context, logger *slog.Logger, fromRequest mcpconnectionattempts.Option, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, client remotesessions.Client, entry remotesessions.UpstreamToken, tokenProjectID uuid.UUID, target validationTarget, trigger remotesessionmetrics.ValidationTrigger) error {
+	subject := *challengeState.Subject
 	// A keepalive never dials a tunnel with no live route, and records nothing: the member is offline, not answering.
 	if trigger == remotesessionmetrics.ValidationTriggerKeepalive && target.tunnelID.Valid && !s.tunnelHasRoute(probeCtx, target.tunnelID.UUID) {
 		return fmt.Errorf("%w: %s", errRemoteSessionMemberOffline, target.name)
@@ -564,6 +570,15 @@ func describeNoUsableCredential(state remotesessions.RemoteSessionState, connect
 }
 
 // resolveValidationTarget finds the upstream this endpoint would hand the credential to, judged as the consent subject.
+// recheckMemberScope restricts the scheduled probe to the project that
+// supplied its offer or attachment. Interactive consent passes nil.
+type recheckMemberScope struct {
+	projectID      uuid.UUID
+	typedOffer     bool
+	serverID       uuid.UUID
+	registrationID uuid.UUID
+}
+
 func (s *Service) resolveValidationTarget(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -572,6 +587,7 @@ func (s *Service) resolveValidationTarget(
 	client remotesessions.Client,
 	tokens map[uuid.UUID]remotesessions.UpstreamToken,
 	memberTokens func(context.Context, metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error),
+	scope *recheckMemberScope,
 ) (context.Context, validationTarget, error) {
 	var none validationTarget
 	subject := *challengeState.Subject
@@ -585,7 +601,7 @@ func (s *Service) resolveValidationTarget(
 
 	switch {
 	case endpoint.MetaMcpServerID.Valid:
-		return s.metaValidationTarget(ctx, logger, endpoint, client, tokens, memberTokens, sessionID, subject)
+		return s.metaValidationTarget(ctx, logger, endpoint, client, tokens, memberTokens, sessionID, subject, scope)
 	case endpoint.McpServerID.Valid:
 		return s.standaloneValidationTarget(ctx, logger, endpoint, challengeState, client, tokens)
 	default:
@@ -603,9 +619,19 @@ func (s *Service) metaValidationTarget(
 	memberTokens func(context.Context, metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error),
 	sessionID string,
 	subject urn.SessionSubject,
+	scope *recheckMemberScope,
 ) (context.Context, validationTarget, error) {
 	var none validationTarget
-	rows, claimed, err := s.claimingMetaMembers(ctx, endpoint, client)
+	var rows []metamcprepo.ListMetaMCPMembersForRemoteSessionClientRow
+	var claimed bool
+	var err error
+	if scope == nil {
+		rows, claimed, err = s.claimingMetaMembers(ctx, endpoint, client)
+	} else {
+		scopedClient := client
+		scopedClient.ProjectID = conv.ToNullUUID(scope.projectID)
+		rows, claimed, err = s.claimingMetaMembersForValidation(ctx, endpoint, scopedClient, scope.typedOffer)
+	}
 	if err != nil {
 		return ctx, none, fmt.Errorf("resolve claiming meta MCP members: %w", err)
 	}
@@ -615,6 +641,9 @@ func (s *Service) metaValidationTarget(
 	entry := tokens[client.RemoteSessionIssuerID]
 	targetID := uuid.Nil
 	for _, row := range rows {
+		if scope != nil && row.McpServerID != scope.serverID {
+			continue
+		}
 		// The dispatch selectors: a tunneled member takes only its own issuer's entry (tunneledIssuerToken).
 		routes := grantRoutesToUpstream(entry.Resource, row.UpstreamUrl, false)
 		if row.Tunneled {
@@ -630,7 +659,17 @@ func (s *Service) metaValidationTarget(
 		return ctx, none, errRemoteSessionUnroutable
 	}
 
-	ctx, members, err := s.resolveEndpointMemberSnapshot(ctx, logger, mandatorySurfaceConsent, endpoint)
+	var members []metaMember
+	switch {
+	case scope == nil:
+		ctx, members, err = s.resolveEndpointMemberSnapshot(ctx, logger, mandatorySurfaceConsent, endpoint)
+	case endpoint.IsOrganizationGateway():
+		// The SQL placement already pins the issuer, tenant, and member.
+		// Use the authorized member snapshot without reading browser inventory.
+		ctx, members, _, err = s.resolveOrganizationMemberSnapshotWithRecheck(ctx, logger, mandatorySurfaceConsent, endpoint.OrganizationID, true, endpoint.UserSessionIssuerID, scope.projectID, false, scope)
+	default:
+		ctx, members, _, err = s.resolveMetaMemberSnapshot(ctx, logger, mandatorySurfaceConsent, endpoint.OrganizationID, endpoint.MetaMcpServerID.UUID, endpoint.ProjectID)
+	}
 	if err != nil {
 		return ctx, none, fmt.Errorf("resolve meta MCP member snapshot: %w", err)
 	}
@@ -646,9 +685,9 @@ func (s *Service) metaValidationTarget(
 	if !found {
 		return ctx, none, errRemoteSessionUnroutable
 	}
-	if member.associatedClients != nil {
-		// The member claimed this client by association, so a credential that
-		// chose it routes by the client's own issuer.
+	if scope != nil || member.associatedClients != nil {
+		// A confirmed claim by offer or association routes by the client's
+		// own issuer, not the member's old provider stamp.
 		member.remoteSessionIssuerID = uuid.NullUUID{UUID: client.RemoteSessionIssuerID, Valid: true}
 	}
 	name := conv.Default(member.name, member.slug)

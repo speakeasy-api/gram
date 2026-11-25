@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
@@ -188,6 +189,8 @@ func newSelfClientEndpointWithEmptyCatalog(t *testing.T, ctx context.Context, ti
 	// The client handlers stamp the server's issuer after each binding change;
 	// a self credential routes by it.
 	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, []uuid.UUID{issuerID}))
+	authClientID := serverAuthClientID(t, ctx, ti, authCtx.ActiveOrganizationID, mcpServer.ID, authz.AuthClientTypeServiceAccount)
+	seedPrincipalGrant(t, ctx, ti, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, mockidp.MockUserID), authz.ScopeMCPAuth, authClientID.String())
 
 	token, jti, err := sessiontokens.NewSigner("test-jwt-secret").Mint(sessiontokens.MintParams{
 		Subject:  urn.NewUserSubject(mockidp.MockUserID),

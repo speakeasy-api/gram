@@ -79,6 +79,30 @@ func (m *ChallengeManager) ResolveAuthClientAccessTokens(ctx context.Context, re
 	return m.resolveClientTokens(ctx, req.Attribution, lookupAuthClient, req.ProjectID, req.OrganizationID, req.UserSessionIssuerID, req.Subject, []remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow{client}, req.SkipUnusable)
 }
 
+type hostedTokenResourceKey struct{}
+
+// ResolveHostedRegistrationAccessTokens resolves only the verified server assignment.
+func (m *ChallengeManager) ResolveHostedRegistrationAccessTokens(ctx context.Context, req AuthClientTokenRequest) (map[uuid.UUID]UpstreamToken, error) {
+	if req.ProjectID == uuid.Nil || req.OrganizationID == "" || req.RegistrationID == uuid.Nil || req.Subject.IsZero() {
+		return nil, ErrInvalidAuthorizationRequest
+	}
+	client, err := m.reachableClient(ctx, req.ProjectID, req.OrganizationID, req.RegistrationID)
+	if err != nil {
+		return nil, err
+	}
+	attached, err := attachedCaller(ctx, req.Subject)
+	if err != nil {
+		return nil, err
+	}
+	lookup := lookupAuthClient
+	if attached && CredentialOwner(client.CredentialOwner) != CredentialOwnerSelf {
+		// Preserve the sign-in-keyed attachment lookup for attached callers.
+		lookup = lookupSignIn
+	}
+	ctx = context.WithValue(ctx, hostedTokenResourceKey{}, true)
+	return m.resolveClientTokens(ctx, req.Attribution, lookup, req.ProjectID, req.OrganizationID, req.UserSessionIssuerID, req.Subject, []remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow{client}, req.SkipUnusable)
+}
+
 // AuthClientNeedsReconnect is RemoteSessionsNeedReconnect for the one
 // registration an auth client resolved to, judged from stored state alone and
 // without the user session issuer link. A registration that is gone or out of
