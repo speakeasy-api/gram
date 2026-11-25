@@ -11,7 +11,7 @@ import { motion } from "motion/react";
 import React from "react";
 import { Link } from "react-router";
 import { ProductTierBadge } from "./product-tier-badge";
-import { stageLabel, stageTextClass } from "./release-stage";
+import { stageLabel } from "./release-stage";
 import type { ReleaseStage } from "./release-stage-badge";
 import { ReleaseStageBadge } from "./release-stage-badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/Tooltip";
@@ -535,18 +535,6 @@ export function NavButton({
   );
 }
 
-// The active rule inside a stage section, in the stage's label colour, and the
-// same colour on the group marker that stands in for it in the icon rail.
-const stageActiveRuleClass: Record<ReleaseStage, string> = {
-  preview: "before:bg-[color:var(--text-default-warning)]",
-  beta: "before:bg-[color:var(--text-default-information)]",
-};
-const stageIconRailMarkerClass: Record<ReleaseStage, string> = {
-  preview:
-    "group-data-[collapsible=icon]:before:bg-[color:var(--text-default-warning)]",
-  beta: "group-data-[collapsible=icon]:before:bg-[color:var(--text-default-information)]",
-};
-
 // ---------------------------------------------------------------------------
 // Collapsible nav group (Connect, Build, etc.)
 // ---------------------------------------------------------------------------
@@ -556,15 +544,12 @@ export function CollapsibleNavGroup({
   Icon,
   defaultHref,
   stage,
-  activeStage,
   children,
 }: {
   label: string;
   Icon: React.ComponentType<{ className?: string }>;
   defaultHref?: string;
   stage?: ReleaseStage;
-  /** Stage of the active leaf's section, if it sits in one. */
-  activeStage?: ReleaseStage;
   children: React.ReactNode;
 }): React.JSX.Element {
   const { openGroups, toggleGroup, openGroup, activeGroup } =
@@ -605,13 +590,6 @@ export function CollapsibleNavGroup({
                 : "text-muted-foreground hover:text-foreground font-medium",
               isActiveGroup && !isOpen && ACTIVE_ITEM,
               isActiveGroup && isOpen && ACTIVE_MARKER_ICON_RAIL,
-              // The marker stands in for the active leaf, so it takes the
-              // leaf's stage colour when that leaf is in a stage section.
-              isActiveGroup &&
-                activeStage &&
-                (isOpen
-                  ? stageIconRailMarkerClass[activeStage]
-                  : stageActiveRuleClass[activeStage]),
             )}
           >
             <Icon
@@ -694,8 +672,7 @@ export function CollapsibleNavItem({
   stage?: ReleaseStage;
   /**
    * The stage of the `ReleaseStageNavSection` the item sits in. The section
-   * already names the stage, so the badge is dropped, and the active rule
-   * takes the stage's colour.
+   * already names the stage, so the row drops its own badge.
    */
   stageSection?: ReleaseStage;
 }): React.JSX.Element {
@@ -748,20 +725,13 @@ export function CollapsibleNavItem({
             item.active
               ? ACTIVE_ITEM
               : "text-muted-foreground hover:text-foreground",
-            // The section's dashed edge sits on the group rail, 9px left of
-            // the rows above; 16px of padding (past its 1px border) puts the
-            // label back on their column.
-            stageSection && "pl-4",
             // The active rule is centred on the group's 1px track: a 2px rule
-            // starts half a pixel left of the track. Rows sit 9px right of it
-            // (the track's 1px plus 8px padding); section rows sit 1px right,
-            // on the section's own border. Active rows only: any `before:`
-            // utility gives the pseudo-element content, which on an inactive
-            // row lands in the flex flow and pushes the label right by the gap.
-            item.active &&
-              (stageSection
-                ? cn("before:-left-[1.5px]", stageActiveRuleClass[stageSection])
-                : "before:-left-[9.5px]"),
+            // starts half a pixel left of the track, and rows sit 9px right of
+            // it (the track's 1px plus 8px padding). Active rows only: any
+            // `before:` utility gives the pseudo-element content, which on an
+            // inactive row lands in the flex flow and pushes the label right
+            // by the gap.
+            item.active && "before:-left-[9.5px]",
           )}
         >
           <span className={cn("truncate", isLoading && "nav-shimmer")}>
@@ -781,19 +751,10 @@ export function CollapsibleNavItem({
 // Release-stage section inside a CollapsibleNavGroup
 // ---------------------------------------------------------------------------
 
-// A faint wash of the stage's colour: the softest background token (100 under
-// the border's 300) at 40% over the sidebar. Mixed with the sidebar rather
-// than transparent so the solid rail under the dashed edge does not show
-// through the gaps.
-const stageSectionBgClass: Record<ReleaseStage, string> = {
-  preview:
-    "bg-[color-mix(in_oklab,var(--bg-warning-softest)_40%,var(--sidebar))]",
-  beta: "bg-[color-mix(in_oklab,var(--bg-information-softest)_40%,var(--sidebar))]",
-};
-
-// Gathers a group's Preview or Beta items into one dashed, tinted box with the
-// stage named once above it, instead of a badge on every row. The label sits
-// clear of the box: laid over the border it cut across the tint's edge.
+// Names the stage once above a group's Preview or Beta items, instead of a
+// badge on every row. A quiet caption, not a box: a bordered or tinted
+// container around a row reads as a selection or focus state, and pulled the
+// eye away from the row that really is active.
 export function ReleaseStageNavSection({
   stage,
   children,
@@ -817,21 +778,11 @@ export function ReleaseStageNavSection({
     >
       <div
         id={labelId}
-        className={cn(
-          "px-2 pb-1 font-mono text-[10px] tracking-[0.08em] uppercase",
-          stageTextClass[stage],
-        )}
+        className="text-muted-foreground px-2 pb-0.5 font-mono text-[10px] tracking-[0.08em] uppercase"
       >
         In {stageLabel[stage]}
       </div>
-      <ul
-        aria-labelledby={labelId}
-        className={cn(
-          "-ml-[9px] flex flex-col border border-dashed py-1 pr-1",
-          stageTextClass[stage],
-          stageSectionBgClass[stage],
-        )}
-      >
+      <ul aria-labelledby={labelId} className="flex flex-col">
         {children}
       </ul>
     </motion.li>

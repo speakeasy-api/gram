@@ -73,7 +73,6 @@ export function ScopeGatedNavGroup({
       Icon={Icon}
       defaultHref={first.item.href()}
       stage={stage}
-      activeStage={visible.find((entry) => entry.item.active)?.item.stage}
     >
       {stable.map((entry) => (
         <CollapsibleNavItem
