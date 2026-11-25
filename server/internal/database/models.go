@@ -4006,6 +4006,9 @@ type McpServer struct {
 	RequiresUpstreamAuth pgtype.Bool
 	// @access: confidential
 	SetupGuideCompletedAt pgtype.Timestamptz
+	// Whether the server offers the built-in feedback tool. Kept equal to mcp_server_feedback_configs.enabled, false when the server has no config.
+	// @access: confidential
+	FeedbackToolEnabled bool
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
