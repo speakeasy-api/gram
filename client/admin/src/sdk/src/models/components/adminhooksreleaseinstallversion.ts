@@ -20,13 +20,13 @@ export type AdminHooksReleaseInstallVersion = {
    */
   installs: number;
   /**
-   * How the version compares to the release Speakeasy ships.
-   */
-  status: AdminHooksReleaseInstallStatus;
-  /**
    * The hooks binary version, or empty for installs that sent no version.
    */
   version: string;
+  /**
+   * How the version compares to the release Speakeasy ships.
+   */
+  status: AdminHooksReleaseInstallStatus;
 };
 
 /** @internal */
@@ -35,8 +35,8 @@ export const AdminHooksReleaseInstallVersion$inboundSchema: z.ZodMiniType<
   unknown
 > = z.object({
   installs: z.int(),
-  status: AdminHooksReleaseInstallStatus$inboundSchema,
   version: z.string(),
+  status: AdminHooksReleaseInstallStatus$inboundSchema,
 });
 
 export function adminHooksReleaseInstallVersionFromJSON(
