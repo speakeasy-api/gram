@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo, useRef } from "react";
 import { useNavigate } from "react-router";
 import type { LauncherCandidate } from "./types";
+import { gatewayInspectCandidate } from "./useGatewayCandidates";
 
 export const COMMAND_SEARCH_SCHEMA_VERSION = "1";
 const PAYLOAD_BUCKET_CEILING = 250_000;
@@ -251,6 +252,14 @@ export function mapResourceSearchItems(
       group: presentation.group,
       run,
     };
+    if (kind === "gateway") {
+      return [
+        candidate,
+        gatewayInspectCandidate(candidate, () =>
+          routes.mcp.gateway.inspect.goTo(selector),
+        ),
+      ];
+    }
     if (kind !== "agent_identity") return [candidate];
 
     const urn = encodeIdentityUrn(`agent:${selector}`);
@@ -284,10 +293,11 @@ export function mapResourceSearchItems(
     const mcpSignIn: LauncherCandidate = {
       ...identity,
       id: `agent-mcp-sign-in:${item.id}`,
-      title: `${item.name} · MCP sign-in`,
+      title: `${item.name} · Server sign-in`,
       detail: "Change MCP servers · reconnect expired sign-ins",
       keywords: [
         ...identity.keywords,
+        "mcp sign-in",
         "mcp",
         "servers",
         "sign-in",

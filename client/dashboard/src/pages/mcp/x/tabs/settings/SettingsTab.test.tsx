@@ -20,34 +20,20 @@ vi.mock("./sections/authentication/AuthenticationSection", () => ({
   MCP_AUTHENTICATION_SECTION_ID: "authentication",
   AuthenticationSection: ({ mcpServer }: { mcpServer: McpServer }) =>
     mcpServer.remoteMcpServerId ? (
-      <h2 data-testid="legacy-identity-section">Identity</h2>
+      <h2 data-testid="legacy-identity-section">Sign-in method</h2>
     ) : (
-      <h2>Authentication</h2>
+      <h2>Sign-in method</h2>
     ),
 }));
 vi.mock("./sections/authentication/UpstreamCredentialsSection", () => ({
   UPSTREAM_CREDENTIALS_SECTION_ID: "upstream-credentials",
   UpstreamCredentialsSection: () => (
-    <h2 data-testid="upstream-credentials-section">Identity</h2>
+    <h2 data-testid="upstream-credentials-section">Upstream credentials</h2>
   ),
 }));
 
-// The enforcement state comes from the organization's product features; the
-// real gate hook reads it through this query.
-const productFeatures = vi.hoisted(() => ({
-  result: {
-    isPending: false,
-    isError: false,
-    data: { upstreamAuthEnforced: false } as
-      | { upstreamAuthEnforced: boolean }
-      | undefined,
-  },
-}));
 vi.mock("./sections/authentication/SetupStepBanner", () => ({
   SetupStepBanner: () => null,
-}));
-vi.mock("@gram/client/react-query/productFeatures.js", () => ({
-  useProductFeatures: () => productFeatures.result,
 }));
 vi.mock("@/contexts/Auth", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/contexts/Auth")>()),
@@ -63,15 +49,18 @@ vi.mock("./sections/DangerZoneSection", () => ({
 vi.mock("./sections/RestartSetupSection", () => ({
   RestartSetupSection: () => <h2>Guided setup</h2>,
 }));
-vi.mock("./sections/HeadersSection", () => ({
-  HeadersSection: () => <h2>Custom Headers</h2>,
-}));
 vi.mock("./sections/PublicRateLimitsSection", () => ({
   PublicRateLimitsSection: () => <h2>Public Rate Limits</h2>,
 }));
 vi.mock("./sections/RemoteMcpSessionsSection", () => ({
   MCP_SESSIONS_SECTION_ID: "sessions",
-  RemoteMcpSessionsSection: () => <h2>Sessions</h2>,
+  RemoteMcpSessionsSection: ({ mcpServer }: { mcpServer: McpServer }) => (
+    <h2 data-server-id={mcpServer.id}>MCP sign-in</h2>
+  ),
+}));
+vi.mock("./sections/UpstreamUrlSection", () => ({
+  MCP_UPSTREAM_URL_SECTION_ID: "upstream-url",
+  UpstreamUrlSection: () => <h2>Remote URL</h2>,
 }));
 vi.mock("./sections/ServerUrlSection", () => ({
   MCP_SERVER_URL_SECTION_ID: "server-url",
@@ -194,7 +183,6 @@ function renderTab(mcpServer: McpServer): void {
 
 afterEach(() => {
   cleanup();
-  setEnforcement("legacy");
 });
 
 describe("SettingsTab", () => {
@@ -246,10 +234,8 @@ describe("SettingsTab", () => {
       // server has no Access area.
       General: ["Availability", "General"],
       Plugins: ["Plugins"],
-      // Upstream headers are the Identity panel's Custom Headers disclosure,
-      // not a section of their own.
-      "Sign-in and identity": ["Identity", "Identity chaining"],
-      Connection: ["Server URL", "Network Access", "Sessions"],
+      "Sign-in": ["Upstream credentials", "MCP sign-in", "Identity chaining"],
+      Connection: ["Server URL", "Remote URL", "Network Access"],
       Tools: ["Tool Filtering"],
       "Danger zone": ["Danger Zone"],
     });
@@ -263,8 +249,9 @@ describe("SettingsTab", () => {
       General: ["Availability", "General"],
       Access: ["Visibility", "Public Rate Limits"],
       Plugins: ["Plugins"],
-      "Sign-in and identity": [
-        "Authentication",
+      "Sign-in": [
+        "Sign-in method",
+        "Upstream credentials",
         "Resource Identifier",
         "Caller Identity",
       ],
@@ -285,7 +272,7 @@ describe("SettingsTab", () => {
     ).toEqual({
       General: ["Availability", "General"],
       Plugins: ["Plugins"],
-      "Sign-in and identity": ["Authentication"],
+      "Sign-in": ["Sign-in method"],
       "Danger zone": ["Danger Zone"],
     });
   });
@@ -308,26 +295,11 @@ describe("SettingsTab", () => {
     ).toEqual([
       ["General", "#settings-general"],
       ["Plugins", "#publishing"],
-      ["Sign-in and identity", "#settings-sign-in"],
+      ["Sign-in", "#settings-sign-in"],
       ["Danger zone", "#settings-danger-zone"],
     ]);
   });
 });
-
-type EnforcementState = "enforced" | "legacy" | "loading" | "error";
-
-function setEnforcement(state: EnforcementState): void {
-  productFeatures.result =
-    state === "loading"
-      ? { isPending: true, isError: false, data: undefined }
-      : state === "error"
-        ? { isPending: false, isError: true, data: undefined }
-        : {
-            isPending: false,
-            isError: false,
-            data: { upstreamAuthEnforced: state === "enforced" },
-          };
-}
 
 const remoteServer = () =>
   server({
@@ -335,57 +307,35 @@ const remoteServer = () =>
     userSessionIssuerId: "issuer-1",
   });
 
-describe("SettingsTab upstream identity gate", () => {
-  it("shows only the credentials as Identity on a remote server when enforced", () => {
-    setEnforcement("enforced");
-    expect(renderSettings(remoteServer())).toEqual([
+describe("SettingsTab typed upstream identity", () => {
+  it("shows typed credentials and keeps sessions on a proxied server", () => {
+    const mcpServer = remoteServer();
+    expect(renderSettings(mcpServer)).toEqual([
       "Availability",
       "General",
       "Plugins",
-      "Identity",
+      "Upstream credentials",
+      "MCP sign-in",
       "Identity chaining",
       "Server URL",
+      "Remote URL",
       "Network Access",
-      "Sessions",
       "Tool Filtering",
       "Danger Zone",
     ]);
     expect(screen.getByTestId("upstream-credentials-section")).toBeTruthy();
     expect(screen.queryByTestId("legacy-identity-section")).toBeNull();
-    // The legacy anchor resolves to the replacement.
+    // The legacy anchor resolves to upstream credentials, not downstream sessions.
+    const upstream = document.getElementById("authentication");
+    const sessions = screen.getByRole("heading", { name: "MCP sign-in" });
     expect(
-      document
-        .getElementById("authentication")
-        ?.querySelector("[data-testid='upstream-credentials-section']"),
-    ).toBeTruthy();
+      upstream?.contains(screen.getByTestId("upstream-credentials-section")),
+    ).toBe(true);
+    expect(upstream?.contains(sessions)).toBe(false);
+    expect(sessions.getAttribute("data-server-id")).toBe(mcpServer.id);
   });
 
-  it("shows only the legacy Identity on a remote server when not enforced", () => {
-    setEnforcement("legacy");
-    expect(renderSettings(remoteServer())).toContain("Identity");
-    expect(screen.getByTestId("legacy-identity-section")).toBeTruthy();
-    expect(screen.queryByTestId("upstream-credentials-section")).toBeNull();
-  });
-
-  it.each([
-    ["loading", "Loading…"],
-    ["error", "The identity settings could not be loaded."],
-  ] as const)(
-    "shows neither identity surface on a remote server while %s",
-    (state, message) => {
-      setEnforcement(state);
-      expect(
-        renderSettings(remoteServer()).filter((h) => h === "Identity"),
-      ).toHaveLength(1);
-      expect(screen.getByText(message, { exact: false })).toBeTruthy();
-      expect(screen.queryByTestId("legacy-identity-section")).toBeNull();
-      expect(screen.queryByTestId("upstream-credentials-section")).toBeNull();
-      expect(document.getElementById("authentication")).toBeTruthy();
-    },
-  );
-
-  it("keeps tunneled caller authentication and adds credentials as Identity when enforced", () => {
-    setEnforcement("enforced");
+  it("keeps tunneled caller authentication alongside upstream credentials", () => {
     const headings = renderSettings(
       server({ tunneledMcpServerId: "tunneled-source-1" }),
     );
@@ -395,73 +345,30 @@ describe("SettingsTab upstream identity gate", () => {
       "Visibility",
       "Public Rate Limits",
       "Plugins",
-      "Authentication",
-      "Identity",
+      "Sign-in method",
+      "Upstream credentials",
     ]);
     expect(screen.getByTestId("upstream-credentials-section")).toBeTruthy();
   });
 
-  it("keeps tunneled caller authentication without credentials when not enforced", () => {
-    setEnforcement("legacy");
-    const headings = renderSettings(
-      server({ tunneledMcpServerId: "tunneled-source-1" }),
-    );
-    expect(headings).toContain("Authentication");
-    expect(headings).not.toContain("Identity");
-    expect(screen.queryByTestId("upstream-credentials-section")).toBeNull();
-  });
-
-  it.each(["enforced", "legacy", "loading", "error"] as const)(
-    "never offers upstream identity on unproxied or toolset-backed servers (%s)",
-    (state) => {
-      setEnforcement(state);
-      expect(
-        renderSettings(server({ unproxiedMcpServerId: "unproxied-source-1" })),
-      ).toEqual([
-        "Availability",
-        "General",
-        "Plugins",
-        "Authentication",
-        "Danger Zone",
-      ]);
-      cleanup();
-      expect(
-        renderSettings(
-          server({
-            tunneledMcpServerId: "tunneled-source-1",
-            toolsetId: "toolset-1",
-          }),
-        ),
-      ).not.toContain("Identity");
-    },
-  );
-});
-
-describe("SettingsTab upstream identity gate state", () => {
-  it("keeps the last known surface when a refetch fails", () => {
-    productFeatures.result = {
-      isPending: false,
-      isError: true,
-      data: { upstreamAuthEnforced: true },
-    };
-    renderSettings(remoteServer());
-    expect(screen.getByTestId("upstream-credentials-section")).toBeTruthy();
-    expect(screen.queryByTestId("legacy-identity-section")).toBeNull();
-  });
-
-  it("shows neither surface when the server could not read the state", () => {
-    productFeatures.result = {
-      isPending: false,
-      isError: false,
-      data: {} as { upstreamAuthEnforced: boolean },
-    };
-    renderSettings(remoteServer());
+  it("never offers upstream identity on unproxied or toolset-backed servers", () => {
     expect(
-      screen.getByText("The identity settings could not be loaded.", {
-        exact: false,
-      }),
-    ).toBeTruthy();
-    expect(screen.queryByTestId("legacy-identity-section")).toBeNull();
-    expect(screen.queryByTestId("upstream-credentials-section")).toBeNull();
+      renderSettings(server({ unproxiedMcpServerId: "unproxied-source-1" })),
+    ).toEqual([
+      "Availability",
+      "General",
+      "Plugins",
+      "Sign-in method",
+      "Danger Zone",
+    ]);
+    cleanup();
+    expect(
+      renderSettings(
+        server({
+          tunneledMcpServerId: "tunneled-source-1",
+          toolsetId: "toolset-1",
+        }),
+      ),
+    ).not.toContain("Upstream credentials");
   });
 });

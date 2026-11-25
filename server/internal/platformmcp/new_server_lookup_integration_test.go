@@ -30,7 +30,7 @@ type countingCatalogReadinessProber struct {
 	ttl time.Duration
 }
 
-func (p *countingCatalogReadinessProber) ProbeCatalogReadiness(_ context.Context, principal Principal, _, registrationID, _, _, _, _ uuid.UUID) (ProviderReadinessProbeResult, error) {
+func (p *countingCatalogReadinessProber) ProbeCatalogReadiness(_ context.Context, principal Principal, _, registrationID, _, _, _, _, _ uuid.UUID) (ProviderReadinessProbeResult, error) {
 	p.calls.Add(1)
 	if p.err != nil {
 		return ProviderReadinessProbeResult{}, p.err

@@ -30,6 +30,23 @@ const (
 	// Storage integration is not yet enabled, so platform-key transitions are
 	// deliberately unavailable for this use case.
 	UseCaseChatTranscripts UseCase = "chat-transcripts"
+
+	// UseCaseAIProviderKeys is the use case for AI provider and model keys:
+	// AI integration API keys and webhook signing secrets, customer model
+	// provider keys, and provisioned OpenRouter keys.
+	UseCaseAIProviderKeys UseCase = "ai-provider-keys"
+
+	// UseCaseMarketplaceTokens is the use case for the plugin marketplace
+	// tokens, the URL-as-secret credentials of marketplace install URLs.
+	UseCaseMarketplaceTokens UseCase = "marketplace-tokens"
+
+	// UseCaseFunctionRunnerKeys is the use case for the per-function keys
+	// Speakeasy Functions runners and the server authenticate each other with.
+	UseCaseFunctionRunnerKeys UseCase = "function-runner-keys"
+
+	// UseCaseTailscaleOAuthClients is the use case for the Tailscale OAuth
+	// clients organizations connect their private network ingress with.
+	UseCaseTailscaleOAuthClients UseCase = "tailscale-oauth-clients"
 )
 
 // registeredUseCases lists every use case the package accepts. Add a consumer
@@ -39,6 +56,10 @@ var registeredUseCases = []UseCase{
 	UseCaseOAuthClientSecrets,
 	UseCaseOAuthSessionTokens,
 	UseCaseChatTranscripts,
+	UseCaseAIProviderKeys,
+	UseCaseMarketplaceTokens,
+	UseCaseFunctionRunnerKeys,
+	UseCaseTailscaleOAuthClients,
 }
 
 // ParseUseCase returns the registered use case named value.

@@ -78,6 +78,10 @@ type consentInventoryTool struct {
 // consentToolInventory holds complete gateway discovery or accumulates a
 // single-server attempt across tools/list pages.
 type consentToolInventory struct {
+	// TypedGateway is present only on gateway previews captured from typed offers.
+	// A preview started by an older binary cannot authorize new choices.
+	TypedGateway bool `json:"typed_gateway,omitempty"`
+
 	// DirectAuthClient binds a direct preview to its typed credential (nil UUID for no auth).
 	DirectAuthClient *uuid.UUID `json:"direct_auth_client,omitempty"`
 
@@ -179,6 +183,7 @@ func (s *Service) loadConsentInventoryDraft(ctx context.Context, endpoint *Resol
 		return consentToolInventory{}, fmt.Errorf("%w: %w", errConsentInventoryUnavailable, err)
 	}
 	return consentToolInventory{
+		TypedGateway:     false,
 		DirectAuthClient: nil,
 		CompletedAt:      time.Time{},
 		BackendHash:      backendHash,

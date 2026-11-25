@@ -15,6 +15,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ettle/strcase"
+
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authz/authzgen"
 	"github.com/speakeasy-api/gram/server/internal/authz/internal/registry"
@@ -49,22 +51,11 @@ type dashboardCase struct {
 	Checks [][4]any         `json:"checks"`
 }
 
-// apiSelectorKey spells a selector key the way the API returns it:
-// resource_id becomes resourceId.
-func apiSelectorKey(key string) string {
-	parts := strings.Split(key, "_")
-	for i := 1; i < len(parts); i++ {
-		if parts[i] != "" {
-			parts[i] = strings.ToUpper(parts[i][:1]) + parts[i][1:]
-		}
-	}
-	return strings.Join(parts, "")
-}
-
 func apiSelector(selector authz.Selector) map[string]string {
 	out := make(map[string]string, len(selector))
 	for key, value := range selector {
-		out[apiSelectorKey(key)] = value
+		// The API spells selector keys in camel case: resource_id is resourceId.
+		out[strcase.ToCamel(key)] = value
 	}
 	return out
 }
@@ -91,6 +82,8 @@ func toEffectiveGrants(grants []authz.Grant) []effectiveGrant {
 	return out
 }
 
+// Checks also ask about caseResource2 and caseProject2, so each case records
+// what a grant must not reach.
 const (
 	caseRole      = "role:organization:role-1"
 	caseUser      = "user:user-1"
@@ -114,7 +107,9 @@ func caseGrant(principal string, scope authz.Scope, resourceID, projectID string
 	return authz.Grant{PrincipalUrn: principal, Scope: scope, Selector: selector, Inferred: false}
 }
 
-// dimensionValues are the values case grants use for optional dimensions.
+// The dashboard never sends these dimensions, so atomsFor's limited grants pin
+// how a grant limited to one answers a check that leaves it out. Any valid,
+// non-empty value works.
 var dimensionValues = map[string]string{
 	authz.SelectorKeyDisposition:    authz.DispositionReadOnly,
 	authz.SelectorKeyServerURL:      "https://example.com",

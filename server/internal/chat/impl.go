@@ -58,6 +58,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/requestip"
 	"github.com/speakeasy-api/gram/server/internal/risk/chatfindings"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -86,7 +87,11 @@ type Service struct {
 	telemetryService *telemetry.Service
 	billingRepo      billing.Repository
 	audit            *audit.Logger
-	riskFindings     *chatfindings.Reader
+
+	// staffOrg is the deployment's Speakeasy staff organization, which the
+	// credit balance gate never blocks.
+	staffOrg     staff.Organization
+	riskFindings *chatfindings.Reader
 	// access is the per-chat gate, shared with services that reveal session
 	// content under another name (see SessionAccess).
 	access *SessionAccess
@@ -171,6 +176,7 @@ func NewService(
 	assistantTokens *assistanttokens.Manager,
 	billingRepo billing.Repository,
 	auditLogger *audit.Logger,
+	staffOrg staff.Organization,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("chat"))
 
@@ -192,6 +198,7 @@ func NewService(
 		telemetryService: telemetryService,
 		billingRepo:      billingRepo,
 		audit:            auditLogger,
+		staffOrg:         staffOrg,
 		riskFindings:     nil,
 		access:           NewSessionAccess(logger, db, authzEngine),
 		turnStream:       nil, // opt in via WithTurnStream
@@ -1057,7 +1064,7 @@ const (
 // can't be made we fall back to own-sessions rather than failing.
 func (s *Service) chatVisibilityScope(ctx context.Context, authCtx *contextvalues.AuthContext, payloadExternalUserID, payloadUserID *string, agentSessions agentSessionScope) (chatVisibility, error) {
 	// An assistant principal is set only on the assistant runtime path and only
-	// the managed-assistant platform toolset surfaces chat tools, so treat it as
+	// the managed assistant's platform toolset surfaces chat tools, so treat it as
 	// admin-equivalent for project-wide visibility.
 	_, isAssistantCall := contextvalues.GetAssistantPrincipal(ctx)
 
@@ -1764,13 +1771,13 @@ func extractHTTPMetadata(r *http.Request) httpMetadata {
 // checkCreditBalance rejects the request when the org has consumed its granted
 // credits. Reads only the cached period usage so the gate stays cheap; on
 // cache miss we fail open and rely on the OpenRouter per-key monthly limit as
-// the hard backstop. Speakeasy-internal orgs (specialLimitOrgs) bypass.
+// the hard backstop. The staff organization bypasses it.
 //
 // Phase 0: only enforce the hard gate on free-tier orgs. Pro/enterprise stay
 // bounded by the OpenRouter monthly key cap (creditsAccountTypeMap) until the
 // two limit sources are unified — see AGE-2122.
 func (s *Service) checkCreditBalance(ctx context.Context, orgID, accountType string) error {
-	if openrouter.IsSpecialLimitOrg(orgID) {
+	if s.staffOrg.Is(orgID) {
 		return nil
 	}
 

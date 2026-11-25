@@ -179,7 +179,23 @@ func AccessRoles(organizationSlug string) Link {
 // user who asked for a scope. The resource, its project and the stored access
 // request are optional.
 func AccessGrant(organizationSlug, userID, scope, resourceID, projectID, requestID string) Link {
-	return AccessRoles(organizationSlug).
+	return withGrant(AccessRoles(organizationSlug), userID, scope, resourceID, projectID, requestID)
+}
+
+// AccessRequests is the organization's pending access requests.
+func AccessRequests(organizationSlug string) Link {
+	return orgPage(organizationSlug, "access", "requests")
+}
+
+// AccessRequestDecision is the access requests page with the decision dialog
+// open for a stored request. It carries the same query as AccessGrant.
+func AccessRequestDecision(organizationSlug, userID, scope, resourceID, projectID, requestID string) Link {
+	return withGrant(AccessRequests(organizationSlug), userID, scope, resourceID, projectID, requestID)
+}
+
+// withGrant adds the query the Access page reads to fill in its grant dialog.
+func withGrant(link Link, userID, scope, resourceID, projectID, requestID string) Link {
+	return link.
 		with("grant_user", userID).
 		with("scope", scope).
 		with("resource_id", resourceID).

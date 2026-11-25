@@ -145,10 +145,10 @@ type SetShadowMCPOfficialServerRequestBody struct {
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
 	// The Shadow MCP server's URL.
 	ServerURL string `form:"server_url" json:"server_url" xml:"server_url"`
-	// The MCP server to link as the official version. Omit it, with keep_shadow
-	// unset, to go back to the automatic link.
+	// The MCP server to make the official version. Omit it, with keep_shadow
+	// unset, to go back to the automatic choice.
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
-	// Keep using the Shadow MCP server directly: no official server is linked, not
+	// Keep using the Shadow MCP server directly: no server is made official, not
 	// even automatically. Cannot be combined with mcp_server_id.
 	KeepShadow *bool `form:"keep_shadow,omitempty" json:"keep_shadow,omitempty" xml:"keep_shadow,omitempty"`
 }
@@ -200,6 +200,15 @@ type RequestAccessRequestBody struct {
 	ResourceName *string `form:"resource_name,omitempty" json:"resource_name,omitempty" xml:"resource_name,omitempty"`
 	// Optional message from the requester explaining why they need access.
 	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// How long the requester would like the access for, counted from approval: 1h,
+	// 2h or 4h. A suggestion shown to the approver, who still picks the window.
+	// Stored only when the request is stored. Cannot be sent with requested_until.
+	Duration *string `form:"duration,omitempty" json:"duration,omitempty" xml:"duration,omitempty"`
+	// When the requester would like the access until, such as the end of their day
+	// as their own clock reads it. Must be in the future and at most 24 hours
+	// away. A suggestion shown to the approver, who still picks the window. Cannot
+	// be sent with duration.
+	RequestedUntil *string `form:"requested_until,omitempty" json:"requested_until,omitempty" xml:"requested_until,omitempty"`
 }
 
 // ResolveChallengeRequestBody is the type of the "access" service
@@ -602,15 +611,15 @@ type GetShadowMCPInventoryServerResponseBody struct {
 	// Enabled blocking policies that block this server via a risk_policy:block
 	// grant (allow_all policies only).
 	BlockedPolicyIds []string `form:"blocked_policy_ids,omitempty" json:"blocked_policy_ids,omitempty" xml:"blocked_policy_ids,omitempty"`
-	// The MCP server linked as this Shadow MCP server's official version. While it
-	// is linked, direct use is blocked wherever a Shadow MCP policy applies, and
+	// The MCP server that is this Shadow MCP server's official version. While it
+	// is official, direct use is blocked wherever a Shadow MCP policy applies, and
 	// the block points agents here.
 	OfficialServer *ShadowMCPOfficialServerResponseBody `form:"official_server,omitempty" json:"official_server,omitempty" xml:"official_server,omitempty"`
 	// A project MCP server that proxies to the same upstream URL, offered as the
-	// server to link. Present only while no official server is linked.
+	// server to make official. Present only while no official server is set.
 	SuggestedOfficialServer *ShadowMCPSuggestedOfficialServerResponseBody `form:"suggested_official_server,omitempty" json:"suggested_official_server,omitempty" xml:"suggested_official_server,omitempty"`
 	// True when an administrator chose to keep using the Shadow MCP server
-	// directly, so no official server is linked automatically.
+	// directly, so no official server is chosen automatically.
 	OfficialServerDeclined *bool `form:"official_server_declined,omitempty" json:"official_server_declined,omitempty" xml:"official_server_declined,omitempty"`
 }
 
@@ -910,6 +919,13 @@ type DecideAccessRequestResponseBody struct {
 	ResourceName *string `form:"resource_name,omitempty" json:"resource_name,omitempty" xml:"resource_name,omitempty"`
 	// The requester's note to the administrators.
 	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// How long the requester asked to have the access, in seconds counted from
+	// approval. A suggestion; the approver picks the window. Absent when none was
+	// asked for.
+	RequestedDurationSeconds *int `form:"requested_duration_seconds,omitempty" json:"requested_duration_seconds,omitempty" xml:"requested_duration_seconds,omitempty"`
+	// When the requester asked to have the access until. A suggestion; the
+	// approver picks the window. Absent when none was asked for.
+	RequestedUntil *string `form:"requested_until,omitempty" json:"requested_until,omitempty" xml:"requested_until,omitempty"`
 	// pending: waiting for a decision. approved: a temporary grant was given.
 	// denied, expired or withdrawn: no access was given.
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
@@ -948,6 +964,13 @@ type WithdrawAccessRequestResponseBody struct {
 	ResourceName *string `form:"resource_name,omitempty" json:"resource_name,omitempty" xml:"resource_name,omitempty"`
 	// The requester's note to the administrators.
 	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// How long the requester asked to have the access, in seconds counted from
+	// approval. A suggestion; the approver picks the window. Absent when none was
+	// asked for.
+	RequestedDurationSeconds *int `form:"requested_duration_seconds,omitempty" json:"requested_duration_seconds,omitempty" xml:"requested_duration_seconds,omitempty"`
+	// When the requester asked to have the access until. A suggestion; the
+	// approver picks the window. Absent when none was asked for.
+	RequestedUntil *string `form:"requested_until,omitempty" json:"requested_until,omitempty" xml:"requested_until,omitempty"`
 	// pending: waiting for a decision. approved: a temporary grant was given.
 	// denied, expired or withdrawn: no access was given.
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
@@ -10793,15 +10816,15 @@ type ShadowMCPInventoryServerResponseBody struct {
 	// Enabled blocking policies that block this server via a risk_policy:block
 	// grant (allow_all policies only).
 	BlockedPolicyIds []string `form:"blocked_policy_ids,omitempty" json:"blocked_policy_ids,omitempty" xml:"blocked_policy_ids,omitempty"`
-	// The MCP server linked as this Shadow MCP server's official version. While it
-	// is linked, direct use is blocked wherever a Shadow MCP policy applies, and
+	// The MCP server that is this Shadow MCP server's official version. While it
+	// is official, direct use is blocked wherever a Shadow MCP policy applies, and
 	// the block points agents here.
 	OfficialServer *ShadowMCPOfficialServerResponseBody `form:"official_server,omitempty" json:"official_server,omitempty" xml:"official_server,omitempty"`
 	// A project MCP server that proxies to the same upstream URL, offered as the
-	// server to link. Present only while no official server is linked.
+	// server to make official. Present only while no official server is set.
 	SuggestedOfficialServer *ShadowMCPSuggestedOfficialServerResponseBody `form:"suggested_official_server,omitempty" json:"suggested_official_server,omitempty" xml:"suggested_official_server,omitempty"`
 	// True when an administrator chose to keep using the Shadow MCP server
-	// directly, so no official server is linked automatically.
+	// directly, so no official server is chosen automatically.
 	OfficialServerDeclined *bool `form:"official_server_declined,omitempty" json:"official_server_declined,omitempty" xml:"official_server_declined,omitempty"`
 }
 
@@ -10883,12 +10906,12 @@ type ShadowMCPOfficialServerResponseBody struct {
 	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
 	// The gateway that serves the official server, when url is a gateway's address.
 	GatewayName *string `form:"gateway_name,omitempty" json:"gateway_name,omitempty" xml:"gateway_name,omitempty"`
-	// True when the link was made automatically because the server proxies to the
-	// Shadow MCP server's URL; false when an administrator chose it.
+	// True when the server was made official automatically because the server
+	// proxies to the Shadow MCP server's URL; false when an administrator chose it.
 	Automatic *bool `form:"automatic,omitempty" json:"automatic,omitempty" xml:"automatic,omitempty"`
-	// Deprecated: links no longer have an on/off switch, so this is always false.
-	// Kept one release so older dashboards, which require it, keep rendering, then
-	// removed.
+	// Deprecated: official servers no longer have an on/off switch, so this is
+	// always false. Kept one release so older dashboards, which require it, keep
+	// rendering, then removed.
 	DirectAccessAllowed *bool `form:"direct_access_allowed,omitempty" json:"direct_access_allowed,omitempty" xml:"direct_access_allowed,omitempty"`
 }
 
@@ -11198,6 +11221,13 @@ type AccessRequestResponseBody struct {
 	ResourceName *string `form:"resource_name,omitempty" json:"resource_name,omitempty" xml:"resource_name,omitempty"`
 	// The requester's note to the administrators.
 	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// How long the requester asked to have the access, in seconds counted from
+	// approval. A suggestion; the approver picks the window. Absent when none was
+	// asked for.
+	RequestedDurationSeconds *int `form:"requested_duration_seconds,omitempty" json:"requested_duration_seconds,omitempty" xml:"requested_duration_seconds,omitempty"`
+	// When the requester asked to have the access until. A suggestion; the
+	// approver picks the window. Absent when none was asked for.
+	RequestedUntil *string `form:"requested_until,omitempty" json:"requested_until,omitempty" xml:"requested_until,omitempty"`
 	// pending: waiting for a decision. approved: a temporary grant was given.
 	// denied, expired or withdrawn: no access was given.
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
@@ -11700,10 +11730,12 @@ func NewSetResourceAudienceRequestBody(p *access.SetResourceAudiencePayload) *Se
 // the "requestAccess" endpoint of the "access" service.
 func NewRequestAccessRequestBody(p *access.RequestAccessPayload) *RequestAccessRequestBody {
 	body := &RequestAccessRequestBody{
-		Scope:        p.Scope,
-		ResourceID:   p.ResourceID,
-		ResourceName: p.ResourceName,
-		Message:      p.Message,
+		Scope:          p.Scope,
+		ResourceID:     p.ResourceID,
+		ResourceName:   p.ResourceName,
+		Message:        p.Message,
+		Duration:       p.Duration,
+		RequestedUntil: p.RequestedUntil,
 	}
 	return body
 }
@@ -19955,22 +19987,24 @@ func NewListAccessRequestsGatewayError(body *ListAccessRequestsGatewayErrorRespo
 // "decideAccessRequest" endpoint result from a HTTP "OK" response.
 func NewDecideAccessRequestAccessRequestOK(body *DecideAccessRequestResponseBody) *access.AccessRequest {
 	v := &access.AccessRequest{
-		ID:               *body.ID,
-		RequesterUserID:  *body.RequesterUserID,
-		RequesterName:    *body.RequesterName,
-		Scope:            *body.Scope,
-		ResourceName:     body.ResourceName,
-		Message:          body.Message,
-		Status:           *body.Status,
-		DecidedByUserID:  body.DecidedByUserID,
-		DecidedByName:    body.DecidedByName,
-		DecidedVia:       body.DecidedVia,
-		DecidedAt:        body.DecidedAt,
-		TemporaryGrantID: body.TemporaryGrantID,
-		GrantExpiresAt:   body.GrantExpiresAt,
-		ExpiresAt:        *body.ExpiresAt,
-		CreatedAt:        *body.CreatedAt,
-		UpdatedAt:        *body.UpdatedAt,
+		ID:                       *body.ID,
+		RequesterUserID:          *body.RequesterUserID,
+		RequesterName:            *body.RequesterName,
+		Scope:                    *body.Scope,
+		ResourceName:             body.ResourceName,
+		Message:                  body.Message,
+		RequestedDurationSeconds: body.RequestedDurationSeconds,
+		RequestedUntil:           body.RequestedUntil,
+		Status:                   *body.Status,
+		DecidedByUserID:          body.DecidedByUserID,
+		DecidedByName:            body.DecidedByName,
+		DecidedVia:               body.DecidedVia,
+		DecidedAt:                body.DecidedAt,
+		TemporaryGrantID:         body.TemporaryGrantID,
+		GrantExpiresAt:           body.GrantExpiresAt,
+		ExpiresAt:                *body.ExpiresAt,
+		CreatedAt:                *body.CreatedAt,
+		UpdatedAt:                *body.UpdatedAt,
 	}
 	v.Selector = unmarshalSelectorResponseBodyToAccessSelector(body.Selector)
 
@@ -20131,22 +20165,24 @@ func NewDecideAccessRequestGatewayError(body *DecideAccessRequestGatewayErrorRes
 // "withdrawAccessRequest" endpoint result from a HTTP "OK" response.
 func NewWithdrawAccessRequestAccessRequestOK(body *WithdrawAccessRequestResponseBody) *access.AccessRequest {
 	v := &access.AccessRequest{
-		ID:               *body.ID,
-		RequesterUserID:  *body.RequesterUserID,
-		RequesterName:    *body.RequesterName,
-		Scope:            *body.Scope,
-		ResourceName:     body.ResourceName,
-		Message:          body.Message,
-		Status:           *body.Status,
-		DecidedByUserID:  body.DecidedByUserID,
-		DecidedByName:    body.DecidedByName,
-		DecidedVia:       body.DecidedVia,
-		DecidedAt:        body.DecidedAt,
-		TemporaryGrantID: body.TemporaryGrantID,
-		GrantExpiresAt:   body.GrantExpiresAt,
-		ExpiresAt:        *body.ExpiresAt,
-		CreatedAt:        *body.CreatedAt,
-		UpdatedAt:        *body.UpdatedAt,
+		ID:                       *body.ID,
+		RequesterUserID:          *body.RequesterUserID,
+		RequesterName:            *body.RequesterName,
+		Scope:                    *body.Scope,
+		ResourceName:             body.ResourceName,
+		Message:                  body.Message,
+		RequestedDurationSeconds: body.RequestedDurationSeconds,
+		RequestedUntil:           body.RequestedUntil,
+		Status:                   *body.Status,
+		DecidedByUserID:          body.DecidedByUserID,
+		DecidedByName:            body.DecidedByName,
+		DecidedVia:               body.DecidedVia,
+		DecidedAt:                body.DecidedAt,
+		TemporaryGrantID:         body.TemporaryGrantID,
+		GrantExpiresAt:           body.GrantExpiresAt,
+		ExpiresAt:                *body.ExpiresAt,
+		CreatedAt:                *body.CreatedAt,
+		UpdatedAt:                *body.UpdatedAt,
 	}
 	v.Selector = unmarshalSelectorResponseBodyToAccessSelector(body.Selector)
 
@@ -21543,6 +21579,9 @@ func ValidateDecideAccessRequestResponseBody(body *DecideAccessRequestResponseBo
 			err = goa.MergeErrors(err, err2)
 		}
 	}
+	if body.RequestedUntil != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.requested_until", *body.RequestedUntil, goa.FormatDateTime))
+	}
 	if body.DecidedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.decided_at", *body.DecidedAt, goa.FormatDateTime))
 	}
@@ -21601,6 +21640,9 @@ func ValidateWithdrawAccessRequestResponseBody(body *WithdrawAccessRequestRespon
 		if err2 := ValidateSelectorResponseBody(body.Selector); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
+	}
+	if body.RequestedUntil != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.requested_until", *body.RequestedUntil, goa.FormatDateTime))
 	}
 	if body.DecidedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.decided_at", *body.DecidedAt, goa.FormatDateTime))
@@ -35155,6 +35197,9 @@ func ValidateAccessRequestResponseBody(body *AccessRequestResponseBody) (err err
 			err = goa.MergeErrors(err, err2)
 		}
 	}
+	if body.RequestedUntil != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.requested_until", *body.RequestedUntil, goa.FormatDateTime))
+	}
 	if body.DecidedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.decided_at", *body.DecidedAt, goa.FormatDateTime))
 	}
@@ -35234,8 +35279,8 @@ func ValidateAuthzChallengeResponseBody(body *AuthzChallengeResponseBody) (err e
 		}
 	}
 	if body.Reason != nil {
-		if !(*body.Reason == "grant_matched" || *body.Reason == "no_grants" || *body.Reason == "scope_unsatisfied" || *body.Reason == "deny_grant" || *body.Reason == "invalid_check" || *body.Reason == "rbac_skipped_apikey" || *body.Reason == "dev_override") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.reason", *body.Reason, []any{"grant_matched", "no_grants", "scope_unsatisfied", "deny_grant", "invalid_check", "rbac_skipped_apikey", "dev_override"}))
+		if !(*body.Reason == "grant_matched" || *body.Reason == "no_grants" || *body.Reason == "scope_unsatisfied" || *body.Reason == "deny_grant" || *body.Reason == "invalid_check" || *body.Reason == "rbac_skipped_apikey" || *body.Reason == "dev_override" || *body.Reason == "connection_owner_mismatch") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.reason", *body.Reason, []any{"grant_matched", "no_grants", "scope_unsatisfied", "deny_grant", "invalid_check", "rbac_skipped_apikey", "dev_override", "connection_owner_mismatch"}))
 		}
 	}
 	if body.ResolvedAt != nil {
@@ -35347,8 +35392,8 @@ func ValidateChallengeBucketResponseBody(body *ChallengeBucketResponseBody) (err
 		}
 	}
 	if body.Reason != nil {
-		if !(*body.Reason == "grant_matched" || *body.Reason == "no_grants" || *body.Reason == "scope_unsatisfied" || *body.Reason == "deny_grant" || *body.Reason == "invalid_check" || *body.Reason == "rbac_skipped_apikey" || *body.Reason == "dev_override") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.reason", *body.Reason, []any{"grant_matched", "no_grants", "scope_unsatisfied", "deny_grant", "invalid_check", "rbac_skipped_apikey", "dev_override"}))
+		if !(*body.Reason == "grant_matched" || *body.Reason == "no_grants" || *body.Reason == "scope_unsatisfied" || *body.Reason == "deny_grant" || *body.Reason == "invalid_check" || *body.Reason == "rbac_skipped_apikey" || *body.Reason == "dev_override" || *body.Reason == "connection_owner_mismatch") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.reason", *body.Reason, []any{"grant_matched", "no_grants", "scope_unsatisfied", "deny_grant", "invalid_check", "rbac_skipped_apikey", "dev_override", "connection_owner_mismatch"}))
 		}
 	}
 	if body.ResolvedAt != nil {

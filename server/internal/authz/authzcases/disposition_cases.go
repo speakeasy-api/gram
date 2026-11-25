@@ -31,6 +31,9 @@ type dispositionCase struct {
 // DispositionFile renders the server's disposition for every combination of
 // hints, each one absent, false or true, so the dashboard's classifier can be
 // checked against it.
+//
+// The nested loops are bounded and cannot cause performance trouble: four
+// hints with three values each is always 3^4 = 81 cases.
 func DispositionFile() ([]byte, error) {
 	values := []*bool{nil, new(false), new(true)}
 	var b bytes.Buffer

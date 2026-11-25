@@ -14,6 +14,7 @@ import (
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 )
@@ -199,6 +200,9 @@ type Registrar struct {
 	// projects resolves the project_slug a tool names for handlers that act
 	// on the project's ID. Without it, those tools are unavailable.
 	projects SkillProjectResolver
+
+	// aiCatalog identifies OAuth clients. The runtime injects it.
+	aiCatalog *aivendors.Store
 }
 
 // withDashboardLinks lets result cards link to dashboard pages.
@@ -207,7 +211,7 @@ func (r *Registrar) withDashboardLinks(links cardLinks) {
 }
 
 func newRegistrar(server *mcp.Server) *Registrar {
-	return &Registrar{server: server, descriptors: nil, resources: nil, riskTelemetry: noopRiskTelemetry{}, externalAuthorizer: nil, logger: nil, instructions: "", cardLinks: cardLinks{dashboardURL: nil, serverURL: nil, projectSlug: nil}, projects: nil}
+	return &Registrar{server: server, descriptors: nil, resources: nil, riskTelemetry: noopRiskTelemetry{}, externalAuthorizer: nil, logger: nil, instructions: "", cardLinks: cardLinks{dashboardURL: nil, serverURL: nil, projectSlug: nil}, projects: nil, aiCatalog: nil}
 }
 
 // withProjects lets tools name their project by slug while their handlers act
@@ -228,6 +232,36 @@ func (r *Registrar) withExternalAuthorizer(authorizer Authorizer) {
 	if r != nil {
 		r.externalAuthorizer = authorizer
 	}
+}
+
+// requireAICatalog fails composition when no catalog was injected, so a
+// runtime missing one never starts serving.
+func (r *Registrar) requireAICatalog() {
+	if r == nil || r.aiCatalog == nil {
+		panic("platformmcp: runtime composed without an AI client catalog store; call WithAICatalog")
+	}
+}
+
+func (r *Registrar) withAICatalog(catalog *aivendors.Store) {
+	if r != nil {
+		r.aiCatalog = catalog
+	}
+}
+
+// withAICatalogSnapshot pins one catalog snapshot for the rest of a request.
+func (r *Registrar) withAICatalogSnapshot(ctx context.Context) context.Context {
+	if r.aiCatalog == nil {
+		panic("platformmcp: AI client catalog store was not injected")
+	}
+	return r.aiCatalog.Pin(ctx)
+}
+
+// aiCatalogSnapshot returns the request's pinned snapshot, or captures one.
+func (r *Registrar) aiCatalogSnapshot(ctx context.Context) *aivendors.Snapshot {
+	if r.aiCatalog == nil {
+		panic("platformmcp: AI client catalog store was not injected")
+	}
+	return r.aiCatalog.SnapshotFor(ctx)
 }
 
 func (r *Registrar) withRiskTelemetry(telemetry RiskTelemetry) {
@@ -274,7 +308,7 @@ func (r *Registrar) FilterExternalTools(ctx context.Context, principal Principal
 		}
 	}
 	grants, grantsLoaded := authz.GrantsFromContext(ctx)
-	allowlist := clientToolAllowlist(principal.ClientID)
+	allowlist := clientToolAllowlist(r.aiCatalogSnapshot(ctx), principal.ClientID)
 	// The small discovery surface reaches every tool by design, so the
 	// allowlist only narrows the full catalogue.
 	if discoveryModeFromContext(ctx) != discoveryFull {
@@ -364,8 +398,30 @@ func grantsAuthorizeAnyResource(grants []authz.Grant, organizationID string, sco
 			if scope != authz.ScopeMCPConnect {
 				continue
 			}
-			check = authz.MCPServer(authz.MCPServerIDFrom(resourceID), authz.ProjectIDFrom(dimensions[authz.SelectorKeyProjectID])).ToolCall(dimensions[authz.SelectorKeyTool], dimensions[authz.SelectorKeyDisposition])
-		} else if scope == authz.ScopeMCPConnect {
+			server := authz.MCPServer(authz.MCPServerIDFrom(resourceID), authz.ProjectIDFrom(dimensions[authz.SelectorKeyProjectID]))
+			// Every block limited to a tool or a disposition covers a call
+			// that leaves that value out, so the probe names both. A grant that
+			// names no tool reaches tools no block names, so it is probed
+			// with a placeholder tool. A grant that names no disposition
+			// reaches its tools whatever their annotations, so each
+			// disposition is tried: the grant counts when any of them passes.
+			tool := dimensions[authz.SelectorKeyTool]
+			if !hasTool {
+				tool = "platform-mcp-catalogue-probe"
+			}
+			dispositions := []string{dimensions[authz.SelectorKeyDisposition]}
+			if !hasDisposition {
+				dispositions = authz.Dispositions()
+			}
+			for _, disposition := range dispositions {
+				allowed, err := authz.GrantsAuthorize(grants, server.ToolCall(tool, disposition))
+				if err == nil && allowed {
+					return true
+				}
+			}
+			continue
+		}
+		if scope == authz.ScopeMCPConnect {
 			// Probe connect as a connection, which may leave the tool and
 			// disposition out, so a grant whose tool or disposition is a
 			// wildcard still matches.

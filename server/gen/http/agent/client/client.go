@@ -86,6 +86,10 @@ type Client struct {
 	// createSessionHandoff endpoint.
 	CreateSessionHandoffDoer goahttp.Doer
 
+	// ListPendingAccessRequests Doer is the HTTP client used to make requests to
+	// the listPendingAccessRequests endpoint.
+	ListPendingAccessRequestsDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -123,6 +127,7 @@ func NewClient(
 		ReportStateDoer:                  doer,
 		ReportCrashDoer:                  doer,
 		CreateSessionHandoffDoer:         doer,
+		ListPendingAccessRequestsDoer:    doer,
 		RestoreResponseBody:              restoreBody,
 		scheme:                           scheme,
 		host:                             host,
@@ -539,6 +544,30 @@ func (c *Client) CreateSessionHandoff() goa.Endpoint {
 		resp, err := c.CreateSessionHandoffDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("agent", "createSessionHandoff", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListPendingAccessRequests returns an endpoint that makes HTTP requests to
+// the agent service listPendingAccessRequests server.
+func (c *Client) ListPendingAccessRequests() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListPendingAccessRequestsRequest(c.encoder)
+		decodeResponse = DecodeListPendingAccessRequestsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListPendingAccessRequestsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListPendingAccessRequestsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("agent", "listPendingAccessRequests", err)
 		}
 		return decodeResponse(resp)
 	}

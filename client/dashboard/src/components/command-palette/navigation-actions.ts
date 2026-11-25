@@ -28,6 +28,7 @@ export const routeToNavAction = (
     onSelect: () => route.goTo(),
     group,
     stage: route.stage,
+    keywords: route.keywords,
   };
 };
 

@@ -45,6 +45,8 @@ const dashboardPaths = (
   AgentManagement: org.legacyAgents.href(),
   AccessRoles: org.access.roles.href(),
   AccessGrant: org.access.roles.href(),
+  AccessRequests: org.access.requests.href(),
+  AccessRequestDecision: org.access.requests.href(),
   AccessChallenges: org.access.challenges.href(),
   RequestAccess: org.requestAccess.href(),
   Assistants: routes.assistants.href(),

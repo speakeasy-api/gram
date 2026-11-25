@@ -13,7 +13,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// MandatoryPolicySource names the policy or public visibility admission behind a mandatory decision.
 type MandatoryPolicySource string
 
 const (
@@ -27,7 +26,6 @@ const (
 	MandatoryPolicySourceNone MandatoryPolicySource = "none"
 )
 
-// MandatoryDenyReason says why a mandatory decision denied.
 type MandatoryDenyReason string
 
 const (
@@ -60,7 +58,6 @@ type MandatoryDecision struct {
 
 var mandatoryScopes = []Scope{ScopeMCPConnect, ScopeMCPAuth}
 
-// MandatoryCaller is the kind of caller a mandatory decision evaluated.
 type MandatoryCaller string
 
 const (
@@ -92,21 +89,28 @@ type MandatoryAuthorization struct {
 	key           *apiKeyAdmission
 	// narrowedProject is a project a credential minted from a key is bound to.
 	narrowedProject *uuid.UUID
+	// workloadOwner is resolved by live admission, not credential claims.
+	workloadOwner string
 }
 
-// Caller is the kind of caller evaluated.
 func (m MandatoryAuthorization) Caller() MandatoryCaller { return m.caller }
 
 // PrincipalID identifies the caller for attribution: a user, API key or
 // credential id. It never grants anything.
 func (m MandatoryAuthorization) PrincipalID() string { return m.principalID }
 
-// OrganizationID is the organization the caller authenticated in.
 func (m MandatoryAuthorization) OrganizationID() string { return m.organizationID }
 
-// RepresentedUserID is the user bound to $represented_user, the same binding
-// enforcement uses. Callers that represent no user return "".
+// RepresentedUserID returns the user the caller represents, if any. It does
+// not include the owner bound only for an auth-client admission check.
 func (m MandatoryAuthorization) RepresentedUserID() string { return m.authorization.representedUser }
+
+func (m MandatoryAuthorization) authClientRepresentedUserID() string {
+	if m.caller == MandatoryCallerWorkload {
+		return m.workloadOwner
+	}
+	return m.RepresentedUserID()
+}
 
 // LegacyAuthCeiling reports whether admission derived the caller's auth
 // client ceiling from server access in a pre-version-5 stored policy.
@@ -129,8 +133,6 @@ func (e *Engine) AuthorizeMandatory(ctx context.Context, checks ...Check) (Manda
 	return authorization.Decide(authorization.organizationID, checks...)
 }
 
-// PrepareMandatory admits the caller once for mandatory decisions. It does not
-// change ctx.
 func (e *Engine) PrepareMandatory(ctx context.Context) (MandatoryAuthorization, error) {
 	m := MandatoryAuthorization{
 		publicAnonymous: false,
@@ -139,9 +141,10 @@ func (e *Engine) PrepareMandatory(ctx context.Context) (MandatoryAuthorization, 
 		principalID:     "",
 		source:          MandatoryPolicySourceNone,
 		decided:         nil,
-		authorization:   grantAuthorization{policies: nil, representedUser: "", representedPolicies: nil, legacyAuthCeiling: false},
+		authorization:   grantAuthorization{policies: nil, representedUser: "", representedPolicies: nil, legacyAuthCeiling: false, attached: nil, credentialRemoved: false},
 		key:             nil,
 		narrowedProject: nil,
+		workloadOwner:   "",
 	}
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
@@ -177,13 +180,32 @@ func (e *Engine) PrepareMandatory(ctx context.Context) (MandatoryAuthorization, 
 		if err != nil {
 			return m, fmt.Errorf("prepare mandatory authorization: %w", err)
 		}
-		authorization, ok = grantAuthorizationFromContext(prepared)
+		ctx = prepared
+		authorization, ok = grantAuthorizationFromContext(ctx)
 	}
 	if !ok {
 		return m.decide(MandatoryPolicySourceNone, MandatoryDenyReasonNoPolicy), nil
 	}
 	m.authorization = authorization
+	if m.caller == MandatoryCallerWorkload {
+		m.workloadOwner, _ = AdmittedWorkloadOwner(ctx)
+	}
 	return m, nil
+}
+
+// WithAttachedConnection applies consent to a connection its owner attached
+// to the agent (Engine.AttachedConnectionConsent), replacing any applied
+// before, so an admission shared by several decisions carries only the
+// current one's. A zero consent applies none. It applies only to an admitted
+// agent that acts for a represented user, in the consent's organization; any
+// other caller, including a workload with no represented user, gets none.
+func (m MandatoryAuthorization) WithAttachedConnection(consent AttachedConnectionConsent) MandatoryAuthorization {
+	m.authorization.attached = nil
+	if consent.ownerUserID == "" || m.caller != MandatoryCallerAgent || m.authorization.representedUser == "" || consent.organizationID != m.organizationID {
+		return m
+	}
+	m.authorization.attached = &attachedConnection{owner: consent.ownerUserID, policy: append([]Grant{}, consent.ownerPolicy...)}
+	return m
 }
 
 func (e *Engine) prepareAPIKey(ctx context.Context, m MandatoryAuthorization, authCtx *contextvalues.AuthContext) (MandatoryAuthorization, error) {
@@ -229,8 +251,7 @@ const (
 const MandatoryPolicySourceVisibility MandatoryPolicySource = "visibility"
 
 // DecideServerAdmission decides mcp:connect on a server in organizationID
-// under its visibility. It adds explicit public admission to mandatory policy evaluation and does
-// no I/O. The shadow uses this boundary; legacy enforcement is unchanged.
+// under its visibility. It does no I/O.
 //
 // A public server admits a caller with no credential: public access needs no
 // policy. Every caller that presents a credential is still decided by its
@@ -267,6 +288,11 @@ func (m MandatoryAuthorization) DecideAuthClientAdmission(organizationID string,
 	}
 	if m.admittedByVisibility(visibility) {
 		return visibilityAdmission(), nil
+	}
+	if m.caller == MandatoryCallerWorkload {
+		// Bind the admitted workload owner only for this check; the
+		// credential ceiling, assigned agent and owner policies still apply.
+		m.authorization.representedUser = m.authClientRepresentedUserID()
 	}
 	return m.Decide(organizationID, use)
 }
@@ -341,7 +367,6 @@ func (m MandatoryAuthorization) decideAPIKey(checks []Check) (MandatoryDecision,
 	return evaluateMandatory(m.authorization, MandatoryPolicySourceAPIKey, checks)
 }
 
-// mandatoryCaller classifies an authenticated caller for attribution.
 func mandatoryCaller(ctx context.Context, authCtx *contextvalues.AuthContext) (MandatoryCaller, string) {
 	if mode, ok := contextvalues.APIKeyAuthorization(ctx); ok {
 		if mode == contextvalues.APIKeyAuthorizationModeLegacy {

@@ -709,7 +709,7 @@ var _ = Service("access", func() {
 	})
 
 	Method("setShadowMCPOfficialServer", func() {
-		Description("Choose the official version of one project-scoped Shadow MCP server. By default a project MCP server that proxies to the Shadow MCP server's URL is linked automatically (the oldest, when several do). While a link exists and the linked server has an address, direct connections are blocked wherever a Shadow MCP policy applies and agents are pointed at the linked server; a linked server with no address yet leaves direct connections on the ordinary rules. With mcp_server_id that server is linked instead; with keep_shadow no server is linked, so direct use follows the ordinary Shadow MCP rules; with neither, the automatic link applies again. Each change is recorded in the audit log. Requires an authenticated session authorized for org:admin on the active organization.")
+		Description("Choose the official version of one project-scoped Shadow MCP server. By default a project MCP server that proxies to the Shadow MCP server's URL is made official automatically (the oldest, when several do). While an official server exists and has an address, direct connections are blocked wherever a Shadow MCP policy applies and agents are pointed at the official server; an official server with no address yet leaves direct connections on the ordinary rules. With mcp_server_id that server is made official instead; with keep_shadow no server is official, so direct use follows the ordinary Shadow MCP rules; with neither, the automatic choice applies again. Each change is recorded in the audit log. Requires an authenticated session authorized for org:admin on the active organization.")
 		Security(security.Session)
 
 		Payload(func() {
@@ -1964,18 +1964,18 @@ var ShadowMCPInventoryServerModel = Type("ShadowMCPInventoryServer", func() {
 	Attribute("allowed_policy_ids", ArrayOf(String))
 	Attribute("blocked_policy_ids", ArrayOf(String), "Enabled blocking policies that block this server via a risk_policy:block grant (allow_all policies only).")
 	Attribute("official_server", ShadowMCPOfficialServerModel, func() {
-		Description("The MCP server linked as this Shadow MCP server's official version. While it is linked, direct use is blocked wherever a Shadow MCP policy applies, and the block points agents here.")
+		Description("The MCP server that is this Shadow MCP server's official version. While it is official, direct use is blocked wherever a Shadow MCP policy applies, and the block points agents here.")
 	})
 	Attribute("suggested_official_server", ShadowMCPSuggestedOfficialServerModel, func() {
-		Description("A project MCP server that proxies to the same upstream URL, offered as the server to link. Present only while no official server is linked.")
+		Description("A project MCP server that proxies to the same upstream URL, offered as the server to make official. Present only while no official server is set.")
 	})
 	Attribute("official_server_declined", Boolean, func() {
-		Description("True when an administrator chose to keep using the Shadow MCP server directly, so no official server is linked automatically.")
+		Description("True when an administrator chose to keep using the Shadow MCP server directly, so no official server is chosen automatically.")
 	})
 })
 
 var ShadowMCPSuggestedOfficialServerModel = Type("ShadowMCPSuggestedOfficialServer", func() {
-	Description("A project MCP server that already serves a Shadow MCP server's upstream URL and can be linked as its official version.")
+	Description("A project MCP server that already serves a Shadow MCP server's upstream URL and can be made its official version.")
 	Required("mcp_server_id", "name")
 
 	Attribute("mcp_server_id", String, func() {
@@ -1996,9 +1996,9 @@ var ShadowMCPOfficialServerModel = Type("ShadowMCPOfficialServer", func() {
 	Attribute("slug", String, "The official server's slug, when it has one.")
 	Attribute("url", String, "Where agents connect. A gateway's address when the server is a gateway member. Absent while the server has no endpoint.")
 	Attribute("gateway_name", String, "The gateway that serves the official server, when url is a gateway's address.")
-	Attribute("automatic", Boolean, "True when the link was made automatically because the server proxies to the Shadow MCP server's URL; false when an administrator chose it.")
+	Attribute("automatic", Boolean, "True when the server was made official automatically because the server proxies to the Shadow MCP server's URL; false when an administrator chose it.")
 	Attribute("direct_access_allowed", Boolean, func() {
-		Description("Deprecated: links no longer have an on/off switch, so this is always false. Kept one release so older dashboards, which require it, keep rendering, then removed.")
+		Description("Deprecated: official servers no longer have an on/off switch, so this is always false. Kept one release so older dashboards, which require it, keep rendering, then removed.")
 	})
 })
 
@@ -2007,8 +2007,8 @@ var SetShadowMCPOfficialServerForm = Type("SetShadowMCPOfficialServerForm", func
 
 	Attribute("project_id", String, func() { Format(FormatUUID) })
 	Attribute("server_url", String, "The Shadow MCP server's URL.", func() { Format(FormatURI) })
-	Attribute("mcp_server_id", String, "The MCP server to link as the official version. Omit it, with keep_shadow unset, to go back to the automatic link.", func() { Format(FormatUUID) })
-	Attribute("keep_shadow", Boolean, "Keep using the Shadow MCP server directly: no official server is linked, not even automatically. Cannot be combined with mcp_server_id.")
+	Attribute("mcp_server_id", String, "The MCP server to make the official version. Omit it, with keep_shadow unset, to go back to the automatic choice.", func() { Format(FormatUUID) })
+	Attribute("keep_shadow", Boolean, "Keep using the Shadow MCP server directly: no server is made official, not even automatically. Cannot be combined with mcp_server_id.")
 })
 
 var ListShadowMCPInventoryResult = Type("ListShadowMCPInventoryResult", func() {
@@ -2240,7 +2240,7 @@ var AuthzChallengeModel = Type("AuthzChallenge", func() {
 		Enum("allow", "deny", "error")
 	})
 	Attribute("reason", String, func() {
-		Enum("grant_matched", "no_grants", "scope_unsatisfied", "deny_grant", "invalid_check", "rbac_skipped_apikey", "dev_override")
+		Enum("grant_matched", "no_grants", "scope_unsatisfied", "deny_grant", "invalid_check", "rbac_skipped_apikey", "dev_override", "connection_owner_mismatch")
 	})
 	Attribute("scope", String, "Scope that was checked.")
 	Attribute("resource_kind", String, "Resource kind of the check.")
@@ -2316,7 +2316,7 @@ var ChallengeBucketModel = Type("ChallengeBucket", func() {
 		Enum("allow", "deny", "error")
 	})
 	Attribute("reason", String, func() {
-		Enum("grant_matched", "no_grants", "scope_unsatisfied", "deny_grant", "invalid_check", "rbac_skipped_apikey", "dev_override")
+		Enum("grant_matched", "no_grants", "scope_unsatisfied", "deny_grant", "invalid_check", "rbac_skipped_apikey", "dev_override", "connection_owner_mismatch")
 	})
 	Attribute("scope", String, "Scope that was checked.")
 	Attribute("resource_kind", String, "Resource kind of the check.")
@@ -2404,6 +2404,14 @@ var RequestAccessForm = Type("RequestAccessForm", func() {
 	Attribute("message", String, func() {
 		Description("Optional message from the requester explaining why they need access.")
 		MaxLength(1000)
+	})
+	Attribute("duration", String, func() {
+		Description("How long the requester would like the access for, counted from approval: 1h, 2h or 4h. A suggestion shown to the approver, who still picks the window. Stored only when the request is stored. Cannot be sent with requested_until.")
+		Enum("1h", "2h", "4h")
+	})
+	Attribute("requested_until", String, func() {
+		Description("When the requester would like the access until, such as the end of their day as their own clock reads it. Must be in the future and at most 24 hours away. A suggestion shown to the approver, who still picks the window. Cannot be sent with duration.")
+		Format(FormatDateTime)
 	})
 })
 
@@ -2805,6 +2813,10 @@ var AccessRequestModel = Type("AccessRequest", func() {
 	Attribute("selector", SelectorModel, "The resource or activity boundary asked for.")
 	Attribute("resource_name", String, "Name of the resource, as it was when the request was made.")
 	Attribute("message", String, "The requester's note to the administrators.")
+	Attribute("requested_duration_seconds", Int, "How long the requester asked to have the access, in seconds counted from approval. A suggestion; the approver picks the window. Absent when none was asked for.")
+	Attribute("requested_until", String, "When the requester asked to have the access until. A suggestion; the approver picks the window. Absent when none was asked for.", func() {
+		Format(FormatDateTime)
+	})
 	Attribute("status", String, "pending: waiting for a decision. approved: a temporary grant was given. denied, expired or withdrawn: no access was given.")
 	Attribute("decided_by_user_id", String, "The administrator who approved or denied the request.")
 	Attribute("decided_by_name", String, "The deciding administrator's display name, or their email.")

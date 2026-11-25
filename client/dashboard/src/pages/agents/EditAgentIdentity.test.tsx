@@ -57,7 +57,7 @@ afterEach(cleanup);
 // renamed in the agent page's header and the servers changed on its MCP
 // sign-in tab, so old links and bookmarks land there.
 it.each(["", "?step=0", "?step=1", "?step=2"])(
-  "sends %s to the MCP sign-in tab",
+  "sends %s to the Server sign-in tab",
   (search) => {
     open(search);
     expect(

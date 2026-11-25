@@ -115,15 +115,15 @@ type Service interface {
 	UpdateShadowMCPInventoryServerName(context.Context, *UpdateShadowMCPInventoryServerNamePayload) (err error)
 	// Choose the official version of one project-scoped Shadow MCP server. By
 	// default a project MCP server that proxies to the Shadow MCP server's URL is
-	// linked automatically (the oldest, when several do). While a link exists and
-	// the linked server has an address, direct connections are blocked wherever a
-	// Shadow MCP policy applies and agents are pointed at the linked server; a
-	// linked server with no address yet leaves direct connections on the ordinary
-	// rules. With mcp_server_id that server is linked instead; with keep_shadow no
-	// server is linked, so direct use follows the ordinary Shadow MCP rules; with
-	// neither, the automatic link applies again. Each change is recorded in the
-	// audit log. Requires an authenticated session authorized for org:admin on the
-	// active organization.
+	// made official automatically (the oldest, when several do). While an official
+	// server exists and has an address, direct connections are blocked wherever a
+	// Shadow MCP policy applies and agents are pointed at the official server; an
+	// official server with no address yet leaves direct connections on the
+	// ordinary rules. With mcp_server_id that server is made official instead;
+	// with keep_shadow no server is official, so direct use follows the ordinary
+	// Shadow MCP rules; with neither, the automatic choice applies again. Each
+	// change is recorded in the audit log. Requires an authenticated session
+	// authorized for org:admin on the active organization.
 	SetShadowMCPOfficialServer(context.Context, *SetShadowMCPOfficialServerPayload) (err error)
 	// List users with observed telemetry usage for one project-scoped Shadow MCP
 	// server URL.
@@ -397,6 +397,13 @@ type AccessRequest struct {
 	ResourceName *string
 	// The requester's note to the administrators.
 	Message *string
+	// How long the requester asked to have the access, in seconds counted from
+	// approval. A suggestion; the approver picks the window. Absent when none was
+	// asked for.
+	RequestedDurationSeconds *int
+	// When the requester asked to have the access until. A suggestion; the
+	// approver picks the window. Absent when none was asked for.
+	RequestedUntil *string
 	// pending: waiting for a decision. approved: a temporary grant was given.
 	// denied, expired or withdrawn: no access was given.
 	Status string
@@ -1481,6 +1488,15 @@ type RequestAccessPayload struct {
 	ResourceName *string
 	// Optional message from the requester explaining why they need access.
 	Message *string
+	// How long the requester would like the access for, counted from approval: 1h,
+	// 2h or 4h. A suggestion shown to the approver, who still picks the window.
+	// Stored only when the request is stored. Cannot be sent with requested_until.
+	Duration *string
+	// When the requester would like the access until, such as the end of their day
+	// as their own clock reads it. Must be in the future and at most 24 hours
+	// away. A suggestion shown to the approver, who still picks the window. Cannot
+	// be sent with duration.
+	RequestedUntil *string
 }
 
 // RequestAccessResult is the result type of the access service requestAccess
@@ -1834,10 +1850,10 @@ type SetShadowMCPOfficialServerPayload struct {
 	ProjectID    string
 	// The Shadow MCP server's URL.
 	ServerURL string
-	// The MCP server to link as the official version. Omit it, with keep_shadow
-	// unset, to go back to the automatic link.
+	// The MCP server to make the official version. Omit it, with keep_shadow
+	// unset, to go back to the automatic choice.
 	McpServerID *string
-	// Keep using the Shadow MCP server directly: no official server is linked, not
+	// Keep using the Shadow MCP server directly: no server is made official, not
 	// even automatically. Cannot be combined with mcp_server_id.
 	KeepShadow *bool
 }
@@ -1952,15 +1968,15 @@ type ShadowMCPInventoryServer struct {
 	// Enabled blocking policies that block this server via a risk_policy:block
 	// grant (allow_all policies only).
 	BlockedPolicyIds []string
-	// The MCP server linked as this Shadow MCP server's official version. While it
-	// is linked, direct use is blocked wherever a Shadow MCP policy applies, and
+	// The MCP server that is this Shadow MCP server's official version. While it
+	// is official, direct use is blocked wherever a Shadow MCP policy applies, and
 	// the block points agents here.
 	OfficialServer *ShadowMCPOfficialServer
 	// A project MCP server that proxies to the same upstream URL, offered as the
-	// server to link. Present only while no official server is linked.
+	// server to make official. Present only while no official server is set.
 	SuggestedOfficialServer *ShadowMCPSuggestedOfficialServer
 	// True when an administrator chose to keep using the Shadow MCP server
-	// directly, so no official server is linked automatically.
+	// directly, so no official server is chosen automatically.
 	OfficialServerDeclined *bool
 }
 
@@ -2022,17 +2038,17 @@ type ShadowMCPOfficialServer struct {
 	URL *string
 	// The gateway that serves the official server, when url is a gateway's address.
 	GatewayName *string
-	// True when the link was made automatically because the server proxies to the
-	// Shadow MCP server's URL; false when an administrator chose it.
+	// True when the server was made official automatically because the server
+	// proxies to the Shadow MCP server's URL; false when an administrator chose it.
 	Automatic *bool
-	// Deprecated: links no longer have an on/off switch, so this is always false.
-	// Kept one release so older dashboards, which require it, keep rendering, then
-	// removed.
+	// Deprecated: official servers no longer have an on/off switch, so this is
+	// always false. Kept one release so older dashboards, which require it, keep
+	// rendering, then removed.
 	DirectAccessAllowed *bool
 }
 
 // A project MCP server that already serves a Shadow MCP server's upstream URL
-// and can be linked as its official version.
+// and can be made its official version.
 type ShadowMCPSuggestedOfficialServer struct {
 	McpServerID string
 	// The server's display name.

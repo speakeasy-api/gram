@@ -949,19 +949,36 @@ SELECT COALESCE(
   ''
 )::text AS user_id;
 
--- name: GetGitHubConnectionByMarketplaceToken :one
--- Resolves a marketplace proxy URL token to the upstream connection. The token
--- is the auth credential — there's no project scope to apply ahead of it.
+-- name: GetGitHubConnectionByMarketplaceTokenHash :one
+-- Resolves a marketplace proxy URL token, by its hash, to the upstream
+-- connection. The token is the auth credential, so there's no project scope to
+-- apply ahead of it.
 SELECT *
 FROM plugin_github_connections
-WHERE marketplace_token = @marketplace_token;
+WHERE marketplace_token_hash = @marketplace_token_hash;
+
+-- name: ResolveGitHubConnectionByMarketplaceToken :one
+-- Resolves a marketplace proxy URL token to the upstream connection by the
+-- token's hash or, until the marketplace token backfill moves it, through the
+-- deprecated plaintext marketplace_token column. One statement reads one
+-- snapshot, so a token the backfill moves during a request still resolves.
+-- plaintext_token reports which form matched. The token is the auth
+-- credential, so there's no project scope to apply ahead of it.
+SELECT sqlc.embed(plugin_github_connections), (plugin_github_connections.marketplace_token_hash IS NULL)::boolean AS plaintext_token
+FROM plugin_github_connections
+WHERE plugin_github_connections.marketplace_token_hash = @marketplace_token_hash
+   OR (
+       plugin_github_connections.marketplace_token_hash IS NULL
+       AND plugin_github_connections.marketplace_token = @marketplace_token::text
+   )
+LIMIT 1;
 
 -- name: UpsertGitHubConnection :one
--- Inserts or refreshes a project's GitHub connection. The marketplace_token
--- argument is the candidate token to use if no token is currently set; on
--- conflict the existing token is preserved via COALESCE so callers can pass a
--- freshly-generated token on every publish without overwriting prior state.
--- Token rotation goes through a separate query. published_mcp_fingerprints,
+-- Inserts or refreshes a project's GitHub connection. It never writes the
+-- marketplace token. When the connection has no token yet, the publish path
+-- stores one through package marketplacetokens, in the same transaction.
+-- organization_id is the project's organization; an existing value is kept, so
+-- a connection never moves to another organization's key. published_mcp_fingerprints,
 -- published_hooks_version, and published_hooks_config record the per-plugin MCP
 -- content hashes, the hooks generator version, and the hook-output-affecting
 -- config just published; all are always overwritten so subsequent rollout runs
@@ -970,13 +987,13 @@ WHERE marketplace_token = @marketplace_token;
 -- browser-login toggle). published_hooks_config also records, under
 -- published_marketplace_name, the marketplace name the repo was published under,
 -- which freezes the project's marketplace name.
-INSERT INTO plugin_github_connections (project_id, installation_id, repo_owner, repo_name, marketplace_token, published_mcp_fingerprints, published_hooks_version, published_hooks_config)
-VALUES (@project_id, @installation_id, @repo_owner, @repo_name, @marketplace_token, @published_mcp_fingerprints, @published_hooks_version, @published_hooks_config)
+INSERT INTO plugin_github_connections (project_id, organization_id, installation_id, repo_owner, repo_name, published_mcp_fingerprints, published_hooks_version, published_hooks_config)
+VALUES (@project_id, sqlc.narg('organization_id'), @installation_id, @repo_owner, @repo_name, @published_mcp_fingerprints, @published_hooks_version, @published_hooks_config)
 ON CONFLICT (project_id) DO UPDATE
   SET installation_id = EXCLUDED.installation_id,
+      organization_id = COALESCE(plugin_github_connections.organization_id, EXCLUDED.organization_id),
       repo_owner = EXCLUDED.repo_owner,
       repo_name = EXCLUDED.repo_name,
-      marketplace_token = COALESCE(plugin_github_connections.marketplace_token, EXCLUDED.marketplace_token),
       published_mcp_fingerprints = EXCLUDED.published_mcp_fingerprints,
       published_hooks_version = EXCLUDED.published_hooks_version,
       published_hooks_config = EXCLUDED.published_hooks_config,

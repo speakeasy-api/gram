@@ -16,13 +16,13 @@ export function RemoteMcpSessionsSection({
 }): JSX.Element {
   const target = useMcpServerAuthTarget(mcpServer, mcpUrl);
   const selectableIssuers = useSelectableUserSessionIssuers(target);
-
+  // Downstream sessions remain configurable independently of upstream offers.
   // The provider's sign-in details and session settings live on its own
-  // page in MCP Sessions, which the picker opens.
+  // page in MCP Sign-in, which the picker opens.
   return (
     <SettingsSection id={MCP_SESSIONS_SECTION_ID}>
       <SettingsSection.Header>
-        <SettingsSection.Title>Sessions</SettingsSection.Title>
+        <SettingsSection.Title>MCP sign-in</SettingsSection.Title>
         <SettingsSection.Description>
           Choose where people sign in to this server. How long their sessions
           last and which clients may connect come with that choice.
@@ -35,6 +35,7 @@ export function RemoteMcpSessionsSection({
             issuers={selectableIssuers.issuers}
             isLoading={selectableIssuers.isLoading}
             isError={selectableIssuers.isError}
+            label="Used by this server"
           />
         </div>
       </SettingsSection.Panel>

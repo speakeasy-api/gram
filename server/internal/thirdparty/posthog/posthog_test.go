@@ -112,7 +112,7 @@ func TestPosthogFlagVariantNilProvider(t *testing.T) {
 	t.Parallel()
 
 	var p *Posthog
-	variant, err := p.FlagVariant(t.Context(), feature.FlagAssistantPlatformMCP, "org-test", nil)
+	variant, err := p.FlagVariant(t.Context(), feature.FlagPlatformMCPDiscoveryMode, "org-test", nil)
 	require.NoError(t, err)
 	require.Empty(t, variant)
 }

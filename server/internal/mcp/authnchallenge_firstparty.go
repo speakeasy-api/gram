@@ -163,7 +163,7 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 		return oops.E(oops.CodeUnexpected, err, "store authn challenge state").LogError(ctx, logger)
 	}
 
-	attempt := challengeState.connectionAttempt(endpoint)
+	attempt := challengeState.connectionAttempt(s.aiCatalog.SnapshotFor(ctx), endpoint)
 	t.Attach(attempt)
 	t.Consumed()
 	defer func() {

@@ -7,7 +7,7 @@
 export const WIZARD_STEPS = [
   { id: "name", label: "Name", short: "Name" },
   { id: "servers", label: "MCP Selection", short: "MCPs" },
-  { id: "mcp-sign-in", label: "MCP sign-in", short: "MCP sign-in" },
+  { id: "mcp-sign-in", label: "Server sign-in", short: "Server sign-in" },
   { id: "agent-sign-in", label: "Agent sign-in", short: "Agent sign-in" },
   { id: "install", label: "Install", short: "Install" },
   { id: "verify", label: "Verify", short: "Verify" },

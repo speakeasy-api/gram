@@ -10,9 +10,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -24,64 +24,48 @@ import (
 // proxied member must never fall through to legacy issuer resolution.
 func TestAgentMemberSelectedResolution(t *testing.T) {
 	t.Parallel()
-	for _, mode := range []feature.AuthClientResolverMode{feature.AuthClientResolverOff, feature.AuthClientResolverShadow, feature.AuthClientResolverEnforced} {
-		for _, tc := range []struct {
-			name        string
-			tokens      map[uuid.UUID]remotesessions.UpstreamToken
-			resolveErr  error
-			unavailable error
-			wantErr     bool
-		}{
-			{name: "selected token", tokens: map[uuid.UUID]remotesessions.UpstreamToken{uuid.New(): {Token: "selected-token"}}},
-			{name: "nil resolution", wantErr: true},
-			{name: "empty resolution", tokens: map[uuid.UUID]remotesessions.UpstreamToken{}, wantErr: true},
-			{name: "empty token", tokens: map[uuid.UUID]remotesessions.UpstreamToken{uuid.New(): {}}, wantErr: true},
-			{name: "resolver failure", resolveErr: errors.New("credential lookup failed"), wantErr: true},
-			{name: "missing attachment", resolveErr: remotesessions.ErrNoValidToken, wantErr: true},
-			{name: "unavailable member", unavailable: errors.New("member is not permitted"), wantErr: true},
-		} {
-			t.Run(agentMemberModeName(mode)+"/"+tc.name, func(t *testing.T) {
-				t.Parallel()
-				flags := new(feature.InMemory)
-				flags.SetFlag(feature.FlagAuthClientResolver, "test-org", mode == feature.AuthClientResolverEnforced)
-				flags.SetFlag(feature.FlagAuthClientResolverShadow, "test-org", mode == feature.AuthClientResolverShadow)
-				s := &Service{features: flags}
-				member := metaMember{serverID: uuid.New(), projectID: uuid.New(), slug: "selected-member", backend: metaMemberBackendProxied,
-					chosenClientID: uuid.NullUUID{UUID: uuid.New(), Valid: true}, upstreamUnavailable: tc.unavailable}
-				calls := 0
-				choices := &memberChoices{enforced: mode == feature.AuthClientResolverEnforced, byServer: map[uuid.UUID]*memberTokens{}, resolve: func(_ context.Context, got metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
-					calls++
-					require.Equal(t, member.chosenClientID, got.chosenClientID)
-					return tc.tokens, tc.resolveErr
-				}}
-				gate := &metaGateContext{agentID: uuid.New(), organizationID: "test-org", memberChoices: choices}
-				tokens, err := s.resolveMemberTokens(t.Context(), gate, member)
-				if tc.wantErr {
-					require.Error(t, err)
-					require.Empty(t, tokens)
-				} else {
-					require.NoError(t, err)
-					require.Equal(t, tc.tokens, tokens)
-				}
-				if tc.unavailable != nil {
-					require.ErrorIs(t, err, tc.unavailable)
-					require.Zero(t, calls)
-				} else {
-					require.Equal(t, 1, calls)
-				}
-			})
-		}
-	}
-}
-
-func agentMemberModeName(mode feature.AuthClientResolverMode) string {
-	switch mode {
-	case feature.AuthClientResolverEnforced:
-		return "enforced"
-	case feature.AuthClientResolverShadow:
-		return "shadow"
-	default:
-		return "off"
+	for _, tc := range []struct {
+		name        string
+		tokens      map[uuid.UUID]remotesessions.UpstreamToken
+		resolveErr  error
+		unavailable error
+		wantErr     bool
+	}{
+		{name: "selected token", tokens: map[uuid.UUID]remotesessions.UpstreamToken{uuid.New(): {Token: "selected-token"}}},
+		{name: "nil resolution", wantErr: true},
+		{name: "empty resolution", tokens: map[uuid.UUID]remotesessions.UpstreamToken{}, wantErr: true},
+		{name: "empty token", tokens: map[uuid.UUID]remotesessions.UpstreamToken{uuid.New(): {}}, wantErr: true},
+		{name: "resolver failure", resolveErr: errors.New("credential lookup failed"), wantErr: true},
+		{name: "missing attachment", resolveErr: remotesessions.ErrNoValidToken, wantErr: true},
+		{name: "unavailable member", unavailable: errors.New("member is not permitted"), wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s := &Service{aiCatalog: aivendorstest.NewStore()}
+			member := metaMember{serverID: uuid.New(), projectID: uuid.New(), slug: "selected-member", backend: metaMemberBackendProxied,
+				chosenClientID: uuid.NullUUID{UUID: uuid.New(), Valid: true}, upstreamUnavailable: tc.unavailable}
+			calls := 0
+			choices := &memberChoices{byServer: map[uuid.UUID]*memberTokens{}, resolve: func(_ context.Context, got metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+				calls++
+				require.Equal(t, member.chosenClientID, got.chosenClientID)
+				return tc.tokens, tc.resolveErr
+			}}
+			gate := &metaGateContext{agentID: uuid.New(), organizationID: "test-org", memberChoices: choices}
+			tokens, err := s.resolveMemberTokens(t.Context(), gate, member)
+			if tc.wantErr {
+				require.Error(t, err)
+				require.Empty(t, tokens)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, tc.tokens, tokens)
+			}
+			if tc.unavailable != nil {
+				require.ErrorIs(t, err, tc.unavailable)
+				require.Zero(t, calls)
+			} else {
+				require.Equal(t, 1, calls)
+			}
+		})
 	}
 }
 
@@ -90,7 +74,7 @@ func TestAgentMemberSelectedHeaderAndNoAuth(t *testing.T) {
 	for _, clientType := range []string{"", authClientTypeStaticCredential, authClientTypePassThrough} {
 		t.Run("no-oauth/"+clientType, func(t *testing.T) {
 			t.Parallel()
-			s := &Service{}
+			s := &Service{aiCatalog: aivendorstest.NewStore()}
 			member := metaMember{serverID: uuid.New(), backend: metaMemberBackendProxied}
 			resolution := authClientResolution{outcome: authClientNoAuth}
 			if clientType != "" {
@@ -112,45 +96,38 @@ func TestAgentMemberSelectedHeaderAndNoAuth(t *testing.T) {
 
 func TestAgentMemberSelectedAttachmentPin(t *testing.T) {
 	t.Parallel()
-	for _, typed := range []bool{false, true} {
-		for _, replaced := range []bool{false, true} {
-			name := "legacy"
-			if typed {
-				name = "typed"
-			}
-			if replaced {
-				name += "/replaced"
-			} else {
-				name += "/unchanged"
-			}
-			t.Run(name, func(t *testing.T) {
-				t.Parallel()
-				checked := uuid.New()
-				source := &fakeUpstreamTokens{issuerID: uuid.New(), bound: checked}
-				s := &Service{upstreamTokens: source}
-				endpoint := &ResolvedMcpEndpoint{ProjectID: uuid.New(), OrganizationID: "test-org", UserSessionIssuerID: uuid.New()}
-				agent := uuid.New()
-				member := metaMember{serverID: uuid.New(), projectID: endpoint.ProjectID, slug: "pinned-member", backend: metaMemberBackendProxied,
-					chosenClientID: uuid.NullUUID{UUID: uuid.New(), Valid: true}, typedAuthClient: typed,
-					authClient: &authClientResolution{attachedSession: checked}}
-				choices := &memberChoices{enforced: true, byServer: map[uuid.UUID]*memberTokens{}, resolve: func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
-					return s.resolveChosenMemberTokens(ctx, remotesessions.RefreshAttribution{}, endpoint, urn.NewAgentSubject(agent), true, member)
-				}}
-				// Simulate replacing the attachment after permission checked its
-				// exact session, but before the credential lookup reads it.
-				if replaced {
-					source.bound = uuid.New()
-				}
-				tokens, err := s.resolveMemberTokens(t.Context(), &metaGateContext{agentID: agent, memberChoices: choices}, member)
-				if replaced {
-					require.Error(t, err)
-					require.Empty(t, tokens)
-				} else {
-					require.NoError(t, err)
-					require.Equal(t, checked, tokens[source.issuerID].RemoteSessionID)
-				}
-			})
+	for _, replaced := range []bool{false, true} {
+		name := "unchanged"
+		if replaced {
+			name = "replaced"
 		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			checked := uuid.New()
+			source := &fakeUpstreamTokens{issuerID: uuid.New(), bound: checked}
+			s := &Service{aiCatalog: aivendorstest.NewStore(), upstreamTokens: source}
+			endpoint := &ResolvedMcpEndpoint{ProjectID: uuid.New(), OrganizationID: "test-org", UserSessionIssuerID: uuid.New()}
+			agent := uuid.New()
+			member := metaMember{serverID: uuid.New(), projectID: endpoint.ProjectID, slug: "pinned-member", backend: metaMemberBackendProxied,
+				chosenClientID: uuid.NullUUID{UUID: uuid.New(), Valid: true},
+				authClient:     &authClientResolution{attachedSession: checked}}
+			choices := &memberChoices{byServer: map[uuid.UUID]*memberTokens{}, resolve: func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+				return s.resolveChosenMemberTokens(ctx, remotesessions.RefreshAttribution{}, endpoint, urn.NewAgentSubject(agent), member)
+			}}
+			// Simulate replacing the attachment after permission checked its
+			// exact session, but before the credential lookup reads it.
+			if replaced {
+				source.bound = uuid.New()
+			}
+			tokens, err := s.resolveMemberTokens(t.Context(), &metaGateContext{agentID: agent, memberChoices: choices}, member)
+			if replaced {
+				require.Error(t, err)
+				require.Empty(t, tokens)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, checked, tokens[source.issuerID].RemoteSessionID)
+			}
+		})
 	}
 }
 
@@ -255,6 +232,67 @@ func TestAgentMemberLegacyClientUsesTheAgentKeysAuthorizer(t *testing.T) {
 	}
 }
 
+// An agent gateway member serves a connection another member attached to the
+// agent, for a key that member did not issue: the attachment is their consent.
+// It serves only while their own live policy still allows the connection.
+func TestAgentMemberServesAnotherMembersAttachedConnection(t *testing.T) {
+	t.Parallel()
+	pool, err := TestInfra.CloneTestDatabase(t, "agent_member_lender_attachment")
+	require.NoError(t, err)
+	personal := personalAuthGrant()
+	connectOnly := []authz.Grant{authz.NewGrant(authz.ScopeMCPConnect, authz.WildcardResource)}
+	cases := []struct {
+		name    string
+		lender  []authz.Grant
+		allowed bool
+	}{
+		{"the lender's attachment serves a key from another member", []authz.Grant{personal}, true},
+		{"the lender's revoked policy refuses", connectOnly, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			f := newAuthClientFixture(t, pool)
+			client := f.oauthClient(authClientTypeRemoteSession)
+			f.enforce()
+			f.service.authz = authz.NewEngine(testenv.NewLogger(t), nil, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient(), authz.EngineOpts{
+				AdmitPrincipalCredential: func(context.Context, *pgxpool.Pool) (authz.PrincipalCredentialAdmission, error) {
+					return authz.PrincipalCredentialAdmission{
+						OwnerUserID: "user_owner", Credential: []authz.Grant{personal}, Agent: []authz.Grant{personal}, Owner: []authz.Grant{personal},
+						Authorizer: authz.RepresentedUserPolicy{UserID: "user_owner", Policy: []authz.Grant{personal}}, LegacyAuthCeiling: false,
+					}, nil
+				},
+				LoadUserPolicy: func(_ context.Context, _ string, userID string) ([]authz.Grant, bool, error) {
+					if userID != "user_lender" {
+						return nil, false, errors.New("only the lender's policy is read")
+					}
+					return tc.lender, true, nil
+				},
+			})
+			f.service.authClientPermitter = mandatoryPermitter{engine: f.service.authz}
+			session := uuid.New()
+			f.service.attachedConnections = &fakeAttachedConnections{conn: remotesessions.AttachedConnection{RemoteSessionID: session, OwnerUserID: "user_lender"}, attached: true, err: nil, asked: nil}
+			source := &agentMemberOutageTokens{fakeUpstreamTokens: &fakeUpstreamTokens{issuerID: uuid.New(), bound: session}}
+			f.service.upstreamTokens = source
+			agentID := uuid.New()
+			ctx := admittedAgentContext(t, f.orgID, agentID)
+			gate := &metaGateContext{agentID: agentID, organizationID: f.orgID, servedCredentials: map[uuid.UUID]contextvalues.UpstreamCredential{}}
+			member := metaMember{serverID: f.serverID, projectID: f.projectID, slug: "member", backend: metaMemberBackendProxied}
+
+			tokens, err := f.service.agentMemberClientTokens(ctx, gate, member, f.issuerID, f.registration, "")
+			if !tc.allowed {
+				require.Error(t, err)
+				require.Empty(t, source.subjects, "a refused member reads no credential")
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, session, tokens[source.issuerID].RemoteSessionID, "the attached connection serves, pinned")
+			require.Equal(t, []urn.SessionSubject{urn.NewAgentSubject(agentID)}, source.subjects)
+			require.Equal(t, contextvalues.UpstreamCredential{AuthClientID: client.String(), AuthClientType: authClientTypeRemoteSession, ConnectionOwnerUserID: "user_lender"}, gate.servedCredentials[f.registration])
+		})
+	}
+}
+
 // agentMemberOutageTokens injects outages into both token lookup paths.
 // Enforced members use the typed lookup rather than the legacy sign-in lookup.
 type agentMemberOutageTokens struct {
@@ -280,12 +318,12 @@ func TestAgentKeyHandbackReadsTheAuthorizersConnection(t *testing.T) {
 					want = urn.NewUserSubject(owner)
 				}
 				source := &fakeUpstreamTokens{issuerID: uuid.New(), bound: uuid.New()}
-				s := &Service{upstreamTokens: source}
+				s := &Service{aiCatalog: aivendorstest.NewStore(), upstreamTokens: source}
 				endpoint := &ResolvedMcpEndpoint{ProjectID: uuid.New(), OrganizationID: "test-org", UserSessionIssuerID: uuid.New()}
 				member := metaMember{serverID: uuid.New(), projectID: endpoint.ProjectID, slug: "member", backend: metaMemberBackendProxied,
-					chosenClientID: uuid.NullUUID{UUID: uuid.New(), Valid: true}, typedAuthClient: typed,
-					authClient: &authClientResolution{authorizerOwner: owner}}
-				_, err := s.resolveChosenMemberTokens(t.Context(), remotesessions.RefreshAttribution{}, endpoint, agent, true, member)
+					chosenClientID: uuid.NullUUID{UUID: uuid.New(), Valid: true},
+					authClient:     &authClientResolution{authorizerOwner: owner}}
+				_, err := s.resolveChosenMemberTokens(t.Context(), remotesessions.RefreshAttribution{}, endpoint, agent, member)
 				require.NoError(t, err)
 				authentication := &issuerGateAuthentication{endpoint: endpoint, subject: agent, chosenClient: uuid.NullUUID{UUID: uuid.New(), Valid: true}, authorizerOwner: owner}
 				if typed {

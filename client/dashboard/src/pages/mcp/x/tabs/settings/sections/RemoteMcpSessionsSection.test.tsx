@@ -14,7 +14,9 @@ vi.mock("./authentication/useSelectableUserSessionIssuers", () => ({
   }),
 }));
 vi.mock("./authentication/UserSessionIssuerField", () => ({
-  UserSessionIssuerField: () => <span>User session issuer</span>,
+  UserSessionIssuerField: ({ label }: { label: string }) => (
+    <span>{label}</span>
+  ),
 }));
 
 const mcpServer = {
@@ -30,13 +32,23 @@ const mcpServer = {
 afterEach(cleanup);
 
 describe("RemoteMcpSessionsSection", () => {
-  it("shows only the provider picker; its settings live in MCP Sessions", () => {
+  it("shows only the provider picker; its settings live in MCP Sign-in", () => {
     render(<RemoteMcpSessionsSection mcpServer={mcpServer} />);
 
-    expect(screen.getByText("User session issuer")).toBeDefined();
+    expect(screen.getByText("MCP sign-in")).toBeDefined();
+    expect(screen.getByText("Used by this server")).toBeDefined();
     expect(screen.queryByText(/Sessions last/)).toBeNull();
     expect(screen.queryByText("Shared authorization server")).toBeNull();
     expect(screen.queryByText("Session length")).toBeNull();
     expect(screen.queryByText("Client access")).toBeNull();
+  });
+
+  it("can configure downstream sessions before an issuer is selected", () => {
+    render(
+      <RemoteMcpSessionsSection
+        mcpServer={{ ...mcpServer, userSessionIssuerId: undefined }}
+      />,
+    );
+    expect(screen.getByText("Used by this server")).toBeDefined();
   });
 });

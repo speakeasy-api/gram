@@ -25,7 +25,7 @@ export function useActionCandidates(): LauncherCandidate[] {
         kind: "page",
         title: action.label,
         detail: detailFor(action.group ?? ""),
-        keywords: [],
+        keywords: action.keywords ?? [],
         verbs: ["open"],
         icon: action.icon as IconName | undefined,
         stage: action.stage,

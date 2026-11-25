@@ -40,6 +40,10 @@ var builders = map[string]func() Link{
 	"AccessGrant": func() Link {
 		return AccessGrant(":orgSlug", ":userId", ":scope", ":resourceId", ":projectId", ":requestId")
 	},
+	"AccessRequests": func() Link { return AccessRequests(":orgSlug") },
+	"AccessRequestDecision": func() Link {
+		return AccessRequestDecision(":orgSlug", ":userId", ":scope", ":resourceId", ":projectId", ":requestId")
+	},
 	"AccessChallenges":    func() Link { return AccessChallenges(":orgSlug") },
 	"RequestAccess":       func() Link { return RequestAccess(":orgSlug", ":scope", ":resourceId", ":resourceName") },
 	"Assistants":          func() Link { return Assistants(":orgSlug", ":projectSlug") },

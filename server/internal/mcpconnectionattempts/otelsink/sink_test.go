@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/dataexports"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/otelsink"
+	"github.com/speakeasy-api/gram/server/internal/mcpfeedback"
 	otelsvc "github.com/speakeasy-api/gram/server/internal/otel"
 	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	"github.com/speakeasy-api/gram/server/internal/otel/oteltest"
@@ -161,7 +162,7 @@ func TestTestSource_SendsThroughTheRouteTester(t *testing.T) {
 	// Unsafe so the test can reach an httptest server on loopback.
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
 	require.NoError(t, err)
-	tester, err := otelsvc.NewRouteTester(policy, append(otelsvc.NewRouteTestSources(testenv.NewLogger(t), testenv.NewMeterProvider(t)), newTestSource(t))...)
+	tester, err := otelsvc.NewRouteTester(policy, append(otelsvc.NewRouteTestSources(testenv.NewLogger(t), testenv.NewMeterProvider(t)), newTestSource(t), mcpfeedback.NewTestSource(otelsvc.NewFeedbackLogTestRequestBuilder(testenv.NewLogger(t), testenv.NewMeterProvider(t)), "gram-server"))...)
 	require.NoError(t, err)
 	destination := testEventDestination(false)
 	destination.EndpointURL = server.URL
@@ -210,7 +211,7 @@ func TestTestEvents_NoAttributeKeyIsADottedPrefixOfAnother(t *testing.T) {
 	// Unsafe so the test can reach an httptest server on loopback.
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
 	require.NoError(t, err)
-	tester, err := otelsvc.NewRouteTester(policy, append(otelsvc.NewRouteTestSources(testenv.NewLogger(t), testenv.NewMeterProvider(t)), newTestSource(t))...)
+	tester, err := otelsvc.NewRouteTester(policy, append(otelsvc.NewRouteTestSources(testenv.NewLogger(t), testenv.NewMeterProvider(t)), newTestSource(t), mcpfeedback.NewTestSource(otelsvc.NewFeedbackLogTestRequestBuilder(testenv.NewLogger(t), testenv.NewMeterProvider(t)), "gram-server"))...)
 	require.NoError(t, err)
 
 	for _, source := range dataexports.Sources() {

@@ -57,6 +57,7 @@ var All = []outbox.EventRegistration{
 	McpApprovalRequestV1,
 	McpCollectionV1,
 	McpEndpointV1,
+	McpFeedbackSubmittedV1,
 	McpServerV1,
 	MetaMcpServerV1,
 	ModelProviderKeyV1,

@@ -1,7 +1,7 @@
 import { cleanup, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { datadogRum } from "@datadog/browser-rum";
-import { getServerURL } from "@/lib/utils";
+import { DASHBOARD_CONFIG_META_NAME } from "@/lib/dashboard-config-html";
 import { TelemetryProvider } from "./TelemetryProvider";
 
 vi.mock("@datadog/browser-rum", () => ({
@@ -13,96 +13,160 @@ vi.mock("@datadog/browser-rum", () => ({
   },
 }));
 
+const posthogInit = vi.hoisted(() => vi.fn(() => null));
+
 vi.mock("posthog-js", () => ({
-  default: { init: vi.fn(() => null) },
+  default: { init: posthogInit },
 }));
 
-vi.mock("@/lib/utils", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/utils")>()),
-  getServerURL: vi.fn(),
-}));
+const rumSettings = {
+  datadogRumApplicationId: "test-app",
+  datadogRumClientToken: "test-token",
+  datadogRumSite: "datadoghq.eu",
+  datadogRumEnv: "prod",
+};
+
+function setRuntimeConfig(config: Record<string, unknown> | null): void {
+  document
+    .querySelectorAll(`meta[name="${DASHBOARD_CONFIG_META_NAME}"]`)
+    .forEach((meta) => meta.remove());
+  if (config === null) return;
+  const meta = document.createElement("meta");
+  meta.name = DASHBOARD_CONFIG_META_NAME;
+  meta.content = JSON.stringify(config);
+  document.head.appendChild(meta);
+}
 
 beforeEach(() => {
-  vi.resetModules();
   vi.clearAllMocks();
-  vi.stubEnv("VITE_DATADOG_APPLICATION_ID", "test-app");
-  vi.stubEnv("VITE_DATADOG_CLIENT_TOKEN", "test-token");
-  vi.stubEnv("VITE_DATADOG_ENV", "prod");
+  // Rendering without PostHog settings warns once per module load; see the
+  // dedicated test below.
+  vi.spyOn(console, "warn").mockImplementation(() => {});
 });
 
 afterEach(() => {
   cleanup();
-  vi.unstubAllEnvs();
+  setRuntimeConfig(null);
+  vi.restoreAllMocks();
 });
 
-describe.each(["dashboard", "elements"] as const)(
-  "%s RUM collection",
-  (entry) => {
-    async function initialize() {
-      if (entry === "dashboard") {
-        render(<TelemetryProvider>{null}</TelemetryProvider>);
-      } else {
-        const { initErrorTracking } =
-          await import("@/elements/lib/errorTracking");
-        initErrorTracking();
-      }
-    }
-
-    it.each([
-      "https://dev.getgram.ai",
-      "https://dev.ai.speakeasy.com",
-      "https://staging.getgram.ai",
-      "https://pr-123.dev.getgram.ai",
-      "https://localhost:5173",
-    ])(
-      "does not initialize collection on %s even with prod credentials",
-      async (url) => {
-        vi.mocked(getServerURL).mockReturnValue(url);
-        await initialize();
-        expect(datadogRum.init).not.toHaveBeenCalled();
-      },
-    );
-
-    it.each(["https://app.getgram.ai", "https://ai.speakeasy.com"])(
-      "initializes collection on %s",
-      async (url) => {
-        vi.mocked(getServerURL).mockReturnValue(url);
-        await initialize();
-        expect(datadogRum.init).toHaveBeenCalledWith(
-          expect.objectContaining({
-            env: "prod",
-            sessionSampleRate: 100,
-            sessionReplaySampleRate: 0,
-          }),
-        );
-      },
-    );
-  },
-);
-
-it("initializes Elements collection with the production environment alias", async () => {
-  vi.mocked(getServerURL).mockReturnValue("https://app.getgram.ai");
-  vi.stubEnv("VITE_DATADOG_ENV", "production");
-  const { initErrorTracking } = await import("@/elements/lib/errorTracking");
-  initErrorTracking();
-  expect(datadogRum.init).toHaveBeenCalledWith(
-    expect.objectContaining({
-      env: "production",
-      sessionSampleRate: 100,
-      sessionReplaySampleRate: 0,
-    }),
-  );
-});
-
-it.each(["dev", "staging"])(
-  "uses the production host rather than the %s telemetry label to enable Elements collection",
-  async (env) => {
-    vi.mocked(getServerURL).mockReturnValue("https://app.getgram.ai");
-    vi.stubEnv("VITE_DATADOG_ENV", env);
-    const { initErrorTracking } = await import("@/elements/lib/errorTracking");
-    initErrorTracking();
+describe("Datadog RUM collection", () => {
+  it("initializes with the deployment's settings", () => {
+    setRuntimeConfig(rumSettings);
+    render(<TelemetryProvider>{null}</TelemetryProvider>);
     expect(datadogRum.init).toHaveBeenCalledWith(
-      expect.objectContaining({ env, sessionSampleRate: 100 }),
+      expect.objectContaining({
+        applicationId: "test-app",
+        clientToken: "test-token",
+        site: "datadoghq.eu",
+        env: "prod",
+        service: "gram",
+        sessionSampleRate: 100,
+        // Session replay stays off: recordings would show customer data.
+        sessionReplaySampleRate: 0,
+      }),
     );
-  },
-);
+  });
+
+  it("stays off without a configuration", () => {
+    setRuntimeConfig(null);
+    render(<TelemetryProvider>{null}</TelemetryProvider>);
+    expect(datadogRum.init).not.toHaveBeenCalled();
+  });
+
+  it.each(Object.keys(rumSettings))("stays off and warns without %s", (key) => {
+    const partial: Record<string, unknown> = { ...rumSettings };
+    delete partial[key];
+    setRuntimeConfig(partial);
+    render(<TelemetryProvider>{null}</TelemetryProvider>);
+    expect(datadogRum.init).not.toHaveBeenCalled();
+    expect(console.warn).toHaveBeenCalledWith(
+      expect.stringContaining("incomplete Datadog RUM settings"),
+    );
+  });
+
+  it("does not warn about RUM when no RUM setting is present", () => {
+    setRuntimeConfig({});
+    render(<TelemetryProvider>{null}</TelemetryProvider>);
+    expect(console.warn).not.toHaveBeenCalledWith(
+      expect.stringContaining("Datadog RUM"),
+    );
+  });
+});
+
+describe("PostHog initialization", () => {
+  it("uses the deployment's project key and API host", () => {
+    setRuntimeConfig({
+      posthogKey: "phc_test",
+      posthogHost: "https://metrics.example.com",
+    });
+    render(<TelemetryProvider>{null}</TelemetryProvider>);
+    expect(posthogInit).toHaveBeenCalledWith(
+      "phc_test",
+      expect.objectContaining({
+        api_host: "https://metrics.example.com",
+        defaults: "2025-05-24",
+        capture_pageview: "history_change",
+        disable_capture_url_hashes: true,
+        disableDeviceModel: true,
+        disable_session_recording: true,
+      }),
+      "speakeasy",
+    );
+  });
+
+  it("stays off on public share pages even with valid configuration", () => {
+    window.history.pushState({}, "", "/shared/skills/test-token");
+    try {
+      setRuntimeConfig({
+        ...rumSettings,
+        posthogKey: "phc_test",
+        posthogHost: "https://metrics.example.com",
+      });
+      render(<TelemetryProvider>{null}</TelemetryProvider>);
+      expect(posthogInit).not.toHaveBeenCalled();
+      expect(datadogRum.init).not.toHaveBeenCalled();
+    } finally {
+      window.history.replaceState({}, "", "/");
+    }
+  });
+
+  it.each([
+    ["no configuration", null],
+    ["a key without a host", { posthogKey: "phc_test" }],
+    ["a host without a key", { posthogHost: "https://metrics.example.com" }],
+  ])("stays off with %s", (_name, config) => {
+    setRuntimeConfig(config);
+    render(<TelemetryProvider>{null}</TelemetryProvider>);
+    expect(posthogInit).not.toHaveBeenCalled();
+  });
+});
+
+describe("missing PostHog settings", () => {
+  it("warns once, because every feature flag reads false without PostHog", async () => {
+    vi.resetModules();
+    const { TelemetryProvider: FreshProvider } =
+      await import("./TelemetryProvider");
+    setRuntimeConfig(null);
+    render(<FreshProvider>{null}</FreshProvider>);
+    render(<FreshProvider>{null}</FreshProvider>);
+    expect(console.warn).toHaveBeenCalledOnce();
+    expect(console.warn).toHaveBeenCalledWith(
+      expect.stringContaining("feature flags are off"),
+    );
+  });
+
+  it("does not warn on the public share page, which never starts PostHog", async () => {
+    window.history.pushState({}, "", "/shared/skills/token");
+    try {
+      vi.resetModules();
+      const { TelemetryProvider: FreshProvider } =
+        await import("./TelemetryProvider");
+      setRuntimeConfig(null);
+      render(<FreshProvider>{null}</FreshProvider>);
+      expect(console.warn).not.toHaveBeenCalled();
+    } finally {
+      window.history.pushState({}, "", "/");
+    }
+  });
+});

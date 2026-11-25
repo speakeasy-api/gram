@@ -28,30 +28,11 @@ import {
   useAllRemoteSessionClients,
   useRemoteSessionIssuersByIds,
 } from "@/lib/remote-identity";
-import { RemoteMcpIdentitySectionBody } from "./RemoteMcpIdentitySection";
 import { SetupStepBanner } from "./SetupStepBanner";
 
 export const MCP_AUTHENTICATION_SECTION_ID = "authentication";
 
-function authenticationSectionDescription(
-  isUnproxied: boolean,
-  isRemoteMcp: boolean,
-  upstreamName: string,
-): string {
-  if (isUnproxied) {
-    return "Speakeasy doesn't manage authentication for unproxied servers.";
-  }
-  if (isRemoteMcp) {
-    return `How callers are identified to ${upstreamName}. Changes take effect on new connections.`;
-  }
-  return "Who may connect to this server and how they sign in. Changes take effect on new connections.";
-}
-
-/**
- * Chrome wrapper for the remote/tunneled MCP server settings tab. The
- * target-agnostic body below also mounts on the toolset detail page inside
- * that page's own section chrome.
- */
+/** Caller authentication for non-remote server settings. */
 export function AuthenticationSection({
   mcpServer,
   mcpUrl,
@@ -61,21 +42,16 @@ export function AuthenticationSection({
   mcpUrl?: string;
 }): JSX.Element {
   const isUnproxied = !!mcpServer.unproxiedMcpServerId;
-  const isRemoteMcp = !!mcpServer.remoteMcpServerId;
   const target = useMcpServerAuthTarget(mcpServer, mcpUrl);
 
   return (
     <SettingsSection id={MCP_AUTHENTICATION_SECTION_ID}>
       <SettingsSection.Header>
-        <SettingsSection.Title>
-          {isRemoteMcp ? "Identity" : "Authentication"}
-        </SettingsSection.Title>
+        <SettingsSection.Title>Sign-in method</SettingsSection.Title>
         <SettingsSection.Description>
-          {authenticationSectionDescription(
-            isUnproxied,
-            isRemoteMcp,
-            mcpServer.name?.trim() || "the upstream service",
-          )}
+          {isUnproxied
+            ? "Speakeasy doesn't manage authentication for unproxied servers."
+            : "Who may connect to this server and how they sign in. Changes take effect on new connections."}
         </SettingsSection.Description>
       </SettingsSection.Header>
       {isUnproxied ? null : <SetupStepBanner mcpServer={mcpServer} />}
@@ -95,7 +71,7 @@ export function AuthenticationSection({
 function UnproxiedAuthenticationNotice(): JSX.Element {
   return (
     <Field>
-      <FieldLabel>Authentication</FieldLabel>
+      <FieldLabel>Sign-in</FieldLabel>
       <div>
         <Badge variant="success">Not applicable</Badge>
       </div>
@@ -114,33 +90,6 @@ function UnproxiedAuthenticationNotice(): JSX.Element {
  * heading, so each shell supplies only the header above it.
  */
 export function AuthenticationSectionBody({
-  target,
-  additionalSetupAction,
-}: {
-  target: AuthTarget;
-  additionalSetupAction?: ReactNode;
-}): JSX.Element {
-  if (target.kind === "remote-mcp") {
-    // Keyed by server: the panel holds unsaved header and identity drafts,
-    // and navigating to another server must not carry them across for Save
-    // to write to the wrong remote. Every render site dispatches through here.
-    return (
-      <RemoteMcpIdentitySectionBody
-        key={`${target.permissionResourceId}:${target.remoteMcpServerId ?? ""}`}
-        target={target}
-      />
-    );
-  }
-
-  return (
-    <StandardAuthenticationSectionBody
-      target={target}
-      additionalSetupAction={additionalSetupAction}
-    />
-  );
-}
-
-function StandardAuthenticationSectionBody({
   target,
   additionalSetupAction,
 }: {
@@ -344,18 +293,17 @@ function IdentityProviderSetupField({
 
 function AuthenticationLoadingField() {
   return (
-    <AuthRow label="Authentication">
-      <Skeleton label="Loading authentication" className="h-5 w-48" />
+    <AuthRow label="Sign-in">
+      <Skeleton label="Loading sign-in settings" className="h-5 w-48" />
     </AuthRow>
   );
 }
 
 function AuthenticationLoadErrorField() {
   return (
-    <AuthRow label="Authentication">
+    <AuthRow label="Sign-in">
       <FieldError>
-        Failed to load the authentication configuration. Refresh the page to try
-        again.
+        Failed to load the sign-in settings. Refresh the page to try again.
       </FieldError>
     </AuthRow>
   );

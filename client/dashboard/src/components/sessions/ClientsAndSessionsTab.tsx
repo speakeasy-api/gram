@@ -31,6 +31,8 @@ import {
   type ConnectionGrouping,
 } from "@/components/connections/groupConnections";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { useConnectionHealthFlag } from "@/pages/mcp-sessions/connection-health/flag";
+import { ServerConnectionHealth } from "@/pages/mcp-sessions/connection-health/ServerConnectionHealth";
 
 type ClientsAndSessionsTabProps = {
   issuerId: string | undefined;
@@ -135,7 +137,25 @@ function NoIssuerEmptyState({
   );
 }
 
-function IssuerClientsAndSessions({
+function IssuerClientsAndSessions(
+  props: Omit<ClientsAndSessionsTabProps, "gateway">,
+): JSX.Element {
+  const health = useConnectionHealthFlag();
+  const { issuerId, originatingMcpServerId } = props;
+  // The sessions list mounts only when its view is shown, so its queries wait.
+  return issuerId && health === "on" && originatingMcpServerId ? (
+    <ServerConnectionHealth
+      key={`${issuerId}:${originatingMcpServerId}`}
+      providerId={issuerId}
+      serverId={originatingMcpServerId}
+      sessions={<IssuerSessionsList {...props} />}
+    />
+  ) : (
+    <IssuerSessionsList {...props} />
+  );
+}
+
+function IssuerSessionsList({
   issuerId,
   originatingMcpServerId,
   authTabPath = "settings",

@@ -153,6 +153,14 @@ type Service interface {
 	// a fetch-by-token URL for uploaded content is a per-user, content-bearing
 	// surface (the same DNO-383 blast-radius rule as getSessionMeta).
 	CreateSessionHandoff(context.Context, *CreateSessionHandoffPayload) (res *CreateSessionHandoffResult, err error)
+	// List the organization's pending access requests for an organization
+	// administrator, newest first, at most 50, each with a link that opens it in
+	// the dashboard to decide. Decisions are made in the dashboard or Slack, never
+	// from the device agent. A user who is not an administrator gets an empty
+	// list. Requires a per-user key; the org install key, device-agent tokens and
+	// agent identities are refused. Answers not found while access requests are
+	// off for the organization.
+	ListPendingAccessRequests(context.Context, *ListPendingAccessRequestsPayload) (res *ListPendingAccessRequestsResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -177,7 +185,7 @@ const ServiceName = "agent"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [17]string{"getPlugins", "getMyConnections", "getClaudeObservabilityPlugin", "hideMcpServer", "unhideMcpServer", "listSyncedUsers", "getConfiguration", "updateConfiguration", "listAiScanTargets", "upsertAiScanTarget", "deleteAiScanTarget", "getSessionMeta", "reportSessionMoved", "reportAIScan", "reportState", "reportCrash", "createSessionHandoff"}
+var MethodNames = [18]string{"getPlugins", "getMyConnections", "getClaudeObservabilityPlugin", "hideMcpServer", "unhideMcpServer", "listSyncedUsers", "getConfiguration", "updateConfiguration", "listAiScanTargets", "upsertAiScanTarget", "deleteAiScanTarget", "getSessionMeta", "reportSessionMoved", "reportAIScan", "reportState", "reportCrash", "createSessionHandoff", "listPendingAccessRequests"}
 
 // One AI detection target a device-agent scan matched.
 type AIScanMatch struct {
@@ -288,6 +296,33 @@ type AgentMarketplace struct {
 	Name string
 	// Git URL for the marketplace, served by the marketplace proxy.
 	URL string
+}
+
+// A pending access request an organization administrator can decide in the
+// dashboard.
+type AgentPendingAccessRequest struct {
+	// Access request ID.
+	ID string
+	// The requester's display name, or their email when they have none.
+	RequesterDisplayName string
+	// The scope asked for.
+	Scope string
+	// The scope's name as the role editor shows it.
+	PermissionLabel string
+	// The resource's name, as it was when the request was made.
+	ResourceName *string
+	// The requester's note to the administrators.
+	Message *string
+	// How long the requester asked to have the access, in seconds counted from
+	// approval.
+	RequestedDurationSeconds *int
+	// When the requester asked to have the access until.
+	RequestedUntil *string
+	CreatedAt      string
+	// When the request lapses.
+	ExpiresAt string
+	// Dashboard page that opens the request to approve or deny it.
+	DecideURL string
 }
 
 type AgentPlugin struct {
@@ -760,6 +795,20 @@ type ListAiScanTargetsResult struct {
 	Etag string
 	// Every target in the organization's list, ordered by id.
 	Targets []*AiScanTarget
+}
+
+// ListPendingAccessRequestsPayload is the payload type of the agent service
+// listPendingAccessRequests method.
+type ListPendingAccessRequestsPayload struct {
+	ApikeyToken *string
+}
+
+// ListPendingAccessRequestsResult is the result type of the agent service
+// listPendingAccessRequests method.
+type ListPendingAccessRequestsResult struct {
+	// Pending requests, newest first. At most 50. Empty for a user who is not an
+	// organization administrator.
+	Requests []*AgentPendingAccessRequest
 }
 
 // ListSyncedUsersPayload is the payload type of the agent service

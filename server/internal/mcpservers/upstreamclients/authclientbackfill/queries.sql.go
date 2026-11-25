@@ -2364,7 +2364,6 @@ SELECT
     JOIN user_session_issuers AS usi ON usi.id = b.user_session_issuer_id AND usi.deleted IS FALSE
     JOIN user_session_issuers AS provenance ON provenance.id = rs.user_session_issuer_id AND provenance.deleted IS FALSE
     JOIN projects AS p ON p.id = b.project_id AND p.organization_id = b.organization_id AND p.deleted IS FALSE
-    JOIN remote_session_client_user_session_issuers AS link ON link.remote_session_client_id = c.id AND link.user_session_issuer_id = usi.id
     WHERE c.id = b.remote_session_client_id
       AND c.deleted IS FALSE
       AND (issuer.project_id = p.id OR (issuer.project_id IS NULL AND (issuer.organization_id IS NULL OR issuer.organization_id = p.organization_id)))
@@ -2378,6 +2377,7 @@ SELECT
     WHERE ac.organization_id = b.organization_id
       AND ac.remote_session_client_id = b.remote_session_client_id
       AND ac.client_type = 'remote_session'
+      AND (ac.project_id IS NULL OR ac.project_id = b.project_id)
       AND ac.deleted IS FALSE
   )::boolean AS client_recorded
 FROM principal_remote_session_bindings AS b
@@ -2412,7 +2412,9 @@ type ListLiveAgentAttachmentsRow struct {
 // one: the exact attached connection row is still live with its current credentials, it
 // belongs to the user who attached it, that user still owns the agent, the
 // agent and its owner are active, and the sign-in, project, upstream client
-// and issuer are live and reach the attachment's project. binding_id, when
+// and issuer are live and reach the attachment's project. A derived connection
+// grant does not create an offer: serving still requires a live typed offer
+// independently of both the grant and the compatibility parent. binding_id, when
 // set, reads that one attachment. It takes no lock: a grant is written only
 // from a read of one attachment taken after LockAttachmentIssuers through
 // LockAttachmentAuthClients hold what it decides from.
@@ -3867,11 +3869,8 @@ SELECT c.id
 FROM principal_remote_session_bindings AS b
 JOIN remote_session_clients AS c ON c.id = b.remote_session_client_id
 JOIN projects AS p ON p.id = b.project_id
-JOIN remote_session_client_user_session_issuers AS link
-  ON link.remote_session_client_id = c.id
- AND link.user_session_issuer_id = b.user_session_issuer_id
 WHERE b.id = $1 AND b.organization_id = $2
-FOR SHARE OF c, p, link
+FOR SHARE OF c, p
 `
 
 type LockAttachmentConfigurationParams struct {
@@ -3948,8 +3947,7 @@ FOR SHARE
 // unservable (issuer deletion or migration, attachment revocation, agent
 // suspension, revocation or reassignment, reauthorization or revocation of
 // the connection, removal of the owner or their membership, and removal of
-// the upstream client, its issuer, the project, the sign-in binding or the
-// auth client) can commit between the read that decides a grant and the
+// the upstream client, its issuer, the project or the auth client) can commit between the read that decides a grant and the
 // grant. FOR SHARE, not FOR KEY SHARE, so they also wait on writers that only
 // update a column, such as a reauthorization's grant_generation. Every
 // candidate's owner and membership are locked first, once for the whole run,

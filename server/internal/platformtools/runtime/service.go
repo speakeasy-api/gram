@@ -23,19 +23,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
-	platformchangelog "github.com/speakeasy-api/gram/server/internal/platformtools/changelog"
-	platformchats "github.com/speakeasy-api/gram/server/internal/platformtools/chats"
-	platformdeployments "github.com/speakeasy-api/gram/server/internal/platformtools/deployments"
-	platformdocs "github.com/speakeasy-api/gram/server/internal/platformtools/docs"
-	platformlogs "github.com/speakeasy-api/gram/server/internal/platformtools/logs"
 	platformmemory "github.com/speakeasy-api/gram/server/internal/platformtools/memory"
 	platformplatform "github.com/speakeasy-api/gram/server/internal/platformtools/platform"
-	platformplugins "github.com/speakeasy-api/gram/server/internal/platformtools/plugins"
-	platformrisk "github.com/speakeasy-api/gram/server/internal/platformtools/risk"
 	platformskills "github.com/speakeasy-api/gram/server/internal/platformtools/skills"
 	"github.com/speakeasy-api/gram/server/internal/platformtools/threadcontext"
 	platformtriggers "github.com/speakeasy-api/gram/server/internal/platformtools/triggers"
-	platformusers "github.com/speakeasy-api/gram/server/internal/platformtools/users"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 )
 
@@ -171,110 +163,6 @@ func TriggerExternalTools(db *pgxpool.Pool, app *bgtriggers.App, auditLogger *au
 	}
 }
 
-// ManagedAssistantLogsTools returns telemetry-backed observability tools for
-// the project's managed assistant. Universal assistants don't get them because
-// they have no dashboard surface to display the results.
-func ManagedAssistantLogsTools(telemetrySvc platformtools.TelemetryService) []platformtools.ExternalTool {
-	return []platformtools.ExternalTool{
-		// Individual tool calls and raw log records need log:read on the
-		// project, which no system role and no agent runtime policy holds.
-		{Executor: platformlogs.NewSearchLogsTool(telemetrySvc), RequiredFeature: "", RequiredScope: string(authz.ScopeLogRead)},
-		{Executor: platformlogs.NewSearchToolCallsTool(telemetrySvc), RequiredFeature: "", RequiredScope: string(authz.ScopeLogRead)},
-		{Executor: platformlogs.NewGetToolUsageSummaryTool(telemetrySvc), RequiredFeature: "", RequiredScope: ""},
-		{Executor: platformlogs.NewSearchChatsTool(telemetrySvc), RequiredFeature: "", RequiredScope: ""},
-		{Executor: platformlogs.NewSearchUsersTool(telemetrySvc), RequiredFeature: "", RequiredScope: ""},
-		{Executor: platformlogs.NewGetProjectMetricsSummaryTool(telemetrySvc), RequiredFeature: "", RequiredScope: ""},
-		{Executor: platformlogs.NewGetUserMetricsSummaryTool(telemetrySvc), RequiredFeature: "", RequiredScope: ""},
-		{Executor: platformlogs.NewGetObservabilityOverviewTool(telemetrySvc), RequiredFeature: "", RequiredScope: ""},
-		{Executor: platformlogs.NewListAttributeKeysTool(telemetrySvc), RequiredFeature: "", RequiredScope: ""},
-	}
-}
-
-// ManagedAssistantChatsTools returns chat-history tools for the project's
-// managed assistant.
-func ManagedAssistantChatsTools(chatSvc platformchats.ChatService) []platformtools.ExternalTool {
-	return []platformtools.ExternalTool{
-		{Executor: platformchats.NewListChatsTool(chatSvc), RequiredFeature: "", RequiredScope: ""},
-		{Executor: platformchats.NewLoadChatTool(chatSvc), RequiredFeature: "", RequiredScope: ""},
-	}
-}
-
-// ManagedAssistantUsersTools returns user-directory tools for the project's
-// managed assistant.
-func ManagedAssistantUsersTools(orgSvc platformusers.OrganizationsService) []platformtools.ExternalTool {
-	return []platformtools.ExternalTool{
-		{Executor: platformusers.NewListOrganizationUsersTool(orgSvc), RequiredFeature: "", RequiredScope: ""},
-	}
-}
-
-// ManagedAssistantRiskTools returns risk/policy tools for the project's
-// managed assistant. listRiskResultsForAgent redacts matches so raw secret
-// content never reaches the model context. The exclusion and false-positive
-// tools mutate project state; the risk service gates them on org admin and
-// audits the invoking user as the actor.
-func ManagedAssistantRiskTools(riskSvc platformrisk.RiskService, redactionKey string) []platformtools.ExternalTool {
-	return []platformtools.ExternalTool{
-		{Executor: platformrisk.NewListRiskPoliciesTool(riskSvc), RequiredFeature: "", RequiredScope: ""},
-		{Executor: platformrisk.NewListRiskResultsForAgentTool(riskSvc), RequiredFeature: "", RequiredScope: ""},
-		{Executor: platformrisk.NewListRiskResultsByChatTool(riskSvc), RequiredFeature: "", RequiredScope: ""},
-		{Executor: platformrisk.NewGetRiskRuleBreakdownTool(riskSvc), RequiredFeature: "", RequiredScope: ""},
-		{Executor: platformrisk.NewListRiskExclusionsTool(riskSvc, redactionKey), RequiredFeature: "", RequiredScope: ""},
-		{Executor: platformrisk.NewCreateRiskExclusionTool(riskSvc, redactionKey), RequiredFeature: "", RequiredScope: ""},
-		{Executor: platformrisk.NewMarkRiskResultsFalsePositiveTool(riskSvc), RequiredFeature: "", RequiredScope: ""},
-		{Executor: platformrisk.NewUnmarkRiskResultsFalsePositiveTool(riskSvc), RequiredFeature: "", RequiredScope: ""},
-	}
-}
-
-// ManagedAssistantDeploymentsTools returns deployment-introspection tools for
-// the project's managed assistant.
-func ManagedAssistantDeploymentsTools(deploymentsSvc platformdeployments.DeploymentsService) []platformtools.ExternalTool {
-	return []platformtools.ExternalTool{
-		{Executor: platformdeployments.NewGetDeploymentLogsTool(deploymentsSvc), RequiredFeature: "", RequiredScope: ""},
-	}
-}
-
-// ManagedAssistantChangelogTools returns the public-changelog tool for the
-// project's managed assistant so it can answer "what's new on the platform"
-// questions. The HTTP client must come from a guardian policy so the outbound
-// fetch stays within the egress rules.
-func ManagedAssistantChangelogTools(httpClient *guardian.HTTPClient) []platformtools.ExternalTool {
-	return []platformtools.ExternalTool{
-		{Executor: platformchangelog.NewGetChangelogTool(httpClient), RequiredFeature: "", RequiredScope: ""},
-	}
-}
-
-// ManagedAssistantDocsTools returns the public product-documentation tools for
-// the project's managed assistant so it can answer product questions from
-// speakeasy.com/docs/ai-control-plane instead of its own priors. The HTTP
-// client must come from a guardian policy so the outbound fetch stays within
-// the egress rules. Both tools share one client so the page index is fetched
-// and cached once rather than per tool.
-func ManagedAssistantDocsTools(httpClient *guardian.HTTPClient) []platformtools.ExternalTool {
-	client := platformdocs.NewClient(httpClient, platformdocs.DefaultSiteURL)
-	return []platformtools.ExternalTool{
-		{Executor: platformdocs.NewListDocsTool(client), RequiredFeature: "", RequiredScope: ""},
-		{Executor: platformdocs.NewGetDocTool(client), RequiredFeature: "", RequiredScope: ""},
-	}
-}
-
-// ManagedAssistantSkillsTools returns skill management tools for the project's
-// managed assistant. The distribution pair is gated on the same "skills"
-// feature as the rest; authorization is enforced downstream by the skills
-// service against the assistant owner's grants (skill:write for a plugin
-// target, project:write for an assistant target).
-func ManagedAssistantSkillsTools(skillsSvc platformskills.SkillsService, insights platformskills.SkillInsightsReader) []platformtools.ExternalTool {
-	return []platformtools.ExternalTool{
-		{Executor: platformskills.NewCreateTool(skillsSvc), RequiredFeature: "skills", RequiredScope: ""},
-		{Executor: platformskills.NewListTool(skillsSvc), RequiredFeature: "skills", RequiredScope: ""},
-		{Executor: platformskills.NewGetTool(skillsSvc), RequiredFeature: "skills", RequiredScope: ""},
-		{Executor: platformskills.NewListVersionsTool(skillsSvc), RequiredFeature: "skills", RequiredScope: ""},
-		{Executor: platformskills.NewListDistributionsTool(skillsSvc), RequiredFeature: "skills", RequiredScope: ""},
-		{Executor: platformskills.NewDistributeTool(skillsSvc), RequiredFeature: "skills", RequiredScope: ""},
-		{Executor: platformskills.NewUndistributeTool(skillsSvc), RequiredFeature: "skills", RequiredScope: ""},
-		{Executor: platformskills.NewInsightsTool(skillsSvc, insights), RequiredFeature: "skills", RequiredScope: ""},
-	}
-}
-
 // PlatformMCPReadTools returns the Platform MCP read tools re-served to the
 // project's managed assistant over the assistant runtime channel. The reader
 // is the same Postgres reader backing the OAuth-facing Platform MCP surface,
@@ -285,16 +173,6 @@ func PlatformMCPReadTools(reader platformmcp.Reader) []platformtools.ExternalToo
 		{Executor: platformplatform.NewListProjectsTool(reader), RequiredFeature: "", RequiredScope: ""},
 		{Executor: platformplatform.NewFindMCPTool(reader), RequiredFeature: "", RequiredScope: ""},
 		{Executor: platformplatform.NewGetMCPTool(reader), RequiredFeature: "", RequiredScope: ""},
-	}
-}
-
-// ManagedAssistantPluginsTools returns the plugin catalog tool for the
-// project's managed assistant. It exists so the assistant can resolve a plugin
-// by name to the ID that platform_distribute_skill needs; without it the only
-// plugin IDs in reach are those that already carry a distributed skill.
-func ManagedAssistantPluginsTools(pluginsSvc platformplugins.PluginsService) []platformtools.ExternalTool {
-	return []platformtools.ExternalTool{
-		{Executor: platformplugins.NewListPluginsTool(pluginsSvc), RequiredFeature: "", RequiredScope: ""},
 	}
 }
 

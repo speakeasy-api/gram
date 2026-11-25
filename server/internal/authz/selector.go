@@ -7,6 +7,8 @@ import (
 	"net/url"
 	"slices"
 	"strings"
+
+	"github.com/google/uuid"
 )
 
 // Selector is a set of key-value constraints attached to a grant or check.
@@ -114,8 +116,8 @@ func legacyResourceKindForScope(scope Scope) string {
 }
 
 // scopeAllowsSelectorKey reports whether a single permission declares key
-// beyond its type's dimensions. Today that is project_id on org:hooks_ingest:
-// the one org scope checked per project (R6, parked).
+// beyond its type's dimensions. Today that is project_id on org:hooks_ingest,
+// the one org scope checked per project.
 func scopeAllowsSelectorKey(scope Scope, key string) bool {
 	return scopeSelectorKeys[scope][key]
 }
@@ -129,9 +131,12 @@ func scopeAllowsSelectorKey(scope Scope, key string) bool {
 //   - unknown keys are rejected
 func ValidateSelector(scope Scope, sel Selector) error {
 	kind, hasKind := sel[SelectorKeyResourceKind]
-	_, hasID := sel[SelectorKeyResourceID]
+	resourceID, hasID := sel[SelectorKeyResourceID]
 	if !hasKind || !hasID {
 		return fmt.Errorf("selector must include both resource_kind and resource_id")
+	}
+	if strings.EqualFold(resourceID, uuid.Nil.String()) {
+		return fmt.Errorf("resource_id must name a resource, got the nil UUID")
 	}
 
 	expectedKind := ResourceKindForScope(scope)
@@ -315,4 +320,40 @@ func (s Selector) MarshalJSON() ([]byte, error) {
 		return nil, fmt.Errorf("marshal selector: %w", err)
 	}
 	return b, nil
+}
+
+// Dispositions lists every disposition a tool call can carry, sorted.
+func Dispositions() []string {
+	return slices.Sorted(maps.Keys(validDispositions))
+}
+
+// DispositionFromHints classifies a tool by its annotation hints into the one
+// disposition a tool call carries. Every caller that authorizes calling or
+// listing a tool uses it, so both see the same value.
+//
+//   - read-only, unless the tool is also destructive;
+//   - destructive;
+//   - idempotent;
+//   - open-world;
+//   - unannotated when no hint is true, including when there are none.
+//
+// A tool that says it is both read-only and destructive is classified
+// destructive, the reading that grants less, and conflicting reports it so the
+// caller can log it.
+func DispositionFromHints(readOnly, destructive, idempotent, openWorld *bool) (disposition string, conflicting bool) {
+	isTrue := func(hint *bool) bool { return hint != nil && *hint }
+	switch {
+	case isTrue(readOnly) && isTrue(destructive):
+		return DispositionDestructive, true
+	case isTrue(readOnly):
+		return DispositionReadOnly, false
+	case isTrue(destructive):
+		return DispositionDestructive, false
+	case isTrue(idempotent):
+		return DispositionIdempotent, false
+	case isTrue(openWorld):
+		return DispositionOpenWorld, false
+	default:
+		return DispositionUnannotated, false
+	}
 }

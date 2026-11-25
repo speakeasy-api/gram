@@ -16,6 +16,7 @@ import { StatusDot } from "@/components/ui/StatusDot";
 import { Text } from "@/components/ui/Text";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { useSession } from "@/contexts/Auth";
+import { useInspectOAuth } from "@/hooks/useInspectOAuth";
 import { useUserSessionToken } from "@/hooks/useUserSessionToken";
 import {
   platformEndpointSlug,
@@ -141,32 +142,36 @@ function GatewayInspectConnection({
   );
   const connectUrl = useMemo(() => mcpConnectionUrl(mcpUrl), [mcpUrl]);
   const hasIssuer = !!metaMcpServer.userSessionIssuerId;
+  const approval = useInspectOAuth({
+    serverUrl: mcpUrl,
+    issuerId: metaMcpServer.userSessionIssuerId ?? undefined,
+    serverId: `gateway:${metaMcpServer.id}`,
+  });
+  const reviewed = approval.accessToken;
 
   // Connect as the signed-in user so the tab shows what this person's agents
   // get. Minting requires the same mcp:connect the runtime enforces.
   const token = useUserSessionToken({
     target: {
       kind: "metaMcpServer",
-      id: metaMcpServer.id,
+      id: reviewed ? undefined : metaMcpServer.id,
       discoveryMode,
       connectionVersion: version,
     },
     userSessionIssuerId: metaMcpServer.userSessionIssuerId,
     throwOnError: false,
   });
+  const accessToken = reviewed ?? token.accessToken;
   const headers = useMemo(
     () =>
-      token.accessToken
-        ? { Authorization: `Bearer ${token.accessToken}` }
-        : undefined,
-    [token.accessToken],
+      accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+    [accessToken],
   );
   const ready =
     !resolvingUrl &&
     !!connectUrl &&
-    !token.isLoading &&
-    !token.error &&
-    (!hasIssuer || !!token.accessToken);
+    (!!reviewed ||
+      (!token.isLoading && !token.error && (!hasIssuer || !!accessToken)));
 
   const inspection = useGatewayInspection(connectUrl, {
     headers,
@@ -182,7 +187,7 @@ function GatewayInspectConnection({
     target: {
       kind: "metaMcpServer",
       // No id, no mint: the catalog session exists only in Code Mode.
-      id: mode === "code_mode" ? metaMcpServer.id : undefined,
+      id: mode === "code_mode" && !reviewed ? metaMcpServer.id : undefined,
       discoveryMode: "progressive",
       connectionVersion: `${version}:catalog`,
     },
@@ -198,7 +203,7 @@ function GatewayInspectConnection({
   );
   const catalog = useGatewayInspection(connectUrl, {
     headers: catalogHeaders,
-    enabled: mode === "code_mode" && !!catalogHeaders,
+    enabled: !reviewed && mode === "code_mode" && !!catalogHeaders,
     configurationKey: `${configurationKey}:catalog`,
   });
 
@@ -233,6 +238,9 @@ function GatewayInspectConnection({
     rows,
     {
       checkTools: "cache",
+      reviewedSession: reviewed
+        ? { accessToken: reviewed, progressive: mode === "progressive" }
+        : undefined,
       onConnected: () => {
         inspection.refetch();
         catalog.refetch();
@@ -309,7 +317,8 @@ function GatewayInspectConnection({
         : false;
 
   const defaultMode = savedMode(metaMcpServer.discoveryMode);
-  const shownMode: Mode = choice === "default" ? defaultMode : choice;
+  const shownMode: Mode =
+    reviewed && mode ? mode : choice === "default" ? defaultMode : choice;
   const modeOptions = (["direct", "progressive", "code_mode"] as const)
     .filter(
       (value) =>
@@ -361,7 +370,7 @@ function GatewayInspectConnection({
       <div className="flex items-center gap-3">
         {/* The mode travels in the minted session token, so only a gateway
             with sign-in can preview another one. */}
-        {hasIssuer ? (
+        {hasIssuer && !reviewed ? (
           <SegmentedControl
             ariaLabel="Preview a mode"
             value={shownMode}
@@ -377,7 +386,17 @@ function GatewayInspectConnection({
             {shownMode === "code_mode" ? null : " mode"}
           </Text>
         )}
-        {choice !== "default" ? (
+        {reviewed && !inspection.needsAuth ? (
+          <Button
+            variant="tertiary"
+            size="sm"
+            onClick={approval.connect}
+            disabled={!approval.connect || approval.isConnecting}
+          >
+            <Button.Text>Review connection</Button.Text>
+          </Button>
+        ) : null}
+        {choice !== "default" && !reviewed ? (
           <SimpleTooltip
             tooltip={`Only you see this preview. Agents get ${modeLabels[defaultMode]}, the gateway's saved mode.`}
           >
@@ -465,6 +484,9 @@ function GatewayInspectConnection({
     unconnected.length === 1
       ? `${unconnected[0]!.name} isn't connected`
       : `${unconnected.length} servers aren't connected`;
+  const needsChoice = unconnected.some(
+    (member) => signIn.statusFor(member.slug)?.status === "needs_consent",
+  );
   const memberSignIn =
     unconnected.length > 0 && skippedConnect ? (
       <p className="text-muted-foreground flex flex-wrap items-center gap-2 text-sm">
@@ -624,29 +646,45 @@ function GatewayInspectConnection({
       <InlineEmptyState
         icon="lock"
         heading="This gateway didn't accept the dashboard's connection"
-        description="Reload to try again, or review the gateway's authentication."
+        description={
+          reviewed
+            ? "Review the gateway connection again to continue."
+            : "Reload to try again, or review the gateway's authentication."
+        }
         action={
-          <Button variant="secondary" asChild>
-            <Link to={`${settingsHref}#${GATEWAY_AUTHENTICATION_SECTION_ID}`}>
-              <Button.Text>Review authentication</Button.Text>
-            </Link>
-          </Button>
+          reviewed ? (
+            <Button
+              variant="secondary"
+              onClick={approval.connect}
+              disabled={!approval.connect || approval.isConnecting}
+            >
+              <Button.Text>Choose connections again</Button.Text>
+            </Button>
+          ) : (
+            <Button variant="secondary" asChild>
+              <Link to={`${settingsHref}#${GATEWAY_AUTHENTICATION_SECTION_ID}`}>
+                <Button.Text>Review authentication</Button.Text>
+              </Link>
+            </Button>
+          )
         }
       />
     );
-  } else if (inspection.isError || token.error) {
+  } else if (inspection.isError || (!reviewed && token.error)) {
     state = (
       <InlineEmptyState
         icon="triangle-alert"
         heading="Couldn't read this gateway"
         description={
-          (token.error ?? inspection.error)?.message ??
+          ((reviewed ? undefined : token.error) ?? inspection.error)?.message ??
           "The gateway didn't answer."
         }
         action={
           <Button
             variant="secondary"
-            onClick={token.error ? token.refetch : inspection.refetch}
+            onClick={
+              !reviewed && token.error ? token.refetch : inspection.refetch
+            }
           >
             <Button.Text>Try again</Button.Text>
           </Button>
@@ -663,21 +701,36 @@ function GatewayInspectConnection({
   ) {
     state = (
       <GatewayConnectStep
-        members={unconnected.map((m) => ({
-          slug: m.slug,
-          name: m.name,
-          mcpServerId: memberServer(m.slug)?.id,
-        }))}
-        onConnect={signIn.connect}
+        members={unconnected.map((m) => {
+          const choose = signIn.statusFor(m.slug)?.status === "needs_consent";
+          return {
+            slug: m.slug,
+            name: m.name,
+            mcpServerId: memberServer(m.slug)?.id,
+            choose,
+            connect: choose ? approval.connect : signIn.connect,
+          };
+        })}
+        choosingConnection={needsChoice}
+        connecting={needsChoice && approval.isConnecting}
+        connectionError={needsChoice && approval.error}
         onSkip={() => setSkippedConnect(true)}
         availableCount={tools.length}
       />
     );
   }
 
+  if (!state && reviewed && approval.error) {
+    state = (
+      <Alert variant="error" title="Couldn't start connection review">
+        Use Review connection to try again.
+      </Alert>
+    );
+  }
+
   const isLoading =
     metaMcpServer.visibility !== "disabled" &&
-    (resolvingUrl || token.isLoading || inspection.isLoading);
+    (resolvingUrl || (!reviewed && token.isLoading) || inspection.isLoading);
 
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col">
@@ -743,7 +796,7 @@ function GatewayInspectConnection({
           chatUrl && data && !inspection.isError ? (
             <InspectChat
               mcpUrl={chatUrl}
-              gatewayToken={token.accessToken}
+              gatewayToken={accessToken}
               model={DEFAULT_MODEL}
             />
           ) : undefined

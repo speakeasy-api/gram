@@ -18,10 +18,12 @@ import (
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/agent"
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/deviceagenttoken"
+	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -32,6 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz/mcpauthztest"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
+	"github.com/speakeasy-api/gram/server/internal/plugins/marketplacetokens/marketplacetokenstest"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -90,6 +93,10 @@ type testInstance struct {
 	deviceAgentTokens *deviceagenttoken.Issuer
 	// redis backs rate limiters a test attaches to the service.
 	redis *redis.Client
+	// sessions and authz are the dependencies an access service attached to
+	// the agent service is built from.
+	sessions *sessions.Manager
+	authz    *authz.Engine
 }
 
 // newTestAgentService clones a fresh DB, seeds the mock org + a project (via
@@ -139,7 +146,7 @@ func newTestAgentService(t *testing.T) (context.Context, *testInstance) {
 	require.NoError(t, err)
 	orgHosts := orghost.New(orghost.Config{ServerURL: serverURL, SiteURL: siteURL})
 	deviceAgentTokens := deviceagenttoken.New(mcpauthztest.NewIssuer(t), conn)
-	svc := agent.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), features, testServerURL, orgHosts, blobs, telemetryLogger, nil, deviceAgentTokens)
+	svc := agent.NewService(aivendorstest.NewStore(), logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), features, testServerURL, orgHosts, blobs, telemetryLogger, nil, deviceAgentTokens, marketplacetokenstest.Tokens(t, conn))
 
 	return ctx, &testInstance{
 		service:           svc,
@@ -151,6 +158,8 @@ func newTestAgentService(t *testing.T) (context.Context, *testInstance) {
 		blobs:             blobs,
 		deviceAgentTokens: deviceAgentTokens,
 		redis:             redisClient,
+		sessions:          sessionManager,
+		authz:             authzEngine,
 	}
 }
 
@@ -182,18 +191,21 @@ func withPerUserKeyAuth(t *testing.T, ctx context.Context, ownerEmail string) co
 	return contextvalues.SetAuthContext(ctx, &clone)
 }
 
-// publishMarketplace gives a project a marketplace_token, which is what makes
-// its marketplace visible to the agent endpoint (the query requires one).
+// publishMarketplace gives a project a marketplace token, which is what makes
+// its marketplace visible to the agent endpoint (the query requires one). An
+// empty token leaves the connection without one.
 func publishMarketplace(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, token string) {
 	t.Helper()
 	_, err := pluginsrepo.New(conn).UpsertGitHubConnection(ctx, pluginsrepo.UpsertGitHubConnectionParams{
-		ProjectID:        projectID,
-		InstallationID:   1,
-		RepoOwner:        "speakeasy",
-		RepoName:         "plugins-" + token, // unique per (installation, owner, repo)
-		MarketplaceToken: pgtype.Text{String: token, Valid: true},
+		ProjectID:      projectID,
+		InstallationID: 1,
+		RepoOwner:      "speakeasy",
+		RepoName:       "plugins-" + token, // unique per (installation, owner, repo)
 	})
 	require.NoError(t, err)
+	if token != "" {
+		marketplacetokenstest.Plant(t, conn, projectID, token)
+	}
 }
 
 // seedProject creates an additional project in an existing org, used to exercise

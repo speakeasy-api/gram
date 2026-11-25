@@ -17,6 +17,8 @@
     "AgentManagement": "/:orgSlug/agent-management",
     "AccessRoles": "/:orgSlug/access/roles",
     "AccessGrant": "/:orgSlug/access/roles?grant_user=:userId&project_id=:projectId&request=:requestId&resource_id=:resourceId&scope=:scope",
+    "AccessRequests": "/:orgSlug/access/requests",
+    "AccessRequestDecision": "/:orgSlug/access/requests?grant_user=:userId&project_id=:projectId&request=:requestId&resource_id=:resourceId&scope=:scope",
     "AccessChallenges": "/:orgSlug/access/challenges",
     "RequestAccess": "/:orgSlug/request-access?resource_id=:resourceId&resource_name=:resourceName&scope=:scope",
     "Assistants": "/:orgSlug/projects/:projectSlug/assistants",

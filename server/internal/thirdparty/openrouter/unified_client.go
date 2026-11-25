@@ -15,6 +15,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/tiktoken-go/tokenizer"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
 	or_base "github.com/OpenRouterTeam/go-sdk"
@@ -56,15 +57,22 @@ type ChatClient struct {
 	usageTrackingStrategy  UsageTrackingStrategy
 	chatTitleGenerator     ChatTitleGenerator
 	telemetryLogger        TelemetryLogger
+
+	// inferenceURL is the partition's Endpoints.Inference, used for
+	// completions, embeddings and model discovery.
+	inferenceURL string
+
 	// providerRouting, when set, limits which OpenRouter providers serve
 	// every chat completion this client sends.
 	providerRouting *ProviderRouting
 }
 
-// NewUnifiedClient creates a new UnifiedClient with the given strategies.
+// NewUnifiedClient creates a new UnifiedClient with the given strategies. It
+// sends every request to endpoints.Inference.
 func NewUnifiedClient(
 	logger *slog.Logger,
 	guardianPolicy *guardian.Policy,
+	endpoints Endpoints,
 	provisioner Provisioner,
 	keyResolver KeyResolver,
 	captureStrategy MessageCaptureStrategy,
@@ -81,6 +89,7 @@ func NewUnifiedClient(
 		usageTrackingStrategy:  trackingStrategy,
 		chatTitleGenerator:     chatTitleGenerator,
 		telemetryLogger:        telemetryLogger,
+		inferenceURL:           endpoints.Inference,
 		providerRouting:        nil,
 	}
 }
@@ -263,7 +272,7 @@ func (c *ChatClient) makeHTTPRequest(ctx context.Context, apiKey string, reqBody
 	httpReq, err := http.NewRequestWithContext(
 		ctx,
 		"POST",
-		fmt.Sprintf("%s/v1/chat/completions", OpenRouterBaseURL),
+		fmt.Sprintf("%s/v1/chat/completions", c.inferenceURL),
 		bytes.NewReader(data),
 	)
 	if err != nil {
@@ -453,6 +462,7 @@ func (c *ChatClient) GetCompletion(ctx context.Context, req CompletionRequest) (
 	if chatResp.Usage != nil {
 		usage = *chatResp.Usage
 	}
+	recordCompletionSpanAttributes(ctx, chatResp.Provider, usage, 0)
 
 	// Extract tool calls
 	var toolCalls []ToolCall
@@ -518,7 +528,9 @@ func (c *ChatClient) GetCompletionStream(ctx context.Context, req CompletionRequ
 	reqBody := initResult.requestBody
 	reqBody.Stream = true
 
-	// Make HTTP request
+	// Make HTTP request. The first-chunk wait is measured from here, so it
+	// includes the connection and the wait for response headers.
+	requestStartedAt := time.Now()
 	httpResp, err := c.makeHTTPRequest(ctx, initResult.apiKey, reqBody)
 	if err != nil {
 		return nil, err
@@ -545,6 +557,8 @@ func (c *ChatClient) GetCompletionStream(ctx context.Context, req CompletionRequ
 		messageContent:       &strings.Builder{},
 		accumulatedToolCalls: make(map[int]ToolCall),
 		startTime:            time.Now(),
+		requestStartedAt:     requestStartedAt,
+		firstChunkAt:         time.Time{},
 		messageID:            "",
 		model:                "",
 		provider:             "",
@@ -645,6 +659,12 @@ type streamingResponseReader struct {
 	usage        Usage
 	usageSet     bool
 	startTime    time.Time
+	// requestStartedAt is when the HTTP request was sent, before the wait for
+	// response headers.
+	requestStartedAt time.Time
+	// firstChunkAt is when the first parsed data chunk arrived: the wait for
+	// the provider, before any streaming.
+	firstChunkAt time.Time
 }
 
 // Read implements io.Reader, passing data through while parsing SSE chunks.
@@ -671,6 +691,12 @@ func (r *streamingResponseReader) Close() error {
 	if err != nil {
 		err = fmt.Errorf("close response body: %w", err)
 	}
+
+	var firstChunk time.Duration
+	if !r.firstChunkAt.IsZero() {
+		firstChunk = r.firstChunkAt.Sub(r.requestStartedAt)
+	}
+	recordCompletionSpanAttributes(r.ctx, r.provider, r.usage, firstChunk)
 
 	// If we have accumulated message data, trigger strategies
 	if r.messageID != "" {
@@ -744,6 +770,10 @@ func (r *streamingResponseReader) processSSELine(line string) {
 	if err := json.Unmarshal([]byte(jsonData), &chunk); err != nil {
 		r.logger.ErrorContext(r.ctx, "failed to parse SSE chunk", attr.SlogError(err))
 		return
+	}
+
+	if r.firstChunkAt.IsZero() {
+		r.firstChunkAt = time.Now()
 	}
 
 	// Extract message ID and model (sent in first chunk)
@@ -1111,7 +1141,7 @@ func (c *ChatClient) createEmbeddings(ctx context.Context, orgID string, model s
 		)
 	}
 
-	orClient := or_base.New(or_base.WithSecurity(openrouterKey))
+	orClient := or_base.New(or_base.WithSecurity(openrouterKey), or_base.WithServerURL(c.inferenceURL+"/v1"))
 	result, err := orClient.Embeddings.Generate(ctx, or_operations.CreateEmbeddingsRequest{
 		SessionID:      nil,
 		Trace:          nil,
@@ -1168,4 +1198,29 @@ func (c *ChatClient) createEmbeddings(ctx context.Context, orgID string, model s
 	}
 
 	return results, nil
+}
+
+// recordCompletionSpanAttributes adds what a model call's latency and cost
+// depend on to the span in ctx: the upstream provider OpenRouter routed to,
+// the time to the first streamed chunk (zero when unknown, as for a
+// non-streaming call), and the reasoning and prompt-cache token counts.
+func recordCompletionSpanAttributes(ctx context.Context, provider string, usage Usage, firstChunk time.Duration) {
+	span := trace.SpanFromContext(ctx)
+	if !span.IsRecording() {
+		return
+	}
+	attrs := make([]attribute.KeyValue, 0, 4)
+	if provider != "" {
+		attrs = append(attrs, attr.OpenRouterUpstreamProvider(provider))
+	}
+	if firstChunk > 0 {
+		attrs = append(attrs, attr.OpenRouterTimeToFirstChunk(firstChunk.Milliseconds()))
+	}
+	if details := usage.CompletionTokensDetails; details != nil {
+		attrs = append(attrs, attr.GenAIUsageReasoningTokens(details.ReasoningTokens))
+	}
+	if details := usage.PromptTokensDetails; details != nil {
+		attrs = append(attrs, attr.GenAIUsageCacheReadInputTokens(details.CachedTokens))
+	}
+	span.SetAttributes(attrs...)
 }

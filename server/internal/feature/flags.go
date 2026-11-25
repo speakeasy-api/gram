@@ -3,13 +3,16 @@ package feature
 type Flag string
 
 const (
+	// FlagMCPFeedbackExport gates queueing MCP server feedback for the OTLP
+	// data export. Every report is stored either way. Evaluated server-side
+	// with local evaluation when a report is stored, keyed by organization ID
+	// with no groups, so it is targeted by a release condition with no
+	// properties. Fails closed. It holds the export back until every log relay
+	// routes feedback records to the feedback export rather than to telemetry,
+	// and is removed once that is deployed and the flag is at 100%.
+	FlagMCPFeedbackExport Flag = "mcp-feedback-export"
 	// FlagChannels gates the Channels rollout for an organization.
 	FlagChannels Flag = "channels"
-	// FlagPromptPolicies gates the natural-language / LLM-judge ("prompt
-	// based") risk policy MVP. While set, only opted-in organizations can
-	// create or update nl-type risk policies and have them enforced. The
-	// dashboard gates the matching UI behind the same key.
-	FlagPromptPolicies Flag = "gram-prompt-policies"
 	// FlagToolApprovals gates creating require_approval risk policies (tool
 	// approvals) and the dashboard's approval wizard and Tool approvals tab.
 	// Evaluated server-side on policy create and update and in the dashboard;
@@ -25,14 +28,6 @@ const (
 	// cannot see the feature. Targeted by PostHog organization group (org
 	// slug), the same way the dashboard evaluates it.
 	FlagBudgets Flag = "gram-budgets"
-	// FlagPrivateNetworkGateway chooses which runtime hosts an organization's
-	// new private network connection: the tsnet tailnet gateway when enabled,
-	// the Tailscale Kubernetes operator otherwise. Evaluated server-side when a
-	// connection is created, and by the dashboard to show the matching setup
-	// steps until one exists. Targeted by PostHog organization group (org
-	// slug). Fails closed to the operator. Existing connections keep the
-	// runtime they were created with. Removed once the gateway is the default.
-	FlagPrivateNetworkGateway Flag = "private-network-gateway"
 	// FlagAccessRequests gates stored access requests: requestAccess records
 	// a request an admin can approve as a temporary grant or deny, from the
 	// dashboard or a Slack DM, and refuses scopes that cannot be given
@@ -93,18 +88,31 @@ const (
 	// invocation time and fails closed independently of the dashboard workflow.
 	FlagPlatformMCPShadowAccessDecisions Flag = "platform-mcp-shadow-access-decisions"
 
-	// FlagAssistantPlatformMCP grants a project's managed (dashboard)
-	// assistant the Platform MCP read toolset — the "platform" platform
-	// toolset re-serving the Platform MCP read tools over the assistant
-	// runtime channel. Targeted by PostHog organization group (org slug),
-	// like FlagBudgets. Evaluated server-side only; removed once the toolset
-	// is GA.
-	FlagAssistantPlatformMCP Flag = "assistant-platform-mcp"
 	// FlagExplore gates Explore and the Platform MCP analytics tools. The key
 	// matches the dashboard's page-level flag so one PostHog flag controls
 	// both surfaces; targeted by organization group (org slug), like
 	// FlagBudgets. A rollout gate, not authorization. Removed once Explore is GA.
 	FlagExplore Flag = "gram-explore"
+	// FlagMCPConnectionHealth gates the MCP connection health reads (Connection
+	// Logs, sign-in summary, session activity, denied clients). Evaluated
+	// server-side, where every mcpConnectionHealth method answers not found
+	// without it, and by the dashboard under the same key. Target by
+	// organization group (org slug) or by person "email" (lowercase); API keys
+	// never match a person, and on the server nobody does without local
+	// evaluation (PostHog personal API key). Switch to people only after this server is fully
+	// deployed, and back before rolling it back; servers follow within about a
+	// minute, so check a listed person and an unlisted member of a previously
+	// enabled organization. Fails closed. A rollout gate, not authorization.
+	// Removed once the pages are GA.
+	FlagMCPConnectionHealth Flag = "mcp-connection-health"
+	// FlagIntentPolicies gates the Intent-based policies page and its
+	// intentPolicies endpoints (guardrail, analyze, upload). Evaluated on the
+	// server and in the dashboard under the same key; targeted per person by
+	// "email" (lowercase). Only signed-in sessions match, and the server only
+	// with local evaluation (PostHog personal API key). Fails closed. A rollout gate on top of the
+	// endpoints' chat and project RBAC checks, not authorization. Removed once
+	// the feature is GA.
+	FlagIntentPolicies Flag = "intent-policies"
 	// FlagRiskLLMAnalyzer selects the engine behind an organization's secret,
 	// PII, prompt injection and destructive tool call detection on both the
 	// realtime enforcement lane and the batch flag lane. It is multivariate:
@@ -200,41 +208,10 @@ const (
 	// or an organization group to pause one organization.
 	FlagInternalSessionIssuerSigningPaused Flag = "internal-session-issuer-signing-paused"
 
-	// FlagWorkloadPlatformGitHubActions offers the GitHub Actions workload
-	// platform to an organization before its catalog entry is enabled, so it
-	// can be tried in production. Evaluated server-side when the platform
-	// catalog is listed (workloadpolicy), so the catalog reports the entry as
-	// enabled and the picker, Command K and preselected setup links offer it.
-	// Targeted by PostHog organization group (org slug). Fails closed: off,
-	// missing or failing, the entry stays "Coming soon". Removed once the entry
-	// is enabled.
-	FlagWorkloadPlatformGitHubActions Flag = "workload-platform-github-actions"
-
-	// FlagAuthClientResolver makes the typed auth client resolver
-	// authoritative for an organization's direct proxied servers. Off, the
-	// upstream client choice keeps serving and is the rollback.
-	//
-	// Precondition: the organization's backfill is complete and its choices
-	// are mapped onto auth clients (AIM-595), including the ones issuance
-	// writes. Until then an OAuth choice with no auth client falls back to the
-	// upstream client choice, so the flag only takes effect for mapped
-	// choices. Evaluated
-	// locally with the organization id as the distinct id, so the PostHog flag
-	// must be person-aggregated and match distinct_id in a list of
-	// organization ids.
-	FlagAuthClientResolver Flag = "auth-client-resolver"
-
-	// FlagAuthClientResolverShadow runs the typed auth client resolver beside
-	// the upstream client choice, without acquiring credentials or writing,
-	// and logs where they disagree. Ignored while FlagAuthClientResolver is on.
-	// Targeted the same way as FlagAuthClientResolver.
-	FlagAuthClientResolverShadow Flag = "auth-client-resolver-shadow"
-
 	// FlagMandatoryAuthzShadow evaluates the mandatory server and auth client
 	// check beside today's decision for an organization's MCP requests and
-	// records where they disagree, without changing any response. Auth clients
-	// are only evaluated where FlagAuthClientResolver or its shadow is on.
-	// Targeted the same way as FlagAuthClientResolver.
+	// records where they disagree, without changing any response.
+	// Use a person-aggregated PostHog flag matching distinct_id to the organization ID.
 	FlagMandatoryAuthzShadow Flag = "mandatory-authz-shadow"
 
 	// FlagUpstreamIssuerFromAssociations makes an MCP server's upstream
@@ -246,7 +223,7 @@ const (
 	// wherever a request reads the server's associations and no credential
 	// choice governs; elsewhere the request is recorded as a governing choice
 	// or as not having read the associations, and keeps the column.
-	// Targeted the same way as FlagAuthClientResolver.
+	// Use a person-aggregated PostHog flag matching distinct_id to the organization ID.
 	FlagUpstreamIssuerFromAssociations Flag = "upstream-issuer-from-associations"
 
 	// FlagAuthClientUpstreamSelectorWrites lets an organization write grants
@@ -256,8 +233,7 @@ const (
 	// do not protect owner blocks, so enable it only once every replica reads
 	// them; that release is then the rollback floor. Off, unavailable or
 	// failing, no such grant is written; reading and enforcing existing ones,
-	// and protecting existing blocks, never depend on it. Targeted the same
-	// way as FlagAuthClientResolver.
+	// and protecting existing blocks, never depend on it. Use a person-aggregated PostHog flag matching distinct_id to the organization ID.
 	FlagAuthClientUpstreamSelectorWrites Flag = "auth-client-upstream-selector-writes"
 
 	// FlagPlatformMCPDiscoveryMode picks the tool surface a Platform MCP
@@ -272,14 +248,6 @@ const (
 	// full catalogue, because the ChatGPT app directory rejects tools that run
 	// other tools by name.
 	FlagPlatformMCPDiscoveryMode Flag = "platform-mcp-discovery-mode"
-
-	// FlagPlatformMCPGatewayProxy lets a Platform MCP connection use the
-	// person's own MCP servers through list_my_servers, search_my_tools,
-	// describe_tools and execute_tool, which run the organization gateway's
-	// tools as that person, and names those servers in the connection's
-	// instructions. Evaluated server-side on every call with the organization
-	// ID as distinct ID. Off, unavailable or failing, the tools refuse.
-	FlagPlatformMCPGatewayProxy Flag = "platform-mcp-gateway-proxy"
 )
 
 // Variants of FlagPlatformMCPDiscoveryMode. Anything else — no variant, an
@@ -293,32 +261,6 @@ const (
 	// progressive surface when the organization can use Code Mode.
 	VariantPlatformMCPDiscoveryCodeMode Variant = "code_mode"
 )
-
-// Variants of FlagAssistantPlatformMCP. Anything else — no variant, an
-// unrecognized key, an unavailable provider, or an evaluation error — resolves
-// to VariantAssistantToolsLegacy, which is the pre-rollout behaviour, so a
-// PostHog outage can never strip the managed assistant's tools.
-const (
-	// VariantAssistantToolsLegacy serves the managed assistant the
-	// "managed-assistant" platform toolset (logs, chats, users, risk,
-	// deployments, skills, plugins, docs, changelog).
-	VariantAssistantToolsLegacy Variant = "legacy"
-	// VariantAssistantToolsPlatformMCP serves the managed assistant the
-	// "platform" toolset — the Platform MCP read tools — INSTEAD of the
-	// legacy toolset, not in addition to it.
-	VariantAssistantToolsPlatformMCP Variant = "platformmcp"
-)
-
-// AssistantToolsVariant normalizes a resolved variant to one of the two known
-// keys, collapsing everything unrecognized onto the legacy default. Both the
-// attach path (assistants service) and the serve path (mcp service) must agree
-// on this mapping or a toolset would be attached and then 404 at request time.
-func AssistantToolsVariant(variant Variant) Variant {
-	if variant == VariantAssistantToolsPlatformMCP {
-		return VariantAssistantToolsPlatformMCP
-	}
-	return VariantAssistantToolsLegacy
-}
 
 // Variants of FlagRiskLLMAnalyzer, the risk engine mode of an organization.
 // Anything else — no variant, an unrecognized key, an unavailable provider,

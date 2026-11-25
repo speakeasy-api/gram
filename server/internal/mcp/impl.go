@@ -27,6 +27,7 @@ import (
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
@@ -116,6 +117,8 @@ type IdentityResolver interface {
 }
 
 type Service struct {
+	aiCatalog *aivendors.Store
+
 	assistantWorkloadTokens AssistantWorkloadTokenIssuer
 	codeExecutor            codemode.Executor
 	federatedLoginConsumer  FederatedLoginConsumer
@@ -189,6 +192,10 @@ type Service struct {
 	// upstreamIssuerParityLog dedupes upstream issuer disagreement and
 	// re-consent forecast logs.
 	upstreamIssuerParityLog *onceLog
+
+	// authClientRefusals dedupes the refused mcp:auth checks recorded as
+	// authorization challenges.
+	authClientRefusals *onceLog
 	// prepareMandatory replaces authz PrepareMandatory for the shadow when
 	// set; tests use it to observe admissions.
 	prepareMandatory func(context.Context) (authz.MandatoryAuthorization, error)
@@ -306,6 +313,10 @@ type Service struct {
 	validationMetrics *remotesessionmetrics.Validation
 	// validationLimiter paces verifies per consent challenge; nil without Redis.
 	validationLimiter *ratelimit.Limiter
+
+	// localToolSources offer the tools Speakeasy answers itself on the
+	// servers it serves, such as the feedback tool; none offers no such tool.
+	localToolSources []localToolSource
 	// autoVerifications admits and drains the probes a committed grant starts off the request path.
 	autoVerifications *autoVerifications
 	// remoteSessionRecheck sweeps idle grants with no refresh token; runs only where StartRemoteSessionRecheck is called.
@@ -499,6 +510,12 @@ type mcpInputs struct {
 
 	// upstreamRejection is set by tools/call when an HTTP tool's provider refused the credential sent.
 	upstreamRejection mcpconnectionattempts.Code
+
+	// backendAnswered is set by tools/call and resources/read when the tool's own backend returned a result that is not an error.
+	backendAnswered bool
+
+	// resultSucceeded is set by tools/call and resources/read when the result is not an error, whoever produced it.
+	resultSucceeded bool
 }
 
 // recordServingAnalytics adds the known serving ids to product event properties.
@@ -528,7 +545,7 @@ func optionalUUIDString(id *uuid.UUID) *string {
 	return new(id.String())
 }
 
-func NewService(
+func NewService(aiCatalog *aivendors.Store,
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
 	meterProvider metric.MeterProvider,
@@ -574,6 +591,9 @@ func NewService(
 	codeExecutor codemode.Executor,
 	connections *mcpconnectionattempts.Recorder,
 ) (*Service, error) {
+	if aiCatalog == nil {
+		return nil, errors.New("mcp service requires an AI client catalog store")
+	}
 	if codeExecutor == nil {
 		codeExecutor = codemode.Disabled{}
 	}
@@ -616,6 +636,7 @@ func NewService(
 		shutdownDrain = shutdowndrain.New()
 	}
 	service := &Service{
+		aiCatalog:                 aiCatalog,
 		assistantWorkloadTokens:   nil,
 		replayLiveness:            nil,
 		federatedLoginConsumer:    nil,
@@ -656,6 +677,7 @@ func NewService(
 		features:                  features,
 		mandatoryShadowLog:        newOnceLog(),
 		upstreamIssuerParityLog:   newOnceLog(),
+		authClientRefusals:        newOnceLog(),
 		prepareMandatory:          nil,
 		cimdResolver:              cimd.NewResolver(guardianPolicy, meterProvider, logger),
 		cimdAdmissionMetrics:      admission.NewMetrics(meterProvider, logger),
@@ -752,6 +774,7 @@ func NewService(
 		attemptEndings:         newAttemptEndings(),
 		validationMetrics:      remotesessionmetrics.NewValidation(logger, meterProvider),
 		validationLimiter:      newValidationLimiter(redisClient, meterProvider),
+		localToolSources:       nil,
 		autoVerifications:      newAutoVerifications(),
 		remoteSessionRecheck:   newRemoteSessionRecheck(metaRuntimeConfig.withDefaults().RecheckInterval, redisClient, meterProvider),
 		remoteProxyManager:     remoteProxyManager,
@@ -1451,7 +1474,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		default:
 			ctx, err = s.TryPublicIdentityAuth(ctx, r, false, toolset.ID)
 			if err == nil {
-				err = s.refuseForeignCaller(ctx, toolset.OrganizationID)
+				err = s.refuseForeignCallerOutsideTypedServing(ctx, toolset.OrganizationID)
 			}
 			if err != nil {
 				s.newMandatoryShadow(ctx, toolset.OrganizationID).shadowRequire(ctx, mandatorySurfaceHostedConnect, err, connect)
@@ -1477,7 +1500,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	hostedCoverageRecorded := false
 	if isHostedToolsCall {
 		if err := s.enforceHostedToolsCall(ctx, toolset.OrganizationID, cfg.mcpServerID); err != nil {
-			s.recordRequestOutcome(ctx, hostedConnectionScope(ctx, toolset, cfg), killswitchHappened(err), r, callerSubject(ctx), s.reportedClient(ctx, r, toolset.ProjectID, toolset.Slug))
+			s.recordRequestOutcome(ctx, hostedConnectionScope(ctx, s.aiCatalog.SnapshotFor(ctx), toolset, cfg), killswitchHappened(err), r, callerSubject(ctx), s.reportedClient(ctx, r, toolset.ProjectID, toolset.Slug))
 			return writeMCPError(ctx, s.logger, w, req.ID, protocolVersion.InEffect, err)
 		}
 		hostedCoverageRecorded = true
@@ -1558,6 +1581,8 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		toolSelection:            callerToolSelection,
 		skillsOverMCP:            nil,
 		upstreamRejection:        mcpconnectionattempts.Code{},
+		backendAnswered:          false,
+		resultSucceeded:          false,
 	}
 
 	// Call handlers resolve attribution after loading their toolset. Other
@@ -1598,7 +1623,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	satisfied, failureCode, err := s.checkToolsetSecurityOutcome(ctx, toolset, cfg.isPublic, mcpInputs)
 	// A notification has no response, so its refusal tells no one anything.
 	if (err != nil || !satisfied) && req.ID.IsSet() {
-		s.recordRequestOutcome(ctx, hostedConnectionScope(ctx, toolset, cfg), failureCode, r, callerSubject(ctx), s.reportedClient(ctx, r, toolset.ProjectID, toolset.Slug))
+		s.recordRequestOutcome(ctx, hostedConnectionScope(ctx, s.aiCatalog.SnapshotFor(ctx), toolset, cfg), failureCode, r, callerSubject(ctx), s.reportedClient(ctx, r, toolset.ProjectID, toolset.Slug))
 	}
 	if err != nil {
 		return err
@@ -1614,6 +1639,9 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	}
 
 	body, err := s.handleRequest(ctx, mcpInputs, &req)
+	if err == nil {
+		s.recordHostedServed(ctx, toolset, cfg, mcpInputs, req.Method)
+	}
 	switch {
 	case body == nil && err == nil:
 		return respondWithNoContent(true, w)
@@ -1638,11 +1666,11 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 }
 
 // hostedConnectionScope files a hosted request under its fronting server, else its toolset.
-func hostedConnectionScope(ctx context.Context, toolset *toolsets_repo.Toolset, cfg *hostedServing) mcpconnectionattempts.Scope {
+func hostedConnectionScope(ctx context.Context, catalog *aivendors.Snapshot, toolset *toolsets_repo.Toolset, cfg *hostedServing) mcpconnectionattempts.Scope {
 	if cfg.mcpServerID != nil {
-		return mcpconnectionattempts.ServerScope(toolset.OrganizationID, toolset.ProjectID, *cfg.mcpServerID, requestApp(ctx))
+		return mcpconnectionattempts.ServerScope(toolset.OrganizationID, toolset.ProjectID, *cfg.mcpServerID, requestApp(ctx, catalog))
 	}
-	return mcpconnectionattempts.ToolsetScope(toolset.OrganizationID, toolset.ProjectID, toolset.ID, requestApp(ctx))
+	return mcpconnectionattempts.ToolsetScope(toolset.OrganizationID, toolset.ProjectID, toolset.ID, requestApp(ctx, catalog))
 }
 
 // admitHostedRequest applies today's access decision for a hosted server and
@@ -1710,7 +1738,7 @@ func (s *Service) authorizeHostedRequest(ctx context.Context, r *http.Request, t
 			if err := s.authz.Require(ctx, connect); err != nil {
 				denied := mcpaccess.ServerPermissionDenied(err, s.requestAccessURL(ctx, cfg.rbacResourceID.String(), toolset.Name))
 				if mcpaccess.IsServerPermissionDenied(denied) {
-					s.recordRequestOutcome(ctx, hostedConnectionScope(ctx, toolset, cfg), mcpconnectionattempts.CodeNoServerAccess, r, callerSubject(ctx), s.reportedClient(ctx, r, toolset.ProjectID, toolset.Slug))
+					s.recordRequestOutcome(ctx, hostedConnectionScope(ctx, s.aiCatalog.SnapshotFor(ctx), toolset, cfg), mcpconnectionattempts.CodeNoServerAccess, r, callerSubject(ctx), s.reportedClient(ctx, r, toolset.ProjectID, toolset.Slug))
 				}
 				return ctx, false, fmt.Errorf("authorize MCP server access: %w", denied)
 			}
@@ -2035,10 +2063,10 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case mcpversions.MethodNotificationsInitialized, mcpversions.MethodNotificationsCancelled:
 		return nil, nil
 	case mcpversions.MethodToolsList:
-		return handleToolsList(ctx, s.logger, s.authz, s.db, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.shadowMCPClient, s.platformExtras, s.sessionClientInfo)
+		return handleToolsList(ctx, s.logger, s.authz, s.db, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.shadowMCPClient, s.platformExtras, s.sessionClientInfo, s.hostedLocalTools)
 	case mcpversions.MethodToolsCall:
 		recordToolsCallIdentityCoverage(ctx, s.identityCoverage, payload.organizationID, payload)
-		body, err := handleToolsCall(ctx, s.logger, s.metrics, s.identityCoverage, s.authz, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.toolCallLogger, s.vectorToolStore, s.mcpMetadataRepo, s.auditLogger, s.platformExtras, s.sessionClientInfo, s.scanEvaluator)
+		body, err := handleToolsCall(ctx, s.logger, s.metrics, s.identityCoverage, s.authz, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.toolCallLogger, s.vectorToolStore, s.mcpMetadataRepo, s.auditLogger, s.platformExtras, s.sessionClientInfo, s.scanEvaluator, s.hostedLocalTools)
 		s.recordHostedToolsCallOutcome(ctx, payload, err)
 		return body, err
 	case mcpversions.MethodPromptsList:
@@ -2271,6 +2299,9 @@ func (s *Service) HandleToolsList(
 		s.shadowMCPClient,
 		s.platformExtras,
 		s.sessionClientInfo,
+		// An internal caller is not an agent on the server's own endpoint, so
+		// it is offered no local tools.
+		nil,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("handle tools list: %w", err)
@@ -2349,6 +2380,7 @@ func (s *Service) HandleToolsCall(
 		s.platformExtras,
 		s.sessionClientInfo,
 		s.scanEvaluator,
+		nil,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("handle tool call: %w", err)

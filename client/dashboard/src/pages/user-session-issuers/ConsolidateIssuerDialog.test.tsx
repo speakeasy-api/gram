@@ -107,6 +107,7 @@ function preflight(
     cimdClientCount: 0,
     remoteSessionCount: 0,
     conflictingClientIds: [],
+    mergedClientIds: [],
     principalBindingConflictCount: 0,
     emaBindingConflictCount: 0,
     warnings: [],
@@ -399,7 +400,7 @@ describe("ConsolidateIssuerDialog", () => {
     renderDialog();
 
     expect(
-      screen.getByText(/Another change to these MCP Authentication Providers/),
+      screen.getByText(/Another change to these MCP sign-ins/),
     ).toBeDefined();
   });
 
@@ -467,6 +468,41 @@ describe("ConsolidateIssuerDialog", () => {
     ).toBeDefined();
   });
 
+  it("says when clients registered with both merge", () => {
+    testState.preflight = preflight({
+      clientCount: 2,
+      sessionCount: 3,
+      mergedClientIds: ["client-a", "client-b"],
+    });
+    renderDialog();
+
+    expect(
+      screen.getByText(
+        "2 clients and 3 sessions move to the target, including 2 clients registered with both that merge into the target's copy.",
+      ),
+    ).toBeDefined();
+    expect(
+      screen
+        .getByRole("button", { name: "Consolidate" })
+        .hasAttribute("disabled"),
+    ).toBe(false);
+  });
+
+  it("says when one client registered with both merges", () => {
+    testState.preflight = preflight({
+      clientCount: 1,
+      sessionCount: 3,
+      mergedClientIds: ["client-a"],
+    });
+    renderDialog();
+
+    expect(
+      screen.getByText(
+        "1 client and 3 sessions move to the target, including 1 client registered with both that merges into the target's copy.",
+      ),
+    ).toBeDefined();
+  });
+
   it("offers nothing until every candidate loads", () => {
     const retry = vi.fn();
     render(
@@ -497,7 +533,7 @@ describe("ConsolidateIssuerDialog", () => {
 
     expect(
       screen.getByRole("status", {
-        name: "Loading MCP Authentication Providers",
+        name: "Loading MCP sign-ins",
       }),
     ).toBeDefined();
     expect(screen.queryByText(/No other authorization server/)).toBeNull();

@@ -1,5 +1,83 @@
 # server
 
+## 2.43.0
+
+### Minor Changes
+
+- 9b6fadf: The AI client catalog is now read from the database instead of the server binary. Servers load it before they start serving and refresh it every minute. If the database catalog is empty or invalid, servers use the built-in catalog until a valid one loads, and a refresh never replaces a good catalog with a bad one. CIMD preset lists now show entries by product id. The catalog seed runs once more to link AI tool decisions saved since it first ran.
+- 7eb900d: Progressive gateways offer `execute_read_only_tool`, marked read-only, beside `execute_tool`. It runs only member tools annotated read-only and refuses any other tool, so MCP clients that skip approval for read-only tools can run those calls without a prompt.
+- bc352bd: Gateways now offer the feedback tool of each member server built from an OpenAPI document or functions, under the member's qualified name (for example `orders--submit_feedback`), in direct, drill-down and code mode. A report sent through a gateway is filed against the member it names. Feedback tools are offered even on connections that approved only some of a member's tools, and they pass the same checks as the member's own tools. Remote and tunneled members are left as they are.
+- b598d9f: Add an Intent-based policies page, rolled out to selected people, that replays a stored or uploaded session and shows which tool calls the intent guardrail would permit, ask about, or block.
+- 65d5577: Add agent feedback for MCP servers. Turning it on from a server's new Agent Feedback tab adds one tool to the server, `submit_feedback` by default, that agents call to report what blocked or confused them. Nothing else needs configuring, and the tool's name and instructions can be changed. Reports are stored with secrets and personal data masked, and the tab shows 30-day counts by severity, the tools named most often, and every report. Reports can also be sent on: a new "MCP feedback" data export delivers each one as an OTLP log, and a new `mcp_feedback.submitted_v1` webhook event carries it to subscribers. It is available on MCP servers built from an OpenAPI document or functions.
+- 4a5f0c8: In the EU partition, AI model requests are processed by OpenRouter in the EU, so prompts and responses stay with in-region model providers and only models available in the EU can be used. Nothing changes in the US partition.
+- ca67ff7: Staff can now move organizations' OAuth client secrets and session tokens from the platform key to their own encryption keys from the admin dashboard. They can enroll organizations one at a time or in batches, roll back, start a backfill, and finalize, which clears the platform-key copies after an acknowledged confirmation. Finalize is refused while the organization's key is suspended.
+- 4f0ed30: Platform MCP no longer offers `list_my_servers`, `search_my_tools`, `describe_tools` or `execute_tool`. To use your own MCP servers from an MCP client, connect the Organization Gateway, which `get_my_organization_gateway` returns.
+- 640125d: The MCP connection health API lists suspected problems for an MCP sign-in, and returns one problem's people, servers, messages and failed attempts. A problem is 2 or more people who cannot connect and failed the same way on one MCP server, one service or one app version, or one person failing for a day, counting only failures on that MCP sign-in's servers in the project. Only people who can read every log in the project see them. The demo organization and local seed now show a small set of them.
+
+### Patch Changes
+
+- 23d78ce: The AI tool scan list version that device agents receive changes once with this update. Devices save their copy of the list again and refresh their plugin marketplaces; they do not rescan.
+- c628c5e: When several AI client catalog patterns match a client ID, the most specific one now decides the product. No two current wildcard patterns overlap, and exact entries still win, so nothing changes today.
+- c160a04: Each request reads one version of the AI client catalog from start to finish. Device scan list defaults are computed once per catalog version instead of on every poll.
+- e94554c: Add an AI client catalog snapshot loader that nothing reads yet.
+- d33f768: Pass the AI client catalog to the API and MCP gateway services, still backed by the built-in list, so nothing users see changes.
+- 0f4da24: Platform MCP reads the AI client catalog through the injected catalog store.
+- 5c0fea0: OAuth registration and sign-in issuer deletion now retire only the grants and agent connections they affect. Removing a server’s offer does not disconnect a shared upstream grant.
+- 4e7b2a9: Bootstrap the AI client catalog at worker startup without overwriting staff edits, link built-in AI tool decisions to it, and refuse saving a decision about a built-in tool with a retryable error until the catalog is seeded.
+- 694ad7b: Add a read, not used yet, that groups people who cannot connect to an MCP server into suspected problems.
+- e99293e: When an ID-JAG sign-in to a single MCP server is refused because the person's account for it isn't connected or its connection has expired, the answer now names the server (or the credential the app chose) and links its connect page in `error_uri` and in the description, and connection logs record it as the person's to fix. Refusals that only an administrator can fix now say so in plain words, in ID-JAG and workload grants alike.
+- bb2b7ea: An MCP connection whose upstream token never expires now reads as "Never expires" on the agent sign-in step. Before, the server sent a zero date for the missing expiry, so the dashboard marked the connection as expired and said it ended almost 2026 years ago.
+- e8907f4: Organizations moving their OAuth client secrets and session tokens to their own encryption keys now have those values backfilled and verified in the background every hour, and one organization's run can also be started on demand. After an organization is finalized, platform-key copies that appear later are cleared and reported, and clears that never finished are resumed.
+- 8517824: An agent's owner now keeps the roles a directory role mapping gives them when an agent is chosen on the consent page. Before, only directly assigned roles were loaded for owners, so an owner whose MCP access came from a mapped role could be refused.
+- 8859e99: The Platform MCP's MCP access report now lists a role's disposition rules on a server as the server enforces them. A rule that a block takes away is no longer reported as giving access.
+- d62a2cf: Revocations by the plugin API key reaper now show under Automated changes in the audit log.
+- 609b076: Every private network connection is now created on and hosted by the Speakeasy tailnet gateway. The Tailscale Kubernetes operator provider, its per-connection attestor, and the `private-network-gateway` rollout check are removed. The private listener accepts only the gateway's service account. A connection row created for the operator is reported as `unsupported_provider` and can still be deleted. The reconciler no longer reads the operator settings (`GRAM_NETWORK_INGRESS_OPERATOR_*`, `GRAM_NETWORK_INGRESS_GATEWAY_ENABLED`, backend, attestor, tag, CIDR and token audience settings), so they can be removed from deployments.
+- 96e79b0: Plugin API keys that have gone unused for 30 days are now revoked automatically. Keys from the last 30 days, keys from within 30 days of a project's latest plugin publish, and keys used in the last 30 days are kept.
+- 7380464: Saving a role with a rule that cannot be stored, such as an `mcp:write` rule limited to read-only tools, now answers 400 with the reason instead of 500. Nothing changes in what is stored: the rule was already refused.
+- 048fb69: Saved Tailscale OAuth clients for private networks can move from the platform key to each organization's own encryption key. Until an organization is moved, nothing changes. Once it is, an organization key that cannot be used makes the private network retry and report `encryption_key_unavailable` instead of reporting invalid credentials.
+- bb54618: Staff can move an organization's saved Tailscale OAuth clients to its organization key from a temporary **Tailscale OAuth migration** page in the admin dashboard, one step at a time: enroll, backfill and verify, finalize, then clear the platform-key copies.
+- 8dbfb92: Tool Logs searches and custom attribute filters are faster. The slow path no longer converts every log's full attributes to text, and it sorts the logs once instead of twice.
+- f99fec2: Project Assistant turns can now be traced end to end. The assistant runner joins the trace of the backend request that dispatched the turn, adds spans for the turn, each tool call (including calls inside compose scripts), MCP connects and reconnects, bootstrap and turn-end compaction, and marks the first streamed model token. Its outbound bootstrap, inference and MCP tool-call requests carry W3C trace context. Local runner containers now export spans to the local collector when the server has tracing enabled.
+- 6ff4620: Signing in to an MCP server no longer fails now and then with a database deadlock while a recently used server in the same project is having its protected resource metadata refreshed. Recording which upstream client a new session uses now locks the project's servers in the same order the refresh does.
+
+## 2.42.0
+
+### Minor Changes
+
+- 16abfa7: Adds the `mcpConnectionHealth` API behind the `mcp-connection-health` flag: Connection Logs for one MCP authentication provider (a paged list with repeats folded into one row, totals and a count per filter value, one attempt's steps, and lookup by reference), the sign-in and renewal summary, active sessions per day with the average session length, and the apps refused at sign-in. Members without permission to read logs see only their own attempts, and the reads say when the organization has logging off.
+
+### Patch Changes
+
+- fca62b7: Daily connection outcomes now credit the owner's next connection with fixing a refused, already used sign-in. Days older than about 11 days at deploy keep the old count; newer days change on the next daily rebuild. Adds a read, not used yet, of who cannot connect to an MCP server right now.
+- 5914d94: The MCP connection health flag can now be targeted at individual people.
+- 715566e: The MCP authentication provider's Overview now covers signing in to Speakeasy only. Its chart and sign-in activity count attempts that ended at Speakeasy's sign-in or sign-in renewal, and their links open Connection Logs filtered to the same steps, so the totals match. Problems connecting to a service show on that server's page. `getSignInSummary` takes optional `steps`, matching the Connection Logs step filter; without it the summary counts what it did before: all four sign-in and renewal step groups, the service ones included.
+- 421f9c6: Add a table that holds when each MCP connection last had a request served, for failing connection detection. Nothing writes to it yet.
+- ea1fd98: Served MCP requests are now recorded per connection, at most every five minutes and never more than five minutes behind the latest one, so failing connections can be told apart from working ones. A tool call or resource read that returned an error does not count as served. Nothing reads these records yet. When a tool call needs a server's tool list and the server never answers, this is now recorded as the server being unreachable. Request failure rows now name the person's own connection to the service when their sign-in was used.
+
+## 2.41.0
+
+### Minor Changes
+
+- 4401be3: When upstream auth enforcement refuses a call because the caller may not use a connection, the refusal now shows under failed authorization checks on the agent's or person's Permissions tab and in Roles & Permissions. A personal connection used by anyone other than its owner is listed with the reason "This connection belongs to another member and works only for them." The record names the server and the connection, never the connection's owner or upstream account. The Platform MCP `list_agent_authorization_checks` tool lists these refusals with the server they happened on.
+- ea4a946: Under upstream auth enforcement, a personal connection its owner attached to an agent now serves that agent whoever issued its API key. Attaching is the owner's consent. The owner's live policy, the key issuer's and the agent's must all still allow the connection, and detaching, owner blocks, the owner leaving and agent suspension still stop use at once. An agent key with no attachment still uses only its issuer's own connection.
+- 96b0aa3: Consolidating one MCP Authentication Provider into another no longer refuses when both hold a copy of the same dynamically registered OAuth client and nothing signs in through the source's copy. That copy is retired in favor of the target's, the same way clients resolved from one Client ID Metadata Document already merge. A copy that has a sign-in or approval (even an expired sign-in), that belongs to an assistant, or that an issuance selection profile pins, still blocks. The consolidation preview lists merged client IDs in the new `merged_client_ids` field, the dashboard says how many clients merge, and the consolidation audit event records them.
+
+### Patch Changes
+
+- 93408f7: AI integration API keys, Anthropic inference signing secrets, customer model provider keys and provisioned OpenRouter keys can now be encrypted with the organization's own key. They follow the organization's ai-provider-keys transition: organizations stay on the platform key until enrolled, then write both copies, then read only the organization copy. Generated code no longer names the retired plaintext `openrouter_api_keys.key` column.
+- bdee7d1: GitHub Actions is now offered as a workload platform to every organization. The agent wizard, Command K and preselected setup links offer its guided setup, where before it stayed under Coming soon unless the `workload-platform-github-actions` feature flag was on for the organization. The flag is removed. The setup's workflow installs the latest stable speakeasyd, and every release from v0.1.54 supports GitHub Actions.
+- 204fe8c: Make prompt-based risk policies available to every project without a feature flag.
+- 2d3daed: Shadow MCP official servers now use "Make official" wording instead of "link", so the action says what it does: direct connections are blocked and agents are sent to the official server. This covers the Shadow MCP page, the catalog and server setup flows, the audit log, API descriptions and the hook block reason.
+- 6ad6dc8: The tailnet gateway can give each tsnet node a fixed UDP port from a range (`GRAM_TAILNET_GATEWAY_TSNET_PORT_BASE`), so a deployment can publish the range and clients behind strict NATs reach the gateway directly instead of through a DERP relay. tsnet's own log now goes to a child logger tagged `gram.component=tsnet`, with endpoint and path changes at info.
+- 3f3ab7c: A rule that blocks MCP tools by name or by kind (read-only, destructive, unannotated and so on) now also blocks a call whose tool name or kind cannot be determined. Before, such a call was outside the rule. Rules that allow tools by name or kind already refused it.
+
+## 2.40.0
+
+### Minor Changes
+
+- 635e382: The Speakeasy server binary (every command, including mcp, worker, streams and admin), pystreams and the tunnel gateway require a `GRAM_PARTITION` setting (`us` or `eu`) naming the partition they run in. There is no default: each refuses to start when it is missing, empty or unknown, so a deployment cannot silently run as the wrong partition. Each tags its logs with `gram.partition`; the server and pystreams also put it on their traces and metrics. `gram version` and help output work without it. Local development sets `GRAM_PARTITION=us` in `mise.toml`.
+- 2c6e833: The Speakeasy server binary (server, mcp, worker, streams, admin and network-ingress-server) reads the Speakeasy staff organization from a `GRAM_STAFF_ORGANIZATION_ID` setting instead of a hardcoded organization. Outside local development each process refuses to start when it is missing or matches no organization in its database. Audit log staff masking, the organization whitelist endpoint, OpenRouter credit limit exemption, daily connection outcomes and the hooks rollout canary (in the plugin publisher and the admin dashboard) all use it. The Vanta evidence sink sends the deployment's HTTPS server origin as each resource's `externalUrl`.
+
 ## 2.39.0
 
 ### Minor Changes

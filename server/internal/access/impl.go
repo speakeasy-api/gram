@@ -12,6 +12,7 @@ import (
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -21,6 +22,7 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/access/server"
 	"github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -52,6 +54,8 @@ type CanonicalFoldGate interface {
 }
 
 type Service struct {
+	aiCatalog *aivendors.Store
+
 	tracer trace.Tracer
 	logger *slog.Logger
 	db     *pgxpool.Pool
@@ -98,7 +102,7 @@ func (s *Service) canonicalFoldOrg(ctx context.Context, orgID string) string {
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(
+func NewService(aiCatalog *aivendors.Store,
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
 	db *pgxpool.Pool,
@@ -115,6 +119,7 @@ func NewService(
 	logger = logger.With(attr.SlogComponent("access"))
 
 	return &Service{
+		aiCatalog:  aiCatalog,
 		tracer:     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/access"),
 		logger:     logger,
 		db:         db,
@@ -1727,34 +1732,35 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 		return &gen.RequestAccessResult{SentToCount: 0, Request: storedView}, nil
 	}
 
-	// Build the manage access link. The query params let the dashboard open a
-	// pre-filled grant dialog for the requester and scope. Resolve an MCP's
-	// project from the tenant-qualified resource rather than trusting browser
-	// state or a client-supplied project id.
-	manageAccessLink := ""
-	if siteURL := s.orgHosts.SiteURL(org.DefaultHost); siteURL != nil {
-		resourceID := ""
-		if payload.ResourceID != nil {
-			resourceID = *payload.ResourceID
-		}
-		projectID := ""
-		if resourceID != "" && strings.HasPrefix(payload.Scope, "mcp:") {
-			resolved, resolveErr := s.resourceProjectID(ctx, ac.ActiveOrganizationID, resourceID)
-			if resolveErr != nil {
-				logger.WarnContext(ctx, "could not resolve MCP project for access request link",
-					attr.SlogError(resolveErr),
-				)
-			}
-			if resolveErr == nil {
-				projectID = resolved
-			}
-		}
-		requestID := ""
-		if storedView != nil {
-			requestID = storedView.ID
-		}
-		manageAccessLink = dashboardlinks.AccessGrant(org.Slug, ac.UserID, payload.Scope, resourceID, projectID, requestID).URL(siteURL)
+	// The query params let the dashboard open a pre-filled grant dialog for
+	// the requester and scope. Resolve an MCP's project from the
+	// tenant-qualified resource rather than trusting browser state or a
+	// client-supplied project id.
+	link := accessLink{
+		OrgSlug:         org.Slug,
+		DefaultHost:     org.DefaultHost,
+		Tab:             accessLinkTabRoles,
+		RequesterUserID: ac.UserID,
+		Scope:           payload.Scope,
+		ResourceID:      conv.PtrValOr(payload.ResourceID, ""),
+		ProjectID:       "",
+		RequestID:       "",
 	}
+	if storedView != nil {
+		link.RequestID = storedView.ID
+	}
+	// Without a site URL there is no link, so the project need not be read.
+	if s.orgHosts.SiteURL(org.DefaultHost) != nil && link.ResourceID != "" && strings.HasPrefix(payload.Scope, "mcp:") {
+		projectID, resolveErr := s.resourceProjectID(ctx, ac.ActiveOrganizationID, link.ResourceID)
+		if resolveErr != nil {
+			logger.WarnContext(ctx, "could not resolve MCP project for access request link",
+				attr.SlogError(resolveErr),
+			)
+		} else {
+			link.ProjectID = projectID
+		}
+	}
+	manageAccessLink := s.accessLinkURL(link)
 
 	// Name the permission the way the role editor does, so the admin reads
 	// "View tool logs" rather than a slug. An unknown slug is sent as is.
@@ -1806,6 +1812,54 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 	)
 
 	return &gen.RequestAccessResult{SentToCount: sentCount, Request: storedView}, nil
+}
+
+// Access page tabs an access request link can open on.
+const (
+	accessLinkTabRoles    = "roles"
+	accessLinkTabRequests = "requests"
+)
+
+// accessLink is a dashboard link that opens a pre-filled grant dialog on an
+// Access page tab.
+type accessLink struct {
+	// OrgSlug and DefaultHost name the organization and the host its
+	// dashboard is served on.
+	OrgSlug     string
+	DefaultHost pgtype.Text
+
+	// Tab is the Access page tab, one of the accessLinkTab constants.
+	Tab string
+
+	// RequesterUserID is the member the dialog grants to.
+	RequesterUserID string
+
+	// Scope is the scope the dialog grants.
+	Scope string
+
+	// ResourceID is the resource the scope applies to, or empty for every
+	// resource of its kind.
+	ResourceID string
+
+	// ProjectID is the project an MCP resource belongs to, resolved from the
+	// tenant-qualified resource, or empty.
+	ProjectID string
+
+	// RequestID is the stored request the dialog decides, or empty.
+	RequestID string
+}
+
+// accessLinkURL renders link, or returns empty when the deployment has no
+// site URL.
+func (s *Service) accessLinkURL(link accessLink) string {
+	siteURL := s.orgHosts.SiteURL(link.DefaultHost)
+	if siteURL == nil {
+		return ""
+	}
+	if link.Tab == accessLinkTabRequests {
+		return dashboardlinks.AccessRequestDecision(link.OrgSlug, link.RequesterUserID, link.Scope, link.ResourceID, link.ProjectID, link.RequestID).URL(siteURL)
+	}
+	return dashboardlinks.AccessGrant(link.OrgSlug, link.RequesterUserID, link.Scope, link.ResourceID, link.ProjectID, link.RequestID).URL(siteURL)
 }
 
 // ListIdentityAccess returns the MCP servers and skills accessible to a user
