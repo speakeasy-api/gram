@@ -85,7 +85,7 @@ func connectMeta(t *testing.T, prefix string, count int) (context.Context, conne
 		accessToken := "token-" + name
 		as := newConsentExchangeAS(t, &captured[i], accessToken)
 
-		clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, name, as.URL, []uuid.UUID{fx.shared})
+		clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, name, as.URL)
 		issuerID := conv.ToNullUUID(clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID))
 
 		upstream := fmt.Sprintf("https://%s.example.com/mcp", name)
@@ -180,7 +180,7 @@ func TestMetaMCPCredentials_UnstampedMembersOfferNoClient(t *testing.T) {
 	ctx, fx, metaServerID := seedMetaConsentEndpoint(t, "aim87-unstamped-gw")
 	for i := range 2 {
 		name := fmt.Sprintf("aim87-unstamped-%d", i)
-		clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, name, "", []uuid.UUID{fx.shared})
+		clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, name, "")
 		createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, name+"-member", fmt.Sprintf("https://%s.example.com/mcp", name), uuid.NullUUID{}, int32(i))
 		requireConnectRefused(t, fx, clientID, "an unstamped member's client must not be offered")
 	}

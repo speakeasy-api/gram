@@ -115,7 +115,6 @@ func TestCannotDetachAnUnclaimedClientFromAServer(t *testing.T) {
 
 	requireServerRequires(t, ctx, ti, manager, first, issuer)
 	requireServerRequires(t, ctx, ti, manager, second, issuer)
-	requireNoAttachmentParent(t, ctx, ti, client, issuer)
 }
 
 // Dropping a server's client must not hand it another server's credential.

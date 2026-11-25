@@ -61,7 +61,6 @@ func TestServeOrganizationGateway_HostedAuthenticationEligibility(t *testing.T) 
 				if tt.client {
 					client, err := remotesessionsrepo.New(ti.conn).CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{ProjectID: conv.ToNullUUID(*auth.ProjectID), OrganizationID: conv.ToPGTextEmpty(auth.ActiveOrganizationID), RemoteSessionIssuerID: issuer.ID, ClientID: "gateway-oauth-client"})
 					require.NoError(t, err)
-					require.NoError(t, remotesessionsrepo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: client.ID, UserSessionIssuerID: fx.issuerID}))
 					if tt.assigned {
 						assignHostedOAuth(t, ctx, ti.conn, auth.ActiveOrganizationID, *auth.ProjectID, server.ID, client.ID)
 					}

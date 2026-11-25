@@ -13,7 +13,6 @@ import (
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
-	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
 // connectedPreparation links the fixture's client to its user session issuer
@@ -22,7 +21,6 @@ import (
 func connectedPreparation(t *testing.T, ti *testInstance, ctx context.Context, in remotesessions.PreparationInput, serverURL string, pin []string) {
 	t.Helper()
 	auth, _ := contextvalues.GetAuthContext(ctx)
-	require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: in.ClientID, UserSessionIssuerID: in.UserSessionIssuerID}))
 	serverID := seedRemoteMcpServerForLogin(t, ctx, ti.conn, *auth.ProjectID, in.UserSessionIssuerID, "connected-"+uuid.NewString()[:8], serverURL)
 	offerRegistration(t, ctx, ti.conn, auth.ActiveOrganizationID, *auth.ProjectID, serverID, in.ClientID)
 	seedProtectedResource(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, serverURL, protectedResourceSeed{pin: pin})

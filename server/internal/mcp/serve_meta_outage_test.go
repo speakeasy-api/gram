@@ -113,7 +113,7 @@ func newMemberRefreshOutageFixture(t *testing.T, ctx context.Context, ti *testIn
 	issuerID := createUserSessionIssuer(t, ctx, ti.conn, projectID)
 	metaSlug := "meta-outage-" + uuid.NewString()[:8]
 	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, metaSlug, issuerID)
-	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "outage-"+uuid.NewString()[:8], provider.URL, []uuid.UUID{issuerID})
+	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "outage-"+uuid.NewString()[:8], provider.URL)
 	remoteIssuerID := clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)
 	seededMember := createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", member.URL, conv.ToNullUUID(remoteIssuerID), 0)
 	associateServerRegistration(t, ctx, ti.conn, orgID, projectID, seededMember.mcpServerID, clientID)
