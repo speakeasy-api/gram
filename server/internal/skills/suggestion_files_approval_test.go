@@ -68,29 +68,36 @@ func explicitFiles() []*types.SkillFileInput {
 func TestSkillsApproveSuggestionRejectsExplicitFilesWithSupportingFileChanges(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
-	fixture := createMixedSuggestion(t, ctx, ti, "approve-files-conflict")
 
 	tests := []struct {
 		name      string
-		changeIDs []string
+		slug      string
+		changeIDs func(mixedSuggestion) []string
 	}{
-		{name: "whole suggestion", changeIDs: nil},
-		{name: "selected file change", changeIDs: []string{fixture.fileChange.String()}},
-		{name: "both changes selected", changeIDs: []string{fixture.manifestChange.String(), fixture.fileChange.String()}},
+		{name: "whole suggestion", slug: "approve-files-conflict-all", changeIDs: func(mixedSuggestion) []string { return nil }},
+		{name: "selected file change", slug: "approve-files-conflict-file", changeIDs: func(f mixedSuggestion) []string { return []string{f.fileChange.String()} }},
+		{name: "both changes selected", slug: "approve-files-conflict-both", changeIDs: func(f mixedSuggestion) []string {
+			return []string{f.manifestChange.String(), f.fileChange.String()}
+		}},
 	}
 	for _, tc := range tests {
-		_, err := ti.service.ApproveSuggestion(ctx, &gen.ApproveSuggestionPayload{
-			ID: fixture.suggestionID.String(), Content: nil, ChangeIds: tc.changeIDs, Files: explicitFiles(),
-			SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
-		})
-		requireOopsCode(t, err, oops.CodeBadRequest)
-		require.ErrorContains(t, err, "references/rollback.md", tc.name)
-		require.ErrorContains(t, err, "approve without files", tc.name)
-		require.ErrorContains(t, err, "change_ids", tc.name)
-	}
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			fixture := createMixedSuggestion(t, ctx, ti, tc.slug)
 
-	// Nothing was recorded and the suggestion is still open with both changes.
-	require.Len(t, suggestionChangeIDs(t, ti, fixture.suggestionID), 2)
+			_, err := ti.service.ApproveSuggestion(ctx, &gen.ApproveSuggestionPayload{
+				ID: fixture.suggestionID.String(), Content: nil, ChangeIds: tc.changeIDs(fixture), Files: explicitFiles(),
+				SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+			})
+			requireOopsCode(t, err, oops.CodeBadRequest)
+			require.ErrorContains(t, err, "references/rollback.md")
+			require.ErrorContains(t, err, "approve without files")
+			require.ErrorContains(t, err, "change_ids")
+
+			// Nothing was recorded and the suggestion is still open with both changes.
+			require.Len(t, suggestionChangeIDs(t, ti, fixture.suggestionID), 2)
+		})
+	}
 }
 
 func TestSkillsApproveSuggestionAcceptsExplicitFilesWithOnlySkillMDChanges(t *testing.T) {

@@ -2,8 +2,9 @@
 // reads alongside SKILL.md.
 //
 // SKILL.md is always sent whole and first by the caller. Supporting files are
-// added after it in priority order, references/ first and scripts/ last,
-// until a byte budget runs out. Files are included whole or not at all: a
+// added after it in priority order, references/ first and scripts/ last, while
+// they fit a byte budget. A file that does not fit is skipped and smaller files
+// after it can still be added. Files are included whole or not at all: a
 // truncated reference reads as complete guidance and would mislead the judge.
 // Binary files and files that do not fit are listed by path so the judge knows
 // they exist without assuming what they say.

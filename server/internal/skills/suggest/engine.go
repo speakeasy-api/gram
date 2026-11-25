@@ -147,10 +147,6 @@ func (e *Engine) run(ctx context.Context, in RunInput, force bool) (Result, erro
 	if err := skills.ReplayOpenSuggestionOntoBase(ctx, queries, in.ProjectID, in.SkillID); err != nil {
 		return Result{}, fmt.Errorf("replay open skill suggestion before analysis: %w", err)
 	}
-	baseTree, err := skills.LoadSuggestionTree(ctx, queries, in.ProjectID, in.SkillID, base.BaseVersionID, base.BaseContent)
-	if err != nil {
-		return Result{}, fmt.Errorf("load suggestion base files: %w", err)
-	}
 	project, err := projectsrepo.New(e.db).GetProjectByID(ctx, in.ProjectID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Result{Kind: ResultSkipped, Reenqueue: false, FeedbackConsumed: 0, SuggestionID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}, nil
@@ -217,6 +213,13 @@ func (e *Engine) run(ctx context.Context, in RunInput, force bool) (Result, erro
 	})
 	if !force && !wake {
 		return Result{Kind: ResultSkipped, Reenqueue: false, FeedbackConsumed: 0, SuggestionID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}, nil
+	}
+
+	// Loaded only once the run is going ahead: the supporting files can total
+	// megabytes and only generation and resolution read them.
+	baseTree, err := skills.LoadSuggestionTree(ctx, queries, in.ProjectID, in.SkillID, base.BaseVersionID, base.BaseContent)
+	if err != nil {
+		return Result{}, fmt.Errorf("load suggestion base files: %w", err)
 	}
 
 	versionUUIDs := []uuid.UUID{base.BaseVersionID}
