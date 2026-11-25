@@ -31,16 +31,12 @@ func TestServeProjectGateway_WorkloadMachineAccess(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 	require.NotNil(t, authCtx.ProjectSlug)
-	fixture := seedOrganizationGateway(t, f.ctx, f.ti)
+	// Use only private members to test exchange before any member is assigned.
+	fixture := seedOrganizationGatewayWithOpenMemberVisibility(t, f.ctx, f.ti, mcpservers.VisibilityPrivate)
 	meta := createMetaMcpEndpoint(t, f.ctx, f.ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "decoy-"+uuid.NewString(), uuid.Nil)
 	member := seedHostedMetaMember(t, f.ctx, f.ti, meta.ID, "private hosted member", 0, mcpservers.VisibilityPrivate, "alpha_tool")
 	seedUserMCPConnectGrant(t, f.ctx, f.ti.conn, authCtx.ActiveOrganizationID, authCtx.UserID, member.toolsetID.String())
-	// Make the third fixture member private too, so exchange is tested with
-	// no reachable member and a grant solely on the owner.
-	openID := mcpServerBySlug(t, f.ctx, f.ti, *authCtx.ProjectID, fixture.open)
-	_, err := f.ti.conn.Exec(f.ctx, "UPDATE mcp_servers SET visibility = 'private' WHERE id = $1", openID)
-	require.NoError(t, err)
-	_, err = testrepo.New(f.ti.conn).SetUserSessionIssuerAuthorizationServerModeFixture(f.ctx, testrepo.SetUserSessionIssuerAuthorizationServerModeFixtureParams{
+	_, err := testrepo.New(f.ti.conn).SetUserSessionIssuerAuthorizationServerModeFixture(f.ctx, testrepo.SetUserSessionIssuerAuthorizationServerModeFixtureParams{
 		OrganizationID: authCtx.ActiveOrganizationID, IssuerID: fixture.issuerID, AuthorizationServerMode: "shared",
 	})
 	require.NoError(t, err)

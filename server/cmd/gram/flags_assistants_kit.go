@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/url"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/speakeasy-api/gram/server/internal/assistants"
@@ -91,7 +92,7 @@ func installKitLocalRuntimeFromCLI(logger *slog.Logger, c *cli.Context, core *as
 		issuerBaseURL = (&url.URL{Scheme: serverURL.Scheme, Host: serverURL.Host}).String()
 	}
 	config := assistants.KitLocalCompositionConfig{
-		OrgHosts:    orgHosts,
+		OrgHosts: orgHosts, MCPUserSessionIssuerID: uuid.Nil,
 		Environment: c.String("environment"), Image: c.String("assistant-kit-image"), ExtraCACertFile: c.String("assistant-runtime-local-ca-file"),
 		Origin: &url.URL{Scheme: "https", Host: "ai.speakeasy.com"}, Network: c.String("assistant-kit-network"), AllowInsecureInference: false,
 		TurnStream:            chat.NewTurnStream(redisClient),

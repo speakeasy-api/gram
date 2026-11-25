@@ -19,12 +19,16 @@ import {
   useResourceAudience,
 } from "@gram/client/react-query/resourceAudience.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, type JSX } from "react";
 import { toast } from "sonner";
 import { agentConnectAccess, directServerConnectGrants } from "./kitMCPAccess";
 import { Section } from "./PanelSection";
 
-export function AssistantKitMCPAccess({ agentId }: { agentId?: string }) {
+export function AssistantKitMCPAccess({
+  agentId,
+}: {
+  agentId?: string;
+}): JSX.Element {
   return (
     <Section title="MCP servers">
       {agentId ? (
