@@ -22,6 +22,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 func TestServeProjectGateway_WorkloadMachineAccess(t *testing.T) {
@@ -49,7 +51,12 @@ func TestServeProjectGateway_WorkloadMachineAccess(t *testing.T) {
 	target, ok, err := f.ti.service.WorkloadTokenTargetFor(t.Context(), root)
 	require.NoError(t, err)
 	require.True(t, ok)
-	require.NotEqual(t, root+"/token", target.TokenEndpoint)
+	issuer, err := usersessionsrepo.New(f.ti.conn).GetSharedUserSessionIssuerByID(f.ctx, fixture.issuerID)
+	require.NoError(t, err)
+	shared, err := (authserver.Hosts{ServerURL: f.ti.serverURL.String()}).SharedAuthorizationServer(issuer.UserSessionIssuer)
+	require.NoError(t, err)
+	require.Equal(t, shared.TokenEndpoint, target.TokenEndpoint)
+	require.Equal(t, shared.TokenEndpoint, target.Audience)
 	require.Equal(t, root, target.Resource)
 
 	form := url.Values{

@@ -1751,7 +1751,14 @@ func (s *ServiceCore) CreateAssistant(
 	if err := validateReasoningEffort(effort); err != nil {
 		return assistantRecord{}, err
 	}
-	if err := validateRuntimeReasoningEffort(s.newAssistantRuntimeVersion, effort); err != nil {
+	// The Default runtime can use initial legacy attachments as requested.
+	// Kit uses backing-agent grants instead, so keep attached creates on Default.
+	hasInitialAttachments := len(toolsets) > 0 || len(mcpServers) > 0
+	runtimeVersion := s.newAssistantRuntimeVersion
+	if hasInitialAttachments && runtimeVersion == 3 {
+		runtimeVersion = 0
+	}
+	if err := validateRuntimeReasoningEffort(runtimeVersion, effort); err != nil {
 		return assistantRecord{}, err
 	}
 	if createdByUserID == "" {
@@ -1784,7 +1791,7 @@ func (s *ServiceCore) CreateAssistant(
 	if err != nil {
 		return assistantRecord{}, fmt.Errorf("insert assistant: %w", err)
 	}
-	if s.newAssistantRuntimeVersion == 3 {
+	if runtimeVersion == 3 {
 		// This row is new and uncommitted: there is no conversation to migrate.
 		changed, err := queries.SetAssistantDesiredRuntimeVersion(ctx, assistantrepo.SetAssistantDesiredRuntimeVersionParams{
 			RuntimeVersion: 3, AssistantID: created.ID, ProjectID: projectID, ExpectedRuntimeVersion: created.RuntimeVersion,
@@ -1814,7 +1821,7 @@ func (s *ServiceCore) CreateAssistant(
 		return assistantRecord{}, err
 	}
 
-	if provisionIdentity && s.newAssistantRuntimeEligible != nil {
+	if !hasInitialAttachments && provisionIdentity && s.newAssistantRuntimeEligible != nil {
 		eligible, err := s.newAssistantRuntimeEligible(ctx, tx, record)
 		if err != nil {
 			return assistantRecord{}, fmt.Errorf("check new assistant Kit eligibility: %w", err)

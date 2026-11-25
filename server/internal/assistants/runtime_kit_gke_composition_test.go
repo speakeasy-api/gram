@@ -11,8 +11,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/orggateway"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	featuresrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -206,7 +209,10 @@ func TestKitGKEEligibilityUsesProjectGatewayWithoutAttachments(t *testing.T) {
 	connection, issuerID, err := core.kitProjectGateway(t.Context(), db, assistant, nil)
 	require.NoError(t, err)
 	require.Equal(t, "project-gateway", connection.Name)
-	require.Contains(t, connection.Resource.Path, "/projects/")
-	require.Contains(t, connection.Resource.String(), "/mcp/gateway/")
+	orgMetadata, err := orgrepo.New(db).GetOrganizationMetadata(t.Context(), org)
+	require.NoError(t, err)
+	project, err := projectsrepo.New(db).GetProjectByIDAndOrganizationID(t.Context(), projectsrepo.GetProjectByIDAndOrganizationIDParams{ID: runtime.ProjectID, OrganizationID: org})
+	require.NoError(t, err)
+	require.Equal(t, orggateway.ProjectURL(core.serverURL, orgMetadata.Slug, project.Slug), connection.Resource.String())
 	require.Equal(t, config.MCPUserSessionIssuerID, issuerID)
 }

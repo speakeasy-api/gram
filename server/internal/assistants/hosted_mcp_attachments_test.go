@@ -1,10 +1,12 @@
 package assistants
 
 import (
+	"context"
 	"net/url"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
@@ -93,6 +95,34 @@ func createCanonicalWrapper(t *testing.T, db *pgxpool.Pool, toolset toolsetsrepo
 	})
 	require.NoError(t, err)
 	testenv.SetHostedMCP(t, t.Context(), db, toolset.ProjectID, toolset.ID, testenv.HostedMCP{Slug: slug})
+}
+
+func TestCreateAssistantKeepsInitialAttachmentsOnDefaultRuntime(t *testing.T) {
+	t.Parallel()
+	f := newHostedAttachmentFixture(t, "assistant_initial_attachments")
+	f.core.newAssistantRuntimeEligible = func(context.Context, pgx.Tx, assistantRecord) (bool, error) {
+		return true, nil
+	}
+	for _, tc := range []struct {
+		name     string
+		toolsets []*types.AssistantToolsetRef
+		servers  []*types.AssistantMCPServerRef
+		wantID   uuid.UUID
+	}{
+		{name: "Hosted toolset", toolsets: []*types.AssistantToolsetRef{{ToolsetSlug: "billing"}}, wantID: f.hosted.ID},
+		{name: "Remote server", servers: []*types.AssistantMCPServerRef{{McpServerSlug: "remote"}}, wantID: f.remote.ID},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			created, err := f.core.CreateAssistant(t.Context(), "org-test", f.projectID, "user-1", tc.name, "openai/gpt-4o-mini", "", tc.toolsets, tc.servers, 300, 1, StatusActive, true, allowAllMCPEnable, nil)
+			require.NoError(t, err)
+			require.EqualValues(t, 2, created.RuntimeVersion)
+			persisted, err := assistantrepo.New(f.db).GetAssistant(t.Context(), assistantrepo.GetAssistantParams{ProjectID: f.projectID, AssistantID: created.ID})
+			require.NoError(t, err)
+			require.EqualValues(t, 2, persisted.RuntimeVersion)
+			require.Len(t, created.MCPServers, 1)
+			require.Equal(t, tc.wantID, created.MCPServers[0].MCPServerID)
+		})
+	}
 }
 
 func (f hostedAttachmentFixture) runtime(t *testing.T) []runtimeMCPServer {
