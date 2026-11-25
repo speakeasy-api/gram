@@ -11,6 +11,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 )
 
 // serversUserSession is one live user session row; offsets are Postgres
@@ -177,20 +178,6 @@ func (s *seeder) seedServers(ctx context.Context) error {
 	}); err != nil {
 		return fmt.Errorf("insert demo linear remote session client: %w", err)
 	}
-	if err := s.q.ServersInsertRemoteSessionClientIssuerBinding(ctx, repo.ServersInsertRemoteSessionClientIssuerBindingParams{
-		RemoteSessionClientID: s.det("remote-identity-client-linear"),
-		UserSessionIssuerID:   s.det("issuer-linear"),
-	}); err != nil {
-		return fmt.Errorf("bind demo linear remote session client: %w", err)
-	}
-	// The gateway serves the Example OAuth server as a member, so its issuer binds the Example OAuth server's
-	// client too, or no gateway sign-in could choose a client for the Example OAuth server.
-	if err := s.q.ServersInsertRemoteSessionClientIssuerBinding(ctx, repo.ServersInsertRemoteSessionClientIssuerBindingParams{
-		RemoteSessionClientID: s.det("remote-identity-client-linear"),
-		UserSessionIssuerID:   s.det("issuer-gateway"),
-	}); err != nil {
-		return fmt.Errorf("bind demo linear remote session client to the gateway: %w", err)
-	}
 	if err := s.q.ServersStampRemoteSessionIssuer(ctx, repo.ServersStampRemoteSessionIssuerParams{
 		RemoteSessionIssuerID: s.det("remote-identity-provider-linear"),
 		McpServerID:           s.det("mcpserver-linear"),
@@ -350,12 +337,6 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		}
 	}
 
-	if err := s.q.ServersInsertRemoteSessionClientIssuerBinding(ctx, repo.ServersInsertRemoteSessionClientIssuerBindingParams{
-		RemoteSessionClientID: s.det("remote-identity-client-linear"), UserSessionIssuerID: s.det("issuer-workforce"),
-	}); err != nil {
-		return fmt.Errorf("bind organization gateway provider: %w", err)
-	}
-
 	userSessions := []serversUserSession{
 		{n: 6, issuer: "linear", client: "linear", user: 1, refreshExpiresIn: "11 days", expiresIn: "6 hours", lastUsedAgo: "40 minutes", createdAgo: "10 days"},
 		{n: 7, issuer: "linear", client: "linear", user: 3, refreshExpiresIn: "9 days", expiresIn: "4 hours", lastUsedAgo: "3 hours", createdAgo: "9 days"},
@@ -399,10 +380,26 @@ func (s *seeder) seedServers(ctx context.Context) error {
 	// client per (user session issuer, remote issuer) pair, and the Example OAuth server's main
 	// client already holds that pair. Exact-session attachments use the main
 	// client, so the Example OAuth server offers one OAuth client.
+	if err := s.seedAuthClients(ctx); err != nil {
+		return err
+	}
 	// Each seeded sign-in carries the choice its consent page would have
 	// recorded for every server it reaches: the Example OAuth server through
 	// its main client, the Example Shared Credential server with no upstream
 	// authentication.
+	personalOffers := map[string]string{
+		"linear": "auth-client-linear", "linear-app": "auth-client-linear-app", "notion-app": "auth-client-notion-app", "ema-wiki": "auth-client-ema-wiki",
+	}
+	typedChoice := func(server string) uuid.NullUUID {
+		if server == "slack" {
+			return uuid.NullUUID{UUID: s.sharedSourceAuthClient(), Valid: true}
+		}
+		if key, ok := personalOffers[server]; ok {
+			return uuid.NullUUID{UUID: s.det(key), Valid: true}
+		}
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	}
+
 	choices := []struct {
 		session int
 		server  string
@@ -431,6 +428,7 @@ func (s *seeder) seedServers(ctx context.Context) error {
 			CredentialID:          s.det("user-session-" + num),
 			McpServerID:           s.det("mcpserver-" + c.server),
 			RemoteSessionClientID: client,
+			AuthClientID:          typedChoice(c.server),
 			Source:                upstreamclients.SelectionSourceIssuance,
 		}); err != nil {
 			return fmt.Errorf("insert demo upstream client choice for session %d on %s: %w", c.session, c.server, err)
@@ -457,7 +455,7 @@ func (s *seeder) seedServers(ctx context.Context) error {
 			if err := s.q.ServersInsertUpstreamClientChoice(ctx, repo.ServersInsertUpstreamClientChoiceParams{
 				ID: s.det("org-gateway-choice-" + strconv.Itoa(i) + "-" + server), ProjectID: proj, OrgID: org,
 				CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: s.det("org-gateway-session-" + strconv.Itoa(i)),
-				McpServerID: s.det("mcpserver-" + server), RemoteSessionClientID: client, Source: upstreamclients.SelectionSourceIssuance,
+				McpServerID: s.det("mcpserver-" + server), RemoteSessionClientID: client, AuthClientID: typedChoice(server), Source: upstreamclients.SelectionSourceIssuance,
 			}); err != nil {
 				return fmt.Errorf("insert organization gateway upstream choice: %w", err)
 			}
@@ -513,6 +511,13 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		}
 	}
 
+	// Keep the compatibility parent only for the exact attachment FK.
+	if err := s.q.ServersInsertAttachmentParent(ctx, repo.ServersInsertAttachmentParentParams{
+		RemoteSessionClientID: s.det("remote-identity-client-linear"),
+		UserSessionIssuerID:   s.det("issuer-linear"),
+	}); err != nil {
+		return fmt.Errorf("insert demo attachment compatibility parent: %w", err)
+	}
 	// Show both a working connection and an expired delegated connection.
 	for _, agent := range []int{1, 4} {
 		num := strconv.Itoa(agent)
@@ -623,7 +628,22 @@ func (s *seeder) seedServers(ctx context.Context) error {
 	if err := s.seedInspect(ctx); err != nil {
 		return err
 	}
-	return s.seedAuthClients(ctx)
+	return nil
+}
+
+func (s *seeder) sharedSourceAuthClient() uuid.UUID {
+	return authclientbackfill.HeaderClientID(s.orgID(), "remote", s.det("remotemcp-slack"), s.det("agent-identity-header-slack"), "static_credential")
+}
+
+func seedAuthClientEMA(ctx context.Context, q *repo.Queries, org string, projectID, authClientID, bindingID uuid.UUID) error {
+	n, err := q.ServersInsertAuthClientEMA(ctx, repo.ServersInsertAuthClientEMAParams{AuthClientID: authClientID, BindingID: bindingID, OrgID: org, ProjectID: projectID})
+	if err != nil {
+		return fmt.Errorf("insert typed EMA client details: %w", err)
+	}
+	if n != 1 {
+		return fmt.Errorf("insert typed EMA client details: expected 1 ready binding, found %d", n)
+	}
+	return nil
 }
 
 // seedAuthClients records the Example OAuth server's OAuth client as the
@@ -636,13 +656,18 @@ func (s *seeder) seedAuthClients(ctx context.Context) error {
 	proj := s.projectID()
 
 	clients := []repo.ServersInsertAuthClientParams{
+		{ID: s.sharedSourceAuthClient(), OrgID: org, ProjectID: proj, ClientType: "static_credential", Source: "backfill", Name: "Static credential", RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}},
 		{ID: s.det("auth-client-linear"), OrgID: org, ProjectID: proj, ClientType: "remote_session", Source: "backfill", Name: "Fixture OAuth sign-in", RemoteSessionClientID: uuid.NullUUID{UUID: s.det("remote-identity-client-linear"), Valid: true}},
+		{ID: s.det("auth-client-ema-wiki"), OrgID: org, ProjectID: proj, ClientType: "ema", Source: "backfill", Name: "Acme Wiki", RemoteSessionClientID: uuid.NullUUID{UUID: s.det("ema-client-wiki"), Valid: true}},
 		{ID: s.det("auth-client-github-token"), OrgID: org, ProjectID: proj, ClientType: "static_credential", Source: "admin", Name: "Shared service token", RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}},
 	}
 	for _, client := range clients {
 		if err := s.q.ServersInsertAuthClient(ctx, client); err != nil {
 			return fmt.Errorf("insert demo auth client %s: %w", client.Name, err)
 		}
+	}
+	if err := seedAuthClientEMA(ctx, s.q, org, proj, s.det("auth-client-ema-wiki"), s.det("ema-binding-wiki")); err != nil {
+		return err
 	}
 	if err := s.q.ServersInsertAuthClientHeader(ctx, repo.ServersInsertAuthClientHeaderParams{
 		ID: s.det("auth-client-github-token-header"), AuthClientID: s.det("auth-client-github-token"), OrgID: org,
@@ -653,6 +678,7 @@ func (s *seeder) seedAuthClients(ctx context.Context) error {
 
 	associations := []struct{ key, server, client string }{
 		{"auth-client-assoc-linear", "mcpserver-linear", "auth-client-linear"},
+		{"auth-client-assoc-ema-wiki", "mcpserver-ema-wiki", "auth-client-ema-wiki"},
 		{"auth-client-assoc-linear-token", "mcpserver-linear", "auth-client-github-token"},
 	}
 	for _, a := range associations {
@@ -661,6 +687,22 @@ func (s *seeder) seedAuthClients(ctx context.Context) error {
 		}); err != nil {
 			return fmt.Errorf("associate demo auth client %s: %w", a.key, err)
 		}
+	}
+	if err := s.q.ServersInsertServerAuthClient(ctx, repo.ServersInsertServerAuthClientParams{
+		ID: s.det("auth-client-assoc-slack"), ProjectID: proj, OrgID: org,
+		McpServerID: s.det("mcpserver-slack"), AuthClientID: s.sharedSourceAuthClient(),
+	}); err != nil {
+		return fmt.Errorf("offer demo static credential: %w", err)
+	}
+	n, err := s.q.ServersCopyStaticCredentialHeader(ctx, repo.ServersCopyStaticCredentialHeaderParams{
+		ID: s.det("auth-client-slack-header"), AuthClientID: s.sharedSourceAuthClient(),
+		OrgID: org, ProjectID: proj, HeaderID: s.det("agent-identity-header-slack"),
+	})
+	if err != nil {
+		return fmt.Errorf("copy demo static credential header: %w", err)
+	}
+	if n != 1 {
+		return fmt.Errorf("copy demo static credential header: expected 1 source row, found %d", n)
 	}
 	if err := s.q.ServersInsertAuthClientRoleGrants(ctx, repo.ServersInsertAuthClientRoleGrantsParams{
 		OrgID: org, AuthClientID: s.det("auth-client-github-token"),
@@ -797,24 +839,6 @@ func (s *seeder) seedServersEMAWiki(ctx context.Context) error {
 		IssuerID:  s.det("ema-vendor-wiki"),
 	}); err != nil {
 		return fmt.Errorf("insert demo acme wiki vendor client: %w", err)
-	}
-	// The client is bound to the workforce sign-in, so organization
-	// sign-ins, which reach every server in the organization, reach the
-	// server through it.
-	if err := s.q.ServersInsertRemoteSessionClientIssuerBinding(ctx, repo.ServersInsertRemoteSessionClientIssuerBindingParams{
-		RemoteSessionClientID: s.det("ema-client-wiki"),
-		UserSessionIssuerID:   issuer,
-	}); err != nil {
-		return fmt.Errorf("bind demo acme wiki client to the workforce issuer: %w", err)
-	}
-	if err := s.q.ServersInsertServerClientAssociation(ctx, repo.ServersInsertServerClientAssociationParams{
-		ID:                    s.det("server-client-association-ema-wiki"),
-		ProjectID:             proj,
-		OrgID:                 org,
-		McpServerID:           s.det("mcpserver-ema-wiki"),
-		RemoteSessionClientID: s.det("ema-client-wiki"),
-	}); err != nil {
-		return fmt.Errorf("associate demo acme wiki server with its client: %w", err)
 	}
 	if err := s.q.ServersStampRemoteSessionIssuer(ctx, repo.ServersStampRemoteSessionIssuerParams{
 		RemoteSessionIssuerID: s.det("ema-vendor-wiki"),

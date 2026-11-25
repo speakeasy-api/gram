@@ -31,7 +31,7 @@ const INTRO =
   "Let people arrive already signed in through your company's identity provider. An agent or app holding an identity token from it connects without a second sign-in. Everyone else signs in as they do today.";
 
 /**
- * Enterprise Managed Auth for one MCP Authentication Provider: which
+ * Enterprise Managed Auth for one MCP sign-in: which
  * identity provider's sign-in it accepts. Only an organization-wide provider
  * can accept one, so a project-specific one is offered the move first.
  */
@@ -379,8 +379,7 @@ function ProjectSpecific({
     <Row>
       <div className="flex flex-1 basis-80 flex-col gap-1">
         <Text>
-          Enterprise Managed Auth needs an organization-wide MCP Authentication
-          Provider
+          Enterprise Managed Auth needs an organization-wide MCP sign-in
         </Text>
         <Text small muted>
           Make {issuer.slug} organization-wide first. Its MCP servers, sessions

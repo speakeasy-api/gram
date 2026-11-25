@@ -15,24 +15,28 @@ import (
 
 // Client is the "mcpConnectionHealth" service client.
 type Client struct {
-	ListAttemptsEndpoint       goa.Endpoint
-	GetAttemptCountsEndpoint   goa.Endpoint
-	GetAttemptEndpoint         goa.Endpoint
-	GetSignInSummaryEndpoint   goa.Endpoint
-	GetSessionActivityEndpoint goa.Endpoint
-	ListDeniedClientsEndpoint  goa.Endpoint
+	ListAttemptsEndpoint          goa.Endpoint
+	GetAttemptCountsEndpoint      goa.Endpoint
+	GetAttemptEndpoint            goa.Endpoint
+	GetSignInSummaryEndpoint      goa.Endpoint
+	GetSessionActivityEndpoint    goa.Endpoint
+	ListDeniedClientsEndpoint     goa.Endpoint
+	ListSuspectedProblemsEndpoint goa.Endpoint
+	GetSuspectedProblemEndpoint   goa.Endpoint
 }
 
 // NewClient initializes a "mcpConnectionHealth" service client given the
 // endpoints.
-func NewClient(listAttempts, getAttemptCounts, getAttempt, getSignInSummary, getSessionActivity, listDeniedClients goa.Endpoint) *Client {
+func NewClient(listAttempts, getAttemptCounts, getAttempt, getSignInSummary, getSessionActivity, listDeniedClients, listSuspectedProblems, getSuspectedProblem goa.Endpoint) *Client {
 	return &Client{
-		ListAttemptsEndpoint:       listAttempts,
-		GetAttemptCountsEndpoint:   getAttemptCounts,
-		GetAttemptEndpoint:         getAttempt,
-		GetSignInSummaryEndpoint:   getSignInSummary,
-		GetSessionActivityEndpoint: getSessionActivity,
-		ListDeniedClientsEndpoint:  listDeniedClients,
+		ListAttemptsEndpoint:          listAttempts,
+		GetAttemptCountsEndpoint:      getAttemptCounts,
+		GetAttemptEndpoint:            getAttempt,
+		GetSignInSummaryEndpoint:      getSignInSummary,
+		GetSessionActivityEndpoint:    getSessionActivity,
+		ListDeniedClientsEndpoint:     listDeniedClients,
+		ListSuspectedProblemsEndpoint: listSuspectedProblems,
+		GetSuspectedProblemEndpoint:   getSuspectedProblem,
 	}
 }
 
@@ -172,4 +176,50 @@ func (c *Client) ListDeniedClients(ctx context.Context, p *ListDeniedClientsPayl
 		return
 	}
 	return ires.(*ConnectionDeniedClientsResult), nil
+}
+
+// ListSuspectedProblems calls the "listSuspectedProblems" endpoint of the
+// "mcpConnectionHealth" service.
+// ListSuspectedProblems may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListSuspectedProblems(ctx context.Context, p *ListSuspectedProblemsPayload) (res *ListSuspectedProblemsResult, err error) {
+	var ires any
+	ires, err = c.ListSuspectedProblemsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListSuspectedProblemsResult), nil
+}
+
+// GetSuspectedProblem calls the "getSuspectedProblem" endpoint of the
+// "mcpConnectionHealth" service.
+// GetSuspectedProblem may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetSuspectedProblem(ctx context.Context, p *GetSuspectedProblemPayload) (res *GetSuspectedProblemResult, err error) {
+	var ires any
+	ires, err = c.GetSuspectedProblemEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*GetSuspectedProblemResult), nil
 }

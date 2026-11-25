@@ -27,7 +27,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -669,7 +668,6 @@ func workloadSessionIssuance(target workloadSessionTarget, subject urn.SessionSu
 		AuthClientPicks:        nil,
 		DeferredServerIDs:      nil,
 		Catalog:                nil,
-		TypedOnly:              false,
 	}
 }
 
@@ -788,8 +786,9 @@ func (s *Service) mintWorkloadGrantSession(ctx context.Context, logger *slog.Log
 	if err == nil && grant.endpoint != nil {
 		authorizationCtx, err = s.requireWorkloadSessionAuthorization(authorizationCtx, grant.endpoint, workloadSessionReachResource)
 	}
+	var workloadServers []consentAuthServer
 	if err == nil && grant.endpoint != nil {
-		authorizationCtx, err = s.requireGatewayWorkloadMember(authorizationCtx, logger, grant.endpoint)
+		authorizationCtx, workloadServers, err = s.requireGatewayWorkloadMember(authorizationCtx, logger, grant.endpoint)
 	}
 	if err == nil && grant.session.Audience == InferenceResource {
 		err = s.authz.Require(authorizationCtx, authz.InferenceExecuteCheck(grant.session.ProjectID.String()))
@@ -804,17 +803,10 @@ func (s *Service) mintWorkloadGrantSession(ctx context.Context, logger *slog.Log
 		return nil, workloadGrantStageUnavailable("agent_admission_unavailable", err)
 	}
 
-	// Read once, before the issuer lock (all database work after it uses
-	// dbtx), so the picks and the choices recorded beside them follow the same
-	// enforcement state.
-	grant.session.TypedOnly, err = authenforcement.ReadEnforced(ctx, s.db, organizationID)
-	if err != nil {
-		return nil, workloadGrantStageUnavailable("upstream_choice_unavailable", err)
-	}
 	if grant.choosesUpstream && grant.endpoint != nil {
-		caller := headlessCaller{clientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, workloadIssuerID: uuid.NullUUID{UUID: grant.presented.issuerID, Valid: true}, workloadSubject: grant.presented.subject, connectsLater: false}
+		caller := headlessCaller{clientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, workloadIssuerID: uuid.NullUUID{UUID: grant.presented.issuerID, Valid: true}, workloadSubject: grant.presented.subject, connectsLater: false, workloadServers: workloadServers}
 		// A workload cannot connect later, so nothing is deferred.
-		upstreamPicks, authClientPicks, _, err := s.headlessAuthClientPicks(authorizationCtx, grant.endpoint, subject, caller, grant.requestedAuthClients, grant.session.TypedOnly)
+		upstreamPicks, authClientPicks, _, err := s.headlessAuthClientPicks(authorizationCtx, grant.endpoint, subject, caller, grant.requestedAuthClients)
 		if err != nil {
 			if _, ok := errors.AsType[*oops.OAuthError](err); ok {
 				// The workload was admitted, so naming why its choice failed
@@ -911,29 +903,35 @@ func (s *Service) writeWorkloadGrantRefusal(ctx context.Context, w http.Response
 // entry and member authorization remain separate decisions: the endpoint grant
 // admits the gateway, while the normal member snapshot applies visibility and
 // each member's own mcp:connect authorization.
-func (s *Service) requireGatewayWorkloadMember(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint) (context.Context, error) {
+func (s *Service) requireGatewayWorkloadMember(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint) (context.Context, []consentAuthServer, error) {
 	gateway, err := gatewayTargetFromEndpoint(endpoint)
 	if err != nil {
-		return ctx, nil
+		return ctx, nil, nil
 	}
 	if _, ok := gateway.authorizationTarget(endpoint.ProjectID); !ok {
-		return ctx, nil
+		return ctx, nil, nil
 	}
 
 	ctx = authz.WithoutCredentialCeiling(ctx)
 	var members []metaMember
 	if endpoint.IsProjectGateway() {
-		ctx, members, _, err = s.resolveOrganizationMemberSnapshot(ctx, logger, mandatorySurfaceGatewayMember, endpoint.OrganizationID, false, uuid.Nil, endpoint.ProjectID)
+		ctx, members, _, err = s.resolveOrganizationMemberSnapshot(ctx, logger, mandatorySurfaceGatewayMember, endpoint.OrganizationID, false, uuid.Nil, endpoint.ProjectID, false)
 	} else {
 		ctx, members, err = s.resolveEndpointMemberSnapshot(ctx, logger, mandatorySurfaceGatewayMember, endpoint)
 	}
 	if err != nil {
-		return ctx, workloadGrantStageUnavailable("gateway_member_admission_unavailable", err)
+		return ctx, nil, workloadGrantStageUnavailable("gateway_member_admission_unavailable", err)
 	}
 	if len(members) == 0 {
-		return ctx, refuseWorkloadGrant("gateway_no_reachable_members", errors.New("workload reaches no gateway member"))
+		return ctx, nil, refuseWorkloadGrant("gateway_no_reachable_members", errors.New("workload reaches no gateway member"))
 	}
-	return ctx, nil
+	servers := make([]consentAuthServer, 0, len(members))
+	for _, member := range members {
+		if member.backend == metaMemberBackendProxied {
+			servers = append(servers, consentAuthServer{id: member.serverID, projectID: member.projectID})
+		}
+	}
+	return ctx, servers, nil
 }
 
 // retryAfterSeconds renders a Retry-After delay in whole seconds, never less

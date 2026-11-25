@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   statuses: [] as Array<Record<string, unknown>>,
   reset: vi.fn(),
   signInReady: true,
+  orgAdmin: true,
   signInUnavailable: false,
   detailsLoading: false,
   detailsError: false,
@@ -45,7 +46,10 @@ vi.mock("@gram/client/react-query/mcpRegistriesGetServerDetails.js", () => ({
   }),
 }));
 vi.mock("@/hooks/useRBAC", () => ({
-  useRBAC: () => ({ hasScope: () => true, isLoading: false }),
+  useRBAC: () => ({
+    hasScope: (scope: string) => scope !== "org:admin" || mocks.orgAdmin,
+    isLoading: false,
+  }),
 }));
 vi.mock("@/lib/remote-identity", () => ({
   useAgentCredentialFields: () => ({ authorizationValue: "" }),
@@ -56,12 +60,8 @@ vi.mock(
   () => ({ CreationIdentityChoice: () => <div>identity choice</div> }),
 );
 vi.mock(
-  "@/pages/mcp/x/tabs/settings/sections/authentication/AuthenticationSection",
-  () => ({ AuthenticationSectionBody: () => <div>identity settings</div> }),
-);
-vi.mock(
-  "@/pages/mcp/x/tabs/settings/sections/authentication/authTarget",
-  () => ({ useMcpServerAuthTarget: () => ({ kind: "remote-mcp" }) }),
+  "@/pages/mcp/x/tabs/settings/sections/authentication/UpstreamCredentialsSection",
+  () => ({ UpstreamCredentialsSection: () => <div>identity settings</div> }),
 );
 vi.mock("@gram/client/react-query/getMcpServer.js", () => ({
   useGetMcpServer: () => ({
@@ -72,7 +72,8 @@ vi.mock("@gram/client/react-query/getMcpServer.js", () => ({
 vi.mock("@gram/client/react-query/updateMcpServer.js", () => ({
   useUpdateMcpServerMutation: () => ({ mutateAsync: mocks.mutateUpdate }),
 }));
-vi.mock("@tanstack/react-query", () => ({
+vi.mock("@tanstack/react-query", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
   useQueryClient: () => ({ fetchQuery: mocks.fetchQuery }),
 }));
 vi.mock("@/lib/mcp-server-visibility", () => ({
@@ -213,6 +214,7 @@ describe("CatalogOfficialSheet", () => {
     mocks.fetchQuery.mockReset();
     mocks.reset.mockReset();
     mocks.signInReady = true;
+    mocks.orgAdmin = true;
     mocks.signInUnavailable = false;
     mocks.detailsLoading = false;
     mocks.detailsError = false;
@@ -333,7 +335,7 @@ describe("CatalogOfficialSheet", () => {
     ).toBeTruthy();
   });
 
-  it("keeps Turn on off until the sign-in is saved, and shows why setup is needed", async () => {
+  it("keeps Turn on off until a credential is set up, and shows why setup is needed", async () => {
     mocks.signInReady = false;
     installWith([
       {
@@ -353,8 +355,35 @@ describe("CatalogOfficialSheet", () => {
     });
     expect((turnOn as HTMLButtonElement).disabled).toBe(true);
     expect(
-      screen.getByText("Save the sign-in settings above to turn it on."),
+      screen.getByText(
+        "Add or turn on an upstream credential above to enable this server.",
+      ),
     ).toBeTruthy();
+  });
+
+  it("hands off incomplete setup to an admin without prompting project writers to add credentials", async () => {
+    mocks.orgAdmin = false;
+    mocks.signInReady = false;
+    installWith([
+      {
+        status: "failed",
+        name: "Tracker Cloud",
+        mcpServerId: "server-1",
+        mcpServerParam: "tracker",
+        setupRequired: "Automatic client registration is unavailable.",
+      },
+    ]);
+
+    expect(
+      await screen.findByText(/Ask an organization admin to open this server/),
+    ).toBeTruthy();
+    expect(
+      screen.queryByText(/Add or turn on an upstream credential above/),
+    ).toBeNull();
+    const turnOn = screen.getByRole("button", {
+      name: "Turn on and make official",
+    });
+    expect((turnOn as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("shows why turning the server on failed", async () => {
@@ -434,7 +463,7 @@ describe("CatalogOfficialSheet", () => {
     expect(mocks.save).toHaveBeenCalledTimes(1);
   });
 
-  it("lets the admin turn the server on when the sign-in check cannot run", async () => {
+  it("shows an unavailable check without blocking turn on", async () => {
     mocks.signInReady = false;
     mocks.signInUnavailable = true;
     installWith([
@@ -451,9 +480,7 @@ describe("CatalogOfficialSheet", () => {
       name: "Turn on and make official",
     });
     expect((turnOn as HTMLButtonElement).disabled).toBe(false);
-    expect(
-      screen.queryByText("Save the sign-in settings above to turn it on."),
-    ).toBeNull();
+    expect(screen.getByText("Could not verify upstream sign-in.")).toBeTruthy();
   });
 
   it("keeps Add and make official off while the catalog entry loads", () => {

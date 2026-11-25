@@ -35,8 +35,7 @@ func TestLogReadToolsExplainMissingLogRead(t *testing.T) {
 	for name, tool := range map[string]interface {
 		Call(ctx context.Context, env toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error
 	}{
-		"search_logs":       NewSearchLogsTool(forbiddenTelemetry{}),
-		"search_tool_calls": NewSearchToolCallsTool(forbiddenTelemetry{}),
+		"search_logs": NewSearchLogsTool(forbiddenTelemetry{}),
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()

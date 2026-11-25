@@ -23,7 +23,7 @@ type sessionTokenRevoker interface {
 	RevokeToken(context.Context, string) error
 }
 type agentSessionRevoker interface {
-	SoftDeleteAgentSubjectSessions(context.Context, remoterepo.DBTX, urn.SessionSubject, uuid.UUID, uuid.UUID, string, pgtype.Timestamptz, bool) ([]remotesessions.RevokedCredentials, error)
+	SoftDeleteAgentSubjectSessions(context.Context, remoterepo.DBTX, urn.SessionSubject, uuid.UUID, uuid.UUID, string, uuid.UUID, pgtype.Timestamptz, bool) ([]remotesessions.RevokedCredentials, error)
 	RevokeAllDetached(context.Context, []remotesessions.RevokedCredentials)
 }
 
@@ -149,7 +149,7 @@ func (s *Service) RevokeSession(ctx context.Context, payload *gen.RevokeSessionP
 	if row.IssuerProjectID.Valid {
 		issuerProjectID = row.IssuerProjectID.UUID
 	}
-	upstream, err := s.sessionRevoker.SoftDeleteAgentSubjectSessions(ctx, tx, subject, row.UserSessionIssuerID, issuerProjectID, human.Auth.ActiveOrganizationID, row.DeletedAt, row.AlreadyRevoked)
+	upstream, err := s.sessionRevoker.SoftDeleteAgentSubjectSessions(ctx, tx, subject, row.UserSessionIssuerID, issuerProjectID, human.Auth.ActiveOrganizationID, row.ID, row.DeletedAt, row.AlreadyRevoked)
 	if err != nil {
 		return fmt.Errorf("revoke agent upstream sessions: %w", err)
 	}

@@ -177,13 +177,13 @@ it.each([
   expect(screen.getByTestId("selection").getAttribute("data-item")).toBe(item);
 });
 
-it("keeps Org Gateway and leaves MCP Authentication out of Settings", () => {
-  // MCP Authentication lives on each project's MCP Sessions page now.
+it("keeps Org Gateway and leaves MCP Sign-in out of Settings", () => {
+  // MCP sign-ins are managed on each project's MCP Sign-in page now.
   mocks.userSessionIssuersFlag = "enabled";
   renderSidebar();
   const settings = screen.getByRole("navigation", { name: "Settings" });
   expect(
-    within(settings).queryByRole("link", { name: "MCP Authentication" }),
+    within(settings).queryByRole("link", { name: "MCP Sign-in" }),
   ).toBeNull();
   expect(
     within(settings).getByRole("link", { name: "Org Gateway" }),

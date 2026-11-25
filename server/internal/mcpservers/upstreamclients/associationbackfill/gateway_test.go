@@ -8,12 +8,20 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // gatewayClient creates a project client bound to userIssuerID and returns it
 // with its remote session issuer.
 func (f *fixture) gatewayClient(userIssuerID uuid.UUID) (clientID, remoteIssuerID uuid.UUID) {
+	f.t.Helper()
+	clientID, remoteIssuerID = f.unboundGatewayRegistration()
+	require.NoError(f.t, f.q.SeedClientBindingFixture(f.t.Context(), SeedClientBindingFixtureParams{RemoteSessionClientID: clientID, UserSessionIssuerID: userIssuerID}))
+	return clientID, remoteIssuerID
+}
+
+func (f *fixture) unboundGatewayRegistration() (clientID, remoteIssuerID uuid.UUID) {
 	f.t.Helper()
 	ctx := f.t.Context()
 	remoteIssuerID, clientID = uuid.New(), uuid.New()
@@ -30,7 +38,6 @@ func (f *fixture) gatewayClient(userIssuerID uuid.UUID) (clientID, remoteIssuerI
 		RemoteSessionIssuerID: remoteIssuerID,
 		ClientID:              "cid-" + clientID.String()[:8],
 	}))
-	require.NoError(f.t, f.q.SeedClientBindingFixture(ctx, SeedClientBindingFixtureParams{RemoteSessionClientID: clientID, UserSessionIssuerID: userIssuerID}))
 	return clientID, remoteIssuerID
 }
 
@@ -190,26 +197,20 @@ func TestRunIgnoresAnOrganizationIssuerThatIsNotTheOnlyOne(t *testing.T) {
 	require.Empty(t, f.associations(server))
 }
 
-func TestReconcileCapturesAndKeepsGatewayAssociations(t *testing.T) {
+func TestReconcileDoesNotInferGatewayOffersFromDerivedIssuer(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	gatewayIssuer := f.userIssuer()
 	member := f.server(f.userIssuer(), "https://member.example.com/mcp")
-	client, remoteIssuer := f.gatewayClient(gatewayIssuer)
+	_, remoteIssuer := f.unboundGatewayRegistration()
 	f.derive(member, remoteIssuer)
 	f.gateway(gatewayIssuer, member)
 
 	require.NoError(t, upstreamclients.Reconcile(t.Context(), f.pool, f.orgID, f.projectID, []uuid.UUID{gatewayIssuer}))
-	require.Equal(t, []uuid.UUID{client}, f.associations(member), "a binding change on the gateway issuer captures the member")
-
-	// The client is bound only to the gateway's issuer, not the member's own,
-	// and the association survives the prune that follows every binding change.
-	require.NoError(t, upstreamclients.Reconcile(t.Context(), f.pool, f.orgID, f.projectID, nil))
-	require.Equal(t, []uuid.UUID{client}, f.associations(member))
-
-	require.NoError(t, f.q.DeleteClientBindingsFixture(t.Context(), client))
-	require.NoError(t, upstreamclients.Reconcile(t.Context(), f.pool, f.orgID, f.projectID, nil))
-	require.Empty(t, f.associations(member), "no issuer reaching the member binds the client any more")
+	require.Empty(t, f.associations(member))
+	offers, err := authclientbackfill.New(f.pool).ListServerAuthClientsFixture(t.Context(), member)
+	require.NoError(t, err)
+	require.Empty(t, offers, "membership and derived issuer metadata do not configure a typed offer")
 }
 
 func TestReconcileDoesNotCaptureAGatewayMemberAGrantRoutesElsewhere(t *testing.T) {
@@ -358,39 +359,55 @@ func TestRunDecidesTunnelsByDerivedIssuerNotClaimedResource(t *testing.T) {
 	require.Equal(t, []uuid.UUID{derivedClient}, f.associations(derived))
 }
 
-func TestReconcileCapturesATunnelWhoseClaimedResourceAnotherClientHoldsGrantsFor(t *testing.T) {
+func TestReconcileDoesNotInferATunnelOfferFromDerivedIssuerOrGrants(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	gatewayIssuer := f.userIssuer()
 	member := f.tunnel(f.userIssuer(), "https://member.internal.example/mcp")
-	client, remoteIssuer := f.gatewayClient(gatewayIssuer)
+	_, remoteIssuer := f.unboundGatewayRegistration()
 	f.derive(member, remoteIssuer)
-	other, _ := f.gatewayClient(gatewayIssuer)
+	other, _ := f.unboundGatewayRegistration()
 	f.grant(gatewayIssuer, other, "https://member.internal.example/mcp")
 	f.gateway(gatewayIssuer, member)
 
 	require.NoError(t, upstreamclients.Reconcile(t.Context(), f.pool, f.orgID, f.projectID, []uuid.UUID{gatewayIssuer}))
-	require.Equal(t, []uuid.UUID{client}, f.associations(member))
+	require.Empty(t, f.associations(member))
+	offers, err := authclientbackfill.New(f.pool).ListServerAuthClientsFixture(t.Context(), member)
+	require.NoError(t, err)
+	require.Empty(t, offers, "neither derived issuer metadata nor an existing grant configures a typed offer")
 }
 
-func TestReconcileRecapturesAMemberThatRejoinsItsGateway(t *testing.T) {
+func TestReconcilePreservesAnOfferWhenAMemberRejoinsItsGateway(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	gatewayIssuer := f.userIssuer()
 	member := f.server(f.userIssuer(), "https://member.example.com/mcp")
-	client, remoteIssuer := f.gatewayClient(gatewayIssuer)
-	f.derive(member, remoteIssuer)
+	client, _ := f.unboundGatewayRegistration()
+	q := authclientbackfill.New(f.pool)
+	offer, err := q.SeedAuthClientFixture(t.Context(), authclientbackfill.SeedAuthClientFixtureParams{
+		OrganizationID: f.orgID, ProjectID: uuid.NullUUID{UUID: f.projectID, Valid: true}, ClientType: authclientbackfill.TypeRemoteSession,
+		Source: "admin", RemoteSessionClientID: uuid.NullUUID{UUID: client, Valid: true},
+	})
+	require.NoError(t, err)
+	require.NoError(t, q.SeedServerAuthClientLinkFixture(t.Context(), authclientbackfill.SeedServerAuthClientLinkFixtureParams{
+		OrganizationID: f.orgID, ProjectID: f.projectID, McpServerID: member, AuthClientID: offer, Source: "admin",
+	}))
+	assertOffer := func() {
+		offers, err := q.ListServerAuthClientsFixture(t.Context(), member)
+		require.NoError(t, err)
+		require.Equal(t, []uuid.UUID{offer}, offers)
+	}
 	f.gateway(gatewayIssuer, member)
 	require.NoError(t, upstreamclients.Reconcile(t.Context(), f.pool, f.orgID, f.projectID, []uuid.UUID{gatewayIssuer}))
-	require.Equal(t, []uuid.UUID{client}, f.associations(member))
+	assertOffer()
 
 	require.NoError(t, f.q.RemoveGatewayMemberFixture(t.Context(), member))
 	require.NoError(t, upstreamclients.Reconcile(t.Context(), f.pool, f.orgID, f.projectID, []uuid.UUID{gatewayIssuer}))
-	require.Empty(t, f.associations(member), "leaving the gateway prunes the association")
+	assertOffer()
 
 	f.gateway(gatewayIssuer, member)
 	require.NoError(t, upstreamclients.Reconcile(t.Context(), f.pool, f.orgID, f.projectID, []uuid.UUID{gatewayIssuer}))
-	require.Equal(t, []uuid.UUID{client}, f.associations(member), "a pruned association is not a detach")
+	assertOffer()
 }
 
 func TestReconcileKeepsAnExplicitGatewayDetach(t *testing.T) {

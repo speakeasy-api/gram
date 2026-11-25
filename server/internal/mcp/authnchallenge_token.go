@@ -28,8 +28,8 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/constants"
@@ -39,7 +39,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
-	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
@@ -159,10 +158,6 @@ type mintSessionParams struct {
 	DeferredServerIDs []uuid.UUID
 	// Catalog supplies the exact auth-client bindings approved by browser consent.
 	Catalog *connectionCatalog
-	// TypedOnly records a new credential's choices from the auth clients each
-	// server offers, for an organization enforcing upstream auth. The caller
-	// reads it before consuming anything a failed read could not give back.
-	TypedOnly bool
 }
 
 type mintedSession struct {
@@ -259,6 +254,7 @@ type tokenGrantAuthenticatedHandler func(
 	w http.ResponseWriter,
 	r *http.Request,
 	endpoint *ResolvedMcpEndpoint,
+	clientCatalog *aivendors.Snapshot,
 	clientRow *usersessions_repo.UserSessionClient,
 	baseURL string,
 	presentedAuthMethod string,
@@ -395,16 +391,19 @@ func (s *Service) serveTokenGrant(
 	// derived from it.
 	baseURL := s.resourceBaseURL(r, endpoint)
 
+	// One snapshot drives admission and attribution for the whole exchange.
+	clientCatalog := s.aiCatalog.SnapshotFor(ctx)
+
 	var grantErr error
 	clientID := creds.clientID
 	switch {
 	case grant.clientAuth == tokenClientAuthRequired && grant.authenticated != nil:
-		clientRow, err := s.authenticateTokenClient(ctx, w, r, endpoint, logger, grantType, creds, grant.resolveMode, baseURL)
+		clientRow, err := s.authenticateTokenClient(ctx, w, r, endpoint, clientCatalog, logger, grantType, creds, grant.resolveMode, baseURL)
 		if clientRow == nil {
 			return err
 		}
 		clientID = clientRow.ClientID
-		grantErr = grant.authenticated(ctx, w, r, endpoint, clientRow, baseURL, creds.method, logger)
+		grantErr = grant.authenticated(ctx, w, r, endpoint, clientCatalog, clientRow, baseURL, creds.method, logger)
 	case grant.clientAuth == tokenClientAuthNone && grant.clientless != nil:
 		grantErr = grant.clientless(ctx, w, r, endpoint, creds, baseURL, logger)
 	default:
@@ -440,6 +439,7 @@ func (s *Service) authenticateTokenClient(
 	w http.ResponseWriter,
 	r *http.Request,
 	endpoint *ResolvedMcpEndpoint,
+	clientCatalog *aivendors.Snapshot,
 	logger *slog.Logger,
 	grantType string,
 	creds presentedClientCredentials,
@@ -464,7 +464,7 @@ func (s *Service) authenticateTokenClient(
 			return nil, writeInvalidClientError(ctx, w, r, logger, clientIDNamesEndpointDescription)
 		}
 	}
-	clientRow, err := s.resolveUserSessionClient(ctx, logger, endpoint, clientID, resolveMode)
+	clientRow, err := s.resolveUserSessionClient(ctx, logger, endpoint, clientCatalog, clientID, resolveMode)
 	if err != nil {
 		if admissionErr, ok := errors.AsType[*admission.DenialError](err); ok {
 			s.rejectTokenClient(ctx, logger, r, endpoint, grantType, clientID, presentedAuthMethod, "cimd_admission_denied", mcpmetrics.IDJAGRejectionClientNotAdmitted)
@@ -540,7 +540,7 @@ func (s *Service) authenticateTokenClient(
 	//
 	// Access tokens already minted stay valid until they expire, same as the
 	// disabled case (AIS-406).
-	if err := s.checkAIToolGatewayBlock(ctx, logger, endpoint.OrganizationID, clientID); err != nil {
+	if err := s.checkAIToolGatewayBlock(ctx, logger, clientCatalog, endpoint.OrganizationID, clientID); err != nil {
 		if blockedErr, ok := errors.AsType[*AIToolBlockedError](err); ok {
 			s.rejectTokenClient(ctx, logger, r, endpoint, grantType, clientID, presentedAuthMethod, "ai_tool_blocked", mcpmetrics.IDJAGRejectionClientBlocked)
 			// This refusal ends an authorization-code exchange before the grant
@@ -571,6 +571,7 @@ func (s *Service) handleTokenJWTBearerGrant(
 	w http.ResponseWriter,
 	r *http.Request,
 	endpoint *ResolvedMcpEndpoint,
+	clientCatalog *aivendors.Snapshot,
 	clientRow *usersessions_repo.UserSessionClient,
 	baseURL string,
 	presentedAuthMethod string,
@@ -578,7 +579,7 @@ func (s *Service) handleTokenJWTBearerGrant(
 ) (retErr error) {
 	exchange, logger := s.startIDJAGExchange(endpoint, logger)
 	defer exchange.record(ctx)
-	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(clientRow.ClientID, mcpconnectionattempts.ClientIDAdmitted)), mcpconnectionattempts.StepInboundToken,
+	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(clientCatalog, clientRow.ClientID, mcpconnectionattempts.ClientIDAdmitted)), mcpconnectionattempts.StepInboundToken,
 		mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Grant(oauthwire.GrantTypeJWTBearer),
 		mcpconnectionattempts.UserSessionClient(clientRow.ID), mcpconnectionattempts.UserSessionIssuer(endpoint.UserSessionIssuerID))
 	defer t.Finish(ctx)
@@ -714,16 +715,10 @@ func (s *Service) handleTokenJWTBearerGrant(
 		t.Refuse(ctx, mcpconnectionattempts.CodeInvalidRequest, mcpconnectionattempts.Detail(tokenParamUpstreamAuthClient))
 		return err
 	}
-	// Read once, so the picks and the choices recorded beside them follow the
-	// same enforcement state.
-	enforced, err := authenforcement.ReadEnforced(ctx, s.db, endpoint.OrganizationID)
-	if err != nil {
-		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
-		return oops.E(oops.CodeUnexpected, err, "read upstream auth enforcement").LogError(ctx, logger)
-	}
-	upstreamPicks, authClientPicks, deferred, err := s.headlessAuthClientPicks(authorizationCtx, endpoint, result.Subject, headlessCaller{clientID: uuid.NullUUID{UUID: clientRow.ID, Valid: true}, workloadIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, workloadSubject: "", connectsLater: true}, requested, enforced)
+	upstreamPicks, authClientPicks, deferred, err := s.headlessAuthClientPicks(authorizationCtx, endpoint, result.Subject, headlessCaller{clientID: uuid.NullUUID{UUID: clientRow.ID, Valid: true}, workloadIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, workloadSubject: "", connectsLater: true, workloadServers: nil}, requested)
 	if err != nil {
 		if _, ok := errors.AsType[*oops.OAuthError](err); ok {
+			err = withConnectPage(endpoint, canonicalResource, err)
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, "upstream_credential_choice", exchange.reject(mcpmetrics.IDJAGRejectionUpstreamCredentialChoice, err)...)
 			code, detail := workloadGrantHappened(err)
 			t.Refuse(ctx, code, detail)
@@ -758,7 +753,6 @@ func (s *Service) handleTokenJWTBearerGrant(
 		AuthClientPicks:        authClientPicks,
 		DeferredServerIDs:      deferred,
 		Catalog:                nil,
-		TypedOnly:              enforced,
 	}, logger)
 	if err != nil {
 		// The issuer was retired after the assertion was checked.
@@ -798,6 +792,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 	w http.ResponseWriter,
 	r *http.Request,
 	endpoint *ResolvedMcpEndpoint,
+	clientCatalog *aivendors.Snapshot,
 	clientRow *usersessions_repo.UserSessionClient,
 	baseURL string,
 	presentedAuthMethod string,
@@ -810,7 +805,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 	// deliberately records neither: refresh is not part of an initial flow.
 	issuerID := endpoint.UserSessionIssuerID.String()
 	mcpSlug := endpoint.Slug
-	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(clientRow.ClientID, mcpconnectionattempts.ClientIDAdmitted)), mcpconnectionattempts.StepInboundToken,
+	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(clientCatalog, clientRow.ClientID, mcpconnectionattempts.ClientIDAdmitted)), mcpconnectionattempts.StepInboundToken,
 		mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Grant(oauthwire.GrantTypeAuthorizationCode), mcpconnectionattempts.UserSessionClient(clientRow.ID))
 	defer t.Finish(ctx)
 
@@ -952,12 +947,6 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		return rejectGrant(mcpconnectionattempts.CodeInternalError, "agent authorization handoff is missing", mcpconnectionattempts.Detail("agent_handoff_missing"))
 	}
 	subject := grant.Subject
-	// Read while a failure still leaves the code available for retry.
-	enforced, err := authenforcement.ReadEnforced(ctx, s.db, endpoint.OrganizationID)
-	if err != nil {
-		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
-		return oops.E(oops.CodeUnavailable, err, "read upstream auth enforcement").LogError(ctx, logger)
-	}
 	var admissionTx pgx.Tx
 	admissionQueries := usersessions_repo.New(s.db)
 	defer func() {
@@ -1020,7 +1009,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		}
 		// Attachments may be revoked between consent and code exchange.
 		// Recheck before persisting an agent session or issuing its tokens.
-		if cerr := s.remoteChallengeMgr.CheckAccessTokens(authorizationCtx, remotesessions.RefreshIn(connectionScope(endpoint, mcpconnectionattempts.AppOf(grant.ClientID, mcpconnectionattempts.ClientIDAdmitted))).InAttempt(grant.Attempt).FromRequest(r), endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, endpoint.proxiedServerID()); cerr != nil {
+		if cerr := s.remoteChallengeMgr.CheckAccessTokens(authorizationCtx, remotesessions.RefreshIn(connectionScope(endpoint, mcpconnectionattempts.AppOf(clientCatalog, grant.ClientID, mcpconnectionattempts.ClientIDAdmitted))).InAttempt(grant.Attempt).FromRequest(r), endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, endpoint.proxiedServerID()); cerr != nil {
 			if errors.Is(cerr, remotesessions.ErrRemoteSessionUnavailable) {
 				s.refuseRemoteSessionUnavailable(ctx, t, cerr)
 				return remoteSessionUnavailableError(w, cerr).LogWarn(ctx, logger)
@@ -1136,7 +1125,6 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		AuthClientPicks:        grant.AuthClientPicks,
 		DeferredServerIDs:      nil,
 		Catalog:                catalog,
-		TypedOnly:              enforced,
 	}, logger)
 	if err != nil {
 		// Almost all errors here occur before the 200 is written — issuer
@@ -1190,6 +1178,7 @@ func (s *Service) handleTokenRefreshTokenGrant(
 	w http.ResponseWriter,
 	r *http.Request,
 	endpoint *ResolvedMcpEndpoint,
+	clientCatalog *aivendors.Snapshot,
 	clientRow *usersessions_repo.UserSessionClient,
 	baseURL string,
 	presentedAuthMethod string,
@@ -1197,7 +1186,7 @@ func (s *Service) handleTokenRefreshTokenGrant(
 ) error {
 	req := usersessions.RefreshTokenRequestFromForm(r.PostForm)
 	req.SetDefaults()
-	tracker := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(clientRow.ClientID, mcpconnectionattempts.ClientIDAdmitted)), mcpconnectionattempts.StepInboundToken,
+	tracker := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(clientCatalog, clientRow.ClientID, mcpconnectionattempts.ClientIDAdmitted)), mcpconnectionattempts.StepInboundToken,
 		mcpconnectionattempts.Grant(oauthwire.GrantTypeRefreshToken), mcpconnectionattempts.UserSessionClient(clientRow.ID), mcpconnectionattempts.UserSessionIssuer(endpoint.UserSessionIssuerID))
 	defer tracker.Finish(ctx)
 
@@ -1663,8 +1652,6 @@ func (s *Service) rotateRefreshToken(
 		AuthClientPicks:        nil,
 		DeferredServerIDs:      nil,
 		Catalog:                nil,
-		// A rotated session records no choices.
-		TypedOnly: false,
 	}, logger)
 	if err != nil {
 		return true, err
@@ -1750,6 +1737,28 @@ func (s *Service) refreshNeedsUpstreamReconnect(ctx context.Context, logger *slo
 	if endpoint.MetaMcpServerID.Valid {
 		return upstreamRefreshServed
 	}
+	if endpoint.ToolsetID.Valid && endpoint.McpServerID.Valid {
+		registrationID, err := s.hostedRegistration(ctx, endpoint.OrganizationID, endpoint.ProjectID, endpoint.McpServerID.UUID)
+		if errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured) {
+			return upstreamRefreshReconnect
+		}
+		if err != nil {
+			logger.WarnContext(ctx, "check hosted upstream assignment before refresh", attr.SlogError(err))
+			return upstreamRefreshCheckFailed
+		}
+		if registrationID == uuid.Nil || !s.subjectReauthorizesToReconnect(ctx, endpoint.OrganizationID, subject) {
+			return upstreamRefreshServed
+		}
+		reconnect, err := s.remoteChallengeMgr.HostedRegistrationNeedsReconnect(ctx, remotesessions.AuthClientTokenRequest{
+			ProjectID: endpoint.ProjectID, OrganizationID: endpoint.OrganizationID, UserSessionIssuerID: endpoint.UserSessionIssuerID,
+			Subject: subject, RegistrationID: registrationID, SkipUnusable: false, Attribution: remotesessions.RefreshAttribution{},
+		})
+		if err != nil {
+			logger.WarnContext(ctx, "check hosted upstream grant before refresh", attr.SlogError(err))
+			return upstreamRefreshCheckFailed
+		}
+		return upstreamRefreshOf(reconnect)
+	}
 	// Where the auth client resolver serves the organization it decides the
 	// refresh: a choice it cannot use sends the session to reconnect rather
 	// than refreshing into the same rejection. Only a registration identity
@@ -1763,7 +1772,7 @@ func (s *Service) refreshNeedsUpstreamReconnect(ctx context.Context, logger *slo
 		return upstreamRefreshOf(resolverReconnect)
 	}
 	reauthorizes := s.subjectReauthorizesToReconnect(ctx, endpoint.OrganizationID, subject)
-	routing := consentRouting{backend: consentBackendNone, upstream: endpoint.UpstreamResource, members: nil}
+	routing := consentRouting{backend: consentBackendNone, upstream: endpoint.UpstreamResource, members: nil, hostedClients: nil}
 	tunneled, proxied, err := s.consentDirectBackend(ctx, endpoint, routing)
 	if err != nil {
 		return upstreamRefreshCheckFailed
@@ -2274,7 +2283,6 @@ func (s *Service) mintSession(
 		AuthClientPicks:        params.AuthClientPicks,
 		DeferredServerIDs:      params.DeferredServerIDs,
 		Catalog:                params.Catalog,
-		TypedOnly:              params.TypedOnly,
 	}, logger)
 }
 
@@ -2357,10 +2365,6 @@ type sessionIssuance struct {
 	DeferredServerIDs []uuid.UUID
 	// Catalog supplies the exact auth-client bindings approved by browser consent.
 	Catalog *connectionCatalog
-	// TypedOnly records a new credential's choices from the auth clients each
-	// server offers, for an organization enforcing upstream auth. issueSession
-	// runs inside the caller's transaction and does not read it itself.
-	TypedOnly bool
 }
 
 // issueSession mints the access token of an issuance and persists its session
@@ -2477,26 +2481,26 @@ func (s *Service) issueSession(
 	}
 	// A rotated session keeps the choices its credential already has.
 	if !issuance.CredentialID.Valid {
-		picks := usersessions_repo.RecordUpstreamClientSelectionsParams{
+		picks := usersessions_repo.RecordIssuedAuthClientChoicesParams{
 			UserSessionIssuerID: issuance.UserSessionIssuerID,
-			CredentialKind:      upstreamclients.CredentialKindUserSession,
 			CredentialID:        session.ID,
-			Source:              upstreamclients.SelectionSourceIssuance,
 			ScopeMcpServerIds:   nil,
 			ExcludeMcpServerIds: issuance.DeferredServerIDs,
 			PickedMcpServerIds:  nil,
 			PickedClientIds:     nil,
 			PickedAuthClientIds: nil,
-			TypedOnly:           issuance.TypedOnly,
+			PickedExplicit:      nil,
+			AllowSoleOffer:      false,
 		}
 		if issuance.Catalog != nil {
-			picks = issuance.Catalog.upstreamChoices(session.ID, issuance.TypedOnly)
+			picks = issuance.Catalog.upstreamChoices(session.ID)
 		} else {
 			for serverID, clientID := range issuance.UpstreamClientPicks {
 				picks.PickedMcpServerIds = append(picks.PickedMcpServerIds, serverID)
 				picks.PickedClientIds = append(picks.PickedClientIds, clientID)
 				// The zero id is read as no typed pick.
 				picks.PickedAuthClientIds = append(picks.PickedAuthClientIds, issuance.AuthClientPicks[serverID])
+				picks.PickedExplicit = append(picks.PickedExplicit, true)
 			}
 			for serverID, authClientID := range issuance.AuthClientPicks {
 				if _, ok := issuance.UpstreamClientPicks[serverID]; ok {
@@ -2506,9 +2510,10 @@ func (s *Service) issueSession(
 				picks.PickedMcpServerIds = append(picks.PickedMcpServerIds, serverID)
 				picks.PickedClientIds = append(picks.PickedClientIds, uuid.Nil)
 				picks.PickedAuthClientIds = append(picks.PickedAuthClientIds, authClientID)
+				picks.PickedExplicit = append(picks.PickedExplicit, true)
 			}
 		}
-		if _, err := queries.RecordUpstreamClientSelections(ctx, picks); err != nil {
+		if _, err := queries.RecordIssuedAuthClientChoices(ctx, picks); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "record upstream client selections").LogError(ctx, logger)
 		}
 	}

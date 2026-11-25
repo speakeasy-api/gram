@@ -132,7 +132,7 @@ func (s *Service) CreateAuthClient(ctx context.Context, payload *gen.CreateAuthC
 
 	attachmentScope := pgtype.Text{String: "", Valid: false}
 	if registrationID.Valid {
-		registration, err := queries.GetAuthClientRegistration(ctx, repo.GetAuthClientRegistrationParams{
+		registration, err := queries.LockAuthClientRegistration(ctx, repo.LockAuthClientRegistrationParams{
 			ID:             registrationID.UUID,
 			OrganizationID: authCtx.ActiveOrganizationID,
 			ProjectID:      projectID,
@@ -351,6 +351,23 @@ func AttachToServer(ctx context.Context, db *pgxpool.Pool, auditLogger *audit.Lo
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	queries := repo.New(dbtx)
+	// A direct typed offer also writes the registration's delete scope. Lock
+	// and check the registration before locking a server or typed client.
+	snapshot, err := queries.GetAuthClient(ctx, repo.GetAuthClientParams{ID: clientID, OrganizationID: organizationID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, &AttachRefusedError{Code: AttachNotFound, Message: "auth client not found"}
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read auth client registration: %w", err)
+	}
+	if snapshot.RemoteSessionClientID.Valid {
+		if _, err := queries.LockAuthClientRegistration(ctx, repo.LockAuthClientRegistrationParams{ID: snapshot.RemoteSessionClientID.UUID, OrganizationID: organizationID, ProjectID: snapshot.ProjectID}); errors.Is(err, pgx.ErrNoRows) {
+			return nil, &AttachRefusedError{Code: AttachConflict, Message: "the auth client's OAuth registration is no longer available"}
+		} else if err != nil {
+			return nil, fmt.Errorf("lock auth client registration: %w", err)
+		}
+	}
+
 	// Match enable and reconciliation writers: server first, then a fresh
 	// client read under its row lock. attachTx rereads the locked server.
 	if _, err := queries.LockAttachableMCPServer(ctx, repo.LockAttachableMCPServerParams{ID: serverID, OrganizationID: organizationID}); errors.Is(err, pgx.ErrNoRows) {
@@ -364,6 +381,10 @@ func AttachToServer(ctx context.Context, db *pgxpool.Pool, auditLogger *audit.Lo
 	}
 	if err != nil {
 		return nil, fmt.Errorf("lock auth client: %w", err)
+	}
+
+	if client.RemoteSessionClientID != snapshot.RemoteSessionClientID {
+		return nil, &AttachRefusedError{Code: AttachConflict, Message: "the auth client's OAuth registration changed; retry the attachment"}
 	}
 
 	server, err := attachTx(ctx, queries, organizationID, client, serverID)

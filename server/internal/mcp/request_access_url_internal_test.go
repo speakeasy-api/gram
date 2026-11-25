@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 )
@@ -21,7 +22,9 @@ func TestRequestAccessURLFollowsRequestPlatformHost(t *testing.T) {
 	require.NoError(t, err)
 	siteURL, err := url.Parse("https://app.example.test")
 	require.NoError(t, err)
-	svc := &Service{serverURL: serverURL, siteURL: siteURL}
+	svc := &Service{
+		aiCatalog: aivendorstest.NewStore(),
+		serverURL: serverURL, siteURL: siteURL}
 
 	tests := []struct {
 		name     string

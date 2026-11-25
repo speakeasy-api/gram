@@ -7,11 +7,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -63,7 +63,7 @@ func TestPreparationScope_DetachRevalidatesOwnershipAfterLockWait(t *testing.T) 
 			require.NoError(t, err)
 			done := make(chan error, 1)
 			go func() {
-				_, err := ti.service.DetachUserSessionIssuer(ctx, &clientsgen.DetachUserSessionIssuerPayload{ID: in.ClientID.String(), UserSessionIssuerID: in.UserSessionIssuerID.String()})
+				_, err := ti.service.DetachLegacyIssuerForTest(ctx, &remotesessions.LegacyIssuerBindingForTest{ID: in.ClientID.String(), UserSessionIssuerID: in.UserSessionIssuerID.String()})
 				done <- err
 			}()
 			testenv.WaitForQueryBlockedBy(t, ctx, ti.conn, testenv.BackendPID(tx), pattern)
@@ -99,7 +99,7 @@ func TestPreparationScope_DetachInheritedClientIgnoresSiblingEMABinding(t *testi
 	require.NoError(t, err)
 	_, err = q.SetEMABinding(ctx, repo.SetEMABindingParams{ID: binding.ID, ProjectID: sibling, OrganizationID: auth.ActiveOrganizationID, Generation: binding.Generation + 1, ExpectedGeneration: binding.Generation, State: conv.ToPGText("unknown_grants"), GrantSource: conv.ToPGText("unknown"), RemoteSessionClientID: conv.ToNullUUID(client), RequestedScopes: []string{}})
 	require.NoError(t, err)
-	_, err = ti.service.DetachUserSessionIssuer(ctx, &clientsgen.DetachUserSessionIssuerPayload{ID: client.String(), UserSessionIssuerID: in.UserSessionIssuerID.String()})
+	_, err = ti.service.DetachLegacyIssuerForTest(ctx, &remotesessions.LegacyIssuerBindingForTest{ID: client.String(), UserSessionIssuerID: in.UserSessionIssuerID.String()})
 	require.NoError(t, err, "project-local join mutation must not be blocked by another project's inherited EMA binding")
 	count, err := q.CountActiveEMABindingsForClient(ctx, repo.CountActiveEMABindingsForClientParams{ClientID: conv.ToNullUUID(client), ProjectID: sibling, OrganizationID: auth.ActiveOrganizationID})
 	require.NoError(t, err)

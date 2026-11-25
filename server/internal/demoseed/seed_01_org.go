@@ -6,14 +6,19 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
 	"github.com/speakeasy-api/gram/server/internal/sigint/evaluation"
 )
+
+// logsOnLead backdates the seeded logs feature past the 30 days of seeded connection events.
+const logsOnLead = 31 * 24 * time.Hour
 
 // orgStep is one ordered statement of the org phase.
 type orgStep struct {
@@ -399,6 +404,9 @@ func (s *seeder) orgFeaturesAndUsers(ctx context.Context) error {
 		Features: []string{"logs", "tool_io_logs", "session_capture", "skills", "rbac", "signals_intelligence", "upstream_auth_enforced"},
 	}); err != nil {
 		return fmt.Errorf("insert demo features: %w", err)
+	}
+	if err := s.q.OrgBackdateLogsFeature(ctx, repo.OrgBackdateLogsFeatureParams{OrgID: org, Since: conv.ToPGTimestamptz(s.now.Add(-logsOnLead))}); err != nil {
+		return fmt.Errorf("backdate demo logs feature: %w", err)
 	}
 	// Require access review on first seed, but retain an administrator's opt-in.
 	if err := s.q.OrgInsertGatewayDisabledFeature(ctx, org); err != nil {

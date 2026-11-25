@@ -13,7 +13,6 @@ import {
 import { SETTINGS_GROUPS } from "@/components/detail/settings-groups";
 import { UNKNOWN_STATUS, UPSTREAM_AUTH_STATUS } from "@/lib/auth-clients";
 import { enumPresentation } from "@/lib/enum";
-import type { IdentityMode } from "@/lib/remote-identity";
 import {
   type McpServerReachability,
   useMcpServerReachability,
@@ -75,6 +74,7 @@ import { usePublishStatus } from "@gram/client/react-query/publishStatus";
 import {
   AlertTriangle,
   Database,
+  MessageSquareQuote,
   MessageSquareText,
   ShieldCheck,
   WandSparkles,
@@ -102,6 +102,12 @@ const GUARDRAILS_TAB: McpDetailTabDef<TabValue> = {
   key: "guardrails",
   title: "Guardrails",
   Icon: ShieldCheck,
+};
+// Named as on a skill's page, where agents' reports about it live too.
+const FEEDBACK_TAB: McpDetailTabDef<TabValue> = {
+  key: "feedback",
+  title: "Agent Feedback",
+  Icon: MessageSquareQuote,
 };
 
 /**
@@ -217,9 +223,13 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
   const { data: pluginsData } = usePlugins(pluginScope, undefined, {
     enabled: canReadPlugins,
   });
-  const { data: publishStatus } = usePublishStatus(pluginScope, undefined, {
-    enabled: canReadPlugins,
-  });
+  // Only the readiness row reads this; a failed status read leaves that row
+  // unknown rather than taking down every tab of the server.
+  const { data: publishStatus, isError: publishStatusFailed } =
+    usePublishStatus(pluginScope, undefined, {
+      enabled: canReadPlugins,
+      throwOnError: false,
+    });
   const isCanonical = !!mcpServer && isCanonicalHostedWrapper(mcpServer);
   // The same load the detail page does, so it is shared from the cache; it
   // finds the toolset from the list when the read omits its summary.
@@ -419,9 +429,11 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
                 label: "Included in a plugin",
                 description: isTrulyIncluded
                   ? `Published to ${memberPlugins.length} plugin${memberPlugins.length > 1 ? "s" : ""}.`
-                  : isPluginMember
-                    ? "Marketplace needs publishing before this plugin is installable."
-                    : "Add this server to a plugin so your team can install it.",
+                  : isPluginMember && publishStatusFailed
+                    ? "Couldn't check whether the marketplace is published."
+                    : isPluginMember
+                      ? "Marketplace needs publishing before this plugin is installable."
+                      : "Add this server to a plugin so your team can install it.",
                 ready: isTrulyIncluded,
                 // Distribution is a later choice, not part of making the
                 // server work, so it never counts as a step left.
@@ -495,6 +507,9 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
       // vendor with the vendor's own credentials, so Speakeasy never mints a session
       // or registers a client for them and the tab would always be empty.
       !isUnproxied && "sessions",
+      // Only for servers built from an API or functions: Speakeasy does not
+      // add a tool to a third party's server, so nothing could be collected.
+      !!mcpServer?.toolsetId && FEEDBACK_TAB,
       "settings",
     ],
     activeTab,
@@ -505,7 +520,7 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
           <span className="flex items-center gap-1.5">
             Settings
             <SimpleTooltip
-              tooltip={`${missingRequiredEnvVars === 1 ? "1 required environment variable is" : `${missingRequiredEnvVars} required environment variables are`} not set, so tool calls that need ${missingRequiredEnvVars === 1 ? "it" : "them"} will fail. Set ${missingRequiredEnvVars === 1 ? "it" : "them"} under Settings > Sign-in.`}
+              tooltip={`${missingRequiredEnvVars === 1 ? "1 required environment variable is" : `${missingRequiredEnvVars} required environment variables are`} not set, so tool calls that need ${missingRequiredEnvVars === 1 ? "it" : "them"} will fail. Set ${missingRequiredEnvVars === 1 ? "it" : "them"} under Settings > Connection.`}
             >
               <AlertTriangle
                 className="text-warning h-3.5 w-3.5 shrink-0"
@@ -574,18 +589,7 @@ const SETUP_PROVIDER_NAME: Record<SetupProvider, string> = {
   okta: "Okta",
 };
 
-// The identity modes' names, as Settings' identity cards call them.
-const IDENTITY_LABEL: Record<IdentityMode, string> = {
-  user: "User identity",
-  agent: "Shared credential",
-  none: "Manual",
-};
-
-/**
- * Whose account the server acts as, in the words Settings uses. Under
- * enforced upstream auth that is the credentials status, as in Settings'
- * credentials section; otherwise the identity mode. Nothing until settled.
- */
+/** Summarize the credentials offered by this proxied server. */
 function identitySummary(
   signsInUpstream: boolean,
   auth: McpServerAuthenticationReadiness,
@@ -605,59 +609,37 @@ function identitySummary(
   // The header always shows this row, so every state has words: one that
   // can't be settled yet says so rather than dropping the row.
   if (!signsInUpstream) return { label: "Not used", href };
-  // Under enforcement only the server's credentials decide it; the legacy
-  // identity queries must not hold it at "Checking…" or fail it.
-  if (auth.upstreamAuth === "enforced") {
-    const { data, isError } = auth.upstreamAuthQuery;
-    if (isError)
-      return { label: "Couldn't check", href, warn: true, tone: "warning" };
-    if (!data) return { label: "Checking…", href };
-    if (data.status === "configured") {
-      // The credentials turned on, as Settings' Credentials list shows them.
-      const count = data.clients.filter((client) => client.enabled).length;
-      if (count > 0) {
-        return {
-          label:
-            count === 1
-              ? "1 credential configured"
-              : `${count} credentials configured`,
-          href,
-          tone: "success",
-        };
-      }
-    }
-    if (setupPending) return setupPending;
-    const presentation = enumPresentation(
-      UPSTREAM_AUTH_STATUS,
-      data.status,
-      UNKNOWN_STATUS,
-    );
-    return {
-      label: presentation.label,
-      href,
-      warn: presentation.tone === "warning",
-      // No credential turned on, so callers reach the upstream without one.
-      tone: presentation.tone === "warning" ? "warning" : "destructive",
-    };
-  }
-  if (auth.loading || auth.isLoadingRemoteIdentity) {
-    return { label: "Checking…", href };
-  }
-  if (auth.unavailable || auth.identityUnavailable) {
+  const { data, isError } = auth.upstreamAuthQuery;
+  if (isError)
     return { label: "Couldn't check", href, warn: true, tone: "warning" };
+  if (!data) return { label: "Checking…", href };
+  if (data.status === "configured") {
+    // The credentials turned on, as Settings' Credentials list shows them.
+    const count = data.clients.filter((client) => client.enabled).length;
+    if (count > 0) {
+      return {
+        label:
+          count === 1
+            ? "1 credential configured"
+            : `${count} credentials configured`,
+        href,
+        tone: "success",
+      };
+    }
   }
-  if (setupPending && !auth.passThroughAuthorization) return setupPending;
+  if (auth.hasLegacyForwardedAuthorization)
+    return { label: "Add a credential", href, warn: true, tone: "warning" };
+  if (setupPending) return setupPending;
+  const presentation = enumPresentation(
+    UPSTREAM_AUTH_STATUS,
+    data.status,
+    UNKNOWN_STATUS,
+  );
   return {
-    label: auth.passThroughAuthorization
-      ? "Needs cleanup"
-      : IDENTITY_LABEL[auth.remoteIdentityMode],
+    label: presentation.label,
     href,
-    warn: !!auth.passThroughAuthorization,
-    tone: auth.passThroughAuthorization
-      ? "warning"
-      : auth.remoteIdentityMode === "none"
-        ? "neutral"
-        : "success",
+    warn: presentation.tone === "warning",
+    tone: presentation.tone,
   };
 }
 

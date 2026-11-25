@@ -8,8 +8,6 @@
 //     confirmation.
 //   - pro-entitlements: PostgreSQL application-data backfill; see
 //     PRO_ENTITLEMENTS_BACKFILL.md. It defaults to a non-writing dry run.
-//   - auth-permission-defaults: PostgreSQL application-data backfill; see
-//     AUTH_PERMISSION_DEFAULTS_BACKFILL.md. It defaults to a dry run.
 //   - assistant-role-grants: PostgreSQL application-data backfill; see
 //     ASSISTANT_ROLE_GRANTS_BACKFILL.md. It defaults to a dry run.
 //   - audit-kit-runtime-security: PostgreSQL application-data backfill; see
@@ -18,6 +16,8 @@
 //     REMOTE_SESSIONS_ORGANIZATION_BACKFILL.md. It defaults to a dry run.
 //   - marketplace-tokens: PostgreSQL application-data backfill; see
 //     MARKETPLACE_TOKENS_BACKFILL.md. It defaults to a dry run.
+//   - functions-access-organization: PostgreSQL application-data backfill; see
+//     FUNCTIONS_ACCESS_ORGANIZATION_BACKFILL.md. It defaults to a dry run.
 //
 // Each guide documents its own connectivity, secret environment variables,
 // invocation modes, output, and recovery procedure. Flags are subcommand-local;
@@ -103,8 +103,6 @@ func run() int {
 		return runOpenRouterDisableCauses(args, os.Stdin, os.Stdout, os.Getenv)
 	case "pro-entitlements":
 		return runProEntitlements(args, os.Stdout, os.Getenv)
-	case authPermissionDefaultsName:
-		return runAuthPermissionDefaults(args, os.Stdout, os.Getenv)
 	case assistantRoleGrantsCommand:
 		return runAssistantRoleGrants(args, os.Stdout, os.Getenv)
 	case auditKitRuntimeSecurityName:
@@ -113,9 +111,11 @@ func run() int {
 		return runRemoteSessionsOrganization(args, os.Stdout, os.Getenv)
 	case marketplaceTokensName:
 		return runMarketplaceTokens(args, os.Stdout, os.Getenv)
+	case functionsAccessOrganizationName:
+		return runFunctionsAccessOrganization(args, os.Stdout, os.Getenv)
 	default:
 		// The unrecognized name is deliberately not echoed (log injection).
-		log.Printf("unknown migration subcommand (available: riskfindings, riskfindingscols, openrouter-disable-causes, pro-entitlements, auth-permission-defaults, assistant-role-grants, audit-kit-runtime-security, remote-sessions-organization, marketplace-tokens)")
+		log.Printf("unknown migration subcommand (available: riskfindings, riskfindingscols, openrouter-disable-causes, pro-entitlements, assistant-role-grants, audit-kit-runtime-security, remote-sessions-organization, marketplace-tokens, functions-access-organization)")
 		return 2
 	}
 }

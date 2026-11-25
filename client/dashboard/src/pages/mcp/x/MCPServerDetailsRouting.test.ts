@@ -23,6 +23,7 @@ describe("activeTabFromPath", () => {
     "inspect",
     "team-access",
     "guardrails",
+    "feedback",
     "settings",
   ] as const)(
     "reads the %s tab when the server slug has the same value",
@@ -228,6 +229,7 @@ describe("renamedServerHref", () => {
       "teamAccess",
       "guardrails",
       "sessions",
+      "feedback",
       "settings",
     ].map((key) => [
       key,
@@ -266,6 +268,7 @@ describe("renamedServerHref", () => {
     "team-access",
     "guardrails",
     "sessions",
+    "feedback",
     "settings",
   ])("keeps the %s tab under the new slug", (tab) => {
     expect(

@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => {
     createUserSessionIssuer: vi.fn().mockResolvedValue({ id: "usi-1" }),
     fetchRemoteSessionIssuerMetadata: vi.fn().mockResolvedValue({}),
     createRemoteSessionIssuer: vi.fn().mockResolvedValue({ id: "rsi-1" }),
+    attachServerClientAssociation: vi.fn().mockResolvedValue(undefined),
     createRemoteSessionClient: vi.fn().mockResolvedValue({ id: "rsc-1" }),
     linkToolsetUserSessionIssuer: vi.fn().mockResolvedValue(undefined),
     capture: vi.fn(),
@@ -104,7 +105,11 @@ vi.mock("@/contexts/Auth", () => ({
 }));
 
 vi.mock("@/contexts/Sdk", () => ({
-  useSdkClient: () => ({}),
+  useSdkClient: () => ({
+    remoteSessions: {
+      attachServerClientAssociation: mocks.attachServerClientAssociation,
+    },
+  }),
   useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 
@@ -628,6 +633,16 @@ describe("OAuthWizard — happy proxy create", () => {
       tokenEndpointAuthMethodsSupported: [],
     });
     expect(mocks.createRemoteSessionClient).toHaveBeenCalledTimes(1);
+    expect(mocks.attachServerClientAssociation).toHaveBeenCalledWith(
+      {
+        serverClientAssociationForm: {
+          mcpServerId: "toolset-1",
+          remoteSessionClientId: "rsc-1",
+        },
+      },
+      undefined,
+      expect.anything(),
+    );
     expect(mocks.linkToolsetUserSessionIssuer).toHaveBeenCalledTimes(1);
     expect(mocks.linkToolsetUserSessionIssuer).toHaveBeenCalledWith(
       expect.anything(),
