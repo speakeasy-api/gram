@@ -767,7 +767,7 @@ function ThreadSearchBar({
           aria-valuemin={0}
           aria-valuemax={scan.total}
           aria-valuenow={scan.scanned}
-          className="bg-foreground/50 absolute bottom-0 left-0 h-px transition-[width]"
+          className="bg-foreground/70 absolute bottom-0 left-0 h-0.5 transition-[width]"
           style={{
             width: `${Math.min(100, (scan.scanned / scan.total) * 100)}%`,
           }}
