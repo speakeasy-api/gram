@@ -45,7 +45,8 @@ func TestStreamingReader_RecordsProviderFirstChunkAndUsageOnSpan(t *testing.T) {
 		lineBuf:              &strings.Builder{},
 		accumulatedToolCalls: make(map[int]ToolCall),
 		usage:                Usage{},
-		startTime:            time.Now().Add(-1500 * time.Millisecond),
+		startTime:            time.Now(),
+		requestStartedAt:     time.Now().Add(-1500 * time.Millisecond),
 	}
 	reader.parseSSEChunks([]byte(
 		"data: {\"provider\":\"Amazon Bedrock\",\"choices\":[{\"delta\":{\"content\":\"Hi\"}}]}\n" +
@@ -81,6 +82,7 @@ func TestStreamingReader_EmptyStreamRecordsNothing(t *testing.T) {
 		accumulatedToolCalls: make(map[int]ToolCall),
 		usage:                Usage{},
 		startTime:            time.Now(),
+		requestStartedAt:     time.Now(),
 	}
 	require.NoError(t, reader.Close())
 	span.End()

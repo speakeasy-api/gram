@@ -528,7 +528,9 @@ func (c *ChatClient) GetCompletionStream(ctx context.Context, req CompletionRequ
 	reqBody := initResult.requestBody
 	reqBody.Stream = true
 
-	// Make HTTP request
+	// Make HTTP request. The first-chunk wait is measured from here, so it
+	// includes the connection and the wait for response headers.
+	requestStartedAt := time.Now()
 	httpResp, err := c.makeHTTPRequest(ctx, initResult.apiKey, reqBody)
 	if err != nil {
 		return nil, err
@@ -555,6 +557,7 @@ func (c *ChatClient) GetCompletionStream(ctx context.Context, req CompletionRequ
 		messageContent:       &strings.Builder{},
 		accumulatedToolCalls: make(map[int]ToolCall),
 		startTime:            time.Now(),
+		requestStartedAt:     requestStartedAt,
 		firstChunkAt:         time.Time{},
 		messageID:            "",
 		model:                "",
@@ -656,6 +659,9 @@ type streamingResponseReader struct {
 	usage        Usage
 	usageSet     bool
 	startTime    time.Time
+	// requestStartedAt is when the HTTP request was sent, before the wait for
+	// response headers.
+	requestStartedAt time.Time
 	// firstChunkAt is when the first parsed data chunk arrived: the wait for
 	// the provider, before any streaming.
 	firstChunkAt time.Time
@@ -688,7 +694,7 @@ func (r *streamingResponseReader) Close() error {
 
 	var firstChunk time.Duration
 	if !r.firstChunkAt.IsZero() {
-		firstChunk = r.firstChunkAt.Sub(r.startTime)
+		firstChunk = r.firstChunkAt.Sub(r.requestStartedAt)
 	}
 	recordCompletionSpanAttributes(r.ctx, r.provider, r.usage, firstChunk)
 
