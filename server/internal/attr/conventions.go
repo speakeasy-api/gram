@@ -146,26 +146,26 @@ const (
 	// SigintEventKindKey namespaces the event identity within its tenant.
 	SigintEventKindKey = attribute.Key("gram.sigint.event.kind")
 
-	RegistryEntryIDKey               = attribute.Key("gram.registry.entry.id")
-	RegistryUpdatedAtKey             = attribute.Key("gram.registry.entry.updated_at")
-	RegistryInvalidPathsKey          = attribute.Key("gram.registry.entry.invalid_paths") // JSON Pointers to the record fields that failed validation
-	RegistryEntryNameKey             = attribute.Key("gram.registry.entry.name")
-	RegistrySeedOutcomeKey           = attribute.Key("gram.registry.seed.outcome")
-	AICatalogSeedVersionKey          = attribute.Key("gram.ai_catalog.seed.version")
-	AICatalogProductsInsertedKey     = attribute.Key("gram.ai_catalog.products_inserted")
-	AICatalogDocumentsInsertedKey    = attribute.Key("gram.ai_catalog.documents_inserted")
-	AICatalogDecisionsLinkedKey      = attribute.Key("gram.ai_catalog.decisions_linked")
-	CIMDCandidatesScannedKey         = attribute.Key("gram.cimd.candidates_scanned")
-	CIMDCandidatesRecordedKey        = attribute.Key("gram.cimd.candidates_recorded")
-	CIMDCandidatesSkippedKey         = attribute.Key("gram.cimd.candidates_skipped")
-	AdminOIDCSubjectKey              = attribute.Key("gram.admin.oidc_subject")
-	AuthSourceKey                    = attribute.Key("gram.auth.source")
-	AuthorizationOrganizationIDKey   = attribute.Key("gram.authorization.organization_id")
-	AuthorizationActorTypeKey        = attribute.Key("gram.authorization.actor.type")
-	AuthorizationActorIDKey          = attribute.Key("gram.authorization.actor.id")
-	AuthorizationAPIKeyIDKey         = attribute.Key("gram.authorization.api_key_id")
-	AuthorizationAuthorizerUserIDKey = attribute.Key("gram.authorization.authorizer_user_id")
-	AuthorizationOwnerUserIDKey      = attribute.Key("gram.authorization.owner_user_id")
+	RegistryEntryIDKey                = attribute.Key("gram.registry.entry.id")
+	RegistryUpdatedAtKey              = attribute.Key("gram.registry.entry.updated_at")
+	RegistryInvalidPathsKey           = attribute.Key("gram.registry.entry.invalid_paths") // JSON Pointers to the record fields that failed validation
+	RegistryEntryNameKey              = attribute.Key("gram.registry.entry.name")
+	RegistrySeedOutcomeKey            = attribute.Key("gram.registry.seed.outcome")
+	AICatalogSeedVersionKey           = attribute.Key("gram.ai_catalog.seed.version")
+	AICatalogProductsInsertedKey      = attribute.Key("gram.ai_catalog.products_inserted")
+	AICatalogDocumentsInsertedKey     = attribute.Key("gram.ai_catalog.documents_inserted")
+	AICatalogDecisionsLinkedKey       = attribute.Key("gram.ai_catalog.decisions_linked")
+	CIMDCandidateRowsScannedKey       = attribute.Key("gram.cimd.candidate_rows_scanned")
+	CIMDCandidateSightingsRecordedKey = attribute.Key("gram.cimd.candidate_sightings_recorded")
+	CIMDCandidateRowsSkippedKey       = attribute.Key("gram.cimd.candidate_rows_skipped")
+	AdminOIDCSubjectKey               = attribute.Key("gram.admin.oidc_subject")
+	AuthSourceKey                     = attribute.Key("gram.auth.source")
+	AuthorizationOrganizationIDKey    = attribute.Key("gram.authorization.organization_id")
+	AuthorizationActorTypeKey         = attribute.Key("gram.authorization.actor.type")
+	AuthorizationActorIDKey           = attribute.Key("gram.authorization.actor.id")
+	AuthorizationAPIKeyIDKey          = attribute.Key("gram.authorization.api_key_id")
+	AuthorizationAuthorizerUserIDKey  = attribute.Key("gram.authorization.authorizer_user_id")
+	AuthorizationOwnerUserIDKey       = attribute.Key("gram.authorization.owner_user_id")
 
 	WideEventKey = attribute.Key("gram.wide_event")
 
@@ -4739,12 +4739,12 @@ func SlogAICatalogDocumentsInserted(v int64) slog.Attr {
 func SlogAICatalogDecisionsLinked(v int64) slog.Attr {
 	return slog.Int64(string(AICatalogDecisionsLinkedKey), v)
 }
-func SlogCIMDCandidatesScanned(v int64) slog.Attr {
-	return slog.Int64(string(CIMDCandidatesScannedKey), v)
+func SlogCIMDCandidateRowsScanned(v int64) slog.Attr {
+	return slog.Int64(string(CIMDCandidateRowsScannedKey), v)
 }
-func SlogCIMDCandidatesRecorded(v int64) slog.Attr {
-	return slog.Int64(string(CIMDCandidatesRecordedKey), v)
+func SlogCIMDCandidateSightingsRecorded(v int64) slog.Attr {
+	return slog.Int64(string(CIMDCandidateSightingsRecordedKey), v)
 }
-func SlogCIMDCandidatesSkipped(v int64) slog.Attr {
-	return slog.Int64(string(CIMDCandidatesSkippedKey), v)
+func SlogCIMDCandidateRowsSkipped(v int64) slog.Attr {
+	return slog.Int64(string(CIMDCandidateRowsSkippedKey), v)
 }

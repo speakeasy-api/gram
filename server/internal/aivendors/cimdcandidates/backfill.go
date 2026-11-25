@@ -29,6 +29,11 @@ const (
 	// upsert writes, so each statement stays small however many clients a
 	// page of issuers holds.
 	backfillClientPage = 1000
+
+	// backfillMaxHeld bounds the rows held back for the final attach pass. They
+	// come only from issuers at their cap, and 10,000 rows of at most ~2 KiB
+	// URLs stay within tens of MiB; rows past it are skipped.
+	backfillMaxHeld = 10_000
 )
 
 // BackfillCounts reports what one backfill run did.
@@ -60,12 +65,12 @@ type BackfillCounts struct {
 // after every page has run, attached to whichever of those URLs another
 // issuer created, so one run converges and a second run changes nothing.
 func Backfill(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, catalog *aivendors.Snapshot, assistantOrigin *url.URL) (BackfillCounts, error) {
-	return backfill(ctx, logger, db, catalog, assistantOrigin, backfillIssuerPage, backfillClientPage)
+	return backfill(ctx, logger, db, catalog, assistantOrigin, backfillIssuerPage, backfillClientPage, backfillMaxHeld)
 }
 
-// backfill is Backfill with its page sizes as parameters, so tests can cross
-// page boundaries with a handful of rows.
-func backfill(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, catalog *aivendors.Snapshot, assistantOrigin *url.URL, issuerPage, clientPage int32) (BackfillCounts, error) {
+// backfill is Backfill with its page sizes and held-row bound as parameters,
+// so tests can cross those limits with a handful of rows.
+func backfill(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, catalog *aivendors.Snapshot, assistantOrigin *url.URL, issuerPage, clientPage int32, maxHeld int) (BackfillCounts, error) {
 	counts := BackfillCounts{Scanned: 0, Recorded: 0, Skipped: 0}
 	compiled := aivendors.CompiledSnapshot()
 	q := repo.New(db)
@@ -132,7 +137,16 @@ func backfill(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, catalo
 			if err != nil {
 				return counts, err
 			}
-			deferred = append(deferred, held...)
+			for _, c := range held {
+				if len(deferred) < maxHeld {
+					deferred = append(deferred, c)
+					continue
+				}
+				if counts.Skipped == 0 {
+					logger.WarnContext(ctx, "cimd client candidate backfill holds its maximum of capped rows; skipping the rest")
+				}
+				counts.Skipped++
+			}
 			n, err := writeBatch(ctx, q, include)
 			if err != nil {
 				return counts, err
@@ -143,9 +157,9 @@ func backfill(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, catalo
 			}
 		}
 		logger.InfoContext(ctx, "cimd client candidate backfill progress",
-			attr.SlogCIMDCandidatesScanned(counts.Scanned),
-			attr.SlogCIMDCandidatesRecorded(counts.Recorded),
-			attr.SlogCIMDCandidatesSkipped(int64(len(deferred))),
+			attr.SlogCIMDCandidateRowsScanned(counts.Scanned),
+			attr.SlogCIMDCandidateSightingsRecorded(counts.Recorded),
+			attr.SlogCIMDCandidateRowsSkipped(counts.Skipped+int64(len(deferred))),
 		)
 	}
 
@@ -171,9 +185,9 @@ func backfill(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, catalo
 	}
 
 	logger.InfoContext(ctx, "cimd client candidate backfill applied",
-		attr.SlogCIMDCandidatesScanned(counts.Scanned),
-		attr.SlogCIMDCandidatesRecorded(counts.Recorded),
-		attr.SlogCIMDCandidatesSkipped(counts.Skipped),
+		attr.SlogCIMDCandidateRowsScanned(counts.Scanned),
+		attr.SlogCIMDCandidateSightingsRecorded(counts.Recorded),
+		attr.SlogCIMDCandidateRowsSkipped(counts.Skipped),
 	)
 	return counts, nil
 }

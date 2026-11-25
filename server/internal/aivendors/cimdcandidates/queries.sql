@@ -10,8 +10,10 @@
 -- it slightly.
 -- name: RecordSighting :execrows
 WITH live_issuer AS (
-  SELECT iss.id, iss.organization_id
+  -- A project-level issuer may leave organization_id unset; its project names it.
+  SELECT iss.id, COALESCE(iss.organization_id, project.organization_id) AS organization_id
   FROM user_session_issuers AS iss
+  LEFT JOIN projects AS project ON project.id = iss.project_id
   WHERE iss.id = @user_session_issuer_id::uuid
     AND iss.deleted IS FALSE
 ),
@@ -124,15 +126,19 @@ WITH batch AS (
     unnest(@user_session_issuer_ids::uuid[]) AS user_session_issuer_id
 ),
 input AS (
-  SELECT batch.*, iss.organization_id
+  SELECT batch.*, COALESCE(iss.organization_id, project.organization_id) AS organization_id
   FROM batch
   JOIN user_session_issuers AS iss ON iss.id = batch.user_session_issuer_id
+  LEFT JOIN projects AS project ON project.id = iss.project_id
   WHERE iss.deleted IS FALSE
 ),
 per_url AS (
   SELECT
     input.url,
     (array_agg(input.client_name ORDER BY input.last_seen_at DESC) FILTER (WHERE input.client_name <> ''))[1] AS client_name,
+    -- When the chosen name was seen, which the name rule compares rather
+    -- than the newest row of the URL.
+    max(input.last_seen_at) FILTER (WHERE input.client_name <> '') AS name_seen_at,
     min(input.first_seen_at) AS first_seen_at,
     max(input.last_seen_at) AS last_seen_at
   FROM input
@@ -146,7 +152,9 @@ candidate AS (
     client_name = CASE
       WHEN c.status <> 'pending' THEN c.client_name
       WHEN c.client_name IS NULL THEN EXCLUDED.client_name
-      WHEN EXCLUDED.client_name IS NOT NULL AND EXCLUDED.last_seen_at >= c.last_seen_at THEN EXCLUDED.client_name
+      WHEN EXCLUDED.client_name IS NOT NULL
+        AND (SELECT per_url.name_seen_at FROM per_url WHERE per_url.url = EXCLUDED.url) >= c.last_seen_at
+        THEN EXCLUDED.client_name
       ELSE c.client_name
     END,
     first_seen_at = CASE WHEN c.status = 'pending' THEN LEAST(c.first_seen_at, EXCLUDED.first_seen_at) ELSE c.first_seen_at END,
