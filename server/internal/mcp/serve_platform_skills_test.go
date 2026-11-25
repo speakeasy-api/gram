@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"maps"
@@ -28,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/skills/skilltree"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
@@ -171,6 +173,12 @@ func TestServePlatformToolset_Skills_ListIsTheEmbeddedSet(t *testing.T) {
 		require.Equal(t, skill.URI, skill.Resources[0].URI)
 		require.Equal(t, "sha256:"+hex.EncodeToString(digest[:]), skill.Resources[0].Digest)
 		require.Equal(t, len(content), skill.Resources[0].Size)
+		for i, file := range source.Files {
+			resource := skill.Resources[i+1]
+			require.Equal(t, mcpskills.SkillFileURI(mcpskills.EmbeddedProjectSlug, name, file.Path), resource.URI)
+			require.Equal(t, "sha256:"+file.SHA256, resource.Digest, "uri=%s", resource.URI)
+			require.Equal(t, int(file.Size), resource.Size, "uri=%s", resource.URI)
+		}
 	}
 	require.Equal(t, slices.Sorted(maps.Keys(embedded)), names, "listing is every embedded skill once, sorted by name")
 }
@@ -238,6 +246,29 @@ func TestServePlatformToolset_Skills_ReadServesEmbeddedBytesWithoutActivation(t 
 		require.Equal(t, uri, contents[0].URI)
 		require.Equal(t, "text/markdown", contents[0].MimeType)
 		require.Equal(t, string(content), contents[0].Text, "the served bytes are the embedded ones")
+
+		for _, file := range source.Files {
+			fileURI := mcpskills.SkillFileURI(mcpskills.EmbeddedProjectSlug, name, file.Path)
+			w, err := servePlatformHTTP(t, ti, f.slug, makeMetaRPCBody(t, mcpversions.MethodResourcesRead, map[string]any{"uri": fileURI}), f.token)
+			require.NoError(t, err)
+			result := requireRPCResult(t, w)
+
+			var fileContents []struct {
+				URI      string `json:"uri"`
+				MimeType string `json:"mimeType"`
+				Text     string `json:"text"`
+				Blob     string `json:"blob"`
+			}
+			require.NoError(t, json.Unmarshal(result["contents"], &fileContents))
+			require.Len(t, fileContents, 1)
+			require.Equal(t, fileURI, fileContents[0].URI)
+			require.Equal(t, file.ContentType, fileContents[0].MimeType, "uri=%s", fileURI)
+			if skilltree.IsText(file.ContentType, file.Content) {
+				require.Equal(t, string(file.Content), fileContents[0].Text, "uri=%s", fileURI)
+			} else {
+				require.Equal(t, base64.StdEncoding.EncodeToString(file.Content), fileContents[0].Blob, "uri=%s", fileURI)
+			}
+		}
 	}
 
 	// Embedded skills belong to no stored version, so a read is no activation.

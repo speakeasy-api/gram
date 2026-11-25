@@ -2333,9 +2333,9 @@ func (s *Service) GetShared(ctx context.Context, payload *gen.GetSharedPayload) 
 		Summary:        conv.FromPGText[string](row.Summary),
 		Content:        row.Content,
 		UpdatedAt:      conv.FromPGTimestamptz(row.VersionCreatedAt),
-		CacheControl:   conv.PtrEmpty("private, max-age=300"),
-		XRobotsTag:     conv.PtrEmpty("noindex, nofollow"),
-		ReferrerPolicy: conv.PtrEmpty("no-referrer"),
+		CacheControl:   conv.PtrEmpty(sharedSkillCacheControl),
+		XRobotsTag:     conv.PtrEmpty(sharedSkillXRobotsTag),
+		ReferrerPolicy: conv.PtrEmpty(sharedSkillReferrerPolicy),
 		Files:          files,
 		ArchivePath:    archivePath,
 	}, nil

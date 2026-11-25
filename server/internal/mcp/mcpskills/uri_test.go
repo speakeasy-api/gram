@@ -104,11 +104,15 @@ func TestParseSkillResourceURIRoundTrip(t *testing.T) {
 	t.Parallel()
 
 	for _, filePath := range []string{"references/REFERENCE.md", "assets/a b/c#d?.png", "scripts/run.py"} {
-		slug, name, parsed, ok := mcpskills.ParseSkillResourceURI(mcpskills.SkillFileURI("default", "pdf", filePath))
-		require.True(t, ok, filePath)
-		require.Equal(t, "default", slug)
-		require.Equal(t, "pdf", name)
-		require.Equal(t, filePath, parsed)
+		t.Run(filePath, func(t *testing.T) {
+			t.Parallel()
+
+			slug, name, parsed, ok := mcpskills.ParseSkillResourceURI(mcpskills.SkillFileURI("default", "pdf", filePath))
+			require.True(t, ok)
+			require.Equal(t, "default", slug)
+			require.Equal(t, "pdf", name)
+			require.Equal(t, filePath, parsed)
+		})
 	}
 }
 

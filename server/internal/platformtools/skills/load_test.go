@@ -60,6 +60,11 @@ func TestSkillsLoadListsAndReadsSupportingFiles(t *testing.T) {
 	}
 	tool := NewLoadTool(testenv.NewLogger(t), fixture.conn)
 	chatID := uuid.NewString()
+	// Supporting-file reads run in chats of their own: an activation is keyed
+	// by chat, so one recorded there would add an observation rather than
+	// refresh the one the SKILL.md load wrote.
+	fileChatID := uuid.NewString()
+	missingChatID := uuid.NewString()
 
 	var out bytes.Buffer
 	require.NoError(t, tool.Call(ctx, skillToolCallEnv(chatID), bytes.NewBufferString(`{"name":"directory-skill"}`), &out))
@@ -68,11 +73,11 @@ func TestSkillsLoadListsAndReadsSupportingFiles(t *testing.T) {
 	require.Contains(t, out.String(), "- references/FORMS.md (text/markdown; charset=utf-8, ")
 
 	out.Reset()
-	require.NoError(t, tool.Call(ctx, skillToolCallEnv(chatID), bytes.NewBufferString(`{"name":"directory-skill","path":"references/FORMS.md"}`), &out))
+	require.NoError(t, tool.Call(ctx, skillToolCallEnv(fileChatID), bytes.NewBufferString(`{"name":"directory-skill","path":"references/FORMS.md"}`), &out))
 	require.Equal(t, reference, out.String())
 
 	out.Reset()
-	require.NoError(t, tool.Call(ctx, skillToolCallEnv(chatID), bytes.NewBufferString(`{"name":"directory-skill","path":"assets/logo.png"}`), &out))
+	require.NoError(t, tool.Call(ctx, skillToolCallEnv(fileChatID), bytes.NewBufferString(`{"name":"directory-skill","path":"assets/logo.png"}`), &out))
 	require.Contains(t, out.String(), "assets/logo.png is a binary file (image/png, 5 bytes")
 	require.NotContains(t, out.String(), string(logo))
 
@@ -80,7 +85,7 @@ func TestSkillsLoadListsAndReadsSupportingFiles(t *testing.T) {
 	require.NoError(t, tool.Call(ctx, skillToolCallEnv(chatID), bytes.NewBufferString(`{"name":"directory-skill","path":"SKILL.md"}`), &out))
 	require.True(t, strings.HasPrefix(out.String(), fixture.version.Content))
 
-	err := tool.Call(ctx, skillToolCallEnv(chatID), bytes.NewBufferString(`{"name":"directory-skill","path":"references/MISSING.md"}`), &out)
+	err := tool.Call(ctx, skillToolCallEnv(missingChatID), bytes.NewBufferString(`{"name":"directory-skill","path":"references/MISSING.md"}`), &out)
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeNotFound, oopsErr.Code)

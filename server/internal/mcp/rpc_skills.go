@@ -122,28 +122,42 @@ func marshalSkillsGet(ctx context.Context, logger *slog.Logger, id mcpjsonrpc.ID
 	return bs, nil
 }
 
+// skillReadResult is the resources/read result for one file of a served
+// skill.
+type skillReadResult struct {
+	Contents []skillResourceContent `json:"contents"`
+}
+
+// skillResourceContent is resourceContent with text and blob as pointers, so
+// an empty file (an empty scripts/__init__.py, say) still carries the one
+// field MCP requires: "text": "" or "blob": "", never neither.
+type skillResourceContent struct {
+	URI      string  `json:"uri"`
+	MimeType string  `json:"mimeType"`
+	Text     *string `json:"text,omitempty"`
+	Blob     *string `json:"blob,omitempty"`
+}
+
 // marshalSkillRead renders a resources/read response carrying one file of a
 // served skill: exactly the bytes its digest covers, as text for UTF-8 text
 // and as a base64 blob otherwise, under the file's media type.
 func marshalSkillRead(ctx context.Context, logger *slog.Logger, id mcpjsonrpc.ID, resource mcpskills.Resource, identity serverInfo) (json.RawMessage, error) {
-	content := resourceContent{
+	content := skillResourceContent{
 		URI:      resource.URI,
-		Name:     nil,
-		MimeType: new(resource.MimeType),
-		Text:     "",
-		Blob:     "",
-		Meta:     nil,
+		MimeType: resource.MimeType,
+		Text:     nil,
+		Blob:     nil,
 	}
 	if resource.Text {
-		content.Text = string(resource.Content)
+		content.Text = new(string(resource.Content))
 	} else {
-		content.Blob = base64.StdEncoding.EncodeToString(resource.Content)
+		content.Blob = new(base64.StdEncoding.EncodeToString(resource.Content))
 	}
 
-	bs, err := json.Marshal(result[resourceReadResult]{
+	bs, err := json.Marshal(result[skillReadResult]{
 		ID: id,
-		Result: resourceReadResult{
-			Contents: []resourceContent{content},
+		Result: skillReadResult{
+			Contents: []skillResourceContent{content},
 		},
 		serverIdentity: identity,
 		cacheHints:     cacheHintsCallerVarying,

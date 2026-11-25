@@ -22,6 +22,9 @@ func TestIsText(t *testing.T) {
 		{name: "json", contentType: "application/json", content: []byte("{}"), want: true},
 		{name: "png", contentType: "image/png", content: []byte{0x89, 'P', 'N', 'G'}, want: false},
 		{name: "text type with invalid utf-8", contentType: "text/plain", content: []byte{0xff, 0xfe}, want: false},
+		{name: "json structured suffix", contentType: "application/ld+json", content: []byte("{}"), want: true},
+		{name: "xml structured suffix", contentType: "application/atom+xml", content: []byte("<feed/>"), want: true},
+		{name: "malformed parameters", contentType: "application/json; charset", content: []byte("{}"), want: true},
 		{name: "octet stream", contentType: "application/octet-stream", content: []byte("abc"), want: false},
 	}
 	for _, tc := range cases {

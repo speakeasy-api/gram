@@ -698,7 +698,7 @@ var _ = Service("skills", func() {
 	})
 
 	Method("getShared", func() {
-		Description("Fetch the publicly shared view of a skill by its share token. This endpoint is unauthenticated and only ever exposes the skill name, display name, summary, and latest content.")
+		Description("Fetch the publicly shared view of a skill by its share token. This endpoint is unauthenticated and only ever exposes the skill name, display name, summary, latest content, the path, digest, size and media type of each supporting file, and the path of the skill's ZIP download.")
 
 		Payload(func() {
 			Attribute("token", String, "The public share token.", func() {

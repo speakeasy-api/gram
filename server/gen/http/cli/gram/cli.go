@@ -30311,7 +30311,7 @@ func skillsUsage() {
 	fmt.Fprintln(os.Stderr, `    undistribute: Revoke a skill's active distribution to exactly one plugin or assistant. Repeated requests are a no-op.`)
 	fmt.Fprintln(os.Stderr, `    share: Create a public share link for a skill. Repeated requests return the existing active link, so each skill has at most one active share token.`)
 	fmt.Fprintln(os.Stderr, `    unshare: Revoke a skill's active public share link. Repeated requests are a no-op.`)
-	fmt.Fprintln(os.Stderr, `    get-shared: Fetch the publicly shared view of a skill by its share token. This endpoint is unauthenticated and only ever exposes the skill name, display name, summary, and latest content.`)
+	fmt.Fprintln(os.Stderr, `    get-shared: Fetch the publicly shared view of a skill by its share token. This endpoint is unauthenticated and only ever exposes the skill name, display name, summary, latest content, the path, digest, size and media type of each supporting file, and the path of the skill's ZIP download.`)
 	fmt.Fprintln(os.Stderr, `    download-shared: Download a shared skill's whole directory as a ZIP (<name>/SKILL.md plus <name>/<path> for every supporting file) by its share token. Unauthenticated, like getShared.`)
 	fmt.Fprintln(os.Stderr, `    list-distributions: List active plugin skill distributions for the current project.`)
 	fmt.Fprintln(os.Stderr, `    link: Link a skill to exactly one MCP surface that serves it over MCP. Repeating the request for the same skill and target updates the version pin or is a no-op. Requires the skills-over-mcp rollout for the organization.`)
@@ -30889,7 +30889,7 @@ func skillsGetSharedUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Fetch the publicly shared view of a skill by its share token. This endpoint is unauthenticated and only ever exposes the skill name, display name, summary, and latest content.`)
+	fmt.Fprintln(os.Stderr, `Fetch the publicly shared view of a skill by its share token. This endpoint is unauthenticated and only ever exposes the skill name, display name, summary, latest content, the path, digest, size and media type of each supporting file, and the path of the skill's ZIP download.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -token STRING: `)

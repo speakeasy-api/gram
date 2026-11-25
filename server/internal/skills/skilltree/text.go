@@ -23,12 +23,21 @@ var textMediaTypes = map[string]bool{
 // media type is a text type and its content is valid UTF-8. Surfaces that
 // return file content use it to choose between text and a binary encoding.
 func IsText(contentType string, content []byte) bool {
+	return isTextMediaType(contentType) && utf8.Valid(content)
+}
+
+// isTextMediaType reports whether a content type names text: text/*, a known
+// text-based application type, or a +json or +xml structured-syntax suffix.
+// A malformed content type is judged by its media type with any parameters
+// removed.
+func isTextMediaType(contentType string) bool {
 	mediaType, _, err := mime.ParseMediaType(contentType)
 	if err != nil {
-		mediaType = strings.ToLower(strings.TrimSpace(contentType))
+		mediaType, _, _ = strings.Cut(contentType, ";")
+		mediaType = strings.ToLower(strings.TrimSpace(mediaType))
 	}
-	if !strings.HasPrefix(mediaType, "text/") && !textMediaTypes[mediaType] {
-		return false
-	}
-	return utf8.Valid(content)
+	return strings.HasPrefix(mediaType, "text/") ||
+		textMediaTypes[mediaType] ||
+		strings.HasSuffix(mediaType, "+json") ||
+		strings.HasSuffix(mediaType, "+xml")
 }

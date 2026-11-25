@@ -45,6 +45,15 @@ const (
 // the skill through Content-Disposition.
 const sharedSkillArchiveName = "skill.zip"
 
+// The header policy of every shared skill response, the getShared JSON
+// endpoint included: short-lived private caching, no search indexing, and no
+// referrer leakage of the capability URL.
+const (
+	sharedSkillCacheControl   = "private, max-age=300"
+	sharedSkillXRobotsTag     = "noindex, nofollow"
+	sharedSkillReferrerPolicy = "no-referrer"
+)
+
 type sharedSkillPageData struct {
 	Unavailable  bool
 	DisplayName  string
@@ -190,7 +199,7 @@ func (s *Service) ServeSharedSkillArchive(w http.ResponseWriter, r *http.Request
 		return err
 	}
 
-	archive, err := s.sharedSkillArchive(ctx, row.ProjectID, row.SkillID, row.SkillVersionID, row.Name, row.Content)
+	files, err := s.sharedSkillArchiveFiles(ctx, row.ProjectID, row.SkillID, row.SkillVersionID)
 	if err != nil {
 		return err
 	}
@@ -199,7 +208,9 @@ func (s *Service) ServeSharedSkillArchive(w http.ResponseWriter, r *http.Request
 	w.Header().Set("Content-Type", "application/zip")
 	w.Header().Set("Content-Disposition", sharedSkillArchiveDisposition(row.Name))
 	w.WriteHeader(http.StatusOK)
-	if _, err := w.Write(archive); err != nil {
+	// The archive streams straight to the response. The files were validated
+	// above, so the only failure left is writing to the client.
+	if err := writeSkillArchive(w, row.Name, row.Content, files); err != nil {
 		return fmt.Errorf("write shared skill archive: %w", err)
 	}
 
@@ -219,18 +230,26 @@ func (s *Service) DownloadShared(ctx context.Context, payload *gen.DownloadShare
 		return nil, nil, oops.E(oops.CodeUnexpected, err, "get shared skill").LogError(ctx, s.logger)
 	}
 
-	archive, err := s.sharedSkillArchive(ctx, row.ProjectID, row.SkillID, row.SkillVersionID, row.Name, row.Content)
+	files, err := s.sharedSkillArchiveFiles(ctx, row.ProjectID, row.SkillID, row.SkillVersionID)
 	if err != nil {
 		return nil, nil, err
 	}
 
+	// The archive streams to the response through a pipe rather than being
+	// buffered a second time next to the file contents. The writer stops when
+	// the response body is closed.
+	pr, pw := io.Pipe()
+	go func() {
+		pw.CloseWithError(writeSkillArchive(pw, row.Name, row.Content, files))
+	}()
+
 	return &gen.DownloadSharedResult{
 		ContentType:        "application/zip",
 		ContentDisposition: sharedSkillArchiveDisposition(row.Name),
-		CacheControl:       "private, max-age=300",
-		XRobotsTag:         "noindex, nofollow",
-		ReferrerPolicy:     "no-referrer",
-	}, io.NopCloser(bytes.NewReader(archive)), nil
+		CacheControl:       sharedSkillCacheControl,
+		XRobotsTag:         sharedSkillXRobotsTag,
+		ReferrerPolicy:     sharedSkillReferrerPolicy,
+	}, pr, nil
 }
 
 // sharedSkillFiles returns a shared version's supporting files and, when it
@@ -261,8 +280,10 @@ func (s *Service) sharedSkillFiles(ctx context.Context, projectID, skillID, vers
 	return files, &archivePath, nil
 }
 
-// sharedSkillArchive builds the ZIP of a shared skill version.
-func (s *Service) sharedSkillArchive(ctx context.Context, projectID, skillID, versionID uuid.UUID, name, manifest string) ([]byte, error) {
+// sharedSkillArchiveFiles loads the supporting files of a shared skill
+// version for its ZIP. A stored path that fails validation fails the download
+// rather than producing an archive missing a file the share page lists.
+func (s *Service) sharedSkillArchiveFiles(ctx context.Context, projectID, skillID, versionID uuid.UUID) ([]repo.ListSkillVersionFilesRow, error) {
 	files, err := repo.New(s.db).ListSkillVersionFiles(ctx, repo.ListSkillVersionFilesParams{
 		ProjectID:      projectID,
 		SkillID:        skillID,
@@ -271,12 +292,12 @@ func (s *Service) sharedSkillArchive(ctx context.Context, projectID, skillID, ve
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list shared skill files").LogError(ctx, s.logger)
 	}
-
-	var buf bytes.Buffer
-	if err := writeSkillArchive(&buf, name, manifest, files); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "build shared skill archive").LogError(ctx, s.logger)
+	for _, file := range files {
+		if err := skilltree.ValidatePath(file.Path); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "invalid shared skill file path").LogError(ctx, s.logger)
+		}
 	}
-	return buf.Bytes(), nil
+	return files, nil
 }
 
 func sharedSkillArchiveDisposition(name string) string {
@@ -316,17 +337,18 @@ func (s *Service) sharedSkillForDomain(w http.ResponseWriter, r *http.Request) (
 // writeSkillArchive writes a skill directory as a deterministic ZIP rooted at
 // a directory named after the skill. Files under scripts/ are marked
 // executable, since the Agent Skills specification puts runnable code there.
+// A file whose path fails validation is an error, never silently left out.
 func writeSkillArchive(w io.Writer, name, manifest string, files []repo.ListSkillVersionFilesRow) error {
 	zw := zip.NewWriter(w)
 	if err := writeSkillArchiveEntry(zw, path.Join(name, skilltree.ManifestPath), []byte(manifest), 0o644); err != nil {
 		return err
 	}
 	for _, file := range files {
-		if skilltree.ValidatePath(file.Path) != nil {
-			continue
+		if err := skilltree.ValidatePath(file.Path); err != nil {
+			return fmt.Errorf("skill archive entry: %w", err)
 		}
 		var mode os.FileMode = 0o644
-		if strings.HasPrefix(file.Path, "scripts/") {
+		if skilltree.IsScript(file.Path) {
 			mode = 0o755
 		}
 		if err := writeSkillArchiveEntry(zw, path.Join(name, file.Path), file.Content, mode); err != nil {
@@ -377,7 +399,9 @@ func formatFileSize(size int64) string {
 		return fmt.Sprintf("%d B", size)
 	}
 	value, suffix := float64(size)/unit, "KB"
-	if value >= unit {
+	// Compare after rounding to one decimal, so a size just under 1 MB shows
+	// as "1.0 MB" rather than "1024.0 KB".
+	if value >= unit-0.05 {
 		value, suffix = value/unit, "MB"
 	}
 	return fmt.Sprintf("%.1f %s", value, suffix)
@@ -400,13 +424,12 @@ func renderSharedSkillPage(w http.ResponseWriter, status int, data sharedSkillPa
 	return nil
 }
 
-// setSharedSkillResponseHeaders mirrors the header policy of the
-// /rpc/skills.getShared JSON endpoint: short-lived private caching, no search
-// indexing, and no referrer leakage of the capability URL.
+// setSharedSkillResponseHeaders applies the shared skill header policy to a
+// response the service writes directly.
 func setSharedSkillResponseHeaders(w http.ResponseWriter) {
-	w.Header().Set("Cache-Control", "private, max-age=300")
-	w.Header().Set("X-Robots-Tag", "noindex, nofollow")
-	w.Header().Set("Referrer-Policy", "no-referrer")
+	w.Header().Set("Cache-Control", sharedSkillCacheControl)
+	w.Header().Set("X-Robots-Tag", sharedSkillXRobotsTag)
+	w.Header().Set("Referrer-Policy", sharedSkillReferrerPolicy)
 }
 
 // stripSkillFrontmatter removes the leading YAML frontmatter block from a

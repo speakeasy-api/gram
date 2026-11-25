@@ -63,6 +63,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
+	"github.com/speakeasy-api/gram/server/internal/skills/skilltree"
 	"github.com/speakeasy-api/gram/server/internal/staff"
 	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -1699,21 +1700,6 @@ func (s *Service) DownloadCodexInstallScript(ctx context.Context, payload *gen.D
 	}, io.NopCloser(bytes.NewReader(script)), nil
 }
 
-// isSkillScript reports whether a package path is a file in a distributed
-// skill's scripts/ directory (.../skills/<name>/scripts/...). The Agent
-// Skills specification puts executable code there, so packages mark those
-// files executable whatever their extension. The GitHub publish path applies
-// the same rule in thirdparty/github/repo.go; keep them in sync.
-func isSkillScript(p string) bool {
-	segments := strings.Split(p, "/")
-	for i := 0; i+3 < len(segments); i++ {
-		if segments[i] == "skills" && segments[i+2] == "scripts" {
-			return true
-		}
-	}
-	return false
-}
-
 // writePluginZip serializes the file map as a deterministic ZIP, marking shell
 // scripts and skill scripts executable so they run after extraction. The GitHub
 // publish path applies the same rule via Tree mode 100755 in
@@ -1758,7 +1744,7 @@ func writePluginZip(w io.Writer, files map[string][]byte) error {
 			// The root install script embeds the hooks API key, so it stays
 			// owner-only while still runnable.
 			mode = 0o700
-		case strings.HasSuffix(p, ".sh"), isSkillScript(p):
+		case strings.HasSuffix(p, ".sh"), skilltree.IsPackagedScript(p):
 			mode = 0o755
 		case path.Base(p) == "speakeasy.json":
 			// Carries the hooks API key, so extraction must leave it owner-only.
@@ -3668,13 +3654,17 @@ func (s *Service) resolvePluginInfosInTx(ctx context.Context, tx pgx.Tx, organiz
 	for _, sk := range skillRows {
 		skillVersionIDs = append(skillVersionIDs, sk.SkillVersionID)
 	}
-	skillFileRows, err := lockedRepo.ListPluginSkillFilesForProject(ctx, repo.ListPluginSkillFilesForProjectParams{ProjectID: projectID, SkillVersionIds: skillVersionIDs})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list plugin skill files").LogError(ctx, s.logger)
-	}
+	// Every package path fingerprints and publishes the whole skill
+	// directory, so the files are loaded with their content like SKILL.md.
 	skillFiles := make(map[uuid.UUID][]PluginSkillFile)
-	for _, file := range skillFileRows {
-		skillFiles[file.SkillVersionID] = append(skillFiles[file.SkillVersionID], PluginSkillFile{Path: file.Path, Content: file.Content})
+	if len(skillVersionIDs) > 0 {
+		skillFileRows, err := lockedRepo.ListPluginSkillFilesForProject(ctx, repo.ListPluginSkillFilesForProjectParams{ProjectID: projectID, SkillVersionIds: skillVersionIDs})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "list plugin skill files").LogError(ctx, s.logger)
+		}
+		for _, file := range skillFileRows {
+			skillFiles[file.SkillVersionID] = append(skillFiles[file.SkillVersionID], PluginSkillFile{Path: file.Path, Content: file.Content})
+		}
 	}
 	envRows, err := lockedRepo.ListPluginEnvironmentConfigsForProject(ctx, repo.ListPluginEnvironmentConfigsForProjectParams{ProjectID: projectID, PluginIds: pluginIDs})
 	if err != nil {

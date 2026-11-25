@@ -457,6 +457,25 @@ func TestServePublic_Skills_ListsAndReadsSupportingFilesWithoutActivation(t *tes
 	require.Empty(t, binary.Text)
 	require.Equal(t, base64.StdEncoding.EncodeToString(logo), binary.Blob)
 
+	// An empty file still carries exactly one of text and blob, which MCP
+	// requires of every resource content.
+	for _, file := range []struct{ path, contentType, field, absent string }{
+		{path: "scripts/__init__.py", contentType: "text/x-python", field: "text", absent: "blob"},
+		{path: "assets/empty.bin", contentType: "application/octet-stream", field: "blob", absent: "text"},
+	} {
+		require.NoError(t, skillsQueries.CreateSkillVersionFile(ctx, skillsrepo.CreateSkillVersionFileParams{
+			Path: file.path, Content: []byte{}, Sha256: rawSHA256(""), SizeBytes: 0,
+			ContentType: file.contentType, ProjectID: f.projectID, SkillID: skill.ID, SkillVersionID: version.ID,
+		}))
+		w, err := servePublicHTTP(t, ctx, ti, f.mcpSlug, makeMetaRPCBody(t, mcpversions.MethodResourcesRead, map[string]any{"uri": mcpskills.SkillFileURI(f.projectSlug, "pdf-tools", file.path)}), "", session)
+		require.NoError(t, err)
+		var contents []map[string]json.RawMessage
+		require.NoError(t, json.Unmarshal(requireRPCResult(t, w)["contents"], &contents))
+		require.Len(t, contents, 1)
+		require.JSONEq(t, `""`, string(contents[0][file.field]), "path=%s", file.path)
+		require.NotContains(t, contents[0], file.absent, "path=%s", file.path)
+	}
+
 	observations, err := testrepo.New(ti.conn).ListMCPSkillObservations(ctx, testrepo.ListMCPSkillObservationsParams{
 		ProjectID: f.projectID, Provider: mcpskills.ObservationProvider,
 	})

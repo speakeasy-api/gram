@@ -10,9 +10,9 @@ Two surfaces serve skills.
 
 **Hosted MCP servers.** A hosted MCP server, the organization MCP server and the organization gateway serve the managed skills linked to them (see [Who receives which skills](#who-receives-which-skills)). Each entry is the skill's current served version: the version the link is pinned to, or else the latest version that passes Agent Skills validation. Versions that fail validation are never served, even when they are newer.
 
-**The Platform MCP.** Both Platform MCP endpoints serve the reviewed Platform MCP skills that ship inside the Platform plugin, straight from the binary: the external Platform MCP at `/platform-mcp`, which administrators reach through the Platform plugin with OAuth, and the platform toolset at `/platform/mcp/{toolsetSlug}`, which managed assistants call with their runtime token. Both build their catalog from `mcpskills.NewEmbeddedCatalog`, and its entries are the same `SKILL.md` files kept under `server/internal/plugins/platform_mcp_skills/<name>/SKILL.md`, so what the plugin package carries and what the endpoints serve are byte-identical. Embedded skills belong to no project, so their URIs use the fixed slug `speakeasy`: `skill://speakeasy/<name>/SKILL.md`. Every caller whose organization has the flag receives the whole catalog; there is no per-caller filtering.
+**The Platform MCP.** Both Platform MCP endpoints serve the reviewed Platform MCP skills that ship inside the Platform plugin, straight from the binary: the external Platform MCP at `/platform-mcp`, which administrators reach through the Platform plugin with OAuth, and the platform toolset at `/platform/mcp/{toolsetSlug}`, which managed assistants call with their runtime token. Both build their catalog from `mcpskills.NewEmbeddedCatalog`, and its entries are the same skill directories kept under `server/internal/plugins/platform_mcp_skills/<name>/` (`SKILL.md` plus any supporting files), so what the plugin package carries and what the endpoints serve are byte-identical. Embedded skills belong to no project, so their URIs use the fixed slug `speakeasy`: `skill://speakeasy/<name>/SKILL.md`. Every caller whose organization has the flag receives the whole catalog; there is no per-caller filtering.
 
-A skill is served as a single file. Its entry has exactly one resource:
+A skill is served as a skill directory. Its entry has one resource for `SKILL.md`, first, then one per supporting file:
 
 | Field                 | Value                                                                                                                                                                                        |
 | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -23,7 +23,7 @@ A skill is served as a single file. Its entry has exactly one resource:
 | `resources[1..]`      | one entry per supporting file of the version, sorted by path: `uri` is `skill://<project-slug>/<name>/<path>`, `digest` is `sha256:<hex>` of the file's bytes, `size` their length           |
 | `frontmatter`         | the version's YAML frontmatter rendered verbatim as JSON: `name`, `description`, and every other field the author wrote                                                                      |
 
-A supporting file's URI percent-encodes a path segment only where URI syntax requires it, so typical paths such as `references/REFERENCE.md` appear verbatim, and each file has exactly one URI.
+A supporting file's URI percent-encodes each path segment with Go's `url.PathEscape`, so typical paths such as `references/REFERENCE.md` appear verbatim, and each file has exactly one URI.
 
 The frontmatter is never curated. `allowed-tools`, `license`, `metadata` and any future field appear only when the author wrote them. The extension requires the frontmatter `name` to equal the URI's `<name>` segment, the one immediately before `/SKILL.md`. Validation trims the name before checking it, so a version whose author quoted a padded name (`name: "refunds "`) is stored valid under the trimmed name while its frontmatter keeps the padding; such a version is never served (the resolver skips it with an error log, and the platform catalog refuses to build), so every served entry's frontmatter `name`, canonical name and URI name segment agree.
 
@@ -199,4 +199,4 @@ The Platform MCP's `search_docs` and `read_doc` tools index the pinned `mcp-setu
 
 ## Out of scope
 
-Deliberately not built in this iteration: multi-file skills and supporting files, `resources/directory/read`, change notifications when a listing changes, serving linked skills through remote MCP servers, and a non-zero cache TTL. A skill manifest is limited to 64 KiB, far under the extension's 16 MiB per-skill limit, so no entry needs the limit checks the extension describes.
+Deliberately not built in this iteration: `resources/directory/read`, change notifications when a listing changes, serving linked skills through remote MCP servers, and a non-zero cache TTL. A skill manifest is limited to 64 KiB and its supporting files to 10 MiB in total, under the extension's 16 MiB per-skill limit, so no entry needs the limit checks the extension describes.

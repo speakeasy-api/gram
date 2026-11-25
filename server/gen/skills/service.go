@@ -92,7 +92,8 @@ type Service interface {
 	Unshare(context.Context, *UnsharePayload) (err error)
 	// Fetch the publicly shared view of a skill by its share token. This endpoint
 	// is unauthenticated and only ever exposes the skill name, display name,
-	// summary, and latest content.
+	// summary, latest content, the path, digest, size and media type of each
+	// supporting file, and the path of the skill's ZIP download.
 	GetShared(context.Context, *GetSharedPayload) (res *SharedSkill, err error)
 	// Download a shared skill's whole directory as a ZIP (<name>/SKILL.md plus
 	// <name>/<path> for every supporting file) by its share token.

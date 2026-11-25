@@ -82329,7 +82329,7 @@ paths:
                 name: Skill
     /rpc/skills.getShared:
         get:
-            description: Fetch the publicly shared view of a skill by its share token. This endpoint is unauthenticated and only ever exposes the skill name, display name, summary, and latest content.
+            description: Fetch the publicly shared view of a skill by its share token. This endpoint is unauthenticated and only ever exposes the skill name, display name, summary, latest content, the path, digest, size and media type of each supporting file, and the path of the skill's ZIP download.
             operationId: getSharedSkill
             parameters:
                 - allowEmptyValue: true

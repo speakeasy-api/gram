@@ -109,10 +109,17 @@ func NewResolver(logger *slog.Logger, db database.DBTX) *Resolver {
 // skill, sorted by project slug and then name. A caller who is not a live member of the
 // organization yields no entries.
 func (r *Resolver) List(ctx context.Context, scope Scope) ([]Entry, error) {
-	return r.resolve(ctx, scope, skillKey{
+	entries, err := r.resolve(ctx, scope, skillKey{
 		projectSlug: pgtype.Text{String: "", Valid: false},
 		name:        pgtype.Text{String: "", Valid: false},
 	})
+	if err != nil {
+		return nil, err
+	}
+	if err := r.attachFiles(ctx, entries); err != nil {
+		return nil, err
+	}
+	return entries, nil
 }
 
 // skillKey narrows a resolution to one skill by its URI segments; unset
@@ -135,6 +142,10 @@ func (r *Resolver) Get(ctx context.Context, scope Scope, uri string) (*Entry, er
 	}
 	if len(entries) == 0 {
 		return nil, fmt.Errorf("%w: %s", ErrSkillNotFound, uri)
+	}
+	entries = entries[:1]
+	if err := r.attachFiles(ctx, entries); err != nil {
+		return nil, err
 	}
 	return &entries[0], nil
 }
@@ -238,15 +249,13 @@ func (r *Resolver) resolve(ctx context.Context, scope Scope, key skillKey) ([]En
 		}
 		entries = append(entries, entry)
 	}
-
-	if err := r.attachFiles(ctx, entries); err != nil {
-		return nil, err
-	}
 	return entries, nil
 }
 
 // attachFiles loads the supporting-file metadata of every entry's served
-// version in one query and sets each entry's Files.
+// version in one query and sets each entry's Files. resolve leaves Files
+// unset so that reading a SKILL.md, the activation path, never pays for it;
+// List, Get and supporting-file reads attach them.
 func (r *Resolver) attachFiles(ctx context.Context, entries []Entry) error {
 	if len(entries) == 0 {
 		return nil
@@ -303,9 +312,13 @@ func (r *Resolver) Read(ctx context.Context, scope Scope, uri string) (*Entry, R
 	if len(entries) == 0 {
 		return nil, resource, fmt.Errorf("%w: %s", ErrSkillNotFound, uri)
 	}
+	entries = entries[:1]
 	entry := &entries[0]
 	if filePath == "" {
 		return entry, entry.ManifestResource(), nil
+	}
+	if err := r.attachFiles(ctx, entries); err != nil {
+		return nil, resource, err
 	}
 
 	file, ok := entry.file(filePath)

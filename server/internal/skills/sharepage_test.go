@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -324,18 +325,23 @@ func TestDownloadSharedReturnsSkillDirectoryZip(t *testing.T) {
 	zr, err := zip.NewReader(bytes.NewReader(archive), int64(len(archive)))
 	require.NoError(t, err)
 	names := make([]string, 0, len(zr.File))
+	contents := make(map[string]string, len(zr.File))
+	modes := make(map[string]fs.FileMode, len(zr.File))
 	for _, file := range zr.File {
 		names = append(names, file.Name)
-		if file.Name == "downloaded-skill/SKILL.md" {
-			entry, err := file.Open()
-			require.NoError(t, err)
-			content, err := io.ReadAll(entry)
-			require.NoError(t, err)
-			require.NoError(t, entry.Close())
-			require.Equal(t, manifest, string(content))
-		}
+		entry, err := file.Open()
+		require.NoError(t, err)
+		content, err := io.ReadAll(entry)
+		require.NoError(t, err)
+		require.NoError(t, entry.Close())
+		contents[file.Name] = string(content)
+		modes[file.Name] = file.Mode().Perm()
 	}
 	require.ElementsMatch(t, []string{"downloaded-skill/SKILL.md", "downloaded-skill/scripts/run.py"}, names)
+	require.Equal(t, manifest, contents["downloaded-skill/SKILL.md"])
+	require.Equal(t, fs.FileMode(0o644), modes["downloaded-skill/SKILL.md"])
+	require.Equal(t, "print(1)\n", contents["downloaded-skill/scripts/run.py"])
+	require.Equal(t, fs.FileMode(0o755), modes["downloaded-skill/scripts/run.py"], "files under scripts/ are executable")
 
 	_, _, err = ti.service.DownloadShared(ctx, &gen.DownloadSharedPayload{Token: strings.Repeat("x", 43)})
 	requireOopsCode(t, err, oops.CodeNotFound)
