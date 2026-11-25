@@ -2,9 +2,7 @@ package gram
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"slices"
 	"strings"
 
 	"github.com/google/uuid"
@@ -39,41 +37,31 @@ func parseTranscriptShadowProjectIDs(values []string) ([]uuid.UUID, error) {
 }
 
 // transcriptShadow is the shadow store a process configured, and the projects
-// whose chat reads open shadows. Store is nil when no project captures shadows.
+// that use it. Store is nil when no project captures shadows.
 type transcriptShadow struct {
 	// Store seals and opens shadow copies.
 	Store *transcriptstore.Store
 
-	// ReadProjectIDs are the projects whose chat reads open shadows instead of
-	// plaintext. Every one also captures shadows.
-	ReadProjectIDs []uuid.UUID
+	// ProjectIDs are the projects that capture shadows. Their chat reads open
+	// the shadows instead of plaintext, so a read never meets a shadow that
+	// capture stopped keeping current.
+	ProjectIDs []uuid.UUID
 }
 
 // configureTranscriptShadow only opts explicit projects into encrypted shadow
-// writes, and optionally reads. Plaintext remains authoritative for every other
-// project; startup never backfills old messages.
+// writes and reads. Plaintext remains authoritative for every other project;
+// startup never backfills old messages.
 func configureTranscriptShadow(ctx context.Context, c *cli.Context, db *pgxpool.Pool, writer *chat.ChatMessageWriter, orgEncryption orgEncryptionDeps, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider) (transcriptShadow, error) {
-	none := transcriptShadow{Store: nil, ReadProjectIDs: nil}
+	none := transcriptShadow{Store: nil, ProjectIDs: nil}
 	values := c.StringSlice(chatTranscriptShadowProjectIDsFlag)
-	readValues := c.StringSlice(chatTranscriptShadowReadProjectsFlag)
-	if c.IsSet(chatTranscriptShadowReadProjectsFlag) && len(readValues) == 0 {
-		return none, fmt.Errorf("chat transcript shadow reads require explicit nonempty project UUIDs")
-	}
 	if len(values) == 0 {
 		// An explicitly supplied blank must not silently disable the feature.
 		if c.IsSet(chatTranscriptShadowProjectIDsFlag) {
 			return none, fmt.Errorf("chat transcript shadow requires explicit nonempty project UUIDs")
 		}
-		if len(readValues) > 0 {
-			return none, fmt.Errorf("chat transcript shadow reads require the same projects to capture shadows")
-		}
 		return none, nil
 	}
 	projectIDs, err := parseTranscriptShadowProjectIDs(values)
-	if err != nil {
-		return none, err
-	}
-	readProjectIDs, err := transcriptShadowReadProjects(projectIDs, readValues)
 	if err != nil {
 		return none, err
 	}
@@ -115,27 +103,7 @@ func configureTranscriptShadow(ctx context.Context, c *cli.Context, db *pgxpool.
 		}
 	}
 	writer.WithTranscriptShadow(store, projectIDs...)
-	return transcriptShadow{Store: store, ReadProjectIDs: readProjectIDs}, nil
-}
-
-// transcriptShadowReadProjects parses the read allowlist and requires it to be
-// a subset of the capture allowlist: in a project that stopped capturing, every
-// edit leaves the message's shadow stale and its reads fail. Errors omit the
-// supplied values.
-func transcriptShadowReadProjects(captureProjectIDs []uuid.UUID, values []string) ([]uuid.UUID, error) {
-	if len(values) == 0 {
-		return nil, nil
-	}
-	readProjectIDs, err := parseTranscriptShadowProjectIDs(values)
-	if err != nil {
-		return nil, fmt.Errorf("chat transcript shadow reads: %w", err)
-	}
-	for _, id := range readProjectIDs {
-		if !slices.Contains(captureProjectIDs, id) {
-			return nil, errors.New("a chat transcript shadow read project does not capture shadows")
-		}
-	}
-	return readProjectIDs, nil
+	return transcriptShadow{Store: store, ProjectIDs: projectIDs}, nil
 }
 
 // checkTranscriptShadowSchema checks only the sidecar contract used by the store.
