@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/jackc/pgx/v5"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	"github.com/speakeasy-api/gram/server/internal/admin/repo"
@@ -27,7 +28,14 @@ func (s *Service) GetHooksReleaseProgress(ctx context.Context, _ *gen.GetHooksRe
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "read hooks generator version").LogError(ctx, s.logger)
 	}
-	store := hooksrollout.NewStore(s.db)
+	// One snapshot, so a stage completing mid-read can't pair the old default
+	// pin with the completed stage.
+	tx, err := s.db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly, DeferrableMode: "", BeginQuery: "", CommitQuery: ""})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin hooks release progress read").LogError(ctx, s.logger)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	store := hooksrollout.NewStore(tx)
 	defaultPin, err := store.DefaultPin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "read default hooks rollout pin").LogError(ctx, s.logger)
@@ -36,11 +44,11 @@ func (s *Service) GetHooksReleaseProgress(ctx context.Context, _ *gen.GetHooksRe
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list hooks rollout overrides").LogError(ctx, s.logger)
 	}
-	stage, err := hooksrollout.NewStageStore(s.db).Current(ctx)
+	stage, err := hooksrollout.NewStageStore(tx).Current(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "read staged hooks rollout").LogError(ctx, s.logger)
 	}
-	repos, err := repo.New(s.db).AdminListHooksPublishState(ctx)
+	repos, err := repo.New(tx).AdminListHooksPublishState(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list hooks publish state").LogError(ctx, s.logger)
 	}

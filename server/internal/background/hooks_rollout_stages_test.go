@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"testing"
 	"time"
 
@@ -17,6 +16,7 @@ import (
 	"go.temporal.io/sdk/testsuite"
 
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestHooksRolloutStagesWorkflowRetries(t *testing.T) {
@@ -76,7 +76,7 @@ func TestRetryScheduleRegistration_RetriesUntilRegistered(t *testing.T) {
 	t.Parallel()
 
 	attempts := 0
-	retryScheduleRegistration(t.Context(), slog.New(slog.DiscardHandler), "test", func(context.Context) error {
+	retryScheduleRegistration(t.Context(), testenv.NewLogger(t), "test", func(context.Context) error {
 		attempts++
 		if attempts < 3 {
 			return errors.New("temporal unavailable")
@@ -91,7 +91,7 @@ func TestRetryScheduleRegistration_StopsWhenContextEnds(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(t.Context())
 	attempts := 0
-	retryScheduleRegistration(ctx, slog.New(slog.DiscardHandler), "test", func(context.Context) error {
+	retryScheduleRegistration(ctx, testenv.NewLogger(t), "test", func(context.Context) error {
 		attempts++
 		cancel()
 		return errors.New("temporal unavailable")
