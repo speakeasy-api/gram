@@ -14,6 +14,7 @@ import (
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 )
@@ -199,6 +200,9 @@ type Registrar struct {
 	// projects resolves the project_slug a tool names for handlers that act
 	// on the project's ID. Without it, those tools are unavailable.
 	projects SkillProjectResolver
+
+	// aiCatalog identifies OAuth clients. The runtime injects it.
+	aiCatalog *aivendors.Store
 }
 
 // withDashboardLinks lets result cards link to dashboard pages.
@@ -207,7 +211,7 @@ func (r *Registrar) withDashboardLinks(links cardLinks) {
 }
 
 func newRegistrar(server *mcp.Server) *Registrar {
-	return &Registrar{server: server, descriptors: nil, resources: nil, riskTelemetry: noopRiskTelemetry{}, externalAuthorizer: nil, logger: nil, instructions: "", cardLinks: cardLinks{dashboardURL: nil, serverURL: nil, projectSlug: nil}, projects: nil}
+	return &Registrar{server: server, descriptors: nil, resources: nil, riskTelemetry: noopRiskTelemetry{}, externalAuthorizer: nil, logger: nil, instructions: "", cardLinks: cardLinks{dashboardURL: nil, serverURL: nil, projectSlug: nil}, projects: nil, aiCatalog: nil}
 }
 
 // withProjects lets tools name their project by slug while their handlers act
@@ -228,6 +232,36 @@ func (r *Registrar) withExternalAuthorizer(authorizer Authorizer) {
 	if r != nil {
 		r.externalAuthorizer = authorizer
 	}
+}
+
+// requireAICatalog fails composition when no catalog was injected, so a
+// runtime missing one never starts serving.
+func (r *Registrar) requireAICatalog() {
+	if r == nil || r.aiCatalog == nil {
+		panic("platformmcp: runtime composed without an AI client catalog store; call WithAICatalog")
+	}
+}
+
+func (r *Registrar) withAICatalog(catalog *aivendors.Store) {
+	if r != nil {
+		r.aiCatalog = catalog
+	}
+}
+
+// withAICatalogSnapshot pins one catalog snapshot for the rest of a request.
+func (r *Registrar) withAICatalogSnapshot(ctx context.Context) context.Context {
+	if r.aiCatalog == nil {
+		panic("platformmcp: AI client catalog store was not injected")
+	}
+	return r.aiCatalog.Pin(ctx)
+}
+
+// aiCatalogSnapshot returns the request's pinned snapshot, or captures one.
+func (r *Registrar) aiCatalogSnapshot(ctx context.Context) *aivendors.Snapshot {
+	if r.aiCatalog == nil {
+		panic("platformmcp: AI client catalog store was not injected")
+	}
+	return r.aiCatalog.SnapshotFor(ctx)
 }
 
 func (r *Registrar) withRiskTelemetry(telemetry RiskTelemetry) {
@@ -261,8 +295,6 @@ func (r *Registrar) For(audience Audience) []Descriptor {
 // FilterExternalTools applies caller-specific discovery policy to an already
 // composed tools/list result. This is only a discovery filter: exact resource
 // checks remain in each handler and run again when a listed tool is called.
-// A client with a tool allowlist (see clientToolAllowlist) sees only those
-// tools, intersected with what its grants make discoverable.
 func (r *Registrar) FilterExternalTools(ctx context.Context, principal Principal, tools []*mcp.Tool) []*mcp.Tool {
 	if r == nil || principal.UserID == "" || principal.OrganizationID == "" {
 		return []*mcp.Tool{}
@@ -274,16 +306,10 @@ func (r *Registrar) FilterExternalTools(ctx context.Context, principal Principal
 		}
 	}
 	grants, grantsLoaded := authz.GrantsFromContext(ctx)
-	allowlist := clientToolAllowlist(principal.ClientID)
-	// The small discovery surface reaches every tool by design, so the
-	// allowlist only narrows the full catalogue.
-	if discoveryModeFromContext(ctx) != discoveryFull {
-		allowlist = nil
-	}
 	visible := make([]*mcp.Tool, 0, len(tools))
 	for _, tool := range tools {
 		descriptor, ok := descriptors[tool.Name]
-		if !ok || (allowlist != nil && !slices.Contains(allowlist, tool.Name)) || !externalToolDiscoverable(grants, grantsLoaded, principal, descriptor.Meta) {
+		if !ok || !externalToolDiscoverable(grants, grantsLoaded, principal, descriptor.Meta) {
 			continue
 		}
 		visible = append(visible, tool)

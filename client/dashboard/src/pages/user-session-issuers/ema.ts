@@ -138,7 +138,7 @@ async function organizationProviders(
 }
 
 /**
- * Trusts `found` for the MCP Authentication Provider: reuses the
+ * Trusts `found` for the MCP sign-in: reuses the
  * organization's record of that identity provider, or adds one, then points
  * the provider at it. Browser sign-in is left as it is.
  */

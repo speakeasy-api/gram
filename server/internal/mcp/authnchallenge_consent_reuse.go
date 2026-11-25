@@ -92,6 +92,16 @@ func consentInventoryFingerprint(inventory *consentToolInventory) string {
 		}
 		return 0
 	})
+	if inventory.DirectAuthClient != nil {
+		// A reusable approval must bind the exact typed choice. An older
+		// fingerprint cannot authorize a new selection just because its tools match.
+		return consentEvidenceHash(struct {
+			Resource   string
+			Backend    string
+			Tools      []consentInventoryTool
+			AuthClient uuid.UUID
+		}{Resource: inventory.Resource, Backend: inventory.BackendHash, Tools: tools, AuthClient: *inventory.DirectAuthClient})
+	}
 	return consentEvidenceHash(struct {
 		Resource string
 		Backend  string
@@ -166,14 +176,9 @@ func (s *Service) beginConsentApproval(ctx context.Context, endpoint *ResolvedMc
 			}
 		}
 	}
-	// The inventory is fingerprinted without a proxied server's upstream
-	// issuer where typed auth clients choose upstream authentication, and with
-	// it elsewhere. A saved approval holds the form written when it was
-	// approved, so it is compared in both: switching mode alone asks nobody
-	// again. One approved under typed auth clients then keeps ignoring the
-	// upstream issuer, and its upstream clients, resource and permissions are
-	// still compared through the remote set. The other forms read the
-	// database, so they are computed before the consent client lock is taken.
+	// Compute the historical evidence before taking the consent client lock.
+	// Its old backend shape never compensates for a missing typed choice in
+	// the saved approval; the choice and remote set are compared separately.
 	var others reuseInventoryFingerprints
 	if reuse {
 		others = s.reuseInventoryFingerprints(ctx, endpoint, inventory)
@@ -340,9 +345,8 @@ func (s *Service) consentReuseInventory(ctx context.Context, endpoint *ResolvedM
 	return &inventory, nil
 }
 
-// consentBackendHashes are a server's consent backend fingerprint in the
-// organization's enforcement mode with its upstream issuer from each source,
-// and in the other enforcement mode.
+// consentBackendHashes holds the typed evidence and the historical
+// issuer-inclusive evidence for the authorization server sources.
 type consentBackendHashes struct {
 	// decided is the fingerprint from the source the organization's flag
 	// makes authoritative. It is the one stored and checked.
@@ -355,30 +359,25 @@ type consentBackendHashes struct {
 	// otherErr is why other could not be computed.
 	otherErr error
 
-	// otherMode is decided in the other enforcement mode, which an approval
-	// saved before the mode changed still holds.
+	// otherMode is the issuer-inclusive legacy fingerprint. Reading it does
+	// not allow a pre-choice approval to authorize a typed credential.
 	otherMode string
 }
 
 // consentBackendFingerprint binds discovery to access-relevant configuration.
 // Display names and update timestamps do not change the authorization surface.
-// Where typed auth clients choose upstream authentication, a proxied server's
-// upstream issuer decides nothing and is left out, so resynchronizing it
-// changes no evidence.
+// A proxied server's typed offers do not depend on its derived upstream
+// issuer. Keep the issuer-inclusive form only for legacy evidence comparisons.
 func (s *Service) consentBackendFingerprint(ctx context.Context, endpoint *ResolvedMcpEndpoint) (consentBackendHashes, error) {
-	enforced, err := s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)
-	if err != nil {
-		return consentBackendHashes{}, err
-	}
 	evidence, err := s.consentBackendEvidence(ctx, endpoint)
 	if err != nil {
 		return consentBackendHashes{}, err
 	}
 	return consentBackendHashes{
-		decided:   evidence.decided.forMode(enforced),
-		other:     evidence.other.forMode(enforced),
+		decided:   evidence.decided.forMode(true),
+		other:     evidence.other.forMode(true),
 		otherErr:  evidence.otherErr,
-		otherMode: evidence.decided.forMode(!enforced),
+		otherMode: evidence.decided.forMode(false),
 	}, nil
 }
 

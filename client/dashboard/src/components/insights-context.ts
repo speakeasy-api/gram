@@ -36,6 +36,10 @@ export interface InsightsContextValue {
    *  `project:write`. Surfaces should render an "ask an admin" notice instead
    *  of waiting on `assistantReady`. */
   assistantNeedsAdmin: boolean;
+  /** Why the Project Assistant failed to connect, or null. */
+  assistantError: string | null;
+  /** Retry the failed connection behind `assistantError`. */
+  retryAssistant: () => void;
   /** Switch the shared runtime to a fresh empty conversation. */
   newConversation: () => void;
   /** Hide the floating dock while a caller is mounted (ref-counted). Returns
@@ -53,6 +57,8 @@ export const InsightsContext = createContext<InsightsContextValue>({
   sendPrompt: () => {},
   assistantReady: false,
   assistantNeedsAdmin: false,
+  assistantError: null,
+  retryAssistant: () => {},
   newConversation: () => {},
   registerDockHide: () => () => {},
 });

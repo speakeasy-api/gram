@@ -4,7 +4,7 @@ import {
   type ShadowMCPPolicy,
 } from "@/components/shadow-mcp/shadowMCPInventoryStatus";
 import { Alert, AlertDescription } from "@/components/ui/Alert";
-import { Button } from "@/components/ui/Button";
+import { RetryButton } from "@/components/retry-button";
 import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { useProject } from "@/contexts/Auth";
 import { useRoutes } from "@/routes";
@@ -38,9 +38,15 @@ function MCPApprovalsLoadingState(): JSX.Element {
 export function MCPApprovalsTab(): JSX.Element {
   const project = useProject();
   const routes = useRoutes();
-  const policiesQuery = useRiskListPolicies();
-  const membersQuery = useMembers();
-  const rolesQuery = useRoles();
+  // A failed read is reported inline (the policy alert, or deciding paused),
+  // so none rethrows to the page error boundary.
+  const policiesQuery = useRiskListPolicies(undefined, undefined, {
+    throwOnError: false,
+  });
+  const membersQuery = useMembers(undefined, undefined, {
+    throwOnError: false,
+  });
+  const rolesQuery = useRoles(undefined, undefined, { throwOnError: false });
   // The table's Decide Access sheet writes grants against the policies it
   // can see, so the table waits for the policy, member and role reads to
   // settle rather than deciding against an empty set. A failed policy read
@@ -62,13 +68,10 @@ export function MCPApprovalsTab(): JSX.Element {
               approval recorded now would enforce nothing. The inventory still
               shows.
             </span>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => void policiesQuery.refetch()}
-            >
-              <Button.Text>Retry</Button.Text>
-            </Button>
+            <RetryButton
+              isRetrying={policiesQuery.isFetching}
+              onRetry={() => void policiesQuery.refetch()}
+            />
           </AlertDescription>
         </Alert>
       ) : null}

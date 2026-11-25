@@ -173,8 +173,8 @@ export function AddClientDialog({
         )}
 
         <Text small muted>
-          Only this MCP Authentication Provider allows it. People still approve
-          it on the consent screen.
+          Only this MCP sign-in allows it. People still approve it on the
+          consent screen.
         </Text>
 
         <Dialog.Footer>

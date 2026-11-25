@@ -15,6 +15,9 @@ const (
 	DataSourceToolCallLogs = "tool_call_logs"
 	// DataSourceMCPConnectionLogs exports failed MCP connection attempts.
 	DataSourceMCPConnectionLogs = "mcp_connection_logs"
+	// DataSourceMCPFeedback exports the feedback agents send through an MCP
+	// server's built-in feedback tool.
+	DataSourceMCPFeedback = "mcp_feedback"
 )
 
 // Signal is one OTLP signal a data source exports.
@@ -39,6 +42,7 @@ var sources = []Source{
 	{Name: DataSourceRiskFindings, Signals: []Signal{SignalLogs}},
 	{Name: DataSourceToolCallLogs, Signals: []Signal{SignalLogs}},
 	{Name: DataSourceMCPConnectionLogs, Signals: []Signal{SignalLogs}},
+	{Name: DataSourceMCPFeedback, Signals: []Signal{SignalLogs}},
 }
 
 // Sources returns a copy of the registry.

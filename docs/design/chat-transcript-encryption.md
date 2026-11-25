@@ -115,7 +115,25 @@ unexpected error: it means capture or the data is broken, and plaintext must not
 hide that. Its codec uses the process's committed data key cache, so a warm page
 makes no KMS call, and a page with no shadows makes no key lookup at all.
 
-Hook ingest (`/rpc/hooks.ingest`) uses the same allowlist when it matches a
+Direct SQL writers (see the scope table below) do not seal yet. If one edits a
+message that already has a shadow, that shadow goes stale and the read fails
+until the message is captured again.
+
+Removing a project from the allowlist stops both capture and shadow reads.
+A message that already had a shadow and is edited while the project is off
+keeps a stale shadow, so before adding the project back, recapture its
+messages with a backfill. Otherwise each such message fails its page as soon
+as the project is back on the allowlist. Messages first written while it was
+off have no shadow and fall back to plaintext as usual.
+
+Any other read error, such as a failed key unwrap or a database error, also
+fails the page. Plaintext is never served in place of an existing shadow.
+
+While plaintext is kept, a shadow that does not match its plaintext row is
+counted under the `stale` read outcome, and a prod Datadog monitor pages on
+any occurrence. That check goes away with the plaintext.
+
+Hook ingest (`/rpc/hooks.ingest`) uses the same capture allowlist when it matches a
 prompt attachment to its prompt by text hash, the one hook path that reads
 stored message bodies. Only a request whose attachments carry a prompt hash, in
 a chat that has user prompts, reads shadows. It opens the chat's prompts newest
@@ -133,10 +151,6 @@ latest prompt. Any other read failure, such as a database or key provider
 error, fails the attachment write like any other failure on that path. Hook writes that skip a message already stored, and the Claude
 transcript upload, compare external message IDs rather than bodies, so they
 read no body.
-
-Direct SQL writers (see the scope table below) do not seal yet. If one edits a
-message that already has a shadow, that shadow goes stale and the read fails
-until the message is captured again.
 
 Messages whose body exceeds the inline limit keep it in a raw content asset.
 The shadow covers only the inline columns, so `chat.load` still reads those

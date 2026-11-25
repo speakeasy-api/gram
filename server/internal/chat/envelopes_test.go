@@ -31,6 +31,33 @@ func TestStripLeadingEnvelopesRemovesMultipleLeadingBlocks(t *testing.T) {
 	require.Equal(t, "What changed?", chat.StripLeadingEnvelopes(input))
 }
 
+// coworkReminderStack is the shape of the framing Cowork stacks in front of a
+// prompt: one <system-reminder> per fact about the session.
+const coworkReminderStack = "<system-reminder>This session can reach the connected device, but no folder is connected yet. You can request access to a folder with device_request_folder_access.</system-reminder>\n" +
+	"<system-reminder>Context the user's app attached to this message:</system-reminder>\n" +
+	"<system-reminder>The user's timezone is America/New_York (UTC-05:00).</system-reminder>\n"
+
+func TestStripLeadingEnvelopesRemovesStackedSystemReminders(t *testing.T) {
+	t.Parallel()
+
+	input := coworkReminderStack + "sort the attached sheet by last name"
+	require.Equal(t, "sort the attached sheet by last name", chat.StripLeadingEnvelopes(input))
+}
+
+func TestStripLeadingEnvelopesRemovesSystemReminderWithAttributes(t *testing.T) {
+	t.Parallel()
+
+	input := "<system-reminder source=\"harness\">\nYou are operating in a git worktree.\n</system-reminder>\n\nrun the linter"
+	require.Equal(t, "run the linter", chat.StripLeadingEnvelopes(input))
+}
+
+func TestStripLeadingEnvelopesLeavesUnterminatedSystemReminder(t *testing.T) {
+	t.Parallel()
+
+	input := "<system-reminder> is the tag Claude Code uses, right?"
+	require.Equal(t, input, chat.StripLeadingEnvelopes(input))
+}
+
 func TestStripLeadingEnvelopesLeavesPlainTextUntouched(t *testing.T) {
 	t.Parallel()
 

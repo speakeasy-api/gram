@@ -84,7 +84,7 @@ func TestAttachUserSessionIssuer_OrgLevelClientConflictsWithProjectClient(t *tes
 
 	orgClient := seedOrgLevelRemoteClient(t, ctx, ti.conn, authCtx.ActiveOrganizationID, orgIssuer, "guard-org-cid")
 
-	_, err := ti.service.AttachUserSessionIssuer(ctx, &clientsgen.AttachUserSessionIssuerPayload{
+	_, err := ti.service.AttachLegacyIssuerForTest(ctx, &remotesessions.LegacyIssuerBindingForTest{
 		ID:                  orgClient.String(),
 		UserSessionIssuerID: userIssuer.String(),
 	})
@@ -138,7 +138,7 @@ func TestDetachUserSessionIssuer_RejectsOtherProjectsBindingOnOrgLevelClient(t *
 
 	// The caller (the auth context's own project) must not be able to detach the
 	// other project's binding.
-	_, err := ti.service.DetachUserSessionIssuer(ctx, &clientsgen.DetachUserSessionIssuerPayload{
+	_, err := ti.service.DetachLegacyIssuerForTest(ctx, &remotesessions.LegacyIssuerBindingForTest{
 		ID:                  orgClient.String(),
 		UserSessionIssuerID: otherUserIssuer.String(),
 	})
@@ -197,7 +197,7 @@ func TestAttachUserSessionIssuer_RefusesOrgClientOnOrgIssuer(t *testing.T) {
 	userIssuer := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "orgwide-attach-usi")
 	orgClient := seedOrgLevelRemoteClient(t, ctx, ti.conn, authCtx.ActiveOrganizationID, orgIssuer, "orgwide-attach-cid")
 
-	_, err := ti.service.AttachUserSessionIssuer(withoutOrganizationAdmin(t, ctx), &clientsgen.AttachUserSessionIssuerPayload{
+	_, err := ti.service.AttachLegacyIssuerForTest(withoutOrganizationAdmin(t, ctx), &remotesessions.LegacyIssuerBindingForTest{
 		ID:                  orgClient.String(),
 		UserSessionIssuerID: userIssuer.String(),
 	})
@@ -217,7 +217,7 @@ func TestDetachUserSessionIssuer_RefusesOrgClientOnOrgIssuer(t *testing.T) {
 	userIssuer := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "orgwide-detach-usi")
 	orgClient := seedOrgLevelRemoteClient(t, ctx, ti.conn, authCtx.ActiveOrganizationID, orgIssuer, "orgwide-detach-cid", userIssuer)
 
-	_, err := ti.service.DetachUserSessionIssuer(withoutOrganizationAdmin(t, ctx), &clientsgen.DetachUserSessionIssuerPayload{
+	_, err := ti.service.DetachLegacyIssuerForTest(withoutOrganizationAdmin(t, ctx), &remotesessions.LegacyIssuerBindingForTest{
 		ID:                  orgClient.String(),
 		UserSessionIssuerID: userIssuer.String(),
 	})
@@ -253,10 +253,10 @@ func TestClientAttachment_OrgWideGuardUsesLockedBinding(t *testing.T) {
 			editorCtx := withoutOrganizationAdmin(t, ctx)
 			go func() {
 				if attach {
-					_, err := ti.service.AttachUserSessionIssuer(editorCtx, &clientsgen.AttachUserSessionIssuerPayload{ID: orgClient.String(), UserSessionIssuerID: userIssuer.String()})
+					_, err := ti.service.AttachLegacyIssuerForTest(editorCtx, &remotesessions.LegacyIssuerBindingForTest{ID: orgClient.String(), UserSessionIssuerID: userIssuer.String()})
 					done <- err
 				} else {
-					_, err := ti.service.DetachUserSessionIssuer(editorCtx, &clientsgen.DetachUserSessionIssuerPayload{ID: orgClient.String(), UserSessionIssuerID: userIssuer.String()})
+					_, err := ti.service.DetachLegacyIssuerForTest(editorCtx, &remotesessions.LegacyIssuerBindingForTest{ID: orgClient.String(), UserSessionIssuerID: userIssuer.String()})
 					done <- err
 				}
 			}()

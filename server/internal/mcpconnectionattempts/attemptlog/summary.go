@@ -2,6 +2,7 @@ package attemptlog
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"time"
@@ -157,4 +158,78 @@ func groupStrings(groups []StepGroup) []string {
 		out[i] = string(g)
 	}
 	return out
+}
+
+// TimeCount is the weighted attempts that started in one interval.
+type TimeCount struct {
+	// Start is the interval's start.
+	Start time.Time `ch:"t_start"`
+
+	// Attempts is weighted attempts.
+	Attempts uint64 `ch:"t_attempts"`
+}
+
+// CountOver counts the attempts matching the filters per interval of width, every interval in the range included.
+func CountOver(ctx context.Context, ch driver.Conn, s Scope, f Filters, width time.Duration, now time.Time) ([]TimeCount, error) {
+	// ClickHouse buckets in whole seconds from the Unix epoch and Go from midnight, so both agree only on whole seconds that divide a day.
+	if width < time.Second || width%time.Second != 0 || (24*time.Hour)%width != 0 {
+		return nil, errors.New("interval must be a whole number of seconds that divides a day")
+	}
+	attempts, args, err := attemptsSQL(s, now)
+	if err != nil {
+		return nil, err
+	}
+	where, filterArgs := filterSQL(f)
+	args = append(args, filterArgs...)
+	interval := fmt.Sprintf("INTERVAL %d SECOND", int64(width/time.Second))
+	query := `
+	SELECT toDateTime(toStartOfInterval(a_started, ` + interval + `), 'UTC') AS t_start, toUInt64(sum(a_weight)) AS t_attempts
+	FROM (` + attempts + `)
+	WHERE ` + where + `
+	GROUP BY t_start` + readSettings
+	rows, err := queryAll[TimeCount](ctx, ch, "attempts over time", query, args...)
+	if err != nil {
+		return nil, err
+	}
+	found := make(map[int64]uint64, len(rows))
+	for _, r := range rows {
+		found[r.Start.Unix()] = r.Attempts
+	}
+	var out []TimeCount
+	for start := s.From.UTC().Truncate(width); start.Before(s.To); start = start.Add(width) {
+		out = append(out, TimeCount{Start: start, Attempts: found[start.Unix()]})
+	}
+	return out, nil
+}
+
+// maxReasons bounds the reasons CountByReason returns.
+const maxReasons = 100
+
+// CountByReason counts the attempts matching the filters per reason, most first.
+func CountByReason(ctx context.Context, ch driver.Conn, s Scope, f Filters, now time.Time) ([]FacetValue, error) {
+	attempts, args, err := attemptsSQL(s, now)
+	if err != nil {
+		return nil, err
+	}
+	where, filterArgs := filterSQL(f)
+	args = append(append(args, filterArgs...), maxReasons)
+	type reasonCount struct {
+		Reason   string `ch:"x_reason"`
+		Attempts uint64 `ch:"x_attempts"`
+	}
+	rows, err := queryAll[reasonCount](ctx, ch, "attempts by reason", `
+	SELECT d_reason AS x_reason, toUInt64(sum(a_weight)) AS x_attempts
+	FROM (`+attempts+`)
+	WHERE `+where+` AND d_reason != ''
+	GROUP BY x_reason
+	ORDER BY x_attempts DESC, x_reason
+	LIMIT ?`+readSettings, args...)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]FacetValue, len(rows))
+	for i, r := range rows {
+		out[i] = FacetValue{Value: r.Reason, Attempts: r.Attempts}
+	}
+	return out, nil
 }

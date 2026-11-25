@@ -496,6 +496,11 @@ func (r *Recorder) servedDrop(ctx context.Context, reason dropReason, n int, cau
 	r.logger.WarnContext(ctx, "dropped served connections", attrs...)
 }
 
+// AppendServed inserts served connections, for seeds that write them directly.
+func AppendServed(ctx context.Context, conn driver.Conn, rows []Served) error {
+	return appendServedInto(ctx, conn, lastServedTable, rows)
+}
+
 // appendServedInto inserts served connections into table. The table keeps the latest times per connection.
 func appendServedInto(ctx context.Context, conn driver.Conn, table string, rows []Served) error {
 	batch, err := conn.PrepareBatch(ctx, fmt.Sprintf(lastServedInsert, table))

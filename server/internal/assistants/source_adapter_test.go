@@ -177,8 +177,8 @@ func TestComposeInstructions_DashboardIncludesElementsPrompts(t *testing.T) {
 	require.Contains(t, instructions, "BarChart")
 	require.Contains(t, instructions, "```ui code blocks")
 	require.Contains(t, instructions, "## Linking entities")
-	require.Contains(t, instructions, "gram:skill/<ID>")
-	require.Contains(t, instructions, "Skill.ID from the skill tools")
+	require.Contains(t, instructions, "gram:skill/<id>")
+	require.Contains(t, instructions, "the skill's id from the skill tools")
 }
 
 func TestDashboardAdapterDecodeTurnIncludesSelectedSkills(t *testing.T) {

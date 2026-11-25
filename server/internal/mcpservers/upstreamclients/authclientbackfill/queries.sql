@@ -1853,13 +1853,18 @@ SELECT sel.id,
          JOIN remote_session_issuers AS rsi
            ON rsi.id = c.remote_session_issuer_id
           AND rsi.deleted IS FALSE
+         JOIN projects AS project ON project.id = sel.project_id
+           AND project.organization_id = sel.organization_id AND NOT project.deleted
          WHERE c.id = sel.remote_session_client_id
+           AND (c.project_id = project.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = project.organization_id)))
+           AND (rsi.project_id = project.id OR (rsi.project_id IS NULL AND (rsi.organization_id IS NULL OR rsi.organization_id = project.organization_id)))
            AND c.deleted IS FALSE
        )::boolean AS registration_live,
        ARRAY(
          SELECT link.user_session_issuer_id
          FROM remote_session_client_user_session_issuers AS link
-         WHERE link.remote_session_client_id = sel.remote_session_client_id
+         WHERE NOT @typed_offer_repair::boolean
+           AND link.remote_session_client_id = sel.remote_session_client_id
          ORDER BY link.user_session_issuer_id
        )::uuid[] AS registration_issuer_ids,
        ARRAY(
@@ -1868,8 +1873,11 @@ SELECT sel.id,
          JOIN mcp_server_auth_clients AS l
            ON l.auth_client_id = ac.id
           AND l.mcp_server_id = sel.mcp_server_id
+          AND l.project_id = sel.project_id
+          AND l.organization_id = sel.organization_id
           AND l.deleted IS FALSE
          WHERE ac.organization_id = sel.organization_id
+           AND (ac.project_id IS NULL OR ac.project_id = sel.project_id)
            AND ac.deleted IS FALSE
            AND ac.enabled
            AND (
@@ -2173,6 +2181,7 @@ WHERE sel.id = @id::uuid
   AND sel.remote_session_client_id IS NOT DISTINCT FROM sqlc.narg('remote_session_client_id')::uuid
   AND ac.id = @auth_client_id::uuid
   AND ac.organization_id = sel.organization_id
+  AND (ac.project_id IS NULL OR ac.project_id = sel.project_id)
   AND ac.deleted IS FALSE
   AND ac.enabled
   AND EXISTS (
@@ -2180,6 +2189,8 @@ WHERE sel.id = @id::uuid
     FROM mcp_server_auth_clients AS l
     WHERE l.auth_client_id = ac.id
       AND l.mcp_server_id = sel.mcp_server_id
+      AND l.project_id = sel.project_id
+      AND l.organization_id = sel.organization_id
       AND l.deleted IS FALSE
   );
 
@@ -2204,6 +2215,7 @@ WHERE sel.id = ANY(@ids::uuid[])
   AND sel.remote_session_client_id IS NOT DISTINCT FROM sqlc.narg('remote_session_client_id')::uuid
   AND ac.id = @auth_client_id::uuid
   AND ac.organization_id = sel.organization_id
+  AND (ac.project_id IS NULL OR ac.project_id = sel.project_id)
   AND ac.deleted IS FALSE
   AND ac.enabled
   AND EXISTS (
@@ -2211,6 +2223,8 @@ WHERE sel.id = ANY(@ids::uuid[])
     FROM mcp_server_auth_clients AS l
     WHERE l.auth_client_id = ac.id
       AND l.mcp_server_id = sel.mcp_server_id
+      AND l.project_id = sel.project_id
+      AND l.organization_id = sel.organization_id
       AND l.deleted IS FALSE
   );
 
@@ -2438,7 +2452,9 @@ ORDER BY role_urn;
 -- one: the exact attached connection row is still live with its current credentials, it
 -- belongs to the user who attached it, that user still owns the agent, the
 -- agent and its owner are active, and the sign-in, project, upstream client
--- and issuer are live and reach the attachment's project. binding_id, when
+-- and issuer are live and reach the attachment's project. A derived connection
+-- grant does not create an offer: serving still requires a live typed offer
+-- independently of both the grant and the compatibility parent. binding_id, when
 -- set, reads that one attachment. It takes no lock: a grant is written only
 -- from a read of one attachment taken after LockAttachmentIssuers through
 -- LockAttachmentAuthClients hold what it decides from.
@@ -2470,7 +2486,6 @@ SELECT
     JOIN user_session_issuers AS usi ON usi.id = b.user_session_issuer_id AND usi.deleted IS FALSE
     JOIN user_session_issuers AS provenance ON provenance.id = rs.user_session_issuer_id AND provenance.deleted IS FALSE
     JOIN projects AS p ON p.id = b.project_id AND p.organization_id = b.organization_id AND p.deleted IS FALSE
-    JOIN remote_session_client_user_session_issuers AS link ON link.remote_session_client_id = c.id AND link.user_session_issuer_id = usi.id
     WHERE c.id = b.remote_session_client_id
       AND c.deleted IS FALSE
       AND (issuer.project_id = p.id OR (issuer.project_id IS NULL AND (issuer.organization_id IS NULL OR issuer.organization_id = p.organization_id)))
@@ -2484,6 +2499,7 @@ SELECT
     WHERE ac.organization_id = b.organization_id
       AND ac.remote_session_client_id = b.remote_session_client_id
       AND ac.client_type = 'remote_session'
+      AND (ac.project_id IS NULL OR ac.project_id = b.project_id)
       AND ac.deleted IS FALSE
   )::boolean AS client_recorded
 FROM principal_remote_session_bindings AS b
@@ -2499,8 +2515,7 @@ ORDER BY b.id;
 -- unservable (issuer deletion or migration, attachment revocation, agent
 -- suspension, revocation or reassignment, reauthorization or revocation of
 -- the connection, removal of the owner or their membership, and removal of
--- the upstream client, its issuer, the project, the sign-in binding or the
--- auth client) can commit between the read that decides a grant and the
+-- the upstream client, its issuer, the project or the auth client) can commit between the read that decides a grant and the
 -- grant. FOR SHARE, not FOR KEY SHARE, so they also wait on writers that only
 -- update a column, such as a reauthorization's grant_generation. Every
 -- candidate's owner and membership are locked first, once for the whole run,
@@ -2583,11 +2598,8 @@ SELECT c.id
 FROM principal_remote_session_bindings AS b
 JOIN remote_session_clients AS c ON c.id = b.remote_session_client_id
 JOIN projects AS p ON p.id = b.project_id
-JOIN remote_session_client_user_session_issuers AS link
-  ON link.remote_session_client_id = c.id
- AND link.user_session_issuer_id = b.user_session_issuer_id
 WHERE b.id = @binding_id AND b.organization_id = @organization_id
-FOR SHARE OF c, p, link;
+FOR SHARE OF c, p;
 
 -- name: LockAttachmentAuthClients :exec
 SELECT ac.id

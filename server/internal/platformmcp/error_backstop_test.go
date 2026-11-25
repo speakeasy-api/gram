@@ -18,6 +18,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -204,6 +205,8 @@ func TestEveryToolOnANotComposedServiceRefusesWithoutPanicking(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			_, registrar := newServerWithRiskMutations(reader, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{}, nil, nil, nil, nil)
+			// A composed runtime always carries the catalog.
+			registrar.withAICatalog(aivendorstest.NewStore())
 			// No logger either: the backstop must not read one it was not given.
 			ctx := ContextWithPrincipal(t.Context(), testPrincipal())
 			descriptors := registrar.Descriptors()

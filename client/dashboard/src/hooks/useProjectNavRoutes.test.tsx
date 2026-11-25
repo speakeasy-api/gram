@@ -135,7 +135,7 @@ describe("useProjectNavRoutes", () => {
     ).toBeTruthy();
   });
 
-  it("uses the selected project's read grant for MCP Sessions", () => {
+  it("uses the selected project's read grant for MCP Sign-in", () => {
     const { result, rerender } = renderNav();
     const sessions = () =>
       result.current.find(
@@ -149,7 +149,7 @@ describe("useProjectNavRoutes", () => {
   });
 
   it.each(["enabled", "disabled"] as const)(
-    "never marks MCP Sessions as beta with connection health %s",
+    "never marks MCP Sign-in as beta with connection health %s",
     (status) => {
       testState.featureFlags[FEATURE_FLAGS.mcpConnectionHealth] = { status };
       const { result } = renderNav();

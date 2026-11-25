@@ -161,9 +161,10 @@ func TestLoadChat_OtherProjectsKeepReadingPlaintext(t *testing.T) {
 	chatID := seedChat(t, ctx, ti, authCtx.UserID, "", "plaintext reads")
 	edited := seedMessageContent(t, ctx, ti, chatID, "original message")
 
-	// The message has a shadow that is now stale. A project that captures
-	// shadows would fail this load; this project does not, so it must
-	// keep serving plaintext without touching the shadow.
+	// The message has a shadow that is now stale. A project the service reads
+	// shadows for would fail this load; the service reads shadows only for
+	// another project, so this one keeps serving plaintext without touching
+	// the shadow.
 	store, reader := newMeteredTranscriptShadowStore(t, ti)
 	captureTranscriptShadows(t, ti, store, edited)
 	_, err := fixturerepo.New(ti.conn).ChangeContent(t.Context(), edited, uuid.NullUUID{UUID: ti.projectID, Valid: true})

@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	idprepo "github.com/speakeasy-api/gram/server/internal/identityproviderconnections/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oktaresourceconnections/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -29,7 +30,7 @@ func TestConfirm_SharedResourceBatch(t *testing.T) {
 		RemoteMcpServerID: uuid.NullUUID{UUID: backend, Valid: true}, RemoteSessionIssuerID: uuid.NullUUID{UUID: f.issuerID, Valid: true}, Visibility: "private",
 	})
 	require.NoError(t, err)
-	associateServerIssuer(t, ctx, si, f.projectID, second, f.issuerID)
+	offerIssuerClient(t, ctx, si, f.projectID, second, f.issuerID)
 	for _, tc := range []struct {
 		name          string
 		id            uuid.UUID
@@ -133,4 +134,38 @@ func TestConfirm_RequiresDiscoveredAdvertisement(t *testing.T) {
 	rows, err := si.q.ListResourceConnections(ctx, repo.ListResourceConnectionsParams{OrganizationID: si.orgID, IdentityProviderConnectionID: si.connectionID})
 	require.NoError(t, err)
 	require.Empty(t, rows)
+}
+
+func TestConfirm_OfferWithdrawnWhileWaitingForConnectionLock(t *testing.T) {
+	t.Parallel()
+	ctx, si := newTestService(t)
+	recordAgent(t, ctx, si, "wlp1")
+	f := capableServer(t, ctx, si, "Withdrawn")
+	_, err := confirm(t, ctx, si, audience, nil, f.serverID)
+	require.NoError(t, err)
+
+	tx := testenv.BeginTx(t, ctx, si.conn)
+	_, err = repo.New(tx).LockLiveConnection(ctx, repo.LockLiveConnectionParams{ID: si.connectionID, OrganizationID: si.orgID})
+	require.NoError(t, err)
+	done := make(chan error, 1)
+	go func() {
+		_, err := si.svc.Confirm(ctx, &gen.ConfirmPayload{Connections: []*gen.OktaResourceConnectionConfirmation{{McpServerID: f.serverID.String(), Audience: audience + "/changed"}}})
+		done <- err
+	}()
+	testenv.WaitForBackendsBlockedBy(t, ctx, si.conn, testenv.BackendPID(tx), 1)
+	require.NoError(t, authclientbackfill.New(tx).SoftDeleteServerAuthClientLinksFixture(ctx, f.serverID))
+	require.NoError(t, tx.Commit(ctx))
+	select {
+	case err := <-done:
+		requireOopsCode(t, err, oops.CodeNotFound)
+	case <-time.After(5 * time.Second):
+		t.Fatal("confirmation did not finish")
+	}
+
+	_, err = si.svc.Reset(ctx, &gen.ResetPayload{McpServerID: f.serverID.String()})
+	requireOopsCode(t, err, oops.CodeNotFound)
+	rows, err := si.q.ListResourceConnections(ctx, repo.ListResourceConnectionsParams{OrganizationID: si.orgID, IdentityProviderConnectionID: si.connectionID})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, audience, rows[0].OktaResourceConnection.Audience)
 }

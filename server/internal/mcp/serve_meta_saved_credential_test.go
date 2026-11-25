@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
@@ -190,14 +191,19 @@ func TestServePublic_MetaEndpoint_ExecuteTool_SavedKeyRefusedAsksAnAdmin(t *test
 			meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, metaSlug, sharedIssuerID)
 			upstream := newKeyRefusingUpstream(t, tc.status, tc.challenge, tc.when)
 			remoteIssuer := uuid.NullUUID{}
+			var registration uuid.UUID
 			if tc.signIn {
-				clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-key", "", []uuid.UUID{sharedIssuerID})
-				remoteIssuer = conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID))
+				registration = createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-key", "", []uuid.UUID{sharedIssuerID})
+				remoteIssuer = conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, registration))
 			}
 			serverID, remoteID := createKeyMember(t, ctx, ti, projectID, meta.ID, upstream.URL, remoteIssuer)
 			saveServerKey(t, ti, projectID, remoteID, "saved-key")
 			subject := createTestUser(t, ctx, ti, "meta-key-user-"+uuid.NewString())
-			token := mintMetaIssuerBearer(t, ti, metaSlug, sharedIssuerID, subject)
+			if tc.signIn {
+				seedTypedSessionClient(t, ctx, ti, orgID, projectID, serverID, registration, "remote_session", subject)
+			}
+			client := seedTypedStaticHeaders(t, ctx, ti, orgID, projectID, serverID, remoteID, subject)
+			token := mintMetaIssuerBearer(t, ti, metaSlug, sharedIssuerID, subject, metaServingChoice{organizationID: orgID, serverID: serverID, clientID: client})
 			rec := mcpconnectionattemptstest.New(t)
 			ti.service.SetConnectionRecorder(rec.Recorder)
 
@@ -243,6 +249,9 @@ func TestAgentGateway_SavedKeyRefusedAsksAnAdmin(t *testing.T) {
 	_, err := mcpserversrepo.New(ti.conn).UpdateMCPServer(ctx, mcpserversrepo.UpdateMCPServerParams{ID: serverID, ProjectID: projectID, Name: conv.ToPGText(fx.granted), Slug: conv.ToPGText(fx.granted), RemoteMcpServerID: conv.ToNullUUID(remote.ID), UserSessionIssuerID: conv.ToNullUUID(issuerID), Visibility: mcpservers.VisibilityPrivate})
 	require.NoError(t, err)
 	saveServerKey(t, ti, projectID, remote.ID, "saved-key")
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	require.NoError(t, authclientbackfill.SyncRemoteSource(ctx, tx, ac.ActiveOrganizationID, remote.ID))
+	require.NoError(t, tx.Commit(ctx))
 	fx.token = issueMemberAuthRegressionKey(t, ctx, ti, fx, serverID)
 	rec := mcpconnectionattemptstest.New(t)
 	ti.service.SetConnectionRecorder(rec.Recorder)

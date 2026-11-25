@@ -4,8 +4,8 @@
 // direct proxied server lists only its associated clients, and a gateway card
 // routes only through the members associated with its client. Serving
 // resolves only the client a credential chose, so another client's grant for
-// the same upstream is never a competing candidate. Endpoints without a
-// proxied backend apply no resource rule.
+// the same upstream is never a competing candidate. Hosted placements
+// accept only grants minted without a resource indicator.
 
 package mcp
 
@@ -37,12 +37,21 @@ type consentRouting struct {
 	upstream string // the single proxied server's upstream
 	// members claiming each client's grant, keyed by remote session client,
 	// meta only.
-	members map[uuid.UUID][]metamcprepo.ListMetaMCPMembersForRemoteSessionClientRow
+	members       map[uuid.UUID][]metamcprepo.ListMetaMCPMembersForRemoteSessionClientRow
+	hostedClients map[uuid.UUID]bool
 }
 
 // unroutable reports whether the runtime would refuse to forward a card's
 // live grant.
 func (r consentRouting) unroutable(client remotesessions.Client, resource string) bool {
+	if r.hostedClients[client.ID] {
+		if resource == "" {
+			return false
+		}
+		if len(r.members[client.ID]) == 0 {
+			return true
+		}
+	}
 	switch r.backend {
 	case consentBackendRemote:
 		return !grantRoutesToUpstream(resource, r.upstream, false)
@@ -68,6 +77,9 @@ func (r consentRouting) unroutable(client remotesessions.Client, resource string
 
 // canValidate distinguishes an unused connection from a routable probe target.
 func (r consentRouting) canValidate(client remotesessions.Client, resource string) bool {
+	if r.hostedClients[client.ID] && resource == "" {
+		return true
+	}
 	switch r.backend {
 	case consentBackendRemote, consentBackendTunneled:
 	case consentBackendMeta:
@@ -89,14 +101,22 @@ func (s *Service) resolveConsentRouting(
 	challengeState AuthnChallengeState,
 	clients []remotesessions.Client,
 	statuses map[uuid.UUID]remotesessions.RemoteSessionState,
+	hosted map[uuid.UUID]uuid.UUID,
 ) (consentRouting, error) {
-	r := consentRouting{backend: consentBackendNone, upstream: endpoint.UpstreamResource, members: nil}
+	r := consentRouting{backend: consentBackendNone, upstream: endpoint.UpstreamResource, members: nil, hostedClients: make(map[uuid.UUID]bool, len(hosted))}
+	for id := range hosted {
+		r.hostedClients[id] = true
+	}
+	if isDirectHostedValidation(endpoint) {
+		return r, nil
+	}
 	switch {
 	case endpoint.MetaMcpServerID.Valid:
 		memberCtx, err := s.contextForSessionSubject(ctx, endpoint, *challengeState.Subject, "consent:"+challengeState.ID, challengeState.ClientID)
 		if err != nil {
 			return r, fmt.Errorf("stamp consent subject context: %w", err)
 		}
+
 		r.backend = consentBackendMeta
 		r.members = make(map[uuid.UUID][]metamcprepo.ListMetaMCPMembersForRemoteSessionClientRow, len(clients))
 		for _, c := range clients {

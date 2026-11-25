@@ -11,3 +11,4 @@ org_gram_demo_workspace,gram-risk-llm-analyzer,true,shadow
 *,mcp-connection-health,true
 72640a3e-93dd-5dbc-89b2-6b95bead0fac,mcp-consent-account-switch,true
 *,intent-policies,true
+72640a3e-93dd-5dbc-89b2-6b95bead0fac,mcp-feedback-export,true

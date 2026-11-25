@@ -13,6 +13,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
@@ -23,6 +24,7 @@ import (
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/chatredact"
 	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/dataexports"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -36,6 +38,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/otelsink"
+	"github.com/speakeasy-api/gram/server/internal/mcpfeedback"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
@@ -83,7 +86,10 @@ func newConnectionLogExport(publisher gcp.Publisher[*otelv1.InboundLogRecord]) m
 
 // newDataExportRouteTester composes a test source for every data export source.
 func newDataExportRouteTester(logger *slog.Logger, meterProvider metric.MeterProvider, policy *guardian.Policy) (*otelsvc.RouteTester, error) {
-	sources := append(otelsvc.NewRouteTestSources(logger, meterProvider), otelsink.NewTestSource(otelsvc.NewConnectionLogTestRequestBuilder(logger, meterProvider), gatewayRecordsServiceName))
+	sources := append(otelsvc.NewRouteTestSources(logger, meterProvider),
+		otelsink.NewTestSource(otelsvc.NewConnectionLogTestRequestBuilder(logger, meterProvider), gatewayRecordsServiceName),
+		mcpfeedback.NewTestSource(otelsvc.NewFeedbackLogTestRequestBuilder(logger, meterProvider), gatewayRecordsServiceName),
+	)
 	tester, err := otelsvc.NewRouteTester(policy, sources...)
 	if err != nil {
 		return nil, fmt.Errorf("compose data export route tester: %w", err)
@@ -105,7 +111,9 @@ func newDataExportRouteTests(logger *slog.Logger, meterProvider metric.MeterProv
 }
 
 type mcpServiceDependencies struct {
-	Connections    *mcpconnectionattempts.Recorder
+	Connections *mcpconnectionattempts.Recorder
+	// AICatalog is the process-wide AI client catalog store.
+	AICatalog      *aivendors.Store
 	TunnelMetrics  *metrics.Collector
 	Logger         *slog.Logger
 	Tracer         trace.TracerProvider
@@ -176,7 +184,7 @@ func newMCPService(c *cli.Context, d mcpServiceDependencies) (service *mcp.Servi
 			err = errors.Join(err, releaseCodeExecutor(c.Context, codeExecutor))
 		}
 	}()
-	service, err = mcp.NewService(d.Logger, d.Tracer, d.Meter, d.DB, d.Sessions, d.ChatSessions, d.Environment, d.Posthog, d.Features, d.ServerURL, d.SiteURL, d.Encryption, cacheImpl,
+	service, err = mcp.NewService(d.AICatalog, d.Logger, d.Tracer, d.Meter, d.DB, d.Sessions, d.ChatSessions, d.Environment, d.Posthog, d.Features, d.ServerURL, d.SiteURL, d.Encryption, cacheImpl,
 		d.Guardian, d.Functions, d.BillingTracker, d.Billing, d.Telemetry, d.ToolCallLogs, d.TelemetryService, d.RAG, d.Triggers, d.Authz, d.AssistantTokens, d.PrincipalCredentials, d.ShadowMCP, d.Audit, d.PlatformExtras, d.PlatformFeatureChecker, d.PlatformToolsets,
 		d.Identity, usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)), d.Challenges, d.MCPRisk, proxy, route.NewRedis(d.Redis), c.String("tunnel-forward-token"), cidrs, d.CallerAssertions, d.Redis,
 		mcp.TunnelPublicConfig{SessionTTL: 0, LiveSessionCap: c.Int("public-tunnels-live-session-cap"), InitializeRate: ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0}, RequestRate: ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0}, MaxRequestLifetime: 0},
@@ -185,6 +193,7 @@ func newMCPService(c *cli.Context, d mcpServiceDependencies) (service *mcp.Servi
 		return nil, fmt.Errorf("initialize MCP service: %w", err)
 	}
 	service.SetCallbackOrigins(d.CallbackOrigins)
+	service.SetFeedback(mcpfeedback.NewRecorder(d.Logger, d.Meter, d.DB, chatredact.New(), mcpfeedback.NewLimits(ratelimit.NewRedisStore(d.Redis), d.Meter), gatewayRecordsServiceName, d.Features))
 	service.SetPlatformHosts(d.PlatformHosts)
 	service.SetOpenAIAppsChallengeToken(c.String("openai-apps-challenge-token"))
 	if err := service.SetMCPRegistryAuth(c.String("mcp-registry-auth")); err != nil {

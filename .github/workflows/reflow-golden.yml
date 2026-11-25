@@ -2,14 +2,15 @@ name: Reflow
 
 # Runs the Reflow collection's golden flows against a freshly booted local
 # stack. Pushes to main record the baseline that pull requests compare with.
-# Pilot: pull requests run only when they carry the `reflow` label.
+# Every pull request from this repository runs, so a change that breaks a
+# golden flow shows on its own pull request instead of on main after merge.
 
 on:
   push:
     branches:
       - main
   pull_request:
-    types: [opened, synchronize, reopened, labeled]
+    types: [opened, synchronize, reopened]
   workflow_dispatch:
 
 permissions:
@@ -30,7 +31,7 @@ jobs:
     if: >-
       github.event_name != 'pull_request' ||
       (github.event.pull_request.head.repo.full_name == github.repository &&
-       contains(github.event.pull_request.labels.*.name, 'reflow'))
+       github.event.pull_request.user.login != 'dependabot[bot]')
     runs-on: blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 100
     permissions:
@@ -130,7 +131,19 @@ jobs:
         run: |
           mkdir -p .reflow
           printf 'team: %s\ncollection: %s\nrepository: %s\n' "$REFLOW_TEAM" "$REFLOW_COLLECTION" "$GITHUB_REPOSITORY" > .reflow/app.yml
-          reflow init --collection "$REFLOW_COLLECTION"
+          # The Reflow API sometimes answers 5xx for a short time. Try again
+          # on a 5xx only; any other failure (auth, a wrong collection) is
+          # not transient and fails at once.
+          for attempt in 1 2 3 4; do
+            if out=$(reflow init --collection "$REFLOW_COLLECTION" 2>&1); then
+              echo "$out"
+              exit 0
+            fi
+            echo "$out"
+            grep -q 'HTTP 5[0-9][0-9]' <<<"$out" || exit 1
+            [ "$attempt" -lt 4 ] && sleep $((attempt * 30))
+          done
+          exit 1
 
       - name: Target the stack
         run: mise run reflow:target --group "ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" --dir "$RUNNER_TEMP/reflow-target"

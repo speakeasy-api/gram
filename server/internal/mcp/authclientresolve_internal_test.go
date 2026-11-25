@@ -3,7 +3,7 @@ package mcp
 import (
 	"bytes"
 	"context"
-	"errors"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"log/slog"
 	"net/url"
 	"testing"
@@ -13,21 +13,15 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/otel/attribute"
-	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
-	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
-	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
@@ -199,7 +193,7 @@ func TestWithoutDeniedSources(t *testing.T) {
 func TestRefreshIsUndecidedBeforeEnforcement(t *testing.T) {
 	t.Parallel()
 
-	reconnect, chain, decided, err := (&Service{}).refreshNeedsAuthClientReconnect(t.Context(), &ResolvedMcpEndpoint{McpServerID: validUUID(uuid.New()), OrganizationID: "org_a"}, urn.NewUserSubject("user_a"), "jti")
+	reconnect, chain, decided, err := (&Service{aiCatalog: aivendorstest.NewStore()}).refreshNeedsAuthClientReconnect(t.Context(), &ResolvedMcpEndpoint{McpServerID: validUUID(uuid.New()), OrganizationID: "org_a"}, urn.NewUserSubject("user_a"), "jti")
 	require.NoError(t, err)
 	require.False(t, reconnect)
 	require.False(t, chain.clientID.Valid)
@@ -226,7 +220,9 @@ func newAuthClientFixture(t *testing.T, pool *pgxpool.Pool) *authClientFixture {
 	q := authclientbackfill.New(pool)
 	enc, err := encryption.NewWithBytes(make([]byte, 32))
 	require.NoError(t, err)
-	f := &authClientFixture{t: t, q: q, service: &Service{db: pool, enc: enc, logger: testenv.NewLogger(t), authClientPermitter: connectPermitter{}}, orgID: "org_" + uuid.NewString(), projectID: uuid.New(), registration: uuid.New(), issuerID: uuid.New()}
+	f := &authClientFixture{t: t, q: q, service: &Service{
+		aiCatalog: aivendorstest.NewStore(),
+		db:        pool, enc: enc, logger: testenv.NewLogger(t), authClientPermitter: connectPermitter{}}, orgID: "org_" + uuid.NewString(), projectID: uuid.New(), registration: uuid.New(), issuerID: uuid.New()}
 	require.NoError(t, q.SeedOrganizationFixture(ctx, f.orgID))
 	require.NoError(t, q.SeedProjectFixture(ctx, authclientbackfill.SeedProjectFixtureParams{ID: f.projectID, Slug: "p-" + f.projectID.String()[:8], OrganizationID: f.orgID}))
 	require.NoError(t, q.SeedRemoteSessionIssuerFixture(ctx, authclientbackfill.SeedRemoteSessionIssuerFixtureParams{ID: f.issuerID, ProjectID: validUUID(f.projectID), Slug: "rsi-" + f.issuerID.String()[:8], Issuer: "https://auth.example.com/" + f.issuerID.String()[:8], Name: pgtype.Text{String: "Example", Valid: true}}))
@@ -362,13 +358,14 @@ func TestResolveAuthClientReadsTheRecordedChoice(t *testing.T) {
 		require.Equal(t, validUUID(f.registration), res.choice.clientID)
 	})
 
-	t.Run("a registration an admin detached is a gap", func(t *testing.T) {
+	t.Run("a saved client an admin detached from the server is a gap", func(t *testing.T) {
 		t.Parallel()
 		f := newAuthClientFixture(t, pool)
 		id := f.client(authClientTypeServiceAccount, validUUID(f.registration), true)
+		require.NoError(t, f.q.SoftDeleteServerAuthClientLinksFixture(ctx, f.serverID))
 		res := f.resolve(f.choose(validUUID(id)))
 		require.Equal(t, authClientGap, res.outcome)
-		require.Equal(t, authClientReasonDetached, res.reason)
+		require.Equal(t, authClientReasonUnassociated, res.reason)
 	})
 
 	t.Run("a missing choice is a gap", func(t *testing.T) {
@@ -470,10 +467,6 @@ func TestResolveAuthClientReadsTheRecordedChoice(t *testing.T) {
 		require.NoError(t, choiceErr)
 		require.True(t, choice.noAuth(), "which serves it with the server's headers, as before")
 
-		var buf bytes.Buffer
-		f.service.logger = slog.New(slog.NewJSONHandler(&buf, nil))
-		f.service.shadowAuthClient(ctx, selector, f.serverID, f.projectID, urn.NewUserSubject("user_1"), choice, choiceErr)
-		require.Empty(t, buf.String(), "shadow reports no mismatch")
 	})
 
 	t.Run("a no-auth choice on a server with an OAuth client stays a gap", func(t *testing.T) {
@@ -486,14 +479,13 @@ func TestResolveAuthClientReadsTheRecordedChoice(t *testing.T) {
 		require.Equal(t, authClientReasonNoAuthForbidden, res.reason)
 	})
 
-	t.Run("a legacy attach keeps a no-auth choice on a header-client server a gap", func(t *testing.T) {
+	t.Run("a declared header client is not replaced by a legacy OAuth attach", func(t *testing.T) {
 		t.Parallel()
 		f := newAuthClientFixture(t, pool)
 		f.client(authClientTypePassThrough, uuid.NullUUID{}, true)
 		f.attach()
-		res := f.resolve(f.choose(uuid.NullUUID{}))
+		res := enforcedCompatibility(f.resolve(f.choose(uuid.NullUUID{})))
 		require.Equal(t, authClientGap, res.outcome)
-		require.Equal(t, authClientReasonNoAuthForbidden, res.reason)
 	})
 
 	t.Run("no-auth on a server with credential headers is a setup gap", func(t *testing.T) {
@@ -730,17 +722,6 @@ func TestResolveAuthClientReadsTheRecordedChoice(t *testing.T) {
 		}}, permitter.asked)
 	})
 
-	t.Run("shadow never asks the permitter", func(t *testing.T) {
-		t.Parallel()
-		f := newAuthClientFixture(t, pool)
-		permitter := &recordingPermitter{asked: nil}
-		f.service.authClientPermitter = permitter
-		id := f.oauthClient(authClientTypeRemoteSession)
-		selector := f.choose(validUUID(id))
-		f.service.shadowAuthClient(ctx, selector, f.serverID, f.projectID, urn.NewUserSubject("user_1"), upstreamChoice{clientID: validUUID(f.registration), remoteSessionIssuerID: validUUID(f.issuerID)}, nil)
-		require.Empty(t, permitter.asked)
-	})
-
 	for _, destination := range []string{"Authorization", "X-Token"} {
 		t.Run("an optional copy reading the inbound Authorization into "+destination+" is not sent", func(t *testing.T) {
 			t.Parallel()
@@ -835,148 +816,6 @@ func TestAnnotateAuthClientRecordsIDsOnly(t *testing.T) {
 	}, got)
 }
 
-// parityPoints reads the mcp.auth_client.parity counter back by attribute set.
-func parityPoints(t *testing.T, reader *sdkmetric.ManualReader) map[attribute.Set]int64 {
-	t.Helper()
-	var rm metricdata.ResourceMetrics
-	require.NoError(t, reader.Collect(t.Context(), &rm))
-	points := map[attribute.Set]int64{}
-	for _, scope := range rm.ScopeMetrics {
-		for _, m := range scope.Metrics {
-			if m.Name != "mcp.auth_client.parity" {
-				continue
-			}
-			sum, ok := m.Data.(metricdata.Sum[int64])
-			require.True(t, ok)
-			for _, dp := range sum.DataPoints {
-				points[dp.Attributes] = dp.Value
-			}
-		}
-	}
-	return points
-}
-
-func parityKey(agreed bool, outcome, legacy authClientOutcome, reason string) attribute.Set {
-	return attribute.NewSet(attr.AuthClientParityAgreed(agreed), attr.AuthClientOutcome(string(outcome)), attr.AuthClientLegacyOutcome(string(legacy)), attr.AuthClientReason(reason))
-}
-
-func TestReportAuthClientParity(t *testing.T) {
-	t.Parallel()
-
-	registration, other := uuid.New(), uuid.New()
-	resolved := func(clientType string, clientID uuid.UUID) authClientResolution {
-		res := gapResolution("")
-		res.outcome = authClientResolved
-		res.clientID = uuid.New()
-		res.clientType = clientType
-		if clientID != uuid.Nil {
-			res.choice = upstreamChoice{clientID: validUUID(clientID), remoteSessionIssuerID: validUUID(uuid.New())}
-		}
-		return res
-	}
-	legacy := func(reason string) authClientResolution {
-		res := gapResolution(reason)
-		res.outcome = authClientLegacy
-		return res
-	}
-	oauthChoice := upstreamChoice{clientID: validUUID(registration), remoteSessionIssuerID: validUUID(uuid.New())}
-	var noAuthChoice upstreamChoice
-
-	cases := []struct {
-		name      string
-		res       authClientResolution
-		choice    upstreamChoice
-		choiceErr error
-		warn      bool
-		counted   *attribute.Set
-	}{
-		{"same client agrees", resolved(authClientTypeRemoteSession, registration), oauthChoice, nil, false, new(parityKey(true, authClientResolved, authClientResolved, authClientReasonNone))},
-		{"different client disagrees", resolved(authClientTypeRemoteSession, other), oauthChoice, nil, true, new(parityKey(false, authClientResolved, authClientResolved, authClientReasonNone))},
-		{"a headers-only client agrees with no-auth", resolved(authClientTypeStaticCredential, uuid.Nil), noAuthChoice, nil, false, new(parityKey(true, authClientResolved, authClientNoAuth, authClientReasonNone))},
-		{"a headers-only client disagrees with an unusable choice", resolved(authClientTypePassThrough, uuid.Nil), noAuthChoice, errUpstreamSelectionUnusable, true, new(parityKey(false, authClientResolved, authClientGap, authClientReasonNone))},
-		{"gap against a usable choice disagrees", gapResolution(authClientReasonClientDisabled), oauthChoice, nil, true, new(parityKey(false, authClientGap, authClientResolved, authClientReasonClientDisabled))},
-		{"a setup gap against a usable choice disagrees", gapResolution(authClientReasonSetup), noAuthChoice, nil, true, new(parityKey(false, authClientGap, authClientNoAuth, authClientReasonSetup))},
-		{"gap against an unusable choice agrees", gapResolution(authClientReasonClientDisabled), oauthChoice, errUpstreamSelectionUnusable, false, new(parityKey(true, authClientGap, authClientGap, authClientReasonClientDisabled))},
-		{"an unmapped choice is counted without a warning", legacy(authClientReasonUnmapped), oauthChoice, nil, false, new(parityKey(false, authClientLegacy, authClientResolved, authClientReasonUnmapped))},
-		{"stale header copies are a mismatch", legacy(authClientReasonHeadersStale), noAuthChoice, nil, true, new(parityKey(false, authClientLegacy, authClientNoAuth, authClientReasonHeadersStale))},
-		{"a choice that may chain is a mismatch", legacy(authClientReasonLegacyMayChain), oauthChoice, nil, true, new(parityKey(false, authClientLegacy, authClientResolved, authClientReasonLegacyMayChain))},
-		{"EMA is not compared", legacy(authClientReasonEMA), oauthChoice, nil, false, nil},
-		{"tunneled headers are not compared", legacy(authClientReasonTunneledHeaders), noAuthChoice, nil, false, nil},
-		{"a failed legacy read is not compared", resolved(authClientTypeRemoteSession, registration), oauthChoice, errors.New("connection reset"), false, nil},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			var buf bytes.Buffer
-			reader := sdkmetric.NewManualReader()
-			metrics := mcpmetrics.NewMetrics(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test"), testenv.NewLogger(t))
-			s := &Service{logger: slog.New(slog.NewJSONHandler(&buf, nil)), metrics: metrics}
-			s.reportAuthClientParity(t.Context(), "org_1", uuid.New(), tc.res, tc.choice, tc.choiceErr)
-			if tc.warn {
-				require.Contains(t, buf.String(), "auth client resolver parity mismatch")
-			} else {
-				require.Empty(t, buf.String())
-			}
-			points := parityPoints(t, reader)
-			if tc.counted == nil {
-				require.Empty(t, points)
-				return
-			}
-			require.Equal(t, map[attribute.Set]int64{*tc.counted: 1}, points)
-		})
-	}
-}
-
-func TestReportAuthClientParityAnnotatesTheSpan(t *testing.T) {
-	t.Parallel()
-
-	recorder := tracetest.NewSpanRecorder()
-	ctx, span := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder)).Tracer("test").Start(t.Context(), "request")
-	s := &Service{logger: testenv.NewLogger(t)}
-	s.reportAuthClientParity(ctx, "org_1", uuid.New(), gapResolution(authClientReasonClientDisabled), upstreamChoice{}, nil)
-	span.End()
-
-	got := map[string]string{}
-	for _, kv := range recorder.Ended()[0].Attributes() {
-		got[string(kv.Key)] = kv.Value.Emit()
-	}
-	require.Equal(t, string(authClientNoAuth), got["gram.auth_client.legacy_outcome"])
-	require.Equal(t, "false", got["gram.auth_client.parity_agreed"])
-}
-
-func TestShadowAuthClientCountsResolverFailures(t *testing.T) {
-	t.Parallel()
-
-	pool, err := TestInfra.CloneTestDatabase(t, "mcp_auth_client_shadow")
-	require.NoError(t, err)
-	f := newAuthClientFixture(t, pool)
-	reader := sdkmetric.NewManualReader()
-	f.service.metrics = mcpmetrics.NewMetrics(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test"), testenv.NewLogger(t))
-	selector := f.choose(uuid.NullUUID{})
-	ctx, cancel := context.WithCancel(t.Context())
-	cancel()
-	f.service.shadowAuthClient(ctx, selector, f.serverID, f.projectID, urn.NewUserSubject("user_1"), upstreamChoice{}, nil)
-	require.Equal(t, map[attribute.Set]int64{
-		attribute.NewSet(attr.AuthClientParityAgreed(false), attr.AuthClientOutcome(authClientParityError), attr.AuthClientLegacyOutcome(string(authClientNoAuth)), attr.AuthClientReason(authClientReasonNone)): 1,
-	}, parityPoints(t, reader))
-}
-
-func TestAuthClientModeIsOffWithoutFlags(t *testing.T) {
-	t.Parallel()
-
-	mode := func(s *Service, org string) feature.AuthClientResolverMode {
-		t.Helper()
-		m, err := s.authClientMode(t.Context(), org)
-		require.NoError(t, err)
-		return m
-	}
-	require.Equal(t, feature.AuthClientResolverOff, mode(&Service{}, "org_a"), "no flag provider keeps the upstream client choice")
-	flags := new(feature.InMemory)
-	flags.SetFlag(feature.FlagAuthClientResolverShadow, "org_a", true)
-	require.Equal(t, feature.AuthClientResolverShadow, mode(&Service{features: flags}, "org_a"))
-	require.Equal(t, feature.AuthClientResolverOff, mode(&Service{features: flags}, "org_b"))
-}
-
 func TestUpstreamClientChoiceServesMappedHeadersOnlyClients(t *testing.T) {
 	t.Parallel()
 
@@ -996,17 +835,6 @@ func TestUpstreamClientChoiceServesMappedHeadersOnlyClients(t *testing.T) {
 			require.Equal(t, before, after, "a mapped choice serves exactly as the unmapped no-auth choice did")
 		})
 
-		t.Run(clientType+" agrees in shadow", func(t *testing.T) {
-			t.Parallel()
-			f := newAuthClientFixture(t, pool)
-			id := f.client(clientType, uuid.NullUUID{}, true)
-			selector := f.choose(validUUID(id))
-			choice, choiceErr := selector.forServer(t.Context(), f.serverID)
-			var buf bytes.Buffer
-			f.service.logger = slog.New(slog.NewJSONHandler(&buf, nil))
-			f.service.shadowAuthClient(t.Context(), selector, f.serverID, f.projectID, urn.NewUserSubject("user_1"), choice, choiceErr)
-			require.Empty(t, buf.String())
-		})
 	}
 
 	t.Run("a disabled headers-only client serves as before mapping", func(t *testing.T) {
@@ -1129,9 +957,6 @@ func TestRefreshNeedsAuthClientReconnectUnderEnforcement(t *testing.T) {
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
 	f.service.remoteChallengeMgr = remotesessions.NewChallengeManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), pool, f.service.enc, policy, nil, cache.NoopCache, &url.URL{Scheme: "http", Host: "localhost"})
-	flags := new(feature.InMemory)
-	flags.SetFlag(feature.FlagAuthClientResolver, f.orgID, true)
-	f.service.features = flags
 	f.enforce()
 	f.service.sessionPolicyCache = cache.NewTypedObjectCache[sessionPolicyEntry](testenv.NewLogger(t), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone)
 
@@ -1216,7 +1041,7 @@ func TestResolveAuthClientsBatchesMemberChoices(t *testing.T) {
 	}
 	choices := &memberChoices{selector: selector, subject: urn.NewUserSubject("test-user")}
 	before = pool.Stat().AcquireCount()
-	choices.apply(t.Context(), testenv.NewLogger(t), members, true)
+	choices.apply(t.Context(), testenv.NewLogger(t), members)
 	require.EqualValues(t, 2, pool.Stat().AcquireCount()-before, "full application batches choices and headers; the connect permitter performs no database reads")
 	require.Len(t, permitter.asked, len(ids), "every member still checks its client's permit")
 	for _, member := range members {
@@ -1270,7 +1095,7 @@ func TestAuthClientConsentUsesSharedResolver(t *testing.T) {
 		f.service.authClientPermitter = gateway
 		members := []metaMember{{serverID: f.serverID, backend: metaMemberBackendProxied}}
 		choices := &memberChoices{selector: selector, subject: urn.NewUserSubject("user_1")}
-		choices.apply(t.Context(), testenv.NewLogger(t), members, true)
+		choices.apply(t.Context(), testenv.NewLogger(t), members)
 		require.Len(t, gateway.asked, 1)
 		require.Equal(t, validUUID(f.registration), gateway.asked[0].RegistrationID, "a gateway member's fallback is permitted on it too")
 		require.NotNil(t, members[0].authClient)
@@ -1338,46 +1163,15 @@ func (f *authClientFixture) enforce() {
 	f.service.authEnforcement = authenforcement.NewGate(f.service.db)
 }
 
-func TestAuthClientModeEnforcesOnlyEnabledOrganizations(t *testing.T) {
-	t.Parallel()
-
-	pool, err := TestInfra.CloneTestDatabase(t, "mcp_auth_client_enforcement")
-	require.NoError(t, err)
-	f := newAuthClientFixture(t, pool)
-	ctx := t.Context()
-	flags := new(feature.InMemory)
-	f.service.features = flags
-	f.service.authEnforcement = authenforcement.NewGate(pool)
-	mode := func() feature.AuthClientResolverMode {
-		t.Helper()
-		m, err := f.service.authClientMode(ctx, f.orgID)
-		require.NoError(t, err)
-		return m
-	}
-
-	require.Equal(t, feature.AuthClientResolverOff, mode())
-	flags.SetFlag(feature.FlagAuthClientResolver, f.orgID, true)
-	require.Equal(t, feature.AuthClientResolverShadow, mode(), "the flag alone only shadows")
-
-	flags.SetFlag(feature.FlagAuthClientResolver, f.orgID, false)
-	f.enforce()
-	require.Equal(t, feature.AuthClientResolverEnforced, mode(), "enabled enforcement needs no flag, so a flag change never skips its readiness check")
-
-	_, err = productfeaturesrepo.New(pool).DeleteFeature(ctx, productfeaturesrepo.DeleteFeatureParams{OrganizationID: f.orgID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
-	require.NoError(t, err)
-	f.service.authEnforcement = authenforcement.NewGate(pool)
-	require.Equal(t, feature.AuthClientResolverOff, mode(), "disabling enforcement rolls back")
-}
-
-func TestAuthClientModeRefusesWhenEnforcementCannotBeRead(t *testing.T) {
+func TestConsentRefusesWhenEnforcementCannotBeRead(t *testing.T) {
 	t.Parallel()
 
 	pool, err := TestInfra.CloneTestDatabase(t, "mcp_auth_client_enforcement_error")
 	require.NoError(t, err)
 	gate := authenforcement.NewGate(pool)
 	pool.Close()
-	_, err = (&Service{authEnforcement: gate}).authClientMode(t.Context(), "org_a")
-	require.Error(t, err, "an unreadable enforcement state is never served as shadow")
+	_, err = (&Service{authEnforcement: gate}).consentAuthChoicesEnforced(t.Context(), "org_a")
+	require.Error(t, err, "consent fails closed on unreadable enrollment")
 }
 
 func TestProfileSelectorReadsOnlyATurnCredentialsOwnProfile(t *testing.T) {
@@ -1385,7 +1179,7 @@ func TestProfileSelectorReadsOnlyATurnCredentialsOwnProfile(t *testing.T) {
 
 	projectID, version := uuid.New(), uuid.New()
 	endpoint := &ResolvedMcpEndpoint{ProjectID: projectID, OrganizationID: "org_a"}
-	s := &Service{}
+	s := &Service{aiCatalog: aivendorstest.NewStore()}
 	credential := func(org string, project uuid.UUID, profile uuid.NullUUID) principalcredential.Credential {
 		return principalcredential.Credential{
 			OrganizationID:            org,
@@ -1407,7 +1201,7 @@ func TestProfileSelectorReadsOnlyATurnCredentialsOwnProfile(t *testing.T) {
 	require.Nil(t, s.profileSelectorFor(t.Context(), endpoint), "a request without a principal credential has none")
 }
 
-func TestRefuseForeignPublicCallerOnlyUnderEnforcement(t *testing.T) {
+func TestRefuseForeignPublicCaller(t *testing.T) {
 	t.Parallel()
 
 	pool, err := TestInfra.CloneTestDatabase(t, "mcp_foreign_public_caller")
@@ -1417,9 +1211,8 @@ func TestRefuseForeignPublicCallerOnlyUnderEnforcement(t *testing.T) {
 	foreign := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: "org_other"})
 	own := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: f.orgID})
 
-	require.NoError(t, f.service.refuseForeignCaller(foreign, f.orgID), "before enforcement a foreign caller is served as today")
+	require.NoError(t, f.service.refuseForeignCallerOutsideTypedServing(foreign, f.orgID), "ordinary ungated and hosted policy is unchanged")
 
-	f.enforce()
 	err = f.service.refuseForeignCaller(foreign, f.orgID)
 	var shareable *oops.ShareableError
 	require.ErrorAs(t, err, &shareable)
@@ -1496,7 +1289,7 @@ func TestResolveAuthClientReadsTypedStateUnderEnforcement(t *testing.T) {
 		f := newAuthClientFixture(t, pool)
 		id := f.client(authClientTypeRemoteSession, validUUID(f.registration), true)
 		selector := f.choose(validUUID(id))
-		require.Equal(t, authClientReasonDetached, f.resolve(selector).reason, "before enforcement the copy is checked against the association")
+		require.Equal(t, authClientResolved, f.resolve(selector).outcome, "serving uses the typed offer without enrollment or a legacy link")
 
 		f.enforce()
 		res := f.resolve(selector)

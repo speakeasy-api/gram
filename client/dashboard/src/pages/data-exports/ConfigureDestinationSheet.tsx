@@ -201,7 +201,8 @@ export function ConfigureDestinationSheet({
                     <div className="space-y-1">
                       <Label>Include sensitive data</Label>
                       <Text muted className="text-sm">
-                        Send tool arguments, results, and prompt content.
+                        Send tool arguments, results, prompt content, and what
+                        agents write in feedback.
                       </Text>
                     </div>
                     <Switch

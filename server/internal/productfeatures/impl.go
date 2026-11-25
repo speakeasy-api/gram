@@ -156,7 +156,7 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 		return oops.E(oops.CodeInvalid, nil, "unknown product feature")
 	}
 	if feature == FeatureUpstreamAuthEnforced {
-		return oops.E(oops.CodeInvalid, nil, "upstream auth enforcement is changed through the admin enforcement endpoint")
+		return oops.E(oops.CodeInvalid, nil, "upstream auth enforcement can only be enabled through the admin enforcement endpoint")
 	}
 	if feature.RequiresPlatformAdmin() {
 		if _, _, err := auth.RequirePlatformAdmin(ctx, s.logger); err != nil {
