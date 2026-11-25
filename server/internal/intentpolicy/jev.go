@@ -14,7 +14,7 @@ import (
 const JevModel = "jev-1.13"
 
 // jevPromptVersion identifies the label-question compilation below.
-const jevPromptVersion = "intent-labels-v1"
+const jevPromptVersion = "intent-labels-v2"
 
 // noulThreshold is the probability at which a yes/no label reads as true.
 const noulThreshold = 0.5

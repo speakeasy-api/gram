@@ -26,7 +26,7 @@ const (
 	LocationScratch         = "scratch"
 	LocationWorkspace       = "workspace"
 	LocationSystem          = "system"
-	LocationCredentialStore = "credential_store"
+	LocationCredentialStore = "credential_store" //nolint:gosec // G101: label option key, not a credential
 	LocationPersistence     = "persistence"
 	LocationRemote          = "remote"
 )
@@ -259,7 +259,7 @@ var contracts = []Contract{
 			label("and", LabelEffectClass, OpIncludesOtherThan, EffectRead),
 			label("and", LabelExecCodeOrigin, OpIsNot, CodeOriginProjectTask),
 		},
-		Expression: `label.effect_coverage != 'understood' && action.effect_class.exists(e, e != 'read') && label.exec_code_origin != 'project_task' ? CLARIFY : ABSTAIN`,
+		Expression: `label.effect_coverage != 'understood' && action.effect_class.exists(e, e != 'read' && !(e == 'exec' && label.exec_code_origin == 'project_task')) ? CLARIFY : ABSTAIN`,
 	},
 }
 

@@ -34,7 +34,7 @@ const (
 	// does not reserve the model's full output ceiling against the key.
 	geminiMaxTokens = 8192
 
-	geminiPromptVersion = "intent-labels-v1"
+	geminiPromptVersion = "intent-labels-v2"
 )
 
 // GeminiEvaluator labels calls with a Gemini model under a strict JSON schema.
