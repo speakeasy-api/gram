@@ -16,6 +16,7 @@ import {
   BookOpenIcon,
   Grid2X2Icon,
   KeyRoundIcon,
+  LockKeyholeIcon,
   ShieldCheckIcon,
   PlugZapIcon,
   ListChecksIcon,
@@ -119,6 +120,20 @@ export const ADMIN_NAV_GROUPS = [
         label: "Upstream OAuth migration",
         keywords: "oauth clients associations credentials backfill migrate",
         icon: KeyRoundIcon,
+      },
+      {
+        to: "/tailscale-oauth-migration",
+        label: "Tailscale OAuth migration",
+        keywords:
+          "tailscale private network ingress oauth credentials organization encryption kms backfill finalize",
+        icon: KeyRoundIcon,
+      },
+      {
+        to: "/encryption-transitions",
+        label: "Encryption transitions",
+        keywords:
+          "kms organization keys platform key dual write enroll rollback roll back finalize backfill",
+        icon: LockKeyholeIcon,
       },
       {
         to: "/platform-credentials",

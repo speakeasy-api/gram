@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -91,6 +92,17 @@ type AttemptFilter struct {
 	// PeopleFailingBefore is the exclusive end of PeopleFailingFrom's range.
 	PeopleFailingBefore time.Time
 
+	// PeopleProjectID, PeopleIssuerID and PeopleIssuerServerIDs, when set, narrow the people
+	// to those failing in one project and on one provider's servers, the provider itself, or
+	// rows stamped with it. Their other attempts are still read: they can show a part working.
+	PeopleProjectID uuid.UUID
+
+	// PeopleIssuerID is the provider the people must have failed on, or any when nil.
+	PeopleIssuerID uuid.UUID
+
+	// PeopleIssuerServerIDs are the servers and gateways attached to PeopleIssuerID now.
+	PeopleIssuerServerIDs []string
+
 	// FixCandidatesOnly keeps only attempts that ended connected or carry a reason: the
 	// successes that can fix a failure and the failures that show it was not fixed yet.
 	// It applies after the attempt is reduced, so it keeps every attempt End can call
@@ -125,11 +137,21 @@ func (f AttemptFilter) where() (string, []any, error) {
 		if f.OrganizationID != "" {
 			window, windowArgs = window+" AND organization_id = ?", append(windowArgs, f.OrganizationID)
 		}
+		failing, failingArgs := window, slices.Clone(windowArgs)
+		if f.PeopleProjectID != uuid.Nil {
+			failing, failingArgs = failing+" AND project_id = ?", append(failingArgs, f.PeopleProjectID)
+		}
+		failingAttempts, failingAttemptArgs := failing+" AND reason != ''", slices.Clone(failingArgs)
+		if f.PeopleIssuerID != uuid.Nil {
+			issuer := f.PeopleIssuerID.String()
+			failingAttempts += ` AND attempt_id IN (SELECT attempt_id FROM ` + EventsTable + ` WHERE ` + failing + ` AND (has(?, server_id) OR server_id = ? OR user_session_issuer_id = ?))`
+			failingAttemptArgs = append(append(failingAttemptArgs, failingArgs...), nonNilStrings(f.PeopleIssuerServerIDs), issuer, issuer)
+		}
 		conds = append(conds, `(organization_id, subject_urn) IN (
 		SELECT organization_id, subject_urn FROM `+EventsTable+`
 		WHERE `+window+` AND subject_urn != ''
-			AND attempt_id IN (SELECT attempt_id FROM `+EventsTable+` WHERE `+window+` AND reason != ''))`)
-		args = append(append(args, windowArgs...), windowArgs...)
+			AND attempt_id IN (SELECT attempt_id FROM `+EventsTable+` WHERE `+failingAttempts+`))`)
+		args = append(append(args, windowArgs...), failingAttemptArgs...)
 		// A row without the person still belongs to the attempt, so select whole attempts.
 		inner := strings.Join(conds, " AND ")
 		return `attempt_id IN (SELECT attempt_id FROM ` + EventsTable + ` WHERE ` + inner + `) AND ` + strings.Join(conds[:2], " AND "), append(args, f.StartedFrom.UnixNano(), f.StartedBefore.UnixNano()), nil
@@ -164,4 +186,11 @@ func ReadAttempts(ctx context.Context, ch driver.Conn, filter AttemptFilter, eac
 		return fmt.Errorf("read attempt rows: %w", err)
 	}
 	return nil
+}
+
+func nonNilStrings(values []string) []string {
+	if values == nil {
+		return []string{}
+	}
+	return values
 }

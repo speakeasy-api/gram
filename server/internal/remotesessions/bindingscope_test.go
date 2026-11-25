@@ -8,6 +8,8 @@ import (
 
 	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
 // A binding change on an organization-level issuer reaches servers in every
@@ -29,7 +31,7 @@ func TestClientBindingWritersReachEveryProjectOnAnOrganizationIssuer(t *testing.
 		provider := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, orgID, "scope-attach-provider")
 		client := seedOrgLevelRemoteClient(t, ctx, ti.conn, orgID, provider, "scope-attach-cid")
 
-		_, err := ti.service.AttachUserSessionIssuer(ctx, &clientsgen.AttachUserSessionIssuerPayload{
+		_, err := ti.service.AttachLegacyIssuerForTest(ctx, &remotesessions.LegacyIssuerBindingForTest{
 			ID:                  client.String(),
 			UserSessionIssuerID: orgUserIssuer.String(),
 		})
@@ -39,7 +41,7 @@ func TestClientBindingWritersReachEveryProjectOnAnOrganizationIssuer(t *testing.
 		require.NotEmpty(t, offeredAuthClients(t, ctx, ti.conn, other))
 	})
 
-	t.Run("detaching prunes the client from another project's server", func(t *testing.T) {
+	t.Run("detaching leaves another project's explicit offer", func(t *testing.T) {
 		t.Parallel()
 		ctx, ti := newTestService(t)
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -50,20 +52,25 @@ func TestClientBindingWritersReachEveryProjectOnAnOrganizationIssuer(t *testing.
 		otherProject := createProject(t, ctx, ti.conn, "scope-detach-other")
 		other := seedServerOnIssuer(t, ctx, ti.conn, otherProject, orgUserIssuer, "scope-detach-other")
 		provider := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, orgID, "scope-detach-provider")
-		client := seedOrgLevelRemoteClient(t, ctx, ti.conn, orgID, provider, "scope-detach-cid", orgUserIssuer)
-		resync(t, ctx, ti.conn, orgID, otherProject, orgUserIssuer)
+		client := seedOrgLevelRemoteClient(t, ctx, ti.conn, orgID, provider, "scope-detach-cid")
+		// The compatibility parent is only the detach target; the offer belongs to the server.
+		require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
+			RemoteSessionClientID: client, UserSessionIssuerID: orgUserIssuer,
+		}))
+		associateClient(t, ctx, ti.conn, orgID, otherProject, other, client)
 		recordTypedClients(t, ctx, ti.conn, orgID, other)
 		require.Equal(t, []uuid.UUID{client}, associatedClients(t, ctx, ti.conn, otherProject, other))
-		require.NotEmpty(t, offeredAuthClients(t, ctx, ti.conn, other))
+		offers := offeredAuthClients(t, ctx, ti.conn, other)
+		require.Len(t, offers, 1)
 
-		_, err := ti.service.DetachUserSessionIssuer(ctx, &clientsgen.DetachUserSessionIssuerPayload{
+		_, err := ti.service.DetachLegacyIssuerForTest(ctx, &remotesessions.LegacyIssuerBindingForTest{
 			ID:                  client.String(),
 			UserSessionIssuerID: orgUserIssuer.String(),
 		})
 		require.NoError(t, err)
-
-		require.Empty(t, associatedClients(t, ctx, ti.conn, otherProject, other))
-		require.Empty(t, offeredAuthClients(t, ctx, ti.conn, other))
+		require.Zero(t, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, client, orgUserIssuer))
+		require.Equal(t, []uuid.UUID{client}, associatedClients(t, ctx, ti.conn, otherProject, other))
+		require.Equal(t, offers, offeredAuthClients(t, ctx, ti.conn, other))
 	})
 }
 
@@ -78,8 +85,8 @@ func TestDeleteRemoteSessionClientPrunesItsAssociations(t *testing.T) {
 
 	userIssuer := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "scope-delete-usi")
 	server := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuer, "scope-delete")
-	client, _ := seedActiveClient(t, ctx, ti.conn, projectID, userIssuer, orgID, "scope-delete")
-	resync(t, ctx, ti.conn, orgID, projectID, userIssuer)
+	client, _ := seedActiveClient(t, ctx, ti.conn, projectID, uuid.Nil, orgID, "scope-delete")
+	associateClient(t, ctx, ti.conn, orgID, projectID, server, client)
 	recordTypedClients(t, ctx, ti.conn, orgID, server)
 	require.Equal(t, []uuid.UUID{client}, associatedClients(t, ctx, ti.conn, projectID, server))
 	require.NotEmpty(t, offeredAuthClients(t, ctx, ti.conn, server))

@@ -41,7 +41,30 @@ const (
 	// verification, by use case. Any increase blocks finalize and needs a
 	// person to look.
 	meterTransitionVerificationFailures = "gram.orgencryption.transition.verification_failures"
+
+	// meterTransitionStragglers counts platform-key copies found after a use
+	// case's clear had finished, by use case, source column and kind
+	// (platform_only or beside_org_copy). Any increase means a writer
+	// bypassed the fence and needs a person to look; platform_only copies
+	// are values the sweep destroyed.
+	meterTransitionStragglers = "gram.orgencryption.transition.stragglers"
 )
+
+// newStragglerCounter builds the straggler counter, or nil if construction
+// fails, which degrades to no metric rather than a panic.
+func newStragglerCounter(logger *slog.Logger, meterProvider metric.MeterProvider) metric.Int64Counter {
+	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/orgencryption")
+
+	counter, err := meter.Int64Counter(meterTransitionStragglers,
+		metric.WithDescription("Platform-key copies found after an organization's clear had finished."),
+		metric.WithUnit("{value}"))
+	if err != nil {
+		logger.ErrorContext(context.Background(), "create metric", attr.SlogMetricName(meterTransitionStragglers), attr.SlogError(err))
+		return nil
+	}
+
+	return counter
+}
 
 // runnerMetrics holds the rollout instruments. Instruments are nil-guarded,
 // so a construction failure degrades to no metrics rather than a panic.

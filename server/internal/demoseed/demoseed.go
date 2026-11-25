@@ -22,6 +22,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/catalogseed"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/fixture/fixtureauth"
@@ -45,9 +48,8 @@ const (
 // Run replaces the data for spec's tenant while holding the shared advisory
 // lock. The Postgres seed runs in one transaction, so a failed run leaves the
 // previous data in place; each statement in it gets its own statement
-// timeout. Once it commits, the tenant's upstream auth is migrated to typed
-// auth clients by the staff migration's own backfills and checked complete
-// (migrateUpstreamAuth). The ClickHouse seed then deletes both source rows and
+// timeout. The tenant's typed auth fixtures and grants are written in that
+// transaction, and checked after it commits. The ClickHouse seed then deletes both source rows and
 // materialized-view targets before its inserts incrementally repopulate the
 // summaries.
 //
@@ -60,22 +62,31 @@ func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.C
 	}
 
 	// The advisory lock holds one connection for the whole run, and the
-	// upstream auth backfills acquire another while it is held.
+	// typed upstream auth diagnostics acquire another while it is held.
 	if db.Config().MaxConns < 2 {
 		return fmt.Errorf("demo seed needs a postgres pool of at least 2 connections, got %d", db.Config().MaxConns)
 	}
 
+	// Reference data only; the decision backfill would touch other organizations.
+	if err := catalogseed.EnsureCatalog(ctx, db); err != nil {
+		return fmt.Errorf("ensure AI catalog before demo seed: %w", err)
+	}
+	catalog, err := aivendors.Load(ctx, db, logger, aitargets.ValidateCatalog)
+	if err != nil {
+		return fmt.Errorf("load AI catalog before demo seed: %w", err)
+	}
+
 	return withSeedLock(ctx, logger, db, func(conn *pgxpool.Conn) error {
-		s, err := seedPostgres(ctx, logger, conn, blob, enc, assistantIssuerURL, serverURL, spec)
+		s, err := seedPostgres(ctx, logger, conn, blob, enc, assistantIssuerURL, serverURL, spec, catalog)
 		if err != nil {
 			return err
 		}
 		logger.InfoContext(ctx, "demo seed applied to postgres")
 
-		if err := migrateUpstreamAuth(ctx, logger, db, spec.OrgID); err != nil {
-			return fmt.Errorf("migrate demo seed upstream auth: %w", err)
+		if err := upstreamAuthReadiness(ctx, logger, db, spec.OrgID); err != nil {
+			return fmt.Errorf("check demo seed upstream auth: %w", err)
 		}
-		logger.InfoContext(ctx, "demo seed upstream auth migrated")
+		logger.InfoContext(ctx, "demo seed typed upstream auth ready")
 
 		if err := s.runClickHouse(ctx, ch); err != nil {
 			return fmt.Errorf("apply demo seed to clickhouse: %w", err)
@@ -143,7 +154,7 @@ type txBeginner interface {
 // seedPostgres runs the Postgres seed for spec in one transaction on db, so a
 // failed run leaves the previous data in place. It returns the seeder, whose
 // clock the ClickHouse seed reuses.
-func seedPostgres(ctx context.Context, logger *slog.Logger, db txBeginner, blob assets.BlobStore, enc *encryption.Client, assistantIssuerURL, serverURL string, spec Spec) (*seeder, error) {
+func seedPostgres(ctx context.Context, logger *slog.Logger, db txBeginner, blob assets.BlobStore, enc *encryption.Client, assistantIssuerURL, serverURL string, spec Spec, catalog *aivendors.Snapshot) (*seeder, error) {
 	if enc == nil {
 		return nil, errors.New("demo seed needs the environment's encryption key")
 	}
@@ -155,11 +166,14 @@ func seedPostgres(ctx context.Context, logger *slog.Logger, db txBeginner, blob 
 	if err != nil {
 		return nil, err
 	}
-	s := &seeder{spec: spec, enc: enc, assistantIssuer: assistantIssuer, serverURL: server, q: nil, logger: logger, now: time.Time{}, signalSequences: nil}
+	s := &seeder{spec: spec, catalog: catalog, enc: enc, assistantIssuer: assistantIssuer, serverURL: server, q: nil, logger: logger, now: time.Time{}, signalSequences: nil}
 	if err := pgx.BeginFunc(ctx, db, func(tx pgx.Tx) error {
 		s.q = repo.New(tx)
 		if err := s.runPostgres(ctx); err != nil {
 			return err
+		}
+		if err := seedUpstreamAuthGrants(ctx, tx, spec.OrgID); err != nil {
+			return fmt.Errorf("seed typed upstream grants: %w", err)
 		}
 		return s.uploadOpenAPIDoc(ctx, blob)
 	}); err != nil {

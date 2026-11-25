@@ -11,6 +11,37 @@ import (
 	"github.com/google/uuid"
 )
 
+const lockRemoteSessionClientUserSessionIssuerLink = `-- name: LockRemoteSessionClientUserSessionIssuerLink :exec
+SELECT 1
+FROM remote_session_client_user_session_issuers AS l
+JOIN remote_session_clients AS c ON c.id = l.remote_session_client_id
+JOIN user_session_issuers AS u ON u.id = l.user_session_issuer_id
+WHERE l.remote_session_client_id = $1
+  AND l.user_session_issuer_id = $2
+  AND EXISTS (
+    SELECT 1 FROM projects AS p
+    WHERE p.organization_id = $3::text AND NOT p.deleted
+      AND (u.project_id = p.id OR (u.project_id IS NULL AND u.organization_id = p.organization_id))
+      AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
+  )
+FOR UPDATE OF l
+`
+
+type LockRemoteSessionClientUserSessionIssuerLinkParams struct {
+	RemoteSessionClientID uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+	OrganizationID        string
+}
+
+// Lock the join-table row an agent attachment's foreign key check reads, before
+// the caller checks for attachments that deleting the row would cascade to. A
+// concurrent attachment either commits first, and the check sees it, or waits
+// for this transaction to end.
+func (q *Queries) LockRemoteSessionClientUserSessionIssuerLink(ctx context.Context, arg LockRemoteSessionClientUserSessionIssuerLinkParams) error {
+	_, err := q.db.Exec(ctx, lockRemoteSessionClientUserSessionIssuerLink, arg.RemoteSessionClientID, arg.UserSessionIssuerID, arg.OrganizationID)
+	return err
+}
+
 const lockingFixtureClearRemoteIssuer = `-- name: LockingFixtureClearRemoteIssuer :exec
 UPDATE mcp_servers SET remote_session_issuer_id=NULL WHERE project_id=$1::uuid AND id=$2::uuid
 `

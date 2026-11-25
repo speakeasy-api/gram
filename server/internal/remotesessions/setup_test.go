@@ -399,6 +399,19 @@ func clearTrustedRemoteSessionIssuer(t *testing.T, ctx context.Context, conn *pg
 	require.NoError(t, err)
 }
 
+// ensureAttachmentParent supplies only the compatibility FK for direct
+// principal-attachment fixture writes. It never configures a login.
+func ensureAttachmentParent(t *testing.T, ctx context.Context, conn *pgxpool.Pool, clientID, signInID uuid.UUID) {
+	t.Helper()
+	require.NoError(t, repo.New(conn).EnsurePrincipalAttachmentParents(ctx, repo.EnsurePrincipalAttachmentParentsParams{
+		UserSessionIssuerID: signInID,
+		ClientIds:           []uuid.UUID{clientID},
+		OrganizationID:      activeOrganizationID(t, ctx),
+		ProjectID:           conv.ToNullUUID(projectIDFromContext(t, ctx)),
+	}))
+	require.Equal(t, 1, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, conn, clientID, signInID), "the attachment fixture needs a compatibility FK parent")
+}
+
 func countRemoteSessionClientUserSessionIssuerBindings(t *testing.T, ctx context.Context, conn *pgxpool.Pool, clientID, userIssuerID uuid.UUID) int {
 	t.Helper()
 
@@ -570,7 +583,7 @@ func seedRemoteIssuerWithURL(t *testing.T, ctx context.Context, conn *pgxpool.Po
 
 // seedOrgLevelRemoteClient creates an organization-level (project_id IS NULL,
 // organization_id set) remote_session_client referencing remoteIssuerID and
-// attaches it to each userSessionIssuerID through the join table. Org-level
+// places it on a server for each userSessionIssuerID. Org-level
 // clients carry no project; any project in the org can bind one to its own
 // user_session_issuer.
 func seedOrgLevelRemoteClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, remoteIssuerID uuid.UUID, clientID string, userSessionIssuerIDs ...uuid.UUID) uuid.UUID {
@@ -585,10 +598,7 @@ func seedOrgLevelRemoteClient(t *testing.T, ctx context.Context, conn *pgxpool.P
 	})
 	require.NoError(t, err)
 	for _, usi := range userSessionIssuerIDs {
-		require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-			RemoteSessionClientID: created.ID,
-			UserSessionIssuerID:   usi,
-		}))
+		placeClientForSignIn(t, ctx, conn, created.ID, usi)
 	}
 	return created.ID
 }
@@ -630,6 +640,21 @@ func seedTrustedIdentityProviderClient(t *testing.T, ctx context.Context, conn *
 	return issuer.ID, client.ID
 }
 
+// placeClientForSignIn creates a hosted placement for a registration. A hosted
+// server gives the sign-in issuer reachability without supplying a resource URL.
+func placeClientForSignIn(t *testing.T, ctx context.Context, conn *pgxpool.Pool, clientID, signInID uuid.UUID) uuid.UUID {
+	t.Helper()
+	return placeClientForSignInInProject(t, ctx, conn, projectIDFromContext(t, ctx), activeOrganizationID(t, ctx), clientID, signInID)
+}
+
+func placeClientForSignInInProject(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, organizationID string, clientID, signInID uuid.UUID) uuid.UUID {
+	t.Helper()
+	fixture := attachFixture{ti: &testInstance{conn: conn}, projectID: projectID, orgID: organizationID}
+	serverID := fixture.hostedServer(t, ctx, "registration-"+uuid.NewString(), conv.ToNullUUID(signInID))
+	associateClient(t, ctx, conn, organizationID, projectID, serverID, clientID)
+	return serverID
+}
+
 // seedRemoteClientAtTier creates a remote client with explicit tenancy and
 // binds it to each supplied user-session issuer.
 func seedRemoteClientAtTier(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.NullUUID, organizationID pgtype.Text, remoteIssuerID uuid.UUID, clientID string, userSessionIssuerIDs ...uuid.UUID) uuid.UUID {
@@ -644,17 +669,18 @@ func seedRemoteClientAtTier(t *testing.T, ctx context.Context, conn *pgxpool.Poo
 	})
 	require.NoError(t, err)
 	for _, userSessionIssuerID := range userSessionIssuerIDs {
-		require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-			RemoteSessionClientID: created.ID,
-			UserSessionIssuerID:   userSessionIssuerID,
-		}))
+		placementProject := projectIDFromContext(t, ctx)
+		if projectID.Valid {
+			placementProject = projectID.UUID
+		}
+		placeClientForSignInInProject(t, ctx, conn, placementProject, activeOrganizationID(t, ctx), created.ID, userSessionIssuerID)
 	}
 	return created.ID
 }
 
-// attachRemoteMcpServerToIssuer binds a remote-backed MCP server to issuerID
-// so clients on that issuer derive serverURL as their resource.
-func attachRemoteMcpServerToIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID, issuerID uuid.UUID, slug, serverURL string) {
+// attachRemoteMcpServerToIssuer creates a remote-backed server on issuerID.
+// Registrations derive serverURL only from an explicit association or offer.
+func attachRemoteMcpServerToIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID, issuerID uuid.UUID, slug, serverURL string) uuid.UUID {
 	t.Helper()
 	remoteServer, err := remotemcprepo.New(conn).CreateServer(ctx, remotemcprepo.CreateServerParams{
 		ID:            uuid.New(),
@@ -663,7 +689,7 @@ func attachRemoteMcpServerToIssuer(t *testing.T, ctx context.Context, conn *pgxp
 		Url:           serverURL,
 	})
 	require.NoError(t, err)
-	_, err = mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+	server, err := mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
 		ID:                  uuid.New(),
 		ProjectID:           projectID,
 		Name:                conv.ToPGText(slug),
@@ -673,6 +699,7 @@ func attachRemoteMcpServerToIssuer(t *testing.T, ctx context.Context, conn *pgxp
 		UserSessionIssuerID: conv.ToNullUUID(issuerID),
 	})
 	require.NoError(t, err)
+	return server.ID
 }
 
 // seedMCPServerInOrg creates a project in the supplied organization and an MCP

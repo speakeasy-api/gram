@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -341,15 +342,28 @@ func chainMetaMember(ctx context.Context, gate metaGateContext, member metaMembe
 			routeErr = memberConnectionError{routeErr, resolveFailureHappened(routed.ClientCredentialErr)}
 		}
 	}
-	if (routeErr != nil && !held) || (routed.Token != "") || gate.chainUpstream == nil || member.upstreamNoAuth || (member.authClient != nil && member.authClient.outcome != authClientLegacy) {
-		return routed, routed.Token, routeErr
+	token := routed.Token
+	if (routeErr == nil || held) && token == "" && gate.chainUpstream != nil && !member.upstreamNoAuth && (member.authClient == nil || member.authClient.outcome == authClientLegacy) {
+		chained, err := gate.chainUpstream(ctx, member, resource)
+		if held && chained == "" {
+			return routed, "", routeErr
+		}
+		var none remotesessions.UpstreamToken
+		routed, token, routeErr = none, chained, err
 	}
-	chained, err := gate.chainUpstream(ctx, member, resource)
-	if held && chained == "" {
-		return routed, "", routeErr
+	if routeErr == nil && token == "" && member.authClient != nil && member.chosenClientID.Valid && !member.upstreamNoAuth {
+		// A named client authorizes only its own checked connection. An
+		// unusable or wrong-resource token must not turn into an anonymous dial.
+		switch {
+		case gate.agentID != uuid.Nil:
+			routeErr = gate.agentReconnectError(member)
+		case member.authClient.clientType == authClientTypeRemoteSession && gate.memberCallerURL(member) != "":
+			routeErr = memberNotConnectedError{memberCredentialError{&metaMemberError{message: fmt.Sprintf("server %q is not connected for this user. Ask the user to open %s to connect it, then retry", member.slug, gate.memberCallerURL(member))}}}
+		default:
+			routeErr = memberCredentialError{&metaMemberError{message: fmt.Sprintf("server %q can't use its saved sign-in anymore. Reconnect it, then retry", member.slug)}}
+		}
 	}
-	var none remotesessions.UpstreamToken
-	return none, chained, err
+	return routed, token, routeErr
 }
 
 // recordDialFailure records a member that could not be dialed for a call.
@@ -395,7 +409,18 @@ func (s *Service) dialMetaMember(
 	callerIdentity string,
 ) (memberDial, error) {
 	dial, backend, err := s.routeMetaMember(ctx, logger, gate, member, callerIdentity, true)
-	dial.fix = func() memberFix { return gate.memberFix(member) }
+	dial.fix = sync.OnceValue(func() memberFix {
+		fix := gate.memberFix(member)
+		if fix.url == "" && dial.configuredHeaders && member.authClient != nil && member.authClient.headersOnly() && codeConnectAvailable(&gate) {
+			// A refused static choice can suggest a separate personal offer.
+			// The hint never changes the credential this request sends.
+			offers, err := s.configuredAuthOffers(ctx, gate.organizationID, []uuid.UUID{member.serverID})
+			if err == nil && len(offers[member.serverID].personalRegistrations()) > 0 {
+				fix.url = gatewayServerConnectURL(gate.connectRoot, member.slug)
+			}
+		}
+		return fix
+	})
 	switch {
 	case errors.Is(err, errAmbiguousMemberCredential):
 		s.metrics.RecordMetaMemberDispatch(ctx, backend, mcpmetrics.MetaDispatchAmbiguous)
@@ -800,12 +825,24 @@ func (s *Service) describeMetaMember(ctx context.Context, logger *slog.Logger, g
 		return nil, err
 	}
 	if gate.catalog != nil && gate.catalogRef.Mode == toolfilter.CatalogModeCached {
-		return s.describeCachedMember(ctx, gate, member)
+		catalog, err := s.describeCachedMember(ctx, gate, member)
+		if err != nil {
+			return nil, err
+		}
+		// A cached catalog holds what was approved at connect time, which
+		// never includes local tools; they are offered as on a live listing.
+		return withLocalToolsInCatalog(catalog, s.memberLocalTools(ctx, logger, gate.organizationID, member)), nil
 	}
 	if member.backend == metaMemberBackendHosted {
 		return s.describeMemberToolset(ctx, logger, gate, member)
 	}
-	return s.describeProxiedMember(ctx, logger, gate, member)
+	catalog, err := s.describeProxiedMember(ctx, logger, gate, member)
+	if err != nil {
+		return nil, err
+	}
+	// The member's proxy lists its local tools among its own; they are
+	// marked here, as on every other path, so consent can leave them out.
+	return withLocalToolsInCatalog(catalog, s.memberLocalTools(ctx, logger, gate.organizationID, member)), nil
 }
 
 // describeProxiedMember pages a proxied member's tools/list into a catalog,
@@ -914,7 +951,7 @@ func listMemberSessionTools(ctx context.Context, logger *slog.Logger, session *m
 	if handshake := session.InitializeResult(); handshake != nil {
 		instructions = handshake.Instructions
 	}
-	catalog := &memberCatalog{entries: make([]*toolListEntry, 0, len(byName)), byName: byName, incomplete: incomplete, instructions: instructions}
+	catalog := &memberCatalog{entries: make([]*toolListEntry, 0, len(byName)), byName: byName, local: nil, incomplete: incomplete, instructions: instructions}
 	for _, entry := range entries {
 		if kept, ok := byName[entry.Name]; ok && kept == entry {
 			catalog.entries = append(catalog.entries, entry)

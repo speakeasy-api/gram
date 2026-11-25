@@ -10,46 +10,36 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
-	authclientfixtures "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
-	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
-	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 )
 
-// On a gateway, two clients holding grants for one member leave the member
-// without a decided client, so neither is offered for verification.
-func TestConsentValidationRefusesAGatewayMemberWithAmbiguousClients(t *testing.T) {
+// A grant and a sign-in link do not make an unoffered registration available for verification.
+func TestConsentValidationRejectsAnUnofferedGatewayRegistration(t *testing.T) {
 	t.Parallel()
 	ctx, fx := seedMetaValidationFixture(t, "validate-duplicate-meta")
 	projectID, orgID := consentTestTenant(t, ctx)
 	duplicate := createConsentRemoteClient(t, ctx, fx.ti.conn, projectID, orgID, "validate-duplicate-other", "", []uuid.UUID{fx.endpoint.UserSessionIssuerID})
 	insertQualifiedRemoteSessionToken(t, ctx, fx.ti, fx.endpoint.UserSessionIssuerID, duplicate, fx.subject, "token-duplicate-other", fx.member.url)
-	_, err := postValidate(t, fx, fx.clientID)
+	_, err := postValidate(t, fx, duplicate)
 	var shareable *oops.ShareableError
 	require.ErrorAs(t, err, &shareable)
 	require.Equal(t, oops.CodeBadRequest, shareable.Code)
-	require.Empty(t, fx.member.drain(), "ambiguous credentials must not reach the backend")
+	require.Empty(t, fx.member.drain(), "unoffered credentials must not reach the backend")
 }
 
-// On a gateway, a member associated with the card's client verifies with
-// that client's credential even when the sign-in also binds two clients of
-// another authorization server for other servers. Those clients are never
-// resolved for this member, so they cannot fail its check.
-func TestConsentValidationVerifiesAnAssociatedGatewayMemberBesideAnotherProvidersDuplicateClients(t *testing.T) {
+// A gateway member verifies with the card's credential even when another
+// member offers two registrations of the same authorization server.
+func TestConsentValidationVerifiesAnOfferedGatewayMemberBesideAnotherProvidersDuplicateClients(t *testing.T) {
 	t.Parallel()
 	ctx, fx := seedMetaValidationFixture(t, "validate-associated-meta")
 	projectID, orgID := consentTestTenant(t, ctx)
-
-	member, err := mcpservers_repo.New(fx.ti.conn).GetMCPServerBySlug(ctx, mcpservers_repo.GetMCPServerBySlugParams{Slug: conv.ToPGText("validate-associated-meta-member"), ProjectID: projectID})
-	require.NoError(t, err)
-	_, err = upstreamclientsrepo.New(fx.ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: orgID, ProjectID: projectID, McpServerID: member.ID, RemoteSessionClientID: fx.clientID})
-	require.NoError(t, err)
 
 	first := createConsentRemoteClient(t, ctx, fx.ti.conn, projectID, orgID, "validate-associated-other", "", []uuid.UUID{fx.endpoint.UserSessionIssuerID})
 	otherIssuer := clientRemoteIssuerID(t, ctx, fx.ti.conn, projectID, orgID, first)
@@ -68,8 +58,17 @@ func TestConsentValidationVerifiesAnAssociatedGatewayMemberBesideAnotherProvider
 		UserSessionIssuerID:   fx.endpoint.UserSessionIssuerID,
 	}))
 
+	sibling := newValidationMember(t)
+	server := createMetaMember(t, ctx, fx.ti.conn, projectID, fx.endpoint.MetaMcpServerID.UUID, "validate-associated-sibling", sibling.url, conv.ToNullUUID(otherIssuer), 1)
+	seedMetaMemberConnectGrant(t, ctx, fx.ti.conn, orgID, server.mcpServerID)
+	seedConsentAuthOffer(t, ctx, fx.ti, orgID, projectID, server.mcpServerID, first, authz.AuthClientTypeRemoteSession)
+	seedConsentAuthOffer(t, ctx, fx.ti, orgID, projectID, server.mcpServerID, second.ID, authz.AuthClientTypeRemoteSession)
+	insertQualifiedRemoteSessionToken(t, ctx, fx.ti, fx.endpoint.UserSessionIssuerID, first, fx.subject, "token-other-first", sibling.url)
+	insertQualifiedRemoteSessionToken(t, ctx, fx.ti, fx.endpoint.UserSessionIssuerID, second.ID, fx.subject, "token-other-second", sibling.url)
+
 	requireValidated(t, fx)
 	requireProbe(t, fx.member.drain(), "token-validate-associated-meta", true, true)
+	require.Empty(t, sibling.drain(), "the other member must not be probed")
 }
 
 // Where upstream auth is enforced, a gateway member's typed auth client
@@ -83,13 +82,6 @@ func TestConsentValidationVerifiesATypedOfferBesideASameProviderClientUnderEnfor
 	_, err := productfeaturesrepo.New(fx.ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: orgID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
 	require.NoError(t, err)
 	fx.ti.service.SetAuthClientPermission(func() bool { return true })
-
-	member, err := mcpservers_repo.New(fx.ti.conn).GetMCPServerBySlug(ctx, mcpservers_repo.GetMCPServerBySlugParams{Slug: conv.ToPGText("validate-typed-meta-member"), ProjectID: projectID})
-	require.NoError(t, err)
-	fixtures := authclientfixtures.New(fx.ti.conn)
-	authClientID, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: orgID, ProjectID: conv.ToNullUUID(projectID), ClientType: "remote_session", Source: "admin", RemoteSessionClientID: conv.ToNullUUID(fx.clientID)})
-	require.NoError(t, err)
-	require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: projectID, OrganizationID: orgID, McpServerID: member.ID, AuthClientID: authClientID, Source: "admin"}))
 
 	q := remotesessionsrepo.New(fx.ti.conn)
 	duplicate, err := q.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
@@ -143,9 +135,10 @@ func TestConsentValidationStandaloneTunnelWillNotProbeWithAnotherCardsCredential
 	endpoint.McpServerID = conv.ToNullUUID(server.ID)
 
 	owner := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "validate-selected-tunnel", "", []uuid.UUID{shared})
-	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, orgID, projectID, []uuid.UUID{shared}))
+	seedConsentAuthOffer(t, ctx, ti, orgID, projectID, server.ID, owner, authz.AuthClientTypeRemoteSession)
 	insertQualifiedRemoteSessionToken(t, ctx, ti, shared, owner, subject, "token-owner", "")
 	foreign := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "validate-selected-foreign", "", []uuid.UUID{shared})
+	seedConsentAuthOffer(t, ctx, ti, orgID, projectID, server.ID, foreign, authz.AuthClientTypeRemoteSession)
 	insertQualifiedRemoteSessionToken(t, ctx, ti, shared, foreign, subject, "token-foreign", "")
 
 	gateway := &fakeTunnelGateway{t: t, agentSessionID: "agent-1", backendSessionID: "backend-session", mu: sync.Mutex{}}
@@ -159,7 +152,7 @@ func TestConsentValidationStandaloneTunnelWillNotProbeWithAnotherCardsCredential
 	headers, _ := tunnelForwards(gateway)
 	require.NotEmpty(t, headers, "the card's own credential is probed")
 	for _, header := range headers {
-		require.NotContains(t, header.Get("Authorization"), "token-owner", "a card never probes with another card's credential")
+		require.Equal(t, "Bearer token-foreign", header.Get("Authorization"), "the probe uses the selected card's credential")
 	}
 }
 
@@ -175,8 +168,8 @@ func TestConsentValidationTimeoutStillDeletesMintedSession(t *testing.T) {
 	require.Equal(t, map[string]int64{"unknown": 1}, validationCounts(t, fx.reader))
 }
 
-// Legacy direct Verify scopes ambiguity checks to the target server's bindings.
-func TestConsentValidationLegacyDirectServerScopesAmbiguousClients(t *testing.T) {
+// Direct Verify scopes typed offers to the target server and selects the posted registration.
+func TestConsentValidationDirectServerScopesTypedOffers(t *testing.T) {
 	t.Parallel()
 	for _, relevant := range []bool{false, true} {
 		name := "unrelated"
@@ -185,28 +178,9 @@ func TestConsentValidationLegacyDirectServerScopesAmbiguousClients(t *testing.T)
 		}
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			prefix := "validate-legacy-" + name
+			prefix := "validate-offers-" + name
 			ctx, fx := seedStandaloneValidationFixture(t, prefix)
 			projectID, orgID := consentTestTenant(t, ctx)
-			_, err := productfeaturesrepo.New(fx.ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{
-				OrganizationID: orgID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced),
-			})
-			require.NoError(t, err)
-			_, err = productfeaturesrepo.New(fx.ti.conn).DeleteFeature(ctx, productfeaturesrepo.DeleteFeatureParams{
-				OrganizationID: orgID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced),
-			})
-			require.NoError(t, err)
-			fx.ti.service.ReloadAuthEnforcement()
-
-			associate := func(serverID, clientID uuid.UUID) {
-				t.Helper()
-				rows, err := upstreamclientsrepo.New(fx.ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{
-					OrganizationID: orgID, ProjectID: projectID, McpServerID: serverID, RemoteSessionClientID: clientID,
-				})
-				require.NoError(t, err)
-				require.Equal(t, int64(1), rows)
-			}
-			associate(fx.endpoint.McpServerID.UUID, fx.clientID)
 			first := fx.clientID
 			boundServer := fx.endpoint.McpServerID.UUID
 			resource := fx.member.url
@@ -216,7 +190,7 @@ func TestConsentValidationLegacyDirectServerScopesAmbiguousClients(t *testing.T)
 				resource = unrelated.url
 				boundServer = createPublicRemoteMcpServer(t, ctx, fx.ti.conn, projectID, fx.endpoint.UserSessionIssuerID, prefix+"-sibling", resource)
 				first = createConsentRemoteClient(t, ctx, fx.ti.conn, projectID, orgID, prefix+"-other", "", []uuid.UUID{fx.endpoint.UserSessionIssuerID})
-				associate(boundServer, first)
+				seedConsentAuthOffer(t, ctx, fx.ti, orgID, projectID, boundServer, first, authz.AuthClientTypeRemoteSession)
 				insertQualifiedRemoteSessionToken(t, ctx, fx.ti, fx.endpoint.UserSessionIssuerID, first, fx.subject, "token-other", resource)
 			}
 			providerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, projectID, orgID, first)
@@ -228,18 +202,16 @@ func TestConsentValidationLegacyDirectServerScopesAmbiguousClients(t *testing.T)
 			require.NoError(t, remotesessionsrepo.New(fx.ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
 				RemoteSessionClientID: duplicate.ID, UserSessionIssuerID: fx.endpoint.UserSessionIssuerID,
 			}))
-			associate(boundServer, duplicate.ID)
+			seedConsentAuthOffer(t, ctx, fx.ti, orgID, projectID, boundServer, duplicate.ID, authz.AuthClientTypeRemoteSession)
 			insertQualifiedRemoteSessionToken(t, ctx, fx.ti, fx.endpoint.UserSessionIssuerID, duplicate.ID, fx.subject, "token-duplicate", resource)
 
+			requireValidated(t, fx)
+			requireProbe(t, fx.member.drain(), "token-"+prefix, true, true)
 			if relevant {
-				_, err := postValidate(t, fx, fx.clientID)
-				var shareable *oops.ShareableError
-				require.ErrorAs(t, err, &shareable)
-				require.Equal(t, oops.CodeUnexpected, shareable.Code)
-				require.Empty(t, fx.member.drain(), "ambiguous relevant credentials must not be probed")
-			} else {
+				fx.clientID = duplicate.ID
 				requireValidated(t, fx)
-				requireProbe(t, fx.member.drain(), "token-"+prefix, true, true)
+				requireProbe(t, fx.member.drain(), "token-duplicate", true, true)
+			} else {
 				_, err := postValidate(t, fx, first)
 				var refused *oops.ShareableError
 				require.ErrorAs(t, err, &refused)

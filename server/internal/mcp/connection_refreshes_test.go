@@ -110,7 +110,7 @@ func TestInboundRefresh_UpstreamWriteFailureLeavesNoVerdict(t *testing.T) {
 
 	ctx, ti := newTestMCPService(t)
 	toolset, issuer, client, refreshToken, _ := seedRefreshReplaySessionDetails(t, ctx, ti, time.Now().Add(time.Hour))
-	attachTestRemoteSessionClient(t, ctx, ti, requireProjectAuthContext(t, ctx), issuer.ID)
+	attachHostedRemoteSessionClient(t, ctx, ti, requireProjectAuthContext(t, ctx), issuer.ID, toolset.ID)
 	requireRefusalRecordedOnDelivery(t, ctx, ti, toolset.McpSlug.String, client.ClientID, refreshToken, mcpconnectionattempts.CodeUpstreamReconnectRequired)
 }
 
@@ -405,7 +405,7 @@ func TestInboundRefresh_UpstreamReconnect(t *testing.T) {
 	rec := mcpconnectionattemptstest.New(t)
 	ti.service.SetConnectionRecorder(rec.Recorder)
 	toolset, issuer, client, refreshToken, _ := seedRefreshReplaySessionDetails(t, ctx, ti, time.Now().Add(time.Hour))
-	attachTestRemoteSessionClient(t, ctx, ti, authCtx, issuer.ID)
+	attachHostedRemoteSessionClient(t, ctx, ti, authCtx, issuer.ID, toolset.ID)
 
 	refused := performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, refreshToken)
 	require.NoError(t, refused.err)

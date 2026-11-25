@@ -348,13 +348,11 @@ type Service interface {
 	// Lists every organization the upstream OAuth migration applies to, so staff
 	// can check and migrate them one by one.
 	ListUpstreamOAuthMigrationOrganizations(context.Context, *ListUpstreamOAuthMigrationOrganizationsPayload) (res *AdminUpstreamOAuthMigrationOrganizations, err error)
-	// Reports where one organization stands in the upstream OAuth migration from a
-	// dry run that writes nothing.
+	// Reports typed upstream authentication readiness for one organization without
+	// making changes.
 	GetUpstreamOAuthMigrationStatus(context.Context, *GetUpstreamOAuthMigrationStatusPayload) (res *AdminUpstreamOAuthMigrationStatus, err error)
-	// Migrates one organization's upstream OAuth configuration: records the server
-	// to client associations its configuration proves, then each live credential's
-	// client choice. Idempotent, so it is safe to run again; a server the
-	// configuration does not prove is reported and never guessed.
+	// Retired. Rejects authenticated calls and does not change upstream
+	// authentication configuration.
 	RunUpstreamOAuthMigration(context.Context, *RunUpstreamOAuthMigrationPayload) (res *AdminUpstreamOAuthMigrationRun, err error)
 	// Enables upstream auth enforcement for one organization: its direct proxied
 	// servers and assistant turns are served by the typed auth client resolver,
@@ -368,13 +366,10 @@ type Service interface {
 	// read from telemetry and communication outside the database. Enabled
 	// enforcement does not depend on the auth-client-resolver flags.
 	EnableUpstreamAuthEnforcement(context.Context, *EnableUpstreamAuthEnforcementPayload) (res *AdminUpstreamOAuthMigrationStatus, err error)
-	// Disables upstream auth enforcement for one organization. This is its
-	// rollback: requests return to the upstream client choice within a minute.
-	// Safe to call when enforcement is already off.
+	// Retired. Older staff clients can still reach this endpoint, but requests are
+	// rejected. Upstream auth enforcement cannot be turned off.
 	DisableUpstreamAuthEnforcement(context.Context, *DisableUpstreamAuthEnforcementPayload) (res *AdminUpstreamOAuthMigrationStatus, err error)
-	// Grants unrestricted mcp:auth to every principal that holds any mcp:connect
-	// grant, in every organization. The connect grant's selectors are ignored.
-	// Safe to run more than once.
+	// Retired. Rejects authenticated calls and does not modify grants.
 	BackfillMcpAuthGrants(context.Context, *BackfillMcpAuthGrantsPayload) (res *AdminBackfillMCPAuthGrantsResult, err error)
 	// Adds an explicit mcp:connect grant, with the same principal, selectors and
 	// expiry, for every unexpired mcp:read or mcp:write grant in every
@@ -477,6 +472,46 @@ type Service interface {
 	// Ends a staged rollout. Organizations it cleared go back to the default pin;
 	// hooks plugins already published are not downgraded.
 	CancelHooksRolloutStage(context.Context, *CancelHooksRolloutStagePayload) (res *AdminHooksRollout, err error)
+	// Lists every organization with saved Tailscale OAuth credentials and where it
+	// stands in moving them to its organization key.
+	ListTailscaleOAuthMigration(context.Context, *ListTailscaleOAuthMigrationPayload) (res *AdminTailscaleOAuthMigrationOrganizations, err error)
+	// Runs one step of moving an organization's saved Tailscale OAuth credentials
+	// to its organization key. enroll provisions the organization key and starts
+	// dual_write; backfill seals every waiting credential with the organization
+	// key and verifies both copies; finalize moves to org_kms once the backfill
+	// and verification are clean and the minimum time in dual_write has passed;
+	// clear_platform_copies then destroys the platform-key copies; rollback
+	// returns a dual_write organization to platform_key. Each step is safe to run
+	// again.
+	RunTailscaleOAuthMigrationStep(context.Context, *RunTailscaleOAuthMigrationStepPayload) (res *AdminTailscaleOAuthMigrationOrganization, err error)
+	// Reports an organization's encryption configuration and, for each use case
+	// that moves to organization keys, its transition state with live counts.
+	GetOrganizationEncryption(context.Context, *GetOrganizationEncryptionPayload) (res *AdminOrganizationEncryption, err error)
+	// Lists organizations by transition state for one use case, oldest first.
+	// Organizations never enrolled are in platform_key.
+	ListOrganizationEncryptionTransitions(context.Context, *ListOrganizationEncryptionTransitionsPayload) (res *AdminOrganizationEncryptionTransitionList, err error)
+	// Moves one organization's use case from platform_key to dual_write.
+	// Provisions the organization's key and data key first and changes nothing if
+	// that fails. Each enroll can mint a KMS key, so enroll several organizations
+	// one at a time.
+	EnrollOrganizationEncryption(context.Context, *EnrollOrganizationEncryptionPayload) (res *AdminOrganizationEncryptionUseCase, err error)
+	// Moves one organization's use case from dual_write back to platform_key. Both
+	// copies still exist in dual_write, so nothing is lost. Not available once the
+	// use case is in org_kms.
+	RollbackOrganizationEncryption(context.Context, *RollbackOrganizationEncryptionPayload) (res *AdminOrganizationEncryptionUseCase, err error)
+	// Starts a background run for one organization's use case: in dual_write it
+	// converts waiting values and verifies both copies, and in org_kms it finishes
+	// destroying the platform-key copies after finalize. Joins a run already in
+	// progress. Returns at once with the current state.
+	RunOrganizationEncryption(context.Context, *RunOrganizationEncryptionPayload) (res *AdminOrganizationEncryptionUseCase, err error)
+	// Moves one organization's use case from dual_write to org_kms, then starts a
+	// run that destroys its platform-key copies, including every unreadable value.
+	// Irreversible: rollback is no longer possible afterwards. Refused unless no
+	// value waits for an organization-key copy, every value is attributed to the
+	// organization, a clean verification ran since the last backfill, the use case
+	// spent the minimum time in dual_write, the confirmation matches, and the
+	// acknowledged unreadable count matches the count when finalize runs.
+	FinalizeOrganizationEncryption(context.Context, *FinalizeOrganizationEncryptionPayload) (res *AdminOrganizationEncryptionFinalizeResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -499,7 +534,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [132]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "setAdoptionDashboardUrl", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "setMcpServerScopePin", "getMcpServerToolCalls", "getHookClients", "getOrganizationHookFleet", "listRegistryPromotionCandidates", "getRegistryPromotionCandidate", "promoteRegistryCandidate", "curateRegistryPromotionCandidate", "retryRegistryPromotionDocs", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "listPlatformMcpFeedback", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage", "listUpstreamOAuthMigrationOrganizations", "getUpstreamOAuthMigrationStatus", "runUpstreamOAuthMigration", "enableUpstreamAuthEnforcement", "disableUpstreamAuthEnforcement", "backfillMcpAuthGrants", "backfillMcpConnectGrants", "getProjectRedeployPreview", "redeployProject", "listCustomDomains", "listPlatformExternalCredentials", "getGcpIamPlatformCredential", "createGcpIamPlatformCredential", "updateGcpIamPlatformCredential", "verifyGcpIamPlatformCredential", "deleteGcpIamPlatformCredential", "getMemoryEvalOptions", "listMemoryEvalRuns", "getMemoryEvalRun", "startMemoryEvalRun", "listAssistantOrganizations", "repairOrganizationAssistantAgentNames", "listOrganizationAssistants", "migrateOrganizationAssistantIdentities", "migrateOrganizationAssistantsToKit", "getHooksRollout", "setHooksRolloutDefault", "getOrganizationHooksRollout", "setOrganizationHooksRollout", "clearOrganizationHooksRollout", "startHooksRolloutStage", "pauseHooksRolloutStage", "resumeHooksRolloutStage", "cancelHooksRolloutStage"}
+var MethodNames = [140]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "setAdoptionDashboardUrl", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "setMcpServerScopePin", "getMcpServerToolCalls", "getHookClients", "getOrganizationHookFleet", "listRegistryPromotionCandidates", "getRegistryPromotionCandidate", "promoteRegistryCandidate", "curateRegistryPromotionCandidate", "retryRegistryPromotionDocs", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "listPlatformMcpFeedback", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage", "listUpstreamOAuthMigrationOrganizations", "getUpstreamOAuthMigrationStatus", "runUpstreamOAuthMigration", "enableUpstreamAuthEnforcement", "disableUpstreamAuthEnforcement", "backfillMcpAuthGrants", "backfillMcpConnectGrants", "getProjectRedeployPreview", "redeployProject", "listCustomDomains", "listPlatformExternalCredentials", "getGcpIamPlatformCredential", "createGcpIamPlatformCredential", "updateGcpIamPlatformCredential", "verifyGcpIamPlatformCredential", "deleteGcpIamPlatformCredential", "getMemoryEvalOptions", "listMemoryEvalRuns", "getMemoryEvalRun", "startMemoryEvalRun", "listAssistantOrganizations", "repairOrganizationAssistantAgentNames", "listOrganizationAssistants", "migrateOrganizationAssistantIdentities", "migrateOrganizationAssistantsToKit", "getHooksRollout", "setHooksRolloutDefault", "getOrganizationHooksRollout", "setOrganizationHooksRollout", "clearOrganizationHooksRollout", "startHooksRolloutStage", "pauseHooksRolloutStage", "resumeHooksRolloutStage", "cancelHooksRolloutStage", "listTailscaleOAuthMigration", "runTailscaleOAuthMigrationStep", "getOrganizationEncryption", "listOrganizationEncryptionTransitions", "enrollOrganizationEncryption", "rollbackOrganizationEncryption", "runOrganizationEncryption", "finalizeOrganizationEncryption"}
 
 type AdminAssistantAgentNameRepairResult struct {
 	AssistantID string
@@ -642,7 +677,7 @@ type AdminAuditLog struct {
 // AdminBackfillMCPAuthGrantsResult is the result type of the admin service
 // backfillMcpAuthGrants method.
 type AdminBackfillMCPAuthGrantsResult struct {
-	// How many principals gained the mcp:auth grant.
+	// Legacy response field; the retired endpoint does not grant access.
 	Granted int64
 }
 
@@ -1785,6 +1820,152 @@ type AdminOrganizationAssistants struct {
 	Assistants []*AdminOrganizationAssistant
 }
 
+// AdminOrganizationEncryption is the result type of the admin service
+// getOrganizationEncryption method.
+type AdminOrganizationEncryption struct {
+	// The organization ID.
+	OrganizationID string
+	// The encryption configuration. Absent until the organization's key is
+	// provisioned, which enroll does.
+	Config *AdminOrganizationEncryptionConfig
+	// One entry per use case that moves from the platform key to organization keys.
+	UseCases []*AdminOrganizationEncryptionUseCase
+	// How long a use case must be in dual_write before finalize is allowed.
+	MinimumDualWriteSeconds int64
+	// The phrase finalize requires as its confirmation.
+	FinalizeConfirmation string
+	// Whether this server can start backfill and clearing runs. When false,
+	// finalize leaves clearing to the hourly background run.
+	RunsAvailable bool
+}
+
+// An organization's encryption configuration: who controls its key, and
+// whether the key is usable.
+type AdminOrganizationEncryptionConfig struct {
+	// Who controls the organization's key.
+	Mode string
+	// Whether the key is usable: active and switching are, suspended is not.
+	State string
+	// When the switch to another key started. Absent unless one is in flight.
+	SwitchStartedAt *string
+	// When the configuration was suspended because its key became unusable.
+	SuspendedAt *string
+	// A short provider error summary for the suspension.
+	SuspendedReason *string
+	// When the key's health was last checked.
+	LastCheckAt *string
+	// A short provider error summary from the last failed health check.
+	LastCheckError *string
+}
+
+// AdminOrganizationEncryptionFinalizeResult is the result type of the admin
+// service finalizeOrganizationEncryption method.
+type AdminOrganizationEncryptionFinalizeResult struct {
+	// The use case after finalize, now in org_kms.
+	UseCase *AdminOrganizationEncryptionUseCase
+	// Whether a run destroying the platform-key copies was started. When false,
+	// the hourly background run finishes clearing, or an administrator starts a
+	// run.
+	ClearingStarted bool
+}
+
+type AdminOrganizationEncryptionStateCount struct {
+	// The transition state.
+	State string
+	// Organizations in the state.
+	Organizations int64
+}
+
+// AdminOrganizationEncryptionTransitionList is the result type of the admin
+// service listOrganizationEncryptionTransitions method.
+type AdminOrganizationEncryptionTransitionList struct {
+	// The use case listed.
+	UseCase string
+	// Every use case that moves from the platform key to organization keys.
+	UseCases []string
+	// The page of organizations, oldest first.
+	Organizations []*AdminOrganizationEncryptionTransitionRow
+	// How many organizations are in each state, across every page.
+	StateCounts []*AdminOrganizationEncryptionStateCount
+	// Whether another page follows.
+	HasMore bool
+}
+
+// One organization's transition state for a use case, from stored state only.
+type AdminOrganizationEncryptionTransitionRow struct {
+	// The organization ID.
+	OrganizationID string
+	// The organization name.
+	Name string
+	// The organization slug.
+	Slug string
+	// Whether the organization is disabled.
+	Disabled bool
+	// The transition state.
+	State string
+	// When the state was entered.
+	StateChangedAt *string
+	// When the platform-key copies were destroyed after finalize.
+	PlatformCopiesClearedAt *string
+	// When the last backfill run started.
+	LastBackfillStartedAt *string
+	// When the last backfill run ended.
+	LastBackfillCompletedAt *string
+	// Values still waiting when the last backfill run ended.
+	LastBackfillRemaining *int64
+	// Values recorded as unreadable when the last backfill run ended.
+	LastBackfillUnreadable *int64
+	// Why the last backfill run stopped early.
+	LastBackfillError *string
+	// When the last clean verification pass started.
+	LastVerifiedAt *string
+}
+
+// AdminOrganizationEncryptionUseCase is the result type of the admin service
+// enrollOrganizationEncryption method.
+type AdminOrganizationEncryptionUseCase struct {
+	// The registered use case, such as oauth-client-secrets.
+	UseCase string
+	// The transition state.
+	State string
+	// Increases on every state change; 0 while the organization has never been
+	// enrolled.
+	Generation int64
+	// When the state was entered. Absent while the organization has never been
+	// enrolled.
+	StateChangedAt *string
+	// When the platform-key copies were destroyed after finalize. Absent until
+	// clearing completes.
+	PlatformCopiesClearedAt *string
+	// Values that still wait for an organization-key copy.
+	WaitingValues int64
+	// Values whose platform-key copy does not decrypt. Finalize destroys them with
+	// the rest.
+	UnreadableValues int64
+	// Values stored without an organization they can be attributed to. They block
+	// finalize.
+	UnattributedValues int64
+	// Platform-key copies still stored.
+	PlatformCopies int64
+	// When the last backfill run started.
+	LastBackfillStartedAt *string
+	// When the last backfill run ended. Absent while it runs.
+	LastBackfillCompletedAt *string
+	// Values the last backfill run gave an organization-key copy.
+	LastBackfillConverted *int64
+	// Values still waiting when the last backfill run ended.
+	LastBackfillRemaining *int64
+	// Values recorded as unreadable when the last backfill run ended.
+	LastBackfillUnreadable *int64
+	// Why the last backfill run stopped early.
+	LastBackfillError *string
+	// When the last clean verification pass started.
+	LastVerifiedAt *string
+	// Why finalize would be refused now, empty when it would proceed. Advisory:
+	// finalize checks again when it runs.
+	FinalizeBlockers []string
+}
+
 // AdminOrganizationHooksRollout is the result type of the admin service
 // getOrganizationHooksRollout method.
 type AdminOrganizationHooksRollout struct {
@@ -2206,6 +2387,57 @@ type AdminStripeSubscriptionCandidate struct {
 	CustomerID string
 	// Stripe subscription status.
 	Status string
+}
+
+// AdminTailscaleOAuthMigrationOrganization is the result type of the admin
+// service runTailscaleOAuthMigrationStep method.
+type AdminTailscaleOAuthMigrationOrganization struct {
+	// The organization ID.
+	OrganizationID string
+	// The organization name.
+	Name string
+	// The organization slug.
+	Slug string
+	// The transition state.
+	State string
+	// The transition generation; 0 before the organization is enrolled.
+	Generation int64
+	// When the current state was entered. Absent before the organization is
+	// enrolled.
+	StateChangedAt *string
+	// Saved credentials with only a platform-key copy, which the backfill still
+	// has to seal with the organization key.
+	Waiting int64
+	// Saved credentials whose platform-key copy does not decrypt. They do not
+	// block finalize; clearing the platform-key copies destroys them.
+	Unreadable int64
+	// Saved credentials that still hold a platform-key copy.
+	PlatformCopies int64
+	// When the last backfill started.
+	LastBackfillStartedAt *string
+	// When the last backfill ended.
+	LastBackfillCompletedAt *string
+	// Why the last backfill stopped early. Never carries values or key material.
+	LastBackfillError *string
+	// When the last clean verification pass started.
+	LastVerifiedAt *string
+	// When the platform-key copies were destroyed after finalize.
+	PlatformCopiesClearedAt *string
+	// Only returned by the backfill step: credentials whose two copies did not
+	// match, whose platform-key copy no longer decrypts beside an organization-key
+	// copy, or whose organization-key copy did not open, in the verification that
+	// step just ran. Above zero means no clean verification was recorded, so
+	// finalize stays blocked.
+	VerificationFailures *int64
+}
+
+// AdminTailscaleOAuthMigrationOrganizations is the result type of the admin
+// service listTailscaleOAuthMigration method.
+type AdminTailscaleOAuthMigrationOrganizations struct {
+	// Every organization with saved Tailscale OAuth credentials, by name.
+	Organizations []*AdminTailscaleOAuthMigrationOrganization
+	// How long an organization must stay in dual_write before it can be finalized.
+	MinimumDualWriteSeconds int64
 }
 
 // AdminUploadImageResult is the result type of the admin service
@@ -2939,6 +3171,16 @@ type EnableUpstreamAuthEnforcementPayload struct {
 	CrossOrganizationDenialCommunicated bool
 }
 
+// EnrollOrganizationEncryptionPayload is the payload type of the admin service
+// enrollOrganizationEncryption method.
+type EnrollOrganizationEncryptionPayload struct {
+	AdminSessionToken *string
+	// The organization ID.
+	OrganizationID string
+	// The use case, such as oauth-client-secrets.
+	UseCase string
+}
+
 // ExtendTrialPayload is the payload type of the admin service extendTrial
 // method.
 type ExtendTrialPayload struct {
@@ -2971,6 +3213,21 @@ type FetchGlobalIssuerMetadataPayload struct {
 	// Issuer URL to fetch metadata for (e.g. https://login.linear.com).
 	Issuer            string
 	AdminSessionToken *string
+}
+
+// FinalizeOrganizationEncryptionPayload is the payload type of the admin
+// service finalizeOrganizationEncryption method.
+type FinalizeOrganizationEncryptionPayload struct {
+	AdminSessionToken *string
+	// The organization ID.
+	OrganizationID string
+	// The use case, such as oauth-client-secrets.
+	UseCase string
+	// The finalize_confirmation phrase, typed by the administrator.
+	Confirmation string
+	// The number of unreadable values the administrator acknowledged will be
+	// destroyed.
+	AcknowledgedUnreadableValues int64
 }
 
 // GcpIamCredential is the result type of the admin service
@@ -3120,6 +3377,14 @@ type GetOnboardingStackOptionsPayload struct {
 type GetOrganizationChatAnalysisSettingsPayload struct {
 	AdminSessionToken *string
 	OrganizationID    string
+}
+
+// GetOrganizationEncryptionPayload is the payload type of the admin service
+// getOrganizationEncryption method.
+type GetOrganizationEncryptionPayload struct {
+	AdminSessionToken *string
+	// The organization ID or slug.
+	OrganizationID string
 }
 
 // GetOrganizationFeaturesPayload is the payload type of the admin service
@@ -3502,6 +3767,21 @@ type ListOrganizationAssistantsPayload struct {
 	OrganizationID string
 }
 
+// ListOrganizationEncryptionTransitionsPayload is the payload type of the
+// admin service listOrganizationEncryptionTransitions method.
+type ListOrganizationEncryptionTransitionsPayload struct {
+	AdminSessionToken *string
+	// The use case, such as oauth-client-secrets. Absent lists the first use case
+	// that moves to organization keys.
+	UseCase *string
+	// Only organizations in this state.
+	State *string
+	// Organizations per page.
+	Limit int
+	// Organizations to skip.
+	Offset int
+}
+
 // ListOrganizationMembersPayload is the payload type of the admin service
 // listOrganizationMembers method.
 type ListOrganizationMembersPayload struct {
@@ -3654,6 +3934,12 @@ type ListSignupOffersPayload struct {
 // listSignupOffers method.
 type ListSignupOffersResult struct {
 	Offers []*AdminSignupOffer
+}
+
+// ListTailscaleOAuthMigrationPayload is the payload type of the admin service
+// listTailscaleOAuthMigration method.
+type ListTailscaleOAuthMigrationPayload struct {
+	AdminSessionToken *string
 }
 
 // ListUpstreamOAuthMigrationOrganizationsPayload is the payload type of the
@@ -3957,6 +4243,36 @@ type RetryRegistryPromotionDocsPayload struct {
 	PromotionID       string
 	DocsRevision      string
 	RetryKey          string
+}
+
+// RollbackOrganizationEncryptionPayload is the payload type of the admin
+// service rollbackOrganizationEncryption method.
+type RollbackOrganizationEncryptionPayload struct {
+	AdminSessionToken *string
+	// The organization ID.
+	OrganizationID string
+	// The use case, such as oauth-client-secrets.
+	UseCase string
+}
+
+// RunOrganizationEncryptionPayload is the payload type of the admin service
+// runOrganizationEncryption method.
+type RunOrganizationEncryptionPayload struct {
+	AdminSessionToken *string
+	// The organization ID.
+	OrganizationID string
+	// The use case, such as oauth-client-secrets.
+	UseCase string
+}
+
+// RunTailscaleOAuthMigrationStepPayload is the payload type of the admin
+// service runTailscaleOAuthMigrationStep method.
+type RunTailscaleOAuthMigrationStepPayload struct {
+	AdminSessionToken *string
+	// The organization ID.
+	OrganizationID string
+	// The step to run.
+	Step string
 }
 
 // RunUpstreamOAuthMigrationPayload is the payload type of the admin service

@@ -131,11 +131,7 @@ func setupRefreshFixtureWithHandler(t *testing.T, slugSuffix string, audience pg
 	})
 	require.NoError(t, err)
 
-	err = q.AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: client.ID,
-		UserSessionIssuerID:   userIssuer,
-	})
-	require.NoError(t, err)
+	placeClientForSignIn(t, ctx, ti.conn, client.ID, userIssuer)
 
 	subject := urn.NewUserSubject("refresh-subject-" + slugSuffix)
 	seedExpiredRemoteSession(t, ctx, ti, enc, subject, userIssuer, client.ID)

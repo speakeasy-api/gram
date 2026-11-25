@@ -111,7 +111,7 @@ export class RemoteSessions extends ClientSDK {
    * attachServerClientAssociation remoteSessions
    *
    * @remarks
-   * Associate one MCP server with an upstream OAuth client, naming the client the server signs in through. The client must already be bound to the server's own user session issuer, or, for a server with none, to an issuer of a gateway fronting it. The client is also bound to the issuer of each gateway fronting the server, so its consent can offer the client. Refused when the server has another client, when another client of the provider holds a fronting gateway's issuer, or when the organization's organization-level issuer lacks the client. A per-user client is also refused when another proxied server uses it at a different upstream address, or would pick it up from a gateway's issuer. On a proxied server, a first association makes earlier no-auth choices unusable, so those people must reconnect, and other servers on the issuer stop falling back to the client. Attaching a client the server is already associated with refuses none of this and only completes the gateway bindings it can. Where upstream auth is enforced, attaching also restores the server's auth client link that detaching its own sign-in retired. Requires mcp:write on the server and on each gateway whose issuer gains the client.
+   * Associate one MCP server with a reachable upstream OAuth client. The association identifies the server's exact registration without requiring or creating a user session issuer binding. A server may have only one registration, and a per-user client cannot be shared by proxied servers at different upstream addresses. Attaching to a hosted server records that upstream authentication is required. When upstream auth enforcement is on, attaching can restore the derived auth client link removed by a previous detach. Requires mcp:write on the server.
    */
   async attachServerClientAssociation(
     request: AttachServerClientAssociationRequest,
@@ -149,7 +149,7 @@ export class RemoteSessions extends ClientSDK {
    * commitServerIdentityConfiguration remoteSessions
    *
    * @remarks
-   * Atomically configure identity for a Remote MCP-backed MCP server. The complete plan selects or creates a project Remote Identity Provider and links an existing client, creates a manual client, or automatically prefers CIMD over DCR. Existing-client linking requires mcp:write on the target and on every other MCP server sharing its user session issuer, because the client binding is keyed by issuer; creating a provider or client additionally requires project:write. Unsupported automatic registration returns manual_setup_required without changing local state.
+   * Atomically configure identity for a Remote MCP-backed MCP server. The complete plan selects or creates a project Remote Identity Provider and offers an existing client, creates a manual client, or automatically prefers CIMD over DCR. Requires mcp:write on the target and any servers explicitly named for replacement. Creating a provider or client also requires project:write. The commit changes server offers, not issuer-client bindings. Unsupported automatic registration returns manual_setup_required without changing local state.
    */
   async commitServerIdentityConfiguration(
     request: CommitServerIdentityConfigurationRequest,
@@ -225,7 +225,7 @@ export class RemoteSessions extends ClientSDK {
    * detachServerClientAssociation remoteSessions
    *
    * @remarks
-   * Remove one MCP server's association with an upstream OAuth client. The client and its associations with other servers are untouched. When the server is the only consumer of its user session issuer, the association follows the issuer's client binding: with upstream auth enforcement off, detach returns a conflict (409) and you must turn off User Identity on the server instead; with enforcement on, detach retires only the backfill-derived typed auth-client link and keeps the association. In this sole-consumer case, repeating detach returns not found (404). For other servers, detach removes the association (or records an exclusion for an unclaimed client bound to the server's issuer) and synchronizes the backfill-derived typed links. Removing an association also releases the client from a project-level issuer of a fronting gateway when the client stays bound to the server's own issuer and nothing else on that gateway issuer signs in through it. Administrator-owned typed links are untouched. Requires mcp:write on the server.
+   * Remove one MCP server's association with an upstream OAuth client. The client, its issuer bindings, and its associations with other servers are untouched. Derived auth client links are synchronized; administrator-owned typed links are untouched. A hosted server that requires upstream authentication remains configured to require it and needs a replacement registration before it can use upstream OAuth. Requires mcp:write on the server.
    */
   async detachServerClientAssociation(
     request: DetachServerClientAssociationRequest,
@@ -301,7 +301,7 @@ export class RemoteSessions extends ClientSDK {
    * listServerClientAssociations remoteSessions
    *
    * @remarks
-   * List the upstream OAuth clients an MCP server is associated with. An association is a per-server configuration fact: one client can serve several servers, and server_count reports how many live servers share each client, since editing or rotating a shared client changes every one of them. Associations are recorded ahead of the serving path that will read them; until then the server keeps signing in through its user session issuer's bindings. Requires mcp:read on the server.
+   * List the upstream OAuth clients an MCP server is associated with. An association is a per-server configuration fact: one client can serve several servers, and server_count reports how many live servers share each client, since editing or rotating a shared client changes every one of them. Hosted servers use this placement to select the upstream registration; a downstream sign-in issuer does not select a registration for a hosted server. Requires mcp:read on the server.
    */
   async listServerClientAssociations(
     request: ListServerClientAssociationsRequest,

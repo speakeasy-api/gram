@@ -579,3 +579,20 @@ func roleGrantsForScopes(scopes []Scope) []*RoleGrant {
 	}
 	return grants
 }
+
+// GrantsCoverEveryResource reports whether grants give scope on every
+// resource of its kind: an allow grant for scope, or for a scope that implies
+// it, whose selector names every resource. Exclusions are not consulted, so
+// it answers whether there is anything left to ask for, not whether one
+// request is authorized.
+func GrantsCoverEveryResource(grants []Grant, scope Scope) bool {
+	for _, grant := range grants {
+		if !grant.Selector.CoversEveryResource() {
+			continue
+		}
+		if grant.Scope == ScopeRoot || grant.Scope == scope || slices.Contains(ScopeImplicationClosure(grant.Scope), scope) {
+			return true
+		}
+	}
+	return false
+}

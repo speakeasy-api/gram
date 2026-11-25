@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -63,6 +64,8 @@ func TestAdmitCIMDClient_PlatformAssistant(t *testing.T) {
 	serverURL, err := url.Parse("https://gram.example.test")
 	require.NoError(t, err)
 	svc := &Service{
+		aiCatalog: aivendorstest.NewStore(),
+
 		logger:               testenv.NewLogger(t),
 		db:                   conn,
 		serverURL:            serverURL,
@@ -86,47 +89,47 @@ func TestAdmitCIMDClient_PlatformAssistant(t *testing.T) {
 	}
 	clientID := assistants.AssistantClientMetadataDocumentURL(serverURL, assistant.ID)
 
-	require.NoError(t, svc.admitCIMDClient(ctx, svc.logger, endpoint(admission.ModePresets), clientID))
-	require.NoError(t, svc.admitCIMDClient(ctx, svc.logger, endpoint(admission.ModeOpen), clientID))
-	require.NoError(t, svc.admitCIMDClient(ctx, svc.logger, endpoint(admission.ModeReporting), clientID))
+	require.NoError(t, svc.admitCIMDClient(ctx, svc.logger, endpoint(admission.ModePresets), svc.aiCatalog.Snapshot(), clientID))
+	require.NoError(t, svc.admitCIMDClient(ctx, svc.logger, endpoint(admission.ModeOpen), svc.aiCatalog.Snapshot(), clientID))
+	require.NoError(t, svc.admitCIMDClient(ctx, svc.logger, endpoint(admission.ModeReporting), svc.aiCatalog.Snapshot(), clientID))
 
 	// First-party admission is deployment-wide, not limited to the
 	// assistant's own project or organization.
 	other := endpoint(admission.ModePresets)
 	other.ProjectID = uuid.New()
 	other.OrganizationID = "org-other"
-	require.NoError(t, svc.admitCIMDClient(ctx, svc.logger, other, clientID))
+	require.NoError(t, svc.admitCIMDClient(ctx, svc.logger, other, svc.aiCatalog.Snapshot(), clientID))
 
 	// Lookup failures must not turn open-mode shadow measurement into
 	// enforcement. Presets still fails closed on an unavailable lookup.
 	canceled, cancel := context.WithCancel(ctx)
 	cancel()
-	require.NoError(t, svc.admitCIMDClient(canceled, svc.logger, endpoint(admission.ModeOpen), clientID))
-	require.ErrorIs(t, svc.admitCIMDClient(canceled, svc.logger, endpoint(admission.ModePresets), clientID), context.Canceled)
+	require.NoError(t, svc.admitCIMDClient(canceled, svc.logger, endpoint(admission.ModeOpen), svc.aiCatalog.Snapshot(), clientID))
+	require.ErrorIs(t, svc.admitCIMDClient(canceled, svc.logger, endpoint(admission.ModePresets), svc.aiCatalog.Snapshot(), clientID), context.Canceled)
 
 	var denial *admission.DenialError
-	require.ErrorAs(t, svc.admitCIMDClient(ctx, svc.logger, endpoint(admission.ModeDisabled), clientID), &denial)
+	require.ErrorAs(t, svc.admitCIMDClient(ctx, svc.logger, endpoint(admission.ModeDisabled), svc.aiCatalog.Snapshot(), clientID), &denial)
 	require.Equal(t, admission.DenialDisabled, denial.Reason)
-	require.ErrorAs(t, svc.admitCIMDClient(ctx, svc.logger, endpoint(admission.Mode("invalid")), clientID), &denial)
+	require.ErrorAs(t, svc.admitCIMDClient(ctx, svc.logger, endpoint(admission.Mode("invalid")), svc.aiCatalog.Snapshot(), clientID), &denial)
 	require.Equal(t, admission.DenialDisabled, denial.Reason)
 
 	unknown := assistants.AssistantClientMetadataDocumentURL(serverURL, uuid.New())
-	require.ErrorAs(t, svc.admitCIMDClient(ctx, svc.logger, endpoint(admission.ModePresets), unknown), &denial)
+	require.ErrorAs(t, svc.admitCIMDClient(ctx, svc.logger, endpoint(admission.ModePresets), svc.aiCatalog.Snapshot(), unknown), &denial)
 	require.Equal(t, admission.DenialNotListed, denial.Reason)
 
 	for _, suffix := range []string{"?extra=1", "/", "#fragment"} {
-		require.ErrorAs(t, svc.admitCIMDClient(ctx, svc.logger, endpoint(admission.ModePresets), clientID+suffix), &denial)
+		require.ErrorAs(t, svc.admitCIMDClient(ctx, svc.logger, endpoint(admission.ModePresets), svc.aiCatalog.Snapshot(), clientID+suffix), &denial)
 		require.Equal(t, admission.DenialNotListed, denial.Reason)
 	}
 
 	foreign := "https://other.example.test/.well-known/oauth-client/assistants/" + assistant.ID.String()
-	require.ErrorAs(t, svc.admitCIMDClient(ctx, svc.logger, endpoint(admission.ModePresets), foreign), &denial)
+	require.ErrorAs(t, svc.admitCIMDClient(ctx, svc.logger, endpoint(admission.ModePresets), svc.aiCatalog.Snapshot(), foreign), &denial)
 	require.Equal(t, admission.DenialNotListed, denial.Reason)
 	require.NoError(t, assistantrepo.New(conn).DeleteAssistant(ctx, assistantrepo.DeleteAssistantParams{
 		AssistantID: assistant.ID,
 		ProjectID:   project.ID,
 	}))
-	require.ErrorAs(t, svc.admitCIMDClient(ctx, svc.logger, endpoint(admission.ModePresets), clientID), &denial)
+	require.ErrorAs(t, svc.admitCIMDClient(ctx, svc.logger, endpoint(admission.ModePresets), svc.aiCatalog.Snapshot(), clientID), &denial)
 	require.Equal(t, admission.DenialNotListed, denial.Reason)
 }
 
@@ -152,7 +155,9 @@ func TestAdmitCIMDClient_PlatformAssistantOnPinnedOrigin(t *testing.T) {
 	require.NoError(t, err)
 	outbound, err := url.Parse("https://app.example.test")
 	require.NoError(t, err)
-	svc := &Service{logger: testenv.NewLogger(t), db: conn, serverURL: serverURL, cimdAdmissionMetrics: nil}
+	svc := &Service{
+		aiCatalog: aivendorstest.NewStore(),
+		logger:    testenv.NewLogger(t), db: conn, serverURL: serverURL, cimdAdmissionMetrics: nil}
 	svc.SetCallbackOrigins(remotesessions.CallbackOrigins{Outbound: outbound, Registration: nil})
 	endpoint := &ResolvedMcpEndpoint{
 		AudienceURN: "toolset:test", CIMDAdmissionModeRaw: conv.ToPGText(string(admission.ModePresets)), CustomDomainID: uuid.NullUUID{},
@@ -160,8 +165,8 @@ func TestAdmitCIMDClient_PlatformAssistantOnPinnedOrigin(t *testing.T) {
 		ToolsetID: uuid.NullUUID{}, UpstreamResource: "", UserSessionIssuerID: uuid.New(),
 	}
 
-	require.NoError(t, svc.admitCIMDClient(ctx, svc.logger, endpoint, assistants.AssistantClientMetadataDocumentURL(outbound, assistant.ID)))
+	require.NoError(t, svc.admitCIMDClient(ctx, svc.logger, endpoint, svc.aiCatalog.Snapshot(), assistants.AssistantClientMetadataDocumentURL(outbound, assistant.ID)))
 	var denial *admission.DenialError
-	require.ErrorAs(t, svc.admitCIMDClient(ctx, svc.logger, endpoint, assistants.AssistantClientMetadataDocumentURL(serverURL, assistant.ID)), &denial)
+	require.ErrorAs(t, svc.admitCIMDClient(ctx, svc.logger, endpoint, svc.aiCatalog.Snapshot(), assistants.AssistantClientMetadataDocumentURL(serverURL, assistant.ID)), &denial)
 	require.Equal(t, admission.DenialNotListed, denial.Reason)
 }

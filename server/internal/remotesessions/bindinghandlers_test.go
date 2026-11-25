@@ -25,7 +25,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
+	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -106,7 +111,6 @@ func TestBindingsOwnershipReachabilityAndExactSession(t *testing.T) {
 	require.NoError(t, err)
 	issuer := createRemoteIssuer(t, ctx, ti, "binding-provider", "")
 	config := createUserSessionIssuer(t, ctx, ti.conn, "binding-config")
-	otherConfig := createUserSessionIssuer(t, ctx, ti.conn, "binding-unreachable-config")
 	sourceConfig := config
 	client := createRemoteClient(t, ctx, ti, issuer, config.String(), "binding-client")
 	mine := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject(auth.UserID), sourceConfig.String(), client)
@@ -117,6 +121,22 @@ func TestBindingsOwnershipReachabilityAndExactSession(t *testing.T) {
 	require.NoError(t, err)
 	theirs := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject("another-user"), sourceConfig.String(), client)
 
+	foreignOrg := createOrganization(t, ctx, ti.conn, "binding-foreign-org")
+	foreignProvider := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, foreignOrg, "binding-foreign-provider")
+	foreignSignIn := createTrustedOrganizationTierUserSessionIssuerForOrganization(t, ctx, ti.conn, foreignOrg, "binding-foreign-config", foreignProvider)
+	foreignClient := seedOrgLevelRemoteClient(t, ctx, ti.conn, foreignOrg, foreignProvider, "binding-foreign-client")
+	foreignSession := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject(auth.UserID), foreignSignIn.String(), foreignClient.String())
+	_, err = ti.service.AttachBinding(ctx, &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String(), RemoteSessionID: foreignSession.ID.String()})
+	requireOopsCode(t, err, oops.CodeNotFound)
+
+	clientID := uuid.MustParse(client)
+	_, err = testrepo.New(ti.conn).UnlinkAttachmentClientFixture(ctx, testrepo.UnlinkAttachmentClientFixtureParams{RemoteSessionClientID: clientID, UserSessionIssuerID: config})
+	require.NoError(t, err)
+	q := repo.New(ti.conn)
+	parent := repo.CountRemoteSessionClientUserSessionIssuerBindingsParams{RemoteSessionClientID: clientID, UserSessionIssuerID: config}
+	parents, err := q.CountRemoteSessionClientUserSessionIssuerBindings(ctx, parent)
+	require.NoError(t, err)
+	require.Zero(t, parents, "creation must work without a legacy link")
 	candidates, err := ti.service.ListRemoteSessions(ctx, &gen.ListRemoteSessionsPayload{PrincipalID: conv.PtrEmpty(agent.ID.String()), UserSessionIssuerID: conv.PtrEmpty(config.String())})
 	require.NoError(t, err)
 	require.Len(t, candidates.Items, 1)
@@ -180,7 +200,7 @@ func TestBindingsOwnershipReachabilityAndExactSession(t *testing.T) {
 	require.EqualValues(t, 1, mine.GrantGeneration, "pre-rollout sessions start at the migration default")
 	_, err = ti.service.AttachBinding(ctx, &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String(), RemoteSessionID: theirs.ID.String()})
 	requireOopsCode(t, err, oops.CodeNotFound)
-	_, err = ti.service.AttachBinding(ctx, &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: otherConfig.String(), RemoteSessionID: mine.ID.String()})
+	_, err = ti.service.AttachBinding(ctx, &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: foreignSignIn.String(), RemoteSessionID: mine.ID.String()})
 	requireOopsCode(t, err, oops.CodeNotFound)
 	_, err = ti.service.ListRemoteSessions(ctx, &gen.ListRemoteSessionsPayload{PrincipalID: conv.PtrEmpty(uuid.NewString()), UserSessionIssuerID: conv.PtrEmpty(config.String())})
 	requireOopsCode(t, err, oops.CodeForbidden)
@@ -192,6 +212,11 @@ func TestBindingsOwnershipReachabilityAndExactSession(t *testing.T) {
 	require.NoError(t, err)
 	binding, err := ti.service.AttachBinding(ctx, attach)
 	require.NoError(t, err)
+	parents, err = q.CountRemoteSessionClientUserSessionIssuerBindings(ctx, parent)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, parents, "only the FK compatibility row is needed")
+	_, err = ti.service.DetachLegacyIssuerForTest(ctx, &remotesessions.LegacyIssuerBindingForTest{ID: client, UserSessionIssuerID: config.String()})
+	requireOopsCode(t, err, oops.CodeConflict)
 	again, err := ti.service.AttachBinding(ctx, attach)
 	require.NoError(t, err)
 	require.Equal(t, binding.ID, again.ID)
@@ -296,9 +321,10 @@ func TestBindingsOwnershipReachabilityAndExactSession(t *testing.T) {
 		require.NoError(t, err)
 		_, err = testrepo.New(ti.conn).MakeAttachmentIssuerGlobalFixture(ctx, uuid.MustParse(issuer))
 		require.NoError(t, err)
-		candidates, err := ti.service.ListRemoteSessions(ctx, &gen.ListRemoteSessionsPayload{PrincipalID: conv.PtrEmpty(agent.ID.String()), UserSessionIssuerID: conv.PtrEmpty(config.String())})
+		placeClientForSignIn(t, ctx, ti.conn, uuid.MustParse(client), config)
+		candidates, err := ti.service.ListRemoteSessions(ctx, &gen.ListRemoteSessionsPayload{PrincipalID: conv.PtrEmpty(agent.ID.String()), UserSessionIssuerID: conv.PtrEmpty(config.String()), RemoteSessionClientID: conv.PtrEmpty(client)})
 		require.NoError(t, err)
-		require.Len(t, candidates.Items, 1)
+		require.Len(t, candidates.Items, 1, "only the caller's exact registration is an attachment candidate")
 		require.Equal(t, mine.ID.String(), candidates.Items[0].ID)
 		attached, err := ti.service.AttachBinding(ctx, attach)
 		require.NoError(t, err)
@@ -314,9 +340,9 @@ func TestBindingsOwnershipReachabilityAndExactSession(t *testing.T) {
 	// Reconnection must not silently move the binding to a different exact row.
 	_, err = repo.New(ti.conn).RevokeRemoteSession(ctx, repo.RevokeRemoteSessionParams{ID: mine.ID, ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID})
 	require.NoError(t, err)
-	candidates, err = ti.service.ListRemoteSessions(ctx, &gen.ListRemoteSessionsPayload{PrincipalID: conv.PtrEmpty(agent.ID.String()), UserSessionIssuerID: conv.PtrEmpty(config.String())})
+	candidates, err = ti.service.ListRemoteSessions(ctx, &gen.ListRemoteSessionsPayload{PrincipalID: conv.PtrEmpty(agent.ID.String()), UserSessionIssuerID: conv.PtrEmpty(config.String()), RemoteSessionClientID: conv.PtrEmpty(client)})
 	require.NoError(t, err)
-	require.Empty(t, candidates.Items, "revoked upstream sessions are not attachment candidates")
+	require.Empty(t, candidates.Items, "revoked upstream sessions are not attachment candidates for this registration")
 	list, err = ti.service.ListBindings(ctx, &gen.ListBindingsPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String()})
 	require.NoError(t, err)
 	require.Len(t, list.Items, 1, "revoked source bindings remain discoverable for detach")
@@ -379,6 +405,8 @@ func TestBindingsAttachConnectionMadeThroughGatewayIssuer(t *testing.T) {
 		ProjectSlugInput:      nil,
 	})
 	require.NoError(t, err)
+	placeClientForSignIn(t, ctx, ti.conn, uuid.MustParse(created.ID), member)
+	gatewayServer := placeClientForSignIn(t, ctx, ti.conn, uuid.MustParse(created.ID), gateway)
 	viaGateway := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject(auth.UserID), gateway.String(), created.ID)
 
 	// The member's own issuer lists and attaches the gateway-made connection.
@@ -398,9 +426,9 @@ func TestBindingsAttachConnectionMadeThroughGatewayIssuer(t *testing.T) {
 
 	// The gateway stops binding the client. Its login is untouched, so the
 	// attachment keeps resolving and the login stays attachable.
-	unlinked, err := repo.New(ti.conn).DetachProjectRemoteSessionClientFromUserSessionIssuer(ctx, repo.DetachProjectRemoteSessionClientFromUserSessionIssuerParams{
-		RemoteSessionClientID: viaGateway.RemoteSessionClientID, UserSessionIssuerID: gateway,
-		ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID,
+	unlinked, err := upstreamclientsrepo.New(ti.conn).DetachMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.DetachMCPServerRemoteSessionClientParams{
+		RemoteSessionClientID: viaGateway.RemoteSessionClientID, McpServerID: gatewayServer,
+		ProjectID: *auth.ProjectID,
 	})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), unlinked)
@@ -415,12 +443,68 @@ func TestBindingsAttachConnectionMadeThroughGatewayIssuer(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, attached.ID, reattached.ID)
 
-	// The member's issuer must still bind the client itself.
+	// Registration selection is checked separately by the serving surface.
+	// An owner can pin another tenant-reachable session even when the legacy
+	// member-issuer link does not exist.
 	otherIssuer := createRemoteIssuer(t, ctx, ti, "binding-gateway-other-provider", "")
 	gatewayOnly := createRemoteClient(t, ctx, ti, otherIssuer, gateway.String(), "binding-gateway-only-client")
-	stray := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject(auth.UserID), gateway.String(), gatewayOnly)
-	_, err = ti.service.AttachBinding(ctx, &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: member.String(), RemoteSessionID: stray.ID.String()})
-	requireOopsCode(t, err, oops.CodeNotFound)
+	second := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject(auth.UserID), gateway.String(), gatewayOnly)
+	attachment, err := ti.service.AttachBinding(ctx, &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: member.String(), RemoteSessionID: second.ID.String()})
+	require.NoError(t, err)
+	require.Equal(t, second.ID.String(), attachment.RemoteSessionID)
+}
+
+func TestBindingsCompatibilityParentDoesNotConfigureServerOAuth(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	ctx = contextvalues.WithValidatedGramSession(ctx, auth, false)
+	configureBindingOwnerAuthorizer(ti)
+	_, err := productfeaturesrepo.New(ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{
+		OrganizationID: auth.ActiveOrganizationID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced),
+	})
+	require.NoError(t, err)
+	agent, err := agentrepo.New(ti.conn).CreateAgent(ctx, agentrepo.CreateAgentParams{OrganizationID: auth.ActiveOrganizationID, OwnerUserID: auth.UserID, Name: "Attachment owner agent"})
+	require.NoError(t, err)
+	signIn := createUserSessionIssuer(t, ctx, ti.conn, "fk-only-sign-in")
+	provenance := createUserSessionIssuer(t, ctx, ti.conn, "fk-only-provenance")
+	provider := createRemoteIssuer(t, ctx, ti, "fk-only-provider", "")
+	client := createRemoteClient(t, ctx, ti, provider, provenance.String(), "fk-only-registration")
+	session := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject(auth.UserID), provenance.String(), client)
+	parent := repo.CountRemoteSessionClientUserSessionIssuerBindingsParams{RemoteSessionClientID: session.RemoteSessionClientID, UserSessionIssuerID: signIn}
+	q := repo.New(ti.conn)
+	parents, err := q.CountRemoteSessionClientUserSessionIssuerBindings(ctx, parent)
+	require.NoError(t, err)
+	require.Zero(t, parents)
+
+	_, err = ti.service.AttachBinding(ctx, &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: signIn.String(), RemoteSessionID: session.ID.String()})
+	require.NoError(t, err)
+	parents, err = q.CountRemoteSessionClientUserSessionIssuerBindings(ctx, parent)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, parents, "the attachment must create its FK parent")
+
+	backend := uuid.New()
+	fixtures := authclientbackfill.New(ti.conn)
+	require.NoError(t, fixtures.SeedRemoteMCPServerFixture(ctx, authclientbackfill.SeedRemoteMCPServerFixtureParams{ID: backend, ProjectID: *auth.ProjectID, Url: "https://mcp.example.com/attachment-only"}))
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	server, err := mcpservers.CreateProjectMCPServerInTransaction(ctx, tx, audit.NewLogger(), mcpservers.MCPServerTransactionInput{
+		OrganizationID: auth.ActiveOrganizationID, ProjectID: *auth.ProjectID, ActorUserID: auth.UserID, ActorEmail: auth.Email,
+		Name: "Attachment-only sign-in server", Visibility: mcpservers.VisibilityPrivate,
+		UserSessionIssuerID: conv.ToNullUUID(signIn), RemoteMCPServerID: conv.ToNullUUID(backend),
+	})
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit(ctx))
+
+	associations, err := upstreamclientsrepo.New(ti.conn).ListMCPServerRemoteSessionClients(ctx, upstreamclientsrepo.ListMCPServerRemoteSessionClientsParams{McpServerID: server.ID, ProjectID: *auth.ProjectID})
+	require.NoError(t, err)
+	require.Empty(t, associations, "the physical parent is not a server association")
+	offers, err := fixtures.ListServerAuthClientsFixture(ctx, server.ID)
+	require.NoError(t, err)
+	require.Empty(t, offers, "the physical parent is not a typed upstream offer")
+	pinned, err := q.GetPrincipalRemoteSessionBinding(ctx, repo.GetPrincipalRemoteSessionBindingParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, PrincipalID: agent.ID, UserSessionIssuerID: signIn, RemoteSessionClientID: session.RemoteSessionClientID})
+	require.NoError(t, err)
+	require.Equal(t, session.ID, pinned.ID)
 }
 
 // A detach names the account the connection signed in as, falling back to the

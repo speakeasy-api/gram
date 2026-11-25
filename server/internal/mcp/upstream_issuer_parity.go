@@ -27,7 +27,6 @@ import (
 const (
 	upstreamIssuerSurfaceDirect         = "direct"
 	upstreamIssuerSurfaceGatewayProxied = "gateway_proxied"
-	upstreamIssuerSurfaceGatewayHosted  = "gateway_hosted"
 	upstreamIssuerSurfaceGatewayState   = "gateway_state"
 	upstreamIssuerSurfaceConsent        = "consent"
 )
@@ -74,9 +73,6 @@ const (
 const (
 	// upstreamIssuerSiteRoute routes a direct request's credential.
 	upstreamIssuerSiteRoute = "route"
-
-	// upstreamIssuerSiteConsentPreview routes the consent page's tool preview.
-	upstreamIssuerSiteConsentPreview = "consent_preview"
 
 	// upstreamIssuerSiteMemberIssuer is a gateway member's starting upstream
 	// issuer, which its sign-in status, connect links, identity chaining and
@@ -202,23 +198,6 @@ func upstreamIssuerSource(fromAssociations bool, keys upstreamIssuerKeys) string
 	return upstreamIssuerSourceColumn
 }
 
-// resolverModeUnknown labels a comparison whose organization's resolver mode
-// could not be read.
-const resolverModeUnknown = "unknown"
-
-// resolverModeLabel is the recorded name of an organization's typed auth
-// client resolver mode.
-func resolverModeLabel(mode feature.AuthClientResolverMode) string {
-	switch mode {
-	case feature.AuthClientResolverEnforced:
-		return "enforced"
-	case feature.AuthClientResolverShadow:
-		return "shadow"
-	default:
-		return "off"
-	}
-}
-
 // sameRoutedUpstream reports whether two routings of one token map reached
 // the same result: the same credential, or no credential, or a fail-closed
 // refusal for the same reason.
@@ -268,11 +247,10 @@ type upstreamIssuerParity struct {
 // window. Agreement and governing choices log nothing.
 func (s *Service) recordUpstreamIssuerParity(ctx context.Context, logger *slog.Logger, p upstreamIssuerParity) {
 	s.metrics.RecordUpstreamIssuerParity(ctx, mcpmetrics.UpstreamIssuerParity{
-		Surface:      p.surface,
-		Site:         p.site,
-		Outcome:      string(p.outcome),
-		Source:       upstreamIssuerSource(p.fromAssociations, p.keys),
-		ResolverMode: s.resolverModeLabelFor(ctx, p.organizationID),
+		Surface: p.surface,
+		Site:    p.site,
+		Outcome: string(p.outcome),
+		Source:  upstreamIssuerSource(p.fromAssociations, p.keys),
 	})
 	if p.outcome == upstreamIssuerMatch || p.outcome == upstreamIssuerChoice {
 		return
@@ -477,35 +455,6 @@ func (s *Service) compareMemberRouting(ctx context.Context, logger *slog.Logger,
 	s.recordUpstreamIssuerParity(ctx, logger, parity)
 }
 
-// compareHostedMemberTokens narrows a hosted gateway member's resolved tokens
-// with the other upstream issuer source and records how it compares with the
-// narrowing that happened.
-func (s *Service) compareHostedMemberTokens(ctx context.Context, logger *slog.Logger, organizationID string, tokens map[uuid.UUID]remotesessions.UpstreamToken, member metaMember, hosted map[uuid.UUID]remotesessions.UpstreamToken, hostedErr error) {
-	parity := upstreamIssuerParity{
-		organizationID:   organizationID,
-		serverID:         member.serverID,
-		surface:          upstreamIssuerSurfaceGatewayHosted,
-		site:             upstreamIssuerSiteRoute,
-		keys:             member.upstreamIssuer,
-		outcome:          upstreamIssuerChoice,
-		fromAssociations: member.upstreamIssuerFromAssociations,
-	}
-	if !memberChoiceGoverns(member) {
-		other, otherErr := hostedMemberTokens(tokens, memberWithOtherIssuer(member))
-		parity.outcome = member.upstreamIssuer.outcome(sameRoutedUpstream(soleToken(hosted), hostedErr, soleToken(other), otherErr))
-	}
-	s.recordUpstreamIssuerParity(ctx, logger, parity)
-}
-
-// soleToken is the one entry hostedMemberTokens narrows to, or none.
-func soleToken(tokens map[uuid.UUID]remotesessions.UpstreamToken) remotesessions.UpstreamToken {
-	var none remotesessions.UpstreamToken
-	for _, entry := range tokens {
-		return entry
-	}
-	return none
-}
-
 // reuseInventoryFingerprints are an inventory's reuse fingerprints with its
 // backend hash in the forms a reuse compares besides the decided one.
 type reuseInventoryFingerprints struct {
@@ -549,14 +498,4 @@ func reconsentConsenter(state AuthnChallengeState) string {
 		return state.Subject.String()
 	}
 	return state.ID
-}
-
-// resolverModeLabelFor is the recorded name of the organization's resolver
-// mode as requests use it, enforcement included.
-func (s *Service) resolverModeLabelFor(ctx context.Context, organizationID string) string {
-	mode, err := s.authClientMode(ctx, organizationID)
-	if err != nil {
-		return resolverModeUnknown
-	}
-	return resolverModeLabel(mode)
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -19,14 +20,18 @@ func TestUpstreamAuthEnforcement_RefusedUntilCovered(t *testing.T) {
 	ctx = contextvalues.SetAdminAuthContext(ctx, &contextvalues.AdminAuthContext{OIDCSubject: "staff-test"})
 	org := newMigrationOrg(t, ctx, db, "enforce-uncovered")
 	issuer := org.issuer()
-	org.client(issuer)
-	org.server(issuer)
+	client := org.client(issuer)
+	server := org.server(issuer)
 	org.session(issuer)
+	_, err := authclientbackfill.New(db).SeedAssociationFixture(ctx, authclientbackfill.SeedAssociationFixtureParams{
+		ProjectID: org.projectID, OrganizationID: org.id, McpServerID: server, RemoteSessionClientID: client,
+	})
+	require.NoError(t, err)
 
 	status, err := svc.GetUpstreamOAuthMigrationStatus(ctx, &gen.GetUpstreamOAuthMigrationStatusPayload{OrganizationID: org.id})
 	require.NoError(t, err)
 	require.False(t, status.Enforcement.Ready)
-	require.Contains(t, status.Enforcement.Blockers, "The upstream OAuth migration is incomplete.")
+	require.Contains(t, status.Enforcement.Blockers, "Typed auth clients are not all recorded.")
 
 	_, err = svc.EnableUpstreamAuthEnforcement(ctx, &gen.EnableUpstreamAuthEnforcementPayload{OrganizationID: org.id, ShadowParityConfirmed: true, CrossOrganizationDenialCommunicated: true})
 	var shareable *oops.ShareableError
@@ -38,19 +43,19 @@ func TestUpstreamAuthEnforcement_RefusedUntilCovered(t *testing.T) {
 	require.False(t, enforced)
 }
 
-func TestUpstreamAuthEnforcement_EnablesOnceCoveredAndRollsBack(t *testing.T) {
+func TestUpstreamAuthEnforcement_EnablesOnceCoveredAndRejectsRollback(t *testing.T) {
 	t.Parallel()
 	ctx, svc, db := newTestAdminService(t)
 	ctx = contextvalues.SetAdminAuthContext(ctx, &contextvalues.AdminAuthContext{OIDCSubject: "staff-test"})
 	org := newMigrationOrg(t, ctx, db, "enforce-covered")
 	issuer := org.issuer()
-	org.client(issuer)
-	org.server(issuer)
-	org.session(issuer)
-
-	run, err := svc.RunUpstreamOAuthMigration(ctx, &gen.RunUpstreamOAuthMigrationPayload{OrganizationID: org.id})
+	registration := org.client(issuer)
+	server := org.server(issuer)
+	credential := org.session(issuer)
+	seedCoveredMigrationFixture(t, ctx, db, org, server, registration, credential)
+	status, err := svc.GetUpstreamOAuthMigrationStatus(ctx, &gen.GetUpstreamOAuthMigrationStatusPayload{OrganizationID: org.id})
 	require.NoError(t, err)
-	require.True(t, run.Status.Enforcement.Ready, run.Status.Enforcement.Blockers)
+	require.True(t, status.Enforcement.Ready, status.Enforcement.Blockers)
 
 	_, err = svc.EnableUpstreamAuthEnforcement(ctx, &gen.EnableUpstreamAuthEnforcementPayload{OrganizationID: org.id, ShadowParityConfirmed: false, CrossOrganizationDenialCommunicated: true})
 	var shareable *oops.ShareableError
@@ -68,15 +73,16 @@ func TestUpstreamAuthEnforcement_EnablesOnceCoveredAndRollsBack(t *testing.T) {
 	require.Equal(t, "staff-test", enabledLog.ActorID)
 	require.Equal(t, org.id, enabledLog.OrganizationID)
 
-	disabled, err := svc.DisableUpstreamAuthEnforcement(ctx, &gen.DisableUpstreamAuthEnforcementPayload{OrganizationID: org.id})
-	require.NoError(t, err)
-	require.False(t, disabled.Enforcement.Enabled)
+	_, err = svc.DisableUpstreamAuthEnforcement(ctx, &gen.DisableUpstreamAuthEnforcementPayload{OrganizationID: org.id})
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeInvalid, shareable.Code)
+	require.ErrorContains(t, err, "upstream auth enforcement cannot be disabled")
 	enforced, err = authenforcement.NewGate(db).Enforced(ctx, org.id)
 	require.NoError(t, err)
-	require.False(t, enforced, "disabling is the organization's rollback")
-	disabledLog, err := audittest.LatestAuditLogByActionAndSubject(ctx, db, audit.ActionOrganizationProductFeatureDisabled, org.id)
-	require.NoError(t, err, "disabling is audited")
-	require.Equal(t, "staff-test", disabledLog.ActorID)
+	require.True(t, enforced, "a retired rollback request must leave enforcement enabled")
+	status, err = svc.GetUpstreamOAuthMigrationStatus(ctx, &gen.GetUpstreamOAuthMigrationStatusPayload{OrganizationID: org.id})
+	require.NoError(t, err)
+	require.True(t, status.Enforcement.Enabled)
 }
 
 func TestUpstreamAuthEnforcement_RequiresStaff(t *testing.T) {
@@ -114,6 +120,7 @@ func TestUpstreamAuthEnforcement_EachCoverageGapBlocks(t *testing.T) {
 		change  func(*gen.AdminUpstreamOAuthMigrationStatus)
 		blocker string
 	}{
+		"incomplete typed clients":   {func(s *gen.AdminUpstreamOAuthMigrationStatus) { s.Migrated, s.AuthClients.Complete = false, false }, "Typed auth clients are not all recorded."},
 		"pending selection mappings": {func(s *gen.AdminUpstreamOAuthMigrationStatus) { s.AuthClients.PendingSelectionMappings = new(int64(1)) }, "Credential choices still need their auth client named."},
 		"pending default grants":     {func(s *gen.AdminUpstreamOAuthMigrationStatus) { s.AuthClients.PendingGrants = new(int64(1)) }, "Default auth permissions are not all granted."},
 		"pending profile versions": {func(s *gen.AdminUpstreamOAuthMigrationStatus) {
@@ -137,13 +144,12 @@ func TestUpstreamAuthEnforcement_RequiresCrossOrganizationNotice(t *testing.T) {
 	ctx = contextvalues.SetAdminAuthContext(ctx, &contextvalues.AdminAuthContext{OIDCSubject: "staff-test"})
 	org := newMigrationOrg(t, ctx, db, "enforce-notice")
 	issuer := org.issuer()
-	org.client(issuer)
-	org.server(issuer)
-	org.session(issuer)
-	_, err := svc.RunUpstreamOAuthMigration(ctx, &gen.RunUpstreamOAuthMigrationPayload{OrganizationID: org.id})
-	require.NoError(t, err)
+	registration := org.client(issuer)
+	server := org.server(issuer)
+	credential := org.session(issuer)
+	seedCoveredMigrationFixture(t, ctx, db, org, server, registration, credential)
 
-	_, err = svc.EnableUpstreamAuthEnforcement(ctx, &gen.EnableUpstreamAuthEnforcementPayload{OrganizationID: org.id, ShadowParityConfirmed: true, CrossOrganizationDenialCommunicated: false})
+	_, err := svc.EnableUpstreamAuthEnforcement(ctx, &gen.EnableUpstreamAuthEnforcementPayload{OrganizationID: org.id, ShadowParityConfirmed: true, CrossOrganizationDenialCommunicated: false})
 	var shareable *oops.ShareableError
 	require.ErrorAs(t, err, &shareable)
 	require.Equal(t, oops.CodeInvalid, shareable.Code)

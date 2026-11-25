@@ -129,6 +129,9 @@ func migrateWithRemoteBinding(t *testing.T) (uuid.UUID, []uuid.NullUUID) {
 	})
 	require.NoError(t, err)
 
+	for _, id := range []uuid.UUID{first.ID, second.ID, freeID} {
+		seedMigrationTypedOffer(t, ctx, ti, projectID, id, remoteClient.ID)
+	}
 	_, err = ti.service.MigrateIssuer(ctx, &orggen.MigrateIssuerPayload{SourceID: sourceID.String(), TargetID: target.ID})
 	require.NoError(t, err)
 

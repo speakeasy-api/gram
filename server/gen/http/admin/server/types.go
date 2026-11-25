@@ -790,6 +790,56 @@ type CancelHooksRolloutStageRequestBody struct {
 	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
 }
 
+// RunTailscaleOAuthMigrationStepRequestBody is the type of the "admin" service
+// "runTailscaleOAuthMigrationStep" endpoint HTTP request body.
+type RunTailscaleOAuthMigrationStepRequestBody struct {
+	// The organization ID.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// The step to run.
+	Step *string `form:"step,omitempty" json:"step,omitempty" xml:"step,omitempty"`
+}
+
+// EnrollOrganizationEncryptionRequestBody is the type of the "admin" service
+// "enrollOrganizationEncryption" endpoint HTTP request body.
+type EnrollOrganizationEncryptionRequestBody struct {
+	// The organization ID.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// The use case, such as oauth-client-secrets.
+	UseCase *string `form:"use_case,omitempty" json:"use_case,omitempty" xml:"use_case,omitempty"`
+}
+
+// RollbackOrganizationEncryptionRequestBody is the type of the "admin" service
+// "rollbackOrganizationEncryption" endpoint HTTP request body.
+type RollbackOrganizationEncryptionRequestBody struct {
+	// The organization ID.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// The use case, such as oauth-client-secrets.
+	UseCase *string `form:"use_case,omitempty" json:"use_case,omitempty" xml:"use_case,omitempty"`
+}
+
+// RunOrganizationEncryptionRequestBody is the type of the "admin" service
+// "runOrganizationEncryption" endpoint HTTP request body.
+type RunOrganizationEncryptionRequestBody struct {
+	// The organization ID.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// The use case, such as oauth-client-secrets.
+	UseCase *string `form:"use_case,omitempty" json:"use_case,omitempty" xml:"use_case,omitempty"`
+}
+
+// FinalizeOrganizationEncryptionRequestBody is the type of the "admin" service
+// "finalizeOrganizationEncryption" endpoint HTTP request body.
+type FinalizeOrganizationEncryptionRequestBody struct {
+	// The organization ID.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// The use case, such as oauth-client-secrets.
+	UseCase *string `form:"use_case,omitempty" json:"use_case,omitempty" xml:"use_case,omitempty"`
+	// The finalize_confirmation phrase, typed by the administrator.
+	Confirmation *string `form:"confirmation,omitempty" json:"confirmation,omitempty" xml:"confirmation,omitempty"`
+	// The number of unreadable values the administrator acknowledged will be
+	// destroyed.
+	AcknowledgedUnreadableValues *int64 `form:"acknowledged_unreadable_values,omitempty" json:"acknowledged_unreadable_values,omitempty" xml:"acknowledged_unreadable_values,omitempty"`
+}
+
 // GetSessionResponseBody is the type of the "admin" service "getSession"
 // endpoint HTTP response body.
 type GetSessionResponseBody struct {
@@ -3128,7 +3178,7 @@ type DisableUpstreamAuthEnforcementResponseBody struct {
 // BackfillMcpAuthGrantsResponseBody is the type of the "admin" service
 // "backfillMcpAuthGrants" endpoint HTTP response body.
 type BackfillMcpAuthGrantsResponseBody struct {
-	// How many principals gained the mcp:auth grant.
+	// Legacy response field; the retired endpoint does not grant access.
 	Granted int64 `form:"granted" json:"granted" xml:"granted"`
 }
 
@@ -3585,6 +3635,237 @@ type CancelHooksRolloutStageResponseBody struct {
 	Overrides []*AdminHooksRolloutOverrideResponseBody `form:"overrides" json:"overrides" xml:"overrides"`
 	// The most recent pin changes, newest first.
 	RecentChanges []*AdminHooksRolloutChangeResponseBody `form:"recent_changes" json:"recent_changes" xml:"recent_changes"`
+}
+
+// ListTailscaleOAuthMigrationResponseBody is the type of the "admin" service
+// "listTailscaleOAuthMigration" endpoint HTTP response body.
+type ListTailscaleOAuthMigrationResponseBody struct {
+	// Every organization with saved Tailscale OAuth credentials, by name.
+	Organizations []*AdminTailscaleOAuthMigrationOrganizationResponseBody `form:"organizations" json:"organizations" xml:"organizations"`
+	// How long an organization must stay in dual_write before it can be finalized.
+	MinimumDualWriteSeconds int64 `form:"minimum_dual_write_seconds" json:"minimum_dual_write_seconds" xml:"minimum_dual_write_seconds"`
+}
+
+// RunTailscaleOAuthMigrationStepResponseBody is the type of the "admin"
+// service "runTailscaleOAuthMigrationStep" endpoint HTTP response body.
+type RunTailscaleOAuthMigrationStepResponseBody struct {
+	// The organization ID.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// The organization name.
+	Name string `form:"name" json:"name" xml:"name"`
+	// The organization slug.
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// The transition state.
+	State string `form:"state" json:"state" xml:"state"`
+	// The transition generation; 0 before the organization is enrolled.
+	Generation int64 `form:"generation" json:"generation" xml:"generation"`
+	// When the current state was entered. Absent before the organization is
+	// enrolled.
+	StateChangedAt *string `form:"state_changed_at,omitempty" json:"state_changed_at,omitempty" xml:"state_changed_at,omitempty"`
+	// Saved credentials with only a platform-key copy, which the backfill still
+	// has to seal with the organization key.
+	Waiting int64 `form:"waiting" json:"waiting" xml:"waiting"`
+	// Saved credentials whose platform-key copy does not decrypt. They do not
+	// block finalize; clearing the platform-key copies destroys them.
+	Unreadable int64 `form:"unreadable" json:"unreadable" xml:"unreadable"`
+	// Saved credentials that still hold a platform-key copy.
+	PlatformCopies int64 `form:"platform_copies" json:"platform_copies" xml:"platform_copies"`
+	// When the last backfill started.
+	LastBackfillStartedAt *string `form:"last_backfill_started_at,omitempty" json:"last_backfill_started_at,omitempty" xml:"last_backfill_started_at,omitempty"`
+	// When the last backfill ended.
+	LastBackfillCompletedAt *string `form:"last_backfill_completed_at,omitempty" json:"last_backfill_completed_at,omitempty" xml:"last_backfill_completed_at,omitempty"`
+	// Why the last backfill stopped early. Never carries values or key material.
+	LastBackfillError *string `form:"last_backfill_error,omitempty" json:"last_backfill_error,omitempty" xml:"last_backfill_error,omitempty"`
+	// When the last clean verification pass started.
+	LastVerifiedAt *string `form:"last_verified_at,omitempty" json:"last_verified_at,omitempty" xml:"last_verified_at,omitempty"`
+	// When the platform-key copies were destroyed after finalize.
+	PlatformCopiesClearedAt *string `form:"platform_copies_cleared_at,omitempty" json:"platform_copies_cleared_at,omitempty" xml:"platform_copies_cleared_at,omitempty"`
+	// Only returned by the backfill step: credentials whose two copies did not
+	// match, whose platform-key copy no longer decrypts beside an organization-key
+	// copy, or whose organization-key copy did not open, in the verification that
+	// step just ran. Above zero means no clean verification was recorded, so
+	// finalize stays blocked.
+	VerificationFailures *int64 `form:"verification_failures,omitempty" json:"verification_failures,omitempty" xml:"verification_failures,omitempty"`
+}
+
+// GetOrganizationEncryptionResponseBody is the type of the "admin" service
+// "getOrganizationEncryption" endpoint HTTP response body.
+type GetOrganizationEncryptionResponseBody struct {
+	// The organization ID.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// The encryption configuration. Absent until the organization's key is
+	// provisioned, which enroll does.
+	Config *AdminOrganizationEncryptionConfigResponseBody `form:"config,omitempty" json:"config,omitempty" xml:"config,omitempty"`
+	// One entry per use case that moves from the platform key to organization keys.
+	UseCases []*AdminOrganizationEncryptionUseCaseResponseBody `form:"use_cases" json:"use_cases" xml:"use_cases"`
+	// How long a use case must be in dual_write before finalize is allowed.
+	MinimumDualWriteSeconds int64 `form:"minimum_dual_write_seconds" json:"minimum_dual_write_seconds" xml:"minimum_dual_write_seconds"`
+	// The phrase finalize requires as its confirmation.
+	FinalizeConfirmation string `form:"finalize_confirmation" json:"finalize_confirmation" xml:"finalize_confirmation"`
+	// Whether this server can start backfill and clearing runs. When false,
+	// finalize leaves clearing to the hourly background run.
+	RunsAvailable bool `form:"runs_available" json:"runs_available" xml:"runs_available"`
+}
+
+// ListOrganizationEncryptionTransitionsResponseBody is the type of the "admin"
+// service "listOrganizationEncryptionTransitions" endpoint HTTP response body.
+type ListOrganizationEncryptionTransitionsResponseBody struct {
+	// The use case listed.
+	UseCase string `form:"use_case" json:"use_case" xml:"use_case"`
+	// Every use case that moves from the platform key to organization keys.
+	UseCases []string `form:"use_cases" json:"use_cases" xml:"use_cases"`
+	// The page of organizations, oldest first.
+	Organizations []*AdminOrganizationEncryptionTransitionRowResponseBody `form:"organizations" json:"organizations" xml:"organizations"`
+	// How many organizations are in each state, across every page.
+	StateCounts []*AdminOrganizationEncryptionStateCountResponseBody `form:"state_counts" json:"state_counts" xml:"state_counts"`
+	// Whether another page follows.
+	HasMore bool `form:"has_more" json:"has_more" xml:"has_more"`
+}
+
+// EnrollOrganizationEncryptionResponseBody is the type of the "admin" service
+// "enrollOrganizationEncryption" endpoint HTTP response body.
+type EnrollOrganizationEncryptionResponseBody struct {
+	// The registered use case, such as oauth-client-secrets.
+	UseCase string `form:"use_case" json:"use_case" xml:"use_case"`
+	// The transition state.
+	State string `form:"state" json:"state" xml:"state"`
+	// Increases on every state change; 0 while the organization has never been
+	// enrolled.
+	Generation int64 `form:"generation" json:"generation" xml:"generation"`
+	// When the state was entered. Absent while the organization has never been
+	// enrolled.
+	StateChangedAt *string `form:"state_changed_at,omitempty" json:"state_changed_at,omitempty" xml:"state_changed_at,omitempty"`
+	// When the platform-key copies were destroyed after finalize. Absent until
+	// clearing completes.
+	PlatformCopiesClearedAt *string `form:"platform_copies_cleared_at,omitempty" json:"platform_copies_cleared_at,omitempty" xml:"platform_copies_cleared_at,omitempty"`
+	// Values that still wait for an organization-key copy.
+	WaitingValues int64 `form:"waiting_values" json:"waiting_values" xml:"waiting_values"`
+	// Values whose platform-key copy does not decrypt. Finalize destroys them with
+	// the rest.
+	UnreadableValues int64 `form:"unreadable_values" json:"unreadable_values" xml:"unreadable_values"`
+	// Values stored without an organization they can be attributed to. They block
+	// finalize.
+	UnattributedValues int64 `form:"unattributed_values" json:"unattributed_values" xml:"unattributed_values"`
+	// Platform-key copies still stored.
+	PlatformCopies int64 `form:"platform_copies" json:"platform_copies" xml:"platform_copies"`
+	// When the last backfill run started.
+	LastBackfillStartedAt *string `form:"last_backfill_started_at,omitempty" json:"last_backfill_started_at,omitempty" xml:"last_backfill_started_at,omitempty"`
+	// When the last backfill run ended. Absent while it runs.
+	LastBackfillCompletedAt *string `form:"last_backfill_completed_at,omitempty" json:"last_backfill_completed_at,omitempty" xml:"last_backfill_completed_at,omitempty"`
+	// Values the last backfill run gave an organization-key copy.
+	LastBackfillConverted *int64 `form:"last_backfill_converted,omitempty" json:"last_backfill_converted,omitempty" xml:"last_backfill_converted,omitempty"`
+	// Values still waiting when the last backfill run ended.
+	LastBackfillRemaining *int64 `form:"last_backfill_remaining,omitempty" json:"last_backfill_remaining,omitempty" xml:"last_backfill_remaining,omitempty"`
+	// Values recorded as unreadable when the last backfill run ended.
+	LastBackfillUnreadable *int64 `form:"last_backfill_unreadable,omitempty" json:"last_backfill_unreadable,omitempty" xml:"last_backfill_unreadable,omitempty"`
+	// Why the last backfill run stopped early.
+	LastBackfillError *string `form:"last_backfill_error,omitempty" json:"last_backfill_error,omitempty" xml:"last_backfill_error,omitempty"`
+	// When the last clean verification pass started.
+	LastVerifiedAt *string `form:"last_verified_at,omitempty" json:"last_verified_at,omitempty" xml:"last_verified_at,omitempty"`
+	// Why finalize would be refused now, empty when it would proceed. Advisory:
+	// finalize checks again when it runs.
+	FinalizeBlockers []string `form:"finalize_blockers" json:"finalize_blockers" xml:"finalize_blockers"`
+}
+
+// RollbackOrganizationEncryptionResponseBody is the type of the "admin"
+// service "rollbackOrganizationEncryption" endpoint HTTP response body.
+type RollbackOrganizationEncryptionResponseBody struct {
+	// The registered use case, such as oauth-client-secrets.
+	UseCase string `form:"use_case" json:"use_case" xml:"use_case"`
+	// The transition state.
+	State string `form:"state" json:"state" xml:"state"`
+	// Increases on every state change; 0 while the organization has never been
+	// enrolled.
+	Generation int64 `form:"generation" json:"generation" xml:"generation"`
+	// When the state was entered. Absent while the organization has never been
+	// enrolled.
+	StateChangedAt *string `form:"state_changed_at,omitempty" json:"state_changed_at,omitempty" xml:"state_changed_at,omitempty"`
+	// When the platform-key copies were destroyed after finalize. Absent until
+	// clearing completes.
+	PlatformCopiesClearedAt *string `form:"platform_copies_cleared_at,omitempty" json:"platform_copies_cleared_at,omitempty" xml:"platform_copies_cleared_at,omitempty"`
+	// Values that still wait for an organization-key copy.
+	WaitingValues int64 `form:"waiting_values" json:"waiting_values" xml:"waiting_values"`
+	// Values whose platform-key copy does not decrypt. Finalize destroys them with
+	// the rest.
+	UnreadableValues int64 `form:"unreadable_values" json:"unreadable_values" xml:"unreadable_values"`
+	// Values stored without an organization they can be attributed to. They block
+	// finalize.
+	UnattributedValues int64 `form:"unattributed_values" json:"unattributed_values" xml:"unattributed_values"`
+	// Platform-key copies still stored.
+	PlatformCopies int64 `form:"platform_copies" json:"platform_copies" xml:"platform_copies"`
+	// When the last backfill run started.
+	LastBackfillStartedAt *string `form:"last_backfill_started_at,omitempty" json:"last_backfill_started_at,omitempty" xml:"last_backfill_started_at,omitempty"`
+	// When the last backfill run ended. Absent while it runs.
+	LastBackfillCompletedAt *string `form:"last_backfill_completed_at,omitempty" json:"last_backfill_completed_at,omitempty" xml:"last_backfill_completed_at,omitempty"`
+	// Values the last backfill run gave an organization-key copy.
+	LastBackfillConverted *int64 `form:"last_backfill_converted,omitempty" json:"last_backfill_converted,omitempty" xml:"last_backfill_converted,omitempty"`
+	// Values still waiting when the last backfill run ended.
+	LastBackfillRemaining *int64 `form:"last_backfill_remaining,omitempty" json:"last_backfill_remaining,omitempty" xml:"last_backfill_remaining,omitempty"`
+	// Values recorded as unreadable when the last backfill run ended.
+	LastBackfillUnreadable *int64 `form:"last_backfill_unreadable,omitempty" json:"last_backfill_unreadable,omitempty" xml:"last_backfill_unreadable,omitempty"`
+	// Why the last backfill run stopped early.
+	LastBackfillError *string `form:"last_backfill_error,omitempty" json:"last_backfill_error,omitempty" xml:"last_backfill_error,omitempty"`
+	// When the last clean verification pass started.
+	LastVerifiedAt *string `form:"last_verified_at,omitempty" json:"last_verified_at,omitempty" xml:"last_verified_at,omitempty"`
+	// Why finalize would be refused now, empty when it would proceed. Advisory:
+	// finalize checks again when it runs.
+	FinalizeBlockers []string `form:"finalize_blockers" json:"finalize_blockers" xml:"finalize_blockers"`
+}
+
+// RunOrganizationEncryptionResponseBody is the type of the "admin" service
+// "runOrganizationEncryption" endpoint HTTP response body.
+type RunOrganizationEncryptionResponseBody struct {
+	// The registered use case, such as oauth-client-secrets.
+	UseCase string `form:"use_case" json:"use_case" xml:"use_case"`
+	// The transition state.
+	State string `form:"state" json:"state" xml:"state"`
+	// Increases on every state change; 0 while the organization has never been
+	// enrolled.
+	Generation int64 `form:"generation" json:"generation" xml:"generation"`
+	// When the state was entered. Absent while the organization has never been
+	// enrolled.
+	StateChangedAt *string `form:"state_changed_at,omitempty" json:"state_changed_at,omitempty" xml:"state_changed_at,omitempty"`
+	// When the platform-key copies were destroyed after finalize. Absent until
+	// clearing completes.
+	PlatformCopiesClearedAt *string `form:"platform_copies_cleared_at,omitempty" json:"platform_copies_cleared_at,omitempty" xml:"platform_copies_cleared_at,omitempty"`
+	// Values that still wait for an organization-key copy.
+	WaitingValues int64 `form:"waiting_values" json:"waiting_values" xml:"waiting_values"`
+	// Values whose platform-key copy does not decrypt. Finalize destroys them with
+	// the rest.
+	UnreadableValues int64 `form:"unreadable_values" json:"unreadable_values" xml:"unreadable_values"`
+	// Values stored without an organization they can be attributed to. They block
+	// finalize.
+	UnattributedValues int64 `form:"unattributed_values" json:"unattributed_values" xml:"unattributed_values"`
+	// Platform-key copies still stored.
+	PlatformCopies int64 `form:"platform_copies" json:"platform_copies" xml:"platform_copies"`
+	// When the last backfill run started.
+	LastBackfillStartedAt *string `form:"last_backfill_started_at,omitempty" json:"last_backfill_started_at,omitempty" xml:"last_backfill_started_at,omitempty"`
+	// When the last backfill run ended. Absent while it runs.
+	LastBackfillCompletedAt *string `form:"last_backfill_completed_at,omitempty" json:"last_backfill_completed_at,omitempty" xml:"last_backfill_completed_at,omitempty"`
+	// Values the last backfill run gave an organization-key copy.
+	LastBackfillConverted *int64 `form:"last_backfill_converted,omitempty" json:"last_backfill_converted,omitempty" xml:"last_backfill_converted,omitempty"`
+	// Values still waiting when the last backfill run ended.
+	LastBackfillRemaining *int64 `form:"last_backfill_remaining,omitempty" json:"last_backfill_remaining,omitempty" xml:"last_backfill_remaining,omitempty"`
+	// Values recorded as unreadable when the last backfill run ended.
+	LastBackfillUnreadable *int64 `form:"last_backfill_unreadable,omitempty" json:"last_backfill_unreadable,omitempty" xml:"last_backfill_unreadable,omitempty"`
+	// Why the last backfill run stopped early.
+	LastBackfillError *string `form:"last_backfill_error,omitempty" json:"last_backfill_error,omitempty" xml:"last_backfill_error,omitempty"`
+	// When the last clean verification pass started.
+	LastVerifiedAt *string `form:"last_verified_at,omitempty" json:"last_verified_at,omitempty" xml:"last_verified_at,omitempty"`
+	// Why finalize would be refused now, empty when it would proceed. Advisory:
+	// finalize checks again when it runs.
+	FinalizeBlockers []string `form:"finalize_blockers" json:"finalize_blockers" xml:"finalize_blockers"`
+}
+
+// FinalizeOrganizationEncryptionResponseBody is the type of the "admin"
+// service "finalizeOrganizationEncryption" endpoint HTTP response body.
+type FinalizeOrganizationEncryptionResponseBody struct {
+	// The use case after finalize, now in org_kms.
+	UseCase *AdminOrganizationEncryptionUseCaseResponseBody `form:"use_case" json:"use_case" xml:"use_case"`
+	// Whether a run destroying the platform-key copies was started. When false,
+	// the hourly background run finishes clearing, or an administrator starts a
+	// run.
+	ClearingStarted bool `form:"clearing_started" json:"clearing_started" xml:"clearing_started"`
 }
 
 // LoginUnauthorizedResponseBody is the type of the "admin" service "login"
@@ -28876,6 +29157,1678 @@ type CancelHooksRolloutStageGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListTailscaleOAuthMigrationUnavailableResponseBody is the type of the
+// "admin" service "listTailscaleOAuthMigration" endpoint HTTP response body
+// for the "unavailable" error.
+type ListTailscaleOAuthMigrationUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTailscaleOAuthMigrationUnauthorizedResponseBody is the type of the
+// "admin" service "listTailscaleOAuthMigration" endpoint HTTP response body
+// for the "unauthorized" error.
+type ListTailscaleOAuthMigrationUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTailscaleOAuthMigrationForbiddenResponseBody is the type of the "admin"
+// service "listTailscaleOAuthMigration" endpoint HTTP response body for the
+// "forbidden" error.
+type ListTailscaleOAuthMigrationForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTailscaleOAuthMigrationBadRequestResponseBody is the type of the "admin"
+// service "listTailscaleOAuthMigration" endpoint HTTP response body for the
+// "bad_request" error.
+type ListTailscaleOAuthMigrationBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTailscaleOAuthMigrationNotFoundResponseBody is the type of the "admin"
+// service "listTailscaleOAuthMigration" endpoint HTTP response body for the
+// "not_found" error.
+type ListTailscaleOAuthMigrationNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTailscaleOAuthMigrationConflictResponseBody is the type of the "admin"
+// service "listTailscaleOAuthMigration" endpoint HTTP response body for the
+// "conflict" error.
+type ListTailscaleOAuthMigrationConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTailscaleOAuthMigrationUnsupportedMediaResponseBody is the type of the
+// "admin" service "listTailscaleOAuthMigration" endpoint HTTP response body
+// for the "unsupported_media" error.
+type ListTailscaleOAuthMigrationUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTailscaleOAuthMigrationInvalidResponseBody is the type of the "admin"
+// service "listTailscaleOAuthMigration" endpoint HTTP response body for the
+// "invalid" error.
+type ListTailscaleOAuthMigrationInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTailscaleOAuthMigrationInvariantViolationResponseBody is the type of the
+// "admin" service "listTailscaleOAuthMigration" endpoint HTTP response body
+// for the "invariant_violation" error.
+type ListTailscaleOAuthMigrationInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTailscaleOAuthMigrationUnexpectedResponseBody is the type of the "admin"
+// service "listTailscaleOAuthMigration" endpoint HTTP response body for the
+// "unexpected" error.
+type ListTailscaleOAuthMigrationUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTailscaleOAuthMigrationGatewayErrorResponseBody is the type of the
+// "admin" service "listTailscaleOAuthMigration" endpoint HTTP response body
+// for the "gateway_error" error.
+type ListTailscaleOAuthMigrationGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RunTailscaleOAuthMigrationStepUnavailableResponseBody is the type of the
+// "admin" service "runTailscaleOAuthMigrationStep" endpoint HTTP response body
+// for the "unavailable" error.
+type RunTailscaleOAuthMigrationStepUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RunTailscaleOAuthMigrationStepUnauthorizedResponseBody is the type of the
+// "admin" service "runTailscaleOAuthMigrationStep" endpoint HTTP response body
+// for the "unauthorized" error.
+type RunTailscaleOAuthMigrationStepUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RunTailscaleOAuthMigrationStepForbiddenResponseBody is the type of the
+// "admin" service "runTailscaleOAuthMigrationStep" endpoint HTTP response body
+// for the "forbidden" error.
+type RunTailscaleOAuthMigrationStepForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RunTailscaleOAuthMigrationStepBadRequestResponseBody is the type of the
+// "admin" service "runTailscaleOAuthMigrationStep" endpoint HTTP response body
+// for the "bad_request" error.
+type RunTailscaleOAuthMigrationStepBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RunTailscaleOAuthMigrationStepNotFoundResponseBody is the type of the
+// "admin" service "runTailscaleOAuthMigrationStep" endpoint HTTP response body
+// for the "not_found" error.
+type RunTailscaleOAuthMigrationStepNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RunTailscaleOAuthMigrationStepConflictResponseBody is the type of the
+// "admin" service "runTailscaleOAuthMigrationStep" endpoint HTTP response body
+// for the "conflict" error.
+type RunTailscaleOAuthMigrationStepConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RunTailscaleOAuthMigrationStepUnsupportedMediaResponseBody is the type of
+// the "admin" service "runTailscaleOAuthMigrationStep" endpoint HTTP response
+// body for the "unsupported_media" error.
+type RunTailscaleOAuthMigrationStepUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RunTailscaleOAuthMigrationStepInvalidResponseBody is the type of the "admin"
+// service "runTailscaleOAuthMigrationStep" endpoint HTTP response body for the
+// "invalid" error.
+type RunTailscaleOAuthMigrationStepInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RunTailscaleOAuthMigrationStepInvariantViolationResponseBody is the type of
+// the "admin" service "runTailscaleOAuthMigrationStep" endpoint HTTP response
+// body for the "invariant_violation" error.
+type RunTailscaleOAuthMigrationStepInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RunTailscaleOAuthMigrationStepUnexpectedResponseBody is the type of the
+// "admin" service "runTailscaleOAuthMigrationStep" endpoint HTTP response body
+// for the "unexpected" error.
+type RunTailscaleOAuthMigrationStepUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RunTailscaleOAuthMigrationStepGatewayErrorResponseBody is the type of the
+// "admin" service "runTailscaleOAuthMigrationStep" endpoint HTTP response body
+// for the "gateway_error" error.
+type RunTailscaleOAuthMigrationStepGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationEncryptionUnavailableResponseBody is the type of the "admin"
+// service "getOrganizationEncryption" endpoint HTTP response body for the
+// "unavailable" error.
+type GetOrganizationEncryptionUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationEncryptionUnauthorizedResponseBody is the type of the "admin"
+// service "getOrganizationEncryption" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetOrganizationEncryptionUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationEncryptionForbiddenResponseBody is the type of the "admin"
+// service "getOrganizationEncryption" endpoint HTTP response body for the
+// "forbidden" error.
+type GetOrganizationEncryptionForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationEncryptionBadRequestResponseBody is the type of the "admin"
+// service "getOrganizationEncryption" endpoint HTTP response body for the
+// "bad_request" error.
+type GetOrganizationEncryptionBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationEncryptionNotFoundResponseBody is the type of the "admin"
+// service "getOrganizationEncryption" endpoint HTTP response body for the
+// "not_found" error.
+type GetOrganizationEncryptionNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationEncryptionConflictResponseBody is the type of the "admin"
+// service "getOrganizationEncryption" endpoint HTTP response body for the
+// "conflict" error.
+type GetOrganizationEncryptionConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationEncryptionUnsupportedMediaResponseBody is the type of the
+// "admin" service "getOrganizationEncryption" endpoint HTTP response body for
+// the "unsupported_media" error.
+type GetOrganizationEncryptionUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationEncryptionInvalidResponseBody is the type of the "admin"
+// service "getOrganizationEncryption" endpoint HTTP response body for the
+// "invalid" error.
+type GetOrganizationEncryptionInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationEncryptionInvariantViolationResponseBody is the type of the
+// "admin" service "getOrganizationEncryption" endpoint HTTP response body for
+// the "invariant_violation" error.
+type GetOrganizationEncryptionInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationEncryptionUnexpectedResponseBody is the type of the "admin"
+// service "getOrganizationEncryption" endpoint HTTP response body for the
+// "unexpected" error.
+type GetOrganizationEncryptionUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationEncryptionGatewayErrorResponseBody is the type of the "admin"
+// service "getOrganizationEncryption" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetOrganizationEncryptionGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListOrganizationEncryptionTransitionsUnavailableResponseBody is the type of
+// the "admin" service "listOrganizationEncryptionTransitions" endpoint HTTP
+// response body for the "unavailable" error.
+type ListOrganizationEncryptionTransitionsUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListOrganizationEncryptionTransitionsUnauthorizedResponseBody is the type of
+// the "admin" service "listOrganizationEncryptionTransitions" endpoint HTTP
+// response body for the "unauthorized" error.
+type ListOrganizationEncryptionTransitionsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListOrganizationEncryptionTransitionsForbiddenResponseBody is the type of
+// the "admin" service "listOrganizationEncryptionTransitions" endpoint HTTP
+// response body for the "forbidden" error.
+type ListOrganizationEncryptionTransitionsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListOrganizationEncryptionTransitionsBadRequestResponseBody is the type of
+// the "admin" service "listOrganizationEncryptionTransitions" endpoint HTTP
+// response body for the "bad_request" error.
+type ListOrganizationEncryptionTransitionsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListOrganizationEncryptionTransitionsNotFoundResponseBody is the type of the
+// "admin" service "listOrganizationEncryptionTransitions" endpoint HTTP
+// response body for the "not_found" error.
+type ListOrganizationEncryptionTransitionsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListOrganizationEncryptionTransitionsConflictResponseBody is the type of the
+// "admin" service "listOrganizationEncryptionTransitions" endpoint HTTP
+// response body for the "conflict" error.
+type ListOrganizationEncryptionTransitionsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListOrganizationEncryptionTransitionsUnsupportedMediaResponseBody is the
+// type of the "admin" service "listOrganizationEncryptionTransitions" endpoint
+// HTTP response body for the "unsupported_media" error.
+type ListOrganizationEncryptionTransitionsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListOrganizationEncryptionTransitionsInvalidResponseBody is the type of the
+// "admin" service "listOrganizationEncryptionTransitions" endpoint HTTP
+// response body for the "invalid" error.
+type ListOrganizationEncryptionTransitionsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListOrganizationEncryptionTransitionsInvariantViolationResponseBody is the
+// type of the "admin" service "listOrganizationEncryptionTransitions" endpoint
+// HTTP response body for the "invariant_violation" error.
+type ListOrganizationEncryptionTransitionsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListOrganizationEncryptionTransitionsUnexpectedResponseBody is the type of
+// the "admin" service "listOrganizationEncryptionTransitions" endpoint HTTP
+// response body for the "unexpected" error.
+type ListOrganizationEncryptionTransitionsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListOrganizationEncryptionTransitionsGatewayErrorResponseBody is the type of
+// the "admin" service "listOrganizationEncryptionTransitions" endpoint HTTP
+// response body for the "gateway_error" error.
+type ListOrganizationEncryptionTransitionsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnrollOrganizationEncryptionUnavailableResponseBody is the type of the
+// "admin" service "enrollOrganizationEncryption" endpoint HTTP response body
+// for the "unavailable" error.
+type EnrollOrganizationEncryptionUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnrollOrganizationEncryptionUnauthorizedResponseBody is the type of the
+// "admin" service "enrollOrganizationEncryption" endpoint HTTP response body
+// for the "unauthorized" error.
+type EnrollOrganizationEncryptionUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnrollOrganizationEncryptionForbiddenResponseBody is the type of the "admin"
+// service "enrollOrganizationEncryption" endpoint HTTP response body for the
+// "forbidden" error.
+type EnrollOrganizationEncryptionForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnrollOrganizationEncryptionBadRequestResponseBody is the type of the
+// "admin" service "enrollOrganizationEncryption" endpoint HTTP response body
+// for the "bad_request" error.
+type EnrollOrganizationEncryptionBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnrollOrganizationEncryptionNotFoundResponseBody is the type of the "admin"
+// service "enrollOrganizationEncryption" endpoint HTTP response body for the
+// "not_found" error.
+type EnrollOrganizationEncryptionNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnrollOrganizationEncryptionConflictResponseBody is the type of the "admin"
+// service "enrollOrganizationEncryption" endpoint HTTP response body for the
+// "conflict" error.
+type EnrollOrganizationEncryptionConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnrollOrganizationEncryptionUnsupportedMediaResponseBody is the type of the
+// "admin" service "enrollOrganizationEncryption" endpoint HTTP response body
+// for the "unsupported_media" error.
+type EnrollOrganizationEncryptionUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnrollOrganizationEncryptionInvalidResponseBody is the type of the "admin"
+// service "enrollOrganizationEncryption" endpoint HTTP response body for the
+// "invalid" error.
+type EnrollOrganizationEncryptionInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnrollOrganizationEncryptionInvariantViolationResponseBody is the type of
+// the "admin" service "enrollOrganizationEncryption" endpoint HTTP response
+// body for the "invariant_violation" error.
+type EnrollOrganizationEncryptionInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnrollOrganizationEncryptionUnexpectedResponseBody is the type of the
+// "admin" service "enrollOrganizationEncryption" endpoint HTTP response body
+// for the "unexpected" error.
+type EnrollOrganizationEncryptionUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnrollOrganizationEncryptionGatewayErrorResponseBody is the type of the
+// "admin" service "enrollOrganizationEncryption" endpoint HTTP response body
+// for the "gateway_error" error.
+type EnrollOrganizationEncryptionGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RollbackOrganizationEncryptionUnavailableResponseBody is the type of the
+// "admin" service "rollbackOrganizationEncryption" endpoint HTTP response body
+// for the "unavailable" error.
+type RollbackOrganizationEncryptionUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RollbackOrganizationEncryptionUnauthorizedResponseBody is the type of the
+// "admin" service "rollbackOrganizationEncryption" endpoint HTTP response body
+// for the "unauthorized" error.
+type RollbackOrganizationEncryptionUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RollbackOrganizationEncryptionForbiddenResponseBody is the type of the
+// "admin" service "rollbackOrganizationEncryption" endpoint HTTP response body
+// for the "forbidden" error.
+type RollbackOrganizationEncryptionForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RollbackOrganizationEncryptionBadRequestResponseBody is the type of the
+// "admin" service "rollbackOrganizationEncryption" endpoint HTTP response body
+// for the "bad_request" error.
+type RollbackOrganizationEncryptionBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RollbackOrganizationEncryptionNotFoundResponseBody is the type of the
+// "admin" service "rollbackOrganizationEncryption" endpoint HTTP response body
+// for the "not_found" error.
+type RollbackOrganizationEncryptionNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RollbackOrganizationEncryptionConflictResponseBody is the type of the
+// "admin" service "rollbackOrganizationEncryption" endpoint HTTP response body
+// for the "conflict" error.
+type RollbackOrganizationEncryptionConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RollbackOrganizationEncryptionUnsupportedMediaResponseBody is the type of
+// the "admin" service "rollbackOrganizationEncryption" endpoint HTTP response
+// body for the "unsupported_media" error.
+type RollbackOrganizationEncryptionUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RollbackOrganizationEncryptionInvalidResponseBody is the type of the "admin"
+// service "rollbackOrganizationEncryption" endpoint HTTP response body for the
+// "invalid" error.
+type RollbackOrganizationEncryptionInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RollbackOrganizationEncryptionInvariantViolationResponseBody is the type of
+// the "admin" service "rollbackOrganizationEncryption" endpoint HTTP response
+// body for the "invariant_violation" error.
+type RollbackOrganizationEncryptionInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RollbackOrganizationEncryptionUnexpectedResponseBody is the type of the
+// "admin" service "rollbackOrganizationEncryption" endpoint HTTP response body
+// for the "unexpected" error.
+type RollbackOrganizationEncryptionUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RollbackOrganizationEncryptionGatewayErrorResponseBody is the type of the
+// "admin" service "rollbackOrganizationEncryption" endpoint HTTP response body
+// for the "gateway_error" error.
+type RollbackOrganizationEncryptionGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RunOrganizationEncryptionUnavailableResponseBody is the type of the "admin"
+// service "runOrganizationEncryption" endpoint HTTP response body for the
+// "unavailable" error.
+type RunOrganizationEncryptionUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RunOrganizationEncryptionUnauthorizedResponseBody is the type of the "admin"
+// service "runOrganizationEncryption" endpoint HTTP response body for the
+// "unauthorized" error.
+type RunOrganizationEncryptionUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RunOrganizationEncryptionForbiddenResponseBody is the type of the "admin"
+// service "runOrganizationEncryption" endpoint HTTP response body for the
+// "forbidden" error.
+type RunOrganizationEncryptionForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RunOrganizationEncryptionBadRequestResponseBody is the type of the "admin"
+// service "runOrganizationEncryption" endpoint HTTP response body for the
+// "bad_request" error.
+type RunOrganizationEncryptionBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RunOrganizationEncryptionNotFoundResponseBody is the type of the "admin"
+// service "runOrganizationEncryption" endpoint HTTP response body for the
+// "not_found" error.
+type RunOrganizationEncryptionNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RunOrganizationEncryptionConflictResponseBody is the type of the "admin"
+// service "runOrganizationEncryption" endpoint HTTP response body for the
+// "conflict" error.
+type RunOrganizationEncryptionConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RunOrganizationEncryptionUnsupportedMediaResponseBody is the type of the
+// "admin" service "runOrganizationEncryption" endpoint HTTP response body for
+// the "unsupported_media" error.
+type RunOrganizationEncryptionUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RunOrganizationEncryptionInvalidResponseBody is the type of the "admin"
+// service "runOrganizationEncryption" endpoint HTTP response body for the
+// "invalid" error.
+type RunOrganizationEncryptionInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RunOrganizationEncryptionInvariantViolationResponseBody is the type of the
+// "admin" service "runOrganizationEncryption" endpoint HTTP response body for
+// the "invariant_violation" error.
+type RunOrganizationEncryptionInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RunOrganizationEncryptionUnexpectedResponseBody is the type of the "admin"
+// service "runOrganizationEncryption" endpoint HTTP response body for the
+// "unexpected" error.
+type RunOrganizationEncryptionUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RunOrganizationEncryptionGatewayErrorResponseBody is the type of the "admin"
+// service "runOrganizationEncryption" endpoint HTTP response body for the
+// "gateway_error" error.
+type RunOrganizationEncryptionGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// FinalizeOrganizationEncryptionUnavailableResponseBody is the type of the
+// "admin" service "finalizeOrganizationEncryption" endpoint HTTP response body
+// for the "unavailable" error.
+type FinalizeOrganizationEncryptionUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// FinalizeOrganizationEncryptionUnauthorizedResponseBody is the type of the
+// "admin" service "finalizeOrganizationEncryption" endpoint HTTP response body
+// for the "unauthorized" error.
+type FinalizeOrganizationEncryptionUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// FinalizeOrganizationEncryptionForbiddenResponseBody is the type of the
+// "admin" service "finalizeOrganizationEncryption" endpoint HTTP response body
+// for the "forbidden" error.
+type FinalizeOrganizationEncryptionForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// FinalizeOrganizationEncryptionBadRequestResponseBody is the type of the
+// "admin" service "finalizeOrganizationEncryption" endpoint HTTP response body
+// for the "bad_request" error.
+type FinalizeOrganizationEncryptionBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// FinalizeOrganizationEncryptionNotFoundResponseBody is the type of the
+// "admin" service "finalizeOrganizationEncryption" endpoint HTTP response body
+// for the "not_found" error.
+type FinalizeOrganizationEncryptionNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// FinalizeOrganizationEncryptionConflictResponseBody is the type of the
+// "admin" service "finalizeOrganizationEncryption" endpoint HTTP response body
+// for the "conflict" error.
+type FinalizeOrganizationEncryptionConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// FinalizeOrganizationEncryptionUnsupportedMediaResponseBody is the type of
+// the "admin" service "finalizeOrganizationEncryption" endpoint HTTP response
+// body for the "unsupported_media" error.
+type FinalizeOrganizationEncryptionUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// FinalizeOrganizationEncryptionInvalidResponseBody is the type of the "admin"
+// service "finalizeOrganizationEncryption" endpoint HTTP response body for the
+// "invalid" error.
+type FinalizeOrganizationEncryptionInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// FinalizeOrganizationEncryptionInvariantViolationResponseBody is the type of
+// the "admin" service "finalizeOrganizationEncryption" endpoint HTTP response
+// body for the "invariant_violation" error.
+type FinalizeOrganizationEncryptionInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// FinalizeOrganizationEncryptionUnexpectedResponseBody is the type of the
+// "admin" service "finalizeOrganizationEncryption" endpoint HTTP response body
+// for the "unexpected" error.
+type FinalizeOrganizationEncryptionUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// FinalizeOrganizationEncryptionGatewayErrorResponseBody is the type of the
+// "admin" service "finalizeOrganizationEncryption" endpoint HTTP response body
+// for the "gateway_error" error.
+type FinalizeOrganizationEncryptionGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // AdminOrganizationMemberResponseBody is used to define fields on response
 // body types.
 type AdminOrganizationMemberResponseBody struct {
@@ -30691,6 +32644,152 @@ type AdminHooksRolloutChangeResponseBody struct {
 	SetBy string `form:"set_by" json:"set_by" xml:"set_by"`
 	// When the change was made.
 	SetAt string `form:"set_at" json:"set_at" xml:"set_at"`
+}
+
+// AdminTailscaleOAuthMigrationOrganizationResponseBody is used to define
+// fields on response body types.
+type AdminTailscaleOAuthMigrationOrganizationResponseBody struct {
+	// The organization ID.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// The organization name.
+	Name string `form:"name" json:"name" xml:"name"`
+	// The organization slug.
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// The transition state.
+	State string `form:"state" json:"state" xml:"state"`
+	// The transition generation; 0 before the organization is enrolled.
+	Generation int64 `form:"generation" json:"generation" xml:"generation"`
+	// When the current state was entered. Absent before the organization is
+	// enrolled.
+	StateChangedAt *string `form:"state_changed_at,omitempty" json:"state_changed_at,omitempty" xml:"state_changed_at,omitempty"`
+	// Saved credentials with only a platform-key copy, which the backfill still
+	// has to seal with the organization key.
+	Waiting int64 `form:"waiting" json:"waiting" xml:"waiting"`
+	// Saved credentials whose platform-key copy does not decrypt. They do not
+	// block finalize; clearing the platform-key copies destroys them.
+	Unreadable int64 `form:"unreadable" json:"unreadable" xml:"unreadable"`
+	// Saved credentials that still hold a platform-key copy.
+	PlatformCopies int64 `form:"platform_copies" json:"platform_copies" xml:"platform_copies"`
+	// When the last backfill started.
+	LastBackfillStartedAt *string `form:"last_backfill_started_at,omitempty" json:"last_backfill_started_at,omitempty" xml:"last_backfill_started_at,omitempty"`
+	// When the last backfill ended.
+	LastBackfillCompletedAt *string `form:"last_backfill_completed_at,omitempty" json:"last_backfill_completed_at,omitempty" xml:"last_backfill_completed_at,omitempty"`
+	// Why the last backfill stopped early. Never carries values or key material.
+	LastBackfillError *string `form:"last_backfill_error,omitempty" json:"last_backfill_error,omitempty" xml:"last_backfill_error,omitempty"`
+	// When the last clean verification pass started.
+	LastVerifiedAt *string `form:"last_verified_at,omitempty" json:"last_verified_at,omitempty" xml:"last_verified_at,omitempty"`
+	// When the platform-key copies were destroyed after finalize.
+	PlatformCopiesClearedAt *string `form:"platform_copies_cleared_at,omitempty" json:"platform_copies_cleared_at,omitempty" xml:"platform_copies_cleared_at,omitempty"`
+	// Only returned by the backfill step: credentials whose two copies did not
+	// match, whose platform-key copy no longer decrypts beside an organization-key
+	// copy, or whose organization-key copy did not open, in the verification that
+	// step just ran. Above zero means no clean verification was recorded, so
+	// finalize stays blocked.
+	VerificationFailures *int64 `form:"verification_failures,omitempty" json:"verification_failures,omitempty" xml:"verification_failures,omitempty"`
+}
+
+// AdminOrganizationEncryptionConfigResponseBody is used to define fields on
+// response body types.
+type AdminOrganizationEncryptionConfigResponseBody struct {
+	// Who controls the organization's key.
+	Mode string `form:"mode" json:"mode" xml:"mode"`
+	// Whether the key is usable: active and switching are, suspended is not.
+	State string `form:"state" json:"state" xml:"state"`
+	// When the switch to another key started. Absent unless one is in flight.
+	SwitchStartedAt *string `form:"switch_started_at,omitempty" json:"switch_started_at,omitempty" xml:"switch_started_at,omitempty"`
+	// When the configuration was suspended because its key became unusable.
+	SuspendedAt *string `form:"suspended_at,omitempty" json:"suspended_at,omitempty" xml:"suspended_at,omitempty"`
+	// A short provider error summary for the suspension.
+	SuspendedReason *string `form:"suspended_reason,omitempty" json:"suspended_reason,omitempty" xml:"suspended_reason,omitempty"`
+	// When the key's health was last checked.
+	LastCheckAt *string `form:"last_check_at,omitempty" json:"last_check_at,omitempty" xml:"last_check_at,omitempty"`
+	// A short provider error summary from the last failed health check.
+	LastCheckError *string `form:"last_check_error,omitempty" json:"last_check_error,omitempty" xml:"last_check_error,omitempty"`
+}
+
+// AdminOrganizationEncryptionUseCaseResponseBody is used to define fields on
+// response body types.
+type AdminOrganizationEncryptionUseCaseResponseBody struct {
+	// The registered use case, such as oauth-client-secrets.
+	UseCase string `form:"use_case" json:"use_case" xml:"use_case"`
+	// The transition state.
+	State string `form:"state" json:"state" xml:"state"`
+	// Increases on every state change; 0 while the organization has never been
+	// enrolled.
+	Generation int64 `form:"generation" json:"generation" xml:"generation"`
+	// When the state was entered. Absent while the organization has never been
+	// enrolled.
+	StateChangedAt *string `form:"state_changed_at,omitempty" json:"state_changed_at,omitempty" xml:"state_changed_at,omitempty"`
+	// When the platform-key copies were destroyed after finalize. Absent until
+	// clearing completes.
+	PlatformCopiesClearedAt *string `form:"platform_copies_cleared_at,omitempty" json:"platform_copies_cleared_at,omitempty" xml:"platform_copies_cleared_at,omitempty"`
+	// Values that still wait for an organization-key copy.
+	WaitingValues int64 `form:"waiting_values" json:"waiting_values" xml:"waiting_values"`
+	// Values whose platform-key copy does not decrypt. Finalize destroys them with
+	// the rest.
+	UnreadableValues int64 `form:"unreadable_values" json:"unreadable_values" xml:"unreadable_values"`
+	// Values stored without an organization they can be attributed to. They block
+	// finalize.
+	UnattributedValues int64 `form:"unattributed_values" json:"unattributed_values" xml:"unattributed_values"`
+	// Platform-key copies still stored.
+	PlatformCopies int64 `form:"platform_copies" json:"platform_copies" xml:"platform_copies"`
+	// When the last backfill run started.
+	LastBackfillStartedAt *string `form:"last_backfill_started_at,omitempty" json:"last_backfill_started_at,omitempty" xml:"last_backfill_started_at,omitempty"`
+	// When the last backfill run ended. Absent while it runs.
+	LastBackfillCompletedAt *string `form:"last_backfill_completed_at,omitempty" json:"last_backfill_completed_at,omitempty" xml:"last_backfill_completed_at,omitempty"`
+	// Values the last backfill run gave an organization-key copy.
+	LastBackfillConverted *int64 `form:"last_backfill_converted,omitempty" json:"last_backfill_converted,omitempty" xml:"last_backfill_converted,omitempty"`
+	// Values still waiting when the last backfill run ended.
+	LastBackfillRemaining *int64 `form:"last_backfill_remaining,omitempty" json:"last_backfill_remaining,omitempty" xml:"last_backfill_remaining,omitempty"`
+	// Values recorded as unreadable when the last backfill run ended.
+	LastBackfillUnreadable *int64 `form:"last_backfill_unreadable,omitempty" json:"last_backfill_unreadable,omitempty" xml:"last_backfill_unreadable,omitempty"`
+	// Why the last backfill run stopped early.
+	LastBackfillError *string `form:"last_backfill_error,omitempty" json:"last_backfill_error,omitempty" xml:"last_backfill_error,omitempty"`
+	// When the last clean verification pass started.
+	LastVerifiedAt *string `form:"last_verified_at,omitempty" json:"last_verified_at,omitempty" xml:"last_verified_at,omitempty"`
+	// Why finalize would be refused now, empty when it would proceed. Advisory:
+	// finalize checks again when it runs.
+	FinalizeBlockers []string `form:"finalize_blockers" json:"finalize_blockers" xml:"finalize_blockers"`
+}
+
+// AdminOrganizationEncryptionTransitionRowResponseBody is used to define
+// fields on response body types.
+type AdminOrganizationEncryptionTransitionRowResponseBody struct {
+	// The organization ID.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// The organization name.
+	Name string `form:"name" json:"name" xml:"name"`
+	// The organization slug.
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// Whether the organization is disabled.
+	Disabled bool `form:"disabled" json:"disabled" xml:"disabled"`
+	// The transition state.
+	State string `form:"state" json:"state" xml:"state"`
+	// When the state was entered.
+	StateChangedAt *string `form:"state_changed_at,omitempty" json:"state_changed_at,omitempty" xml:"state_changed_at,omitempty"`
+	// When the platform-key copies were destroyed after finalize.
+	PlatformCopiesClearedAt *string `form:"platform_copies_cleared_at,omitempty" json:"platform_copies_cleared_at,omitempty" xml:"platform_copies_cleared_at,omitempty"`
+	// When the last backfill run started.
+	LastBackfillStartedAt *string `form:"last_backfill_started_at,omitempty" json:"last_backfill_started_at,omitempty" xml:"last_backfill_started_at,omitempty"`
+	// When the last backfill run ended.
+	LastBackfillCompletedAt *string `form:"last_backfill_completed_at,omitempty" json:"last_backfill_completed_at,omitempty" xml:"last_backfill_completed_at,omitempty"`
+	// Values still waiting when the last backfill run ended.
+	LastBackfillRemaining *int64 `form:"last_backfill_remaining,omitempty" json:"last_backfill_remaining,omitempty" xml:"last_backfill_remaining,omitempty"`
+	// Values recorded as unreadable when the last backfill run ended.
+	LastBackfillUnreadable *int64 `form:"last_backfill_unreadable,omitempty" json:"last_backfill_unreadable,omitempty" xml:"last_backfill_unreadable,omitempty"`
+	// Why the last backfill run stopped early.
+	LastBackfillError *string `form:"last_backfill_error,omitempty" json:"last_backfill_error,omitempty" xml:"last_backfill_error,omitempty"`
+	// When the last clean verification pass started.
+	LastVerifiedAt *string `form:"last_verified_at,omitempty" json:"last_verified_at,omitempty" xml:"last_verified_at,omitempty"`
+}
+
+// AdminOrganizationEncryptionStateCountResponseBody is used to define fields
+// on response body types.
+type AdminOrganizationEncryptionStateCountResponseBody struct {
+	// The transition state.
+	State string `form:"state" json:"state" xml:"state"`
+	// Organizations in the state.
+	Organizations int64 `form:"organizations" json:"organizations" xml:"organizations"`
 }
 
 // SupportDraftRequestBody is used to define fields on request body types.
@@ -34164,6 +36263,235 @@ func NewCancelHooksRolloutStageResponseBody(res *admin.AdminHooksRollout) *Cance
 		}
 	} else {
 		body.RecentChanges = []*AdminHooksRolloutChangeResponseBody{}
+	}
+	return body
+}
+
+// NewListTailscaleOAuthMigrationResponseBody builds the HTTP response body
+// from the result of the "listTailscaleOAuthMigration" endpoint of the "admin"
+// service.
+func NewListTailscaleOAuthMigrationResponseBody(res *admin.AdminTailscaleOAuthMigrationOrganizations) *ListTailscaleOAuthMigrationResponseBody {
+	body := &ListTailscaleOAuthMigrationResponseBody{
+		MinimumDualWriteSeconds: res.MinimumDualWriteSeconds,
+	}
+	if res.Organizations != nil {
+		body.Organizations = make([]*AdminTailscaleOAuthMigrationOrganizationResponseBody, len(res.Organizations))
+		for i, val := range res.Organizations {
+			if val == nil {
+				body.Organizations[i] = nil
+				continue
+			}
+			body.Organizations[i] = marshalAdminAdminTailscaleOAuthMigrationOrganizationToAdminTailscaleOAuthMigrationOrganizationResponseBody(val)
+		}
+	} else {
+		body.Organizations = []*AdminTailscaleOAuthMigrationOrganizationResponseBody{}
+	}
+	return body
+}
+
+// NewRunTailscaleOAuthMigrationStepResponseBody builds the HTTP response body
+// from the result of the "runTailscaleOAuthMigrationStep" endpoint of the
+// "admin" service.
+func NewRunTailscaleOAuthMigrationStepResponseBody(res *admin.AdminTailscaleOAuthMigrationOrganization) *RunTailscaleOAuthMigrationStepResponseBody {
+	body := &RunTailscaleOAuthMigrationStepResponseBody{
+		OrganizationID:          res.OrganizationID,
+		Name:                    res.Name,
+		Slug:                    res.Slug,
+		State:                   res.State,
+		Generation:              res.Generation,
+		StateChangedAt:          res.StateChangedAt,
+		Waiting:                 res.Waiting,
+		Unreadable:              res.Unreadable,
+		PlatformCopies:          res.PlatformCopies,
+		LastBackfillStartedAt:   res.LastBackfillStartedAt,
+		LastBackfillCompletedAt: res.LastBackfillCompletedAt,
+		LastBackfillError:       res.LastBackfillError,
+		LastVerifiedAt:          res.LastVerifiedAt,
+		PlatformCopiesClearedAt: res.PlatformCopiesClearedAt,
+		VerificationFailures:    res.VerificationFailures,
+	}
+	return body
+}
+
+// NewGetOrganizationEncryptionResponseBody builds the HTTP response body from
+// the result of the "getOrganizationEncryption" endpoint of the "admin"
+// service.
+func NewGetOrganizationEncryptionResponseBody(res *admin.AdminOrganizationEncryption) *GetOrganizationEncryptionResponseBody {
+	body := &GetOrganizationEncryptionResponseBody{
+		OrganizationID:          res.OrganizationID,
+		MinimumDualWriteSeconds: res.MinimumDualWriteSeconds,
+		FinalizeConfirmation:    res.FinalizeConfirmation,
+		RunsAvailable:           res.RunsAvailable,
+	}
+	if res.Config != nil {
+		body.Config = marshalAdminAdminOrganizationEncryptionConfigToAdminOrganizationEncryptionConfigResponseBody(res.Config)
+	}
+	if res.UseCases != nil {
+		body.UseCases = make([]*AdminOrganizationEncryptionUseCaseResponseBody, len(res.UseCases))
+		for i, val := range res.UseCases {
+			if val == nil {
+				body.UseCases[i] = nil
+				continue
+			}
+			body.UseCases[i] = marshalAdminAdminOrganizationEncryptionUseCaseToAdminOrganizationEncryptionUseCaseResponseBody(val)
+		}
+	} else {
+		body.UseCases = []*AdminOrganizationEncryptionUseCaseResponseBody{}
+	}
+	return body
+}
+
+// NewListOrganizationEncryptionTransitionsResponseBody builds the HTTP
+// response body from the result of the "listOrganizationEncryptionTransitions"
+// endpoint of the "admin" service.
+func NewListOrganizationEncryptionTransitionsResponseBody(res *admin.AdminOrganizationEncryptionTransitionList) *ListOrganizationEncryptionTransitionsResponseBody {
+	body := &ListOrganizationEncryptionTransitionsResponseBody{
+		UseCase: res.UseCase,
+		HasMore: res.HasMore,
+	}
+	if res.UseCases != nil {
+		body.UseCases = make([]string, len(res.UseCases))
+		for i, val := range res.UseCases {
+			body.UseCases[i] = val
+		}
+	} else {
+		body.UseCases = []string{}
+	}
+	if res.Organizations != nil {
+		body.Organizations = make([]*AdminOrganizationEncryptionTransitionRowResponseBody, len(res.Organizations))
+		for i, val := range res.Organizations {
+			if val == nil {
+				body.Organizations[i] = nil
+				continue
+			}
+			body.Organizations[i] = marshalAdminAdminOrganizationEncryptionTransitionRowToAdminOrganizationEncryptionTransitionRowResponseBody(val)
+		}
+	} else {
+		body.Organizations = []*AdminOrganizationEncryptionTransitionRowResponseBody{}
+	}
+	if res.StateCounts != nil {
+		body.StateCounts = make([]*AdminOrganizationEncryptionStateCountResponseBody, len(res.StateCounts))
+		for i, val := range res.StateCounts {
+			if val == nil {
+				body.StateCounts[i] = nil
+				continue
+			}
+			body.StateCounts[i] = marshalAdminAdminOrganizationEncryptionStateCountToAdminOrganizationEncryptionStateCountResponseBody(val)
+		}
+	} else {
+		body.StateCounts = []*AdminOrganizationEncryptionStateCountResponseBody{}
+	}
+	return body
+}
+
+// NewEnrollOrganizationEncryptionResponseBody builds the HTTP response body
+// from the result of the "enrollOrganizationEncryption" endpoint of the
+// "admin" service.
+func NewEnrollOrganizationEncryptionResponseBody(res *admin.AdminOrganizationEncryptionUseCase) *EnrollOrganizationEncryptionResponseBody {
+	body := &EnrollOrganizationEncryptionResponseBody{
+		UseCase:                 res.UseCase,
+		State:                   res.State,
+		Generation:              res.Generation,
+		StateChangedAt:          res.StateChangedAt,
+		PlatformCopiesClearedAt: res.PlatformCopiesClearedAt,
+		WaitingValues:           res.WaitingValues,
+		UnreadableValues:        res.UnreadableValues,
+		UnattributedValues:      res.UnattributedValues,
+		PlatformCopies:          res.PlatformCopies,
+		LastBackfillStartedAt:   res.LastBackfillStartedAt,
+		LastBackfillCompletedAt: res.LastBackfillCompletedAt,
+		LastBackfillConverted:   res.LastBackfillConverted,
+		LastBackfillRemaining:   res.LastBackfillRemaining,
+		LastBackfillUnreadable:  res.LastBackfillUnreadable,
+		LastBackfillError:       res.LastBackfillError,
+		LastVerifiedAt:          res.LastVerifiedAt,
+	}
+	if res.FinalizeBlockers != nil {
+		body.FinalizeBlockers = make([]string, len(res.FinalizeBlockers))
+		for i, val := range res.FinalizeBlockers {
+			body.FinalizeBlockers[i] = val
+		}
+	} else {
+		body.FinalizeBlockers = []string{}
+	}
+	return body
+}
+
+// NewRollbackOrganizationEncryptionResponseBody builds the HTTP response body
+// from the result of the "rollbackOrganizationEncryption" endpoint of the
+// "admin" service.
+func NewRollbackOrganizationEncryptionResponseBody(res *admin.AdminOrganizationEncryptionUseCase) *RollbackOrganizationEncryptionResponseBody {
+	body := &RollbackOrganizationEncryptionResponseBody{
+		UseCase:                 res.UseCase,
+		State:                   res.State,
+		Generation:              res.Generation,
+		StateChangedAt:          res.StateChangedAt,
+		PlatformCopiesClearedAt: res.PlatformCopiesClearedAt,
+		WaitingValues:           res.WaitingValues,
+		UnreadableValues:        res.UnreadableValues,
+		UnattributedValues:      res.UnattributedValues,
+		PlatformCopies:          res.PlatformCopies,
+		LastBackfillStartedAt:   res.LastBackfillStartedAt,
+		LastBackfillCompletedAt: res.LastBackfillCompletedAt,
+		LastBackfillConverted:   res.LastBackfillConverted,
+		LastBackfillRemaining:   res.LastBackfillRemaining,
+		LastBackfillUnreadable:  res.LastBackfillUnreadable,
+		LastBackfillError:       res.LastBackfillError,
+		LastVerifiedAt:          res.LastVerifiedAt,
+	}
+	if res.FinalizeBlockers != nil {
+		body.FinalizeBlockers = make([]string, len(res.FinalizeBlockers))
+		for i, val := range res.FinalizeBlockers {
+			body.FinalizeBlockers[i] = val
+		}
+	} else {
+		body.FinalizeBlockers = []string{}
+	}
+	return body
+}
+
+// NewRunOrganizationEncryptionResponseBody builds the HTTP response body from
+// the result of the "runOrganizationEncryption" endpoint of the "admin"
+// service.
+func NewRunOrganizationEncryptionResponseBody(res *admin.AdminOrganizationEncryptionUseCase) *RunOrganizationEncryptionResponseBody {
+	body := &RunOrganizationEncryptionResponseBody{
+		UseCase:                 res.UseCase,
+		State:                   res.State,
+		Generation:              res.Generation,
+		StateChangedAt:          res.StateChangedAt,
+		PlatformCopiesClearedAt: res.PlatformCopiesClearedAt,
+		WaitingValues:           res.WaitingValues,
+		UnreadableValues:        res.UnreadableValues,
+		UnattributedValues:      res.UnattributedValues,
+		PlatformCopies:          res.PlatformCopies,
+		LastBackfillStartedAt:   res.LastBackfillStartedAt,
+		LastBackfillCompletedAt: res.LastBackfillCompletedAt,
+		LastBackfillConverted:   res.LastBackfillConverted,
+		LastBackfillRemaining:   res.LastBackfillRemaining,
+		LastBackfillUnreadable:  res.LastBackfillUnreadable,
+		LastBackfillError:       res.LastBackfillError,
+		LastVerifiedAt:          res.LastVerifiedAt,
+	}
+	if res.FinalizeBlockers != nil {
+		body.FinalizeBlockers = make([]string, len(res.FinalizeBlockers))
+		for i, val := range res.FinalizeBlockers {
+			body.FinalizeBlockers[i] = val
+		}
+	} else {
+		body.FinalizeBlockers = []string{}
+	}
+	return body
+}
+
+// NewFinalizeOrganizationEncryptionResponseBody builds the HTTP response body
+// from the result of the "finalizeOrganizationEncryption" endpoint of the
+// "admin" service.
+func NewFinalizeOrganizationEncryptionResponseBody(res *admin.AdminOrganizationEncryptionFinalizeResult) *FinalizeOrganizationEncryptionResponseBody {
+	body := &FinalizeOrganizationEncryptionResponseBody{
+		ClearingStarted: res.ClearingStarted,
+	}
+	if res.UseCase != nil {
+		body.UseCase = marshalAdminAdminOrganizationEncryptionUseCaseToAdminOrganizationEncryptionUseCaseResponseBody(res.UseCase)
 	}
 	return body
 }
@@ -54024,6 +56352,1326 @@ func NewCancelHooksRolloutStageGatewayErrorResponseBody(res *goa.ServiceError) *
 	return body
 }
 
+// NewListTailscaleOAuthMigrationUnavailableResponseBody builds the HTTP
+// response body from the result of the "listTailscaleOAuthMigration" endpoint
+// of the "admin" service.
+func NewListTailscaleOAuthMigrationUnavailableResponseBody(res *goa.ServiceError) *ListTailscaleOAuthMigrationUnavailableResponseBody {
+	body := &ListTailscaleOAuthMigrationUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTailscaleOAuthMigrationUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "listTailscaleOAuthMigration" endpoint
+// of the "admin" service.
+func NewListTailscaleOAuthMigrationUnauthorizedResponseBody(res *goa.ServiceError) *ListTailscaleOAuthMigrationUnauthorizedResponseBody {
+	body := &ListTailscaleOAuthMigrationUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTailscaleOAuthMigrationForbiddenResponseBody builds the HTTP response
+// body from the result of the "listTailscaleOAuthMigration" endpoint of the
+// "admin" service.
+func NewListTailscaleOAuthMigrationForbiddenResponseBody(res *goa.ServiceError) *ListTailscaleOAuthMigrationForbiddenResponseBody {
+	body := &ListTailscaleOAuthMigrationForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTailscaleOAuthMigrationBadRequestResponseBody builds the HTTP
+// response body from the result of the "listTailscaleOAuthMigration" endpoint
+// of the "admin" service.
+func NewListTailscaleOAuthMigrationBadRequestResponseBody(res *goa.ServiceError) *ListTailscaleOAuthMigrationBadRequestResponseBody {
+	body := &ListTailscaleOAuthMigrationBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTailscaleOAuthMigrationNotFoundResponseBody builds the HTTP response
+// body from the result of the "listTailscaleOAuthMigration" endpoint of the
+// "admin" service.
+func NewListTailscaleOAuthMigrationNotFoundResponseBody(res *goa.ServiceError) *ListTailscaleOAuthMigrationNotFoundResponseBody {
+	body := &ListTailscaleOAuthMigrationNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTailscaleOAuthMigrationConflictResponseBody builds the HTTP response
+// body from the result of the "listTailscaleOAuthMigration" endpoint of the
+// "admin" service.
+func NewListTailscaleOAuthMigrationConflictResponseBody(res *goa.ServiceError) *ListTailscaleOAuthMigrationConflictResponseBody {
+	body := &ListTailscaleOAuthMigrationConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTailscaleOAuthMigrationUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "listTailscaleOAuthMigration" endpoint
+// of the "admin" service.
+func NewListTailscaleOAuthMigrationUnsupportedMediaResponseBody(res *goa.ServiceError) *ListTailscaleOAuthMigrationUnsupportedMediaResponseBody {
+	body := &ListTailscaleOAuthMigrationUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTailscaleOAuthMigrationInvalidResponseBody builds the HTTP response
+// body from the result of the "listTailscaleOAuthMigration" endpoint of the
+// "admin" service.
+func NewListTailscaleOAuthMigrationInvalidResponseBody(res *goa.ServiceError) *ListTailscaleOAuthMigrationInvalidResponseBody {
+	body := &ListTailscaleOAuthMigrationInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTailscaleOAuthMigrationInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "listTailscaleOAuthMigration" endpoint
+// of the "admin" service.
+func NewListTailscaleOAuthMigrationInvariantViolationResponseBody(res *goa.ServiceError) *ListTailscaleOAuthMigrationInvariantViolationResponseBody {
+	body := &ListTailscaleOAuthMigrationInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTailscaleOAuthMigrationUnexpectedResponseBody builds the HTTP
+// response body from the result of the "listTailscaleOAuthMigration" endpoint
+// of the "admin" service.
+func NewListTailscaleOAuthMigrationUnexpectedResponseBody(res *goa.ServiceError) *ListTailscaleOAuthMigrationUnexpectedResponseBody {
+	body := &ListTailscaleOAuthMigrationUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTailscaleOAuthMigrationGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "listTailscaleOAuthMigration" endpoint
+// of the "admin" service.
+func NewListTailscaleOAuthMigrationGatewayErrorResponseBody(res *goa.ServiceError) *ListTailscaleOAuthMigrationGatewayErrorResponseBody {
+	body := &ListTailscaleOAuthMigrationGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRunTailscaleOAuthMigrationStepUnavailableResponseBody builds the HTTP
+// response body from the result of the "runTailscaleOAuthMigrationStep"
+// endpoint of the "admin" service.
+func NewRunTailscaleOAuthMigrationStepUnavailableResponseBody(res *goa.ServiceError) *RunTailscaleOAuthMigrationStepUnavailableResponseBody {
+	body := &RunTailscaleOAuthMigrationStepUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRunTailscaleOAuthMigrationStepUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "runTailscaleOAuthMigrationStep"
+// endpoint of the "admin" service.
+func NewRunTailscaleOAuthMigrationStepUnauthorizedResponseBody(res *goa.ServiceError) *RunTailscaleOAuthMigrationStepUnauthorizedResponseBody {
+	body := &RunTailscaleOAuthMigrationStepUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRunTailscaleOAuthMigrationStepForbiddenResponseBody builds the HTTP
+// response body from the result of the "runTailscaleOAuthMigrationStep"
+// endpoint of the "admin" service.
+func NewRunTailscaleOAuthMigrationStepForbiddenResponseBody(res *goa.ServiceError) *RunTailscaleOAuthMigrationStepForbiddenResponseBody {
+	body := &RunTailscaleOAuthMigrationStepForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRunTailscaleOAuthMigrationStepBadRequestResponseBody builds the HTTP
+// response body from the result of the "runTailscaleOAuthMigrationStep"
+// endpoint of the "admin" service.
+func NewRunTailscaleOAuthMigrationStepBadRequestResponseBody(res *goa.ServiceError) *RunTailscaleOAuthMigrationStepBadRequestResponseBody {
+	body := &RunTailscaleOAuthMigrationStepBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRunTailscaleOAuthMigrationStepNotFoundResponseBody builds the HTTP
+// response body from the result of the "runTailscaleOAuthMigrationStep"
+// endpoint of the "admin" service.
+func NewRunTailscaleOAuthMigrationStepNotFoundResponseBody(res *goa.ServiceError) *RunTailscaleOAuthMigrationStepNotFoundResponseBody {
+	body := &RunTailscaleOAuthMigrationStepNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRunTailscaleOAuthMigrationStepConflictResponseBody builds the HTTP
+// response body from the result of the "runTailscaleOAuthMigrationStep"
+// endpoint of the "admin" service.
+func NewRunTailscaleOAuthMigrationStepConflictResponseBody(res *goa.ServiceError) *RunTailscaleOAuthMigrationStepConflictResponseBody {
+	body := &RunTailscaleOAuthMigrationStepConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRunTailscaleOAuthMigrationStepUnsupportedMediaResponseBody builds the
+// HTTP response body from the result of the "runTailscaleOAuthMigrationStep"
+// endpoint of the "admin" service.
+func NewRunTailscaleOAuthMigrationStepUnsupportedMediaResponseBody(res *goa.ServiceError) *RunTailscaleOAuthMigrationStepUnsupportedMediaResponseBody {
+	body := &RunTailscaleOAuthMigrationStepUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRunTailscaleOAuthMigrationStepInvalidResponseBody builds the HTTP
+// response body from the result of the "runTailscaleOAuthMigrationStep"
+// endpoint of the "admin" service.
+func NewRunTailscaleOAuthMigrationStepInvalidResponseBody(res *goa.ServiceError) *RunTailscaleOAuthMigrationStepInvalidResponseBody {
+	body := &RunTailscaleOAuthMigrationStepInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRunTailscaleOAuthMigrationStepInvariantViolationResponseBody builds the
+// HTTP response body from the result of the "runTailscaleOAuthMigrationStep"
+// endpoint of the "admin" service.
+func NewRunTailscaleOAuthMigrationStepInvariantViolationResponseBody(res *goa.ServiceError) *RunTailscaleOAuthMigrationStepInvariantViolationResponseBody {
+	body := &RunTailscaleOAuthMigrationStepInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRunTailscaleOAuthMigrationStepUnexpectedResponseBody builds the HTTP
+// response body from the result of the "runTailscaleOAuthMigrationStep"
+// endpoint of the "admin" service.
+func NewRunTailscaleOAuthMigrationStepUnexpectedResponseBody(res *goa.ServiceError) *RunTailscaleOAuthMigrationStepUnexpectedResponseBody {
+	body := &RunTailscaleOAuthMigrationStepUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRunTailscaleOAuthMigrationStepGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "runTailscaleOAuthMigrationStep"
+// endpoint of the "admin" service.
+func NewRunTailscaleOAuthMigrationStepGatewayErrorResponseBody(res *goa.ServiceError) *RunTailscaleOAuthMigrationStepGatewayErrorResponseBody {
+	body := &RunTailscaleOAuthMigrationStepGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationEncryptionUnavailableResponseBody builds the HTTP response
+// body from the result of the "getOrganizationEncryption" endpoint of the
+// "admin" service.
+func NewGetOrganizationEncryptionUnavailableResponseBody(res *goa.ServiceError) *GetOrganizationEncryptionUnavailableResponseBody {
+	body := &GetOrganizationEncryptionUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationEncryptionUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "getOrganizationEncryption" endpoint of
+// the "admin" service.
+func NewGetOrganizationEncryptionUnauthorizedResponseBody(res *goa.ServiceError) *GetOrganizationEncryptionUnauthorizedResponseBody {
+	body := &GetOrganizationEncryptionUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationEncryptionForbiddenResponseBody builds the HTTP response
+// body from the result of the "getOrganizationEncryption" endpoint of the
+// "admin" service.
+func NewGetOrganizationEncryptionForbiddenResponseBody(res *goa.ServiceError) *GetOrganizationEncryptionForbiddenResponseBody {
+	body := &GetOrganizationEncryptionForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationEncryptionBadRequestResponseBody builds the HTTP response
+// body from the result of the "getOrganizationEncryption" endpoint of the
+// "admin" service.
+func NewGetOrganizationEncryptionBadRequestResponseBody(res *goa.ServiceError) *GetOrganizationEncryptionBadRequestResponseBody {
+	body := &GetOrganizationEncryptionBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationEncryptionNotFoundResponseBody builds the HTTP response
+// body from the result of the "getOrganizationEncryption" endpoint of the
+// "admin" service.
+func NewGetOrganizationEncryptionNotFoundResponseBody(res *goa.ServiceError) *GetOrganizationEncryptionNotFoundResponseBody {
+	body := &GetOrganizationEncryptionNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationEncryptionConflictResponseBody builds the HTTP response
+// body from the result of the "getOrganizationEncryption" endpoint of the
+// "admin" service.
+func NewGetOrganizationEncryptionConflictResponseBody(res *goa.ServiceError) *GetOrganizationEncryptionConflictResponseBody {
+	body := &GetOrganizationEncryptionConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationEncryptionUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "getOrganizationEncryption" endpoint of
+// the "admin" service.
+func NewGetOrganizationEncryptionUnsupportedMediaResponseBody(res *goa.ServiceError) *GetOrganizationEncryptionUnsupportedMediaResponseBody {
+	body := &GetOrganizationEncryptionUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationEncryptionInvalidResponseBody builds the HTTP response
+// body from the result of the "getOrganizationEncryption" endpoint of the
+// "admin" service.
+func NewGetOrganizationEncryptionInvalidResponseBody(res *goa.ServiceError) *GetOrganizationEncryptionInvalidResponseBody {
+	body := &GetOrganizationEncryptionInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationEncryptionInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getOrganizationEncryption" endpoint of
+// the "admin" service.
+func NewGetOrganizationEncryptionInvariantViolationResponseBody(res *goa.ServiceError) *GetOrganizationEncryptionInvariantViolationResponseBody {
+	body := &GetOrganizationEncryptionInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationEncryptionUnexpectedResponseBody builds the HTTP response
+// body from the result of the "getOrganizationEncryption" endpoint of the
+// "admin" service.
+func NewGetOrganizationEncryptionUnexpectedResponseBody(res *goa.ServiceError) *GetOrganizationEncryptionUnexpectedResponseBody {
+	body := &GetOrganizationEncryptionUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationEncryptionGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "getOrganizationEncryption" endpoint of
+// the "admin" service.
+func NewGetOrganizationEncryptionGatewayErrorResponseBody(res *goa.ServiceError) *GetOrganizationEncryptionGatewayErrorResponseBody {
+	body := &GetOrganizationEncryptionGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListOrganizationEncryptionTransitionsUnavailableResponseBody builds the
+// HTTP response body from the result of the
+// "listOrganizationEncryptionTransitions" endpoint of the "admin" service.
+func NewListOrganizationEncryptionTransitionsUnavailableResponseBody(res *goa.ServiceError) *ListOrganizationEncryptionTransitionsUnavailableResponseBody {
+	body := &ListOrganizationEncryptionTransitionsUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListOrganizationEncryptionTransitionsUnauthorizedResponseBody builds the
+// HTTP response body from the result of the
+// "listOrganizationEncryptionTransitions" endpoint of the "admin" service.
+func NewListOrganizationEncryptionTransitionsUnauthorizedResponseBody(res *goa.ServiceError) *ListOrganizationEncryptionTransitionsUnauthorizedResponseBody {
+	body := &ListOrganizationEncryptionTransitionsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListOrganizationEncryptionTransitionsForbiddenResponseBody builds the
+// HTTP response body from the result of the
+// "listOrganizationEncryptionTransitions" endpoint of the "admin" service.
+func NewListOrganizationEncryptionTransitionsForbiddenResponseBody(res *goa.ServiceError) *ListOrganizationEncryptionTransitionsForbiddenResponseBody {
+	body := &ListOrganizationEncryptionTransitionsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListOrganizationEncryptionTransitionsBadRequestResponseBody builds the
+// HTTP response body from the result of the
+// "listOrganizationEncryptionTransitions" endpoint of the "admin" service.
+func NewListOrganizationEncryptionTransitionsBadRequestResponseBody(res *goa.ServiceError) *ListOrganizationEncryptionTransitionsBadRequestResponseBody {
+	body := &ListOrganizationEncryptionTransitionsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListOrganizationEncryptionTransitionsNotFoundResponseBody builds the HTTP
+// response body from the result of the "listOrganizationEncryptionTransitions"
+// endpoint of the "admin" service.
+func NewListOrganizationEncryptionTransitionsNotFoundResponseBody(res *goa.ServiceError) *ListOrganizationEncryptionTransitionsNotFoundResponseBody {
+	body := &ListOrganizationEncryptionTransitionsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListOrganizationEncryptionTransitionsConflictResponseBody builds the HTTP
+// response body from the result of the "listOrganizationEncryptionTransitions"
+// endpoint of the "admin" service.
+func NewListOrganizationEncryptionTransitionsConflictResponseBody(res *goa.ServiceError) *ListOrganizationEncryptionTransitionsConflictResponseBody {
+	body := &ListOrganizationEncryptionTransitionsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListOrganizationEncryptionTransitionsUnsupportedMediaResponseBody builds
+// the HTTP response body from the result of the
+// "listOrganizationEncryptionTransitions" endpoint of the "admin" service.
+func NewListOrganizationEncryptionTransitionsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListOrganizationEncryptionTransitionsUnsupportedMediaResponseBody {
+	body := &ListOrganizationEncryptionTransitionsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListOrganizationEncryptionTransitionsInvalidResponseBody builds the HTTP
+// response body from the result of the "listOrganizationEncryptionTransitions"
+// endpoint of the "admin" service.
+func NewListOrganizationEncryptionTransitionsInvalidResponseBody(res *goa.ServiceError) *ListOrganizationEncryptionTransitionsInvalidResponseBody {
+	body := &ListOrganizationEncryptionTransitionsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListOrganizationEncryptionTransitionsInvariantViolationResponseBody
+// builds the HTTP response body from the result of the
+// "listOrganizationEncryptionTransitions" endpoint of the "admin" service.
+func NewListOrganizationEncryptionTransitionsInvariantViolationResponseBody(res *goa.ServiceError) *ListOrganizationEncryptionTransitionsInvariantViolationResponseBody {
+	body := &ListOrganizationEncryptionTransitionsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListOrganizationEncryptionTransitionsUnexpectedResponseBody builds the
+// HTTP response body from the result of the
+// "listOrganizationEncryptionTransitions" endpoint of the "admin" service.
+func NewListOrganizationEncryptionTransitionsUnexpectedResponseBody(res *goa.ServiceError) *ListOrganizationEncryptionTransitionsUnexpectedResponseBody {
+	body := &ListOrganizationEncryptionTransitionsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListOrganizationEncryptionTransitionsGatewayErrorResponseBody builds the
+// HTTP response body from the result of the
+// "listOrganizationEncryptionTransitions" endpoint of the "admin" service.
+func NewListOrganizationEncryptionTransitionsGatewayErrorResponseBody(res *goa.ServiceError) *ListOrganizationEncryptionTransitionsGatewayErrorResponseBody {
+	body := &ListOrganizationEncryptionTransitionsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnrollOrganizationEncryptionUnavailableResponseBody builds the HTTP
+// response body from the result of the "enrollOrganizationEncryption" endpoint
+// of the "admin" service.
+func NewEnrollOrganizationEncryptionUnavailableResponseBody(res *goa.ServiceError) *EnrollOrganizationEncryptionUnavailableResponseBody {
+	body := &EnrollOrganizationEncryptionUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnrollOrganizationEncryptionUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "enrollOrganizationEncryption" endpoint
+// of the "admin" service.
+func NewEnrollOrganizationEncryptionUnauthorizedResponseBody(res *goa.ServiceError) *EnrollOrganizationEncryptionUnauthorizedResponseBody {
+	body := &EnrollOrganizationEncryptionUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnrollOrganizationEncryptionForbiddenResponseBody builds the HTTP
+// response body from the result of the "enrollOrganizationEncryption" endpoint
+// of the "admin" service.
+func NewEnrollOrganizationEncryptionForbiddenResponseBody(res *goa.ServiceError) *EnrollOrganizationEncryptionForbiddenResponseBody {
+	body := &EnrollOrganizationEncryptionForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnrollOrganizationEncryptionBadRequestResponseBody builds the HTTP
+// response body from the result of the "enrollOrganizationEncryption" endpoint
+// of the "admin" service.
+func NewEnrollOrganizationEncryptionBadRequestResponseBody(res *goa.ServiceError) *EnrollOrganizationEncryptionBadRequestResponseBody {
+	body := &EnrollOrganizationEncryptionBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnrollOrganizationEncryptionNotFoundResponseBody builds the HTTP response
+// body from the result of the "enrollOrganizationEncryption" endpoint of the
+// "admin" service.
+func NewEnrollOrganizationEncryptionNotFoundResponseBody(res *goa.ServiceError) *EnrollOrganizationEncryptionNotFoundResponseBody {
+	body := &EnrollOrganizationEncryptionNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnrollOrganizationEncryptionConflictResponseBody builds the HTTP response
+// body from the result of the "enrollOrganizationEncryption" endpoint of the
+// "admin" service.
+func NewEnrollOrganizationEncryptionConflictResponseBody(res *goa.ServiceError) *EnrollOrganizationEncryptionConflictResponseBody {
+	body := &EnrollOrganizationEncryptionConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnrollOrganizationEncryptionUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "enrollOrganizationEncryption" endpoint
+// of the "admin" service.
+func NewEnrollOrganizationEncryptionUnsupportedMediaResponseBody(res *goa.ServiceError) *EnrollOrganizationEncryptionUnsupportedMediaResponseBody {
+	body := &EnrollOrganizationEncryptionUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnrollOrganizationEncryptionInvalidResponseBody builds the HTTP response
+// body from the result of the "enrollOrganizationEncryption" endpoint of the
+// "admin" service.
+func NewEnrollOrganizationEncryptionInvalidResponseBody(res *goa.ServiceError) *EnrollOrganizationEncryptionInvalidResponseBody {
+	body := &EnrollOrganizationEncryptionInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnrollOrganizationEncryptionInvariantViolationResponseBody builds the
+// HTTP response body from the result of the "enrollOrganizationEncryption"
+// endpoint of the "admin" service.
+func NewEnrollOrganizationEncryptionInvariantViolationResponseBody(res *goa.ServiceError) *EnrollOrganizationEncryptionInvariantViolationResponseBody {
+	body := &EnrollOrganizationEncryptionInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnrollOrganizationEncryptionUnexpectedResponseBody builds the HTTP
+// response body from the result of the "enrollOrganizationEncryption" endpoint
+// of the "admin" service.
+func NewEnrollOrganizationEncryptionUnexpectedResponseBody(res *goa.ServiceError) *EnrollOrganizationEncryptionUnexpectedResponseBody {
+	body := &EnrollOrganizationEncryptionUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnrollOrganizationEncryptionGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "enrollOrganizationEncryption" endpoint
+// of the "admin" service.
+func NewEnrollOrganizationEncryptionGatewayErrorResponseBody(res *goa.ServiceError) *EnrollOrganizationEncryptionGatewayErrorResponseBody {
+	body := &EnrollOrganizationEncryptionGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRollbackOrganizationEncryptionUnavailableResponseBody builds the HTTP
+// response body from the result of the "rollbackOrganizationEncryption"
+// endpoint of the "admin" service.
+func NewRollbackOrganizationEncryptionUnavailableResponseBody(res *goa.ServiceError) *RollbackOrganizationEncryptionUnavailableResponseBody {
+	body := &RollbackOrganizationEncryptionUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRollbackOrganizationEncryptionUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "rollbackOrganizationEncryption"
+// endpoint of the "admin" service.
+func NewRollbackOrganizationEncryptionUnauthorizedResponseBody(res *goa.ServiceError) *RollbackOrganizationEncryptionUnauthorizedResponseBody {
+	body := &RollbackOrganizationEncryptionUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRollbackOrganizationEncryptionForbiddenResponseBody builds the HTTP
+// response body from the result of the "rollbackOrganizationEncryption"
+// endpoint of the "admin" service.
+func NewRollbackOrganizationEncryptionForbiddenResponseBody(res *goa.ServiceError) *RollbackOrganizationEncryptionForbiddenResponseBody {
+	body := &RollbackOrganizationEncryptionForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRollbackOrganizationEncryptionBadRequestResponseBody builds the HTTP
+// response body from the result of the "rollbackOrganizationEncryption"
+// endpoint of the "admin" service.
+func NewRollbackOrganizationEncryptionBadRequestResponseBody(res *goa.ServiceError) *RollbackOrganizationEncryptionBadRequestResponseBody {
+	body := &RollbackOrganizationEncryptionBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRollbackOrganizationEncryptionNotFoundResponseBody builds the HTTP
+// response body from the result of the "rollbackOrganizationEncryption"
+// endpoint of the "admin" service.
+func NewRollbackOrganizationEncryptionNotFoundResponseBody(res *goa.ServiceError) *RollbackOrganizationEncryptionNotFoundResponseBody {
+	body := &RollbackOrganizationEncryptionNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRollbackOrganizationEncryptionConflictResponseBody builds the HTTP
+// response body from the result of the "rollbackOrganizationEncryption"
+// endpoint of the "admin" service.
+func NewRollbackOrganizationEncryptionConflictResponseBody(res *goa.ServiceError) *RollbackOrganizationEncryptionConflictResponseBody {
+	body := &RollbackOrganizationEncryptionConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRollbackOrganizationEncryptionUnsupportedMediaResponseBody builds the
+// HTTP response body from the result of the "rollbackOrganizationEncryption"
+// endpoint of the "admin" service.
+func NewRollbackOrganizationEncryptionUnsupportedMediaResponseBody(res *goa.ServiceError) *RollbackOrganizationEncryptionUnsupportedMediaResponseBody {
+	body := &RollbackOrganizationEncryptionUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRollbackOrganizationEncryptionInvalidResponseBody builds the HTTP
+// response body from the result of the "rollbackOrganizationEncryption"
+// endpoint of the "admin" service.
+func NewRollbackOrganizationEncryptionInvalidResponseBody(res *goa.ServiceError) *RollbackOrganizationEncryptionInvalidResponseBody {
+	body := &RollbackOrganizationEncryptionInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRollbackOrganizationEncryptionInvariantViolationResponseBody builds the
+// HTTP response body from the result of the "rollbackOrganizationEncryption"
+// endpoint of the "admin" service.
+func NewRollbackOrganizationEncryptionInvariantViolationResponseBody(res *goa.ServiceError) *RollbackOrganizationEncryptionInvariantViolationResponseBody {
+	body := &RollbackOrganizationEncryptionInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRollbackOrganizationEncryptionUnexpectedResponseBody builds the HTTP
+// response body from the result of the "rollbackOrganizationEncryption"
+// endpoint of the "admin" service.
+func NewRollbackOrganizationEncryptionUnexpectedResponseBody(res *goa.ServiceError) *RollbackOrganizationEncryptionUnexpectedResponseBody {
+	body := &RollbackOrganizationEncryptionUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRollbackOrganizationEncryptionGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "rollbackOrganizationEncryption"
+// endpoint of the "admin" service.
+func NewRollbackOrganizationEncryptionGatewayErrorResponseBody(res *goa.ServiceError) *RollbackOrganizationEncryptionGatewayErrorResponseBody {
+	body := &RollbackOrganizationEncryptionGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRunOrganizationEncryptionUnavailableResponseBody builds the HTTP response
+// body from the result of the "runOrganizationEncryption" endpoint of the
+// "admin" service.
+func NewRunOrganizationEncryptionUnavailableResponseBody(res *goa.ServiceError) *RunOrganizationEncryptionUnavailableResponseBody {
+	body := &RunOrganizationEncryptionUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRunOrganizationEncryptionUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "runOrganizationEncryption" endpoint of
+// the "admin" service.
+func NewRunOrganizationEncryptionUnauthorizedResponseBody(res *goa.ServiceError) *RunOrganizationEncryptionUnauthorizedResponseBody {
+	body := &RunOrganizationEncryptionUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRunOrganizationEncryptionForbiddenResponseBody builds the HTTP response
+// body from the result of the "runOrganizationEncryption" endpoint of the
+// "admin" service.
+func NewRunOrganizationEncryptionForbiddenResponseBody(res *goa.ServiceError) *RunOrganizationEncryptionForbiddenResponseBody {
+	body := &RunOrganizationEncryptionForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRunOrganizationEncryptionBadRequestResponseBody builds the HTTP response
+// body from the result of the "runOrganizationEncryption" endpoint of the
+// "admin" service.
+func NewRunOrganizationEncryptionBadRequestResponseBody(res *goa.ServiceError) *RunOrganizationEncryptionBadRequestResponseBody {
+	body := &RunOrganizationEncryptionBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRunOrganizationEncryptionNotFoundResponseBody builds the HTTP response
+// body from the result of the "runOrganizationEncryption" endpoint of the
+// "admin" service.
+func NewRunOrganizationEncryptionNotFoundResponseBody(res *goa.ServiceError) *RunOrganizationEncryptionNotFoundResponseBody {
+	body := &RunOrganizationEncryptionNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRunOrganizationEncryptionConflictResponseBody builds the HTTP response
+// body from the result of the "runOrganizationEncryption" endpoint of the
+// "admin" service.
+func NewRunOrganizationEncryptionConflictResponseBody(res *goa.ServiceError) *RunOrganizationEncryptionConflictResponseBody {
+	body := &RunOrganizationEncryptionConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRunOrganizationEncryptionUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "runOrganizationEncryption" endpoint of
+// the "admin" service.
+func NewRunOrganizationEncryptionUnsupportedMediaResponseBody(res *goa.ServiceError) *RunOrganizationEncryptionUnsupportedMediaResponseBody {
+	body := &RunOrganizationEncryptionUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRunOrganizationEncryptionInvalidResponseBody builds the HTTP response
+// body from the result of the "runOrganizationEncryption" endpoint of the
+// "admin" service.
+func NewRunOrganizationEncryptionInvalidResponseBody(res *goa.ServiceError) *RunOrganizationEncryptionInvalidResponseBody {
+	body := &RunOrganizationEncryptionInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRunOrganizationEncryptionInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "runOrganizationEncryption" endpoint of
+// the "admin" service.
+func NewRunOrganizationEncryptionInvariantViolationResponseBody(res *goa.ServiceError) *RunOrganizationEncryptionInvariantViolationResponseBody {
+	body := &RunOrganizationEncryptionInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRunOrganizationEncryptionUnexpectedResponseBody builds the HTTP response
+// body from the result of the "runOrganizationEncryption" endpoint of the
+// "admin" service.
+func NewRunOrganizationEncryptionUnexpectedResponseBody(res *goa.ServiceError) *RunOrganizationEncryptionUnexpectedResponseBody {
+	body := &RunOrganizationEncryptionUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRunOrganizationEncryptionGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "runOrganizationEncryption" endpoint of
+// the "admin" service.
+func NewRunOrganizationEncryptionGatewayErrorResponseBody(res *goa.ServiceError) *RunOrganizationEncryptionGatewayErrorResponseBody {
+	body := &RunOrganizationEncryptionGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewFinalizeOrganizationEncryptionUnavailableResponseBody builds the HTTP
+// response body from the result of the "finalizeOrganizationEncryption"
+// endpoint of the "admin" service.
+func NewFinalizeOrganizationEncryptionUnavailableResponseBody(res *goa.ServiceError) *FinalizeOrganizationEncryptionUnavailableResponseBody {
+	body := &FinalizeOrganizationEncryptionUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewFinalizeOrganizationEncryptionUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "finalizeOrganizationEncryption"
+// endpoint of the "admin" service.
+func NewFinalizeOrganizationEncryptionUnauthorizedResponseBody(res *goa.ServiceError) *FinalizeOrganizationEncryptionUnauthorizedResponseBody {
+	body := &FinalizeOrganizationEncryptionUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewFinalizeOrganizationEncryptionForbiddenResponseBody builds the HTTP
+// response body from the result of the "finalizeOrganizationEncryption"
+// endpoint of the "admin" service.
+func NewFinalizeOrganizationEncryptionForbiddenResponseBody(res *goa.ServiceError) *FinalizeOrganizationEncryptionForbiddenResponseBody {
+	body := &FinalizeOrganizationEncryptionForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewFinalizeOrganizationEncryptionBadRequestResponseBody builds the HTTP
+// response body from the result of the "finalizeOrganizationEncryption"
+// endpoint of the "admin" service.
+func NewFinalizeOrganizationEncryptionBadRequestResponseBody(res *goa.ServiceError) *FinalizeOrganizationEncryptionBadRequestResponseBody {
+	body := &FinalizeOrganizationEncryptionBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewFinalizeOrganizationEncryptionNotFoundResponseBody builds the HTTP
+// response body from the result of the "finalizeOrganizationEncryption"
+// endpoint of the "admin" service.
+func NewFinalizeOrganizationEncryptionNotFoundResponseBody(res *goa.ServiceError) *FinalizeOrganizationEncryptionNotFoundResponseBody {
+	body := &FinalizeOrganizationEncryptionNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewFinalizeOrganizationEncryptionConflictResponseBody builds the HTTP
+// response body from the result of the "finalizeOrganizationEncryption"
+// endpoint of the "admin" service.
+func NewFinalizeOrganizationEncryptionConflictResponseBody(res *goa.ServiceError) *FinalizeOrganizationEncryptionConflictResponseBody {
+	body := &FinalizeOrganizationEncryptionConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewFinalizeOrganizationEncryptionUnsupportedMediaResponseBody builds the
+// HTTP response body from the result of the "finalizeOrganizationEncryption"
+// endpoint of the "admin" service.
+func NewFinalizeOrganizationEncryptionUnsupportedMediaResponseBody(res *goa.ServiceError) *FinalizeOrganizationEncryptionUnsupportedMediaResponseBody {
+	body := &FinalizeOrganizationEncryptionUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewFinalizeOrganizationEncryptionInvalidResponseBody builds the HTTP
+// response body from the result of the "finalizeOrganizationEncryption"
+// endpoint of the "admin" service.
+func NewFinalizeOrganizationEncryptionInvalidResponseBody(res *goa.ServiceError) *FinalizeOrganizationEncryptionInvalidResponseBody {
+	body := &FinalizeOrganizationEncryptionInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewFinalizeOrganizationEncryptionInvariantViolationResponseBody builds the
+// HTTP response body from the result of the "finalizeOrganizationEncryption"
+// endpoint of the "admin" service.
+func NewFinalizeOrganizationEncryptionInvariantViolationResponseBody(res *goa.ServiceError) *FinalizeOrganizationEncryptionInvariantViolationResponseBody {
+	body := &FinalizeOrganizationEncryptionInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewFinalizeOrganizationEncryptionUnexpectedResponseBody builds the HTTP
+// response body from the result of the "finalizeOrganizationEncryption"
+// endpoint of the "admin" service.
+func NewFinalizeOrganizationEncryptionUnexpectedResponseBody(res *goa.ServiceError) *FinalizeOrganizationEncryptionUnexpectedResponseBody {
+	body := &FinalizeOrganizationEncryptionUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewFinalizeOrganizationEncryptionGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "finalizeOrganizationEncryption"
+// endpoint of the "admin" service.
+func NewFinalizeOrganizationEncryptionGatewayErrorResponseBody(res *goa.ServiceError) *FinalizeOrganizationEncryptionGatewayErrorResponseBody {
+	body := &FinalizeOrganizationEncryptionGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewLoginPayload builds a admin service login endpoint payload.
 func NewLoginPayload(returnTo *string, prompt *string) *admin.LoginPayload {
 	v := &admin.LoginPayload{}
@@ -55726,6 +59374,100 @@ func NewCancelHooksRolloutStagePayload(body *CancelHooksRolloutStageRequestBody,
 	return v
 }
 
+// NewListTailscaleOAuthMigrationPayload builds a admin service
+// listTailscaleOAuthMigration endpoint payload.
+func NewListTailscaleOAuthMigrationPayload(adminSessionToken *string) *admin.ListTailscaleOAuthMigrationPayload {
+	v := &admin.ListTailscaleOAuthMigrationPayload{}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewRunTailscaleOAuthMigrationStepPayload builds a admin service
+// runTailscaleOAuthMigrationStep endpoint payload.
+func NewRunTailscaleOAuthMigrationStepPayload(body *RunTailscaleOAuthMigrationStepRequestBody, adminSessionToken *string) *admin.RunTailscaleOAuthMigrationStepPayload {
+	v := &admin.RunTailscaleOAuthMigrationStepPayload{
+		OrganizationID: *body.OrganizationID,
+		Step:           *body.Step,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewGetOrganizationEncryptionPayload builds a admin service
+// getOrganizationEncryption endpoint payload.
+func NewGetOrganizationEncryptionPayload(organizationID string, adminSessionToken *string) *admin.GetOrganizationEncryptionPayload {
+	v := &admin.GetOrganizationEncryptionPayload{}
+	v.OrganizationID = organizationID
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewListOrganizationEncryptionTransitionsPayload builds a admin service
+// listOrganizationEncryptionTransitions endpoint payload.
+func NewListOrganizationEncryptionTransitionsPayload(useCase *string, state *string, limit int, offset int, adminSessionToken *string) *admin.ListOrganizationEncryptionTransitionsPayload {
+	v := &admin.ListOrganizationEncryptionTransitionsPayload{}
+	v.UseCase = useCase
+	v.State = state
+	v.Limit = limit
+	v.Offset = offset
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewEnrollOrganizationEncryptionPayload builds a admin service
+// enrollOrganizationEncryption endpoint payload.
+func NewEnrollOrganizationEncryptionPayload(body *EnrollOrganizationEncryptionRequestBody, adminSessionToken *string) *admin.EnrollOrganizationEncryptionPayload {
+	v := &admin.EnrollOrganizationEncryptionPayload{
+		OrganizationID: *body.OrganizationID,
+		UseCase:        *body.UseCase,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewRollbackOrganizationEncryptionPayload builds a admin service
+// rollbackOrganizationEncryption endpoint payload.
+func NewRollbackOrganizationEncryptionPayload(body *RollbackOrganizationEncryptionRequestBody, adminSessionToken *string) *admin.RollbackOrganizationEncryptionPayload {
+	v := &admin.RollbackOrganizationEncryptionPayload{
+		OrganizationID: *body.OrganizationID,
+		UseCase:        *body.UseCase,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewRunOrganizationEncryptionPayload builds a admin service
+// runOrganizationEncryption endpoint payload.
+func NewRunOrganizationEncryptionPayload(body *RunOrganizationEncryptionRequestBody, adminSessionToken *string) *admin.RunOrganizationEncryptionPayload {
+	v := &admin.RunOrganizationEncryptionPayload{
+		OrganizationID: *body.OrganizationID,
+		UseCase:        *body.UseCase,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewFinalizeOrganizationEncryptionPayload builds a admin service
+// finalizeOrganizationEncryption endpoint payload.
+func NewFinalizeOrganizationEncryptionPayload(body *FinalizeOrganizationEncryptionRequestBody, adminSessionToken *string) *admin.FinalizeOrganizationEncryptionPayload {
+	v := &admin.FinalizeOrganizationEncryptionPayload{
+		OrganizationID:               *body.OrganizationID,
+		UseCase:                      *body.UseCase,
+		Confirmation:                 *body.Confirmation,
+		AcknowledgedUnreadableValues: *body.AcknowledgedUnreadableValues,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
 // ValidateSetOrganizationFeatureRequestBody runs the validations defined on
 // SetOrganizationFeatureRequestBody
 func ValidateSetOrganizationFeatureRequestBody(body *SetOrganizationFeatureRequestBody) (err error) {
@@ -56919,6 +60661,82 @@ func ValidateCancelHooksRolloutStageRequestBody(body *CancelHooksRolloutStageReq
 	if body.Reason != nil {
 		if utf8.RuneCountInString(*body.Reason) > 500 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.reason", *body.Reason, utf8.RuneCountInString(*body.Reason), 500, false))
+		}
+	}
+	return
+}
+
+// ValidateRunTailscaleOAuthMigrationStepRequestBody runs the validations
+// defined on RunTailscaleOAuthMigrationStepRequestBody
+func ValidateRunTailscaleOAuthMigrationStepRequestBody(body *RunTailscaleOAuthMigrationStepRequestBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.Step == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("step", "body"))
+	}
+	if body.Step != nil {
+		if !(*body.Step == "enroll" || *body.Step == "backfill" || *body.Step == "finalize" || *body.Step == "clear_platform_copies" || *body.Step == "rollback") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.step", *body.Step, []any{"enroll", "backfill", "finalize", "clear_platform_copies", "rollback"}))
+		}
+	}
+	return
+}
+
+// ValidateEnrollOrganizationEncryptionRequestBody runs the validations defined
+// on EnrollOrganizationEncryptionRequestBody
+func ValidateEnrollOrganizationEncryptionRequestBody(body *EnrollOrganizationEncryptionRequestBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.UseCase == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("use_case", "body"))
+	}
+	return
+}
+
+// ValidateRollbackOrganizationEncryptionRequestBody runs the validations
+// defined on RollbackOrganizationEncryptionRequestBody
+func ValidateRollbackOrganizationEncryptionRequestBody(body *RollbackOrganizationEncryptionRequestBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.UseCase == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("use_case", "body"))
+	}
+	return
+}
+
+// ValidateRunOrganizationEncryptionRequestBody runs the validations defined on
+// RunOrganizationEncryptionRequestBody
+func ValidateRunOrganizationEncryptionRequestBody(body *RunOrganizationEncryptionRequestBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.UseCase == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("use_case", "body"))
+	}
+	return
+}
+
+// ValidateFinalizeOrganizationEncryptionRequestBody runs the validations
+// defined on FinalizeOrganizationEncryptionRequestBody
+func ValidateFinalizeOrganizationEncryptionRequestBody(body *FinalizeOrganizationEncryptionRequestBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.UseCase == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("use_case", "body"))
+	}
+	if body.Confirmation == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("confirmation", "body"))
+	}
+	if body.AcknowledgedUnreadableValues == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("acknowledged_unreadable_values", "body"))
+	}
+	if body.AcknowledgedUnreadableValues != nil {
+		if *body.AcknowledgedUnreadableValues < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.acknowledged_unreadable_values", *body.AcknowledgedUnreadableValues, 0, true))
 		}
 	}
 	return

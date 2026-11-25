@@ -503,9 +503,15 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 		return zero, fmt.Errorf("lock remote session issuer for client rotation: %w", err)
 	}
 
-	issuerIDs, err := txRepo.ListUserSessionIssuerIDsForRemoteSessionClient(ctx, current.ID)
-	if err != nil {
-		return zero, fmt.Errorf("list client issuer bindings for rotation audit: %w", err)
+	auditOrganizationID := conv.Default(params.OrganizationID, current.OrganizationID.String)
+	var issuerIDs []uuid.UUID
+	if auditOrganizationID != "" {
+		issuerIDs, err = txRepo.ListVisibleRemoteSessionClientPlacementIssuers(ctx, repo.ListVisibleRemoteSessionClientPlacementIssuersParams{
+			OrganizationID: auditOrganizationID, ProjectID: current.ProjectID.UUID, RemoteSessionClientID: current.ID,
+		})
+		if err != nil {
+			return zero, fmt.Errorf("list client placements for rotation audit: %w", err)
+		}
 	}
 	beforeView, err := mv.BuildRemoteSessionClientView(current, issuerIDs)
 	if err != nil {
@@ -578,7 +584,6 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 	}
 	// Global clients have no organization to credit the entry to; every other
 	// tier records the rotation the same way an administrator's update is.
-	auditOrganizationID := conv.Default(params.OrganizationID, updated.OrganizationID.String)
 	if auditOrganizationID != "" {
 		if err := r.auditLogger.LogRemoteSessionClientUpdate(ctx, dbtx, audit.LogRemoteSessionClientUpdateEvent{
 			OrganizationID:         auditOrganizationID,
