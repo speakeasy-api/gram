@@ -2226,8 +2226,8 @@ WHERE organization_id = @organization_id
 -- name: InsertAccessRequest :one
 -- Stores a pending request. Returns no row when the requester already has a
 -- pending request for the same access; the caller loads that one instead.
-INSERT INTO access_requests (organization_id, requester_user_id, scope, selector, resource_name, message, challenge_ids, expires_at)
-VALUES (@organization_id, @requester_user_id, @scope, @selector, sqlc.narg(resource_name), sqlc.narg(message), @challenge_ids, @expires_at)
+INSERT INTO access_requests (organization_id, requester_user_id, scope, selector, resource_name, message, challenge_ids, requested_duration_seconds, requested_until, expires_at)
+VALUES (@organization_id, @requester_user_id, @scope, @selector, sqlc.narg(resource_name), sqlc.narg(message), @challenge_ids, sqlc.narg(requested_duration_seconds), sqlc.narg(requested_until), @expires_at)
 ON CONFLICT (organization_id, requester_user_id, scope, selector) WHERE deleted IS FALSE AND status = 'pending'
 DO NOTHING
 RETURNING *;

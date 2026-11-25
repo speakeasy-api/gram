@@ -117,6 +117,7 @@ trackedFiles:
   src/funcs/agentGetSessionMeta.ts: {}
   src/funcs/agentHideMcpServer.ts: {}
   src/funcs/agentListAiScanTargets.ts: {}
+  src/funcs/agentListPendingAccessRequests.ts: {}
   src/funcs/agentListSyncedUsers.ts: {}
   src/funcs/agentReportAIScan.ts: {}
   src/funcs/agentReportCrash.ts: {}
@@ -982,6 +983,7 @@ trackedFiles:
   src/models/components/agentmcpserver.ts: {}
   src/models/components/agentownerassignmentform.ts: {}
   src/models/components/agentownerprofile.ts: {}
+  src/models/components/agentpendingaccessrequest.ts: {}
   src/models/components/agentpermissions.ts: {}
   src/models/components/agentplugin.ts: {}
   src/models/components/agentpluginserver.ts: {}
@@ -1624,6 +1626,7 @@ trackedFiles:
   src/models/components/listorganizationusersessionissuersresult.ts: {}
   src/models/components/listorgencryptionkeysresult.ts: {}
   src/models/components/listpackagesresult.ts: {}
+  src/models/components/listpendingaccessrequestsresult.ts: {}
   src/models/components/listpersonaccountsresponsebody.ts: {}
   src/models/components/listpluginsresult.ts: {}
   src/models/components/listprescriptionsresponsebody.ts: {}
@@ -2823,6 +2826,7 @@ trackedFiles:
   src/models/operations/listadminopenrouterkeys.ts: {}
   src/models/operations/listagentconnectionblocks.ts: {}
   src/models/operations/listagentdelegablegrants.ts: {}
+  src/models/operations/listagentpendingaccessrequests.ts: {}
   src/models/operations/listagentpolicygrants.ts: {}
   src/models/operations/listagentpolicyscopes.ts: {}
   src/models/operations/listagents.ts: {}
@@ -3323,6 +3327,8 @@ trackedFiles:
   src/react-query/agentGetClaudeObservabilityPlugin.ts: {}
   src/react-query/agentMyConnections.core.ts: {}
   src/react-query/agentMyConnections.ts: {}
+  src/react-query/agentPendingAccessRequests.core.ts: {}
+  src/react-query/agentPendingAccessRequests.ts: {}
   src/react-query/agentPlugins.core.ts: {}
   src/react-query/agentPlugins.ts: {}
   src/react-query/agentSessionMeta.core.ts: {}
@@ -10012,6 +10018,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  listAgentPendingAccessRequests:
+    speakeasy-default-list-agent-pending-access-requests:
+      responses:
+        "200":
+          application/json: {"requests": [{"created_at": "2025-07-21T07:53:35.697Z", "decide_url": "https://late-designation.info/", "expires_at": "2025-09-10T06:13:58.828Z", "id": "e53feb5f-4770-4689-869d-91a257711b44", "permission_label": "<value>", "requester_display_name": "<value>", "scope": "<value>"}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   listAgentPolicyGrants:
     speakeasy-default-list-agent-policy-grants:
       parameters:

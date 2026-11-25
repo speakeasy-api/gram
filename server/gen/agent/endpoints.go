@@ -34,6 +34,7 @@ type Endpoints struct {
 	ReportState                  goa.Endpoint
 	ReportCrash                  goa.Endpoint
 	CreateSessionHandoff         goa.Endpoint
+	ListPendingAccessRequests    goa.Endpoint
 }
 
 // GetClaudeObservabilityPluginResponseData holds both the result and the HTTP
@@ -67,6 +68,7 @@ func NewEndpoints(s Service) *Endpoints {
 		ReportState:                  NewReportStateEndpoint(s, a.APIKeyAuth),
 		ReportCrash:                  NewReportCrashEndpoint(s, a.JWTAuth, a.APIKeyAuth),
 		CreateSessionHandoff:         NewCreateSessionHandoffEndpoint(s, a.APIKeyAuth),
+		ListPendingAccessRequests:    NewListPendingAccessRequestsEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -89,6 +91,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ReportState = m(e.ReportState)
 	e.ReportCrash = m(e.ReportCrash)
 	e.CreateSessionHandoff = m(e.CreateSessionHandoff)
+	e.ListPendingAccessRequests = m(e.ListPendingAccessRequests)
 }
 
 // NewGetPluginsEndpoint returns an endpoint function that calls the method
@@ -507,5 +510,28 @@ func NewCreateSessionHandoffEndpoint(s Service, authAPIKeyFn security.AuthAPIKey
 			return nil, err
 		}
 		return s.CreateSessionHandoff(ctx, p)
+	}
+}
+
+// NewListPendingAccessRequestsEndpoint returns an endpoint function that calls
+// the method "listPendingAccessRequests" of service "agent".
+func NewListPendingAccessRequestsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListPendingAccessRequestsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"agent_user"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListPendingAccessRequests(ctx, p)
 	}
 }

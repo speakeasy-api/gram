@@ -1613,7 +1613,9 @@ func newStartCommand() *cli.Command {
 				WithFeatures(featureFlags)
 			access.Attach(mux, accessService)
 			agentService := agent.NewService(aiCatalog, logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, productFeatures, serverURL.String(), orgHosts, assetStorage, telemLogger, growthEmitter, deviceAgentTokens, marketplaceTokens).
-				WithWorkloadTokenTargets(mcpService)
+				WithWorkloadTokenTargets(mcpService).
+				WithAccessRequests(accessService).
+				WithAccessRequestsLimiter(ratelimit.New(ratelimit.NewRedisStore(redisClient), "agent-access-requests", agent.AccessRequestsRate, ratelimit.WithMetrics(meterProvider)))
 			agentService.SetAgentVersions(deviceagentversions.NewStore(redisClient))
 			agentService.WithStateReportLimiter(ratelimit.New(ratelimit.NewRedisStore(redisClient), "agent-report-state", agent.StateReportRate, ratelimit.WithMetrics(meterProvider)))
 			agentService.WithCrashReportLimiter(ratelimit.New(ratelimit.NewRedisStore(redisClient), "agent-report-crash", agent.CrashReportRate, ratelimit.WithMetrics(meterProvider))).
