@@ -118,11 +118,13 @@ trackedFiles:
   src/funcs/agentHideMcpServer.ts: {}
   src/funcs/agentListAiScanTargets.ts: {}
   src/funcs/agentListPendingAccessRequests.ts: {}
+  src/funcs/agentListRequestableAccess.ts: {}
   src/funcs/agentListSyncedUsers.ts: {}
   src/funcs/agentReportAIScan.ts: {}
   src/funcs/agentReportCrash.ts: {}
   src/funcs/agentReportSessionMoved.ts: {}
   src/funcs/agentReportState.ts: {}
+  src/funcs/agentRequestAccess.ts: {}
   src/funcs/agentUnhideMcpServer.ts: {}
   src/funcs/agentUpdateConfiguration.ts: {}
   src/funcs/agentUpsertAiScanTarget.ts: {}
@@ -528,7 +530,6 @@ trackedFiles:
   src/funcs/organizationUserSessionIssuersList.ts: {}
   src/funcs/organizationUserSessionIssuersListCimdClients.ts: {}
   src/funcs/organizationUserSessionIssuersListMcpServers.ts: {}
-  src/funcs/organizationUserSessionIssuersListRemoteSessionClientBindings.ts: {}
   src/funcs/organizationUserSessionIssuersMigrate.ts: {}
   src/funcs/organizationUserSessionIssuersMove.ts: {}
   src/funcs/organizationUserSessionIssuersSetAuthenticationHost.ts: {}
@@ -630,12 +631,10 @@ trackedFiles:
   src/funcs/remoteMcpUpdateServerHeader.ts: {}
   src/funcs/remoteMcpVerifyURL.ts: {}
   src/funcs/remoteSessionClientsAttachKeySet.ts: {}
-  src/funcs/remoteSessionClientsAttachUserSessionIssuer.ts: {}
   src/funcs/remoteSessionClientsCreate.ts: {}
   src/funcs/remoteSessionClientsCreateCimd.ts: {}
   src/funcs/remoteSessionClientsDelete.ts: {}
   src/funcs/remoteSessionClientsDetachKeySet.ts: {}
-  src/funcs/remoteSessionClientsDetachUserSessionIssuer.ts: {}
   src/funcs/remoteSessionClientsGet.ts: {}
   src/funcs/remoteSessionClientsGetNewClientCallbackUrl.ts: {}
   src/funcs/remoteSessionClientsList.ts: {}
@@ -968,6 +967,7 @@ trackedFiles:
   src/models/components/addtoolmetadatabatchresult.ts: {}
   src/models/components/adminopenrouterkey.ts: {}
   src/models/components/admitworkloadsubjectform.ts: {}
+  src/models/components/agentaccessrequesttarget.ts: {}
   src/models/components/agentconnectionblock.ts: {}
   src/models/components/agentconnectionblockidform.ts: {}
   src/models/components/agentcrashbuild.ts: {}
@@ -981,6 +981,7 @@ trackedFiles:
   src/models/components/agentkeyauthclientchoice.ts: {}
   src/models/components/agentmarketplace.ts: {}
   src/models/components/agentmcpserver.ts: {}
+  src/models/components/agentownaccessrequest.ts: {}
   src/models/components/agentownerassignmentform.ts: {}
   src/models/components/agentownerprofile.ts: {}
   src/models/components/agentpendingaccessrequest.ts: {}
@@ -992,6 +993,10 @@ trackedFiles:
   src/models/components/agentpolicygrantform.ts: {}
   src/models/components/agentpolicyselector.ts: {}
   src/models/components/agentpollingprincipal.ts: {}
+  src/models/components/agentrequestablepermission.ts: {}
+  src/models/components/agentrequestableproject.ts: {}
+  src/models/components/agentrequestaccessform.ts: {}
+  src/models/components/agentrequestaccessresult.ts: {}
   src/models/components/agentserverconnection.ts: {}
   src/models/components/agentsession.ts: {}
   src/models/components/agentsessionmeta.ts: {}
@@ -1068,7 +1073,6 @@ trackedFiles:
   src/models/components/attachbindingrequestbody.ts: {}
   src/models/components/attachkeysetform.ts: {}
   src/models/components/attachserverclientassociationresult.ts: {}
-  src/models/components/attachusersessionissuerform.ts: {}
   src/models/components/audienceoption.ts: {}
   src/models/components/auditlog.ts: {}
   src/models/components/auditlogfacetoption.ts: {}
@@ -1636,6 +1640,7 @@ trackedFiles:
   src/models/components/listremotesessionclientsresult.ts: {}
   src/models/components/listremotesessionissuersresult.ts: {}
   src/models/components/listremotesessionsresult.ts: {}
+  src/models/components/listrequestableaccessresult.ts: {}
   src/models/components/listresourcesresult.ts: {}
   src/models/components/listresponsebody.ts: {}
   src/models/components/listriskevalreviewsresult.ts: {}
@@ -2357,9 +2362,6 @@ trackedFiles:
   src/models/components/usersessionissuermcpserver.ts: {}
   src/models/components/usersessionissuermigrationclient.ts: {}
   src/models/components/usersessionissuermigrationserverimpact.ts: {}
-  src/models/components/usersessionissuerremotesessionclient.ts: {}
-  src/models/components/usersessionissuerremotesessionclientbindings.ts: {}
-  src/models/components/usersessionissuerserverremotesessionclient.ts: {}
   src/models/components/usersessionupstream.ts: {}
   src/models/components/usersessionworkload.ts: {}
   src/models/components/usersessionworkloadadmission.ts: {}
@@ -2418,6 +2420,7 @@ trackedFiles:
   src/models/operations/addpluginserver.ts: {}
   src/models/operations/addskillversion.ts: {}
   src/models/operations/admitworkloadsubject.ts: {}
+  src/models/operations/agentrequestaccess.ts: {}
   src/models/operations/analyticsdescribe.ts: {}
   src/models/operations/analyticsdimensionvalues.ts: {}
   src/models/operations/analyticsquery.ts: {}
@@ -2435,7 +2438,6 @@ trackedFiles:
   src/models/operations/attachorganizationremotesessionclientkeyset.ts: {}
   src/models/operations/attachremotesessionclientkeyset.ts: {}
   src/models/operations/attachserverclientassociation.ts: {}
-  src/models/operations/attachusersessionissuer.ts: {}
   src/models/operations/authcallback.ts: {}
   src/models/operations/authlogin.ts: {}
   src/models/operations/authtransferin.ts: {}
@@ -2597,7 +2599,6 @@ trackedFiles:
   src/models/operations/detachorganizationremotesessionclientkeyset.ts: {}
   src/models/operations/detachremotesessionclientkeyset.ts: {}
   src/models/operations/detachserverclientassociation.ts: {}
-  src/models/operations/detachusersessionissuer.ts: {}
   src/models/operations/disableadminopenrouterkey.ts: {}
   src/models/operations/disablewebhooks.ts: {}
   src/models/operations/disconnectslackdirectoryconnection.ts: {}
@@ -2829,6 +2830,7 @@ trackedFiles:
   src/models/operations/listagentpendingaccessrequests.ts: {}
   src/models/operations/listagentpolicygrants.ts: {}
   src/models/operations/listagentpolicyscopes.ts: {}
+  src/models/operations/listagentrequestableaccess.ts: {}
   src/models/operations/listagents.ts: {}
   src/models/operations/listagentsessions.ts: {}
   src/models/operations/listaidetections.ts: {}
@@ -2930,7 +2932,6 @@ trackedFiles:
   src/models/operations/listorganizationusers.ts: {}
   src/models/operations/listorganizationusersessionissuercimdclients.ts: {}
   src/models/operations/listorganizationusersessionissuermcpservers.ts: {}
-  src/models/operations/listorganizationusersessionissuerremotesessionclientbindings.ts: {}
   src/models/operations/listorganizationusersessionissuers.ts: {}
   src/models/operations/listorgencryptionkeys.ts: {}
   src/models/operations/listpackages.ts: {}
@@ -3331,6 +3332,9 @@ trackedFiles:
   src/react-query/agentPendingAccessRequests.ts: {}
   src/react-query/agentPlugins.core.ts: {}
   src/react-query/agentPlugins.ts: {}
+  src/react-query/agentRequestAccess.ts: {}
+  src/react-query/agentRequestableAccess.core.ts: {}
+  src/react-query/agentRequestableAccess.ts: {}
   src/react-query/agentSessionMeta.core.ts: {}
   src/react-query/agentSessionMeta.ts: {}
   src/react-query/agentSessions.core.ts: {}
@@ -3392,7 +3396,6 @@ trackedFiles:
   src/react-query/attachOrganizationRemoteSessionClientKeySet.ts: {}
   src/react-query/attachRemoteSessionClientKeySet.ts: {}
   src/react-query/attachServerClientAssociation.ts: {}
-  src/react-query/attachUserSessionIssuer.ts: {}
   src/react-query/audienceOptions.core.ts: {}
   src/react-query/audienceOptions.ts: {}
   src/react-query/audiences.core.ts: {}
@@ -3569,7 +3572,6 @@ trackedFiles:
   src/react-query/detachOrganizationRemoteSessionClientKeySet.ts: {}
   src/react-query/detachRemoteSessionClientKeySet.ts: {}
   src/react-query/detachServerClientAssociation.ts: {}
-  src/react-query/detachUserSessionIssuer.ts: {}
   src/react-query/deviceAgentConfiguration.core.ts: {}
   src/react-query/deviceAgentConfiguration.ts: {}
   src/react-query/deviceIntegrationConfig.core.ts: {}
@@ -4049,8 +4051,6 @@ trackedFiles:
   src/react-query/organizationUserSessionIssuerMcpServers.ts: {}
   src/react-query/organizationUserSessionIssuerMigratePreflight.core.ts: {}
   src/react-query/organizationUserSessionIssuerMigratePreflight.ts: {}
-  src/react-query/organizationUserSessionIssuerRemoteSessionClientBindings.core.ts: {}
-  src/react-query/organizationUserSessionIssuerRemoteSessionClientBindings.ts: {}
   src/react-query/organizationUserSessionIssuers.core.ts: {}
   src/react-query/organizationUserSessionIssuers.ts: {}
   src/react-query/pauseTrigger.ts: {}
@@ -4848,6 +4848,17 @@ examples:
       responses:
         "200":
           application/json: {"admissions": [{"agent_id": "699d2770-2c50-4076-b7ec-41ff4e2c2e85", "agent_name": "<value>", "created_at": "2025-07-09T02:12:37.415Z", "id": "55001c0c-1e9a-4559-95c4-5bffb2aa31f3", "issuer": "diners_club", "issuer_name": "<value>", "match_kind": "wildcard", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "subject": "<value>", "tags": [], "updated_at": "2025-05-31T20:36:13.884Z", "wildcard_active": true, "workload_issuer_id": "bb712eab-4d75-409f-a571-6d332e042074"}], "issuers": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  agentRequestAccess:
+    speakeasy-default-agent-request-access:
+      requestBody:
+        application/json: {"scope": "<value>"}
+      responses:
+        "200":
+          application/json: {"created": true, "request": {"created_at": "2024-11-21T21:51:35.188Z", "expires_at": "2026-11-25T09:06:17.096Z", "id": "2f1fb116-cbe4-44b0-a2d4-9c927cf5caae", "permission_label": "<value>", "scope": "<value>"}}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -8137,7 +8148,7 @@ examples:
     speakeasy-default-get-intent-guardrail:
       responses:
         "200":
-          application/json: {"contracts": [{"conditions": [{"join": "and", "label": "<value>", "op": "includes", "pattern": "<value>", "values": ["<value 1>"]}], "expression": "<value>", "id": "<id>", "name": "<value>", "outcome": "block", "statement": "<value>"}], "id": "<id>", "questions": [], "statements": ["<value 1>", "<value 2>"], "version": "<value>"}
+          application/json: {"contracts": [{"conditions": [{"join": "and", "label": "<value>", "op": "includes", "values": ["<value 1>"]}], "expression": "<value>", "id": "<id>", "name": "<value>", "outcome": "block", "statement": "<value>"}], "id": "<id>", "questions": [], "statements": ["<value 1>", "<value 2>"], "version": "<value>"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -10048,6 +10059,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listAgentRequestableAccess:
+    speakeasy-default-list-agent-requestable-access:
+      responses:
+        "200":
+          application/json: {"pending": [], "permissions": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   listAgentSessions:
     speakeasy-default-list-agent-sessions:
       parameters:

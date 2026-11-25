@@ -164,9 +164,9 @@ func NewRuntimeWithRiskMutations(logger *slog.Logger, authenticator Authenticato
 	// Register the wrappers together so their order is reviewable: readiness is
 	// outside catalogue aggregation and therefore observes one completed external
 	// tools/list call, never the SDK pages the catalogue middleware reads inside.
-	// Discovery is outside the allowlist and catalogue, so a meta-tool's
-	// dispatched call passes through both like a direct call.
-	middlewares := []mcp.Middleware{discoveryMiddleware(runtime, logger), clientToolAllowlistMiddleware(registrar), capabilityCatalogueMiddleware(registrar)}
+	// Discovery is outside the catalogue, so a meta-tool's dispatched call
+	// passes through it like a direct call.
+	middlewares := []mcp.Middleware{discoveryMiddleware(runtime, logger), capabilityCatalogueMiddleware(registrar)}
 	if readiness != nil {
 		middlewares = append([]mcp.Middleware{readinessMiddleware(runtime, logger)}, middlewares...)
 	}
@@ -198,45 +198,6 @@ func readinessMiddleware(runtime *Runtime, logger *slog.Logger) mcp.Middleware {
 				}
 			}
 			return result, err
-		}
-	}
-}
-
-// clientToolAllowlistMiddleware makes a client with a tool allowlist meet a
-// server that has only those tools. tools/list is narrowed by
-// FilterExternalTools; this covers the rest. A call to a tool outside the list
-// gets the same unknown-tool error the SDK returns for a name that was never
-// registered, and the server instructions drop every paragraph that points at
-// such a tool, so the client never meets a tool it was not shown.
-func clientToolAllowlistMiddleware(registrar *Registrar) mcp.Middleware {
-	return func(next mcp.MethodHandler) mcp.MethodHandler {
-		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
-			// The small discovery surface already fits the hosts the allowlist
-			// was for, and reaches every tool by design.
-			if discoveryModeFromContext(ctx) != discoveryFull {
-				return next(ctx, method, req)
-			}
-			clientID := mustPrincipal(ctx).ClientID
-			catalog := registrar.aiCatalogSnapshot(ctx)
-			if method == "tools/call" {
-				if callReq, ok := req.(*mcp.CallToolRequest); ok && callReq.Params != nil && !toolAllowedForClient(catalog, clientID, callReq.Params.Name) {
-					return nil, &jsonrpc.Error{Code: jsonrpc.CodeInvalidParams, Message: fmt.Sprintf("unknown tool %q", callReq.Params.Name)}
-				}
-			}
-			result, err := next(ctx, method, req)
-			if err != nil {
-				return result, err
-			}
-			switch typed := result.(type) {
-			case *mcp.InitializeResult:
-				typed.Instructions = registrar.instructionsForClient(catalog, clientID, typed.Instructions)
-			case *mcp.DiscoverResult:
-				typed.Instructions = registrar.instructionsForClient(catalog, clientID, typed.Instructions)
-				// The instructions now depend on the caller, so no shared cache
-				// may hand one client's answer to another.
-				typed.CacheScope = "private"
-			}
-			return result, nil
 		}
 	}
 }

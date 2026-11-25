@@ -3,16 +3,14 @@ package mcp_test
 import (
 	"context"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/otel/attribute"
-	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
-	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
-	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -24,6 +22,7 @@ import (
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -52,8 +51,11 @@ func TestUpstreamIssuerFlag_TunneledGatewayMemberUnderEitherSource(t *testing.T)
 	t.Cleanup(gatewayServer.Close)
 	require.NoError(t, ti.tunnelRoutes.Publish(ctx, tunnelID.String(), gatewayServer.URL, time.Hour))
 
-	client := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-upstream-source", "", []uuid.UUID{sharedIssuerID, memberIssuerID})
-	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, orgID, projectID, []uuid.UUID{memberIssuerID}))
+	client := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-upstream-source", "")
+	serverID := tunneledFixtureMember(t, ctx, ti, projectID, meta.ID, "member-tunnel")
+	associateServerRegistration(t, ctx, ti.conn, orgID, projectID, serverID, client)
+	typed := seedServerAuthOffer(t, ctx, ti.conn, orgID, projectID, serverID, client, "remote_session")
+	require.NoError(t, remotesessions.RestampMCPServerRemoteSessionIssuers(ctx, ti.conn, orgID, projectID, []uuid.UUID{memberIssuerID}))
 	subject := createTestUser(t, ctx, ti, "meta-upstream-source-user-"+uuid.NewString())
 	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, client, subject, "token-member", "")
 
@@ -86,7 +88,6 @@ func TestUpstreamIssuerFlag_TunneledGatewayMemberUnderEitherSource(t *testing.T)
 	require.NotEqual(t, disagreeing.ConfigurationHash, disagreeing.AssociationConfigurationHash)
 	require.Equal(t, agreeing.AssociationConfigurationHash, disagreeing.AssociationConfigurationHash, "clearing the column leaves the association hash alone")
 
-	typed := serverAuthClientID(t, ctx, ti, orgID, member.McpServerID, "remote_session")
 	_, err = organizationsrepo.New(ti.conn).UpsertOrganizationUserRelationship(ctx, organizationsrepo.UpsertOrganizationUserRelationshipParams{OrganizationID: orgID, UserID: conv.ToPGText(subject.ID)})
 	require.NoError(t, err)
 	seedPrincipalGrant(t, ctx, ti, orgID, urn.NewPrincipal(urn.PrincipalTypeUser, subject.ID), authz.ScopeMCPAuth, typed.String())
@@ -107,40 +108,11 @@ func TestUpstreamIssuerFlag_TunneledGatewayMemberUnderEitherSource(t *testing.T)
 		"on, the member still receives its own token")
 }
 
-// upstreamIssuerParityPoints reads the mcp.upstream_issuer.parity counter
-// back, keyed by attribute set.
-func upstreamIssuerParityPoints(t *testing.T, reader *sdkmetric.ManualReader) map[attribute.Set]int64 {
-	t.Helper()
-
-	var rm metricdata.ResourceMetrics
-	require.NoError(t, reader.Collect(t.Context(), &rm))
-	points := map[attribute.Set]int64{}
-	for _, scope := range rm.ScopeMetrics {
-		for _, m := range scope.Metrics {
-			if m.Name != "mcp.upstream_issuer.parity" {
-				continue
-			}
-			sum, ok := m.Data.(metricdata.Sum[int64])
-			require.True(t, ok, "the parity instrument must be an int64 counter")
-			for _, dp := range sum.DataPoints {
-				points[dp.Attributes] = dp.Value
-			}
-		}
-	}
-	return points
-}
-
-// A hosted gateway member receives only the unqualified token keyed by its
-// upstream issuer, with no client choice to replace it, so the flag decides
-// which token it gets: its column names one provider and its association
-// another. Off, the column-keyed token connects it; on, the association-keyed
-// one does, and only once that provider holds a token. Each tool dispatch
-// counts the two sources as different under either setting.
-func TestUpstreamIssuerFlag_HostedGatewayMemberTakesTheFlaggedSourcesToken(t *testing.T) {
+// A hosted member always uses its exact registration, independently of the issuer-source flag.
+func TestUpstreamIssuerFlag_HostedGatewayAlwaysUsesItsAssignment(t *testing.T) {
 	t.Parallel()
 
-	reader := sdkmetric.NewManualReader()
-	ctx, ti := newTestMCPServiceWithMeterProvider(t, sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)))
+	ctx, ti := newTestMCPService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
@@ -150,10 +122,15 @@ func TestUpstreamIssuerFlag_HostedGatewayMemberTakesTheFlaggedSourcesToken(t *te
 	sharedIssuerID := createUserSessionIssuer(t, ctx, ti.conn, projectID)
 	metaSlug := "meta-hosted-source-" + uuid.NewString()[:8]
 	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, metaSlug, sharedIssuerID)
-	hosted := seedHostedMetaMember(t, ctx, ti, meta.ID, "Hosted member", 0, mcpservers.VisibilityPublic, "alpha_tool")
+	hosted := seedHostedMetaMember(t, ctx, ti, meta.ID, "Hosted member", 0, mcpservers.VisibilityPublic, "initial_fixture_tool")
+	toolset, err := toolsetsrepo.New(ti.conn).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: hosted.toolsetID, ProjectID: projectID})
+	require.NoError(t, err)
+	var forwarded atomic.Value
+	upstream := newAuthorizationRecorder(t, &forwarded)
+	toolName := addOAuthSecuredHTTPTool(t, ctx, ti, hostedToolset{Toolset: toolset, McpSlug: pgtype.Text{}, CustomDomainID: uuid.NullUUID{}, UserSessionIssuerID: uuid.NullUUID{}}, upstream.URL)
 
-	columnClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "hosted-source-column", "", []uuid.UUID{sharedIssuerID})
-	associationClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "hosted-source-association", "", []uuid.UUID{sharedIssuerID})
+	columnClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "hosted-source-column", "")
+	associationClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "hosted-source-association", "")
 	columnProvider := clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, columnClient)
 	associationProvider := clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, associationClient)
 	require.NotEqual(t, columnProvider, associationProvider)
@@ -176,35 +153,19 @@ func TestUpstreamIssuerFlag_HostedGatewayMemberTakesTheFlaggedSourcesToken(t *te
 	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, columnClient, subject, "token-column", "")
 	bearer := mintMetaIssuerBearer(t, ti, metaSlug, sharedIssuerID, subject)
 
-	hostedDiffer := func(source string) attribute.Set {
-		return attribute.NewSet(
-			attr.UpstreamIssuerSurface("gateway_hosted"),
-			attr.UpstreamIssuerSite("route"),
-			attr.UpstreamIssuerOutcome("differ"),
-			attr.UpstreamIssuerSource(source),
-		)
+	for _, enabled := range []bool{false, true} {
+		ti.features.SetFlag(feature.FlagUpstreamIssuerFromAssociations, orgID, enabled)
+		require.Equal(t, metamcp.SignInNotConnected, callConnectionStatus(t, ti, context.Background(), metaSlug, bearer).statuses[hosted.slug],
+			"the unrelated registration must not connect the member, regardless of the issuer flag")
 	}
-	dispatch := func() {
-		t.Helper()
-		// The fixture tool has no server URL, so the call fails member-scoped
-		// after the member's credential is picked, which is all this needs.
-		executeMetaTool(t, ti, metaSlug, bearer, hosted.slug+"--alpha_tool")
-	}
-
-	require.Equal(t, metamcp.SignInConnected, callConnectionStatus(t, ti, context.Background(), metaSlug, bearer).statuses[hosted.slug],
-		"off, the column-keyed token connects the member")
-	dispatch()
-	require.Equal(t, int64(1), upstreamIssuerParityPoints(t, reader)[hostedDiffer("column")],
-		"off, the dispatch counts the sources as different with the column deciding")
-
-	ti.features.SetFlag(feature.FlagUpstreamIssuerFromAssociations, orgID, true)
-
-	require.Equal(t, metamcp.SignInNotConnected, callConnectionStatus(t, ti, context.Background(), metaSlug, bearer).statuses[hosted.slug],
-		"on, the column-keyed token no longer serves the member")
 	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, associationClient, subject, "token-association", "")
-	require.Equal(t, metamcp.SignInConnected, callConnectionStatus(t, ti, context.Background(), metaSlug, bearer).statuses[hosted.slug],
-		"on, the association-keyed token connects the member")
-	dispatch()
-	require.Equal(t, int64(1), upstreamIssuerParityPoints(t, reader)[hostedDiffer("associations")],
-		"on, the dispatch counts the sources as different with the associations deciding")
+	for _, enabled := range []bool{false, true} {
+		ti.features.SetFlag(feature.FlagUpstreamIssuerFromAssociations, orgID, enabled)
+		require.Equal(t, metamcp.SignInConnected, callConnectionStatus(t, ti, context.Background(), metaSlug, bearer).statuses[hosted.slug])
+		forwarded.Store("")
+		text, isError := metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, hosted.slug+"--"+toolName))
+		require.False(t, isError, "%s", text)
+		require.Equal(t, "Bearer token-association", forwarded.Load())
+	}
+
 }

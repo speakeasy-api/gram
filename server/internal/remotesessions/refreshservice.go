@@ -336,48 +336,35 @@ func NewRefreshService(logger *slog.Logger, meterProvider metric.MeterProvider, 
 // persisted resource. organizationID is the client's organization; it selects
 // where the attachments come from and, for associations, scopes them.
 func (s *RefreshService) FallbackResourceForClient(ctx context.Context, organizationID string, clientID uuid.UUID) (string, error) {
-	if s.attachmentsFromAssociations(ctx, organizationID) {
-		attachments, err := attachmentsForClients(ctx, s.db, organizationID, []uuid.UUID{clientID}, true)
-		if err != nil {
-			return "", err
-		}
-		return clientUpstreamResource(attachments[clientID]), nil
+	if organizationID == "" {
+		return "", nil
 	}
-
-	rows, err := remotesessions_repo.New(s.db).ListOrganizationMcpServersForClient(ctx, clientID)
+	attachments, err := attachmentsForClients(ctx, s.db, organizationID, []uuid.UUID{clientID}, true)
 	if err != nil {
-		return "", fmt.Errorf("list mcp servers for client: %w", err)
+		return "", err
 	}
-	resources := make([]string, 0, len(rows))
-	for _, row := range rows {
-		resources = append(resources, row.Url)
-	}
-	return clientUpstreamResource(resources), nil
+	return clientUpstreamResource(attachments[clientID]), nil
 }
 
 // fallbackResourceForGrant derives the resource for a grant stored with none.
-// Where the organization it was consented in enforces typed auth clients, the
-// servers that offer its client decide; a client with no offer, and any client
-// elsewhere, falls back to its attached servers.
+// The grant's sign-in tenant fences both typed offers and direct placements.
+// Only a global sign-in may fall back to the registration's own tenant.
 func (s *RefreshService) fallbackResourceForGrant(ctx context.Context, sess remotesessions_repo.RemoteSession) (string, error) {
 	q := remotesessions_repo.New(s.db)
 	organizationID, err := q.GetUserSessionIssuerOrganizationID(ctx, sess.UserSessionIssuerID)
 	if err != nil {
 		return "", fmt.Errorf("get grant organization: %w", err)
 	}
-	attachments, offered, err := loadClientAttachments(ctx, s.db, organizationID, []uuid.UUID{sess.RemoteSessionClientID})
-	if err != nil {
-		return "", fmt.Errorf("list mcp servers for grant client: %w", err)
+	if organizationID == "" {
+		organizationID, err = q.GetRemoteSessionClientTenantOrganizationID(ctx, sess.RemoteSessionClientID)
+		if err != nil {
+			return "", fmt.Errorf("read client organization for fallback resource: %w", err)
+		}
 	}
-	if offered[sess.RemoteSessionClientID] {
-		return clientUpstreamResource(attachments[sess.RemoteSessionClientID]), nil
-	}
-	// A global sign-in has no organization, but its client still has a tenant.
-	// Use that tenant for the association flag and retain the legacy client-wide
-	// fallback when association-derived resources are not enabled.
-	organizationID, err = q.GetRemoteSessionClientTenantOrganizationID(ctx, sess.RemoteSessionClientID)
-	if err != nil {
-		return "", fmt.Errorf("read client organization for fallback resource: %w", err)
+	if organizationID == "" {
+		// Neither side establishes a tenant. Do not infer a resource from
+		// some other tenant's placement of a platform-global registration.
+		return "", nil
 	}
 	return s.FallbackResourceForClient(ctx, organizationID, sess.RemoteSessionClientID)
 }
@@ -450,8 +437,8 @@ func attachmentsForClients(ctx context.Context, db remotesessions_repo.DBTX, org
 	return attachments, nil
 }
 
-// loadClientAttachments also reports which clients have offers, so grant
-// refresh can preserve its client-wide fallback when no offer decides.
+// loadClientAttachments also reports which registrations have typed offers,
+// so attachmentsForClients only falls back to direct associations for others.
 func loadClientAttachments(ctx context.Context, db remotesessions_repo.DBTX, organizationID string, clientIDs []uuid.UUID) (map[uuid.UUID][]string, map[uuid.UUID]bool, error) {
 	rows, err := remotesessions_repo.New(db).ListOrganizationMcpServersForClients(ctx, remotesessions_repo.ListOrganizationMcpServersForClientsParams{
 		RemoteSessionClientIds: clientIDs,
@@ -1153,6 +1140,13 @@ func (s *RefreshService) refresh(
 		if err != nil {
 			return zero, nil, nil, fmt.Errorf("derive fallback resource: %w", err)
 		}
+	}
+
+	// A hosted request accepts only an unqualified grant. Recheck after
+	// acquiring the lock and deriving any legacy fallback, before sending
+	// credentials or asking the provider for an audience we cannot use.
+	if ctx.Value(hostedTokenResourceKey{}) == true && resource != "" {
+		return zero, nil, nil, ErrNoValidToken
 	}
 
 	// Read after the lock: this caller may have waited on it for seconds, and

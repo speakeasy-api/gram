@@ -261,7 +261,7 @@ func buildGuardrailView(g intentpolicy.Guardrail) *gen.IntentGuardrail {
 	for _, c := range g.Contracts {
 		conds := make([]*gen.IntentCondition, 0, len(c.Conditions))
 		for _, cond := range c.Conditions {
-			conds = append(conds, &gen.IntentCondition{Join: cond.Join, Label: cond.Label, Op: cond.Op, Values: append([]string{}, cond.Values...), Pattern: cond.Pattern})
+			conds = append(conds, &gen.IntentCondition{Join: cond.Join, Label: cond.Label, Op: cond.Op, Values: append([]string{}, cond.Values...)})
 		}
 		cs = append(cs, &gen.IntentContract{ID: c.ID, Name: c.Name, Statement: c.Statement, Outcome: string(c.Outcome), Conditions: conds, Expression: c.Expression})
 	}

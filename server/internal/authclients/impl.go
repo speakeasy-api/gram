@@ -314,7 +314,7 @@ func (s *Service) GetMcpServerAuthentication(ctx context.Context, payload *gen.G
 		return nil, oops.E(oops.CodeUnexpected, err, "get mcp server").LogError(ctx, logger)
 	}
 
-	return s.serverAuthentication(ctx, queries, authCtx.ActiveOrganizationID, server.ID, server.ProjectID, server.Visibility, server.UpstreamAuthPending, logger)
+	return s.serverAuthentication(ctx, queries, authCtx.ActiveOrganizationID, server, logger)
 }
 
 func (s *Service) SetMcpServerUpstreamAuthRequirement(ctx context.Context, payload *gen.SetMcpServerUpstreamAuthRequirementPayload) (*types.McpServerAuthentication, error) {
@@ -337,12 +337,15 @@ func (s *Service) SetMcpServerUpstreamAuthRequirement(ctx context.Context, paylo
 		return nil, oops.E(oops.CodeUnexpected, err, "get mcp server").LogError(ctx, logger)
 	}
 	if server.ToolsetID.Valid {
-		return nil, oops.E(oops.CodeBadRequest, nil, "hosted toolsets keep their own authentication; their upstream requirement cannot be set").LogError(ctx, logger)
+		if payload.RequiresUpstreamAuth {
+			return nil, oops.E(oops.CodeBadRequest, nil, "Assign an upstream registration to require authentication for this hosted server.").LogWarn(ctx, logger)
+		}
+		return s.setHostedNoUpstream(ctx, logger, authCtx, server.ProjectID, server.ID)
 	}
 
 	// The requested requirement is ignored: whether the upstream needs
 	// authentication follows from the enabled auth clients the server offers.
-	return s.serverAuthentication(ctx, queries, authCtx.ActiveOrganizationID, server.ID, server.ProjectID, server.Visibility, server.UpstreamAuthPending, logger)
+	return s.serverAuthentication(ctx, queries, authCtx.ActiveOrganizationID, server, logger)
 }
 
 func (s *Service) require(ctx context.Context, permission func(authz.OrgRef) authz.Check) (*contextvalues.AuthContext, *slog.Logger, error) {
@@ -368,8 +371,8 @@ func (s *Service) require(ctx context.Context, permission func(authz.OrgRef) aut
 	return authCtx, logger, nil
 }
 
-func (s *Service) serverAuthentication(ctx context.Context, queries *repo.Queries, organizationID string, serverID, projectID uuid.UUID, serverVisibility string, pending bool, logger *slog.Logger) (*types.McpServerAuthentication, error) {
-	view, err := serverAuthenticationView(ctx, queries, organizationID, serverID, projectID, serverVisibility, pending)
+func (s *Service) serverAuthentication(ctx context.Context, queries *repo.Queries, organizationID string, server repo.ListOrganizationMCPServersByIDRow, logger *slog.Logger) (*types.McpServerAuthentication, error) {
+	view, err := serverAuthenticationView(ctx, queries, organizationID, server)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "read server authentication").LogError(ctx, logger)
 	}
@@ -386,7 +389,23 @@ func ReadServerAuthentication(ctx context.Context, db repo.DBTX, organizationID 
 	if err != nil {
 		return nil, fmt.Errorf("get mcp server: %w", err)
 	}
-	return serverAuthenticationView(ctx, queries, organizationID, server.ID, server.ProjectID, server.Visibility, server.UpstreamAuthPending)
+	return serverAuthenticationView(ctx, queries, organizationID, server)
+}
+
+// ReadServerAuthenticationStatuses derives the same status as an
+// individual server read, without fetching any credential metadata.
+func ReadServerAuthenticationStatuses(ctx context.Context, db repo.DBTX, organizationID string, projectID uuid.UUID, serverIDs []uuid.UUID) (map[uuid.UUID]string, error) {
+	rows, err := repo.New(db).ListOrganizationMCPServersByID(ctx, repo.ListOrganizationMCPServersByIDParams{
+		OrganizationID: organizationID, Ids: serverIDs, ProjectID: uuid.NullUUID{UUID: projectID, Valid: true},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list organization MCP server statuses: %w", err)
+	}
+	statuses := make(map[uuid.UUID]string, len(rows))
+	for _, row := range rows {
+		statuses[row.ID] = serverAuthenticationStatus(row, row.OffersEnabledClient)
+	}
+	return statuses, nil
 }
 
 // upstreamAuthStatus is a server's upstream authentication status: configured
@@ -404,15 +423,32 @@ func upstreamAuthStatus(offersEnabledClient, pending bool) string {
 	}
 }
 
-// serverAuthenticationView derives whether the upstream needs authentication
-// from the auth clients the server offers: it does when at least one is
-// enabled. pending is a server with upstream credentials that has never had an
-// auth-client link, live or detached, which is incomplete setup rather than a
-// server needing none.
-func serverAuthenticationView(ctx context.Context, queries *repo.Queries, organizationID string, serverID, projectID uuid.UUID, serverVisibility string, pending bool) (*types.McpServerAuthentication, error) {
+// serverAuthenticationStatus uses hosting placement, not typed offers, for hosted servers.
+func serverAuthenticationStatus(server repo.ListOrganizationMCPServersByIDRow, offersEnabledClient bool) string {
+	if !server.ToolsetID.Valid {
+		return upstreamAuthStatus(offersEnabledClient, server.UpstreamAuthPending)
+	}
+	switch {
+	case server.HostedPlacements == 1 && server.ReachableHostedPlacements == 1 && server.HasSignIn:
+		return StatusConfigured
+	case server.HostedPlacements == 0 && !server.HostedRequiresAssignment:
+		return StatusNoAuthRequired
+	default:
+		return StatusSetupIncomplete
+	}
+}
+
+func serverAuthenticationView(ctx context.Context, queries *repo.Queries, organizationID string, server repo.ListOrganizationMCPServersByIDRow) (*types.McpServerAuthentication, error) {
+	if server.ToolsetID.Valid {
+		status := serverAuthenticationStatus(server, false)
+		return &types.McpServerAuthentication{
+			McpServerID: server.ID.String(), ProjectID: server.ProjectID.String(), Public: server.Visibility == visibility.Public,
+			RequiresUpstreamAuth: status == StatusConfigured, Status: status, Clients: []*types.AuthClient{},
+		}, nil
+	}
 	clients, err := queries.ListServerAuthClients(ctx, repo.ListServerAuthClientsParams{
-		McpServerID:    serverID,
-		ProjectID:      projectID,
+		McpServerID:    server.ID,
+		ProjectID:      server.ProjectID,
 		OrganizationID: organizationID,
 	})
 	if err != nil {
@@ -424,12 +460,12 @@ func serverAuthenticationView(ctx context.Context, queries *repo.Queries, organi
 		return nil, err
 	}
 
-	status := upstreamAuthStatus(slices.ContainsFunc(clients, func(c repo.McpAuthClient) bool { return c.Enabled }), pending)
+	status := serverAuthenticationStatus(server, slices.ContainsFunc(clients, func(c repo.McpAuthClient) bool { return c.Enabled }))
 
 	return &types.McpServerAuthentication{
-		McpServerID:          serverID.String(),
-		ProjectID:            projectID.String(),
-		Public:               serverVisibility == visibility.Public,
+		McpServerID:          server.ID.String(),
+		ProjectID:            server.ProjectID.String(),
+		Public:               server.Visibility == visibility.Public,
 		RequiresUpstreamAuth: status == StatusConfigured,
 		Status:               status,
 		Clients:              views,

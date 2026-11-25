@@ -9,7 +9,10 @@ import { invalidateAllTemporaryGrants } from "@gram/client/react-query/temporary
 import { useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { useState } from "react";
-import { approvalChoices } from "./approvalChoices";
+import {
+  approvalWindowsFor,
+  requestedDurationLabel,
+} from "./requestedDuration";
 
 /**
  * Approve a pending access request for a fixed window, or deny it. Approving
@@ -25,6 +28,10 @@ export function AccessRequestDecision({
 }): JSX.Element {
   const queryClient = useQueryClient();
   const [choice, setChoice] = useState<string | null>(null);
+  // A window can lapse while the dialog stays open (End of day near midnight,
+  // or a requester's deadline). The windows are worked out again at each
+  // render and click; a click on one that has lapsed says so.
+  const [lapsed, setLapsed] = useState<string | null>(null);
   const decide = useDecideAccessRequestMutation({
     // Refresh on a refusal too: a 409 means the request was decided
     // elsewhere, and the list should show that.
@@ -57,10 +64,15 @@ export function AccessRequestDecision({
     // The window starts when the administrator clicks, not when the dialog
     // opened.
     const expiresAt = approve
-      ? approvalChoices(new Date()).find((option) => option.key === key)
-          ?.expiresAt
+      ? approvalWindowsFor(request, new Date()).windows.find(
+          (option) => option.key === key,
+        )?.expiresAt
       : undefined;
-    if (approve && !expiresAt) return;
+    if (approve && !expiresAt) {
+      setLapsed(key);
+      return;
+    }
+    setLapsed(null);
     setChoice(key);
     decide.mutate({
       request: {
@@ -73,15 +85,24 @@ export function AccessRequestDecision({
     });
   };
 
+  const now = new Date();
+  const { windows, suggested } = approvalWindowsFor(request, now);
+  const asked = requestedDurationLabel(request, now);
+
   return (
     <div className="space-y-2">
       <Text className="text-eyebrow">Give temporary access</Text>
+      {asked && (
+        <Text variant="body" className="text-sm">
+          {requesterName} asked to have it {asked}.
+        </Text>
+      )}
       <div className="flex flex-wrap gap-2">
-        {approvalChoices(new Date()).map((option) => (
+        {windows.map((option) => (
           <Button
             key={option.key}
             size="sm"
-            variant={option.key === "1h" ? "primary" : "secondary"}
+            variant={option.key === suggested ? "primary" : "secondary"}
             disabled={decide.isPending}
             onClick={() => submit(option.key, true)}
           >
@@ -102,6 +123,11 @@ export function AccessRequestDecision({
       <Text muted small>
         Access ends on its own. To give it permanently, assign a role below.
       </Text>
+      {lapsed && (
+        <Text variant="body" className="text-destructive text-sm">
+          That window has passed. Pick another one.
+        </Text>
+      )}
       {decide.isError && (
         <Text variant="body" className="text-destructive text-sm">
           {decide.error instanceof GramError && decide.error.statusCode === 409

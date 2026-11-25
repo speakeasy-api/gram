@@ -192,11 +192,12 @@ export function createWizardServices(client: GramClient): WizardServices {
         ...opts,
       });
 
-      await buildCreateRemoteSessionClientMutation(client).mutationFn({
+      const registration = await buildCreateRemoteSessionClientMutation(
+        client,
+      ).mutationFn({
         request: {
           createRemoteSessionClientForm: {
             remoteSessionIssuerId: remoteIssuer.id,
-            userSessionIssuerIds: [issuer.id],
             clientId: input.clientId,
             clientSecret: input.clientSecret || undefined,
             tokenEndpointAuthMethod: narrowTokenEndpointAuthMethod(
@@ -212,6 +213,16 @@ export function createWizardServices(client: GramClient): WizardServices {
         client,
         { id: input.toolsetId },
         issuer.id,
+        opts.options,
+      );
+      await client.remoteSessions.attachServerClientAssociation(
+        {
+          serverClientAssociationForm: {
+            mcpServerId: input.toolsetId,
+            remoteSessionClientId: registration.id,
+          },
+        },
+        undefined,
         opts.options,
       );
     },

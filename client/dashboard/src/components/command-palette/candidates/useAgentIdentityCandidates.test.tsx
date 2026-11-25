@@ -349,7 +349,7 @@ describe("useAgentIdentityCandidates", () => {
     );
   });
 
-  it("offers the Server sign-in tab only for agents the reader can change", () => {
+  it("offers the MCP sign-in tab only for agents the reader can change", () => {
     mocks.queryData = {
       pages: [
         {
@@ -368,7 +368,7 @@ describe("useAgentIdentityCandidates", () => {
     );
     expect(signIns).toHaveLength(1);
     expect(signIns[0]).toMatchObject({
-      title: "Worker · Server sign-in",
+      title: "Worker · MCP sign-in",
       kind: "person",
       keywords: expect.arrayContaining(["mcp", "reconnect"]),
     });

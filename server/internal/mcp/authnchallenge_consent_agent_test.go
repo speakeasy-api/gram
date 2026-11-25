@@ -306,7 +306,8 @@ func seedAgentOutageConnection(t *testing.T, ctx context.Context, ti *testInstan
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	clientID := createConsentRemoteClient(t, ctx, ti.conn, *authCtx.ProjectID, fx.orgID, "agent-outage-"+uuid.NewString()[:8], providerURL, []uuid.UUID{fx.client.UserSessionIssuerID})
+	clientID := createConsentRemoteClient(t, ctx, ti.conn, *authCtx.ProjectID, fx.orgID, "agent-outage-"+uuid.NewString()[:8], providerURL)
+	assignHostedOAuth(t, ctx, ti.conn, fx.orgID, *authCtx.ProjectID, fx.toolset.ID, clientID)
 	access, err := ti.enc.Encrypt([]byte("expired"))
 	require.NoError(t, err)
 	refresh, err := ti.enc.Encrypt([]byte("live-refresh"))

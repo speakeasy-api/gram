@@ -35,7 +35,7 @@ import (
 // exchange and credential persistence without a legacy issuer binding.
 func TestTypedRemoteLoginConsentCallback(t *testing.T) {
 	t.Parallel()
-	for _, scenario := range []string{"typed", "typed_without_flag", "typed_alternatives", "typed_alternatives_no_identity", "ema", "gateway", "gateway_without_flag", "gateway_legacy", "gateway_ambiguous", "gateway_denied_member", "revoked_link", "deleted_auth_client", "disabled_auth_client", "revoked_permission", "revoked_connect", "deleted_server", "deleted_sign_in", "deleted_remote_issuer", "tenant_mismatch", "legacy_unlinked", "legacy"} {
+	for _, scenario := range []string{"typed", "typed_alternatives", "typed_alternatives_no_identity", "ema", "gateway", "gateway_legacy", "gateway_ambiguous", "gateway_denied_member", "revoked_link", "deleted_auth_client", "disabled_auth_client", "revoked_permission", "revoked_connect", "deleted_server", "deleted_sign_in", "deleted_remote_issuer", "tenant_mismatch", "legacy_unlinked", "legacy"} {
 		t.Run(scenario, func(t *testing.T) {
 			t.Parallel()
 			ctx, ti := newTestMCPService(t)
@@ -50,11 +50,7 @@ func TestTypedRemoteLoginConsentCallback(t *testing.T) {
 			}
 			var posted atomic.Value
 			as := newConsentExchangeAS(t, &posted, "typed-upstream-token")
-			var bindings []uuid.UUID
-			if scenario == "legacy" || scenario == "gateway_legacy" {
-				bindings = []uuid.UUID{issuerID}
-			}
-			registration := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "typed-login", as.URL, bindings)
+			registration := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "typed-login", as.URL)
 			endpoint, stateID, subject := mintConsentEndpointState(t, ctx, ti, projectID, orgID, issuerID, "typed-login")
 			q := authclientbackfill.New(ti.conn)
 			serverID, remoteID := uuid.New(), uuid.New()
@@ -74,14 +70,15 @@ func TestTypedRemoteLoginConsentCallback(t *testing.T) {
 			authGrantID := seedPrincipalGrant(t, ctx, ti, orgID, principal, authz.ScopeMCPAuth, authClientID.String())
 			connectGrantID := seedPrincipalMCPConnectGrant(t, ctx, ti, orgID, principal, serverID)
 			require.NoError(t, q.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{ProjectID: projectID, OrganizationID: orgID, McpServerID: serverID, AuthClientID: authClientID, Source: "admin"}))
-			if scenario != "legacy" && scenario != "gateway_legacy" && scenario != "gateway_without_flag" && scenario != "typed_without_flag" {
+			if scenario != "legacy" && scenario != "gateway_legacy" {
 				_, err = productfeaturesrepo.New(ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: orgID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
 				require.NoError(t, err)
 			}
 			loaded, loadErr := ti.service.RemoteChallengeManager().ListAuthClientRegistrations(ctx, projectID, orgID, []uuid.UUID{registration})
 			require.NoError(t, loadErr)
 			require.Len(t, loaded, 1)
-			if scenario == "legacy" {
+			if scenario == "legacy" || scenario == "gateway_legacy" {
+				require.NoError(t, q.SetServerUserSessionIssuerFixture(ctx, authclientbackfill.SetServerUserSessionIssuerFixtureParams{ID: serverID, UserSessionIssuerID: conv.ToNullUUID(issuerID)}))
 				_, err = q.SeedAssociationFixture(ctx, authclientbackfill.SeedAssociationFixtureParams{ProjectID: projectID, OrganizationID: orgID, McpServerID: serverID, RemoteSessionClientID: registration})
 				require.NoError(t, err)
 			}
@@ -152,7 +149,7 @@ func TestTypedRemoteLoginConsentCallback(t *testing.T) {
 				require.NoError(t, q.SeedMCPServerFixture(ctx, authclientbackfill.SeedMCPServerFixtureParams{ID: otherServer, ProjectID: projectID, Slug: conv.ToPGText("alternative-resource"), RemoteMcpServerID: conv.ToNullUUID(otherRemote)}))
 				require.NoError(t, q.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{ProjectID: projectID, OrganizationID: orgID, McpServerID: otherServer, AuthClientID: authClientID, Source: "admin"}))
 				alternativeAS := newConsentExchangeAS(t, new(atomic.Value), "alternative-token")
-				alternative := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "alternative-provider", alternativeAS.URL, nil)
+				alternative := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "alternative-provider", alternativeAS.URL)
 				alternativeID, err := q.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{OrganizationID: orgID, ProjectID: conv.ToNullUUID(projectID), ClientType: authz.AuthClientTypeRemoteSession, Source: "admin", RemoteSessionClientID: conv.ToNullUUID(alternative)})
 				require.NoError(t, err)
 				require.NoError(t, q.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{ProjectID: projectID, OrganizationID: orgID, McpServerID: serverID, AuthClientID: alternativeID, Source: "admin"}))
@@ -202,9 +199,6 @@ func TestTypedRemoteLoginConsentCallback(t *testing.T) {
 				// Simulate a provider callback issued by an old binary. This
 				// is separate from accepting a stale gateway approval preview.
 				state.TypedAuthorization = nil
-				if scenario == "gateway_legacy" {
-					state.ResourceMcpServerID = uuid.NullUUID{}
-				}
 			}
 			if scenario == "tenant_mismatch" || scenario == "legacy_unlinked" || scenario == "legacy" || scenario == "gateway_legacy" {
 				// Mutate trusted cached provenance to exercise compatibility and tamper checks.
@@ -216,8 +210,11 @@ func TestTypedRemoteLoginConsentCallback(t *testing.T) {
 			w := httptest.NewRecorder()
 			callbackErr := mgr.HandleRemoteLoginCallback(w, req)
 			session, sessionErr := remotesessionsrepo.New(ti.conn).GetActiveRemoteSession(ctx, remotesessionsrepo.GetActiveRemoteSessionParams{SubjectUrn: subject, RemoteSessionClientID: registration})
-			if scenario != "typed" && scenario != "typed_without_flag" && scenario != "gateway_without_flag" && !strings.HasPrefix(scenario, "typed_alternatives") && scenario != "ema" && scenario != "gateway" && scenario != "gateway_denied_member" && scenario != "legacy" && scenario != "gateway_legacy" {
+			if scenario != "typed" && !strings.HasPrefix(scenario, "typed_alternatives") && scenario != "ema" && scenario != "gateway" && scenario != "gateway_denied_member" && scenario != "legacy" {
 				require.Error(t, callbackErr)
+				if scenario == "gateway_legacy" {
+					require.ErrorIs(t, callbackErr, remotesessions.ErrTypedAuthorizationChanged)
+				}
 				if scenario != "legacy_unlinked" && scenario != "deleted_sign_in" {
 					require.Nil(t, posted.Load(), "revocation must fail before exchanging the code")
 				}

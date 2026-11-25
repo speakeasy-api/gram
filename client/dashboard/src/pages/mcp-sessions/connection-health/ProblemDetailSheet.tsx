@@ -23,7 +23,7 @@ import { logsSearch } from "./filters";
 import {
   appLabel,
   axisLabels,
-  formatClockMinutes,
+  formatAt,
   formatCount,
   formatDuration,
   formatSince,
@@ -31,6 +31,7 @@ import {
   problemRule,
   serverLabel,
   SOURCE_LABELS,
+  sourceSentence,
 } from "./format";
 import type { SuspectedProblemDetail } from "./types";
 
@@ -142,8 +143,25 @@ function sourceName(problem: SuspectedProblemDetail): string | undefined {
   if (problem.source === "service")
     return problem.scope.kind === "service" ? problem.scope.name : undefined;
   if (problem.source !== "app") return undefined;
-  const apps = new Set(problem.people.flatMap((p) => p.apps.map(appLabel)));
-  return apps.size === 1 ? [...apps][0] : undefined;
+  // Name the app only when every person in the problem is in the rows and shows it.
+  if (
+    problem.peopleTotal > problem.people.length ||
+    problem.people.some(
+      (p) => p.apps.length === 0 || p.appsTotal > p.apps.length,
+    )
+  )
+    return undefined;
+  // Two unlisted apps share a label, so they are told apart by family, version and key.
+  const apps = new Map(
+    problem.people
+      .flatMap((p) => p.apps)
+      .map((a) => [
+        `${a.family}\u0000${a.version ?? ""}\u0000${a.appKey ?? ""}`,
+        a,
+      ]),
+  );
+  const [only] = apps.values();
+  return apps.size === 1 && only ? appLabel(only) : undefined;
 }
 
 /** A fixed question; every name and label goes in the escaped context, never in the question. */
@@ -199,7 +217,9 @@ function ProblemBody({
     asOf.getTime() - Date.parse(problem.filters.from) > 24 * 60 * 60 * 1000;
   const logsHref = `${routes.mcpSessions.provider.connectionLogs.href(providerId)}${logsSearch(problem.filters, asOf)}`;
   const peopleCount = problem.peopleCount;
-  const sinceLabel = formatSince(problem.since, now);
+  // Dates show against the day the sheet renders, not the day the page opened.
+  const today = new Date();
+  const sinceLabel = formatSince(problem.since, today);
   const succeeded = problem.part === "speakeasy" ? "signed in" : "connected";
   return (
     <div className="flex min-h-full flex-col">
@@ -213,7 +233,7 @@ function ProblemBody({
         </SheetTitle>
         <SheetDescription>
           Since {sinceLabel} · latest failure{" "}
-          {formatClockMinutes(problem.lastFailedAt)} ·{" "}
+          {formatAt(problem.lastFailedAt, today)} ·{" "}
           {formatDuration(
             Date.parse(problem.lastFailedAt) - Date.parse(problem.since),
           )}
@@ -237,9 +257,7 @@ function ProblemBody({
           <p className="text-muted-foreground">Rule: {problemRule(problem)}</p>
           {problem.source ? (
             <p className="text-muted-foreground">
-              The failures came from{" "}
-              {SOURCE_LABELS[problem.source].toLowerCase()}
-              {sourceName(problem) ? ` (${sourceName(problem)})` : ""}.
+              {sourceSentence(problem.source, sourceName(problem))}
             </p>
           ) : null}
           <p className="text-muted-foreground">
@@ -299,7 +317,7 @@ function ProblemBody({
                 </div>
                 <span className="text-destructive text-xs">
                   {p.attempts > 1 ? "started" : "at"}{" "}
-                  {formatClockMinutes(p.firstFailedAt)}
+                  {formatAt(p.firstFailedAt, today)}
                 </span>
                 <span className="text-right text-sm">{p.attempts}</span>
               </PersonRow>
@@ -446,11 +464,18 @@ function FailureBars({
   buckets: { start: string; attempts: number }[];
   now: Date;
 }): JSX.Element {
+  const rendered = new Date();
+  // Midnight today, so the tooltips re-date after midnight.
+  const today = new Date(
+    rendered.getFullYear(),
+    rendered.getMonth(),
+    rendered.getDate(),
+  ).getTime();
   const chart = useMemo(
     () => ({
       labels: axisLabels(buckets.map((b) => b.start)),
       timestamps: buckets.map((b) => Date.parse(b.start)),
-      tooltipLabels: buckets.map((b) => formatClockMinutes(b.start)),
+      tooltipLabels: buckets.map((b) => formatAt(b.start, new Date(today))),
       series: [
         {
           label: "Failed",
@@ -459,7 +484,7 @@ function FailureBars({
         },
       ],
     }),
-    [buckets],
+    [buckets, today],
   );
   return (
     <HealthBarChart

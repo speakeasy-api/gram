@@ -1220,7 +1220,8 @@ func newStartCommand() *cli.Command {
 			}
 			clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
 			clientAssertionSigner.PinManagedSigner(c.String(identityProviderSigningServiceAccount))
-			if err := configureTranscriptShadow(ctx, c, db, chatWriter, orgEncryption, tracerProvider, meterProvider); err != nil {
+			shadow, err := configureTranscriptShadow(ctx, c, db, chatWriter, orgEncryption, tracerProvider, meterProvider)
+			if err != nil {
 				return err
 			}
 			clientSecrets := orgEncryption.ClientSecrets(logger, encryptionClient)
@@ -1332,6 +1333,7 @@ func newStartCommand() *cli.Command {
 				WithWorkloadInference(mcpService).
 				WithTurnStream(turnStream).
 				WithRiskFindings(chatRiskFindings).
+				WithTranscriptShadowReads(shadow.Store, shadow.ProjectIDs...).
 				WithStreamRotation(meterProvider, c.Duration("stream-max-age")).
 				WithMaskedSummaries(chat.NewSummaryGenerator(db, chatClient, chatredact.New()))
 			assistantsCore := assistants.NewServiceCore(logger, tracerProvider, meterProvider, db, guardianPolicy, encryptionClient, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemLogger, contextWindowResolver, auditLogger, assistantIdentities, authzEngine)

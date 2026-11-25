@@ -631,7 +631,7 @@ const ROUTE_STRUCTURE = {
           // Which MCP servers the agent calls, and how Speakeasy signs in to
           // each. Changed here, not by walking the setup wizard again.
           mcpSignIn: {
-            title: "Agent Server Sign-in",
+            title: "Agent MCP Sign-in",
             url: "mcp-sign-in",
           },
           // An agent's activity is the changes made to it and by it, so the
@@ -916,6 +916,12 @@ const ROUTE_STRUCTURE = {
     url: "https://docs.getgram.ai",
     icon: "book-open",
     external: true,
+  },
+  // Standalone chat-first prototype: no app chrome, not in the nav.
+  prototype: {
+    title: "Prototype",
+    url: "prototype",
+    outsideMainLayout: true,
   },
 } satisfies Record<string, RouteEntry>;
 

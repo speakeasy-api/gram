@@ -55,11 +55,9 @@ func (f *fixture) interactiveCredential() uuid.UUID {
 	return f.credential(urn.NewUserSubject("user_"+uuid.NewString()[:8]), "refresh-"+uuid.NewString())
 }
 
-// oauthSelection seeds a credential's choice of clientID, bound to the
-// credential's user session issuer as issuance requires.
+// oauthSelection seeds a credential's registration choice.
 func (f *fixture) oauthSelection(credentialID, serverID, clientID uuid.UUID) {
 	f.t.Helper()
-	require.NoError(f.t, f.q.BindClientIssuerFixture(f.t.Context(), BindClientIssuerFixtureParams{RemoteSessionClientID: clientID, UserSessionIssuerID: f.sessionIssuer()}))
 	f.unboundOAuthSelection(credentialID, serverID, clientID)
 }
 
@@ -136,20 +134,32 @@ func selectionGaps(report Report, outcome SelectionOutcome) []SelectionGap {
 	return out
 }
 
+func (f *fixture) runTypedSelections(apply bool) Report {
+	f.t.Helper()
+	report, err := Run(f.t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: apply, PageSize: 0, TypedOnly: true})
+	require.NoError(f.t, err)
+	return report
+}
+
+func reconcileFixtureTypedSelections(ctx context.Context, tx pgx.Tx, organizationID string, issuerID uuid.UUID) error {
+	_, err := ReconcileTypedUserSessionSelectionsForServersInLockedTransaction(ctx, tx, organizationID, issuerID, nil)
+	return err
+}
+
 func TestRun_OAuthChoiceNamesItsRegistrationsClient(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	server, registration := f.server(), f.client("subject")
 	f.associate(server, registration)
-	f.run(true)
+	f.runTypedSelections(true)
 	credential := f.interactiveCredential()
 	f.oauthSelection(credential, server, registration)
 
-	dry := f.run(false)
+	dry := f.runTypedSelections(false)
 	require.Equal(t, 1, dry.PendingSelectionMappings)
 	require.False(t, f.selection(credential, server).AuthClientID.Valid, "dry run writes nothing")
 
-	applied := f.run(true)
+	applied := f.runTypedSelections(true)
 	require.Equal(t, 1, applied.SelectionsMapped)
 	require.Equal(t, 1, applied.Selections[ClassInteractive].Written)
 	require.Empty(t, applied.SelectionGaps)
@@ -158,7 +168,7 @@ func TestRun_OAuthChoiceNamesItsRegistrationsClient(t *testing.T) {
 	require.Equal(t, uuid.NullUUID{UUID: f.live(TypeRemoteSession)[0].ID, Valid: true}, row.AuthClientID)
 	require.Equal(t, uuid.NullUUID{UUID: registration, Valid: true}, row.RemoteSessionClientID, "the upstream client choice is kept")
 
-	again := f.run(true)
+	again := f.runTypedSelections(true)
 	require.Zero(t, again.SelectionsMapped, "rerun is idempotent")
 	require.Equal(t, 1, again.Selections[ClassInteractive].Outcomes[SelectionMapped])
 }
@@ -172,7 +182,7 @@ func TestRun_NoAuthChoiceNamesTheServersHeaderClient(t *testing.T) {
 	credential := f.interactiveCredential()
 	f.noAuthSelection(credential, server)
 
-	report := f.run(true)
+	report := f.runTypedSelections(true)
 	require.Equal(t, 1, report.SelectionsMapped)
 	row := f.selection(credential, server)
 	require.Equal(t, uuid.NullUUID{UUID: f.live(TypeStaticCredential)[0].ID, Valid: true}, row.AuthClientID)
@@ -186,7 +196,7 @@ func TestRun_NoAuthChoiceWithoutClientsStaysNoAuth(t *testing.T) {
 	credential := f.interactiveCredential()
 	f.noAuthSelection(credential, server)
 
-	report := f.run(true)
+	report := f.runTypedSelections(true)
 	require.Zero(t, report.SelectionsMapped)
 	require.Equal(t, 1, report.Selections[ClassInteractive].Outcomes[SelectionNoAuth])
 	require.Empty(t, report.SelectionGaps)
@@ -201,7 +211,7 @@ func TestRun_NoAuthChoiceBesideAnOAuthClientIsStale(t *testing.T) {
 	credential := f.interactiveCredential()
 	f.noAuthSelection(credential, server)
 
-	report := f.run(true)
+	report := f.runTypedSelections(true)
 	require.Len(t, selectionGaps(report, SelectionStaleNoAuth), 1)
 	require.False(t, f.selection(credential, server).AuthClientID.Valid)
 }
@@ -214,13 +224,13 @@ func TestRun_ChoiceSeveralClientsCouldServeIsNeverGuessed(t *testing.T) {
 	f.staticHeader(source, "Authorization")
 	credential := f.interactiveCredential()
 	f.noAuthSelection(credential, server)
-	f.run(true)
+	f.runTypedSelections(true)
 	// A second header client an administrator linked to the same server.
 	f.adminHeaderClient(server)
 	other := f.interactiveCredential()
 	f.noAuthSelection(other, server)
 
-	report := f.run(true)
+	report := f.runTypedSelections(true)
 	gaps := selectionGaps(report, SelectionAmbiguous)
 	require.Len(t, gaps, 1)
 	require.Equal(t, other, gaps[0].CredentialID)
@@ -235,11 +245,11 @@ func TestRun_MappedChoiceWhoseClientIsDisabledIsAGap(t *testing.T) {
 	f.associate(server, registration)
 	credential := f.interactiveCredential()
 	f.oauthSelection(credential, server, registration)
-	f.run(true)
+	f.runTypedSelections(true)
 	clientID := f.live(TypeRemoteSession)[0].ID
 	require.NoError(t, f.q.SetAuthClientEnabledFixture(t.Context(), SetAuthClientEnabledFixtureParams{Enabled: false, ID: clientID}))
 
-	report := f.run(true)
+	report := f.runTypedSelections(true)
 	require.Len(t, selectionGaps(report, SelectionUnusable), 1)
 	require.Equal(t, uuid.NullUUID{UUID: clientID, Valid: true}, f.selection(credential, server).AuthClientID, "a named client is never replaced")
 }
@@ -264,7 +274,7 @@ func TestRun_SelectionCoverageIsReportedByCredentialClass(t *testing.T) {
 	// is not counted.
 	f.oauthSelection(uuid.New(), server, registration)
 
-	report := f.run(true)
+	report := f.runTypedSelections(true)
 	require.Equal(t, 2, report.Selections[ClassInteractive].Selections)
 	for _, class := range []CredentialClass{ClassIDJAG, ClassDashboardMint, ClassAgent, ClassWorkload} {
 		require.Equal(t, 1, report.Selections[class].Selections, class)
@@ -279,7 +289,7 @@ func TestRun_HeaderClientWithoutTheServersHeadersIsNotACandidate(t *testing.T) {
 	source := f.source()
 	server := f.serverOn(source)
 	f.staticHeader(source, "Authorization")
-	f.run(true)
+	f.runTypedSelections(true)
 	stale := f.adminHeaderClient(server)
 	require.NoError(t, f.q.SeedAuthClientHeaderFixture(t.Context(), SeedAuthClientHeaderFixtureParams{
 		AuthClientID:           stale,
@@ -293,25 +303,11 @@ func TestRun_HeaderClientWithoutTheServersHeadersIsNotACandidate(t *testing.T) {
 	credential := f.interactiveCredential()
 	f.noAuthSelection(credential, server)
 
-	report := f.run(true)
+	report := f.runTypedSelections(true)
 	require.Equal(t, 1, report.SelectionsMapped)
 	named := f.selection(credential, server).AuthClientID
 	require.True(t, named.Valid)
 	require.NotEqual(t, stale, named.UUID, "only the client carrying the server's current headers is the server's headers")
-}
-
-func TestRun_OAuthChoiceTheIssuerIsNotBoundToIsAGap(t *testing.T) {
-	t.Parallel()
-	f := newFixture(t)
-	server, registration := f.server(), f.client("subject")
-	f.associate(server, registration)
-	credential := f.interactiveCredential()
-	f.unboundOAuthSelection(credential, server, registration)
-
-	report := f.run(true)
-	require.Zero(t, report.SelectionsMapped)
-	require.Len(t, selectionGaps(report, SelectionUnusable), 1, "the upstream client choice already rejects it")
-	require.False(t, f.selection(credential, server).AuthClientID.Valid)
 }
 
 // A choice for a deleted server is never served again: it stays recorded but
@@ -321,14 +317,13 @@ func TestRun_ChoiceForADeletedServerIsNotLiveCoverage(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	live, deleted, registration := f.server(), f.server(), f.client("subject")
-	f.associate(live, registration)
 	credential := f.interactiveCredential()
 	f.unboundOAuthSelection(credential, live, registration)
 	f.unboundOAuthSelection(credential, deleted, registration)
 	require.NoError(t, f.q.SoftDeleteMCPServerFixture(t.Context(), deleted))
 
-	report := f.run(true)
-	gaps := selectionGaps(report, SelectionUnusable)
+	report := f.runTypedSelections(true)
+	gaps := selectionGaps(report, SelectionNoClient)
 	require.Len(t, gaps, 1)
 	require.Equal(t, live, gaps[0].MCPServerID)
 	require.Equal(t, 1, report.Selections[ClassInteractive].Selections)
@@ -337,19 +332,18 @@ func TestRun_ChoiceForADeletedServerIsNotLiveCoverage(t *testing.T) {
 
 // A choice already naming its registration's auth client no longer depends on
 // the legacy issuer binding: the typed resolver serves it on the client
-// alone, so removing the binding leaves it covered.
-func TestRun_MappedOAuthChoiceKeepsCoverageWhenTheIssuerBindingIsRemoved(t *testing.T) {
+// alone, so no issuer binding is needed.
+func TestRun_MappedOAuthChoiceKeepsCoverageWithoutIssuerBinding(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	server, registration := f.server(), f.client("subject")
 	f.associate(server, registration)
-	f.run(true)
+	f.runTypedSelections(true)
 	credential := f.interactiveCredential()
 	f.oauthSelection(credential, server, registration)
-	require.Equal(t, 1, f.run(true).SelectionsMapped)
-	require.NoError(t, f.q.UnbindClientIssuerFixture(t.Context(), UnbindClientIssuerFixtureParams{RemoteSessionClientID: registration, UserSessionIssuerID: f.sessionIssuer()}))
+	require.Equal(t, 1, f.runTypedSelections(true).SelectionsMapped)
 
-	report := f.run(true)
+	report := f.runTypedSelections(true)
 	require.Equal(t, 1, report.Selections[ClassInteractive].Outcomes[SelectionMapped])
 	require.Empty(t, report.SelectionGaps)
 	require.True(t, f.selection(credential, server).AuthClientID.Valid)
@@ -363,10 +357,10 @@ func TestRun_MappedHeaderChoiceBesideANewOAuthAssociationIsStale(t *testing.T) {
 	f.staticHeader(source, "Authorization")
 	credential := f.interactiveCredential()
 	f.noAuthSelection(credential, server)
-	require.Equal(t, 1, f.run(true).SelectionsMapped)
+	require.Equal(t, 1, f.runTypedSelections(true).SelectionsMapped)
 	f.associate(server, f.client("subject"))
 
-	report := f.run(true)
+	report := f.runTypedSelections(true)
 	gaps := selectionGaps(report, SelectionStaleNoAuth)
 	require.Len(t, gaps, 1)
 	require.Equal(t, credential, gaps[0].CredentialID)
@@ -382,7 +376,7 @@ func TestRun_ChoiceIsDecidedAgainUnderLock(t *testing.T) {
 	source := f.source()
 	server := f.serverOn(source)
 	f.staticHeader(source, "Authorization")
-	f.run(true)
+	f.runTypedSelections(true)
 	second := f.adminHeaderClient(server)
 	require.NoError(t, f.q.SetAuthClientEnabledFixture(t.Context(), SetAuthClientEnabledFixtureParams{Enabled: false, ID: second}))
 	credential := f.interactiveCredential()
@@ -395,7 +389,7 @@ func TestRun_ChoiceIsDecidedAgainUnderLock(t *testing.T) {
 
 	done := make(chan Report, 1)
 	go func() {
-		report, err := Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: true, PageSize: 0})
+		report, err := Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: true, PageSize: 0, TypedOnly: true})
 		assert.NoError(t, err)
 		done <- report
 	}()
@@ -415,50 +409,13 @@ func TestRun_ChoiceIsDecidedAgainUnderLock(t *testing.T) {
 	require.False(t, f.selection(credential, server).AuthClientID.Valid)
 }
 
-// TestRun_OAuthChoiceIsNotMappedAfterItsIssuerBindingIsRemoved removes the
-// binding an unmapped OAuth choice is decided from while the mapping waits on
-// it: the choice is decided again and left unmapped.
-func TestRun_OAuthChoiceIsNotMappedAfterItsIssuerBindingIsRemoved(t *testing.T) {
-	t.Parallel()
-	f := newFixture(t)
-	server, registration := f.server(), f.client("subject")
-	f.associate(server, registration)
-	f.run(true)
-	credential := f.interactiveCredential()
-	f.oauthSelection(credential, server, registration)
-
-	tx, err := f.pool.Begin(t.Context()) //nolint:glint // notestingrawsql: transaction boundary only; the write uses a generated SQLc method.
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = tx.Rollback(context.WithoutCancel(t.Context())) })
-	require.NoError(t, New(tx).UnbindClientIssuerFixture(t.Context(), UnbindClientIssuerFixtureParams{RemoteSessionClientID: registration, UserSessionIssuerID: f.sessionIssuer()}))
-
-	done := make(chan Report, 1)
-	go func() {
-		report, err := Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: true, PageSize: 0})
-		assert.NoError(t, err)
-		done <- report
-	}()
-	require.Eventually(t, func() bool {
-		_, err := f.q.ProbeServerLockFixture(t.Context(), server)
-		var pgErr *pgconn.PgError
-		return errors.As(err, &pgErr) && pgErr.Code == pgerrcode.LockNotAvailable
-	}, 10*time.Second, 20*time.Millisecond, "the mapping holds the server and waits on the binding")
-	require.NoError(t, tx.Commit(t.Context()))
-
-	report := <-done
-	require.Equal(t, 1, report.PendingSelectionMappings, "the first read saw the binding")
-	require.Zero(t, report.SelectionsMapped)
-	require.Len(t, selectionGaps(report, SelectionUnusable), 1)
-	require.False(t, f.selection(credential, server).AuthClientID.Valid)
-}
-
 // TestRun_ChoicesAreNotMappedAfterAFailedPhase is not parallel: it swaps
 // beforePhase.
 func TestRun_ChoicesAreNotMappedAfterAFailedPhase(t *testing.T) { //nolint:paralleltest // swaps a package seam
 	f := newFixture(t)
 	server, registration := f.server(), f.client("subject")
 	f.associate(server, registration)
-	f.run(true)
+	f.runTypedSelections(true)
 	credential := f.interactiveCredential()
 	f.oauthSelection(credential, server, registration)
 	original := beforePhase
@@ -470,7 +427,7 @@ func TestRun_ChoicesAreNotMappedAfterAFailedPhase(t *testing.T) { //nolint:paral
 	}
 	t.Cleanup(func() { beforePhase = original })
 
-	report := f.run(true)
+	report := f.runTypedSelections(true)
 	require.Contains(t, report.PhaseErrors, PhaseReconcile)
 	require.Equal(t, 1, report.PendingSelectionMappings)
 	require.Zero(t, report.SelectionsMapped)
@@ -481,51 +438,22 @@ func TestRun_ChoicesAreNotMappedAfterAFailedPhase(t *testing.T) { //nolint:paral
 // no-auth choice stale nor rejects an unmapped client choice. The issuer binding,
 // the registration's liveness and the auth clients the server offers still
 // decide.
-func TestDecideSelectionIgnoresAssociationsWhenTypedOnly(t *testing.T) {
+func TestDecideSelectionUsesTypedOffers(t *testing.T) {
 	t.Parallel()
 	issuer, candidate := uuid.New(), uuid.New()
 	for name, tc := range map[string]struct {
-		row       ListSelectionMappingsRow
-		typedOnly bool
-		want      SelectionOutcome
+		row  ListSelectionMappingsRow
+		want SelectionOutcome
 	}{
-		"no-auth beside an association, not enforcing": {
-			row:  ListSelectionMappingsRow{NoAuth: true, ServerHasAssociations: true},
-			want: SelectionStaleNoAuth,
-		},
-		"no-auth beside an association, enforcing": {
-			row:       ListSelectionMappingsRow{NoAuth: true, ServerHasAssociations: true},
-			typedOnly: true,
-			want:      SelectionNoAuth,
-		},
-		"no-auth beside an offered OAuth client, enforcing": {
-			row:       ListSelectionMappingsRow{NoAuth: true, ServerHasOauthClients: true},
-			typedOnly: true,
-			want:      SelectionStaleNoAuth,
-		},
-		"unmapped client without an association, not enforcing": {
-			row:  ListSelectionMappingsRow{RegistrationLive: true, RegistrationIssuerIds: []uuid.UUID{issuer}, CandidateIds: []uuid.UUID{candidate}},
-			want: SelectionUnusable,
-		},
-		"unmapped client without an association, enforcing": {
-			row:       ListSelectionMappingsRow{RegistrationLive: true, RegistrationIssuerIds: []uuid.UUID{issuer}, CandidateIds: []uuid.UUID{candidate}},
-			typedOnly: true,
-			want:      SelectionMap,
-		},
-		"unmapped client whose registration was deleted, enforcing": {
-			row:       ListSelectionMappingsRow{RegistrationIssuerIds: []uuid.UUID{issuer}, CandidateIds: []uuid.UUID{candidate}},
-			typedOnly: true,
-			want:      SelectionUnusable,
-		},
-		"unmapped client the issuer does not bind, enforcing": {
-			row:       ListSelectionMappingsRow{RegistrationLive: true, CandidateIds: []uuid.UUID{candidate}},
-			typedOnly: true,
-			want:      SelectionUnusable,
-		},
+		"no-auth without an offer":           {row: ListSelectionMappingsRow{NoAuth: true}, want: SelectionNoAuth},
+		"no-auth beside an OAuth offer":      {row: ListSelectionMappingsRow{NoAuth: true, ServerHasOauthClients: true}, want: SelectionStaleNoAuth},
+		"live registration without an offer": {row: ListSelectionMappingsRow{RegistrationLive: true}, want: SelectionNoClient},
+		"live registration with one offer":   {row: ListSelectionMappingsRow{RegistrationLive: true, CandidateIds: []uuid.UUID{candidate}}, want: SelectionMap},
+		"registration was deleted":           {row: ListSelectionMappingsRow{CandidateIds: []uuid.UUID{candidate}}, want: SelectionUnusable},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			got, mapped := decideSelection(tc.row, issuer, tc.typedOnly)
+			got, mapped := decideSelection(tc.row, issuer)
 			require.Equal(t, tc.want, got)
 			if got == SelectionMap {
 				require.Equal(t, candidate, mapped, "the candidate is the client recorded")
@@ -635,10 +563,10 @@ func TestListSelectionMappingsIssuerScopeDoesNotImplyUnmapped(t *testing.T) {
 	f := newFixture(t)
 	server, registration := f.server(), f.client("subject")
 	f.associate(server, registration)
-	f.run(true)
+	f.runTypedSelections(true)
 	credential := f.interactiveCredential()
 	f.oauthSelection(credential, server, registration)
-	f.run(true)
+	f.runTypedSelections(true)
 	require.True(t, f.selection(credential, server).AuthClientID.Valid)
 	params := ListSelectionMappingsParams{
 		OrganizationID: f.orgID, PageSize: defaultPageSize, OnlyUnmapped: false,
@@ -674,6 +602,7 @@ type selectionMappingCounts struct {
 
 func (tx observeSelectionMapping) Query(ctx context.Context, query string, args ...any) (pgx.Rows, error) {
 	if strings.HasPrefix(query, "-- name: ListSelectionMappings ") {
+		// The generated ListSelectionMappings call passes OnlyID before PageSize.
 		onlyID, ok := args[5].(uuid.NullUUID)
 		if !ok {
 			return nil, fmt.Errorf("selection query only ID has unexpected type %T", args[5])
@@ -730,7 +659,7 @@ func TestReconcileUserSessionSelectionsGroupsAcrossPages(t *testing.T) {
 			source := f.source()
 			ambiguous := f.serverOn(source)
 			f.staticHeader(source, "Authorization")
-			f.run(true)
+			f.runTypedSelections(true)
 			f.adminHeaderClient(ambiguous)
 			typed := OAuthClientID(f.orgID, registration, TypeRemoteSession)
 			f.adminDetach(detached, OAuthClientID(f.orgID, detachedRegistration, TypeRemoteSession))
@@ -757,7 +686,7 @@ func TestReconcileUserSessionSelectionsGroupsAcrossPages(t *testing.T) {
 			require.NoError(t, LockEMAWriterScope(ctx, tx, f.orgID, []uuid.UUID{f.projectID}))
 			require.NoError(t, PreflightServerAssociations(ctx, tx, f.orgID, server, detached, ambiguous))
 			counts := selectionMappingCounts{rereads: 0, serverLocks: 0, singleUpdates: 0, groupUpdates: 0, injected: false}
-			require.NoError(t, ReconcileUserSessionSelectionsInLockedTransaction(ctx, observeSelectionMapping{
+			require.NoError(t, reconcileFixtureTypedSelections(ctx, observeSelectionMapping{
 				Tx: tx, counts: &counts, organizationID: f.orgID, registrationID: registration, clientID: typed, raceFirst: raceFirst,
 			}, f.orgID, f.sessionIssuer()))
 			require.NoError(t, tx.Commit(ctx))
@@ -805,7 +734,7 @@ func TestReconcileUserSessionSelectionsGroupsNoAuthAcrossPages(t *testing.T) {
 	source := f.source()
 	server := f.serverOn(source)
 	f.staticHeader(source, "Authorization")
-	f.run(true)
+	f.runTypedSelections(true)
 	typed := f.live(TypeStaticCredential)[0].ID
 	credentials := make([]uuid.UUID, 0, defaultPageSize+5)
 	for range defaultPageSize + 5 {
@@ -818,7 +747,7 @@ func TestReconcileUserSessionSelectionsGroupsNoAuthAcrossPages(t *testing.T) {
 	require.NoError(t, LockEMAWriterScope(ctx, tx, f.orgID, []uuid.UUID{f.projectID}))
 	require.NoError(t, PreflightServerAssociations(ctx, tx, f.orgID, server))
 	counts := selectionMappingCounts{rereads: 0, serverLocks: 0, singleUpdates: 0, groupUpdates: 0, injected: false}
-	require.NoError(t, ReconcileUserSessionSelectionsInLockedTransaction(ctx, observeSelectionMapping{
+	require.NoError(t, reconcileFixtureTypedSelections(ctx, observeSelectionMapping{
 		Tx: tx, counts: &counts, organizationID: f.orgID, registrationID: uuid.Nil, clientID: typed, raceFirst: false,
 	}, f.orgID, f.sessionIssuer()))
 	require.NoError(t, tx.Commit(ctx))
@@ -855,7 +784,7 @@ func TestReconcileUserSessionSelectionsDoesNotInferEMA(t *testing.T) {
 	tx := testenv.BeginTx(t, ctx, f.pool)
 	require.NoError(t, LockEMAWriterScope(ctx, tx, f.orgID, []uuid.UUID{f.projectID}))
 	require.NoError(t, PreflightServerAssociations(ctx, tx, f.orgID, server))
-	require.NoError(t, ReconcileUserSessionSelectionsInLockedTransaction(ctx, tx, f.orgID, f.sessionIssuer()))
+	require.NoError(t, reconcileFixtureTypedSelections(ctx, tx, f.orgID, f.sessionIssuer()))
 	require.NoError(t, tx.Commit(ctx))
 	require.False(t, f.selection(credential, server).AuthClientID.Valid, "an EMA-only offer requires explicit selection")
 }
@@ -890,7 +819,7 @@ func TestReconcileUserSessionSelectionsReportsGuardedBulkSkips(t *testing.T) {
 	f := newFixture(t)
 	server, registration := f.server(), f.client("subject")
 	f.associate(server, registration)
-	f.run(true)
+	f.runTypedSelections(true)
 	typed := OAuthClientID(f.orgID, registration, TypeRemoteSession)
 	credentials := []uuid.UUID{f.interactiveCredential(), f.interactiveCredential(), f.interactiveCredential()}
 	for _, credential := range credentials {
@@ -901,7 +830,7 @@ func TestReconcileUserSessionSelectionsReportsGuardedBulkSkips(t *testing.T) {
 	require.NoError(t, PreflightServerAssociations(t.Context(), tx, f.orgID, server))
 	counts := selectionMappingCounts{rereads: 0, serverLocks: 0, singleUpdates: 0, groupUpdates: 0, injected: false}
 	injected := false
-	skipped, err := ReconcileUserSessionSelectionsForServersInLockedTransaction(t.Context(), skipBulkSelectionMapping{
+	skipped, err := ReconcileTypedUserSessionSelectionsForServersInLockedTransaction(t.Context(), skipBulkSelectionMapping{
 		observeSelectionMapping: observeSelectionMapping{Tx: tx, counts: &counts, organizationID: f.orgID, registrationID: registration, clientID: typed, raceFirst: false}, injected: &injected,
 	}, f.orgID, f.sessionIssuer(), []uuid.UUID{server})
 	require.NoError(t, err)
@@ -915,7 +844,7 @@ func TestReconcileUserSessionSelectionsReportsGuardedBulkSkips(t *testing.T) {
 	}
 }
 
-// Both representative and grouped writes use typed-only decisions after enforcement.
+// Typed issuer repair maps only live offers, regardless of rollout state.
 func TestReconcileUserSessionSelectionsTypedOnlyWithoutAssociation(t *testing.T) {
 	t.Parallel()
 	for _, enforced := range []bool{false, true} {
@@ -925,7 +854,7 @@ func TestReconcileUserSessionSelectionsTypedOnlyWithoutAssociation(t *testing.T)
 			f := newFixture(t)
 			server, registration := f.server(), f.client("subject")
 			association := f.associate(server, registration)
-			f.run(true)
+			f.runTypedSelections(true)
 			require.NoError(t, f.q.SoftDeleteAssociationFixture(ctx, association))
 			if enforced {
 				_, err := productfeaturesrepo.New(f.pool).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{
@@ -942,15 +871,37 @@ func TestReconcileUserSessionSelectionsTypedOnlyWithoutAssociation(t *testing.T)
 			tx := testenv.BeginTx(t, ctx, f.pool)
 			require.NoError(t, LockEMAWriterScope(ctx, tx, f.orgID, []uuid.UUID{f.projectID}))
 			require.NoError(t, PreflightServerAssociations(ctx, tx, f.orgID, server))
-			require.NoError(t, ReconcileUserSessionSelectionsInLockedTransaction(ctx, tx, f.orgID, f.sessionIssuer()))
+			require.NoError(t, reconcileFixtureTypedSelections(ctx, tx, f.orgID, f.sessionIssuer()))
 			require.NoError(t, tx.Commit(ctx))
 			for _, credential := range credentials {
 				choice := f.selection(credential, server)
-				require.Equal(t, enforced, choice.AuthClientID.Valid)
-				if enforced {
-					require.Equal(t, OAuthClientID(f.orgID, registration, TypeRemoteSession), choice.AuthClientID.UUID)
-				}
+				require.True(t, choice.AuthClientID.Valid)
+				require.Equal(t, OAuthClientID(f.orgID, registration, TypeRemoteSession), choice.AuthClientID.UUID)
 			}
 		})
 	}
+}
+
+// The surviving server-registration mirror is not a typed offer. Repair must
+// not infer an auth client from it, even with a matching saved registration.
+func TestReconcileUserSessionSelectionsDoesNotInferOfferFromAssociation(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	f := newFixture(t)
+	server, registration := f.server(), f.client("subject")
+	f.associate(server, registration)
+	credential := f.interactiveCredential()
+	f.oauthSelection(credential, server, registration)
+
+	tx := testenv.BeginTx(t, ctx, f.pool)
+	require.NoError(t, LockEMAWriterScope(ctx, tx, f.orgID, []uuid.UUID{f.projectID}))
+	require.NoError(t, PreflightServerAssociations(ctx, tx, f.orgID, server))
+	skipped, err := ReconcileTypedUserSessionSelectionsForServersInLockedTransaction(ctx, tx, f.orgID, f.sessionIssuer(), []uuid.UUID{server})
+	require.NoError(t, err)
+	require.Zero(t, skipped)
+	require.NoError(t, tx.Commit(ctx))
+
+	choice := f.selection(credential, server)
+	require.False(t, choice.AuthClientID.Valid)
+	require.Equal(t, registration, choice.RemoteSessionClientID.UUID)
 }

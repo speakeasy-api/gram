@@ -43,6 +43,7 @@ import type {
   SuspectedProblem,
   SuspectedProblemDetail,
   ViewerScope,
+  WhoFixes,
 } from "./types";
 
 // The SDK names enum fields after their types (`connectionOutcome`), keeps
@@ -323,6 +324,7 @@ function problem(
     },
     rule: p.suspectedProblemRule as ProblemRule,
     part: p.suspectedProblemPart as ProblemPart,
+    whoFixes: p.suspectedProblemWhoFixes as WhoFixes | undefined,
     filters: {
       from: iso(p.filters.from),
       outcomes: p.filters.outcomes as Outcome[] | undefined,

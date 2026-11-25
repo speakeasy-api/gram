@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -80,6 +86,28 @@ const toast = vi.hoisted(() => ({
   error: vi.fn(),
   info: vi.fn(),
 }));
+// The real control is a Radix select, which jsdom cannot drive; a native
+// select with the same label and choices stands in for it.
+vi.mock("./request-duration-select", () => ({
+  RequestDurationSelect: ({
+    value,
+    onChange,
+  }: {
+    value: string;
+    onChange: (value: string) => void;
+  }) => (
+    <label>
+      How long do you need it?
+      <select value={value} onChange={(e) => onChange(e.target.value)}>
+        {["none", "1h", "2h", "4h", "eod"].map((key) => (
+          <option key={key} value={key}>
+            {key}
+          </option>
+        ))}
+      </select>
+    </label>
+  ),
+}));
 vi.mock("sonner", () => ({ toast }));
 const invalidateQueries = vi.hoisted(() => vi.fn(() => Promise.resolve()));
 vi.mock("@tanstack/react-query", async (importOriginal) => ({
@@ -118,7 +146,15 @@ describe("RequireScope page level", () => {
       </RequireScope>,
     );
 
-    expect(screen.getByText("Access restricted")).toBeTruthy();
+    const banner = screen.getByRole("alert");
+    expect(
+      within(banner).getByRole("heading", {
+        name: "You don't have access to this page",
+      }),
+    ).toBeTruthy();
+    // The missing permission is named without opening "What access do I
+    // need?".
+    expect(banner.textContent).toContain("It needs org:admin.");
     expect(screen.getAllByTestId("page-header")).toHaveLength(1);
     expect(screen.queryByText("secret")).toBeNull();
   });
@@ -137,10 +173,20 @@ describe("RequireScope page level", () => {
       </Page>,
     );
 
-    expect(screen.getByText("Access restricted")).toBeTruthy();
+    expect(
+      within(screen.getByRole("alert")).getByRole("heading", {
+        name: "You don't have access to this page",
+      }),
+    ).toBeTruthy();
     expect(screen.getAllByTestId("page-header")).toHaveLength(1);
   });
 });
+
+/** Opens the request dialog and sends it with the defaults. */
+function requestThroughDialog(): void {
+  fireEvent.click(screen.getByRole("button", { name: "Request Access" }));
+  fireEvent.click(screen.getByRole("button", { name: "Send request" }));
+}
 
 describe("RequestScopeAccess", () => {
   it("starts over when the resource it would ask for changes", async () => {
@@ -173,8 +219,103 @@ describe("RequestScopeAccess", () => {
     });
     render(<RequestScopeAccess scopes={["log:read"]} resourceId="project-1" />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Request Access" }));
+    requestThroughDialog();
     expect(await screen.findByText("Request pending")).toBeTruthy();
+  });
+
+  it("asks in a dialog how long and why while requests are stored", async () => {
+    accessRequests.on = true;
+    accessRequests.grantable = new Set(["log:read"]);
+    mutateAsync.mockResolvedValueOnce({
+      sentToCount: 1,
+      request: { id: "request-1" },
+    });
+    render(<RequestScopeAccess scopes={["log:read"]} resourceId="project-1" />);
+
+    expect(screen.queryByLabelText("How long do you need it?")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Request Access" }));
+    expect(await screen.findByRole("dialog")).toBeTruthy();
+    expect(screen.getByLabelText("How long do you need it?")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText(/Why do you need it/), {
+      target: { value: "  Checking a failed tool call  " },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send request" }));
+
+    expect(await screen.findByText("Request pending")).toBeTruthy();
+    // No preference is the default, so the request carries no window.
+    expect(mutateAsync).toHaveBeenCalledWith({
+      request: {
+        requestAccessForm: {
+          scope: "log:read",
+          resourceId: "project-1",
+          message: "Checking a failed tool call",
+        },
+      },
+    });
+  });
+
+  it("sends the duration the requester picked", async () => {
+    accessRequests.on = true;
+    accessRequests.grantable = new Set(["log:read"]);
+    mutateAsync.mockResolvedValueOnce({
+      sentToCount: 1,
+      request: { id: "request-1" },
+    });
+    render(<RequestScopeAccess scopes={["log:read"]} resourceId="project-1" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Request Access" }));
+    fireEvent.change(await screen.findByLabelText("How long do you need it?"), {
+      target: { value: "4h" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send request" }));
+
+    expect(await screen.findByText("Request pending")).toBeTruthy();
+    expect(mutateAsync).toHaveBeenCalledWith({
+      request: {
+        requestAccessForm: {
+          scope: "log:read",
+          resourceId: "project-1",
+          duration: "4h",
+        },
+      },
+    });
+  });
+
+  it("starts the dialog afresh each time it opens", async () => {
+    accessRequests.on = true;
+    accessRequests.grantable = new Set(["log:read"]);
+    render(<RequestScopeAccess scopes={["log:read"]} resourceId="project-1" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Request Access" }));
+    fireEvent.change(await screen.findByLabelText(/Why do you need it/), {
+      target: { value: "first attempt" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Request Access" }));
+
+    const note = (await screen.findByLabelText(
+      /Why do you need it/,
+    )) as HTMLTextAreaElement;
+    expect(note.value).toBe("");
+  });
+
+  it("lists only the permission an any-of gate asks for", async () => {
+    accessRequests.on = true;
+    accessRequests.grantable = new Set(["log:read", "chat:read"]);
+    render(<RequestScopeAccess scopes={["log:read", "chat:read"]} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Request Access" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog.textContent).toContain("log:read");
+    expect(dialog.textContent).not.toContain("chat:read");
+  });
+
+  it("asks straight away, without a dialog, while requests only send email", async () => {
+    render(<RequestScopeAccess scopes={["log:read"]} resourceId="project-1" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Request Access" }));
+    expect(await screen.findByText("Request sent")).toBeTruthy();
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   it("shows a request made earlier as pending without asking again", () => {
@@ -215,7 +356,7 @@ describe("RequestScopeAccess", () => {
     const { rerender } = render(
       <RequestScopeAccess scopes={["log:read"]} resourceId="project-1" />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Request Access" }));
+    requestThroughDialog();
     expect(await screen.findByText("Request pending")).toBeTruthy();
 
     // The first list read after the request no longer holds it.
@@ -239,7 +380,7 @@ describe("RequestScopeAccess", () => {
     const { rerender } = render(
       <RequestScopeAccess scopes={["log:read"]} resourceId="project-1" />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Request Access" }));
+    requestThroughDialog();
     expect(await screen.findByText("Request pending")).toBeTruthy();
 
     // The pending list picks the request up, then drops it once an admin

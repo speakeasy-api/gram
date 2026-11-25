@@ -57,8 +57,6 @@ func everyHarness(variant feature.Variant) harnessFlags {
 // goldenClientDecision is what Platform MCP decides from one client ID.
 type goldenClientDecision struct {
 	ClientID     string        `json:"client_id"`
-	ChatGPT      bool          `json:"chatgpt"`
-	Allowlist    []string      `json:"allowlist"`
 	Harness      string        `json:"harness"`
 	Progressive  discoveryMode `json:"progressive"`
 	CodeMode     discoveryMode `json:"code_mode"`
@@ -86,8 +84,6 @@ func TestClientCatalogDecisionsMatchGolden(t *testing.T) {
 		principal.ClientID = id
 		decisions = append(decisions, goldenClientDecision{
 			ClientID:     id,
-			ChatGPT:      isChatGPTClient(catalog, id),
-			Allowlist:    clientToolAllowlist(catalog, id),
 			Harness:      harnessForClient(catalog, id),
 			Progressive:  progressive.discoveryModeFor(t.Context(), progressive.registrar.logger, principal),
 			CodeMode:     codeMode.discoveryModeFor(t.Context(), codeMode.registrar.logger, principal),
@@ -144,17 +140,28 @@ func TestClientToolSurfacesMatchGolden(t *testing.T) {
 	testenv.RequireJSONGolden(t, "testdata/ai_catalog_client_surfaces_golden.json", data)
 }
 
-// The runtime reads the store it was given: an empty catalog recognizes no
-// ChatGPT client, so ChatGPT keeps the full catalogue.
+// The runtime reads the store it was given. With progressive mode flagged for
+// unidentified harnesses, the compiled catalog identifies the ChatGPT client
+// and keeps it on the full catalogue, while an empty catalog cannot identify it
+// and so serves it the progressive surface.
 func TestRuntimeReadsTheInjectedCatalog(t *testing.T) {
 	t.Parallel()
 
-	runtime := newAllowlistTestRuntime(t, []authz.Grant{authz.NewGrant(authz.ScopeRoot, authz.WildcardResource)}).WithAICatalog(aivendors.NewStore(aivendors.NewSnapshot(nil)))
-	var list struct {
-		Tools []*mcp.Tool `json:"tools"`
+	toolsFor := func(store *aivendors.Store) []string {
+		runtime := newAllowlistTestRuntime(t, []authz.Grant{authz.NewGrant(authz.ScopeRoot, authz.WildcardResource)}).WithAICatalog(store).WithDiscovery(DiscoveryConfig{
+			Flags:             harnessFlags{"unknown": feature.VariantPlatformMCPDiscoveryProgressive},
+			CodeExecutor:      codemode.Disabled{},
+			CodeModeAvailable: func(context.Context, string) bool { return true },
+		})
+		var list struct {
+			Tools []*mcp.Tool `json:"tools"`
+		}
+		allowlistRPC(t, runtime.Handler(), runtime, testChatGPTConnectorClientID, `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`, &list)
+		return toolNames(list.Tools)
 	}
-	allowlistRPC(t, runtime.Handler(), runtime, testChatGPTConnectorClientID, `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`, &list)
-	require.ElementsMatch(t, names(runtime.registrar.For(AudienceExternal)), toolNames(list.Tools))
+	full := newAllowlistTestRuntime(t, nil)
+	require.ElementsMatch(t, names(full.registrar.For(AudienceExternal)), toolsFor(aivendorstest.NewStore()))
+	require.Contains(t, toolsFor(aivendors.NewStore(aivendors.NewSnapshot(nil))), callPlatformToolName)
 	require.Panics(t, func() { newAllowlistTestRuntime(t, nil).WithAICatalog(nil) })
 }
 

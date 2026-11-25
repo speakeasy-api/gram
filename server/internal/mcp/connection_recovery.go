@@ -243,6 +243,7 @@ func (s *Service) HandleConnectionRecovery(w http.ResponseWriter, r *http.Reques
 	t.Consumed()
 	t.With(mcpconnectionattempts.Subject(&subject))
 	authorizationURL, err := s.remoteChallengeMgr.BuildAuthorizationUrl(ctx, remotesessions.ParentChallenge{
+		HostedPlacement:     nil,
 		TypedAuthorization:  typedAuthorization,
 		ConnectionPopup:     false,
 		ID:                  login.ID,

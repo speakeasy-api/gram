@@ -93,6 +93,9 @@ LIMIT @limit_value;
 -- counts sessions without organization_id whose client belongs to the
 -- organization, directly or through its project: the organization-scoped
 -- queries never reach them.
+-- value_count and last_written_at cover every row of the organization storing
+-- a value under either key, soft-deleted rows included, as
+-- ListOrganizationsWith* reports them.
 SELECT
     COUNT(*) FILTER (
         WHERE s.organization_id = @organization_id::text
@@ -113,7 +116,15 @@ SELECT
     COUNT(*) FILTER (
         WHERE s.organization_id = @organization_id::text
           AND s.access_token_encrypted <> ''
-    )::bigint AS platform_copies
+    )::bigint AS platform_copies,
+    COUNT(*) FILTER (
+        WHERE s.organization_id = @organization_id::text
+          AND (s.access_token_encrypted <> '' OR s.access_token_org_encrypted IS NOT NULL)
+    )::bigint AS value_count,
+    MAX(s.updated_at) FILTER (
+        WHERE s.organization_id = @organization_id::text
+          AND (s.access_token_encrypted <> '' OR s.access_token_org_encrypted IS NOT NULL)
+    )::timestamptz AS last_written_at
 FROM remote_sessions AS s
 LEFT JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
 LEFT JOIN projects AS p ON p.id = c.project_id
@@ -206,6 +217,9 @@ LIMIT @limit_value;
 -- name: CountRemoteSessionRefreshTokenCopies :one
 -- The organization's refresh token counts, under the same rules as
 -- CountRemoteSessionAccessTokenCopies.
+-- value_count and last_written_at cover every row of the organization storing
+-- a value under either key, soft-deleted rows included, as
+-- ListOrganizationsWith* reports them.
 SELECT
     COUNT(*) FILTER (
         WHERE s.organization_id = @organization_id::text
@@ -226,7 +240,15 @@ SELECT
     COUNT(*) FILTER (
         WHERE s.organization_id = @organization_id::text
           AND s.refresh_token_encrypted <> ''
-    )::bigint AS platform_copies
+    )::bigint AS platform_copies,
+    COUNT(*) FILTER (
+        WHERE s.organization_id = @organization_id::text
+          AND (s.refresh_token_encrypted <> '' OR s.refresh_token_org_encrypted IS NOT NULL)
+    )::bigint AS value_count,
+    MAX(s.updated_at) FILTER (
+        WHERE s.organization_id = @organization_id::text
+          AND (s.refresh_token_encrypted <> '' OR s.refresh_token_org_encrypted IS NOT NULL)
+    )::timestamptz AS last_written_at
 FROM remote_sessions AS s
 LEFT JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
 LEFT JOIN projects AS p ON p.id = c.project_id
@@ -343,6 +365,9 @@ LIMIT @limit_value;
 -- project_id are NULL together (remote_session_ema_credentials_project_ref_check),
 -- so a slot without an organization belongs to none and is never
 -- unattributed: it stays on the platform key.
+-- value_count and last_written_at cover every row of the organization storing
+-- a value under either key, soft-deleted rows included, as
+-- ListOrganizationsWith* reports them.
 SELECT
     COUNT(*) FILTER (
         WHERE c.access_token_encrypted <> ''
@@ -355,7 +380,15 @@ SELECT
           AND u.id IS NOT NULL
     )::bigint AS unreadable,
     0::bigint AS unattributed,
-    COUNT(*) FILTER (WHERE c.access_token_encrypted <> '')::bigint AS platform_copies
+    COUNT(*) FILTER (WHERE c.access_token_encrypted <> '')::bigint AS platform_copies,
+    COUNT(*) FILTER (
+        WHERE c.organization_id = @organization_id::text
+          AND (c.access_token_encrypted <> '' OR c.access_token_org_encrypted IS NOT NULL)
+    )::bigint AS value_count,
+    MAX(c.updated_at) FILTER (
+        WHERE c.organization_id = @organization_id::text
+          AND (c.access_token_encrypted <> '' OR c.access_token_org_encrypted IS NOT NULL)
+    )::timestamptz AS last_written_at
 FROM remote_session_ema_credentials AS c
 LEFT JOIN organization_encryption_unreadable_values AS u
   ON u.organization_id = c.organization_id
@@ -491,6 +524,9 @@ LIMIT @limit_value;
 -- The organization's counts for the value. Unattributed counts sessions
 -- without organization_id whose trusted client belongs to the organization:
 -- the organization-scoped queries never reach them.
+-- value_count and last_written_at cover every row of the organization storing
+-- a value under either key, soft-deleted rows included, as
+-- ListOrganizationsWith* reports them.
 SELECT
     COUNT(*) FILTER (
         WHERE s.organization_id = @organization_id::text
@@ -511,7 +547,15 @@ SELECT
     COUNT(*) FILTER (
         WHERE s.organization_id = @organization_id::text
           AND s.identity_assertion_encrypted <> ''
-    )::bigint AS platform_copies
+    )::bigint AS platform_copies,
+    COUNT(*) FILTER (
+        WHERE s.organization_id = @organization_id::text
+          AND (s.identity_assertion_encrypted <> '' OR s.identity_assertion_org_encrypted IS NOT NULL)
+    )::bigint AS value_count,
+    MAX(s.updated_at) FILTER (
+        WHERE s.organization_id = @organization_id::text
+          AND (s.identity_assertion_encrypted <> '' OR s.identity_assertion_org_encrypted IS NOT NULL)
+    )::timestamptz AS last_written_at
 FROM trusted_issuer_sessions AS s
 LEFT JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
 LEFT JOIN organization_encryption_unreadable_values AS u
@@ -605,6 +649,9 @@ LIMIT @limit_value;
 -- The organization's counts for the value. Unattributed counts sessions
 -- without organization_id whose trusted client belongs to the organization:
 -- the organization-scoped queries never reach them.
+-- value_count and last_written_at cover every row of the organization storing
+-- a value under either key, soft-deleted rows included, as
+-- ListOrganizationsWith* reports them.
 SELECT
     COUNT(*) FILTER (
         WHERE s.organization_id = @organization_id::text
@@ -625,7 +672,15 @@ SELECT
     COUNT(*) FILTER (
         WHERE s.organization_id = @organization_id::text
           AND s.refresh_token_encrypted <> ''
-    )::bigint AS platform_copies
+    )::bigint AS platform_copies,
+    COUNT(*) FILTER (
+        WHERE s.organization_id = @organization_id::text
+          AND (s.refresh_token_encrypted <> '' OR s.refresh_token_org_encrypted IS NOT NULL)
+    )::bigint AS value_count,
+    MAX(s.updated_at) FILTER (
+        WHERE s.organization_id = @organization_id::text
+          AND (s.refresh_token_encrypted <> '' OR s.refresh_token_org_encrypted IS NOT NULL)
+    )::timestamptz AS last_written_at
 FROM trusted_issuer_sessions AS s
 LEFT JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
 LEFT JOIN organization_encryption_unreadable_values AS u
@@ -719,6 +774,9 @@ LIMIT @limit_value;
 -- The organization's counts for the value. Unattributed counts sessions
 -- without organization_id whose trusted client belongs to the organization:
 -- the organization-scoped queries never reach them.
+-- value_count and last_written_at cover every row of the organization storing
+-- a value under either key, soft-deleted rows included, as
+-- ListOrganizationsWith* reports them.
 SELECT
     COUNT(*) FILTER (
         WHERE s.organization_id = @organization_id::text
@@ -739,7 +797,15 @@ SELECT
     COUNT(*) FILTER (
         WHERE s.organization_id = @organization_id::text
           AND s.upstream_subject_encrypted <> ''
-    )::bigint AS platform_copies
+    )::bigint AS platform_copies,
+    COUNT(*) FILTER (
+        WHERE s.organization_id = @organization_id::text
+          AND (s.upstream_subject_encrypted <> '' OR s.upstream_subject_org_encrypted IS NOT NULL)
+    )::bigint AS value_count,
+    MAX(s.updated_at) FILTER (
+        WHERE s.organization_id = @organization_id::text
+          AND (s.upstream_subject_encrypted <> '' OR s.upstream_subject_org_encrypted IS NOT NULL)
+    )::timestamptz AS last_written_at
 FROM trusted_issuer_sessions AS s
 LEFT JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
 LEFT JOIN organization_encryption_unreadable_values AS u
@@ -833,6 +899,9 @@ LIMIT @limit_value;
 -- The organization's counts for the value. Unattributed counts sessions
 -- without organization_id whose trusted client belongs to the organization:
 -- the organization-scoped queries never reach them.
+-- value_count and last_written_at cover every row of the organization storing
+-- a value under either key, soft-deleted rows included, as
+-- ListOrganizationsWith* reports them.
 SELECT
     COUNT(*) FILTER (
         WHERE s.organization_id = @organization_id::text
@@ -853,7 +922,15 @@ SELECT
     COUNT(*) FILTER (
         WHERE s.organization_id = @organization_id::text
           AND s.nonce_encrypted <> ''
-    )::bigint AS platform_copies
+    )::bigint AS platform_copies,
+    COUNT(*) FILTER (
+        WHERE s.organization_id = @organization_id::text
+          AND (s.nonce_encrypted <> '' OR s.nonce_org_encrypted IS NOT NULL)
+    )::bigint AS value_count,
+    MAX(s.updated_at) FILTER (
+        WHERE s.organization_id = @organization_id::text
+          AND (s.nonce_encrypted <> '' OR s.nonce_org_encrypted IS NOT NULL)
+    )::timestamptz AS last_written_at
 FROM trusted_issuer_sessions AS s
 LEFT JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
 LEFT JOIN organization_encryption_unreadable_values AS u
@@ -949,3 +1026,94 @@ WHERE table_schema = current_schema()
   AND table_name IN ('remote_sessions', 'trusted_issuer_sessions', 'remote_session_ema_credentials')
   AND column_name LIKE '%\_org\_encrypted'
 ORDER BY 1;
+
+-- name: ListOrganizationsWithRemoteSessionAccessTokens :many
+-- Every organization storing a remote session access token under either key,
+-- soft-deleted rows included, with how many and the latest updated_at of the
+-- rows storing them. Rows without organization_id are left out.
+SELECT
+    s.organization_id::text AS organization_id,
+    COUNT(*)::bigint AS value_count,
+    MAX(s.updated_at)::timestamptz AS last_written_at
+FROM remote_sessions AS s
+WHERE s.organization_id IS NOT NULL
+  AND (s.access_token_encrypted <> '' OR s.access_token_org_encrypted IS NOT NULL)
+GROUP BY s.organization_id;
+
+-- name: ListOrganizationsWithRemoteSessionRefreshTokens :many
+-- Every organization storing a remote session refresh token under either key,
+-- soft-deleted rows included, with how many and the latest updated_at of the
+-- rows storing them. Rows without organization_id are left out.
+SELECT
+    s.organization_id::text AS organization_id,
+    COUNT(*)::bigint AS value_count,
+    MAX(s.updated_at)::timestamptz AS last_written_at
+FROM remote_sessions AS s
+WHERE s.organization_id IS NOT NULL
+  AND (s.refresh_token_encrypted <> '' OR s.refresh_token_org_encrypted IS NOT NULL)
+GROUP BY s.organization_id;
+
+-- name: ListOrganizationsWithEMACredentialAccessTokens :many
+-- Every organization storing an EMA access token under either key,
+-- soft-deleted rows included, with how many and the latest updated_at of the
+-- rows storing them. Rows without organization_id are left out.
+SELECT
+    c.organization_id::text AS organization_id,
+    COUNT(*)::bigint AS value_count,
+    MAX(c.updated_at)::timestamptz AS last_written_at
+FROM remote_session_ema_credentials AS c
+WHERE c.organization_id IS NOT NULL
+  AND (c.access_token_encrypted <> '' OR c.access_token_org_encrypted IS NOT NULL)
+GROUP BY c.organization_id;
+
+-- name: ListOrganizationsWithTrustedIssuerSessionIdentityAssertions :many
+-- Every organization storing a trusted issuer identity assertion under either key,
+-- soft-deleted rows included, with how many and the latest updated_at of the
+-- rows storing them. Rows without organization_id are left out.
+SELECT
+    s.organization_id::text AS organization_id,
+    COUNT(*)::bigint AS value_count,
+    MAX(s.updated_at)::timestamptz AS last_written_at
+FROM trusted_issuer_sessions AS s
+WHERE s.organization_id IS NOT NULL
+  AND (s.identity_assertion_encrypted <> '' OR s.identity_assertion_org_encrypted IS NOT NULL)
+GROUP BY s.organization_id;
+
+-- name: ListOrganizationsWithTrustedIssuerSessionRefreshTokens :many
+-- Every organization storing a trusted issuer refresh token under either key,
+-- soft-deleted rows included, with how many and the latest updated_at of the
+-- rows storing them. Rows without organization_id are left out.
+SELECT
+    s.organization_id::text AS organization_id,
+    COUNT(*)::bigint AS value_count,
+    MAX(s.updated_at)::timestamptz AS last_written_at
+FROM trusted_issuer_sessions AS s
+WHERE s.organization_id IS NOT NULL
+  AND (s.refresh_token_encrypted <> '' OR s.refresh_token_org_encrypted IS NOT NULL)
+GROUP BY s.organization_id;
+
+-- name: ListOrganizationsWithTrustedIssuerSessionUpstreamSubjects :many
+-- Every organization storing a trusted issuer upstream subject under either key,
+-- soft-deleted rows included, with how many and the latest updated_at of the
+-- rows storing them. Rows without organization_id are left out.
+SELECT
+    s.organization_id::text AS organization_id,
+    COUNT(*)::bigint AS value_count,
+    MAX(s.updated_at)::timestamptz AS last_written_at
+FROM trusted_issuer_sessions AS s
+WHERE s.organization_id IS NOT NULL
+  AND (s.upstream_subject_encrypted <> '' OR s.upstream_subject_org_encrypted IS NOT NULL)
+GROUP BY s.organization_id;
+
+-- name: ListOrganizationsWithTrustedIssuerSessionNonces :many
+-- Every organization storing a trusted issuer nonce under either key,
+-- soft-deleted rows included, with how many and the latest updated_at of the
+-- rows storing them. Rows without organization_id are left out.
+SELECT
+    s.organization_id::text AS organization_id,
+    COUNT(*)::bigint AS value_count,
+    MAX(s.updated_at)::timestamptz AS last_written_at
+FROM trusted_issuer_sessions AS s
+WHERE s.organization_id IS NOT NULL
+  AND (s.nonce_encrypted <> '' OR s.nonce_org_encrypted IS NOT NULL)
+GROUP BY s.organization_id;

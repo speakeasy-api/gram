@@ -15,7 +15,7 @@ import { useServerInventory } from "@/pages/agents/credentials/useServerInventor
 
 /**
  * How many of the agent's MCP servers someone has to sign in to, counted as
- * its Server sign-in tab counts them, for the badge that draws people there.
+ * its MCP sign-in tab counts them, for the badge that draws people there.
  * Only someone who can change the agent can read its servers, and fix them,
  * so for anyone else it is 0.
  */

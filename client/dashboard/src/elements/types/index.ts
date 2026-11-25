@@ -45,6 +45,8 @@ export interface MCPServerEntry {
    * to this MCP server only.
    */
   environment?: string;
+  /** A bearer token for this MCP server only. */
+  accessToken?: string;
 }
 
 export const VARIANTS = ["widget", "sidecar", "standalone"] as const;

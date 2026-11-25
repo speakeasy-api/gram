@@ -2475,6 +2475,10 @@ func unmarshalSuspectedProblemResponseBodyToMcpconnectionhealthSuspectedProblem(
 		Headline:            *v.Headline,
 		Fact:                *v.Fact,
 	}
+	if v.WhoFixes != nil {
+		whoFixes := mcpconnectionhealth.SuspectedProblemWhoFixes(*v.WhoFixes)
+		res.WhoFixes = &whoFixes
+	}
 	res.Scope = unmarshalSuspectedProblemScopeResponseBodyToMcpconnectionhealthSuspectedProblemScope(v.Scope)
 	res.Filters = unmarshalSuspectedProblemFiltersResponseBodyToMcpconnectionhealthSuspectedProblemFilters(v.Filters)
 
@@ -2592,6 +2596,10 @@ func unmarshalSuspectedProblemDetailResponseBodyToMcpconnectionhealthSuspectedPr
 	if v.Source != nil {
 		source := mcpconnectionhealth.ConnectionFailureSource(*v.Source)
 		res.Source = &source
+	}
+	if v.WhoFixes != nil {
+		whoFixes := mcpconnectionhealth.SuspectedProblemWhoFixes(*v.WhoFixes)
+		res.WhoFixes = &whoFixes
 	}
 	res.FailedPer10Minutes = make([]*mcpconnectionhealth.SuspectedProblemBucket, len(v.FailedPer10Minutes))
 	for i, val := range v.FailedPer10Minutes {

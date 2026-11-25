@@ -662,7 +662,6 @@ func TestStore_RequestsTheScopesRecordedAtTurnOn(t *testing.T) {
 	t.Parallel()
 	f := newChainStoreFixture(t)
 	q := repo.New(f.db)
-	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(t.Context(), repo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: f.sel.clientID, UserSessionIssuerID: f.req.UserSessionIssuerID}))
 	_, err := q.UpdateOrganizationRemoteSessionClient(t.Context(), repo.UpdateOrganizationRemoteSessionClientParams{
 		Scope: []string{"openid", "read", "write"}, ID: f.sel.clientID, OrganizationID: pgtype.Text{String: f.req.OrganizationID, Valid: true},
 		TokenEndpointAuthMethod: pgtype.Text{}, TokenEndpointAuthAudienceFormat: pgtype.Text{}, Audience: pgtype.Text{}, LegacyCallbackUrl: pgtype.Bool{},
@@ -681,7 +680,6 @@ func TestStore_OIDCOnlyConnectionBoundsTheGrant(t *testing.T) {
 	f := newChainStoreFixture(t)
 	ctx := t.Context()
 	q := repo.New(f.db)
-	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: f.sel.clientID, UserSessionIssuerID: f.req.UserSessionIssuerID}))
 	_, err := q.UpdateOrganizationRemoteSessionClient(ctx, repo.UpdateOrganizationRemoteSessionClientParams{
 		Scope: []string{"openid", "email"}, ID: f.sel.clientID, OrganizationID: pgtype.Text{String: f.req.OrganizationID, Valid: true},
 		TokenEndpointAuthMethod: pgtype.Text{}, TokenEndpointAuthAudienceFormat: pgtype.Text{}, Audience: pgtype.Text{}, LegacyCallbackUrl: pgtype.Bool{},

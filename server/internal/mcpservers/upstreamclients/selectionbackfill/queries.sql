@@ -78,6 +78,7 @@ offered_oauth AS (
     FROM mcp_server_auth_clients AS l
     JOIN reachable AS r
       ON r.id = l.mcp_server_id
+     AND r.project_id = l.project_id
     JOIN mcp_auth_clients AS ac
       ON ac.id = l.auth_client_id
      AND ac.organization_id = l.organization_id
@@ -88,11 +89,8 @@ offered_oauth AS (
     WHERE l.deleted IS FALSE
       AND l.organization_id = (SELECT organization_id FROM session_issuer)
 ),
--- The registrations of those clients the credential's issuer binds, which is
--- what a choice can be decided from without a person picking it, as
--- RecordUpstreamClientSelections decides it: the registration and its issuer
--- are live, and exactly one offered client uses it. A registration two
--- clients share names neither, so the resolver serves its choice as ambiguous.
+-- Match the live recorder: distinct typed offers with live registrations
+-- and providers in scope. Compatibility parents do not confer eligibility.
 typed_eligible AS (
     SELECT o.mcp_server_id,
            o.remote_session_client_id
@@ -103,10 +101,11 @@ typed_eligible AS (
     JOIN remote_session_issuers AS rsi
       ON rsi.id = c.remote_session_issuer_id
      AND rsi.deleted IS FALSE
-    JOIN remote_session_client_user_session_issuers AS binding
-      ON binding.remote_session_client_id = o.remote_session_client_id
-     AND binding.user_session_issuer_id = @user_session_issuer_id
+    JOIN reachable AS r ON r.id = o.mcp_server_id
+    CROSS JOIN session_issuer AS si
     WHERE o.client_type IN ('remote_session', 'service_account')
+      AND (c.project_id = r.project_id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = si.organization_id)))
+      AND (rsi.project_id = r.project_id OR (rsi.project_id IS NULL AND (rsi.organization_id IS NULL OR rsi.organization_id = si.organization_id)))
     GROUP BY o.mcp_server_id, o.remote_session_client_id
     HAVING count(DISTINCT o.auth_client_id) = 1
 )
@@ -176,10 +175,13 @@ SELECT r.id AS mcp_server_id,
                JOIN remote_session_clients AS c
                  ON c.id = a.remote_session_client_id
                 AND c.deleted IS FALSE
-               JOIN remote_session_client_user_session_issuers AS link
-                 ON link.remote_session_client_id = a.remote_session_client_id
-                AND link.user_session_issuer_id = @user_session_issuer_id
+               JOIN remote_session_issuers AS provider
+                 ON provider.id = c.remote_session_issuer_id AND NOT provider.deleted
+               JOIN user_session_issuers AS sign_in
+                 ON sign_in.id = @user_session_issuer_id AND NOT sign_in.deleted
+                AND (sign_in.project_id = sel.project_id OR (sign_in.project_id IS NULL AND sign_in.organization_id = sel.organization_id))
                WHERE a.mcp_server_id = r.id
+                 AND a.project_id = sel.project_id AND a.organization_id = sel.organization_id
                  AND a.remote_session_client_id = sel.remote_session_client_id
                  AND a.deleted IS FALSE
              )
@@ -220,9 +222,6 @@ SELECT r.id AS mcp_server_id,
            JOIN remote_session_clients AS c
              ON c.id = a.remote_session_client_id
             AND c.deleted IS FALSE
-           JOIN remote_session_client_user_session_issuers AS link
-             ON link.remote_session_client_id = a.remote_session_client_id
-            AND link.user_session_issuer_id = @user_session_issuer_id
            WHERE a.mcp_server_id = r.id
              AND a.deleted IS FALSE
          ) END
@@ -259,10 +258,6 @@ INSERT INTO remote_session_issuers (id, project_id, slug, issuer) VALUES (@id, @
 -- name: SeedRemoteSessionClientFixture :exec
 INSERT INTO remote_session_clients (id, project_id, organization_id, remote_session_issuer_id, client_id)
 VALUES (@id, @project_id, @organization_id, @remote_session_issuer_id, @client_id);
-
--- name: SeedClientBindingFixture :exec
-INSERT INTO remote_session_client_user_session_issuers (remote_session_client_id, user_session_issuer_id)
-VALUES (@remote_session_client_id, @user_session_issuer_id);
 
 -- name: SeedRemoteMCPServerFixture :exec
 INSERT INTO remote_mcp_servers (id, project_id, transport_type, url) VALUES (@id, @project_id, 'streamable-http', 'https://upstream.example.com/mcp');
@@ -305,10 +300,6 @@ SELECT mcp_server_id, remote_session_client_id, no_auth, source
 FROM upstream_client_selections
 WHERE credential_kind = @credential_kind AND credential_id = @credential_id AND deleted IS FALSE
 ORDER BY mcp_server_id;
-
--- name: UnbindClientFixture :exec
-DELETE FROM remote_session_client_user_session_issuers
-WHERE remote_session_client_id = @remote_session_client_id AND user_session_issuer_id = @user_session_issuer_id;
 
 -- name: SeedLinkedHeaderAuthClientFixture :exec
 -- A static-credential auth client in the project, linked to one server.

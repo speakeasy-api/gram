@@ -14,7 +14,9 @@ import { RequestOptions } from "../lib/sdks.js";
 import { AdminOrganizationEncryptionTransitionList } from "../models/components/adminorganizationencryptiontransitionlist.js";
 import {
   AdminListOrganizationEncryptionTransitionsRequest,
+  Sort,
   State,
+  Values,
 } from "../models/operations/adminlistorganizationencryptiontransitions.js";
 import { unwrapAsync } from "../types/fp.js";
 export type AdminListOrganizationEncryptionTransitionsQueryData =
@@ -49,6 +51,8 @@ export function buildAdminListOrganizationEncryptionTransitionsQuery(
     queryKey: queryKeyAdminListOrganizationEncryptionTransitions({
       useCase: request?.useCase,
       state: request?.state,
+      values: request?.values,
+      sort: request?.sort,
       limit: request?.limit,
       offset: request?.offset,
     }),
@@ -79,6 +83,8 @@ export function queryKeyAdminListOrganizationEncryptionTransitions(
   parameters: {
     useCase?: string | undefined;
     state?: State | undefined;
+    values?: Values | undefined;
+    sort?: Sort | undefined;
     limit?: number | undefined;
     offset?: number | undefined;
   },

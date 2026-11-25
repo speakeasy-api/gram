@@ -57,6 +57,17 @@ func (c *capturingPosthogClient) event(t *testing.T, name string) posthoggo.Prop
 	return nil
 }
 
+func (c *capturingPosthogClient) has(name string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, capture := range c.captures {
+		if capture.Event == name {
+			return true
+		}
+	}
+	return false
+}
+
 func mcpEndpointIDForServer(t *testing.T, ctx context.Context, ti *testInstance, projectID, serverID uuid.UUID) uuid.UUID {
 	t.Helper()
 	endpoints, err := mcpendpointsrepo.New(ti.conn).ListMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsByMCPServerIDParams{
@@ -141,10 +152,7 @@ func TestServePublic_HostedEndpoint_AttributesServerAndEndpoint(t *testing.T) {
 	require.Equal(t, toolset.ID.String(), listed["toolset_id"])
 	require.EqualValues(t, toolset.Slug, listed["toolset_slug"])
 
-	shared := captured.event(t, "mcp_server_tools_list")
-	for _, key := range []string{"mcp_server_id", "mcp_endpoint_id", "mcp_session_id", "toolset_id", "mcp_url", "protocol_version"} {
-		require.Equal(t, listed[key], shared[key], key)
-	}
+	require.False(t, captured.has("mcp_server_tools_list"), "mcp_server_tools_list is no longer sent to PostHog")
 	requireHostedAttributionRow(t, telemetry.EventSourceToolCall, server.ID, endpointID)
 	require.True(t, wide.Contains(reqCtx, string(attr.McpServerIDKey)))
 	require.True(t, wide.Contains(reqCtx, string(attr.McpEndpointIDKey)))

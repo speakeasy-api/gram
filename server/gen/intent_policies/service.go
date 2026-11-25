@@ -141,15 +141,13 @@ type IntentCallUsage struct {
 type IntentCondition struct {
 	// Links the clause to the previous one; empty on the first clause.
 	Join string
-	// Label key the clause reads. Empty for a shell command pattern.
+	// Label key the clause reads.
 	Label string
 	// How the label compares to values.
 	Op string
 	// Values compared: "true" for a yes/no label, else option keys. Several read
 	// as any of.
 	Values []string
-	// Regular expression a shell command must match, for a pattern clause.
-	Pattern string
 }
 
 type IntentContract struct {

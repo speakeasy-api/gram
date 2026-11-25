@@ -79,10 +79,11 @@ func TestMisassignedChoicesCoverConnectionHealthSessions(t *testing.T) {
 		LinearServerID:     s.det("mcpserver-linear"),
 		LinearClientID:     s.det("remote-identity-client-linear"),
 		SlackServerID:      s.det("mcpserver-slack"),
+		SlackAuthClientID:  s.sharedSourceAuthClient(),
 	}
-	// The upstream auth migration moves some seeded choices to auth clients, so compare counts.
 	before, err := q.PostflightIDMisassignedUpstreamClientChoices(ctx, params)
 	require.NoError(t, err)
+	require.Zero(t, before, "native seed choices must already pass typed postflight")
 
 	session := uuid.Nil
 	for n, held := range s.healthSessions() {
@@ -95,7 +96,7 @@ func TestMisassignedChoicesCoverConnectionHealthSessions(t *testing.T) {
 	require.NoError(t, q.ServersInsertUpstreamClientChoice(ctx, repo.ServersInsertUpstreamClientChoiceParams{
 		ID: uuid.New(), ProjectID: s.projectID(), OrgID: s.orgID(),
 		CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: session, McpServerID: s.det("mcpserver-linear"),
-		RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, Source: upstreamclients.SelectionSourceIssuance,
+		AuthClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, Source: upstreamclients.SelectionSourceIssuance,
 	}))
 	after, err := q.PostflightIDMisassignedUpstreamClientChoices(ctx, params)
 	require.NoError(t, err)

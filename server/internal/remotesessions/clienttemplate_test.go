@@ -103,15 +103,12 @@ func TestCommitServerIdentityConfigurationFromTemplateCreatesIndependentClient(t
 	ctx, ti := newTestService(t)
 	providerID := createServerIdentityProvider(t, ctx, ti, "template-provider", "", false, []string{"client_secret_basic", "client_secret_post"})
 
-	// The template is in use: bound to another server's issuer, with a person
-	// signed in through it.
+	// Another server explicitly offers the template, with a person signed in
+	// through it.
 	sourceServerID, sourceIssuerID := createServerIdentityTarget(t, ctx, ti, "template-source")
 	template := createTemplateClient(t, ctx, ti, providerID, nil)
-	require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: template.ID,
-		UserSessionIssuerID:   sourceIssuerID,
-	}))
-	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, activeOrganizationID(t, ctx), projectIDFromContext(t, ctx), []uuid.UUID{sourceIssuerID}))
+	associateServerClient(t, ctx, ti, sourceServerID, template.ID)
+	recordTypedClients(t, ctx, ti.conn, activeOrganizationID(t, ctx), sourceServerID)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	_, err := repo.New(ti.conn).UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
@@ -139,7 +136,7 @@ func TestCommitServerIdentityConfigurationFromTemplateCreatesIndependentClient(t
 	require.Equal(t, "registered", *result.Status)
 	require.Equal(t, "manual", *result.RegistrationMethod)
 	require.NotEqual(t, template.ID.String(), result.Client.ID)
-	require.Equal(t, []string{targetIssuerID.String()}, result.Client.UserSessionIssuerIds)
+	require.Empty(t, result.Client.UserSessionIssuerIds)
 
 	copyID, err := uuid.Parse(result.Client.ID)
 	require.NoError(t, err)
@@ -391,12 +388,9 @@ func TestCreateRemoteSessionClientFromTemplateCreatesStandaloneCopy(t *testing.T
 
 	ctx, ti := newTestService(t)
 	providerID := createServerIdentityProvider(t, ctx, ti, "create-template-provider", "", false, []string{"client_secret_basic"})
-	_, sourceIssuerID := createServerIdentityTarget(t, ctx, ti, "create-template-source")
+	sourceServerID, _ := createServerIdentityTarget(t, ctx, ti, "create-template-source")
 	template := createTemplateClient(t, ctx, ti, providerID, nil)
-	require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: template.ID,
-		UserSessionIssuerID:   sourceIssuerID,
-	}))
+	associateServerClient(t, ctx, ti, sourceServerID, template.ID)
 	before := getStoredClient(t, ctx, ti, template.ID)
 
 	created, err := ti.service.CreateRemoteSessionClient(ctx, &gen.CreateRemoteSessionClientPayload{

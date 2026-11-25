@@ -398,8 +398,7 @@ open their effective assignments; the dropdown always offers compact member sear
     `ResyncMCPServerRemoteSessionIssuers` would derive. Example OAuth offers one
     OAuth client, "Fixture OAuth sign-in", plus the "Shared service token"
     typed client. The legacy callback client
-    (`attachment-client`) has no row in
-    `remote_session_client_user_session_issuers` and no server association;
+    (`attachment-client`) has neither a typed offer nor a server association;
     it shows only on the provider's pages. Every org points the fixture
     servers at the MCP fixture the Speakeasy server hosts,
     `GRAM_SERVER_URL/rpc/demoseed`; none keeps the placeholder
@@ -653,7 +652,7 @@ open their effective assignments; the dropdown always offers compact member sear
     - Locally, after the `enterprise-sign-in` sign-in below, the server's binding reads as
       accepted and `remote_session_ema_credentials` holds one row for the
       developer.
-    - Open an agent's **Server sign-in** tab and click **Add servers**. Every
+    - Open an agent's **MCP sign-in** tab and click **Add servers**. Every
       server appears once, named for what it tests: OpenAPI Server (the
       toolset's canonical wrapper), Example OAuth and Example Shared
       Credential, plus Linear and Notion: five in all in the demo org (Acme

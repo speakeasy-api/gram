@@ -150,7 +150,7 @@ const mcpNetworkTrafficToolName = "get_mcp_network_traffic"
 func registerMCPNetworkTrafficTool(reg *Registrar, reader *PostgresReader) {
 	addTool(reg, &mcp.Tool{
 		Name: mcpNetworkTrafficToolName, Title: "Check MCP Network Traffic",
-		Description: "Summarize observed public and private inbound requests and last-seen times for one exact MCP server or gateway over 24 hours or 7 days. Use before changing its network access mode; a quiet route is not proof all clients migrated.",
+		Description: "Read historical network traffic: public and private inbound request counts and last-seen times for one exact MCP server or gateway over 24 hours or 7 days. This does not change access. Use for traffic and migration-impact questions; a quiet route is not proof all clients migrated.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryMCPRead}, func(ctx context.Context, _ *mcp.CallToolRequest, input MCPNetworkTrafficInput) (*mcp.CallToolResult, MCPNetworkTrafficOutput, error) {
 		principal, err := principalFromToolContext(ctx)

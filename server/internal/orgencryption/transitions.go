@@ -754,10 +754,11 @@ func clearStore(ctx context.Context, organizationID string, generation int64, st
 	}
 }
 
-// CountStores sums the counts of every copy store for an organization. It
-// reads the database only, so it is cheap enough for an admin page load.
+// CountStores sums the counts of every copy store for an organization, keeping
+// the latest LastWrittenAt. It reads the database only, so it is cheap enough
+// for an admin page load.
 func CountStores(ctx context.Context, organizationID string, stores []CopyStore) (CopyCounts, error) {
-	total := CopyCounts{Waiting: 0, Unreadable: 0, Unattributed: 0, PlatformCopies: 0}
+	total := CopyCounts{Waiting: 0, Unreadable: 0, Unattributed: 0, PlatformCopies: 0, Values: 0, LastWrittenAt: time.Time{}}
 	for _, store := range stores {
 		counts, err := store.Count(ctx, organizationID)
 		if err != nil {
@@ -767,6 +768,8 @@ func CountStores(ctx context.Context, organizationID string, stores []CopyStore)
 		total.Unreadable += counts.Unreadable
 		total.Unattributed += counts.Unattributed
 		total.PlatformCopies += counts.PlatformCopies
+		total.Values += counts.Values
+		total.LastWrittenAt = later(total.LastWrittenAt, counts.LastWrittenAt)
 	}
 
 	return total, nil

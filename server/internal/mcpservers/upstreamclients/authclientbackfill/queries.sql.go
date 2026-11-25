@@ -13,22 +13,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-const bindClientIssuerFixture = `-- name: BindClientIssuerFixture :exec
-INSERT INTO remote_session_client_user_session_issuers (remote_session_client_id, user_session_issuer_id)
-VALUES ($1, $2)
-ON CONFLICT DO NOTHING
-`
-
-type BindClientIssuerFixtureParams struct {
-	RemoteSessionClientID uuid.UUID
-	UserSessionIssuerID   uuid.UUID
-}
-
-func (q *Queries) BindClientIssuerFixture(ctx context.Context, arg BindClientIssuerFixtureParams) error {
-	_, err := q.db.Exec(ctx, bindClientIssuerFixture, arg.RemoteSessionClientID, arg.UserSessionIssuerID)
-	return err
-}
-
 const clearEMABindingClientFixture = `-- name: ClearEMABindingClientFixture :exec
 UPDATE remote_session_ema_bindings SET state = 'manual_setup_required', remote_session_client_id = NULL
 WHERE id = $1 AND project_id = $2
@@ -2996,22 +2980,6 @@ SELECT sel.id,
            AND (headers_only.project_id IS NULL OR headers_only.project_id = sel.project_id)
            AND headers_only.client_type IN ('static_credential', 'pass_through')
        )::boolean AS names_headers,
-       EXISTS (
-         SELECT 1
-         FROM mcp_server_remote_session_clients AS a
-         WHERE a.mcp_server_id = sel.mcp_server_id
-           AND a.deleted IS FALSE
-       )::boolean AS server_has_associations,
-       EXISTS (
-         SELECT 1
-         FROM mcp_server_remote_session_clients AS a
-         JOIN remote_session_clients AS c
-           ON c.id = a.remote_session_client_id
-          AND c.deleted IS FALSE
-         WHERE a.mcp_server_id = sel.mcp_server_id
-           AND a.remote_session_client_id = sel.remote_session_client_id
-           AND a.deleted IS FALSE
-       )::boolean AS registration_associated,
        -- The registration and its issuer are live, which the typed resolver
        -- requires of a choice whatever the server's associations.
        EXISTS (
@@ -3020,23 +2988,24 @@ SELECT sel.id,
          JOIN remote_session_issuers AS rsi
            ON rsi.id = c.remote_session_issuer_id
           AND rsi.deleted IS FALSE
+         JOIN projects AS project ON project.id = sel.project_id
+           AND project.organization_id = sel.organization_id AND NOT project.deleted
          WHERE c.id = sel.remote_session_client_id
+           AND (c.project_id = project.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = project.organization_id)))
+           AND (rsi.project_id = project.id OR (rsi.project_id IS NULL AND (rsi.organization_id IS NULL OR rsi.organization_id = project.organization_id)))
            AND c.deleted IS FALSE
        )::boolean AS registration_live,
-       ARRAY(
-         SELECT link.user_session_issuer_id
-         FROM remote_session_client_user_session_issuers AS link
-         WHERE link.remote_session_client_id = sel.remote_session_client_id
-         ORDER BY link.user_session_issuer_id
-       )::uuid[] AS registration_issuer_ids,
        ARRAY(
          SELECT ac.id
          FROM mcp_auth_clients AS ac
          JOIN mcp_server_auth_clients AS l
            ON l.auth_client_id = ac.id
           AND l.mcp_server_id = sel.mcp_server_id
+          AND l.project_id = sel.project_id
+          AND l.organization_id = sel.organization_id
           AND l.deleted IS FALSE
          WHERE ac.organization_id = sel.organization_id
+           AND (ac.project_id IS NULL OR ac.project_id = sel.project_id)
            AND ac.deleted IS FALSE
            AND ac.enabled
            AND (
@@ -3273,22 +3242,19 @@ type ListSelectionMappingsParams struct {
 }
 
 type ListSelectionMappingsRow struct {
-	ID                     uuid.UUID
-	ProjectID              uuid.UUID
-	CredentialID           uuid.UUID
-	McpServerID            uuid.UUID
-	RemoteSessionClientID  uuid.NullUUID
-	NoAuth                 bool
-	AuthClientID           uuid.NullUUID
-	MappedUsable           bool
-	NamesHeaders           bool
-	ServerHasAssociations  bool
-	RegistrationAssociated bool
-	RegistrationLive       bool
-	RegistrationIssuerIds  []uuid.UUID
-	CandidateIds           []uuid.UUID
-	ServerHasOauthClients  bool
-	EmaGatewayIssuerIds    []uuid.UUID
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+	CredentialID          uuid.UUID
+	McpServerID           uuid.UUID
+	RemoteSessionClientID uuid.NullUUID
+	NoAuth                bool
+	AuthClientID          uuid.NullUUID
+	MappedUsable          bool
+	NamesHeaders          bool
+	RegistrationLive      bool
+	CandidateIds          []uuid.UUID
+	ServerHasOauthClients bool
+	EmaGatewayIssuerIds   []uuid.UUID
 }
 
 // Every live user session choice for a live server in the organization after
@@ -3298,10 +3264,9 @@ type ListSelectionMappingsRow struct {
 // restricts results to choices that do not yet name a typed auth client.
 //
 // What the upstream client choice reads today (GetUpstreamClientSelection):
-// whether the server has any upstream OAuth client association, whether the
-// chosen registration is live and associated with the server, the user
-// session issuers the registration is bound to, and whether the choice names
-// the server's headers, which reads as no-auth.
+// whether the server has any enabled typed OAuth auth client offer
+// (server_has_oauth_clients), whether the chosen registration is live, and
+// whether the choice names the server's headers, which reads as no-auth.
 //
 // The typed auth clients: an OAuth choice can name the live, enabled
 // remote_session or service_account clients of its registration linked to
@@ -3344,10 +3309,7 @@ func (q *Queries) ListSelectionMappings(ctx context.Context, arg ListSelectionMa
 			&i.AuthClientID,
 			&i.MappedUsable,
 			&i.NamesHeaders,
-			&i.ServerHasAssociations,
-			&i.RegistrationAssociated,
 			&i.RegistrationLive,
-			&i.RegistrationIssuerIds,
 			&i.CandidateIds,
 			&i.ServerHasOauthClients,
 			&i.EmaGatewayIssuerIds,
@@ -4184,30 +4146,6 @@ func (q *Queries) LockRemoteCredentialSource(ctx context.Context, arg LockRemote
 	return id, err
 }
 
-const lockSelectionIssuerBinding = `-- name: LockSelectionIssuerBinding :exec
-SELECT link.remote_session_client_id
-FROM remote_session_client_user_session_issuers AS link
-WHERE link.remote_session_client_id = $1::uuid
-  AND link.user_session_issuer_id = $2::uuid
-FOR SHARE OF link
-`
-
-type LockSelectionIssuerBindingParams struct {
-	RemoteSessionClientID uuid.UUID
-	UserSessionIssuerID   uuid.UUID
-}
-
-// Holds the binding of an unmapped OAuth choice's registration to its
-// credential's user session issuer, which is what makes the upstream client
-// choice usable, against unbinding until the transaction ends, so a choice is
-// never named after the binding it was decided from is gone. Taken after
-// LockSelectionServerAuthClients. A binding that is already gone locks
-// nothing, and the fresh decision then rejects the choice.
-func (q *Queries) LockSelectionIssuerBinding(ctx context.Context, arg LockSelectionIssuerBindingParams) error {
-	_, err := q.db.Exec(ctx, lockSelectionIssuerBinding, arg.RemoteSessionClientID, arg.UserSessionIssuerID)
-	return err
-}
-
 const lockSelectionRemoteSource = `-- name: LockSelectionRemoteSource :exec
 SELECT r.id
 FROM remote_mcp_servers AS r
@@ -4363,6 +4301,7 @@ WHERE sel.id = ANY($1::uuid[])
   AND sel.remote_session_client_id IS NOT DISTINCT FROM $5::uuid
   AND ac.id = $6::uuid
   AND ac.organization_id = sel.organization_id
+  AND (ac.project_id IS NULL OR ac.project_id = sel.project_id)
   AND ac.deleted IS FALSE
   AND ac.enabled
   AND EXISTS (
@@ -4370,6 +4309,8 @@ WHERE sel.id = ANY($1::uuid[])
     FROM mcp_server_auth_clients AS l
     WHERE l.auth_client_id = ac.id
       AND l.mcp_server_id = sel.mcp_server_id
+      AND l.project_id = sel.project_id
+      AND l.organization_id = sel.organization_id
       AND l.deleted IS FALSE
   )
 `
@@ -4417,6 +4358,7 @@ WHERE sel.id = $1::uuid
   AND sel.remote_session_client_id IS NOT DISTINCT FROM $4::uuid
   AND ac.id = $5::uuid
   AND ac.organization_id = sel.organization_id
+  AND (ac.project_id IS NULL OR ac.project_id = sel.project_id)
   AND ac.deleted IS FALSE
   AND ac.enabled
   AND EXISTS (
@@ -4424,6 +4366,8 @@ WHERE sel.id = $1::uuid
     FROM mcp_server_auth_clients AS l
     WHERE l.auth_client_id = ac.id
       AND l.mcp_server_id = sel.mcp_server_id
+      AND l.project_id = sel.project_id
+      AND l.organization_id = sel.organization_id
       AND l.deleted IS FALSE
   )
 `
@@ -4997,13 +4941,9 @@ func (q *Queries) RevokeAttachmentConnectionFixture(ctx context.Context, binding
 }
 
 const seedAgentAttachmentFixture = `-- name: SeedAgentAttachmentFixture :one
-WITH link AS (
-  INSERT INTO remote_session_client_user_session_issuers (remote_session_client_id, user_session_issuer_id)
-  VALUES ($4, $7)
-  ON CONFLICT DO NOTHING
-), session AS (
+WITH session AS (
   INSERT INTO remote_sessions (subject_urn, user_session_issuer_id, remote_session_client_id, organization_id, access_token_encrypted)
-  VALUES ($8::text, $7, $4,
+  VALUES ($7::text, $8, $4,
     (SELECT org.id FROM remote_session_clients AS client
      LEFT JOIN projects AS project ON project.id = client.project_id
      JOIN organization_metadata AS org ON org.id = COALESCE(project.organization_id, client.organization_id)
@@ -5027,8 +4967,8 @@ type SeedAgentAttachmentFixtureParams struct {
 	RemoteSessionClientID uuid.UUID
 	GenerationOffset      int64
 	AttachedBy            string
-	UserSessionIssuerID   uuid.UUID
 	ConnectionSubject     string
+	UserSessionIssuerID   uuid.UUID
 }
 
 func (q *Queries) SeedAgentAttachmentFixture(ctx context.Context, arg SeedAgentAttachmentFixtureParams) (uuid.UUID, error) {
@@ -5039,8 +4979,8 @@ func (q *Queries) SeedAgentAttachmentFixture(ctx context.Context, arg SeedAgentA
 		arg.RemoteSessionClientID,
 		arg.GenerationOffset,
 		arg.AttachedBy,
-		arg.UserSessionIssuerID,
 		arg.ConnectionSubject,
+		arg.UserSessionIssuerID,
 	)
 	var id uuid.UUID
 	err := row.Scan(&id)
@@ -5879,21 +5819,6 @@ func (q *Queries) TryLockOrganizationBackfill(ctx context.Context, organizationI
 	var i TryLockOrganizationBackfillRow
 	err := row.Scan(&i.Locked, &i.StartedAt)
 	return i, err
-}
-
-const unbindClientIssuerFixture = `-- name: UnbindClientIssuerFixture :exec
-DELETE FROM remote_session_client_user_session_issuers
-WHERE remote_session_client_id = $1 AND user_session_issuer_id = $2
-`
-
-type UnbindClientIssuerFixtureParams struct {
-	RemoteSessionClientID uuid.UUID
-	UserSessionIssuerID   uuid.UUID
-}
-
-func (q *Queries) UnbindClientIssuerFixture(ctx context.Context, arg UnbindClientIssuerFixtureParams) error {
-	_, err := q.db.Exec(ctx, unbindClientIssuerFixture, arg.RemoteSessionClientID, arg.UserSessionIssuerID)
-	return err
 }
 
 const unlockOrganizationBackfill = `-- name: UnlockOrganizationBackfill :exec

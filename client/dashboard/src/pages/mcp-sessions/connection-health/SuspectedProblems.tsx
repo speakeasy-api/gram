@@ -1,16 +1,11 @@
 import { ArrowRight, ChevronDown } from "lucide-react";
 import { InlineEmptyState } from "@/components/inline-empty-state";
-import { Skeleton } from "@/components/ui/Skeleton";
 import type { UseQueryResult } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { problemHeadline } from "./format";
 import { isUnavailable } from "./api";
-import type {
-  ListSuspectedProblemsResponse,
-  SuspectedProblem,
-  ViewerScope,
-} from "./types";
+import type { ListSuspectedProblemsResponse, SuspectedProblem } from "./types";
 
 const VISIBLE = 3;
 
@@ -25,15 +20,12 @@ const MIXED_PROBLEMS_RULE =
 export const SIGN_IN_PROBLEMS_RULE =
   "Failed to sign in the same way on this provider's servers and not signed in since: 2 or more people on one MCP server or one app version, or one person for 24 hours.";
 
-/** Where problems with a service are listed; not for someone who can never see problems. */
+/** Where problems with a service are listed; shown only under a panel that lists problems. */
 export function ServiceProblemsNote({
-  viewerScope,
   serversHref,
 }: {
-  viewerScope: ViewerScope | undefined;
   serversHref: string;
-}): JSX.Element | null {
-  if (viewerScope === "own") return null;
+}): JSX.Element {
   return (
     <p className="text-muted-foreground text-sm">
       Problems with a service show on the page of each MCP server that uses it,
@@ -49,47 +41,13 @@ export function ServiceProblemsNote({
   );
 }
 
-/** The panel's header and one row, so the panel with one problem replaces it without moving the page. */
-function PanelSkeleton({ hint }: { hint: string }): JSX.Element {
-  const line = (className: string) => (
-    <>
-      {"\u200b"}
-      <Skeleton
-        className={`inline-block h-[0.9em] align-middle ${className}`}
-      />
-    </>
-  );
-  return (
-    <section
-      className="space-y-3"
-      aria-busy="true"
-      aria-label="Loading suspected problems"
-    >
-      <div>
-        <h2 className="text-eyebrow">Suspected problems</h2>
-        <p className="text-muted-foreground mt-1 text-sm">{hint}</p>
-      </div>
-      <div className="bg-card border border-l-2">
-        <div className="flex w-full items-center gap-3 px-5 py-4">
-          <span className="size-2 shrink-0" aria-hidden />
-          <span className="min-w-0 flex-1">
-            <span className="block text-[15px]">{line("w-2/3")}</span>
-            <span className="block text-xs">{line("w-1/2")}</span>
-          </span>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/** The one panel that says we suspect something, with its own loading, error and empty states. */
+/** The one panel that says we suspect something; nothing at all while loading or when there is nothing to list. */
 export function SuspectedProblems({
   query,
   now,
   onOpen,
   rule,
-  empty,
-  expectVisible,
+  note,
 }: {
   query: Pick<
     UseQueryResult<ListSuspectedProblemsResponse>,
@@ -99,18 +57,12 @@ export function SuspectedProblems({
   onOpen: (problem: SuspectedProblem) => void;
   /** The hint under the heading; chosen from the problems listed when absent. */
   rule?: string;
-  /** Said when there are no problems. */
-  empty: string;
-  /** Whether the page already knows this viewer sees the panel; only then is space reserved while it loads. */
-  expectVisible: boolean;
+  /** Shown under the panel, only when it lists problems. */
+  note?: ReactNode;
 }): JSX.Element | null {
   const [expanded, setExpanded] = useState(false);
-  // Decided once, when loading starts: a viewer learned about mid-load gets the panel in one move.
-  const [reserve] = useState(expectVisible);
-  if (query.isPending)
-    return reserve ? (
-      <PanelSkeleton hint={rule ?? SUSPECTED_PROBLEMS_RULE} />
-    ) : null;
+  // Cached results show at once; with none, nothing is reserved, so an empty result moves nothing.
+  if (query.isPending) return null;
   if (query.isError)
     return (
       <InlineEmptyState
@@ -129,15 +81,7 @@ export function SuspectedProblems({
   // Problems name other people: nothing shows with logging off or to someone who reads only their own logs.
   if (!data?.loggingEnabled || data.viewerScope !== "all") return null;
   const problems = data.problems;
-  if (problems.length === 0)
-    return (
-      <InlineEmptyState
-        orientation="horizontal"
-        className="min-h-28"
-        icon="circle-check"
-        heading={empty}
-      />
-    );
+  if (problems.length === 0) return null;
   const hint =
     rule ??
     (problems.some((p) => p.part === "speakeasy")
@@ -146,66 +90,69 @@ export function SuspectedProblems({
   const shown = expanded ? problems : problems.slice(0, VISIBLE);
   const hidden = problems.length - shown.length;
   return (
-    <section className="space-y-3" aria-labelledby="suspected-problems">
-      <div>
-        <h2 id="suspected-problems" className="text-eyebrow">
-          Suspected problems · {data.problemsTotal}
-        </h2>
-        <p className="text-muted-foreground mt-1 text-sm">
-          {hint}
-          {data.problemsTotal > problems.length
-            ? ` Showing the first ${problems.length}.`
-            : ""}
-        </p>
-      </div>
-      <ul className="bg-card border-l-destructive divide-y border border-l-2">
-        {shown.map((problem) => (
-          <li key={problem.id}>
-            <button
-              type="button"
-              onClick={() => onOpen(problem)}
-              className="hover:bg-muted/40 flex w-full items-center gap-3 px-5 py-4 text-left"
-            >
-              <span
-                className="bg-destructive size-2 shrink-0 rounded-full"
-                aria-hidden
-              />
-              <span className="min-w-0 flex-1">
-                <span className="block text-[15px]">
-                  {problemHeadline(problem, now)}
+    <div className="space-y-3">
+      <section className="space-y-3" aria-labelledby="suspected-problems">
+        <div>
+          <h2 id="suspected-problems" className="text-eyebrow">
+            Suspected problems · {data.problemsTotal}
+          </h2>
+          <p className="text-muted-foreground mt-1 text-sm">
+            {hint}
+            {data.problemsTotal > problems.length
+              ? ` Showing the first ${problems.length}.`
+              : ""}
+          </p>
+        </div>
+        <ul className="bg-card border-l-destructive divide-y border border-l-2">
+          {shown.map((problem) => (
+            <li key={problem.id}>
+              <button
+                type="button"
+                onClick={() => onOpen(problem)}
+                className="hover:bg-muted/40 flex w-full items-center gap-3 px-5 py-4 text-left"
+              >
+                <span
+                  className="bg-destructive size-2 shrink-0 rounded-full"
+                  aria-hidden
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[15px]">
+                    {problemHeadline(problem, now)}
+                  </span>
+                  <span className="text-muted-foreground block text-xs">
+                    {problem.peopleOnServerCount !== undefined &&
+                    problem.peopleOnServerCount < problem.peopleCount
+                      ? `${problem.peopleOnServerCount} on this server · ${problem.peopleCount} ${problem.scope.kind === "service" ? `on all servers that use ${problem.scope.name}` : "in all"}. `
+                      : ""}
+                    {problem.fact}
+                  </span>
                 </span>
-                <span className="text-muted-foreground block text-xs">
-                  {problem.peopleOnServerCount !== undefined &&
-                  problem.peopleOnServerCount < problem.peopleCount
-                    ? `${problem.peopleOnServerCount} on this server · ${problem.peopleCount} ${problem.scope.kind === "service" ? `on all servers that use ${problem.scope.name}` : "in all"}. `
-                    : ""}
-                  {problem.fact}
-                </span>
-              </span>
-              <ArrowRight
-                className="text-muted-foreground size-4 shrink-0"
-                aria-hidden
-              />
-            </button>
-          </li>
-        ))}
-        {problems.length > VISIBLE ? (
-          <li>
-            <button
-              type="button"
-              onClick={() => setExpanded((v) => !v)}
-              aria-expanded={expanded}
-              className="flex items-center gap-2 px-5 py-3 text-sm"
-            >
-              <ChevronDown
-                className={`size-4 transition-transform ${expanded ? "rotate-180" : ""}`}
-                aria-hidden
-              />
-              {expanded ? "Show fewer" : `Show ${hidden} more`}
-            </button>
-          </li>
-        ) : null}
-      </ul>
-    </section>
+                <ArrowRight
+                  className="text-muted-foreground size-4 shrink-0"
+                  aria-hidden
+                />
+              </button>
+            </li>
+          ))}
+          {problems.length > VISIBLE ? (
+            <li>
+              <button
+                type="button"
+                onClick={() => setExpanded((v) => !v)}
+                aria-expanded={expanded}
+                className="flex items-center gap-2 px-5 py-3 text-sm"
+              >
+                <ChevronDown
+                  className={`size-4 transition-transform ${expanded ? "rotate-180" : ""}`}
+                  aria-hidden
+                />
+                {expanded ? "Show fewer" : `Show ${hidden} more`}
+              </button>
+            </li>
+          ) : null}
+        </ul>
+      </section>
+      {note}
+    </div>
   );
 }

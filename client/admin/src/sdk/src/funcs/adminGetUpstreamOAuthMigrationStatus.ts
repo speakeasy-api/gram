@@ -40,7 +40,7 @@ import { Result } from "../types/fp.js";
  * getUpstreamOAuthMigrationStatus admin
  *
  * @remarks
- * Reports where one organization stands in the upstream OAuth migration from a dry run that writes nothing.
+ * Reports typed upstream authentication readiness for one organization without making changes.
  */
 export function adminGetUpstreamOAuthMigrationStatus(
   client: GramCore,
