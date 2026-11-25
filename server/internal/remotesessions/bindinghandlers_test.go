@@ -482,7 +482,7 @@ func TestBindingsCompatibilityParentDoesNotConfigureServerOAuth(t *testing.T) {
 	require.NoError(t, err)
 	parents, err = q.CountRemoteSessionClientUserSessionIssuerBindings(ctx, parent)
 	require.NoError(t, err)
-	require.EqualValues(t, 1, parents, "the attachment must create its FK parent")
+	require.Zero(t, parents, "attachment must not create a legacy compatibility parent")
 
 	backend := uuid.New()
 	fixtures := authclientbackfill.New(ti.conn)
