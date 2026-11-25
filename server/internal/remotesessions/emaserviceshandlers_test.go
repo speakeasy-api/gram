@@ -18,6 +18,7 @@ import (
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -466,4 +467,82 @@ func TestReadEMA_CompleteBeforeOnWhenNoOtherServerCouldShare(t *testing.T) {
 	// Same origin as the resource but not naming it: only live discovery could tell, so the list may be short.
 	seedRemoteMCPServerForIssuer(t, ctx, ti, in.UserSessionIssuerID, "ema-same-origin", "https://resource.example.com/other/mcp")
 	require.False(t, *read().ServersComplete)
+}
+
+// Once on, Turn off names only servers the binding writer links: a server
+// whose protected resource leaves the issuer out names the resource but is
+// refused at runtime, so it is not one the binding changes.
+func TestReadEMA_OnOmitsServersTheWriterRefuses(t *testing.T) {
+	t.Parallel()
+	ctx, ti, in := preparationFixture(t)
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	refused := seedRemoteMCPServerForIssuer(t, ctx, ti, in.UserSessionIssuerID, "ema-issuer-not-allowed", in.Resource)
+	_, err := remotemcprepo.New(ti.conn).UpsertRemoteProtectedResource(ctx, remotemcprepo.UpsertRemoteProtectedResourceParams{
+		ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, ResourceIdentifier: in.Resource,
+		MetadataUrl: "https://resource.example.com/.well-known/oauth-protected-resource", AuthorizationServers: []string{"https://another-issuer.example.com"},
+		ScopesSupported: nil, BearerMethodsSupported: nil, ResourceName: "", ResourceDocumentation: "", ResourcePolicyUri: "", ResourceTosUri: "", Metadata: "",
+	})
+	require.NoError(t, err)
+	_, err = remotemcprepo.New(ti.conn).SetRemoteProtectedResourceMetadataTimestamps(ctx, remotemcprepo.SetRemoteProtectedResourceMetadataTimestampsParams{
+		MetadataFetchedAt: conv.ToPGTimestamptz(time.Now()), MetadataLastErrorAt: pgtype.Timestamptz{}, ProjectID: *auth.ProjectID, ResourceIdentifier: in.Resource,
+	})
+	require.NoError(t, err)
+	read := func() *clientsgen.IdentityChainingPreparation {
+		t.Helper()
+		out, err := ti.service.ReadEMA(ctx, &clientsgen.ReadEMAPayload{UserSessionIssuerID: in.UserSessionIssuerID.String(), RemoteSessionIssuerID: in.RemoteSessionIssuerID.String(), Resource: in.Resource})
+		require.NoError(t, err)
+		return out
+	}
+
+	off := read()
+	require.Len(t, off.Servers, 1, "before the binding is on, a server naming the resource may change")
+	require.Equal(t, refused.String(), off.Servers[0].ID)
+
+	prepareEMABinding(t, ctx, ti, in)
+	on := read()
+	require.Equal(t, "ready", on.State)
+	require.Empty(t, on.Servers, "the writer refuses a server whose metadata leaves the issuer out")
+	require.Equal(t, 0, *on.HiddenServerCount)
+}
+
+// Before the binding is on, only remote servers signed in directly are named;
+// a tunneled server or a gateway member it could reach leaves the list short,
+// so the confirmation says other servers may change.
+func TestReadEMA_IncompleteBeforeOnForTunneledAndGatewayCandidates(t *testing.T) {
+	t.Parallel()
+	read := func(t *testing.T, ctx context.Context, ti *testInstance, in remotesessions.PreparationInput) *clientsgen.IdentityChainingPreparation {
+		t.Helper()
+		out, err := ti.service.ReadEMA(ctx, &clientsgen.ReadEMAPayload{UserSessionIssuerID: in.UserSessionIssuerID.String(), RemoteSessionIssuerID: in.RemoteSessionIssuerID.String(), Resource: in.Resource})
+		require.NoError(t, err)
+		return out
+	}
+
+	t.Run("tunneled server", func(t *testing.T) {
+		t.Parallel()
+		ctx, ti, in := preparationFixture(t)
+		named := seedRemoteMCPServerForIssuer(t, ctx, ti, in.UserSessionIssuerID, "ema-named", in.Resource)
+		require.True(t, *read(t, ctx, ti, in).ServersComplete)
+
+		seedTunneledMCPServerForIssuer(t, ctx, ti, in.UserSessionIssuerID, "ema-tunneled", in.Resource)
+		off := read(t, ctx, ti, in)
+		require.Len(t, off.Servers, 1)
+		require.Equal(t, named.String(), off.Servers[0].ID)
+		require.False(t, *off.ServersComplete)
+	})
+
+	t.Run("gateway member", func(t *testing.T) {
+		t.Parallel()
+		ctx, ti, in := preparationFixture(t)
+		auth, ok := contextvalues.GetAuthContext(ctx)
+		require.True(t, ok)
+		seedRemoteMCPServerForIssuer(t, ctx, ti, in.UserSessionIssuerID, "ema-member", in.Resource)
+		in.UserSessionIssuerID = seedPreparationGatewayIssuer(t, ctx, ti)
+		require.True(t, *read(t, ctx, ti, in).ServersComplete, "with no gateway decision the member is not reached")
+
+		require.NoError(t, ti.features.SetFeatureEnabled(ctx, auth.ActiveOrganizationID, productfeatures.FeatureOrganizationGatewayDisabled, false))
+		off := read(t, ctx, ti, in)
+		require.Empty(t, off.Servers)
+		require.False(t, *off.ServersComplete)
+	})
 }

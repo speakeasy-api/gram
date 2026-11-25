@@ -343,6 +343,7 @@ func (s *Service) emaBindingServers(ctx context.Context, in PreparationInput) ([
 		OrganizationID:      authCtx.ActiveOrganizationID,
 		ProjectID:           *authCtx.ProjectID,
 		ReachedServerIds:    reached,
+		Ready:               ready,
 		UserSessionIssuerID: uuid.NullUUID{UUID: in.UserSessionIssuerID, Valid: true},
 		Resource:            in.Resource,
 	})

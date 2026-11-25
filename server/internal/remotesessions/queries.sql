@@ -7467,7 +7467,7 @@ ORDER BY COALESCE(i.organization_id = @organization_id::text OR (i.organization_
   COALESCE(i.organization_id = @organization_id::text, FALSE) DESC, (i.project_id IS NULL) DESC, i.created_at, i.id, p.name, m.id;
 
 -- name: ListEMABindingTargetServers :many
--- Live servers in the project a binding target reaches: those the binding writer matched, and remote servers on its sign-in naming its resource.
+-- Live servers in the project a binding target reaches: once ready, only those the binding writer matched; before, remote servers on its sign-in naming its resource.
 SELECT m.id, m.toolset_id, COALESCE(m.name, '')::text AS name, COALESCE(m.slug, '')::text AS slug
 FROM mcp_servers m
 JOIN projects p ON p.id = m.project_id AND p.organization_id = @organization_id::text AND p.deleted IS FALSE
@@ -7476,7 +7476,7 @@ WHERE m.project_id = @project_id
   AND m.deleted IS FALSE
   AND (
     m.id = ANY(@reached_server_ids::uuid[])
-    OR (r.id IS NOT NULL AND m.user_session_issuer_id = @user_session_issuer_id AND (
+    OR (NOT @ready::boolean AND r.id IS NOT NULL AND m.user_session_issuer_id = @user_session_issuer_id AND (
       r.url = @resource::text
       OR EXISTS (
         SELECT 1 FROM remote_protected_resources rpr

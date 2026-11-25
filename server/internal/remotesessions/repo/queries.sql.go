@@ -8374,12 +8374,12 @@ WHERE m.project_id = $2
   AND m.deleted IS FALSE
   AND (
     m.id = ANY($3::uuid[])
-    OR (r.id IS NOT NULL AND m.user_session_issuer_id = $4 AND (
-      r.url = $5::text
+    OR (NOT $4::boolean AND r.id IS NOT NULL AND m.user_session_issuer_id = $5 AND (
+      r.url = $6::text
       OR EXISTS (
         SELECT 1 FROM remote_protected_resources rpr
         WHERE rpr.project_id = r.project_id AND rpr.resource_identifier = r.url AND rpr.deleted IS FALSE
-          AND rpr.metadata->>'resource' = $5::text
+          AND rpr.metadata->>'resource' = $6::text
       )
     ))
   )
@@ -8390,6 +8390,7 @@ type ListEMABindingTargetServersParams struct {
 	OrganizationID      string
 	ProjectID           uuid.UUID
 	ReachedServerIds    []uuid.UUID
+	Ready               bool
 	UserSessionIssuerID uuid.NullUUID
 	Resource            string
 }
@@ -8401,12 +8402,13 @@ type ListEMABindingTargetServersRow struct {
 	Slug      string
 }
 
-// Live servers in the project a binding target reaches: those the binding writer matched, and remote servers on its sign-in naming its resource.
+// Live servers in the project a binding target reaches: once ready, only those the binding writer matched; before, remote servers on its sign-in naming its resource.
 func (q *Queries) ListEMABindingTargetServers(ctx context.Context, arg ListEMABindingTargetServersParams) ([]ListEMABindingTargetServersRow, error) {
 	rows, err := q.db.Query(ctx, listEMABindingTargetServers,
 		arg.OrganizationID,
 		arg.ProjectID,
 		arg.ReachedServerIds,
+		arg.Ready,
 		arg.UserSessionIssuerID,
 		arg.Resource,
 	)

@@ -14,7 +14,6 @@ import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IdentityChainingField } from "./IdentityChainingField";
 import { sharedServersText } from "./identityChainingShared";
-import type { ChainingProviders } from "./identityChainingGate";
 
 const pending = vi.hoisted(() => ({ prepare: false, unlink: false }));
 // readEMA lists the servers a binding shares; these name none and are complete.
@@ -180,7 +179,6 @@ const clients = ["first", "second"].map((id) => ({
 })) as RemoteSessionClient[];
 
 function field(
-  _providers: ChainingProviders = { external: true },
   userSessionIssuer = {
     id: "session-issuer",
     trustedRemoteSessionIssuerId: "idp",
@@ -317,11 +315,11 @@ describe("identity chaining client for this service", () => {
     expect(screen.queryByText(/Identity above/)).toBeNull();
   });
 
-  it("asks for the service's authorization server credential when an identity provider vouches", () => {
+  it("asks for a credential registered with the server's authorization server", () => {
     prmMock.value = {
       metadata: { authorizationServers: ["https://tracker.example.com/"] },
     };
-    render(field({ external: true }), { wrapper: MemoryRouter });
+    render(field(), { wrapper: MemoryRouter });
     expect(
       screen.getByText(
         "First, use Add credential in Upstream credentials above to add a per-person credential registered with this server’s authorization server.",
@@ -536,7 +534,7 @@ describe("identity chaining shared with other servers", () => {
 
   it("says an on setting is shared and lists the servers Turn off changes", () => {
     read.data = { ...bound("second"), servers, hiddenServerCount: 0 };
-    render(field({ external: true }, issuer, "this"), {
+    render(field(issuer, "this"), {
       wrapper: MemoryRouter,
     });
     expect(
@@ -598,7 +596,7 @@ describe("identity chaining shared with other servers", () => {
     ],
   ])("still confirms Turn on when %s", (_case, shared, says) => {
     read.data = { ...unlinked, ...shared };
-    render(field({ external: true }, issuer, "this"), {
+    render(field(issuer, "this"), {
       wrapper: MemoryRouter,
     });
     fireEvent.click(screen.getByRole("button", { name: "Turn on" }));
@@ -616,7 +614,7 @@ describe("identity chaining shared with other servers", () => {
 
   it("turns on without asking when nothing else shares the setting", () => {
     read.data = unlinked;
-    render(field({ external: true }, issuer, "this"), {
+    render(field(issuer, "this"), {
       wrapper: MemoryRouter,
     });
     fireEvent.click(screen.getByRole("button", { name: "Turn on" }));
@@ -631,7 +629,7 @@ describe("identity chaining shared with other servers", () => {
       hiddenServerCount: 0,
       serversComplete: true,
     };
-    render(field({ external: true }, issuer, "this"), {
+    render(field(issuer, "this"), {
       wrapper: MemoryRouter,
     });
     fireEvent.click(screen.getByRole("button", { name: "Turn on" }));
@@ -643,7 +641,7 @@ describe("identity chaining shared with other servers", () => {
 
   it("says the credential changes on the other servers when switching it", () => {
     read.data = { ...bound("elsewhere"), servers, hiddenServerCount: 0 };
-    render(field({ external: true }, issuer, "this"), {
+    render(field(issuer, "this"), {
       wrapper: MemoryRouter,
     });
     fireEvent.click(
@@ -720,7 +718,6 @@ describe("identity chaining bound client", () => {
 });
 
 describe("identity chaining vouched for by Speakeasy", () => {
-  const speakeasyOnly = { external: false };
   const plainIssuer = {
     id: "session-issuer",
     slug: "speakeasy-sign-in",
@@ -1034,7 +1031,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
   });
 
   it("offers every linked client when no sign-in client is trusted", () => {
-    render(field(speakeasyOnly, plainIssuer), { wrapper: MemoryRouter });
+    render(field(plainIssuer), { wrapper: MemoryRouter });
     expect(screen.getByRole("combobox")).toBeTruthy();
     expect(
       screen.getByRole("link", { name: "Manage client" }).getAttribute("href"),
@@ -1045,13 +1042,14 @@ describe("identity chaining vouched for by Speakeasy", () => {
 
   it("keeps the identity provider's sign-in client out of the picker", () => {
     read.data = { ...unlinked, emaProviders: providersOf(okta) };
-    render(field({ external: true }, trusting), { wrapper: MemoryRouter });
+    render(field(trusting), { wrapper: MemoryRouter });
     expect(screen.queryByRole("combobox")).toBeNull();
     expect(within(chain()).getByRole("link", { name: "first" })).toBeTruthy();
   });
 
   it("keeps the trusted sign-in client out even when only Speakeasy applies", () => {
-    render(field(speakeasyOnly, trusting), { wrapper: MemoryRouter });
+    read.data = { ...unlinked, emaProviders: providersOf(speakeasy) };
+    render(field(trusting), { wrapper: MemoryRouter });
     expect(screen.queryByRole("combobox")).toBeNull();
   });
 
