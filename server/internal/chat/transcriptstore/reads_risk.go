@@ -68,11 +68,12 @@ type GetChatMessageForUnmaskRow = plainrepo.GetChatMessageForUnmaskRow
 func (t *Transcripts) GetChatMessageForUnmask(ctx context.Context, db DBTX, projectID, messageID uuid.UUID) (GetChatMessageForUnmaskRow, error) {
 	row, err := plainrepo.New(db).GetChatMessageForUnmask(ctx, plainrepo.GetChatMessageForUnmaskParams{OpenShadows: t.Enabled(projectID), ID: messageID, ProjectID: uuid.NullUUID{UUID: projectID, Valid: true}})
 	if err != nil {
-		return row, fmt.Errorf("get chat message for unmask: %w", err)
+		return GetChatMessageForUnmaskRow{}, fmt.Errorf("get chat message for unmask: %w", err)
 	}
 	joined := []joinedRow{{body: Body{MessageID: row.ID, Content: &row.Content, ContentRaw: nil, ToolCalls: &row.ToolCalls, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}, chatID: row.ChatID, ciphertext: row.ShadowCiphertext, current: row.ShadowCurrent, shape: nil}}
 	if err := t.openJoined(ctx, db, projectID, joined); err != nil {
-		return row, err
+		// Never hand back the plaintext that failed the check.
+		return GetChatMessageForUnmaskRow{}, err
 	}
 	return row, nil
 }
