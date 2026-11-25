@@ -26,6 +26,7 @@ import {
   MessageSquareIcon,
   FlaskConicalIcon,
   RocketIcon,
+  BotIcon,
 } from "lucide-react";
 
 import { McpIcon } from "@/components/ui/mcp-icon";
@@ -71,6 +72,13 @@ export const ADMIN_NAV_GROUPS = [
         label: "MCP Registry",
         keywords: "catalog mcp servers",
         icon: McpIcon,
+      },
+      {
+        to: "/ai-clients/products",
+        label: "AI clients",
+        keywords:
+          "ai client catalog products shadow ai cimd documents signatures vendors",
+        icon: BotIcon,
       },
       {
         to: "/integration-coverage",

@@ -61,6 +61,7 @@ trackedFiles:
   src/funcs/adminExtendTrial.ts: {}
   src/funcs/adminFetchGlobalIssuerMetadata.ts: {}
   src/funcs/adminFinalizeOrganizationEncryption.ts: {}
+  src/funcs/adminGetAIProduct.ts: {}
   src/funcs/adminGetGcpIamPlatformCredential.ts: {}
   src/funcs/adminGetGlobalIssuer.ts: {}
   src/funcs/adminGetGlobalIssuerDuplicatePreflight.ts: {}
@@ -97,6 +98,7 @@ trackedFiles:
   src/funcs/adminGetSupportCoverage.ts: {}
   src/funcs/adminGetSupportMatrix.ts: {}
   src/funcs/adminGetUpstreamOAuthMigrationStatus.ts: {}
+  src/funcs/adminListAIProducts.ts: {}
   src/funcs/adminListAssistantOrganizations.ts: {}
   src/funcs/adminListCustomDomains.ts: {}
   src/funcs/adminListCustomerUsage.ts: {}
@@ -182,6 +184,9 @@ trackedFiles:
   src/lib/sdks.ts: {}
   src/lib/security.ts: {}
   src/lib/url.ts: {}
+  src/models/components/adminaiproduct.ts: {}
+  src/models/components/adminaiproductdocument.ts: {}
+  src/models/components/adminaiproductsummary.ts: {}
   src/models/components/adminassistantagentnamerepairresult.ts: {}
   src/models/components/adminassistantagentnamerepairrun.ts: {}
   src/models/components/adminassistantidentitymigrationresult.ts: {}
@@ -358,6 +363,7 @@ trackedFiles:
   src/models/components/issuerconvergencecandidate.ts: {}
   src/models/components/issuerfieldmismatch.ts: {}
   src/models/components/issuermigratepreflight.ts: {}
+  src/models/components/listaiproductsresponsebody.ts: {}
   src/models/components/listexternalcredentialsresult.ts: {}
   src/models/components/listglobalremotesessionissuersresult.ts: {}
   src/models/components/listissuerconvergencecandidatesresult.ts: {}
@@ -432,6 +438,7 @@ trackedFiles:
   src/models/errors/serviceerror.ts: {}
   src/models/operations/admindeleteglobalissuer.ts: {}
   src/models/operations/admindescribemcpserverhealth.ts: {}
+  src/models/operations/admingetaiproduct.ts: {}
   src/models/operations/admingetgcpiamplatformcredential.ts: {}
   src/models/operations/admingetglobalissuer.ts: {}
   src/models/operations/admingetglobalissuerduplicatepreflight.ts: {}
@@ -461,6 +468,7 @@ trackedFiles:
   src/models/operations/admingetstripesubscriptioncandidate.ts: {}
   src/models/operations/admingetsupportcoverage.ts: {}
   src/models/operations/admingetupstreamoauthmigrationstatus.ts: {}
+  src/models/operations/adminlistaiproducts.ts: {}
   src/models/operations/adminlistcustomdomains.ts: {}
   src/models/operations/adminlistcustomerusage.ts: {}
   src/models/operations/adminlistglobalissuerconvergencecandidates.ts: {}
@@ -507,6 +515,8 @@ trackedFiles:
   src/react-query/adminExtendTrial.ts: {}
   src/react-query/adminFetchGlobalIssuerMetadata.ts: {}
   src/react-query/adminFinalizeOrganizationEncryption.ts: {}
+  src/react-query/adminGetAIProduct.core.ts: {}
+  src/react-query/adminGetAIProduct.ts: {}
   src/react-query/adminGetGcpIamPlatformCredential.core.ts: {}
   src/react-query/adminGetGcpIamPlatformCredential.ts: {}
   src/react-query/adminGetGlobalIssuer.core.ts: {}
@@ -570,6 +580,8 @@ trackedFiles:
   src/react-query/adminGetSupportMatrix.ts: {}
   src/react-query/adminGetUpstreamOAuthMigrationStatus.core.ts: {}
   src/react-query/adminGetUpstreamOAuthMigrationStatus.ts: {}
+  src/react-query/adminListAIProducts.core.ts: {}
+  src/react-query/adminListAIProducts.ts: {}
   src/react-query/adminListAssistantOrganizations.core.ts: {}
   src/react-query/adminListAssistantOrganizations.ts: {}
   src/react-query/adminListCustomDomains.core.ts: {}
@@ -1062,6 +1074,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  adminGetAIProduct:
+    speakeasy-default-admin-get-AI-product:
+      parameters:
+        query:
+          id: "<id>"
+      responses:
+        "200":
+          application/json: {"binaries": ["<value 1>", "<value 2>"], "blocked_organization_count": 576342, "bundle_ids": [], "client_info_names": ["<value 1>"], "config_dirs": ["<value 1>", "<value 2>"], "created_at": "2025-12-24T00:23:13.182Z", "deleted": false, "display_name": "Ulices.Breitenberg46", "documents": [{"created_at": "2024-01-16T09:40:10.376Z", "deleted": true, "display_name": "Terrill41", "enabled": true, "id": "c8ab1182-bd14-4230-b638-e1a6dc505cb2", "is_pattern": true, "updated_at": "2026-10-16T01:15:42.646Z", "url": "https://hollow-nucleotidase.com"}], "id": "<id>", "process_names": ["<value 1>"], "updated_at": "2024-04-21T14:46:46.599Z", "vendor_key": "<value>"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   adminGetGcpIamPlatformCredential:
     speakeasy-default-admin-get-gcp-iam-platform-credential:
       parameters:
@@ -1529,6 +1553,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  adminListAIProducts:
+    speakeasy-default-admin-list-AI-products:
+      parameters:
+        query:
+          include_deleted: false
+      responses:
+        "200":
+          application/json: {"products": [{"deleted": false, "display_name": "Helmer77", "document_count": 581054, "id": "<id>", "updated_at": "2025-11-10T10:52:03.504Z", "vendor_key": "<value>"}], "truncated": false}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   adminListAssistantOrganizations:
     speakeasy-default-admin-list-assistant-organizations:
       responses:

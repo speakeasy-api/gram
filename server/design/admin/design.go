@@ -1409,6 +1409,7 @@ var _ = Service("admin", func() {
 	hookClientsMethods()
 	hookFleetMethods()
 	registryDesign()
+	aiCatalogMethods()
 	onboardingStackMethods()
 	onboardingPlaybookMethods()
 	signupOfferMethods()

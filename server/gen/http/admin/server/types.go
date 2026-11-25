@@ -2704,6 +2704,45 @@ type SetRegistryEntryPublishedResponseBody struct {
 	Issues    []*AdminRegistryIssueResponseBody `form:"issues" json:"issues" xml:"issues"`
 }
 
+// ListAIProductsResponseBody is the type of the "admin" service
+// "listAIProducts" endpoint HTTP response body.
+type ListAIProductsResponseBody struct {
+	// Live products first, then by name.
+	Products []*AdminAIProductSummaryResponseBody `form:"products" json:"products" xml:"products"`
+	// Whether more products matched than the list returns.
+	Truncated bool `form:"truncated" json:"truncated" xml:"truncated"`
+}
+
+// GetAIProductResponseBody is the type of the "admin" service "getAIProduct"
+// endpoint HTTP response body.
+type GetAIProductResponseBody struct {
+	ID          string  `form:"id" json:"id" xml:"id"`
+	DisplayName string  `form:"display_name" json:"display_name" xml:"display_name"`
+	Category    *string `form:"category,omitempty" json:"category,omitempty" xml:"category,omitempty"`
+	VendorKey   string  `form:"vendor_key" json:"vendor_key" xml:"vendor_key"`
+	// macOS bundle identifiers.
+	BundleIds []string `form:"bundle_ids" json:"bundle_ids" xml:"bundle_ids"`
+	// Command names resolved on the device PATH.
+	Binaries []string `form:"binaries" json:"binaries" xml:"binaries"`
+	// Directories whose existence marks the product installed.
+	ConfigDirs []string `form:"config_dirs" json:"config_dirs" xml:"config_dirs"`
+	// Process names checked for the running signal.
+	ProcessNames []string `form:"process_names" json:"process_names" xml:"process_names"`
+	// Info.plist key read for the version. Absent means CFBundleShortVersionString.
+	VersionPlistKey *string `form:"version_plist_key,omitempty" json:"version_plist_key,omitempty" xml:"version_plist_key,omitempty"`
+	// Names the product reports at MCP initialize. Self-reported, attribution only.
+	ClientInfoNames []string `form:"client_info_names" json:"client_info_names" xml:"client_info_names"`
+	CreatedBy       *string  `form:"created_by,omitempty" json:"created_by,omitempty" xml:"created_by,omitempty"`
+	UpdatedBy       *string  `form:"updated_by,omitempty" json:"updated_by,omitempty" xml:"updated_by,omitempty"`
+	Deleted         bool     `form:"deleted" json:"deleted" xml:"deleted"`
+	CreatedAt       string   `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt       string   `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// How many organizations block the product. A count only, never which ones.
+	BlockedOrganizationCount int `form:"blocked_organization_count" json:"blocked_organization_count" xml:"blocked_organization_count"`
+	// Every document, deleted ones included.
+	Documents []*AdminAIProductDocumentResponseBody `form:"documents" json:"documents" xml:"documents"`
+}
+
 // ListOnboardingStepsResponseBody is the type of the "admin" service
 // "listOnboardingSteps" endpoint HTTP response body.
 type ListOnboardingStepsResponseBody struct {
@@ -18296,6 +18335,369 @@ type SetRegistryEntryPublishedGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListAIProductsUnauthorizedResponseBody is the type of the "admin" service
+// "listAIProducts" endpoint HTTP response body for the "unauthorized" error.
+type ListAIProductsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAIProductsForbiddenResponseBody is the type of the "admin" service
+// "listAIProducts" endpoint HTTP response body for the "forbidden" error.
+type ListAIProductsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAIProductsBadRequestResponseBody is the type of the "admin" service
+// "listAIProducts" endpoint HTTP response body for the "bad_request" error.
+type ListAIProductsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAIProductsNotFoundResponseBody is the type of the "admin" service
+// "listAIProducts" endpoint HTTP response body for the "not_found" error.
+type ListAIProductsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAIProductsConflictResponseBody is the type of the "admin" service
+// "listAIProducts" endpoint HTTP response body for the "conflict" error.
+type ListAIProductsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAIProductsUnsupportedMediaResponseBody is the type of the "admin"
+// service "listAIProducts" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListAIProductsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAIProductsInvalidResponseBody is the type of the "admin" service
+// "listAIProducts" endpoint HTTP response body for the "invalid" error.
+type ListAIProductsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAIProductsInvariantViolationResponseBody is the type of the "admin"
+// service "listAIProducts" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListAIProductsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAIProductsUnexpectedResponseBody is the type of the "admin" service
+// "listAIProducts" endpoint HTTP response body for the "unexpected" error.
+type ListAIProductsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAIProductsGatewayErrorResponseBody is the type of the "admin" service
+// "listAIProducts" endpoint HTTP response body for the "gateway_error" error.
+type ListAIProductsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAIProductUnauthorizedResponseBody is the type of the "admin" service
+// "getAIProduct" endpoint HTTP response body for the "unauthorized" error.
+type GetAIProductUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAIProductForbiddenResponseBody is the type of the "admin" service
+// "getAIProduct" endpoint HTTP response body for the "forbidden" error.
+type GetAIProductForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAIProductBadRequestResponseBody is the type of the "admin" service
+// "getAIProduct" endpoint HTTP response body for the "bad_request" error.
+type GetAIProductBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAIProductNotFoundResponseBody is the type of the "admin" service
+// "getAIProduct" endpoint HTTP response body for the "not_found" error.
+type GetAIProductNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAIProductConflictResponseBody is the type of the "admin" service
+// "getAIProduct" endpoint HTTP response body for the "conflict" error.
+type GetAIProductConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAIProductUnsupportedMediaResponseBody is the type of the "admin" service
+// "getAIProduct" endpoint HTTP response body for the "unsupported_media" error.
+type GetAIProductUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAIProductInvalidResponseBody is the type of the "admin" service
+// "getAIProduct" endpoint HTTP response body for the "invalid" error.
+type GetAIProductInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAIProductInvariantViolationResponseBody is the type of the "admin"
+// service "getAIProduct" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetAIProductInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAIProductUnexpectedResponseBody is the type of the "admin" service
+// "getAIProduct" endpoint HTTP response body for the "unexpected" error.
+type GetAIProductUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAIProductGatewayErrorResponseBody is the type of the "admin" service
+// "getAIProduct" endpoint HTTP response body for the "gateway_error" error.
+type GetAIProductGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // ListOnboardingStepsUnauthorizedResponseBody is the type of the "admin"
 // service "listOnboardingSteps" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -31077,6 +31479,45 @@ type AdminRegistryIssueResponseBody struct {
 	Message string `form:"message" json:"message" xml:"message"`
 }
 
+// AdminAIProductSummaryResponseBody is used to define fields on response body
+// types.
+type AdminAIProductSummaryResponseBody struct {
+	// Stable product identifier, e.g. claude-code.
+	ID          string `form:"id" json:"id" xml:"id"`
+	DisplayName string `form:"display_name" json:"display_name" xml:"display_name"`
+	// harness, assistant or local_model. Absent for a product known only as an
+	// OAuth client.
+	Category *string `form:"category,omitempty" json:"category,omitempty" xml:"category,omitempty"`
+	// Groups the products a vendor ships.
+	VendorKey string `form:"vendor_key" json:"vendor_key" xml:"vendor_key"`
+	// Documents not deleted, enabled or not.
+	DocumentCount int    `form:"document_count" json:"document_count" xml:"document_count"`
+	Deleted       bool   `form:"deleted" json:"deleted" xml:"deleted"`
+	UpdatedAt     string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// AdminAIProductDocumentResponseBody is used to define fields on response body
+// types.
+type AdminAIProductDocumentResponseBody struct {
+	ID string `form:"id" json:"id" xml:"id"`
+	// The client_id, or a pattern where * stands for one path segment.
+	URL         string `form:"url" json:"url" xml:"url"`
+	DisplayName string `form:"display_name" json:"display_name" xml:"display_name"`
+	Enabled     bool   `form:"enabled" json:"enabled" xml:"enabled"`
+	IsPattern   bool   `form:"is_pattern" json:"is_pattern" xml:"is_pattern"`
+	// When the live document was last checked. Absent if never.
+	VerifiedAt *string `form:"verified_at,omitempty" json:"verified_at,omitempty" xml:"verified_at,omitempty"`
+	// Reason code from the last check. Absent when it passed or never ran.
+	VerificationError *string `form:"verification_error,omitempty" json:"verification_error,omitempty" xml:"verification_error,omitempty"`
+	// Staff subject who created the row. Absent for seeded rows.
+	CreatedBy *string `form:"created_by,omitempty" json:"created_by,omitempty" xml:"created_by,omitempty"`
+	// Staff subject who last changed the row. Absent for seeded rows.
+	UpdatedBy *string `form:"updated_by,omitempty" json:"updated_by,omitempty" xml:"updated_by,omitempty"`
+	Deleted   bool    `form:"deleted" json:"deleted" xml:"deleted"`
+	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
 // AdminOnboardingStepResponseBody is used to define fields on response body
 // types.
 type AdminOnboardingStepResponseBody struct {
@@ -34052,6 +34493,98 @@ func NewSetRegistryEntryPublishedResponseBody(res *admin.AdminRegistryEntry) *Se
 		}
 	} else {
 		body.Issues = []*AdminRegistryIssueResponseBody{}
+	}
+	return body
+}
+
+// NewListAIProductsResponseBody builds the HTTP response body from the result
+// of the "listAIProducts" endpoint of the "admin" service.
+func NewListAIProductsResponseBody(res *admin.ListAIProductsResult) *ListAIProductsResponseBody {
+	body := &ListAIProductsResponseBody{
+		Truncated: res.Truncated,
+	}
+	if res.Products != nil {
+		body.Products = make([]*AdminAIProductSummaryResponseBody, len(res.Products))
+		for i, val := range res.Products {
+			if val == nil {
+				body.Products[i] = nil
+				continue
+			}
+			body.Products[i] = marshalAdminAdminAIProductSummaryToAdminAIProductSummaryResponseBody(val)
+		}
+	} else {
+		body.Products = []*AdminAIProductSummaryResponseBody{}
+	}
+	return body
+}
+
+// NewGetAIProductResponseBody builds the HTTP response body from the result of
+// the "getAIProduct" endpoint of the "admin" service.
+func NewGetAIProductResponseBody(res *admin.AdminAIProduct) *GetAIProductResponseBody {
+	body := &GetAIProductResponseBody{
+		ID:                       res.ID,
+		DisplayName:              res.DisplayName,
+		Category:                 res.Category,
+		VendorKey:                res.VendorKey,
+		VersionPlistKey:          res.VersionPlistKey,
+		CreatedBy:                res.CreatedBy,
+		UpdatedBy:                res.UpdatedBy,
+		Deleted:                  res.Deleted,
+		CreatedAt:                res.CreatedAt,
+		UpdatedAt:                res.UpdatedAt,
+		BlockedOrganizationCount: res.BlockedOrganizationCount,
+	}
+	if res.BundleIds != nil {
+		body.BundleIds = make([]string, len(res.BundleIds))
+		for i, val := range res.BundleIds {
+			body.BundleIds[i] = val
+		}
+	} else {
+		body.BundleIds = []string{}
+	}
+	if res.Binaries != nil {
+		body.Binaries = make([]string, len(res.Binaries))
+		for i, val := range res.Binaries {
+			body.Binaries[i] = val
+		}
+	} else {
+		body.Binaries = []string{}
+	}
+	if res.ConfigDirs != nil {
+		body.ConfigDirs = make([]string, len(res.ConfigDirs))
+		for i, val := range res.ConfigDirs {
+			body.ConfigDirs[i] = val
+		}
+	} else {
+		body.ConfigDirs = []string{}
+	}
+	if res.ProcessNames != nil {
+		body.ProcessNames = make([]string, len(res.ProcessNames))
+		for i, val := range res.ProcessNames {
+			body.ProcessNames[i] = val
+		}
+	} else {
+		body.ProcessNames = []string{}
+	}
+	if res.ClientInfoNames != nil {
+		body.ClientInfoNames = make([]string, len(res.ClientInfoNames))
+		for i, val := range res.ClientInfoNames {
+			body.ClientInfoNames[i] = val
+		}
+	} else {
+		body.ClientInfoNames = []string{}
+	}
+	if res.Documents != nil {
+		body.Documents = make([]*AdminAIProductDocumentResponseBody, len(res.Documents))
+		for i, val := range res.Documents {
+			if val == nil {
+				body.Documents[i] = nil
+				continue
+			}
+			body.Documents[i] = marshalAdminAdminAIProductDocumentToAdminAIProductDocumentResponseBody(val)
+		}
+	} else {
+		body.Documents = []*AdminAIProductDocumentResponseBody{}
 	}
 	return body
 }
@@ -46802,6 +47335,286 @@ func NewSetRegistryEntryPublishedGatewayErrorResponseBody(res *goa.ServiceError)
 	return body
 }
 
+// NewListAIProductsUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "listAIProducts" endpoint of the "admin" service.
+func NewListAIProductsUnauthorizedResponseBody(res *goa.ServiceError) *ListAIProductsUnauthorizedResponseBody {
+	body := &ListAIProductsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAIProductsForbiddenResponseBody builds the HTTP response body from
+// the result of the "listAIProducts" endpoint of the "admin" service.
+func NewListAIProductsForbiddenResponseBody(res *goa.ServiceError) *ListAIProductsForbiddenResponseBody {
+	body := &ListAIProductsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAIProductsBadRequestResponseBody builds the HTTP response body from
+// the result of the "listAIProducts" endpoint of the "admin" service.
+func NewListAIProductsBadRequestResponseBody(res *goa.ServiceError) *ListAIProductsBadRequestResponseBody {
+	body := &ListAIProductsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAIProductsNotFoundResponseBody builds the HTTP response body from the
+// result of the "listAIProducts" endpoint of the "admin" service.
+func NewListAIProductsNotFoundResponseBody(res *goa.ServiceError) *ListAIProductsNotFoundResponseBody {
+	body := &ListAIProductsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAIProductsConflictResponseBody builds the HTTP response body from the
+// result of the "listAIProducts" endpoint of the "admin" service.
+func NewListAIProductsConflictResponseBody(res *goa.ServiceError) *ListAIProductsConflictResponseBody {
+	body := &ListAIProductsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAIProductsUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "listAIProducts" endpoint of the "admin" service.
+func NewListAIProductsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListAIProductsUnsupportedMediaResponseBody {
+	body := &ListAIProductsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAIProductsInvalidResponseBody builds the HTTP response body from the
+// result of the "listAIProducts" endpoint of the "admin" service.
+func NewListAIProductsInvalidResponseBody(res *goa.ServiceError) *ListAIProductsInvalidResponseBody {
+	body := &ListAIProductsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAIProductsInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "listAIProducts" endpoint of the "admin" service.
+func NewListAIProductsInvariantViolationResponseBody(res *goa.ServiceError) *ListAIProductsInvariantViolationResponseBody {
+	body := &ListAIProductsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAIProductsUnexpectedResponseBody builds the HTTP response body from
+// the result of the "listAIProducts" endpoint of the "admin" service.
+func NewListAIProductsUnexpectedResponseBody(res *goa.ServiceError) *ListAIProductsUnexpectedResponseBody {
+	body := &ListAIProductsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAIProductsGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "listAIProducts" endpoint of the "admin" service.
+func NewListAIProductsGatewayErrorResponseBody(res *goa.ServiceError) *ListAIProductsGatewayErrorResponseBody {
+	body := &ListAIProductsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAIProductUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "getAIProduct" endpoint of the "admin" service.
+func NewGetAIProductUnauthorizedResponseBody(res *goa.ServiceError) *GetAIProductUnauthorizedResponseBody {
+	body := &GetAIProductUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAIProductForbiddenResponseBody builds the HTTP response body from the
+// result of the "getAIProduct" endpoint of the "admin" service.
+func NewGetAIProductForbiddenResponseBody(res *goa.ServiceError) *GetAIProductForbiddenResponseBody {
+	body := &GetAIProductForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAIProductBadRequestResponseBody builds the HTTP response body from the
+// result of the "getAIProduct" endpoint of the "admin" service.
+func NewGetAIProductBadRequestResponseBody(res *goa.ServiceError) *GetAIProductBadRequestResponseBody {
+	body := &GetAIProductBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAIProductNotFoundResponseBody builds the HTTP response body from the
+// result of the "getAIProduct" endpoint of the "admin" service.
+func NewGetAIProductNotFoundResponseBody(res *goa.ServiceError) *GetAIProductNotFoundResponseBody {
+	body := &GetAIProductNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAIProductConflictResponseBody builds the HTTP response body from the
+// result of the "getAIProduct" endpoint of the "admin" service.
+func NewGetAIProductConflictResponseBody(res *goa.ServiceError) *GetAIProductConflictResponseBody {
+	body := &GetAIProductConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAIProductUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "getAIProduct" endpoint of the "admin" service.
+func NewGetAIProductUnsupportedMediaResponseBody(res *goa.ServiceError) *GetAIProductUnsupportedMediaResponseBody {
+	body := &GetAIProductUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAIProductInvalidResponseBody builds the HTTP response body from the
+// result of the "getAIProduct" endpoint of the "admin" service.
+func NewGetAIProductInvalidResponseBody(res *goa.ServiceError) *GetAIProductInvalidResponseBody {
+	body := &GetAIProductInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAIProductInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "getAIProduct" endpoint of the "admin" service.
+func NewGetAIProductInvariantViolationResponseBody(res *goa.ServiceError) *GetAIProductInvariantViolationResponseBody {
+	body := &GetAIProductInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAIProductUnexpectedResponseBody builds the HTTP response body from the
+// result of the "getAIProduct" endpoint of the "admin" service.
+func NewGetAIProductUnexpectedResponseBody(res *goa.ServiceError) *GetAIProductUnexpectedResponseBody {
+	body := &GetAIProductUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAIProductGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "getAIProduct" endpoint of the "admin" service.
+func NewGetAIProductGatewayErrorResponseBody(res *goa.ServiceError) *GetAIProductGatewayErrorResponseBody {
+	body := &GetAIProductGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListOnboardingStepsUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "listOnboardingSteps" endpoint of the "admin" service.
 func NewListOnboardingStepsUnauthorizedResponseBody(res *goa.ServiceError) *ListOnboardingStepsUnauthorizedResponseBody {
@@ -57049,6 +57862,26 @@ func NewSetRegistryEntryPublishedPayload(body *SetRegistryEntryPublishedRequestB
 		UpdatedAt: *body.UpdatedAt,
 		Published: *body.Published,
 	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewListAIProductsPayload builds a admin service listAIProducts endpoint
+// payload.
+func NewListAIProductsPayload(query *string, includeDeleted bool, adminSessionToken *string) *admin.ListAIProductsPayload {
+	v := &admin.ListAIProductsPayload{}
+	v.Query = query
+	v.IncludeDeleted = includeDeleted
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewGetAIProductPayload builds a admin service getAIProduct endpoint payload.
+func NewGetAIProductPayload(id string, adminSessionToken *string) *admin.GetAIProductPayload {
+	v := &admin.GetAIProductPayload{}
+	v.ID = id
 	v.AdminSessionToken = adminSessionToken
 
 	return v

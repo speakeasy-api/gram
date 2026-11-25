@@ -97,6 +97,8 @@ type Server struct {
 	CreateRegistryEntry                     http.Handler
 	SaveRegistryEntry                       http.Handler
 	SetRegistryEntryPublished               http.Handler
+	ListAIProducts                          http.Handler
+	GetAIProduct                            http.Handler
 	ListOnboardingSteps                     http.Handler
 	GetOnboardingStackOptions               http.Handler
 	GetOrganizationOnboardingStack          http.Handler
@@ -262,6 +264,8 @@ func New(
 			{"CreateRegistryEntry", "POST", "/admin/registry.create"},
 			{"SaveRegistryEntry", "POST", "/admin/registry.save"},
 			{"SetRegistryEntryPublished", "POST", "/admin/registry.setPublished"},
+			{"ListAIProducts", "GET", "/admin/aiProducts.list"},
+			{"GetAIProduct", "GET", "/admin/aiProducts.get"},
 			{"ListOnboardingSteps", "GET", "/admin/onboarding.steps"},
 			{"GetOnboardingStackOptions", "GET", "/admin/onboarding.stackOptions"},
 			{"GetOrganizationOnboardingStack", "GET", "/admin/organization.onboardingStack"},
@@ -399,6 +403,8 @@ func New(
 		CreateRegistryEntry:                     NewCreateRegistryEntryHandler(e.CreateRegistryEntry, mux, decoder, encoder, errhandler, formatter),
 		SaveRegistryEntry:                       NewSaveRegistryEntryHandler(e.SaveRegistryEntry, mux, decoder, encoder, errhandler, formatter),
 		SetRegistryEntryPublished:               NewSetRegistryEntryPublishedHandler(e.SetRegistryEntryPublished, mux, decoder, encoder, errhandler, formatter),
+		ListAIProducts:                          NewListAIProductsHandler(e.ListAIProducts, mux, decoder, encoder, errhandler, formatter),
+		GetAIProduct:                            NewGetAIProductHandler(e.GetAIProduct, mux, decoder, encoder, errhandler, formatter),
 		ListOnboardingSteps:                     NewListOnboardingStepsHandler(e.ListOnboardingSteps, mux, decoder, encoder, errhandler, formatter),
 		GetOnboardingStackOptions:               NewGetOnboardingStackOptionsHandler(e.GetOnboardingStackOptions, mux, decoder, encoder, errhandler, formatter),
 		GetOrganizationOnboardingStack:          NewGetOrganizationOnboardingStackHandler(e.GetOrganizationOnboardingStack, mux, decoder, encoder, errhandler, formatter),
@@ -543,6 +549,8 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.CreateRegistryEntry = m(s.CreateRegistryEntry)
 	s.SaveRegistryEntry = m(s.SaveRegistryEntry)
 	s.SetRegistryEntryPublished = m(s.SetRegistryEntryPublished)
+	s.ListAIProducts = m(s.ListAIProducts)
+	s.GetAIProduct = m(s.GetAIProduct)
 	s.ListOnboardingSteps = m(s.ListOnboardingSteps)
 	s.GetOnboardingStackOptions = m(s.GetOnboardingStackOptions)
 	s.GetOrganizationOnboardingStack = m(s.GetOrganizationOnboardingStack)
@@ -686,6 +694,8 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountCreateRegistryEntryHandler(mux, h.CreateRegistryEntry)
 	MountSaveRegistryEntryHandler(mux, h.SaveRegistryEntry)
 	MountSetRegistryEntryPublishedHandler(mux, h.SetRegistryEntryPublished)
+	MountListAIProductsHandler(mux, h.ListAIProducts)
+	MountGetAIProductHandler(mux, h.GetAIProduct)
 	MountListOnboardingStepsHandler(mux, h.ListOnboardingSteps)
 	MountGetOnboardingStackOptionsHandler(mux, h.GetOnboardingStackOptions)
 	MountGetOrganizationOnboardingStackHandler(mux, h.GetOrganizationOnboardingStack)
@@ -4823,6 +4833,112 @@ func NewSetRegistryEntryPublishedHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "setRegistryEntryPublished")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListAIProductsHandler configures the mux to serve the "admin" service
+// "listAIProducts" endpoint.
+func MountListAIProductsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/aiProducts.list", f)
+}
+
+// NewListAIProductsHandler creates a HTTP handler which loads the HTTP request
+// and calls the "admin" service "listAIProducts" endpoint.
+func NewListAIProductsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListAIProductsRequest(mux, decoder)
+		encodeResponse = EncodeListAIProductsResponse(encoder)
+		encodeError    = EncodeListAIProductsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listAIProducts")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetAIProductHandler configures the mux to serve the "admin" service
+// "getAIProduct" endpoint.
+func MountGetAIProductHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/aiProducts.get", f)
+}
+
+// NewGetAIProductHandler creates a HTTP handler which loads the HTTP request
+// and calls the "admin" service "getAIProduct" endpoint.
+func NewGetAIProductHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetAIProductRequest(mux, decoder)
+		encodeResponse = EncodeGetAIProductResponse(encoder)
+		encodeError    = EncodeGetAIProductError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getAIProduct")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
 		payload, err := decodeRequest(r)
 		if err != nil {

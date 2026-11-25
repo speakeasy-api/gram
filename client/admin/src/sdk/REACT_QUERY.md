@@ -50,10 +50,10 @@ from TanStack Query.
 [use-query]: https://tanstack.com/query/v5/docs/framework/react/reference/useQuery
 
 ```tsx
-import { useAdminServeImage } from "@gram/admin-client/react-query/adminServeImage.js";
+import { useAdminGetAIProduct } from "@gram/admin-client/react-query/adminGetAIProduct.js";
 
 export function Example() {
-  const { data, error, status } = useAdminServeImage({
+  const { data, error, status } = useAdminGetAIProduct({
     id: "<id>",
   });
 
@@ -68,11 +68,11 @@ more options provided by the query hooks to control these behaviors.
 
 ```tsx
 import { useState } from "react";
-import { useAdminServeImage } from "@gram/admin-client/react-query/adminServeImage.js";
+import { useAdminGetAIProduct } from "@gram/admin-client/react-query/adminGetAIProduct.js";
 
 export function ExampleWithOptions() {
   const [enabled, setEnabled] = useState(true);
-  const { data, error, status } = useAdminServeImage(
+  const { data, error, status } = useAdminGetAIProduct(
     {
       id: "<id>",
     },
@@ -175,7 +175,7 @@ query hook there are two functions that help invalidate cached data:
 
 ```tsx
 import { useQueryClient } from "@tanstack/react-query";
-import { invalidateAdminServeImage, invalidateAllAdminServeImage } from "@gram/admin-client/react-query/adminServeImage.js";
+import { invalidateAdminGetAIProduct, invalidateAllAdminGetAIProduct } from "@gram/admin-client/react-query/adminGetAIProduct.js";
 // Replace this with a real mutation
 import { useExampleMutation } from "@gram/admin-client/react-query/example.js";
 
@@ -193,9 +193,9 @@ export function Example() {
         mutate(formData, {
           onSuccess: () => {
             // Invalidate a single cache entry:
-            invalidateAdminServeImage(queryClient, /* ... arguments ... */);
+            invalidateAdminGetAIProduct(queryClient, /* ... arguments ... */);
             // OR, invalidate all cache entries for the query targets:
-            invalidateAllAdminServeImage(queryClient);
+            invalidateAllAdminGetAIProduct(queryClient);
           },
         });
       }}
@@ -256,7 +256,7 @@ import { ErrorBoundary } from "react-error-boundary";
 
 import { GramCore } from "@gram/admin-client";
 import { GramProvider } from "@gram/admin-client/react-query";
-import { useAdminServeImageSuspense } from "@gram/admin-client/react-query/adminServeImage.js";
+import { useAdminGetAIProductSuspense } from "@gram/admin-client/react-query/adminGetAIProduct.js";
 
 const queryClient = new QueryClient();
 const gram = new GramCore({
@@ -291,7 +291,7 @@ export function App() {
 }
 
 function Example() {
-  const { data } = useAdminServeImageSuspense({
+  const { data } = useAdminGetAIProductSuspense({
     id: "<id>",
   });
 
@@ -313,7 +313,7 @@ import {
   QueryClient,
 } from "@tanstack/react-query";
 import { GramCore } from "@gram/admin-client";
-import { prefetchAdminServeImage } from "@gram/admin-client/react-query/adminServeImage.js";
+import { prefetchAdminGetAIProduct } from "@gram/admin-client/react-query/adminGetAIProduct.js";
 
 export default async function Page() {
   const queryClient = new QueryClient();
@@ -321,7 +321,7 @@ export default async function Page() {
     serverURL: "https://api.example.com",
   });
 
-  await prefetchAdminServeImage(queryClient, gram, {
+  await prefetchAdminGetAIProduct(queryClient, gram, {
     id: "<id>",
   });
 

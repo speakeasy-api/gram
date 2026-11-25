@@ -6,6 +6,174 @@ info:
 servers:
     - url: https://app.getgram.ai
 paths:
+    /admin/aiProducts.get:
+        get:
+            description: 'Staff-only: get one product in the AI client catalog, deleted or not.'
+            operationId: adminGetAIProduct
+            parameters:
+                - allowEmptyValue: true
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    maxLength: 256
+                    minLength: 1
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminAIProduct'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: getAIProduct admin
+            tags:
+                - admin
+            x-speakeasy-name-override: getAIProduct
+    /admin/aiProducts.list:
+        get:
+            description: 'Staff-only: list products in the AI client catalog.'
+            operationId: adminListAIProducts
+            parameters:
+                - allowEmptyValue: true
+                  description: Matches part of the product id or name, ignoring case.
+                  in: query
+                  name: query
+                  schema:
+                    description: Matches part of the product id or name, ignoring case.
+                    maxLength: 256
+                    type: string
+                - allowEmptyValue: true
+                  description: Include deleted products.
+                  in: query
+                  name: include_deleted
+                  schema:
+                    default: false
+                    description: Include deleted products.
+                    type: boolean
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListAIProductsResponseBody'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: listAIProducts admin
+            tags:
+                - admin
+            x-speakeasy-name-override: listAIProducts
     /admin/assets.serveImage:
         get:
             description: Serve a public image, preserving the existing image serving contract.
@@ -102193,6 +102361,158 @@ components:
             description: Result of a strictly additive tool metadata batch insert.
             required:
                 - tools
+        AdminAIProduct:
+            type: object
+            properties:
+                binaries:
+                    type: array
+                    items:
+                        type: string
+                    description: Command names resolved on the device PATH.
+                blocked_organization_count:
+                    type: integer
+                    description: How many organizations block the product. A count only, never which ones.
+                    format: int64
+                bundle_ids:
+                    type: array
+                    items:
+                        type: string
+                    description: macOS bundle identifiers.
+                category:
+                    type: string
+                client_info_names:
+                    type: array
+                    items:
+                        type: string
+                    description: Names the product reports at MCP initialize. Self-reported, attribution only.
+                config_dirs:
+                    type: array
+                    items:
+                        type: string
+                    description: Directories whose existence marks the product installed.
+                created_at:
+                    type: string
+                    format: date-time
+                created_by:
+                    type: string
+                deleted:
+                    type: boolean
+                display_name:
+                    type: string
+                documents:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminAIProductDocument'
+                    description: Every document, deleted ones included.
+                id:
+                    type: string
+                process_names:
+                    type: array
+                    items:
+                        type: string
+                    description: Process names checked for the running signal.
+                updated_at:
+                    type: string
+                    format: date-time
+                updated_by:
+                    type: string
+                vendor_key:
+                    type: string
+                version_plist_key:
+                    type: string
+                    description: Info.plist key read for the version. Absent means CFBundleShortVersionString.
+            description: One product in the AI client catalog with its signatures and documents.
+            required:
+                - id
+                - display_name
+                - vendor_key
+                - bundle_ids
+                - binaries
+                - config_dirs
+                - process_names
+                - client_info_names
+                - deleted
+                - created_at
+                - updated_at
+                - blocked_organization_count
+                - documents
+        AdminAIProductDocument:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    format: date-time
+                created_by:
+                    type: string
+                    description: Staff subject who created the row. Absent for seeded rows.
+                deleted:
+                    type: boolean
+                display_name:
+                    type: string
+                enabled:
+                    type: boolean
+                id:
+                    type: string
+                    format: uuid
+                is_pattern:
+                    type: boolean
+                updated_at:
+                    type: string
+                    format: date-time
+                updated_by:
+                    type: string
+                    description: Staff subject who last changed the row. Absent for seeded rows.
+                url:
+                    type: string
+                    description: The client_id, or a pattern where * stands for one path segment.
+                verification_error:
+                    type: string
+                    description: Reason code from the last check. Absent when it passed or never ran.
+                verified_at:
+                    type: string
+                    description: When the live document was last checked. Absent if never.
+                    format: date-time
+            description: One Client ID Metadata Document a catalog product publishes.
+            required:
+                - id
+                - url
+                - display_name
+                - enabled
+                - is_pattern
+                - deleted
+                - created_at
+                - updated_at
+        AdminAIProductSummary:
+            type: object
+            properties:
+                category:
+                    type: string
+                    description: harness, assistant or local_model. Absent for a product known only as an OAuth client.
+                deleted:
+                    type: boolean
+                display_name:
+                    type: string
+                document_count:
+                    type: integer
+                    description: Documents not deleted, enabled or not.
+                    format: int64
+                id:
+                    type: string
+                    description: Stable product identifier, e.g. claude-code.
+                updated_at:
+                    type: string
+                    format: date-time
+                vendor_key:
+                    type: string
+                    description: Groups the products a vendor ships.
+            description: One product in the AI client catalog, as the catalog list shows it.
+            required:
+                - id
+                - display_name
+                - vendor_key
+                - document_count
+                - deleted
+                - updated_at
         AdminAssistantAgentNameRepairResult:
             type: object
             properties:
@@ -122600,6 +122920,20 @@ components:
                 - organization_id
                 - provider
                 - schedules
+        ListAIProductsResponseBody:
+            type: object
+            properties:
+                products:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminAIProductSummary'
+                    description: Live products first, then by name.
+                truncated:
+                    type: boolean
+                    description: Whether more products matched than the list returns.
+            required:
+                - products
+                - truncated
         ListAccessRequestsResult:
             type: object
             properties:

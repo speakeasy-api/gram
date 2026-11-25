@@ -31,6 +31,7 @@ import { adminEnrollOrganizationEncryption } from "../funcs/adminEnrollOrganizat
 import { adminExtendTrial } from "../funcs/adminExtendTrial.js";
 import { adminFetchGlobalIssuerMetadata } from "../funcs/adminFetchGlobalIssuerMetadata.js";
 import { adminFinalizeOrganizationEncryption } from "../funcs/adminFinalizeOrganizationEncryption.js";
+import { adminGetAIProduct } from "../funcs/adminGetAIProduct.js";
 import { adminGetGcpIamPlatformCredential } from "../funcs/adminGetGcpIamPlatformCredential.js";
 import { adminGetGlobalIssuer } from "../funcs/adminGetGlobalIssuer.js";
 import { adminGetGlobalIssuerDuplicatePreflight } from "../funcs/adminGetGlobalIssuerDuplicatePreflight.js";
@@ -67,6 +68,7 @@ import { adminGetStripeSubscriptionCandidate } from "../funcs/adminGetStripeSubs
 import { adminGetSupportCoverage } from "../funcs/adminGetSupportCoverage.js";
 import { adminGetSupportMatrix } from "../funcs/adminGetSupportMatrix.js";
 import { adminGetUpstreamOAuthMigrationStatus } from "../funcs/adminGetUpstreamOAuthMigrationStatus.js";
+import { adminListAIProducts } from "../funcs/adminListAIProducts.js";
 import { adminListAssistantOrganizations } from "../funcs/adminListAssistantOrganizations.js";
 import { adminListCustomDomains } from "../funcs/adminListCustomDomains.js";
 import { adminListCustomerUsage } from "../funcs/adminListCustomerUsage.js";
@@ -136,6 +138,7 @@ import { adminUpdateSupportMatrix } from "../funcs/adminUpdateSupportMatrix.js";
 import { adminUploadPlatformImage } from "../funcs/adminUploadPlatformImage.js";
 import { adminVerifyGcpIamPlatformCredential } from "../funcs/adminVerifyGcpIamPlatformCredential.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import { AdminAIProduct } from "../models/components/adminaiproduct.js";
 import { AdminAssistantAgentNameRepairRun } from "../models/components/adminassistantagentnamerepairrun.js";
 import { AdminAssistantIdentityMigrationRun } from "../models/components/adminassistantidentitymigrationrun.js";
 import { AdminAssistantKitMigrationRun } from "../models/components/adminassistantkitmigrationrun.js";
@@ -232,6 +235,7 @@ import { GcpIamCredential } from "../models/components/gcpiamcredential.js";
 import { GetRegistryPromotionCandidateRequestBody } from "../models/components/getregistrypromotioncandidaterequestbody.js";
 import { GlobalRemoteSessionIssuer } from "../models/components/globalremotesessionissuer.js";
 import { IssuerMigratePreflight } from "../models/components/issuermigratepreflight.js";
+import { ListAIProductsResponseBody } from "../models/components/listaiproductsresponsebody.js";
 import { ListExternalCredentialsResult } from "../models/components/listexternalcredentialsresult.js";
 import { ListPlatformMcpFeedbackResponseBody } from "../models/components/listplatformmcpfeedbackresponsebody.js";
 import { ListSignupOffersResponseBody } from "../models/components/listsignupoffersresponsebody.js";
@@ -285,6 +289,7 @@ import { UpdateSupportMatrixRequestBody } from "../models/components/updatesuppo
 import { VerifyPlatformCredentialResult } from "../models/components/verifyplatformcredentialresult.js";
 import { AdminDeleteGlobalIssuerRequest } from "../models/operations/admindeleteglobalissuer.js";
 import { AdminDescribeMcpServerHealthRequest } from "../models/operations/admindescribemcpserverhealth.js";
+import { AdminGetAIProductRequest } from "../models/operations/admingetaiproduct.js";
 import { AdminGetGcpIamPlatformCredentialRequest } from "../models/operations/admingetgcpiamplatformcredential.js";
 import { AdminGetGlobalIssuerRequest } from "../models/operations/admingetglobalissuer.js";
 import { AdminGetGlobalIssuerDuplicatePreflightRequest } from "../models/operations/admingetglobalissuerduplicatepreflight.js";
@@ -314,6 +319,7 @@ import { AdminGetStripeSubscriptionRequest } from "../models/operations/adminget
 import { AdminGetStripeSubscriptionCandidateRequest } from "../models/operations/admingetstripesubscriptioncandidate.js";
 import { AdminGetSupportCoverageRequest } from "../models/operations/admingetsupportcoverage.js";
 import { AdminGetUpstreamOAuthMigrationStatusRequest } from "../models/operations/admingetupstreamoauthmigrationstatus.js";
+import { AdminListAIProductsRequest } from "../models/operations/adminlistaiproducts.js";
 import { AdminListCustomDomainsRequest } from "../models/operations/adminlistcustomdomains.js";
 import { AdminListCustomerUsageRequest } from "../models/operations/adminlistcustomerusage.js";
 import {
@@ -356,6 +362,40 @@ import { unwrapAsync } from "../types/fp.js";
 import { PageIterator, unwrapResultIterator } from "../types/operations.js";
 
 export class Admin extends ClientSDK {
+  /**
+   * getAIProduct admin
+   *
+   * @remarks
+   * Staff-only: get one product in the AI client catalog, deleted or not.
+   */
+  async getAIProduct(
+    request: AdminGetAIProductRequest,
+    options?: RequestOptions,
+  ): Promise<AdminAIProduct> {
+    return unwrapAsync(adminGetAIProduct(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * listAIProducts admin
+   *
+   * @remarks
+   * Staff-only: list products in the AI client catalog.
+   */
+  async listAIProducts(
+    request?: AdminListAIProductsRequest | undefined,
+    options?: RequestOptions,
+  ): Promise<ListAIProductsResponseBody> {
+    return unwrapAsync(adminListAIProducts(
+      this,
+      request,
+      options,
+    ));
+  }
+
   /**
    * serveImage admin
    *

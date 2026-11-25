@@ -46,6 +46,9 @@ import {
 import { queryKeyAdminListOrganizationActivityInfinite } from "@gram/admin-client/react-query/adminListOrganizationActivity.core";
 import { buildAdminListCustomDomainsQuery } from "@gram/admin-client/react-query/adminListCustomDomains.core";
 import type { AdminListCustomDomainsRequest } from "@gram/admin-client/models/operations/adminlistcustomdomains";
+import { buildAdminListAIProductsQuery } from "@gram/admin-client/react-query/adminListAIProducts.core";
+import { buildAdminGetAIProductQuery } from "@gram/admin-client/react-query/adminGetAIProduct.core";
+import type { AdminListAIProductsRequest } from "@gram/admin-client/models/operations/adminlistaiproducts";
 import { redirecting, redirectingClient } from "@/lib/adminSdkClient";
 
 // What queryOptions infers, named so the exports can carry the return type that
@@ -478,4 +481,44 @@ export function assistantMigrationOrganizationsQuery(): AdminQuery<
     queryKey: ["admin", "assistant-migration-organizations"] as const,
     queryFn: listAssistantMigrationOrganizations,
   });
+}
+
+function createAIProductsListQuery(request: AdminListAIProductsRequest) {
+  const generated = buildAdminListAIProductsQuery(redirectingClient(), request);
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+  });
+}
+
+// Products in the AI client catalog. The server applies both filters.
+export function aiProductsListQuery(
+  request: AdminListAIProductsRequest = {},
+): ReturnType<typeof createAIProductsListQuery> {
+  return createAIProductsListQuery(request);
+}
+
+// The crumb watches this key, since a product names itself displayName.
+export function aiProductNameKey(id: string): readonly [string, string] {
+  return ["gram-admin-ai-product-name", id] as const;
+}
+
+function createAIProductQuery(id: string) {
+  const generated = buildAdminGetAIProductQuery(redirectingClient(), { id });
+  return queryOptions({
+    ...generated,
+    queryFn: async (context) => {
+      const product = await redirecting(generated.queryFn(context));
+      context.client.setQueryData(aiProductNameKey(id), {
+        name: product.displayName,
+      });
+      return product;
+    },
+  });
+}
+
+export function aiProductQuery(
+  id: string,
+): ReturnType<typeof createAIProductQuery> {
+  return createAIProductQuery(id);
 }
