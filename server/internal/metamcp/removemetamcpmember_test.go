@@ -168,7 +168,7 @@ func TestRemoveMetaMcpMember_DetachesProviderClient(t *testing.T) {
 	stampAndWireMemberClient(t, ctx, ti.conn, projectID, orgID, secondServer, createRemoteSessionClient(t, ctx, ti.conn, projectID, orgID, remoteIssuerID, "auto-detach-client-2"))
 	secondMember := addMember(secondServer)
 
-	require.Equal(t, 1, count(), "one client per upstream per issuer")
+	require.Zero(t, count(), "membership does not mirror registration offers")
 
 	// Removing the first member leaves the second still fronting the upstream,
 	// so the provider binding is retained.
@@ -178,7 +178,7 @@ func TestRemoveMetaMcpMember_DetachesProviderClient(t *testing.T) {
 		ProjectSlugInput: nil,
 		ID:               firstMember,
 	}))
-	require.Equal(t, 1, count(), "binding retained while another member fronts the upstream")
+	require.Zero(t, count(), "membership does not mirror registration offers")
 
 	// Removing the last member fronting the upstream unbinds the provider.
 	require.NoError(t, ti.service.RemoveMetaMcpMember(ctx, &gen.RemoveMetaMcpMemberPayload{
@@ -187,7 +187,7 @@ func TestRemoveMetaMcpMember_DetachesProviderClient(t *testing.T) {
 		ProjectSlugInput: nil,
 		ID:               secondMember,
 	}))
-	require.Equal(t, 0, count(), "binding detached once no member fronts the upstream")
+	require.Equal(t, 0, count(), "removal does not mirror registration offers")
 }
 
 // When two gateways share one user_session_issuer, the provider binding is
@@ -245,7 +245,7 @@ func TestRemoveMetaMcpMember_RetainsProviderForSharedIssuer(t *testing.T) {
 	stampAndWireMemberClient(t, ctx, ti.conn, projectID, orgID, serverB, createRemoteSessionClient(t, ctx, ti.conn, projectID, orgID, remoteIssuerID, "shared-client-b"))
 	addMember(metaB.ID, serverB)
 
-	require.Equal(t, 1, count(), "one client per upstream on the shared issuer")
+	require.Zero(t, count(), "membership does not mirror registration offers")
 
 	// Removing gateway A's member must not strip the provider gateway B fronts.
 	require.NoError(t, ti.service.RemoveMetaMcpMember(ctx, &gen.RemoveMetaMcpMemberPayload{
@@ -254,5 +254,5 @@ func TestRemoveMetaMcpMember_RetainsProviderForSharedIssuer(t *testing.T) {
 		ProjectSlugInput: nil,
 		ID:               memberA,
 	}))
-	require.Equal(t, 1, count(), "binding retained: gateway B still fronts the upstream on the shared issuer")
+	require.Zero(t, count(), "membership does not mirror registration offers")
 }

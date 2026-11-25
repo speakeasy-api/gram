@@ -8,8 +8,9 @@
 // A version's choices are decided when a turn credential is issued, from the
 // server's configuration, and kept: a later version carries every earlier
 // choice and only adds choices for servers that had none. A server whose
-// configuration offers exactly one client the context can use gets it; a
-// server offering no enabled auth client needs no upstream authentication and
+// configuration offers exactly one client the context can use gets it,
+// including EMA for user-backed turns. This selects a client, not a user
+// connection or a grant. A server offering no enabled auth client needs no upstream authentication and
 // gets an explicit no-auth choice; anything else, including a server with
 // upstream credentials no auth client records yet, is left without a choice,
 // reported as a gap, and never guessed. A turn with no user (userless) never chooses a
@@ -20,8 +21,8 @@
 // auth client backfill reports their coverage with every other credential's.
 //
 // The profile grants nothing. Permission to use the chosen client is checked
-// live on every request, and the upstream client choice stays authoritative
-// until the typed auth client resolver is enabled for the organization.
+// live on every request. Serving honors pinned choices under upstream auth
+// enforcement.
 package executionprofiles
 
 import (
@@ -32,8 +33,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 )
 
 // Context is whether a turn runs for a user it identified.
@@ -84,8 +85,8 @@ const (
 	// profile whose turns have no user to act as.
 	GapPersonalRequiresUser GapReason = "personal_requires_user"
 
-	// GapNoClient is a server whose upstream OAuth client no live, enabled
-	// auth client carries.
+	// GapNoClient is a server missing from the live catalog or whose pinned
+	// typed client is no longer offered.
 	GapNoClient GapReason = "no_client"
 
 	// GapSetupIncomplete is a server with upstream credentials no auth client
@@ -106,17 +107,46 @@ type decision struct {
 	authClientID uuid.UUID
 }
 
-// decide decides a server's choice for a context. A server's upstream OAuth
-// client is its single associated one, which is what serves it today; its
-// remote_session, EMA or service_account auth client serves the choice. A server
-// with no associated upstream OAuth client is served by its headers, as a
-// static_credential or pass_through auth client, or by nothing.
-//
-// For an organization enforcing upstream auth (typedOnly), associations decide
-// nothing and every enabled auth client the server offers is a credential it
-// can be served with, as an administrator's choice reads them: the one the
-// context can use is chosen, and several are left to an administrator.
-func decide(row ListProfileServersRow, execCtx Context, typedOnly bool) (decision, *Gap) {
+type profileServer struct {
+	ListProfileServersRow
+	offers []upstreamclientsrepo.ListServerConsentAuthClientsRow
+}
+
+func loadProfileOffers(ctx context.Context, q *Queries, target Target, versionID uuid.NullUUID) ([]profileServer, error) {
+	reached, err := q.ListProfileServers(ctx, ListProfileServersParams{
+		VersionID: versionID, OrganizationID: target.OrganizationID,
+		AssistantID: target.AssistantID, ProjectID: target.ProjectID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list execution profile servers: %w", err)
+	}
+	if len(reached) == 0 {
+		return nil, nil
+	}
+	ids := make([]uuid.UUID, 0, len(reached))
+	for _, row := range reached {
+		ids = append(ids, row.McpServerID)
+	}
+	offers, err := upstreamclientsrepo.New(q.db).ListServerConsentAuthClients(ctx, upstreamclientsrepo.ListServerConsentAuthClientsParams{
+		OrganizationID: target.OrganizationID, McpServerIds: ids,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list server auth clients: %w", err)
+	}
+	byServer := make(map[uuid.UUID][]upstreamclientsrepo.ListServerConsentAuthClientsRow, len(reached))
+	for _, offer := range offers {
+		byServer[offer.McpServerID] = append(byServer[offer.McpServerID], offer)
+	}
+	servers := make([]profileServer, 0, len(reached))
+	for _, row := range reached {
+		servers = append(servers, profileServer{ListProfileServersRow: row, offers: byServer[row.McpServerID]})
+	}
+	return servers, nil
+}
+
+// decide chooses the sole enabled typed client a context can use, or leaves
+// ambiguous choices to an administrator.
+func decide(row profileServer, execCtx Context) (decision, *Gap) {
 	gap := func(reason GapReason) (decision, *Gap) {
 		return decision{serverID: uuid.Nil, authClientID: uuid.Nil}, &Gap{MCPServerID: row.McpServerID, Reason: reason}
 	}
@@ -126,81 +156,32 @@ func decide(row ListProfileServersRow, execCtx Context, typedOnly bool) (decisio
 	// A server offering no enabled auth client needs no upstream sign-in and
 	// takes no credential, matching the choices an administrator may record
 	// for it, unless it has upstream credentials no auth client records yet.
-	if len(row.AuthClientIds) == 0 {
-		if row.UpstreamAuthPending {
+	if len(row.offers) == 0 {
+		return gap(GapNoClient)
+	}
+	if !row.offers[0].RequiresUpstreamAuth {
+		if row.offers[0].UpstreamAuthPending {
 			return gap(GapSetupIncomplete)
 		}
 		return choose(uuid.Nil)
 	}
-	if typedOnly {
-		usable, personal := []uuid.UUID{}, false
-		for i, id := range row.AuthClientIds {
-			switch {
-			case authz.IsSharedAuthClientType(row.AuthClientTypes[i]):
-				usable = append(usable, id)
-			case execCtx == ContextUserless:
-				personal = true
-			default:
-				usable = append(usable, id)
-			}
+	var candidate uuid.UUID
+	for _, offer := range row.offers {
+		if !offer.AuthClientID.Valid {
+			continue
 		}
-		switch {
-		case len(usable) == 1:
-			return choose(usable[0])
-		case len(usable) > 1:
+		if execCtx == ContextUserless && !authz.IsSharedAuthClientType(offer.ClientType.String) {
+			continue
+		}
+		if candidate != uuid.Nil {
 			return gap(GapSelectionRequired)
-		case personal:
-			return gap(GapPersonalRequiresUser)
-		default:
-			return gap(GapNoClient)
 		}
+		candidate = offer.AuthClientID.UUID
 	}
-	switch len(row.RegistrationIds) {
-	case 0:
-		headers, oauth := []uuid.UUID{}, false
-		for i, id := range row.AuthClientIds {
-			switch row.AuthClientTypes[i] {
-			case typeStaticCredential, typePassThrough:
-				headers = append(headers, id)
-			default:
-				oauth = true
-			}
-		}
-		if oauth || len(headers) > 1 {
-			return gap(GapSelectionRequired)
-		}
-		return choose(headers[0])
-	case 1:
-		registration := row.RegistrationIds[0]
-		candidates, personal := []uuid.UUID{}, false
-		for i, id := range row.AuthClientIds {
-			if row.AuthClientRegistrationIds[i] != registration {
-				continue
-			}
-			switch row.AuthClientTypes[i] {
-			case typeServiceAccount:
-				candidates = append(candidates, id)
-			case typeRemoteSession, typeEMA:
-				if execCtx == ContextUserless {
-					personal = true
-					continue
-				}
-				candidates = append(candidates, id)
-			}
-		}
-		switch {
-		case len(candidates) == 1:
-			return choose(candidates[0])
-		case len(candidates) > 1:
-			return gap(GapSelectionRequired)
-		case personal:
-			return gap(GapPersonalRequiresUser)
-		default:
-			return gap(GapNoClient)
-		}
-	default:
-		return gap(GapSelectionRequired)
+	if candidate == uuid.Nil {
+		return gap(GapPersonalRequiresUser)
 	}
+	return choose(candidate)
 }
 
 // Target is the assistant, root trigger and execution context a turn runs
@@ -275,27 +256,16 @@ func (p plan) writes() bool {
 }
 
 func planTx(ctx context.Context, q *Queries, target Target, profileID, versionID uuid.UUID, version int64) (plan, error) {
-	// Read on the bind's transaction, so the choices it records follow the
-	// enforcement state they commit beside.
-	typedOnly, err := authenforcement.ReadEnforced(ctx, q.db, target.OrganizationID)
+	servers, err := loadProfileOffers(ctx, q, target, uuid.NullUUID{UUID: versionID, Valid: version > 0})
 	if err != nil {
-		return plan{}, fmt.Errorf("read upstream auth enforcement: %w", err)
-	}
-	servers, err := q.ListProfileServers(ctx, ListProfileServersParams{
-		VersionID:      uuid.NullUUID{UUID: versionID, Valid: version > 0},
-		OrganizationID: target.OrganizationID,
-		AssistantID:    target.AssistantID,
-		ProjectID:      target.ProjectID,
-	})
-	if err != nil {
-		return plan{}, fmt.Errorf("list execution profile servers: %w", err)
+		return plan{}, err
 	}
 	p := plan{profileID: profileID, versionID: versionID, version: version, decisions: []decision{}, gaps: []Gap{}}
 	for _, row := range servers {
 		if row.HasChoice {
 			continue
 		}
-		d, gap := decide(row, target.Context, typedOnly)
+		d, gap := decide(row, target.Context)
 		if gap != nil {
 			p.gaps = append(p.gaps, *gap)
 			continue

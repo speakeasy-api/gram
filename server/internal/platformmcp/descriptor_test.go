@@ -10,6 +10,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 )
 
@@ -324,6 +325,7 @@ func TestExternalCatalogueFiltersByLiveCapabilities(t *testing.T) {
 		authz.NewGrant(authz.ScopeProjectRead, "project-1"),
 		authz.NewGrant(authz.ScopeSkillRead, "skill-1"),
 	})
+	registrar.withAICatalog(aivendorstest.NewStore())
 	require.Equal(t, []string{"context", "projects"}, toolNames(registrar.FilterExternalTools(memberCtx, principal, tools)))
 
 	blockedCtx := authz.GrantsToContext(t.Context(), []authz.Grant{

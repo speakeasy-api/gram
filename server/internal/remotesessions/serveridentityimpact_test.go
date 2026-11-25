@@ -2,9 +2,6 @@ package remotesessions_test
 
 import (
 	"context"
-	"net/http"
-	"net/http/httptest"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -194,19 +191,19 @@ func TestGetServerIdentityImpactOrganizationIssuerAcrossProjects(t *testing.T) {
 		require.Equal(t, projectID.String(), server.ProjectID)
 	}
 
-	// Binding an organization-level client would reach every project on the
-	// issuer, which the commit refuses a project editor, so the preview
-	// refuses it too.
+	// Directly attaching an organization-level client to the issuer would
+	// change sign-in across projects. Offering it on a server is local.
 	orgClientID := createServerIdentityClient(t, ctx, ti, "impact-org-shared-client", nextProviderID, true)
 	editorCtx := withoutOrganizationAdmin(t, ctx)
-	for _, change := range []string{"attach", "replace"} {
-		_, err = ti.service.GetServerIdentityImpact(editorCtx, impactPayload(userIssuerID, &targetID, change, nil, &orgClientID))
-		requireOopsCode(t, err, oops.CodeForbidden)
-		require.ErrorContains(t, err, remotesessions.OrgWideBindingMessage)
-	}
-	_, err = ti.service.CommitServerIdentityConfiguration(editorCtx, existingServerIdentityPayload(targetID, nextProviderID, orgClientID))
+	_, err = ti.service.GetServerIdentityImpact(editorCtx, impactPayload(userIssuerID, &targetID, "attach", nil, &orgClientID))
 	requireOopsCode(t, err, oops.CodeForbidden)
 	require.ErrorContains(t, err, remotesessions.OrgWideBindingMessage)
+	result, err = ti.service.GetServerIdentityImpact(editorCtx, impactPayload(userIssuerID, &targetID, "replace", nil, &orgClientID))
+	require.NoError(t, err)
+	require.Empty(t, impactsByServer(result))
+	_, err = ti.service.CommitServerIdentityConfiguration(editorCtx, existingServerIdentityPayload(targetID, nextProviderID, orgClientID))
+	require.NoError(t, err)
+	requireClientBound(t, ctx, ti, orgClientID, userIssuerID, false)
 
 	// An organization admin may, and the preview lists the other project's
 	// server among those it reaches.
@@ -223,6 +220,8 @@ func TestGetServerIdentityImpactRefusesUnbindingOrgClientOnOrgIssuerWithoutOrgan
 	targetID := createServerIdentityTargetOnIssuer(t, ctx, ti, "impact-org-unbind-target", userIssuerID)
 	currentProviderID := createServerIdentityProvider(t, ctx, ti, "impact-org-unbind-current", "", false, []string{"none"})
 	orgClientID := bindServerIdentityClient(t, ctx, ti, "impact-org-unbind-client", currentProviderID, userIssuerID, true)
+	associate(t, ctx, ti.conn, activeOrganizationID(t, ctx), projectIDFromContext(t, ctx), targetID, orgClientID)
+	recordTypedClients(t, ctx, ti.conn, activeOrganizationID(t, ctx), targetID)
 	nextProviderID := createServerIdentityProvider(t, ctx, ti, "impact-org-unbind-next", "", false, []string{"none"})
 
 	for _, change := range []string{"detach", "replace"} {
@@ -264,29 +263,25 @@ func TestGetServerIdentityImpactMatchesCommitOnDeletedProvider(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, int64(1), associated)
 	}
+	recordTypedClients(t, ctx, ti.conn, activeOrganizationID(t, ctx), targetID)
 	_, err := repo.New(ti.conn).DeleteRemoteSessionIssuer(ctx, repo.DeleteRemoteSessionIssuerParams{ID: deletedProviderID, ProjectID: conv.ToNullUUID(projectID)})
 	require.NoError(t, err)
 
-	// The commit still sees the deleted provider's bound client, and so does
-	// the preview: this server's own clients of two other providers make the
-	// replacement ambiguous.
-	var requests atomic.Int64
-	registrationServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		requests.Add(1)
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	t.Cleanup(registrationServer.Close)
-	nextProviderID := createServerIdentityProvider(t, ctx, ti, "impact-deleted-next", registrationServer.URL, false, []string{"client_secret_basic"})
-
-	_, previewErr := ti.service.GetServerIdentityImpact(ctx, impactPayload(userIssuerID, &targetID, "replace", &nextProviderID, nil))
-	_, commitErr := ti.service.CommitServerIdentityConfiguration(ctx, autoServerIdentityPayload(targetID, nextProviderID))
-	requireOopsCode(t, previewErr, oops.CodeConflict)
-	requireOopsCode(t, commitErr, oops.CodeConflict)
-	var previewOops, commitOops *oops.ShareableError
-	require.ErrorAs(t, previewErr, &previewOops)
-	require.ErrorAs(t, commitErr, &commitOops)
-	require.Equal(t, commitOops.Error(), previewOops.Error())
-	require.Zero(t, requests.Load())
+	// A deleted provider is not an eligible offer and does not make a
+	// replacement ambiguous, even while the historical issuer pair exists.
+	nextProviderID := createServerIdentityProvider(t, ctx, ti, "impact-deleted-next", "", false, []string{"none"})
+	nextClientID := createServerIdentityClient(t, ctx, ti, "impact-deleted-new-client", nextProviderID, false)
+	preview, err := ti.service.GetServerIdentityImpact(ctx, impactPayload(userIssuerID, &targetID, "replace", &nextProviderID, &nextClientID))
+	require.NoError(t, err)
+	require.Empty(t, preview.Servers)
+	_, err = ti.service.CommitServerIdentityConfiguration(ctx, existingServerIdentityPayload(targetID, nextProviderID, nextClientID))
+	require.NoError(t, err)
+	offers, err := repo.New(ti.conn).ListIdentityOfferClients(ctx, repo.ListIdentityOfferClientsParams{
+		McpServerID: targetID, ProjectID: projectID, OrganizationID: activeOrganizationID(t, ctx),
+	})
+	require.NoError(t, err)
+	require.Len(t, offers, 1)
+	require.Equal(t, nextClientID, offers[0].ID)
 
 	// The deleted provider's client does not count toward the derivation, as
 	// in the resync: the sibling derives the live provider until another joins.

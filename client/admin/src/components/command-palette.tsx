@@ -9,6 +9,7 @@ import {
   BotIcon,
   BuildingIcon,
   ListChecksIcon,
+  LockKeyholeIcon,
   CreditCardIcon,
   ExternalLinkIcon,
   FolderIcon,
@@ -109,6 +110,13 @@ const RECORD_PAGES = [
     label: "Hooks",
     icon: WebhookIcon,
     keywords: "hooks fleet installs versions machines legacy",
+  },
+  {
+    to: "/organizations/$idOrSlug/encryption",
+    label: "Encryption",
+    icon: LockKeyholeIcon,
+    keywords:
+      "kms keys platform key dual write finalize enroll backfill rollback roll back",
   },
 ] as const;
 

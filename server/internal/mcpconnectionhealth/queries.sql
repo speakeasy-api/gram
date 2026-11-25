@@ -141,3 +141,23 @@ LEFT JOIN scoped
   AND scoped.ended_at > days.day_start
 GROUP BY days.day_start
 ORDER BY days.day_start;
+
+-- name: SetGatewayIssuerFixture :execrows
+-- Test fixture: moves a gateway in a project to another MCP authentication provider.
+UPDATE meta_mcp_servers
+SET user_session_issuer_id = @issuer_id
+WHERE id = @id
+  AND project_id = @project_id;
+
+-- name: TurnLogsOnFixture :exec
+-- Test fixture: turns an organization's logs on at a given time.
+INSERT INTO organization_features (organization_id, feature_name, created_at)
+VALUES (@organization_id, 'logs', @created_at);
+
+-- name: GetLogsOnSince :one
+-- When the organization's logs were last turned on: the active row's creation, none while off.
+SELECT created_at
+FROM organization_features
+WHERE organization_id = @organization_id
+  AND feature_name = @feature_name
+  AND deleted IS FALSE;

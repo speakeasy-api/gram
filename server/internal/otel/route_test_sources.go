@@ -227,7 +227,7 @@ func (s *productTelemetryTestSource) logRequest(ctx context.Context, destination
 		return nil, fmt.Errorf("validate product telemetry test log: %w", err)
 	}
 	return buildTestLogRequest(ctx, s.instruments, inbound[0], destination, func(record *otelv1.LogRecord) error {
-		if isConnectionLogRecord(record) || logOriginalScopeName(record) == dialect.GatewayLogScope {
+		if isConnectionLogRecord(record) || isFeedbackLogRecord(record) || logOriginalScopeName(record) == dialect.GatewayLogScope {
 			return errors.New("product telemetry test log would not reach the product telemetry route")
 		}
 		return nil
@@ -377,6 +377,26 @@ func (c *ConnectionLogTestRequestBuilder) Build(ctx context.Context, inbound *ot
 	return buildTestLogRequest(ctx, c.instruments, inbound, destination, func(record *otelv1.LogRecord) error {
 		if !isConnectionLogRecord(record) {
 			return errors.New("connection log test record has the wrong provenance source")
+		}
+		return nil
+	})
+}
+
+// FeedbackLogTestRequestBuilder turns an MCP feedback test record, built the
+// way the feedback recorder builds real ones, into what the MCP feedback route
+// sends.
+type FeedbackLogTestRequestBuilder struct {
+	instruments *enrich.Instruments
+}
+
+func NewFeedbackLogTestRequestBuilder(logger *slog.Logger, meterProvider metric.MeterProvider) *FeedbackLogTestRequestBuilder {
+	return &FeedbackLogTestRequestBuilder{instruments: enrich.NewInstruments(logger, meterProvider)}
+}
+
+func (f *FeedbackLogTestRequestBuilder) Build(ctx context.Context, inbound *otelv1.InboundLogRecord, destination dataexports.TestDestination) (proto.Message, error) {
+	return buildTestLogRequest(ctx, f.instruments, inbound, destination, func(record *otelv1.LogRecord) error {
+		if !isFeedbackLogRecord(record) {
+			return errors.New("mcp feedback test record has the wrong provenance source")
 		}
 		return nil
 	})

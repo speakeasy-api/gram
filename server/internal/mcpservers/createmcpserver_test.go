@@ -263,7 +263,7 @@ func TestCreateMcpServer_AttachesOrganizationUserSessionIssuer(t *testing.T) {
 	require.Equal(t, issuerID, *created.UserSessionIssuerID)
 }
 
-func TestCreateMcpServer_ResolvesRemoteIssuerForSelectedOrganizationIssuer(t *testing.T) {
+func TestCreateMcpServer_DoesNotInheritRemoteIssuerFromOrganizationIssuer(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -319,8 +319,8 @@ func TestCreateMcpServer_ResolvesRemoteIssuerForSelectedOrganizationIssuer(t *te
 		ProjectID: *authCtx.ProjectID,
 	})
 	require.NoError(t, err)
-	require.Equal(t, remoteIssuer.ID, stored.RemoteSessionIssuerID.UUID)
-	require.True(t, stored.RemoteSessionIssuerID.Valid)
+	require.Equal(t, conv.ToNullUUID(userIssuer.ID), stored.UserSessionIssuerID)
+	require.False(t, stored.RemoteSessionIssuerID.Valid, "selecting an organization sign-in issuer does not inherit its legacy registration link")
 }
 
 func TestCreateMcpServer_RejectsForeignOrganizationUserSessionIssuer(t *testing.T) {

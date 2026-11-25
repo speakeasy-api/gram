@@ -39,7 +39,7 @@ describe("callOutcome", () => {
       outcomes: [
         {
           contractId: "no_credential_egress",
-          error: "evaluator did not answer: carries_secret",
+          error: "evaluator did not answer: payload_data",
           inputs: {},
         },
       ],
@@ -54,7 +54,7 @@ describe("callOutcome", () => {
       outcomes: [
         {
           contractId: "no_credential_egress",
-          error: "evaluator did not answer: carries_secret",
+          error: "evaluator did not answer: payload_data",
           inputs: {},
         },
       ],
@@ -65,9 +65,11 @@ describe("callOutcome", () => {
   it("keeps a real block when a contract matched", () => {
     const blocked = call({
       decision: "block",
-      decidedBy: ["no_force_push"],
+      decidedBy: ["no_remote_destruction"],
       evaluatorError: "partial",
-      outcomes: [{ contractId: "no_force_push", result: "block", inputs: {} }],
+      outcomes: [
+        { contractId: "no_remote_destruction", result: "block", inputs: {} },
+      ],
     });
     expect(callOutcome(blocked)).toBe("block");
   });
@@ -122,28 +124,43 @@ function labeled(labels: Record<string, unknown>): IntentCallAssessment {
 describe("secretExposure", () => {
   it("flags later calls that run code or send data", () => {
     const exposure = secretExposure([
-      labeled({ effect_class: ["exec_program"] }),
-      labeled({ effect_class: ["read"], touches_credential_store: true }),
+      labeled({ effect_class: ["exec"] }),
+      labeled({
+        effect_class: ["read"],
+        target_locations: ["credential_store"],
+      }),
       labeled({ effect_class: ["read"] }),
-      labeled({ effect_class: ["exec_program"] }),
-      labeled({ effect_class: ["write_local", "outbound"] }),
+      labeled({ effect_class: ["exec"] }),
+      labeled({ effect_class: ["write", "outbound"] }),
     ]);
     expect(exposure).toEqual({ firstIndex: 1, riskyIndexes: [3, 4] });
+  });
+
+  it("treats a credential payload as putting a secret in context", () => {
+    const exposure = secretExposure([
+      labeled({
+        effect_class: ["write"],
+        payload_data: ["credential"],
+      }),
+      labeled({ effect_class: ["outbound"] }),
+    ]);
+    expect(exposure).toEqual({ firstIndex: 0, riskyIndexes: [1] });
   });
 
   it("ignores a credential store named only in an outbound call", () => {
     expect(
       secretExposure([
-        labeled({ effect_class: ["outbound"], touches_credential_store: true }),
-        labeled({ effect_class: ["exec_program"] }),
+        labeled({
+          effect_class: ["outbound"],
+          target_locations: ["credential_store"],
+        }),
+        labeled({ effect_class: ["exec"] }),
       ]),
     ).toBeNull();
   });
 
   it("is null when no call touches a secret", () => {
-    expect(
-      secretExposure([labeled({ effect_class: ["exec_program"] })]),
-    ).toBeNull();
+    expect(secretExposure([labeled({ effect_class: ["exec"] })])).toBeNull();
   });
 });
 
@@ -178,30 +195,30 @@ describe("decisionReason", () => {
   it("names the contract and the label that fired it", () => {
     const c = call({
       decision: "clarify",
-      decidedBy: ["review_credential_reads"],
+      decidedBy: ["review_credential_access"],
       labels: [
         {
-          key: "touches_credential_store",
-          value: true,
+          key: "target_locations",
+          value: ["credential_store"],
           probability: 0.94,
-          rank: 0,
+          rank: -1,
         },
       ],
       outcomes: [
         {
-          contractId: "review_credential_reads",
+          contractId: "review_credential_access",
           result: "clarify",
-          inputs: { "label.touches_credential_store": true },
+          inputs: { "label.target_locations": ["credential_store"] },
         },
       ],
     });
     expect(
       decisionReason(
         c,
-        new Map([["review_credential_reads", "Review credential reads"]]),
+        new Map([["review_credential_access", "Review credential access"]]),
       ),
     ).toBe(
-      "Review credential reads fired because touches_credential_store is true (94%).",
+      "Review credential access fired because target_locations is credential_store (94%).",
     );
   });
 

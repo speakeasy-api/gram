@@ -305,21 +305,20 @@ VALUES (@organization_id, @email, NULLIF(@serial_number::text, ''), @hostname::t
 -- name: RolesDeleteAIScanTargets :exec
 DELETE FROM ai_scan_targets WHERE organization_id = @organization_id;
 
--- The decided built-ins carry no definition: the compiled-in one stays
--- authoritative, so a later registry revision still reaches this org.
+-- Decided built-ins carry only decisions, so catalog edits still reach this org.
 -- name: RolesInsertAIScanTargets :exec
-INSERT INTO ai_scan_targets (organization_id, id, status, rationale)
+INSERT INTO ai_scan_targets (organization_id, id, ai_product_id, status, rationale)
 VALUES
-  (@organization_id, 'claude-code', 'approved',
+  (@organization_id, 'claude-code', 'claude-code', 'approved',
    'Standard issue for the platform team.'),
-  (@organization_id, 'codex', 'blocked',
+  (@organization_id, 'codex', 'codex', 'blocked',
    'Not covered by the vendor review. Ask in #ai-tooling if you need it.'),
-  (@organization_id, 'hermes-agent', 'approved',
+  (@organization_id, 'hermes-agent', 'hermes-agent', 'approved',
    'Reviewed with the research team. Publishes a client ID metadata '
    || 'document, so the approval is enforced at the gateway.'),
-  (@organization_id, 'zed', 'approved',
+  (@organization_id, 'zed', 'zed', 'approved',
    'Approved for the platform team after the editor review.'),
-  (@organization_id, 'goose', 'blocked',
+  (@organization_id, 'goose', 'goose', 'blocked',
    'Runs arbitrary local commands under its own extensions. Blocked until '
    || 'the extension policy lands.');
 
@@ -362,17 +361,19 @@ VALUES (@organization_id, 50000000, 1)
 ON CONFLICT (organization_id) DO UPDATE
   SET tum_monthly_token_limit = EXCLUDED.tum_monthly_token_limit;
 
--- Access requests: one pending, one denied, so the Access Requests tab and
--- the grant dialog's approval choices have something to show. Messages
--- cascade with their request.
+-- Access requests: three pending (one asking for a duration, one asking until
+-- a deadline) and one denied, so the Access Requests tab and the grant
+-- dialog's approval choices have something to show. Messages cascade with
+-- their request.
 -- name: RolesDeleteAccessRequests :exec
 DELETE FROM access_requests WHERE organization_id = @organization_id;
 
 -- name: RolesInsertAccessRequest :exec
 INSERT INTO access_requests
   (id, organization_id, requester_user_id, scope, selector, resource_name, message,
-   status, decided_by_user_id, decided_via, decided_at, expires_at, created_at, updated_at)
+   status, decided_by_user_id, decided_via, decided_at, requested_duration_seconds,
+   requested_until, expires_at, created_at, updated_at)
 VALUES
   (@id, @organization_id, @requester_user_id, @scope, @selector, @resource_name, @message,
    @status, sqlc.narg(decided_by_user_id), sqlc.narg(decided_via), sqlc.narg(decided_at),
-   @expires_at, @created_at, @created_at);
+   sqlc.narg(requested_duration_seconds), sqlc.narg(requested_until), @expires_at, @created_at, @created_at);

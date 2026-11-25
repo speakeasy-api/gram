@@ -29,8 +29,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	authclientfixtures "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
-	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -42,14 +40,15 @@ type connectionRecoveryFixture struct {
 	userAgent string
 	ti        *testInstance
 	//nolint:containedctx // the test's authenticated context, used by every request it makes
-	ctx      context.Context
-	link     mcp.ConnectionRecoveryLink
-	router   chi.Router
-	asBase   string
-	upstream string
-	userID   string
-	otherID  string
-	fixtures *authclientfixtures.Queries
+	ctx            context.Context
+	link           mcp.ConnectionRecoveryLink
+	router         chi.Router
+	asBase         string
+	upstream       string
+	userID         string
+	otherID        string
+	fixtures       *authclientfixtures.Queries
+	connectGrantID uuid.UUID
 }
 
 // newConnectionRecoveryFixture links a personal auth client to a server; its
@@ -86,7 +85,9 @@ func newConnectionRecoveryFixtureWithCallback(t *testing.T, callbackBase, asBase
 	f.link = mcp.ConnectionRecoveryLink{
 		OrganizationID: authCtx.ActiveOrganizationID, UserID: f.userID, ProjectID: *authCtx.ProjectID,
 		McpServerID: serverID, AuthClientID: authClientID, RegistrationID: registration,
+		UserSessionIssuerID: createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID),
 	}
+	f.connectGrantID = seedPrincipalMCPConnectGrant(t, ctx, ti, f.link.OrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, f.userID), serverID)
 	ti.service.SetBrowserSession(func(ctx context.Context, token string) (context.Context, error) {
 		if token == "" || strings.HasPrefix(token, "invalid") {
 			return ctx, oops.C(oops.CodeUnauthorized)
@@ -260,8 +261,8 @@ func TestConnectionRecoveryBindsACallbackOnAnotherHost(t *testing.T) {
 	require.NotContains(t, refused.Body.String(), f.asBase)
 }
 
-// Where typed auth clients are enforced, a link's login stands on the offer it
-// names and asks for the resource that offer decides. It completes and stores
+// A link's login stands on the offer it names and asks for the resource that
+// offer decides. It completes and stores
 // the connection whether or not a user session issuer links the registration,
 // and it writes no link.
 func TestConnectionRecoveryCompletesThroughTheOffer(t *testing.T) {
@@ -297,9 +298,6 @@ func TestConnectionRecoveryCompletesThroughTheOffer(t *testing.T) {
 			if tc.linked {
 				require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(f.ctx, remotesessions_repo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: f.link.RegistrationID, UserSessionIssuerID: signIn}))
 			}
-			_, err := productfeaturesrepo.New(f.ti.conn).EnableFeature(f.ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: f.link.OrganizationID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
-			require.NoError(t, err)
-			seedPrincipalMCPConnectGrant(t, f.ctx, f.ti, f.link.OrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, f.userID), f.link.McpServerID)
 			// A browser's request carries no prepared grants: the person's own decide.
 			f.ctx = t.Context()
 
@@ -335,8 +333,7 @@ func TestConnectionRecoveryCompletesThroughTheOffer(t *testing.T) {
 func TestConnectionRecoveryRefusesATypedLoginTheServerWouldDeny(t *testing.T) {
 	t.Parallel()
 	f := newConnectionRecoveryFixture(t)
-	f.link.UserSessionIssuerID = createUserSessionIssuer(t, f.ctx, f.ti.conn, f.link.ProjectID)
-	_, err := productfeaturesrepo.New(f.ti.conn).EnableFeature(f.ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: f.link.OrganizationID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
+	_, err := accessrepo.New(f.ti.conn).DeletePrincipalGrant(f.ctx, accessrepo.DeletePrincipalGrantParams{ID: f.connectGrantID, OrganizationID: f.link.OrganizationID})
 	require.NoError(t, err)
 	seedPrincipalGrant(t, f.ctx, f.ti, f.link.OrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, f.userID), authz.ScopeMCPAuth, f.link.AuthClientID.String())
 	// A browser's request carries no prepared grants: the person's own decide.
@@ -348,23 +345,6 @@ func TestConnectionRecoveryRefusesATypedLoginTheServerWouldDeny(t *testing.T) {
 	require.Equal(t, http.StatusForbidden, refused.Code)
 	require.Contains(t, refused.Body.String(), "No access")
 	require.NotContains(t, refused.Body.String(), f.asBase)
-}
-
-// Without enforcement a link's login carries no typed authorization and no
-// resource, and its callback still relies on the user session issuer link.
-func TestConnectionRecoveryWithoutEnforcementStandsOnTheLink(t *testing.T) {
-	t.Parallel()
-	f := newConnectionRecoveryFixture(t)
-	f.link.UpstreamResource = f.upstream
-
-	path, err := f.ti.service.IssueConnectionRecovery(f.ctx, f.link)
-	require.NoError(t, err)
-	location, _ := f.start(t, path, f.userID)
-	require.False(t, location.Query().Has("resource"))
-	remote, err := f.ti.service.RemoteLoginState(f.ctx, location.Query().Get("state"))
-	require.NoError(t, err)
-	require.Nil(t, remote.TypedAuthorization)
-	require.Empty(t, remote.Resource)
 }
 
 // A link connects only through a client the server still offers on the same
@@ -393,6 +373,18 @@ func TestConnectionRecoveryRefusesAClientTheServerNoLongerOffers(t *testing.T) {
 	detached := f.open(t, path, f.userID)
 	require.Equal(t, http.StatusConflict, detached.Code)
 	require.NotContains(t, detached.Body.String(), f.asBase)
+}
+
+func TestConnectionRecoveryRefusesAChangedResource(t *testing.T) {
+	t.Parallel()
+	f := newConnectionRecoveryFixture(t)
+	f.link.UpstreamResource = "https://old-target.example.com/mcp"
+	path, err := f.ti.service.IssueConnectionRecovery(f.ctx, f.link)
+	require.NoError(t, err)
+	refused := f.open(t, path, f.userID)
+	require.Equal(t, http.StatusForbidden, refused.Code)
+	require.Contains(t, refused.Body.String(), "No access")
+	require.NotContains(t, refused.Body.String(), f.asBase)
 }
 
 func TestConnectionRecoveryShowsNoAccessWithoutAWayToConnect(t *testing.T) {

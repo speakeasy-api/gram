@@ -11,7 +11,9 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -21,6 +23,25 @@ type hostedToolset struct {
 	McpSlug             pgtype.Text
 	CustomDomainID      uuid.NullUUID
 	UserSessionIssuerID uuid.NullUUID
+}
+
+// markHostedDownstreamOnly records that downstream sign-in does not require upstream OAuth.
+func markHostedDownstreamOnly(t *testing.T, ctx context.Context, conn *pgxpool.Pool, serverID uuid.UUID) {
+	t.Helper()
+	require.NoError(t, authclientbackfill.New(conn).SetRequiresUpstreamAuthFixture(ctx, authclientbackfill.SetRequiresUpstreamAuthFixtureParams{
+		ID: serverID, RequiresUpstreamAuth: pgtype.Bool{Bool: false, Valid: true},
+	}))
+}
+
+// assignHostedOAuth gives a hosted server its exact upstream registration.
+func assignHostedOAuth(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, projectID, serverID, registrationID uuid.UUID) {
+	t.Helper()
+	require.NoError(t, testrepo.New(conn).InsertMCPServerRemoteSessionClientFixture(ctx, testrepo.InsertMCPServerRemoteSessionClientFixtureParams{
+		OrganizationID: organizationID, ProjectID: projectID, McpServerID: serverID, RemoteSessionClientID: registrationID,
+	}))
+	require.NoError(t, authclientbackfill.New(conn).SetRequiresUpstreamAuthFixture(ctx, authclientbackfill.SetRequiresUpstreamAuthFixtureParams{
+		ID: serverID, RequiresUpstreamAuth: pgtype.Bool{Bool: true, Valid: true},
+	}))
 }
 
 // hostToolset gives a toolset a canonical MCP server with one platform endpoint at slug.
@@ -43,6 +64,7 @@ func hostToolset(t *testing.T, ctx context.Context, ti *testInstance, toolset to
 		NetworkAccessMode:     pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
+	markHostedDownstreamOnly(t, ctx, ti.conn, toolset.ID)
 	testenv.SetHostedMCP(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, testenv.HostedMCP{Slug: slug, CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}})
 
 	toolset, err = toolsets_repo.New(ti.conn).GetToolsetByIDAndProject(ctx, toolsets_repo.GetToolsetByIDAndProjectParams{ID: toolset.ID, ProjectID: toolset.ProjectID})
@@ -82,6 +104,11 @@ func setToolsetIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, pro
 
 	issuer := uuid.NullUUID{UUID: issuerID, Valid: true}
 	testenv.SetHostedMCP(t, ctx, conn, projectID, toolset.ID, testenv.HostedMCP{UserSessionIssuerID: &issuer})
+	server, err := mcpserversrepo.New(conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: toolset.ID, ProjectID: projectID})
+	require.NoError(t, err)
+	if !server.RequiresUpstreamAuth.Valid {
+		markHostedDownstreamOnly(t, ctx, conn, toolset.ID)
+	}
 	toolset.UserSessionIssuerID = issuer
 	return toolset
 }

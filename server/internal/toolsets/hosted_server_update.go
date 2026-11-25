@@ -20,7 +20,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/tombstone"
-	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
@@ -377,15 +376,8 @@ func applyHostedServerChange(ctx context.Context, tx pgx.Tx, auditLogger *audit.
 				touched = append(touched, id.UUID)
 			}
 		}
-		// Moving the server onto an issuer configures its sign-in, so a server
-		// that is the issuer's only consumer offers the clients bound there.
-		if issuer.Valid {
-			if err := upstreamclients.CaptureSoleConsumers(ctx, tx, toolset.OrganizationID, toolset.ProjectID, []uuid.UUID{issuer.UUID}, nil); err != nil {
-				return hostedServerWrite{}, oops.E(oops.CodeUnexpected, err, "capture hosted MCP upstream clients")
-			}
-		}
-		if err := remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, tx, toolset.OrganizationID, toolset.ProjectID, touched); err != nil {
-			return hostedServerWrite{}, oops.E(oops.CodeUnexpected, err, "resync hosted MCP remote session issuer")
+		if err := remotesessions.RestampMCPServerRemoteSessionIssuers(ctx, tx, toolset.OrganizationID, toolset.ProjectID, touched); err != nil {
+			return hostedServerWrite{}, oops.E(oops.CodeUnexpected, err, "restamp hosted MCP remote session issuer")
 		}
 		result.After, err = servers.GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: canonical.ID, ProjectID: canonical.ProjectID})
 		if err != nil {

@@ -18,7 +18,7 @@ import (
 // when it leaves the server out, and fails on a duplicate list row.
 func eligibleIssuers(t *testing.T, ctx context.Context, si *instance, serverID uuid.UUID) (listed, got uuid.UUID) {
 	t.Helper()
-	rows, err := si.q.ListEligibleServers(ctx, repo.ListEligibleServersParams{TypedAuthEnforced: false, OrganizationID: si.orgID})
+	rows, err := si.q.ListEligibleServers(ctx, si.orgID)
 	require.NoError(t, err)
 	for _, row := range rows {
 		if row.ID == serverID {
@@ -37,7 +37,7 @@ func eligibleIssuers(t *testing.T, ctx context.Context, si *instance, serverID u
 func TestEligibleServers_OneProvider(t *testing.T) {
 	t.Parallel()
 	ctx, si := newTestService(t)
-	f := capableServer(t, ctx, si, "One")
+	f := legacyCapableServer(t, ctx, si, "One")
 
 	listed, got := eligibleIssuers(t, ctx, si, f.serverID)
 	require.Equal(t, f.issuerID, listed)
@@ -47,7 +47,7 @@ func TestEligibleServers_OneProvider(t *testing.T) {
 func TestEligibleServers_NoAssociationLeavesServerOut(t *testing.T) {
 	t.Parallel()
 	ctx, si := newTestService(t)
-	f := capableServer(t, ctx, si, "None")
+	f := legacyCapableServer(t, ctx, si, "None")
 	require.NoError(t, testrepo.New(si.conn).ClearMCPServerRemoteSessionClientsFixture(ctx, f.serverID))
 
 	listed, got := eligibleIssuers(t, ctx, si, f.serverID)
@@ -58,7 +58,7 @@ func TestEligibleServers_NoAssociationLeavesServerOut(t *testing.T) {
 func TestEligibleServers_AssociationOverridesColumn(t *testing.T) {
 	t.Parallel()
 	ctx, si := newTestService(t)
-	f := capableServer(t, ctx, si, "Stale")
+	f := legacyCapableServer(t, ctx, si, "Stale")
 	other := createResourceIssuer(t, ctx, si, si.orgID, f.projectID, true)
 	_, err := si.q.SetMCPServerIssuerFixture(ctx, repo.SetMCPServerIssuerFixtureParams{RemoteSessionIssuerID: uuid.NullUUID{UUID: other, Valid: true}, ID: f.serverID, ProjectID: f.projectID})
 	require.NoError(t, err)
@@ -71,7 +71,7 @@ func TestEligibleServers_AssociationOverridesColumn(t *testing.T) {
 func TestEligibleServers_SeveralProvidersLeaveServerOut(t *testing.T) {
 	t.Parallel()
 	ctx, si := newTestService(t)
-	f := capableServer(t, ctx, si, "Several")
+	f := legacyCapableServer(t, ctx, si, "Several")
 	other := createResourceIssuer(t, ctx, si, si.orgID, f.projectID, true)
 	associateServerIssuer(t, ctx, si, f.projectID, f.serverID, other)
 
@@ -83,7 +83,7 @@ func TestEligibleServers_SeveralProvidersLeaveServerOut(t *testing.T) {
 func TestEligibleServers_SeveralClientsOfOneProviderKeepOneRow(t *testing.T) {
 	t.Parallel()
 	ctx, si := newTestService(t)
-	f := capableServer(t, ctx, si, "Clients")
+	f := legacyCapableServer(t, ctx, si, "Clients")
 	second := addClient(t, ctx, si, f.issuerID, uuid.NullUUID{UUID: f.projectID, Valid: true}, "0oasecond")
 	require.NoError(t, testrepo.New(si.conn).InsertMCPServerRemoteSessionClientFixture(ctx, testrepo.InsertMCPServerRemoteSessionClientFixtureParams{
 		ProjectID:             f.projectID,
@@ -103,7 +103,7 @@ func TestEligibleServers_DetachedAssociationLeavesServerOut(t *testing.T) {
 	projectID := createProject(t, ctx, si, si.orgID, "proj-"+uuid.NewString()[:8])
 	issuerID := createResourceIssuer(t, ctx, si, si.orgID, projectID, true)
 	clientID := addClient(t, ctx, si, issuerID, uuid.NullUUID{UUID: projectID, Valid: true}, "0oadetached")
-	serverID := createServer(t, ctx, si, projectID, issuerID, "Detached")
+	serverID := createUnproxiedLegacyServer(t, ctx, si, projectID, issuerID, "Detached")
 
 	detached, err := upstreamclientsrepo.New(si.conn).DetachMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.DetachMCPServerRemoteSessionClientParams{
 		McpServerID:           serverID,
@@ -124,7 +124,7 @@ func TestEligibleServers_DeletedClientLeavesServerOut(t *testing.T) {
 	projectID := createProject(t, ctx, si, si.orgID, "proj-"+uuid.NewString()[:8])
 	issuerID := createResourceIssuer(t, ctx, si, si.orgID, projectID, true)
 	clientID := addClient(t, ctx, si, issuerID, uuid.NullUUID{UUID: projectID, Valid: true}, "0oadeleted")
-	serverID := createServer(t, ctx, si, projectID, issuerID, "DeletedClient")
+	serverID := createUnproxiedLegacyServer(t, ctx, si, projectID, issuerID, "DeletedClient")
 
 	deleted, err := testrepo.New(si.conn).SoftDeleteRemoteSessionClientFixture(ctx, testrepo.SoftDeleteRemoteSessionClientFixtureParams{
 		ID:             clientID,
@@ -142,7 +142,7 @@ func TestEligibleServers_DeletedClientLeavesServerOut(t *testing.T) {
 func TestEligibleServers_DeletedProviderLeavesServerOut(t *testing.T) {
 	t.Parallel()
 	ctx, si := newTestService(t)
-	f := capableServer(t, ctx, si, "DeletedProvider")
+	f := legacyCapableServer(t, ctx, si, "DeletedProvider")
 	require.NoError(t, testrepo.New(si.conn).ForceSoftDeleteRemoteSessionIssuerFixture(ctx, f.issuerID))
 
 	listed, got := eligibleIssuers(t, ctx, si, f.serverID)
@@ -153,7 +153,7 @@ func TestEligibleServers_DeletedProviderLeavesServerOut(t *testing.T) {
 func TestEligibleServers_DeletedProviderDoesNotCountTowardSeveral(t *testing.T) {
 	t.Parallel()
 	ctx, si := newTestService(t)
-	f := capableServer(t, ctx, si, "LiveAndDeleted")
+	f := legacyCapableServer(t, ctx, si, "LiveAndDeleted")
 	deleted := createResourceIssuer(t, ctx, si, si.orgID, f.projectID, true)
 	associateServerIssuer(t, ctx, si, f.projectID, f.serverID, deleted)
 	require.NoError(t, testrepo.New(si.conn).ForceSoftDeleteRemoteSessionIssuerFixture(ctx, deleted))

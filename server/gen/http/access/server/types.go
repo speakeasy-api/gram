@@ -200,6 +200,15 @@ type RequestAccessRequestBody struct {
 	ResourceName *string `form:"resource_name,omitempty" json:"resource_name,omitempty" xml:"resource_name,omitempty"`
 	// Optional message from the requester explaining why they need access.
 	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// How long the requester would like the access for, counted from approval: 1h,
+	// 2h or 4h. A suggestion shown to the approver, who still picks the window.
+	// Stored only when the request is stored. Cannot be sent with requested_until.
+	Duration *string `form:"duration,omitempty" json:"duration,omitempty" xml:"duration,omitempty"`
+	// When the requester would like the access until, such as the end of their day
+	// as their own clock reads it. Must be in the future and at most 24 hours
+	// away. A suggestion shown to the approver, who still picks the window. Cannot
+	// be sent with duration.
+	RequestedUntil *string `form:"requested_until,omitempty" json:"requested_until,omitempty" xml:"requested_until,omitempty"`
 }
 
 // ResolveChallengeRequestBody is the type of the "access" service
@@ -914,6 +923,13 @@ type DecideAccessRequestResponseBody struct {
 	ResourceName *string `form:"resource_name,omitempty" json:"resource_name,omitempty" xml:"resource_name,omitempty"`
 	// The requester's note to the administrators.
 	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// How long the requester asked to have the access, in seconds counted from
+	// approval. A suggestion; the approver picks the window. Absent when none was
+	// asked for.
+	RequestedDurationSeconds *int `form:"requested_duration_seconds,omitempty" json:"requested_duration_seconds,omitempty" xml:"requested_duration_seconds,omitempty"`
+	// When the requester asked to have the access until. A suggestion; the
+	// approver picks the window. Absent when none was asked for.
+	RequestedUntil *string `form:"requested_until,omitempty" json:"requested_until,omitempty" xml:"requested_until,omitempty"`
 	// pending: waiting for a decision. approved: a temporary grant was given.
 	// denied, expired or withdrawn: no access was given.
 	Status string `form:"status" json:"status" xml:"status"`
@@ -952,6 +968,13 @@ type WithdrawAccessRequestResponseBody struct {
 	ResourceName *string `form:"resource_name,omitempty" json:"resource_name,omitempty" xml:"resource_name,omitempty"`
 	// The requester's note to the administrators.
 	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// How long the requester asked to have the access, in seconds counted from
+	// approval. A suggestion; the approver picks the window. Absent when none was
+	// asked for.
+	RequestedDurationSeconds *int `form:"requested_duration_seconds,omitempty" json:"requested_duration_seconds,omitempty" xml:"requested_duration_seconds,omitempty"`
+	// When the requester asked to have the access until. A suggestion; the
+	// approver picks the window. Absent when none was asked for.
+	RequestedUntil *string `form:"requested_until,omitempty" json:"requested_until,omitempty" xml:"requested_until,omitempty"`
 	// pending: waiting for a decision. approved: a temporary grant was given.
 	// denied, expired or withdrawn: no access was given.
 	Status string `form:"status" json:"status" xml:"status"`
@@ -11113,6 +11136,13 @@ type AccessRequestResponseBody struct {
 	ResourceName *string `form:"resource_name,omitempty" json:"resource_name,omitempty" xml:"resource_name,omitempty"`
 	// The requester's note to the administrators.
 	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// How long the requester asked to have the access, in seconds counted from
+	// approval. A suggestion; the approver picks the window. Absent when none was
+	// asked for.
+	RequestedDurationSeconds *int `form:"requested_duration_seconds,omitempty" json:"requested_duration_seconds,omitempty" xml:"requested_duration_seconds,omitempty"`
+	// When the requester asked to have the access until. A suggestion; the
+	// approver picks the window. Absent when none was asked for.
+	RequestedUntil *string `form:"requested_until,omitempty" json:"requested_until,omitempty" xml:"requested_until,omitempty"`
 	// pending: waiting for a decision. approved: a temporary grant was given.
 	// denied, expired or withdrawn: no access was given.
 	Status string `form:"status" json:"status" xml:"status"`
@@ -12565,22 +12595,24 @@ func NewListAccessRequestsResponseBody(res *access.ListAccessRequestsResult) *Li
 // result of the "decideAccessRequest" endpoint of the "access" service.
 func NewDecideAccessRequestResponseBody(res *access.AccessRequest) *DecideAccessRequestResponseBody {
 	body := &DecideAccessRequestResponseBody{
-		ID:               res.ID,
-		RequesterUserID:  res.RequesterUserID,
-		RequesterName:    res.RequesterName,
-		Scope:            res.Scope,
-		ResourceName:     res.ResourceName,
-		Message:          res.Message,
-		Status:           res.Status,
-		DecidedByUserID:  res.DecidedByUserID,
-		DecidedByName:    res.DecidedByName,
-		DecidedVia:       res.DecidedVia,
-		DecidedAt:        res.DecidedAt,
-		TemporaryGrantID: res.TemporaryGrantID,
-		GrantExpiresAt:   res.GrantExpiresAt,
-		ExpiresAt:        res.ExpiresAt,
-		CreatedAt:        res.CreatedAt,
-		UpdatedAt:        res.UpdatedAt,
+		ID:                       res.ID,
+		RequesterUserID:          res.RequesterUserID,
+		RequesterName:            res.RequesterName,
+		Scope:                    res.Scope,
+		ResourceName:             res.ResourceName,
+		Message:                  res.Message,
+		RequestedDurationSeconds: res.RequestedDurationSeconds,
+		RequestedUntil:           res.RequestedUntil,
+		Status:                   res.Status,
+		DecidedByUserID:          res.DecidedByUserID,
+		DecidedByName:            res.DecidedByName,
+		DecidedVia:               res.DecidedVia,
+		DecidedAt:                res.DecidedAt,
+		TemporaryGrantID:         res.TemporaryGrantID,
+		GrantExpiresAt:           res.GrantExpiresAt,
+		ExpiresAt:                res.ExpiresAt,
+		CreatedAt:                res.CreatedAt,
+		UpdatedAt:                res.UpdatedAt,
 	}
 	if res.Selector != nil {
 		body.Selector = marshalAccessSelectorToSelectorResponseBody(res.Selector)
@@ -12592,22 +12624,24 @@ func NewDecideAccessRequestResponseBody(res *access.AccessRequest) *DecideAccess
 // result of the "withdrawAccessRequest" endpoint of the "access" service.
 func NewWithdrawAccessRequestResponseBody(res *access.AccessRequest) *WithdrawAccessRequestResponseBody {
 	body := &WithdrawAccessRequestResponseBody{
-		ID:               res.ID,
-		RequesterUserID:  res.RequesterUserID,
-		RequesterName:    res.RequesterName,
-		Scope:            res.Scope,
-		ResourceName:     res.ResourceName,
-		Message:          res.Message,
-		Status:           res.Status,
-		DecidedByUserID:  res.DecidedByUserID,
-		DecidedByName:    res.DecidedByName,
-		DecidedVia:       res.DecidedVia,
-		DecidedAt:        res.DecidedAt,
-		TemporaryGrantID: res.TemporaryGrantID,
-		GrantExpiresAt:   res.GrantExpiresAt,
-		ExpiresAt:        res.ExpiresAt,
-		CreatedAt:        res.CreatedAt,
-		UpdatedAt:        res.UpdatedAt,
+		ID:                       res.ID,
+		RequesterUserID:          res.RequesterUserID,
+		RequesterName:            res.RequesterName,
+		Scope:                    res.Scope,
+		ResourceName:             res.ResourceName,
+		Message:                  res.Message,
+		RequestedDurationSeconds: res.RequestedDurationSeconds,
+		RequestedUntil:           res.RequestedUntil,
+		Status:                   res.Status,
+		DecidedByUserID:          res.DecidedByUserID,
+		DecidedByName:            res.DecidedByName,
+		DecidedVia:               res.DecidedVia,
+		DecidedAt:                res.DecidedAt,
+		TemporaryGrantID:         res.TemporaryGrantID,
+		GrantExpiresAt:           res.GrantExpiresAt,
+		ExpiresAt:                res.ExpiresAt,
+		CreatedAt:                res.CreatedAt,
+		UpdatedAt:                res.UpdatedAt,
 	}
 	if res.Selector != nil {
 		body.Selector = marshalAccessSelectorToSelectorResponseBody(res.Selector)
@@ -20518,10 +20552,12 @@ func NewExplainResourceAccessPayload(resourceKind string, resourceID string, use
 // payload.
 func NewRequestAccessPayload(body *RequestAccessRequestBody, apikeyToken *string, sessionToken *string) *access.RequestAccessPayload {
 	v := &access.RequestAccessPayload{
-		Scope:        *body.Scope,
-		ResourceID:   body.ResourceID,
-		ResourceName: body.ResourceName,
-		Message:      body.Message,
+		Scope:          *body.Scope,
+		ResourceID:     body.ResourceID,
+		ResourceName:   body.ResourceName,
+		Message:        body.Message,
+		Duration:       body.Duration,
+		RequestedUntil: body.RequestedUntil,
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
@@ -21029,6 +21065,14 @@ func ValidateRequestAccessRequestBody(body *RequestAccessRequestBody) (err error
 		if utf8.RuneCountInString(*body.Message) > 1000 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.message", *body.Message, utf8.RuneCountInString(*body.Message), 1000, false))
 		}
+	}
+	if body.Duration != nil {
+		if !(*body.Duration == "1h" || *body.Duration == "2h" || *body.Duration == "4h") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.duration", *body.Duration, []any{"1h", "2h", "4h"}))
+		}
+	}
+	if body.RequestedUntil != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.requested_until", *body.RequestedUntil, goa.FormatDateTime))
 	}
 	return
 }

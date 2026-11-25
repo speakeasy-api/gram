@@ -66,6 +66,7 @@ func TestOrganizationUserSessionIssuerMigrateReconcilesCredentialChoices(t *test
 				}
 				sourceID := seedIssuerInProject(t, ctx, ti.conn, projectID, fmt.Sprintf("selection-source-%d", i))
 				serverID, clientID := seedIssuerMigrationOAuthServer(t, ctx, ti, projectID, sourceID)
+				syncIssuerMigrationTestServers(t, ctx, ti, projectID, serverID)
 				moved, err := seedUserSession(t, ctx, ti.conn, sourceID, urn.NewUserSubject(fmt.Sprintf("moved-%d", i)))
 				require.NoError(t, err)
 				// A choice recorded before typed clients existed must keep its row
@@ -190,9 +191,10 @@ func TestOrganizationUserSessionIssuerMigrateScopesExistingTargetButNotMovedCred
 	targetID := uuid.MustParse(target.ID)
 	first, _ := seedIssuerMigrationOAuthServer(t, ctx, ti, *auth.ProjectID, targetID)
 	second, _ := seedIssuerMigrationOAuthServer(t, ctx, ti, *auth.ProjectID, targetID)
-	syncIssuerMigrationTestServers(t, ctx, ti, first, second)
+	syncIssuerMigrationTestServers(t, ctx, ti, *auth.ProjectID, first, second)
 	sourceID := seedIssuer(t, ctx, ti, "bounded-source")
-	impact, _ := seedIssuerMigrationOAuthServer(t, ctx, ti, *auth.ProjectID, sourceID)
+	impact, registration := seedIssuerMigrationOAuthServer(t, ctx, ti, *auth.ProjectID, sourceID)
+	seedMigrationTypedOffer(t, ctx, ti, *auth.ProjectID, impact, registration)
 	existing, err := seedUserSession(t, ctx, ti.conn, targetID, urn.NewUserSubject("bounded-existing"))
 	require.NoError(t, err)
 	moved, err := seedUserSession(t, ctx, ti.conn, sourceID, urn.NewUserSubject("bounded-moved"))
@@ -228,7 +230,7 @@ func TestOrganizationUserSessionIssuerMigrateMaintainsMovedGatewayMembers(t *tes
 	member, registration := seedIssuerMigrationOAuthServer(t, ctx, ti, *auth.ProjectID, otherID)
 	fixtures := selectionbackfill.New(ti.conn)
 	require.NoError(t, fixtures.SeedClientBindingFixture(ctx, selectionbackfill.SeedClientBindingFixtureParams{RemoteSessionClientID: registration, UserSessionIssuerID: targetID}))
-	syncIssuerMigrationTestServers(t, ctx, ti, direct, member)
+	syncIssuerMigrationTestServers(t, ctx, ti, *auth.ProjectID, direct, member)
 	gatewayID := uuid.New()
 	require.NoError(t, fixtures.SeedMetaMCPServerFixture(ctx, selectionbackfill.SeedMetaMCPServerFixtureParams{ID: gatewayID, OrganizationID: auth.ActiveOrganizationID, ProjectID: *auth.ProjectID, Name: "Moved gateway", UserSessionIssuerID: conv.ToNullUUID(sourceID)}))
 	require.NoError(t, fixtures.SeedMetaMCPServerMemberFixture(ctx, selectionbackfill.SeedMetaMCPServerMemberFixtureParams{ProjectID: *auth.ProjectID, MetaMcpServerID: gatewayID, McpServerID: member}))
@@ -254,12 +256,12 @@ func TestOrganizationUserSessionIssuerMigrateMaintainsMovedGatewayMembers(t *tes
 	require.Len(t, movedChoices, 2)
 }
 
-func syncIssuerMigrationTestServers(t *testing.T, ctx context.Context, ti *testInstance, servers ...uuid.UUID) {
+func syncIssuerMigrationTestServers(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID, servers ...uuid.UUID) {
 	t.Helper()
 	auth, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	tx := testenv.BeginTx(t, ctx, ti.conn)
-	require.NoError(t, authclientbackfill.LockEMAWriterScope(ctx, tx, auth.ActiveOrganizationID, []uuid.UUID{*auth.ProjectID}))
+	require.NoError(t, authclientbackfill.LockEMAWriterScope(ctx, tx, auth.ActiveOrganizationID, []uuid.UUID{projectID}))
 	require.NoError(t, authclientbackfill.PreflightServerAssociations(ctx, tx, auth.ActiveOrganizationID, servers...))
 	require.NoError(t, authclientbackfill.SyncServerAssociations(ctx, tx, auth.ActiveOrganizationID, servers...))
 	require.NoError(t, tx.Commit(ctx))
@@ -287,7 +289,7 @@ func TestOrganizationUserSessionIssuerMigrateKeepsExistingTargetChoice(t *testin
 			fixtures := selectionbackfill.New(ti.conn)
 			// The source's registration is also configured on the target's server.
 			require.NoError(t, fixtures.SeedAssociationFixture(ctx, selectionbackfill.SeedAssociationFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: targetServer, RemoteSessionClientID: sourceRegistration}))
-			syncIssuerMigrationTestServers(t, ctx, ti, targetServer, sourceServer)
+			syncIssuerMigrationTestServers(t, ctx, ti, *auth.ProjectID, targetServer, sourceServer)
 
 			existing, err := seedUserSession(t, ctx, ti.conn, targetID, urn.NewUserSubject("kept-existing"))
 			require.NoError(t, err)
@@ -330,11 +332,9 @@ func TestOrganizationUserSessionIssuerMigrateKeepsExistingTargetChoice(t *testin
 	}
 }
 
-// A server both issuers bound a registration for has one eligible client per
-// credential before consolidation and two after it. A credential with no
-// recorded choice is decided by the bindings it was served through, not left
-// to reconnect.
-func TestOrganizationUserSessionIssuerMigrateDecidesChoicesBeforeMergingBindings(t *testing.T) {
+// Repair can preserve explicit choices but cannot resolve an ambiguity with
+// the old issuer bindings, even when each issuer used a different client.
+func TestOrganizationUserSessionIssuerMigrateDoesNotPickAmongAmbiguousOffers(t *testing.T) {
 	t.Parallel()
 	for _, enforced := range []bool{false, true} {
 		t.Run(fmt.Sprintf("enforced=%t", enforced), func(t *testing.T) {
@@ -348,11 +348,11 @@ func TestOrganizationUserSessionIssuerMigrateDecidesChoicesBeforeMergingBindings
 			}
 			targetID := seedIssuer(t, ctx, ti, "premerge-target")
 			sourceID := seedIssuer(t, ctx, ti, "premerge-source")
-			targetServer, targetRegistration := seedIssuerMigrationOAuthServer(t, ctx, ti, *auth.ProjectID, targetID)
+			targetServer, _ := seedIssuerMigrationOAuthServer(t, ctx, ti, *auth.ProjectID, targetID)
 			sourceServer, sourceRegistration := seedIssuerMigrationOAuthServer(t, ctx, ti, *auth.ProjectID, sourceID)
 			fixtures := selectionbackfill.New(ti.conn)
 			require.NoError(t, fixtures.SeedAssociationFixture(ctx, selectionbackfill.SeedAssociationFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: targetServer, RemoteSessionClientID: sourceRegistration}))
-			syncIssuerMigrationTestServers(t, ctx, ti, targetServer, sourceServer)
+			syncIssuerMigrationTestServers(t, ctx, ti, *auth.ProjectID, targetServer, sourceServer)
 			existing, err := seedUserSession(t, ctx, ti.conn, targetID, urn.NewUserSubject("premerge-existing"))
 			require.NoError(t, err)
 			moved, err := seedUserSession(t, ctx, ti.conn, sourceID, urn.NewUserSubject("premerge-moved"))
@@ -370,15 +370,13 @@ func TestOrganizationUserSessionIssuerMigrateDecidesChoicesBeforeMergingBindings
 				}
 				return byServer
 			}
-			require.Equal(t, map[uuid.UUID]uuid.UUID{targetServer: targetRegistration, sourceServer: sourceRegistration}, choices(existing),
-				"the target credential keeps the registration its issuer bound and learns the moved server")
+			require.Equal(t, map[uuid.UUID]uuid.UUID{sourceServer: sourceRegistration}, choices(existing),
+				"the target credential learns the moved server without choosing among the target server offers")
 			require.Equal(t, map[uuid.UUID]uuid.UUID{sourceServer: sourceRegistration}, choices(moved),
 				"the moved credential never reached the target's server, so two eligible clients there are a real choice")
-			for _, server := range []uuid.UUID{targetServer, sourceServer} {
-				typed, err := fixtures.GetSelectionAuthClientFixture(ctx, selectionbackfill.GetSelectionAuthClientFixtureParams{CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: migrationCredentialID(existing), McpServerID: server})
-				require.NoError(t, err)
-				require.True(t, typed.AuthClientID.Valid, "each choice names its typed auth client")
-			}
+			typed, err := fixtures.GetSelectionAuthClientFixture(ctx, selectionbackfill.GetSelectionAuthClientFixtureParams{CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: migrationCredentialID(existing), McpServerID: sourceServer})
+			require.NoError(t, err)
+			require.True(t, typed.AuthClientID.Valid)
 		})
 	}
 }

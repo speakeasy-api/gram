@@ -25,9 +25,10 @@ const rolesDeleteAccessRequests = `-- name: RolesDeleteAccessRequests :exec
 DELETE FROM access_requests WHERE organization_id = $1
 `
 
-// Access requests: one pending, one denied, so the Access Requests tab and
-// the grant dialog's approval choices have something to show. Messages
-// cascade with their request.
+// Access requests: three pending (one asking for a duration, one asking until
+// a deadline) and one denied, so the Access Requests tab and the grant
+// dialog's approval choices have something to show. Messages cascade with
+// their request.
 func (q *Queries) RolesDeleteAccessRequests(ctx context.Context, organizationID string) error {
 	_, err := q.db.Exec(ctx, rolesDeleteAccessRequests, organizationID)
 	return err
@@ -231,24 +232,23 @@ func (q *Queries) RolesFindPluginBySlug(ctx context.Context, arg RolesFindPlugin
 }
 
 const rolesInsertAIScanTargets = `-- name: RolesInsertAIScanTargets :exec
-INSERT INTO ai_scan_targets (organization_id, id, status, rationale)
+INSERT INTO ai_scan_targets (organization_id, id, ai_product_id, status, rationale)
 VALUES
-  ($1, 'claude-code', 'approved',
+  ($1, 'claude-code', 'claude-code', 'approved',
    'Standard issue for the platform team.'),
-  ($1, 'codex', 'blocked',
+  ($1, 'codex', 'codex', 'blocked',
    'Not covered by the vendor review. Ask in #ai-tooling if you need it.'),
-  ($1, 'hermes-agent', 'approved',
+  ($1, 'hermes-agent', 'hermes-agent', 'approved',
    'Reviewed with the research team. Publishes a client ID metadata '
    || 'document, so the approval is enforced at the gateway.'),
-  ($1, 'zed', 'approved',
+  ($1, 'zed', 'zed', 'approved',
    'Approved for the platform team after the editor review.'),
-  ($1, 'goose', 'blocked',
+  ($1, 'goose', 'goose', 'blocked',
    'Runs arbitrary local commands under its own extensions. Blocked until '
    || 'the extension policy lands.')
 `
 
-// The decided built-ins carry no definition: the compiled-in one stays
-// authoritative, so a later registry revision still reaches this org.
+// Decided built-ins carry only decisions, so catalog edits still reach this org.
 func (q *Queries) RolesInsertAIScanTargets(ctx context.Context, organizationID string) error {
 	_, err := q.db.Exec(ctx, rolesInsertAIScanTargets, organizationID)
 	return err
@@ -257,27 +257,30 @@ func (q *Queries) RolesInsertAIScanTargets(ctx context.Context, organizationID s
 const rolesInsertAccessRequest = `-- name: RolesInsertAccessRequest :exec
 INSERT INTO access_requests
   (id, organization_id, requester_user_id, scope, selector, resource_name, message,
-   status, decided_by_user_id, decided_via, decided_at, expires_at, created_at, updated_at)
+   status, decided_by_user_id, decided_via, decided_at, requested_duration_seconds,
+   requested_until, expires_at, created_at, updated_at)
 VALUES
   ($1, $2, $3, $4, $5, $6, $7,
    $8, $9, $10, $11,
-   $12, $13, $13)
+   $12, $13, $14, $15, $15)
 `
 
 type RolesInsertAccessRequestParams struct {
-	ID              uuid.UUID
-	OrganizationID  string
-	RequesterUserID string
-	Scope           string
-	Selector        []byte
-	ResourceName    pgtype.Text
-	Message         pgtype.Text
-	Status          string
-	DecidedByUserID pgtype.Text
-	DecidedVia      pgtype.Text
-	DecidedAt       pgtype.Timestamptz
-	ExpiresAt       pgtype.Timestamptz
-	CreatedAt       pgtype.Timestamptz
+	ID                       uuid.UUID
+	OrganizationID           string
+	RequesterUserID          string
+	Scope                    string
+	Selector                 []byte
+	ResourceName             pgtype.Text
+	Message                  pgtype.Text
+	Status                   string
+	DecidedByUserID          pgtype.Text
+	DecidedVia               pgtype.Text
+	DecidedAt                pgtype.Timestamptz
+	RequestedDurationSeconds pgtype.Int4
+	RequestedUntil           pgtype.Timestamptz
+	ExpiresAt                pgtype.Timestamptz
+	CreatedAt                pgtype.Timestamptz
 }
 
 func (q *Queries) RolesInsertAccessRequest(ctx context.Context, arg RolesInsertAccessRequestParams) error {
@@ -293,6 +296,8 @@ func (q *Queries) RolesInsertAccessRequest(ctx context.Context, arg RolesInsertA
 		arg.DecidedByUserID,
 		arg.DecidedVia,
 		arg.DecidedAt,
+		arg.RequestedDurationSeconds,
+		arg.RequestedUntil,
 		arg.ExpiresAt,
 		arg.CreatedAt,
 	)

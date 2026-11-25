@@ -67,7 +67,7 @@ func requireReady(t *testing.T, ctx context.Context, ti *testInstance) {
 
 // recordSelectionFixture exercises the selection repository query with a synthetic
 // credential ID. It does not mint a credential or exercise request enforcement.
-func recordSelectionFixture(t *testing.T, ctx context.Context, ti *testInstance, userIssuerID, serverID uuid.UUID) uuid.NullUUID {
+func recordSelectionFixture(t *testing.T, ctx context.Context, ti *testInstance, userIssuerID, serverID, registrationID, authClientID uuid.UUID) uuid.NullUUID {
 	t.Helper()
 	credentialID := uuid.New()
 	_, err := usersessionsrepo.New(ti.conn).RecordUpstreamClientSelections(ctx, usersessionsrepo.RecordUpstreamClientSelectionsParams{
@@ -75,9 +75,10 @@ func recordSelectionFixture(t *testing.T, ctx context.Context, ti *testInstance,
 		CredentialKind:      upstreamclients.CredentialKindUserSession,
 		CredentialID:        credentialID,
 		Source:              upstreamclients.SelectionSourceIssuance,
-		PickedMcpServerIds:  []uuid.UUID{},
-		PickedClientIds:     []uuid.UUID{},
-		PickedAuthClientIds: nil,
+		PickedMcpServerIds:  []uuid.UUID{serverID},
+		PickedClientIds:     []uuid.UUID{registrationID},
+		PickedAuthClientIds: []uuid.UUID{authClientID},
+		TypedOnly:           true,
 	})
 	require.NoError(t, err)
 	choice, err := authclientbackfill.New(ti.conn).GetSelectionFixture(ctx, authclientbackfill.GetSelectionFixtureParams{
@@ -108,7 +109,7 @@ func TestCommitServerIdentityConfigurationRecordsTheTypedClientAfterMigration(t 
 	require.Equal(t, []string{"X-Tenant-Key"}, copiedHeaderNames(t, ctx, ti, authClientID),
 		"the source's credential header is not carried by the typed client")
 
-	require.Equal(t, uuid.NullUUID{UUID: authClientID, Valid: true}, recordSelectionFixture(t, ctx, ti, userIssuerID, target),
+	require.Equal(t, uuid.NullUUID{UUID: authClientID, Valid: true}, recordSelectionFixture(t, ctx, ti, userIssuerID, target, registration, authClientID),
 		"the selection query records the choice without its typed client")
 	requireReady(t, ctx, ti)
 
@@ -142,7 +143,7 @@ func TestResyncCaptureRecordsTheTypedClientAfterMigration(t *testing.T) {
 
 	require.Equal(t, []uuid.UUID{registration}, associatedClients(t, ctx, ti.conn, projectID, target))
 	authClientID := requireTypedClient(t, ctx, ti, registration, target)
-	require.Equal(t, uuid.NullUUID{UUID: authClientID, Valid: true}, recordSelectionFixture(t, ctx, ti, userIssuerID, target))
+	require.Equal(t, uuid.NullUUID{UUID: authClientID, Valid: true}, recordSelectionFixture(t, ctx, ti, userIssuerID, target, registration, authClientID))
 	requireReady(t, ctx, ti)
 }
 

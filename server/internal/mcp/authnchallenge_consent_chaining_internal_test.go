@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -63,11 +64,13 @@ func consentChainingFixture(t *testing.T, g *funcGovernor) (*Service, *ResolvedM
 		UpstreamResource:    "https://upstream.example.test/mcp",
 	}
 	subject := urn.NewUserSubject("user-1")
-	return &Service{identityChainer: g, logger: testenv.NewLogger(t)}, endpoint, AuthnChallengeState{Subject: &subject}
+	return &Service{
+		aiCatalog:       aivendorstest.NewStore(),
+		identityChainer: g, logger: testenv.NewLogger(t)}, endpoint, AuthnChallengeState{Subject: &subject}
 }
 
 func directRouting(backend consentBackend) consentRouting {
-	return consentRouting{backend: backend, upstream: "", members: nil}
+	return consentRouting{backend: backend, upstream: "", members: nil, hostedClients: nil}
 }
 
 func TestConsentChainedClients_RequestMatchesRuntime(t *testing.T) {
@@ -264,7 +267,7 @@ func TestConsentChainedMetaClients_ServesEachRequestOnce(t *testing.T) {
 	clientB := remotesessions.Client{ID: uuid.New(), RemoteSessionIssuerID: issuer}
 	member := metamcprepo.ListMetaMCPMembersForRemoteSessionClientRow{McpServerID: uuid.New(), ProjectID: endpoint.ProjectID, McpServerVisibility: "private", UpstreamUrl: "https://upstream.example.test/mcp", Tunneled: false}
 	members := []metamcprepo.ListMetaMCPMembersForRemoteSessionClientRow{member, member}
-	routing := consentRouting{backend: consentBackendMeta, upstream: "", members: map[uuid.UUID][]metamcprepo.ListMetaMCPMembersForRemoteSessionClientRow{clientA.ID: members, clientB.ID: members}}
+	routing := consentRouting{backend: consentBackendMeta, upstream: "", members: map[uuid.UUID][]metamcprepo.ListMetaMCPMembersForRemoteSessionClientRow{clientA.ID: members, clientB.ID: members}, hostedClients: nil}
 
 	chained := s.consentChainedClients(t.Context(), endpoint, state, []remotesessions.Client{clientA, clientB}, routing)
 	require.True(t, chained[clientA.ID])

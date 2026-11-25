@@ -271,6 +271,17 @@ describe("MCPServerDetails path resolution", () => {
   });
 });
 
+describe("MCPServerDetails Agent Feedback", () => {
+  // The feedback tool is offered only on servers built from an API or
+  // functions, so a remote server's old link lands on Overview.
+  it("sends a remote server's Agent Feedback link to Overview", () => {
+    visit("/acme/projects/default/mcp/my-server/feedback");
+    expect(screen.getByTestId("landed").textContent).toBe(
+      "/acme/projects/default/mcp/my-server/overview",
+    );
+  });
+});
+
 describe("MCPServerDetails Team access tool narrowing", () => {
   it("passes remote tools from the shared source through Team access to the picker", async () => {
     const user = userEvent.setup();
@@ -415,7 +426,9 @@ describe("MCPServerDetails setup authorization", () => {
     visit("/acme/projects/default/mcp/my-server/setup");
     expect(screen.queryByTestId("setup-page")).toBeNull();
     expect(
-      screen.getByRole("heading", { name: "Access restricted" }),
+      within(screen.getByRole("alert")).getByRole("heading", {
+        name: "You don't have access to this page",
+      }),
     ).toBeDefined();
   });
 });

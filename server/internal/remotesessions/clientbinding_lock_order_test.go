@@ -13,6 +13,7 @@ import (
 	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -64,9 +65,9 @@ func TestClientBindingWriterScopeBeforeIssuerLocks(t *testing.T) {
 					case "cimd":
 						_, err = ti.service.CreateCimd(ctx, &clientsgen.CreateCimdPayload{RemoteSessionIssuerID: issuerID.String(), UserSessionIssuerIds: []string{userIssuerID.String()}})
 					case "attach":
-						_, err = ti.service.AttachUserSessionIssuer(ctx, &clientsgen.AttachUserSessionIssuerPayload{ID: clientID, UserSessionIssuerID: userIssuerID.String()})
+						_, err = ti.service.AttachLegacyIssuerForTest(ctx, &remotesessions.LegacyIssuerBindingForTest{ID: clientID, UserSessionIssuerID: userIssuerID.String()})
 					case "detach":
-						_, err = ti.service.DetachUserSessionIssuer(ctx, &clientsgen.DetachUserSessionIssuerPayload{ID: clientID, UserSessionIssuerID: userIssuerID.String()})
+						_, err = ti.service.DetachLegacyIssuerForTest(ctx, &remotesessions.LegacyIssuerBindingForTest{ID: clientID, UserSessionIssuerID: userIssuerID.String()})
 					}
 					done <- err
 				}()

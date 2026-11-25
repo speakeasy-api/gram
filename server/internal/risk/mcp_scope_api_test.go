@@ -132,8 +132,8 @@ func (scopedPlatformExecutor) Call(context.Context, toolconfig.ToolCallEnv, io.R
 func TestRiskPolicyPlatformMCPScopeValidatesListsAndMatches(t *testing.T) {
 	t.Parallel()
 
-	const slug = platformtools.ManagedAssistantPlatformToolsetSlug
-	toolset := platformtools.NewManagedAssistantToolset(platformtools.ExternalTool{Executor: scopedPlatformExecutor{}})
+	const slug = platformtools.PlatformMCPReadToolsetSlug
+	toolset := platformtools.NewPlatformMCPReadToolset(platformtools.ExternalTool{Executor: scopedPlatformExecutor{}})
 	ctx, ti := newTestRiskService(t, func(instance *testInstance) {
 		instance.platformToolsets = map[string]platformtools.Toolset{slug: toolset}
 	})
@@ -172,7 +172,7 @@ func TestRiskPolicyPlatformMCPScopeValidatesListsAndMatches(t *testing.T) {
 	require.Len(t, catalog.Toolsets, 1)
 	require.Equal(t, platformID.String(), catalog.Toolsets[0].ID)
 	require.Equal(t, slug, catalog.Toolsets[0].Slug)
-	require.Equal(t, "Speakeasy managed assistant tools", catalog.Toolsets[0].Name)
+	require.Equal(t, "Speakeasy Platform MCP", catalog.Toolsets[0].Name)
 	require.Len(t, catalog.Toolsets[0].Tools, 1)
 	require.Equal(t, "danger", catalog.Toolsets[0].Tools[0].Name)
 	require.NotNil(t, catalog.Toolsets[0].Tools[0].Annotations)

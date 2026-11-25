@@ -695,15 +695,13 @@ type IntentContractResponseBody struct {
 type IntentConditionResponseBody struct {
 	// Links the clause to the previous one; empty on the first clause.
 	Join string `form:"join" json:"join" xml:"join"`
-	// Label key the clause reads. Empty for a shell command pattern.
+	// Label key the clause reads.
 	Label string `form:"label" json:"label" xml:"label"`
 	// How the label compares to values.
 	Op string `form:"op" json:"op" xml:"op"`
 	// Values compared: "true" for a yes/no label, else option keys. Several read
 	// as any of.
 	Values []string `form:"values" json:"values" xml:"values"`
-	// Regular expression a shell command must match, for a pattern clause.
-	Pattern string `form:"pattern" json:"pattern" xml:"pattern"`
 }
 
 // IntentEvaluatorDescriptorResponseBody is used to define fields on response

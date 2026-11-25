@@ -85,7 +85,6 @@ func TestRecordNewMemberChoices(t *testing.T) {
 	choices := &memberChoices{
 		selector:     &upstreamSelector{service: f.service, organizationID: f.orgID, userSessionIssuerID: issuerID, credentialKind: upstreamclients.CredentialKindUserSession, credentialID: credentialID},
 		subject:      user,
-		enforced:     true,
 		metaServerID: validUUID(gatewayID),
 		byServer:     map[uuid.UUID]*memberTokens{},
 	}
@@ -124,7 +123,7 @@ func TestRecordNewMemberChoices(t *testing.T) {
 	// still has a disabled header client attached.
 	for range 2 {
 		served := []metaMember{member(noAuth)}
-		choices.apply(ctx, testenv.NewLogger(t), served, true)
+		choices.apply(ctx, testenv.NewLogger(t), served)
 		require.NoError(t, served[0].upstreamUnavailable)
 		require.True(t, served[0].upstreamNoAuth)
 	}
@@ -218,8 +217,6 @@ func TestAgentKeyChoiceServesAServerWithoutAnIssuerGate(t *testing.T) {
 		return options
 	}
 
-	require.Len(t, serve(keyCtx, true), 1, "before enforcement the server's own headers serve the key")
-	f.enforce()
 	require.Len(t, serve(keyCtx, false), 1, "the key's chosen credential replaces the server's headers")
 	require.Len(t, serve(ctx, true), 1, "a caller with no agent key keeps the server's headers")
 	omittedChoiceCtx := contextvalues.WithPrincipalAPIKeyAuthorization(ctx, &contextvalues.AuthContext{ActiveOrganizationID: f.orgID, APIKeyID: uuid.NewString()}, agent, contextvalues.PrincipalCredential{AuthorizerUserID: "user_1"})

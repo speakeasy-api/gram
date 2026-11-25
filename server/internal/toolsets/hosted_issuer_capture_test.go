@@ -17,11 +17,8 @@ import (
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
-// Moving a hosted server onto a user session issuer configures its sign-in
-// there. Under upstream auth enforcement a server that is the issuer's only
-// consumer is associated with the clients bound to it, and one that shares the
-// issuer is associated with none.
-func TestHostedServerIssuerMoveAssociatesSoleConsumerClientsUnderEnforcement(t *testing.T) {
+// Moving a hosted server to another issuer does not inherit upstream offers.
+func TestHostedServerIssuerMoveDoesNotInheritOffers(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -91,12 +88,7 @@ func TestHostedServerIssuerMoveAssociatesSoleConsumerClientsUnderEnforcement(t *
 
 			associations, err := upstreamclientsrepo.New(ti.conn).ListMCPServerRemoteSessionClients(ctx, upstreamclientsrepo.ListMCPServerRemoteSessionClientsParams{McpServerID: moved, ProjectID: projectID})
 			require.NoError(t, err)
-			if tc.shared {
-				require.Empty(t, associations, "an issuer another server uses configures nothing for the moved server")
-				return
-			}
-			require.Len(t, associations, 1)
-			require.Equal(t, client.ID, associations[0].RemoteSessionClientID)
+			require.Empty(t, associations, "selecting the downstream issuer does not inherit upstream offers")
 		})
 	}
 }

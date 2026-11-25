@@ -67,7 +67,7 @@ func orgEncryptionServiceFlags() []cli.Flag {
 func transcriptShadowFlag() cli.Flag {
 	return &cli.StringSliceFlag{
 		Name:    chatTranscriptShadowProjectIDsFlag,
-		Usage:   "Explicit project UUIDs to write encrypted chat transcript shadow copies for, and whose chat reads open them; retains plaintext and does not backfill existing messages. Messages without a shadow are served from plaintext; a stale or unauthentic shadow fails the read. Disabled by default.",
+		Usage:   "Explicit project UUIDs to write encrypted chat transcript shadow copies for, and whose chat reads open them; retains plaintext and does not backfill existing messages. Messages without a shadow are served from plaintext. A stale or unauthentic shadow fails the read, as does any other read error such as a key unwrap or database failure. Before adding back a project that was removed, recapture its messages: a message that already had a shadow and was edited while the project was off has a stale shadow. Disabled by default.",
 		EnvVars: []string{"GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS"},
 	}
 }
