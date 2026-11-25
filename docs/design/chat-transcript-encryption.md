@@ -119,6 +119,18 @@ Direct SQL writers (see the scope table below) do not seal yet. If one edits a
 message that already has a shadow, that shadow goes stale and the read fails
 until the message is captured again.
 
+Removing a project from the allowlist stops both capture and shadow reads.
+Messages edited while it is off keep stale shadows, so before adding the
+project back, recapture its messages with a backfill. Otherwise each such
+message fails its page as soon as the project is back on the allowlist.
+
+Any other read error, such as a failed key unwrap or a database error, also
+fails the page. Plaintext is never served in place of an existing shadow.
+
+While plaintext is kept, a shadow that does not match its plaintext row is
+counted under the `stale` read outcome, and a prod Datadog monitor pages on
+any occurrence. That check goes away with the plaintext.
+
 Messages whose body exceeds the inline limit keep it in a raw content asset.
 The shadow covers only the inline columns, so `chat.load` still reads those
 bodies from the plaintext asset; encrypting assets is tracked under "Raw content
