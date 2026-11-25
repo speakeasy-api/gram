@@ -2884,3 +2884,15 @@ UPDATE ai_product_cimd_documents
 SET url = @url, display_name = @display_name, enabled = @enabled,
     deleted_at = sqlc.narg('deleted_at')
 WHERE id = @id;
+
+-- name: ListCimdClientCandidatesFixture :many
+SELECT * FROM cimd_client_candidates ORDER BY url;
+
+-- name: ListCimdClientCandidateSightingsFixture :many
+SELECT s.*, c.url
+FROM cimd_client_candidate_sightings AS s
+JOIN cimd_client_candidates AS c ON c.id = s.candidate_id
+ORDER BY c.url, s.user_session_issuer_id;
+
+-- name: SetCimdClientCandidateStatusFixture :exec
+UPDATE cimd_client_candidates SET status = @status WHERE url = @url;

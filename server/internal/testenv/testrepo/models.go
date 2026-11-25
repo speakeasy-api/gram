@@ -12,6 +12,40 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+// Staff review queue of CIMD client URLs no catalog document covers. One row per URL; the decision is permanent.
+type CimdClientCandidate struct {
+	// @access: confidential
+	ID uuid.UUID
+	// The client_id the client presented, stored exactly as received.
+	// @access: restricted
+	Url string
+	// client_name from the fetched metadata document; null when absent.
+	// @access: opaque-confidential
+	ClientName pgtype.Text
+	// One of pending, approved, dismissed, customer_specific. Only pending rows are open; the others never return to pending.
+	// @access: confidential
+	Status string
+	// Staff note recorded with the decision.
+	// @access: opaque-restricted
+	Reason pgtype.Text
+	// Subject URN of the staff member who decided; null while pending.
+	// @access: confidential-pii
+	ReviewedBy pgtype.Text
+	// @access: confidential
+	ReviewedAt pgtype.Timestamptz
+	// Catalog document created on approval; null otherwise.
+	// @access: confidential
+	DocumentID uuid.NullUUID
+	// @access: confidential
+	FirstSeenAt pgtype.Timestamptz
+	// @access: confidential
+	LastSeenAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
 type DeviceAgentStateReport struct {
 	// @access: confidential
 	ID uuid.UUID

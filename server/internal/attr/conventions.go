@@ -155,6 +155,8 @@ const (
 	AICatalogProductsInsertedKey     = attribute.Key("gram.ai_catalog.products_inserted")
 	AICatalogDocumentsInsertedKey    = attribute.Key("gram.ai_catalog.documents_inserted")
 	AICatalogDecisionsLinkedKey      = attribute.Key("gram.ai_catalog.decisions_linked")
+	CIMDCandidatesScannedKey         = attribute.Key("gram.cimd.candidates.scanned")
+	CIMDCandidatesRecordedKey        = attribute.Key("gram.cimd.candidates.recorded")
 	AdminOIDCSubjectKey              = attribute.Key("gram.admin.oidc_subject")
 	AuthSourceKey                    = attribute.Key("gram.auth.source")
 	AuthorizationOrganizationIDKey   = attribute.Key("gram.authorization.organization_id")
@@ -4721,4 +4723,10 @@ func SlogAICatalogDocumentsInserted(v int64) slog.Attr {
 }
 func SlogAICatalogDecisionsLinked(v int64) slog.Attr {
 	return slog.Int64(string(AICatalogDecisionsLinkedKey), v)
+}
+func SlogCIMDCandidatesScanned(v int64) slog.Attr {
+	return slog.Int64(string(CIMDCandidatesScannedKey), v)
+}
+func SlogCIMDCandidatesRecorded(v int64) slog.Attr {
+	return slog.Int64(string(CIMDCandidatesRecordedKey), v)
 }

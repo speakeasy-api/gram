@@ -228,18 +228,21 @@ func (s *Snapshot) Catalog() []Preset { return slices.Clone(s.presets) }
 // document still wins its match: its client is unknown, not a broader
 // pattern's product.
 func (s *Snapshot) CatalogPreset(clientID string) (Preset, bool) {
-	none := Preset{ProductID: "", VendorKey: "", DisplayName: "", URL: "", Enabled: false, Pattern: false}
+	p, ok := s.CatalogDocument(clientID)
+	if !ok || !p.Enabled {
+		return Preset{ProductID: "", VendorKey: "", DisplayName: "", URL: "", Enabled: false, Pattern: false}, false
+	}
+	return p, true
+}
+
+// CatalogDocument returns the document that wins a client ID's match under the
+// CatalogPreset rules, enabled or disabled.
+func (s *Snapshot) CatalogDocument(clientID string) (Preset, bool) {
 	if p, ok := s.exact[clientID]; ok {
-		if !p.Enabled {
-			return none, false
-		}
 		return p, true
 	}
 	for _, p := range s.patterns {
 		if matchesPattern(p.URL, clientID) {
-			if !p.Enabled {
-				return none, false
-			}
 			return p, true
 		}
 	}

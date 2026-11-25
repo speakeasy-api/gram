@@ -12,7 +12,10 @@ import (
 	"github.com/urfave/cli/v2"
 	"go.opentelemetry.io/otel"
 
+	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/aivendors/catalogseed"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/cimdcandidates"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
@@ -42,6 +45,20 @@ func startupSeeds(logger *slog.Logger, db *pgxpool.Pool, assetBaseURL *url.URL) 
 				}
 				if _, err := oktaseed.Apply(ctx, logger, mcpregistry.New(db, validator).WithAssetBaseURL(assetBaseURL)); err != nil {
 					return fmt.Errorf("apply okta catalog seed: %w", err)
+				}
+				return nil
+			},
+		},
+		{
+			Name:    cimdcandidates.BackfillSeedName,
+			Version: cimdcandidates.BackfillSeedVersion,
+			Apply: func(ctx context.Context) error {
+				catalog, err := aivendors.Load(ctx, db, logger, aitargets.ValidateCatalog)
+				if err != nil {
+					return fmt.Errorf("load AI catalog for cimd candidate backfill: %w", err)
+				}
+				if _, err := cimdcandidates.Backfill(ctx, logger, db, catalog); err != nil {
+					return fmt.Errorf("backfill cimd client candidates: %w", err)
 				}
 				return nil
 			},

@@ -19,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/aivendors"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/cimdcandidates"
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -76,6 +77,11 @@ func (s *Service) resolveUserSessionClient(ctx context.Context, logger *slog.Log
 	queries := usersessions_repo.New(s.db)
 
 	if mode == resolveClientCIMD && cimd.IsClientIDURL(clientID) {
+		logger = logger.With(
+			attr.SlogUserSessionIssuerID(endpoint.UserSessionIssuerID.String()),
+			attr.SlogOrganizationID(endpoint.OrganizationID),
+		)
+
 		// Admission runs before the resolver, so a denied client_id costs a
 		// map lookup — no outbound request, no fetch timeout. It also runs
 		// before the length cap inside the resolver, which is why admission
@@ -157,6 +163,7 @@ func (s *Service) resolveUserSessionClient(ctx context.Context, logger *slog.Log
 				}
 				return nil, fmt.Errorf("update cimd user session client cache: %w", err)
 			}
+			s.recordCIMDCandidate(ctx, logger, endpoint, clientCatalog, &row)
 			return &row, nil
 		case cimd.CacheOutcomeRefreshed:
 			if cachedRow != nil && usersessions.CIMDDocumentDowngradesAuthMethod(cachedRow, result.Document) {
@@ -194,6 +201,7 @@ func (s *Service) resolveUserSessionClient(ctx context.Context, logger *slog.Log
 				}
 				return nil, fmt.Errorf("upsert cimd user session client: %w", err)
 			}
+			s.recordCIMDCandidate(ctx, logger, endpoint, clientCatalog, &row)
 			return &row, nil
 		default:
 			return nil, fmt.Errorf("unknown cimd resolve outcome %q", result.Outcome)
@@ -208,6 +216,22 @@ func (s *Service) resolveUserSessionClient(ctx context.Context, logger *slog.Log
 		return nil, fmt.Errorf("lookup user session client: %w", err)
 	}
 	return &row, nil
+}
+
+// recordCIMDCandidate queues a client this issuer just fetched and validated
+// for staff review when the issuer is open and no catalog document covers it.
+// It runs only beside a client row write, never on a cached read, and it
+// cannot fail the resolution.
+func (s *Service) recordCIMDCandidate(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, clientCatalog *aivendors.Snapshot, row *usersessions_repo.UserSessionClient) {
+	mode, _ := admission.ResolveMode(endpoint.CIMDAdmissionModeRaw.String, endpoint.CIMDAdmissionModeRaw.Valid)
+	if !cimdcandidates.Recordable(clientCatalog, mode, row.ClientID) {
+		return
+	}
+	s.cimdCandidates.Record(ctx, logger, cimdcandidates.Sighting{
+		URL:                 row.ClientID,
+		ClientName:          row.ClientName,
+		UserSessionIssuerID: endpoint.UserSessionIssuerID,
+	})
 }
 
 // admitCIMDClient enforces the issuer's CIMD admission policy against a

@@ -4339,6 +4339,90 @@ func (q *Queries) ListAgentColumnNamesFixture(ctx context.Context) ([]string, er
 	return items, nil
 }
 
+const listCimdClientCandidateSightingsFixture = `-- name: ListCimdClientCandidateSightingsFixture :many
+SELECT s.id, s.candidate_id, s.user_session_issuer_id, s.organization_id, s.last_seen_at, s.created_at, s.updated_at, c.url
+FROM cimd_client_candidate_sightings AS s
+JOIN cimd_client_candidates AS c ON c.id = s.candidate_id
+ORDER BY c.url, s.user_session_issuer_id
+`
+
+type ListCimdClientCandidateSightingsFixtureRow struct {
+	ID                  uuid.UUID
+	CandidateID         uuid.UUID
+	UserSessionIssuerID uuid.UUID
+	OrganizationID      pgtype.Text
+	LastSeenAt          pgtype.Timestamptz
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	Url                 string
+}
+
+func (q *Queries) ListCimdClientCandidateSightingsFixture(ctx context.Context) ([]ListCimdClientCandidateSightingsFixtureRow, error) {
+	rows, err := q.db.Query(ctx, listCimdClientCandidateSightingsFixture)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListCimdClientCandidateSightingsFixtureRow
+	for rows.Next() {
+		var i ListCimdClientCandidateSightingsFixtureRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.CandidateID,
+			&i.UserSessionIssuerID,
+			&i.OrganizationID,
+			&i.LastSeenAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Url,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listCimdClientCandidatesFixture = `-- name: ListCimdClientCandidatesFixture :many
+SELECT id, url, client_name, status, reason, reviewed_by, reviewed_at, document_id, first_seen_at, last_seen_at, created_at, updated_at FROM cimd_client_candidates ORDER BY url
+`
+
+func (q *Queries) ListCimdClientCandidatesFixture(ctx context.Context) ([]CimdClientCandidate, error) {
+	rows, err := q.db.Query(ctx, listCimdClientCandidatesFixture)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CimdClientCandidate
+	for rows.Next() {
+		var i CimdClientCandidate
+		if err := rows.Scan(
+			&i.ID,
+			&i.Url,
+			&i.ClientName,
+			&i.Status,
+			&i.Reason,
+			&i.ReviewedBy,
+			&i.ReviewedAt,
+			&i.DocumentID,
+			&i.FirstSeenAt,
+			&i.LastSeenAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDemoSeedAgentsFixture = `-- name: ListDemoSeedAgentsFixture :many
 SELECT id, owner_user_id
 FROM agents
@@ -7261,6 +7345,20 @@ type SetChatMessagesCreatedAtFixtureParams struct {
 // sweep reads the chat's last activity as created_at.
 func (q *Queries) SetChatMessagesCreatedAtFixture(ctx context.Context, arg SetChatMessagesCreatedAtFixtureParams) error {
 	_, err := q.db.Exec(ctx, setChatMessagesCreatedAtFixture, arg.CreatedAt, arg.ChatID)
+	return err
+}
+
+const setCimdClientCandidateStatusFixture = `-- name: SetCimdClientCandidateStatusFixture :exec
+UPDATE cimd_client_candidates SET status = $1 WHERE url = $2
+`
+
+type SetCimdClientCandidateStatusFixtureParams struct {
+	Status string
+	Url    string
+}
+
+func (q *Queries) SetCimdClientCandidateStatusFixture(ctx context.Context, arg SetCimdClientCandidateStatusFixtureParams) error {
+	_, err := q.db.Exec(ctx, setCimdClientCandidateStatusFixture, arg.Status, arg.Url)
 	return err
 }
 
