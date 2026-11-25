@@ -15,6 +15,7 @@ import { useRoutes } from "@/routes";
 import { Navigate } from "react-router";
 import { HomeWidgets } from "@/components/home/HomeWidgets";
 import { HomeTerminal } from "@/components/home/HomeTerminal";
+import { useConnectionProblemsAccess } from "@/components/home/useConnectionProblems";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -119,23 +120,50 @@ export default function Home(): JSX.Element {
 /**
  * Bento grid around the terminal: on wide screens the terminal takes the
  * right two of three columns and the top two rows; tiles fill the left column
- * and the bottom row. Below `lg` everything stacks, terminal first.
+ * and the bottom row. Viewers who get connection problems see Needs attention
+ * over the top two rows and four tiles in the bottom row. Below `lg`
+ * everything stacks, terminal first.
  */
 function TerminalHomeGrid(): JSX.Element {
+  // Set by who may see the rows, not by whether there are any, so the grid
+  // does not move when a problem appears or clears.
+  const tall = useConnectionProblemsAccess() === "on";
   return (
     // On wide screens the grid fills the viewport below the header: three
     // equal rows, the terminal spanning the top two, and every widget
     // scrolling inside its own card instead of growing the page.
-    <div className="grid grid-cols-1 gap-6 pt-2 lg:h-[calc(100dvh-var(--header-height)-var(--banner-offset,0px)-7.5rem)] lg:grid-cols-3 lg:grid-rows-3">
-      <HomeTerminal className="h-[32rem] lg:col-span-2 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:h-auto" />
+    <div
+      className={cn(
+        "grid grid-cols-1 gap-6 pt-2 lg:h-[calc(100dvh-var(--header-height)-var(--banner-offset,0px)-7.5rem)] lg:grid-rows-3",
+        tall ? "lg:grid-cols-12" : "lg:grid-cols-3",
+      )}
+    >
+      <HomeTerminal
+        className={cn(
+          "h-[32rem] lg:row-span-2 lg:row-start-1 lg:h-auto",
+          tall
+            ? "lg:col-span-8 lg:col-start-5"
+            : "lg:col-span-2 lg:col-start-2",
+        )}
+      />
       <HomeWidgets
-        classNames={[
-          "lg:col-start-1 lg:row-start-1",
-          "lg:col-start-1 lg:row-start-2",
-          "",
-          "",
-          "",
-        ]}
+        classNames={
+          tall
+            ? [
+                "lg:col-span-4 lg:col-start-1 lg:row-span-2 lg:row-start-1",
+                "lg:col-span-3 lg:row-start-3",
+                "lg:col-span-3 lg:row-start-3",
+                "lg:col-span-3 lg:row-start-3",
+                "lg:col-span-3 lg:row-start-3",
+              ]
+            : [
+                "lg:col-start-1 lg:row-start-1",
+                "lg:col-start-1 lg:row-start-2",
+                "",
+                "",
+                "",
+              ]
+        }
       />
     </div>
   );

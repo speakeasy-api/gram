@@ -6,15 +6,25 @@ const state = vi.hoisted(() => ({
   assistantsAvailable: true,
   terminalHome: "disabled" as "enabled" | "disabled" | "loading",
   canReadAssistants: true,
+  connectionAccess: "off" as "pending" | "on" | "off",
+  widgetClassNames: [] as string[],
 }));
 vi.mock("@/hooks/useFeatureFlag", () => ({
   useFeatureFlag: () => ({ status: state.terminalHome }),
 }));
 vi.mock("@/components/home/HomeTerminal", () => ({
-  HomeTerminal: () => <div data-testid="home-terminal" />,
+  HomeTerminal: ({ className }: { className: string }) => (
+    <div data-testid="home-terminal" className={className} />
+  ),
 }));
 vi.mock("@/components/home/HomeWidgets", () => ({
-  HomeWidgets: () => <div data-testid="home-widgets" />,
+  HomeWidgets: ({ classNames }: { classNames: string[] }) => {
+    state.widgetClassNames = classNames;
+    return <div data-testid="home-widgets" />;
+  },
+}));
+vi.mock("@/components/home/useConnectionProblems", () => ({
+  useConnectionProblemsAccess: () => state.connectionAccess,
 }));
 vi.mock("@/hooks/useAssistantsAvailability", () => ({
   useAssistantsAvailable: () => state.assistantsAvailable,
@@ -65,7 +75,12 @@ afterEach(() => {
   state.assistantsAvailable = true;
   state.terminalHome = "disabled";
   state.canReadAssistants = true;
+  state.connectionAccess = "off";
+  state.widgetClassNames = [];
 });
+
+const classes = (el: Element): string[] =>
+  (el.getAttribute("class") ?? "").split(/\s+/);
 
 function renderHome(): void {
   render(
@@ -130,5 +145,61 @@ describe("Home", () => {
     expect(
       screen.getByRole("status", { name: "Loading the project home" }),
     ).toBeTruthy();
+  });
+
+  describe("grid", () => {
+    const grid = () => screen.getByTestId("home-terminal").parentElement!;
+
+    it.each(["off", "pending"] as const)(
+      "keeps three columns when connection rows are %s",
+      (access) => {
+        state.terminalHome = "enabled";
+        state.connectionAccess = access;
+        renderHome();
+        expect(classes(grid())).toContain("lg:grid-cols-3");
+        expect(classes(grid())).not.toContain("lg:grid-cols-12");
+        expect(classes(screen.getByTestId("home-terminal"))).toEqual(
+          expect.arrayContaining(["lg:col-span-2", "lg:col-start-2"]),
+        );
+        expect(state.widgetClassNames).toEqual([
+          "lg:col-start-1 lg:row-start-1",
+          "lg:col-start-1 lg:row-start-2",
+          "",
+          "",
+          "",
+        ]);
+      },
+    );
+
+    it("gives Needs attention two rows and the other four the bottom row for viewers with connection rows", () => {
+      state.terminalHome = "enabled";
+      state.connectionAccess = "on";
+      renderHome();
+      expect(classes(grid())).toEqual(
+        expect.arrayContaining(["lg:grid-cols-12", "lg:grid-rows-3"]),
+      );
+      expect(classes(screen.getByTestId("home-terminal"))).toEqual(
+        expect.arrayContaining([
+          "lg:col-span-8",
+          "lg:col-start-5",
+          "lg:row-span-2",
+          "lg:row-start-1",
+        ]),
+      );
+      const [attention, ...bottom] = state.widgetClassNames;
+      expect(attention!.split(" ")).toEqual(
+        expect.arrayContaining([
+          "lg:col-span-4",
+          "lg:row-span-2",
+          "lg:row-start-1",
+        ]),
+      );
+      expect(bottom).toHaveLength(4);
+      for (const c of bottom) {
+        expect(c.split(" ")).toEqual(
+          expect.arrayContaining(["lg:col-span-3", "lg:row-start-3"]),
+        );
+      }
+    });
   });
 });

@@ -5,6 +5,11 @@ import {
   dailyCost,
   heatmapKey,
 } from "./home-widget-data";
+import {
+  connectionProblemHref,
+  TALL_ATTENTION_ROWS,
+  useConnectionProblems,
+} from "./useConnectionProblems";
 import { useInsightsState } from "@/components/insights-context";
 import { buildProjectOverviewQuery } from "@/components/project/projectOverviewQuery";
 import { Card } from "@/components/ui/Card";
@@ -18,6 +23,7 @@ import { useRBAC } from "@/hooks/useRBAC";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { cn } from "@/lib/utils";
 import { Sparkline } from "@/pages/costs/Sparkline";
+import { problemHeadline } from "@/pages/mcp-sessions/connection-health/format";
 import { useOrgRoutes, useRoutes } from "@/routes";
 import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
 import { telemetryGetToolUsageUsers } from "@gram/client/funcs/telemetryGetToolUsageUsers";
@@ -35,6 +41,8 @@ const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 // Rows in the most active list.
 const MOST_ACTIVE_LIMIT = 5;
+// Rows in Needs attention when it fills one grid cell.
+const ATTENTION_ROWS = 5;
 // Widgets live in fixed-height grid rows on wide screens: the card clips and
 // its body scrolls.
 const WIDGET_CLASS = "min-h-0 overflow-hidden";
@@ -132,6 +140,8 @@ type AttentionItem = {
   label: string;
   detail: string;
   tone: "destructive" | "warning";
+  /** Full label on hover; the label wraps to two lines below `lg`. */
+  title?: string;
 } & ({ prompt: string } | { href: string });
 
 function NeedsAttention({ className }: { className?: string }): JSX.Element {
@@ -151,8 +161,30 @@ function NeedsAttention({ className }: { className?: string }): JSX.Element {
     enabled: requestsEnabled,
     throwOnError: false,
   });
+  const connections = useConnectionProblems();
+  const tall = connections.access === "on";
+  const rowCap = tall ? TALL_ATTENTION_ROWS : ATTENTION_ROWS;
+  const now = new Date();
 
   const items: AttentionItem[] = [
+    ...connections.problems.map((p) => {
+      const label = problemHeadline(
+        {
+          headline: p.headline,
+          since: p.since.toISOString(),
+          rule: p.suspectedProblemRule,
+        },
+        now,
+      );
+      return {
+        key: `connection:${p.id}`,
+        label,
+        title: label,
+        detail: p.fact,
+        tone: "destructive",
+        href: connectionProblemHref(routes, p, now),
+      } satisfies AttentionItem;
+    }),
     ...(signals.data?.signals ?? [])
       .filter((s) => s.severity === "critical" || s.severity === "high")
       .slice(0, 3)
@@ -189,17 +221,23 @@ function NeedsAttention({ className }: { className?: string }): JSX.Element {
           href: `${orgRoutes.access.href()}?request=${r.id}`,
         }) satisfies AttentionItem,
     ),
-  ].slice(0, 5);
+  ].slice(0, rowCap);
+  const shownConnections = Math.min(connections.problems.length, rowCap);
 
   const pending =
     week.pending ||
     (isAdmin && signals.isPending && !signals.isError) ||
-    (requestsEnabled && requests.isPending && !requests.isError);
+    (requestsEnabled && requests.isPending && !requests.isError) ||
+    connections.pending;
+  const sources = [
+    { active: true, failed: week.error },
+    { active: isAdmin, failed: signals.isError },
+    { active: requestsEnabled, failed: requests.isError },
+    { active: tall, failed: connections.error },
+  ].filter((source) => source.active);
   // With a source down, an empty list does not mean all is well.
-  const error =
-    week.error ||
-    (isAdmin && signals.isError) ||
-    (requestsEnabled && requests.isError);
+  const error = sources.some((source) => source.failed);
+  const allFailed = sources.every((source) => source.failed);
 
   return (
     <Card.Dashboard
@@ -207,12 +245,17 @@ function NeedsAttention({ className }: { className?: string }): JSX.Element {
       tooltip="High-risk signals, failing tools, and pending access requests from the last 7 days."
       className={cn(WIDGET_CLASS, className)}
       bodyClassName={cn(WIDGET_BODY_CLASS, "p-0")}
+      action={
+        !pending && connections.total > shownConnections ? (
+          <ViewAllLink to={routes.mcpSessions.href()} />
+        ) : undefined
+      }
     >
       {pending ? (
         <ListSkeleton />
-      ) : items.length === 0 && error ? (
+      ) : items.length === 0 && allFailed ? (
         <LoadError />
-      ) : items.length === 0 ? (
+      ) : items.length === 0 && !error ? (
         <p className="text-muted-foreground px-6 py-5 text-sm">
           Nothing needs attention this week.
         </p>
@@ -226,6 +269,7 @@ function NeedsAttention({ className }: { className?: string }): JSX.Element {
           {items.map((item) => (
             <li key={item.key}>
               <ActionRow
+                title={item.title}
                 {...("prompt" in item
                   ? { prompt: item.prompt }
                   : { href: item.href })}
@@ -240,7 +284,16 @@ function NeedsAttention({ className }: { className?: string }): JSX.Element {
                   )}
                 />
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm">{item.label}</span>
+                  <span
+                    className={cn(
+                      "block text-sm",
+                      item.title
+                        ? "line-clamp-2 break-words lg:line-clamp-1"
+                        : "truncate",
+                    )}
+                  >
+                    {item.label}
+                  </span>
                   <span className="text-muted-foreground block truncate text-xs">
                     {item.detail}
                   </span>
@@ -609,10 +662,13 @@ function ActionRow({
   children,
   prompt,
   href,
+  title,
 }: {
   children: ReactNode;
   prompt?: string;
   href?: string;
+  /** Shown on hover. */
+  title?: string;
 }): JSX.Element {
   const { sendPrompt } = useInsightsState();
   const className =
@@ -624,7 +680,7 @@ function ActionRow({
   );
   if (href) {
     return (
-      <Link to={href} className={cn(className, "no-underline")}>
+      <Link to={href} title={title} className={cn(className, "no-underline")}>
         {children}
         {hint}
       </Link>

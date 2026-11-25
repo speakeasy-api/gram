@@ -2,6 +2,7 @@ import { useProject, useSession } from "@/contexts/Auth";
 import { nextScheduleBoundaryDelay } from "@/components/killswitch/killswitch-view-model";
 import { useKillswitchAccess } from "@/hooks/useKillswitchAccess";
 import { isExpectedAPIError } from "@/lib/errors";
+import type { ListProjectSuspectedProblemsResult } from "@gram/client/models/components/listprojectsuspectedproblemsresult.js";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useKillswitches } from "@gram/client/react-query/killswitches.js";
@@ -320,6 +321,20 @@ export function useSuspectedProblems(
         serverId: scope.serverId,
         part,
       }),
+    ...PROBLEM_QUERY,
+  });
+}
+
+export function useProjectSuspectedProblems(options: {
+  limit: number;
+  enabled: boolean;
+}): UseQueryResult<ListProjectSuspectedProblemsResult> {
+  const { client, gramProject, projectId } = useClient();
+  return useQuery({
+    queryKey: [ROOT, projectId, "listProjectSuspectedProblems", options.limit],
+    queryFn: () =>
+      sdk.listProjectSuspectedProblems(client, gramProject, options.limit),
+    enabled: options.enabled,
     ...PROBLEM_QUERY,
   });
 }

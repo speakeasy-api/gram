@@ -6,6 +6,7 @@ import { mcpConnectionHealthGetSignInSummary } from "@gram/client/funcs/mcpConne
 import { mcpConnectionHealthGetSuspectedProblem } from "@gram/client/funcs/mcpConnectionHealthGetSuspectedProblem.js";
 import { mcpConnectionHealthListAttempts } from "@gram/client/funcs/mcpConnectionHealthListAttempts.js";
 import { mcpConnectionHealthListDeniedClients } from "@gram/client/funcs/mcpConnectionHealthListDeniedClients.js";
+import { mcpConnectionHealthListProjectSuspectedProblems } from "@gram/client/funcs/mcpConnectionHealthListProjectSuspectedProblems.js";
 import { mcpConnectionHealthListSuspectedProblems } from "@gram/client/funcs/mcpConnectionHealthListSuspectedProblems.js";
 import type { ConnectionAttemptDetail } from "@gram/client/models/components/connectionattemptdetail.js";
 import type { ConnectionAttemptFilters } from "@gram/client/models/components/connectionattemptfilters.js";
@@ -13,6 +14,7 @@ import type { ConnectionAttemptRow } from "@gram/client/models/components/connec
 import type { ConnectionAttemptStep } from "@gram/client/models/components/connectionattemptstep.js";
 import type { ConnectionPerson } from "@gram/client/models/components/connectionperson.js";
 import type { ConnectionServer } from "@gram/client/models/components/connectionserver.js";
+import type { ListProjectSuspectedProblemsResult } from "@gram/client/models/components/listprojectsuspectedproblemsresult.js";
 import type { SuspectedProblem as SdkSuspectedProblem } from "@gram/client/models/components/suspectedproblem.js";
 import type { SuspectedProblemDetail as SdkSuspectedProblemDetail } from "@gram/client/models/components/suspectedproblemdetail.js";
 import { unwrapAsync } from "@gram/client/types/fp";
@@ -394,6 +396,20 @@ export async function listSuspectedProblems(
     problems: result.problems.map(problem),
     problemsTotal: result.problemsTotal,
   };
+}
+
+/** The project's problems as the API returns them, with the links each one needs. */
+export function listProjectSuspectedProblems(
+  client: GramCore,
+  gramProject: string,
+  limit: number,
+): Promise<ListProjectSuspectedProblemsResult> {
+  return unwrapAsync(
+    mcpConnectionHealthListProjectSuspectedProblems(client, {
+      gramProject,
+      listProjectSuspectedProblemsRequestBody: { limit },
+    }),
+  );
 }
 
 export async function getSuspectedProblem(
