@@ -1554,7 +1554,7 @@ export class Admin extends ClientSDK {
    * listOrganizationEncryptionTransitions admin
    *
    * @remarks
-   * Lists organizations by transition state for one use case, oldest first. Organizations never enrolled are in platform_key.
+   * Lists organizations by transition state for one use case. Organizations never enrolled are in platform_key. By default it lists only organizations with values for the use case, most recently written first.
    */
   async listOrganizationEncryptionTransitions(
     request?: AdminListOrganizationEncryptionTransitionsRequest | undefined,

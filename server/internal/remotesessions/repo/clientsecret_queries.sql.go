@@ -153,7 +153,15 @@ SELECT
     COUNT(*) FILTER (
         WHERE c.organization_id = $1::text
           AND c.client_secret_encrypted IS NOT NULL
-    )::bigint AS platform_copies
+    )::bigint AS platform_copies,
+    COUNT(*) FILTER (
+        WHERE c.organization_id = $1::text
+          AND (c.client_secret_encrypted IS NOT NULL OR c.client_secret_org_encrypted IS NOT NULL)
+    )::bigint AS value_count,
+    MAX(c.updated_at) FILTER (
+        WHERE c.organization_id = $1::text
+          AND (c.client_secret_encrypted IS NOT NULL OR c.client_secret_org_encrypted IS NOT NULL)
+    )::timestamptz AS last_written_at
 FROM remote_session_clients AS c
 LEFT JOIN projects AS p ON p.id = c.project_id
 LEFT JOIN organization_encryption_unreadable_values AS u
@@ -171,6 +179,8 @@ type CountRemoteSessionClientSecretCopiesRow struct {
 	Unreadable     int64
 	Unattributed   int64
 	PlatformCopies int64
+	ValueCount     int64
+	LastWrittenAt  pgtype.Timestamptz
 }
 
 // The organization's secret counts for the backfill and finalize. A waiting
@@ -178,6 +188,9 @@ type CountRemoteSessionClientSecretCopiesRow struct {
 // hash still matches the stored platform-key copy. Unattributed counts project
 // clients of the organization's projects stored without organization_id,
 // which the organization-scoped queries never reach.
+// value_count and last_written_at cover every row of the organization storing
+// a value under either key, soft-deleted rows included, as
+// ListOrganizationsWith* reports them.
 func (q *Queries) CountRemoteSessionClientSecretCopies(ctx context.Context, organizationID string) (CountRemoteSessionClientSecretCopiesRow, error) {
 	row := q.db.QueryRow(ctx, countRemoteSessionClientSecretCopies, organizationID)
 	var i CountRemoteSessionClientSecretCopiesRow
@@ -186,6 +199,8 @@ func (q *Queries) CountRemoteSessionClientSecretCopies(ctx context.Context, orga
 		&i.Unreadable,
 		&i.Unattributed,
 		&i.PlatformCopies,
+		&i.ValueCount,
+		&i.LastWrittenAt,
 	)
 	return i, err
 }
@@ -249,6 +264,46 @@ func (q *Queries) GetRemoteSessionClientRowFixture(ctx context.Context, id uuid.
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const listOrganizationsWithRemoteSessionClientSecrets = `-- name: ListOrganizationsWithRemoteSessionClientSecrets :many
+SELECT
+    c.organization_id::text AS organization_id,
+    COUNT(*)::bigint AS value_count,
+    MAX(c.updated_at)::timestamptz AS last_written_at
+FROM remote_session_clients AS c
+WHERE c.organization_id IS NOT NULL
+  AND (c.client_secret_encrypted IS NOT NULL OR c.client_secret_org_encrypted IS NOT NULL)
+GROUP BY c.organization_id
+`
+
+type ListOrganizationsWithRemoteSessionClientSecretsRow struct {
+	OrganizationID string
+	ValueCount     int64
+	LastWrittenAt  pgtype.Timestamptz
+}
+
+// Every organization storing a client secret under either key,
+// soft-deleted rows included, with how many and the latest updated_at of the
+// rows storing them. Rows without organization_id are left out.
+func (q *Queries) ListOrganizationsWithRemoteSessionClientSecrets(ctx context.Context) ([]ListOrganizationsWithRemoteSessionClientSecretsRow, error) {
+	rows, err := q.db.Query(ctx, listOrganizationsWithRemoteSessionClientSecrets)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOrganizationsWithRemoteSessionClientSecretsRow
+	for rows.Next() {
+		var i ListOrganizationsWithRemoteSessionClientSecretsRow
+		if err := rows.Scan(&i.OrganizationID, &i.ValueCount, &i.LastWrittenAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listRemoteSessionClientSecretsSealed = `-- name: ListRemoteSessionClientSecretsSealed :many

@@ -75,6 +75,12 @@ WITH platform_copies AS (
     AND u.platform_ciphertext_sha256 = sha256(fa.encryption_key)
   WHERE fa.organization_id = $1::text
     AND fa.encryption_key IS NOT NULL
+),
+stored_values AS (
+  SELECT COUNT(*) AS value_count, MAX(fa.updated_at) AS last_written_at
+  FROM functions_access AS fa
+  WHERE fa.organization_id = $1::text
+    AND (fa.encryption_key IS NOT NULL OR fa.encryption_key_org_encrypted IS NOT NULL)
 )
 SELECT
     COUNT(*) FILTER (
@@ -93,7 +99,9 @@ SELECT
         AND p.organization_id = $1::text
         AND (fa.encryption_key IS NOT NULL OR fa.encryption_key_org_encrypted IS NOT NULL)
     )::bigint AS unattributed,
-    COUNT(*)::bigint AS platform_copies
+    COUNT(*)::bigint AS platform_copies,
+    (SELECT v.value_count FROM stored_values AS v)::bigint AS value_count,
+    (SELECT v.last_written_at FROM stored_values AS v)::timestamptz AS last_written_at
 FROM platform_copies AS k
 `
 
@@ -102,6 +110,8 @@ type CountRunnerKeyCopiesRow struct {
 	Unreadable     int64
 	Unattributed   int64
 	PlatformCopies int64
+	ValueCount     int64
+	LastWrittenAt  pgtype.Timestamptz
 }
 
 // The organization's runner key counts for the organization encryption
@@ -110,6 +120,11 @@ type CountRunnerKeyCopiesRow struct {
 // platform-key copy. Unattributed counts keys of the organization's projects
 // stored without organization_id, which the organization-scoped queries never
 // reach.
+// value_count and last_written_at cover every row of the organization storing
+// a value under either key, soft-deleted rows included, as
+// ListOrganizationsWith* reports them.
+// One scan reads both value columns: a value stored only under the
+// organization key has no platform-key copy, so platform_copies leaves it out.
 func (q *Queries) CountRunnerKeyCopies(ctx context.Context, organizationID string) (CountRunnerKeyCopiesRow, error) {
 	row := q.db.QueryRow(ctx, countRunnerKeyCopies, organizationID)
 	var i CountRunnerKeyCopiesRow
@@ -118,6 +133,8 @@ func (q *Queries) CountRunnerKeyCopies(ctx context.Context, organizationID strin
 		&i.Unreadable,
 		&i.Unattributed,
 		&i.PlatformCopies,
+		&i.ValueCount,
+		&i.LastWrittenAt,
 	)
 	return i, err
 }
@@ -201,6 +218,46 @@ func (q *Queries) GetProjectOrganization(ctx context.Context, projectID uuid.UUI
 	var organization_id string
 	err := row.Scan(&organization_id)
 	return organization_id, err
+}
+
+const listOrganizationsWithRunnerKeys = `-- name: ListOrganizationsWithRunnerKeys :many
+SELECT
+    fa.organization_id::text AS organization_id,
+    COUNT(*)::bigint AS value_count,
+    MAX(fa.updated_at)::timestamptz AS last_written_at
+FROM functions_access AS fa
+WHERE fa.organization_id IS NOT NULL
+  AND (fa.encryption_key IS NOT NULL OR fa.encryption_key_org_encrypted IS NOT NULL)
+GROUP BY fa.organization_id
+`
+
+type ListOrganizationsWithRunnerKeysRow struct {
+	OrganizationID string
+	ValueCount     int64
+	LastWrittenAt  pgtype.Timestamptz
+}
+
+// Every organization storing a function runner key under either key,
+// soft-deleted rows included, with how many and the latest updated_at of the
+// rows storing them. Rows without organization_id are left out.
+func (q *Queries) ListOrganizationsWithRunnerKeys(ctx context.Context) ([]ListOrganizationsWithRunnerKeysRow, error) {
+	rows, err := q.db.Query(ctx, listOrganizationsWithRunnerKeys)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOrganizationsWithRunnerKeysRow
+	for rows.Next() {
+		var i ListOrganizationsWithRunnerKeysRow
+		if err := rows.Scan(&i.OrganizationID, &i.ValueCount, &i.LastWrittenAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listRunnerKeysSealed = `-- name: ListRunnerKeysSealed :many

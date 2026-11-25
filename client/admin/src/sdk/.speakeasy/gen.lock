@@ -1679,6 +1679,8 @@ examples:
         query:
           limit: 50
           offset: 0
+          values: "present"
+          sort: "last_written"
       responses:
         "200":
           application/json: {"has_more": true, "organizations": [], "state_counts": [{"organizations": 927487, "state": "dual_write"}], "use_case": "<value>", "use_cases": ["<value 1>", "<value 2>"]}

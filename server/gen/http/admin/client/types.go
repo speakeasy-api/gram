@@ -3604,9 +3604,10 @@ type ListOrganizationEncryptionTransitionsResponseBody struct {
 	UseCase *string `form:"use_case,omitempty" json:"use_case,omitempty" xml:"use_case,omitempty"`
 	// Every use case that moves from the platform key to organization keys.
 	UseCases []string `form:"use_cases,omitempty" json:"use_cases,omitempty" xml:"use_cases,omitempty"`
-	// The page of organizations, oldest first.
+	// The page of organizations, in the requested order.
 	Organizations []*AdminOrganizationEncryptionTransitionRowResponseBody `form:"organizations,omitempty" json:"organizations,omitempty" xml:"organizations,omitempty"`
-	// How many organizations are in each state, across every page.
+	// How many organizations the values filter keeps are in each state, across
+	// every page.
 	StateCounts []*AdminOrganizationEncryptionStateCountResponseBody `form:"state_counts,omitempty" json:"state_counts,omitempty" xml:"state_counts,omitempty"`
 	// Whether another page follows.
 	HasMore *bool `form:"has_more,omitempty" json:"has_more,omitempty" xml:"has_more,omitempty"`
@@ -31935,6 +31936,16 @@ type AdminOrganizationEncryptionTransitionRowResponseBody struct {
 	LastBackfillError *string `form:"last_backfill_error,omitempty" json:"last_backfill_error,omitempty" xml:"last_backfill_error,omitempty"`
 	// When the last clean verification pass started.
 	LastVerifiedAt *string `form:"last_verified_at,omitempty" json:"last_verified_at,omitempty" xml:"last_verified_at,omitempty"`
+	// How many values the organization stores for the use case under either key,
+	// soft-deleted rows included. A row storing values in two columns counts once
+	// in each.
+	ValueCount *int64 `form:"value_count,omitempty" json:"value_count,omitempty" xml:"value_count,omitempty"`
+	// The latest updated_at of a row storing one of the organization's values. A
+	// change that updates the row's updated_at moves it, such as a session's token
+	// refresh or an OpenRouter key's limit change; a write that leaves updated_at
+	// alone, such as a backfill seal, does not. Absent when the organization has
+	// none.
+	LastWrittenAt *string `form:"last_written_at,omitempty" json:"last_written_at,omitempty" xml:"last_written_at,omitempty"`
 }
 
 // AdminOrganizationEncryptionStateCountResponseBody is used to define fields
@@ -98571,6 +98582,9 @@ func ValidateAdminOrganizationEncryptionTransitionRowResponseBody(body *AdminOrg
 	if body.State == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("state", "body"))
 	}
+	if body.ValueCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("value_count", "body"))
+	}
 	if body.State != nil {
 		if !(*body.State == "platform_key" || *body.State == "dual_write" || *body.State == "org_kms") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.state", *body.State, []any{"platform_key", "dual_write", "org_kms"}))
@@ -98590,6 +98604,9 @@ func ValidateAdminOrganizationEncryptionTransitionRowResponseBody(body *AdminOrg
 	}
 	if body.LastVerifiedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_verified_at", *body.LastVerifiedAt, goa.FormatDateTime))
+	}
+	if body.LastWrittenAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_written_at", *body.LastWrittenAt, goa.FormatDateTime))
 	}
 	return
 }
