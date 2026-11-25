@@ -60,6 +60,7 @@ func TestHooksRolloutStagesSchedule(t *testing.T) {
 		action, ok := options.Action.(*client.ScheduleWorkflowAction)
 		require.True(t, ok)
 		require.Equal(t, "main", action.TaskQueue)
+		require.Equal(t, hooksRolloutStagesRunTimeout, action.WorkflowRunTimeout)
 		return true
 	})).Return(nil, nil).Once()
 	require.NoError(t, addHooksRolloutStagesSchedule(t.Context(), env))

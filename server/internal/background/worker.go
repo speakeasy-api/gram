@@ -1291,12 +1291,15 @@ type Workers struct {
 // Run registers the recurring schedules, starts every worker, then blocks
 // until interruptCh receives and the workers have stopped.
 func (w *Workers) Run(interruptCh <-chan any) error {
-	w.registerSchedules(context.Background())
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	w.registerSchedules(ctx)
 
 	if err := w.Start(); err != nil {
 		return err
 	}
 	<-interruptCh
+	cancel()
 	w.Stop()
 	return nil
 }

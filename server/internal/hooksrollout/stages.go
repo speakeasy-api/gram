@@ -47,6 +47,7 @@ var (
 	ErrStageNotRunning    = errors.New("the staged hooks rollout is not running")
 	ErrStageNotPaused     = errors.New("the staged hooks rollout is not paused")
 	ErrStageVersionBehind = errors.New("version must be newer than the default pin")
+	ErrStageVersionOlder  = errors.New("version must not be older than the active staged rollout; cancel it first")
 	ErrStageChanged       = errors.New("the staged hooks rollout changed since it was read")
 )
 
@@ -159,6 +160,9 @@ func (s *StageStore) Start(ctx context.Context, revision int64, version int, set
 		if current.Active() && current.Version == version {
 			return nil
 		}
+		if current.Active() && version < current.Version {
+			return ErrStageVersionOlder
+		}
 		return insertStage(ctx, q, Stage{Revision: 0, Version: version, Percent: stagePercents[0], State: StageRunning, Reason: "", SetBy: setBy, SetAt: time.Time{}})
 	})
 }
@@ -228,8 +232,8 @@ func (s *StageStore) Advance(ctx context.Context, now time.Time) (*Stage, error)
 		if err := insertStage(ctx, q, next); err != nil {
 			return err
 		}
-		advanced = &next
-		return nil
+		advanced, err = currentStage(ctx, q)
+		return err
 	})
 	if err != nil {
 		return nil, err
