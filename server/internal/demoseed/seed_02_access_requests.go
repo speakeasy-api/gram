@@ -15,12 +15,14 @@ import (
 
 // demoAccessRequestCount is how many access requests the seed writes, for
 // the postflight.
-const demoAccessRequestCount = 2
+const demoAccessRequestCount = 3
 
-// seedRolesAccessRequests gives the Access Requests tab a pending request to
+// seedRolesAccessRequests gives the Access Requests tab pending requests to
 // review and a denied one in its history: Amara asks for the demo project's
-// tool logs, and Lucas, an admin, denied Hana's request to view environments,
-// which hold secret values. Neither holds the scope they asked for.
+// tool logs, Priya asks to view environments after the seeded challenges show
+// her denied doing so (so Authorization Challenges marks her denied rows as
+// requested), and Lucas, an admin, denied Hana's request to view
+// environments, which hold secret values. None holds the scope they asked for.
 func (s *seeder) seedRolesAccessRequests(ctx context.Context) error {
 	org := s.orgID()
 	if err := s.q.RolesDeleteAccessRequests(ctx, org); err != nil {
@@ -52,6 +54,21 @@ func (s *seeder) seedRolesAccessRequests(ctx context.Context) error {
 			DecidedAt:       noDecision,
 			ExpiresAt:       conv.ToPGTimestamptz(s.now.Add(20 * time.Hour)),
 			CreatedAt:       conv.ToPGTimestamptz(s.now.Add(-4 * time.Hour)),
+		},
+		{
+			ID:              s.det("access-request-pending-challenged"),
+			OrganizationID:  org,
+			RequesterUserID: s.userID("priya"),
+			Scope:           string(authz.ScopeEnvironmentRead),
+			Selector:        environmentSelector,
+			ResourceName:    conv.ToPGTextEmpty(""),
+			Message:         conv.ToPGText("Setting up the staging MCP server and need to see which environment it reads its API keys from."),
+			Status:          "pending",
+			DecidedByUserID: conv.ToPGTextEmpty(""),
+			DecidedVia:      conv.ToPGTextEmpty(""),
+			DecidedAt:       noDecision,
+			ExpiresAt:       conv.ToPGTimestamptz(s.now.Add(23 * time.Hour)),
+			CreatedAt:       conv.ToPGTimestamptz(s.now.Add(-1 * time.Hour)),
 		},
 		{
 			ID:              s.det("access-request-denied"),

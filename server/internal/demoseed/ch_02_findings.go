@@ -2,6 +2,7 @@ package demoseed
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
 	"strconv"
@@ -11,6 +12,7 @@ import (
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/orggateway"
 )
 
@@ -345,10 +347,13 @@ func (s *seeder) chfAIScanReceipts(ctx context.Context, ch driver.Conn) error {
 
 var (
 	chfChalScopes = []string{
-		"toolset:admin", "project:admin", "environment:read",
+		"mcp:write", "project:write", "environment:read",
 		"environment:write", "mcp:connect", "skill:write", "chat:read",
 	}
-	chfChalKinds = []string{"toolset", "project", "environment", "environment", "mcp", "skill", "chat"}
+	chfChalKinds = []string{"mcp", "project", "environment", "environment", "mcp", "skill", "chat"}
+	// chfChalProjectKinds are the seeded resource kinds whose checks carry a
+	// project_id dimension.
+	chfChalProjectKinds = map[string]bool{"environment": true, "mcp": true}
 )
 
 // chfAuthzChallenges: org home "Recent challenges" panel, /access/challenges,
@@ -368,7 +373,6 @@ func (s *seeder) chfAuthzChallenges(ctx context.Context, ch driver.Conn) error {
 	now := s.now.UTC()
 	proj := s.projectID().String()
 	resources := []string{s.toolset1().String(), proj, s.fixed("0000-4000-a000-00000000ee01").String()}
-	selector := `{"project":"` + proj + `"}`
 	const apiKeyID = "akey_demo0000000001"
 	return chfInsert(ctx, ch, "authz challenges", `INSERT INTO authz_challenges
   (timestamp, organization_id, project_id, trace_id, span_id, request_id,
@@ -406,6 +410,22 @@ func (s *seeder) chfAuthzChallenges(ctx context.Context, ch driver.Conn) error {
 			}
 			sc := hash64("chal-scope", n) % 7
 			scope, kind, resource := chfChalScopes[sc], chfChalKinds[sc], resources[n%3]
+			// The selector is the denied check as the challenge logger records
+			// it: the resource, plus project_id for the kinds that declare it.
+			// Granting from a challenge rebuilds the check from this selector,
+			// so a selector without the resource, or with an undeclared key,
+			// made every seeded denial unresolvable.
+			checked := authz.Selector{
+				authz.SelectorKeyResourceKind: kind,
+				authz.SelectorKeyResourceID:   resource,
+			}
+			if chfChalProjectKinds[kind] {
+				checked[authz.SelectorKeyProjectID] = proj
+			}
+			selector, err := json.Marshal(checked)
+			if err != nil {
+				return fmt.Errorf("encode authz challenge selector: %w", err)
+			}
 			if err := b.Append(
 				now.Add(-time.Duration(2+n*5)*time.Hour),
 				s.orgID(),
@@ -417,9 +437,9 @@ func (s *seeder) chfAuthzChallenges(ctx context.Context, ch driver.Conn) error {
 				[]string{},
 				"require",
 				outcome, reason, scope, kind, resource,
-				selector,
+				string(selector),
 				[]string{scope},
-				[]string{scope}, []string{kind}, []string{resource}, []string{selector},
+				[]string{scope}, []string{kind}, []string{resource}, []string{string(selector)},
 				[]string{}, []string{}, []string{}, []string{},
 				uint32(3+n%5),
 			); err != nil {

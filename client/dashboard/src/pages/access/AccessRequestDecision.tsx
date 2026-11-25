@@ -4,6 +4,8 @@ import { Text } from "@/components/ui/Text";
 import type { AccessRequest } from "@gram/client/models/components/accessrequest.js";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { invalidateAllAccessRequests } from "@gram/client/react-query/accessRequests.js";
+import { invalidateAllChallengeBuckets } from "@gram/client/react-query/challengeBuckets.js";
+import { invalidateAllChallenges } from "@gram/client/react-query/challenges.js";
 import { useDecideAccessRequestMutation } from "@gram/client/react-query/decideAccessRequest.js";
 import { invalidateAllTemporaryGrants } from "@gram/client/react-query/temporaryGrants.js";
 import { useQueryClient } from "@tanstack/react-query";
@@ -27,11 +29,14 @@ export function AccessRequestDecision({
   const [choice, setChoice] = useState<string | null>(null);
   const decide = useDecideAccessRequestMutation({
     // Refresh on a refusal too: a 409 means the request was decided
-    // elsewhere, and the list should show that.
+    // elsewhere, and the list should show that. An approval also resolves the
+    // requester's matching denials, so the challenge lists change with it.
     onSettled: async () => {
       await Promise.all([
         invalidateAllAccessRequests(queryClient),
         invalidateAllTemporaryGrants(queryClient),
+        invalidateAllChallenges(queryClient),
+        invalidateAllChallengeBuckets(queryClient),
       ]);
     },
   });

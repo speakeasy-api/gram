@@ -361,7 +361,7 @@ VALUES (@organization_id, 50000000, 1)
 ON CONFLICT (organization_id) DO UPDATE
   SET tum_monthly_token_limit = EXCLUDED.tum_monthly_token_limit;
 
--- Access requests: one pending, one denied, so the Access Requests tab and
+-- Access requests: two pending, one denied, so the Access Requests tab and
 -- the grant dialog's approval choices have something to show. Messages
 -- cascade with their request.
 -- name: RolesDeleteAccessRequests :exec

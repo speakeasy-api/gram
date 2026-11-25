@@ -145,6 +145,15 @@ function AccessInner() {
     next.set("scope", request.scope);
     if (request.selector.resourceId && request.selector.resourceId !== "*") {
       next.set("resource_id", request.selector.resourceId);
+    } else {
+      next.delete("resource_id");
+    }
+    // A project-scoped request keeps its project, so a role created or
+    // assigned from the dialog stays inside it.
+    if (request.selector.projectId) {
+      next.set("project_id", request.selector.projectId);
+    } else {
+      next.delete("project_id");
     }
     next.set("request", request.id);
     setSearchParams(next, { replace: true });
@@ -226,7 +235,12 @@ function AccessInner() {
         </TabsContent>
 
         <TabsContent value="challenges" className="mt-6">
-          <ChallengesTab />
+          <ChallengesTab
+            pendingRequests={
+              accessRequestsOn ? pendingRequests.data?.requests : undefined
+            }
+            onReviewRequest={reviewRequest}
+          />
         </TabsContent>
 
         {accessRequestsOn && (
