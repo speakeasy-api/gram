@@ -42,6 +42,7 @@ import {
 import { useOnUnmount } from "@/hooks/useOnUnmount";
 import {
   adminListCustomDomainsQuery,
+  aiProductsListQuery,
   organizationQuery,
   organizationsListQuery,
 } from "@/lib/adminQueries";
@@ -284,6 +285,21 @@ export function CommandPalette(): JSX.Element {
         .slice(0, RESULT_LIMIT) ?? [])
     : [];
 
+  // The catalog is small and bounded, so the whole list, deleted products
+  // included, is fetched once and matched here by name or id.
+  const productsQuery = useQuery({
+    ...aiProductsListQuery({ includeDeleted: true }),
+    enabled: open && searching,
+    retry: false,
+  });
+  const productResults = searching
+    ? (productsQuery.data?.products
+        .filter((product) =>
+          matches(trimmed, `${product.displayName} ${product.id}`),
+        )
+        .slice(0, RESULT_LIMIT) ?? [])
+    : [];
+
   const lowered = trimmed.toLowerCase();
   const navItems = ADMIN_NAV.filter((item) =>
     matches(lowered, `${item.label} ${item.keywords}`),
@@ -321,7 +337,7 @@ export function CommandPalette(): JSX.Element {
         onClick={() => changeOpen(true)}
         // Named for what it opens rather than what it is. The shortcut is on
         // the button as an attribute too, so it is announced and not only drawn.
-        aria-label="Search organizations, custom domains, and pages"
+        aria-label="Search organizations, custom domains, AI clients, and pages"
         aria-keyshortcuts={shortcut.announced}
         // Square and iconic where the bar is narrow, an input-shaped box where
         // there is room for one. Never hidden outright: the shortcut is the
@@ -347,7 +363,8 @@ export function CommandPalette(): JSX.Element {
           <DialogHeader className="sr-only">
             <DialogTitle>Command palette</DialogTitle>
             <DialogDescription>
-              Search organizations or custom domains, or jump to a page
+              Search organizations, custom domains or AI clients, or jump to a
+              page
             </DialogDescription>
           </DialogHeader>
 
@@ -360,7 +377,7 @@ export function CommandPalette(): JSX.Element {
             <CommandInput
               value={term}
               onValueChange={changeTerm}
-              placeholder="Search organizations or custom domains, or jump to a page..."
+              placeholder="Search organizations, custom domains or AI clients, or jump to a page..."
             />
             <CommandList>
               {searchState !== "idle" && (
@@ -475,6 +492,47 @@ export function CommandPalette(): JSX.Element {
                   {domainsQuery.isSuccess && domainResults.length === 0 && (
                     <p className="text-muted-foreground px-2 py-3 text-sm">
                       No custom domains match.
+                    </p>
+                  )}
+                </CommandGroup>
+              )}
+
+              {searching && (
+                <CommandGroup heading="AI clients">
+                  {productResults.map((product) => (
+                    <CommandItem
+                      key={product.id}
+                      value={`ai-product:${product.id}`}
+                      onSelect={() => {
+                        changeOpen(false);
+                        void navigate({
+                          to: "/ai-clients/products/$productId",
+                          params: { productId: product.id },
+                        });
+                      }}
+                    >
+                      <BotIcon />
+                      <span className="truncate">{product.displayName}</span>
+                      <span className="text-muted-foreground ml-auto truncate pl-2 text-xs">
+                        {product.deleted
+                          ? `Deleted · ${product.id}`
+                          : product.id}
+                      </span>
+                    </CommandItem>
+                  ))}
+                  {productsQuery.isError && (
+                    <p className="text-muted-foreground px-2 py-3 text-sm">
+                      Could not search AI clients.
+                    </p>
+                  )}
+                  {productsQuery.isPending && (
+                    <p className="text-muted-foreground px-2 py-3 text-sm">
+                      Searching AI clients...
+                    </p>
+                  )}
+                  {productsQuery.isSuccess && productResults.length === 0 && (
+                    <p className="text-muted-foreground px-2 py-3 text-sm">
+                      No AI clients match.
                     </p>
                   )}
                 </CommandGroup>

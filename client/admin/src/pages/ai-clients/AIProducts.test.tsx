@@ -79,34 +79,53 @@ function aProduct(overrides: Partial<AdminAIProduct> = {}): AdminAIProduct {
   };
 }
 
+const CATALOG = [
+  {
+    id: "example-cli",
+    displayName: "Example CLI",
+    category: "harness",
+    vendorKey: "example",
+    documentCount: 2,
+    deleted: false,
+    updatedAt: new Date("2026-02-01T00:00:00Z"),
+  },
+  {
+    id: "old-tool",
+    displayName: "Old Tool",
+    vendorKey: "old",
+    documentCount: 0,
+    deleted: true,
+    updatedAt: new Date("2026-02-01T00:00:00Z"),
+  },
+];
+
 beforeEach(() => {
   for (const mock of Object.values(mocks)) mock.mockReset();
   mocks.getSession.mockResolvedValue({
     email: "ops@example.test",
     name: "Ops",
   });
-  mocks.list.mockResolvedValue({
-    products: [
-      {
-        id: "example-cli",
-        displayName: "Example CLI",
-        category: "harness",
-        vendorKey: "example",
-        documentCount: 2,
-        deleted: false,
-        updatedAt: new Date("2026-02-01T00:00:00Z"),
-      },
-      {
-        id: "old-tool",
-        displayName: "Old Tool",
-        vendorKey: "old",
-        documentCount: 0,
-        deleted: true,
-        updatedAt: new Date("2026-02-01T00:00:00Z"),
-      },
-    ],
-    truncated: false,
-  });
+  // Answers the way the server does: deleted rows only when asked for, and
+  // only rows whose name or id holds the search text.
+  mocks.list.mockImplementation(
+    async ({
+      query,
+      includeDeleted,
+    }: {
+      query?: string;
+      includeDeleted: boolean;
+    }) => ({
+      products: CATALOG.filter(
+        (product) =>
+          (includeDeleted || !product.deleted) &&
+          (!query ||
+            `${product.displayName} ${product.id}`
+              .toLowerCase()
+              .includes(query.toLowerCase())),
+      ),
+      truncated: false,
+    }),
+  );
   mocks.get.mockResolvedValue(aProduct());
 });
 
@@ -128,22 +147,31 @@ describe("AIProductList", () => {
       includeDeleted: false,
     });
     expect(screen.getByText("Coding agent")).toBeTruthy();
-    expect(screen.getByText("No category")).toBeTruthy();
-    expect(screen.getByText("Deleted")).toBeTruthy();
+    expect(screen.queryByText("Old Tool")).toBeNull();
+    expect(screen.queryByText("Deleted")).toBeNull();
     expect(
       screen.getByRole("link", { name: "Example CLI" }).getAttribute("href"),
     ).toBe("/ai-clients/products/example-cli");
 
+    fireEvent.click(screen.getByRole("switch"));
+    expect(await screen.findByText("Old Tool")).toBeTruthy();
+    expect(screen.getByText("Deleted")).toBeTruthy();
+    expect(screen.getByText("No category")).toBeTruthy();
+    expect(mocks.list).toHaveBeenLastCalledWith({
+      query: undefined,
+      includeDeleted: true,
+    });
+
     fireEvent.change(screen.getByLabelText("Search products"), {
       target: { value: "exa" },
     });
-    fireEvent.click(screen.getByRole("switch"));
     await waitFor(() =>
       expect(mocks.list).toHaveBeenLastCalledWith({
         query: "exa",
         includeDeleted: true,
       }),
     );
+    await waitFor(() => expect(screen.queryByText("Old Tool")).toBeNull());
     expect(router.state.location.search).toEqual({ q: "exa", deleted: true });
   });
 

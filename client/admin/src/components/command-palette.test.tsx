@@ -23,6 +23,7 @@ type Mounted = Awaited<ReturnType<typeof renderRouteTree>>;
 
 const mocks = vi.hoisted(() => ({
   listCustomDomains: vi.fn(),
+  listAIProducts: vi.fn(),
   getSession: vi.fn(),
   listUsers: vi
     .fn()
@@ -60,6 +61,11 @@ vi.mock("@/lib/adminQueries", async (importOriginal) => {
       queryOptions({
         queryKey: ["customDomains", request],
         queryFn: () => mocks.listCustomDomains(request),
+      }),
+    aiProductsListQuery: (request = {}) =>
+      queryOptions({
+        queryKey: ["aiProducts", request],
+        queryFn: () => mocks.listAIProducts(request),
       }),
   };
 });
@@ -179,6 +185,8 @@ async function renderWithSubmitCaptured(): Promise<void> {
 beforeEach(() => {
   mocks.listCustomDomains.mockReset();
   mocks.listCustomDomains.mockResolvedValue({ customDomains: [] });
+  mocks.listAIProducts.mockReset();
+  mocks.listAIProducts.mockResolvedValue({ products: [], truncated: false });
   submitted = [];
   connectedAtSubmit = [];
   router = undefined;
@@ -283,7 +291,7 @@ describe("CommandPalette", () => {
 
     fireEvent.click(
       screen.getByRole("button", {
-        name: "Search organizations, custom domains, and pages",
+        name: "Search organizations, custom domains, AI clients, and pages",
       }),
     );
 
@@ -787,6 +795,71 @@ describe("custom domain search", () => {
     pressTheShortcut();
     type(ORG.name);
     await within(palette()).findByText("Could not search custom domains.");
+    expect(
+      await within(palette()).findByRole("option", {
+        name: new RegExp(`^${ORG.name}`),
+      }),
+    ).toBeTruthy();
+  });
+});
+
+describe("AI client search", () => {
+  it("waits until the palette opens and a search is entered", async () => {
+    await renderWithSubmitCaptured();
+    pressTheShortcut();
+    await screen.findByRole("dialog");
+    expect(mocks.listAIProducts).not.toHaveBeenCalled();
+    type("example");
+    await waitFor(() =>
+      expect(mocks.listAIProducts).toHaveBeenCalledWith({
+        includeDeleted: true,
+      }),
+    );
+  });
+
+  it("matches a product by id beyond the display limit and opens it", async () => {
+    mocks.listAIProducts.mockResolvedValue({
+      products: [
+        ...Array.from({ length: 20 }, (_, i) => ({
+          id: `other-tool-${i}`,
+          displayName: `Other Tool ${i}`,
+          vendorKey: "other",
+          documentCount: 0,
+          deleted: false,
+          updatedAt: new Date("2026-02-01T00:00:00Z"),
+        })),
+        {
+          id: "example-cli",
+          displayName: "Example CLI",
+          vendorKey: "example",
+          documentCount: 1,
+          deleted: true,
+          updatedAt: new Date("2026-02-01T00:00:00Z"),
+        },
+      ],
+      truncated: false,
+    });
+    await renderWithSubmitCaptured();
+    pressTheShortcut();
+    type("EXAMPLE-CLI");
+    const option = await within(palette()).findByRole("option", {
+      name: /Example CLI/,
+    });
+    expect(option.textContent).toContain("Deleted · example-cli");
+    fireEvent.click(option);
+    await waitFor(() =>
+      expect(router?.state.location.pathname).toBe(
+        "/ai-clients/products/example-cli",
+      ),
+    );
+  });
+
+  it("isolates a failed product search from organization results", async () => {
+    mocks.listAIProducts.mockRejectedValue(new Error("unavailable"));
+    await renderWithSubmitCaptured();
+    pressTheShortcut();
+    type(ORG.name);
+    await within(palette()).findByText("Could not search AI clients.");
     expect(
       await within(palette()).findByRole("option", {
         name: new RegExp(`^${ORG.name}`),
