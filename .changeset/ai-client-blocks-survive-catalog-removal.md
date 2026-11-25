@@ -2,4 +2,4 @@
 "server": patch
 ---
 
-An organization's block on an AI client keeps applying after Speakeasy removes that client from the catalog or disables its document. Organizations can still change or clear an existing decision about a removed client, and get a clear message when they try to add a new one.
+An organization's block on an AI client keeps applying after Speakeasy removes the client from its catalog or turns off its sign-in documents. Blocks on clients that were already removed had quietly stopped applying. They start applying again when this ships. Admins can see these blocks in Shadow AI, and can change or clear them. They cannot add a new decision for a removed client.

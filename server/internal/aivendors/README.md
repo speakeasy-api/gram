@@ -40,37 +40,46 @@ refresh.
 
 A removed or disabled row stops admitting its client on presets issuers, stops
 attributing it, and leaves the scan list and the presets list. An
-organization's block on the product keeps applying. Each load also reads, in
-the same transaction, the soft-deleted documents and every document of a
-soft-deleted product, most recently removed first, up to
-`maxRetiredDocuments`. When no live target matches a client at sign-in,
-`Snapshot.LastKnown` names the product that last published its client ID: a
-disabled live document first, then a removed exact URL, then the most specific
-removed pattern. An enabled live document always wins, so a URL re-added under
-another product follows that product. Nothing else reads these documents: they
-never admit, never appear in presets, scan lists or device payloads, never
-change attribution, and never count in validation. A malformed removed pattern
-is dropped. The built-in fallback keeps them too, except when nothing is
-removed or the removals would leave no product, where the built-in catalog
-already lists every product.
+organization's block on the product keeps applying.
 
-An organization can still change or clear its existing decision on a removed
-product, but cannot add a new one. A decision on a product whose documents are
-all disabled stays editable for the same reason.
+Each load also reads, in the same transaction, the soft-deleted documents and
+every document of a soft-deleted product, newest removal first, up to
+`maxRemovedDocuments`. A removed URL that a live document of a live product
+holds now is left out, so it is never credited to its old product, not even by
+the built-in fallback. These documents are read only to keep blocks applying:
+they never admit, never appear in presets, scan lists or device payloads,
+never change attribution, and never count in validation. A malformed removed
+pattern is dropped. The built-in fallback keeps them too, except when nothing
+is removed or the removals would leave no product, where the built-in catalog
+lists every product.
 
-Before removing a row, check two things. A block only keeps applying while
-the removed document stays within the cap, so hard-deleting rows or removing
-more than `maxRetiredDocuments` documents drops the oldest blocks. And a
-re-added URL under a different product moves the client to that product's
-decision. To find the organizations affected:
+When no live target matches a client at sign-in, `Snapshot.LastKnown` names
+the product that last published its client ID: a disabled live document
+first, then a removed exact URL, then the most specific removed pattern. Live
+attribution always wins. An enabled live document, including a broader
+pattern of another product that now matches a removed exact URL, decides
+instead, and a URL added back under another product follows that product.
+The organization's own targets are matched against the last product's vendor
+key and document URL first, then the product id itself decides.
+
+The rule for decisions: for a removed product, or a live one whose documents
+are all disabled, a decision can be changed or cleared only while one other
+than unreviewed is on file. Such a product is listed in Shadow AI with
+`catalog_status` set and its block shown as in force. Once cleared it drops
+out of the list (removed) or reads as not enforceable (documents disabled),
+and a new decision is refused.
+
+Before removing a row, check how many organizations block the product:
 
 ```sql
 SELECT count(*) FROM ai_scan_targets
 WHERE (ai_product_id = '<PRODUCT_ID>' OR id = '<PRODUCT_ID>') AND status = 'blocked';
 ```
 
-The inventory reads a removed product as unreviewed even while its block
-applies, so tell affected organizations if they need to clear one.
+Those blocks keep applying, and the organizations can see and clear them.
+Blocks stop applying when the removed document passes the cap (a warning is
+logged when a load reaches it), when the row is hard-deleted, or when the URL
+is added back under another product.
 
 Every load rejects an empty catalog, a malformed enabled pattern, more
 products, documents per product, client info names or enabled patterns than the
@@ -100,7 +109,7 @@ so a tie can only be between one product's own patterns, and goes to the lower
 URL. The database's `is_pattern` discriminator is authoritative. A malformed
 disabled pattern is logged and omitted; that is a successful partial load,
 distinct from a database failure. Documents of soft-deleted products are read
-only for block enforcement.
+only to keep blocks applying.
 
 Full fingerprints drive refresh detection. The device scan list version is
 derived from the served targets in `agent/aitargets`, not from the snapshot.

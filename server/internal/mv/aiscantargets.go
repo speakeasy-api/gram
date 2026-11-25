@@ -35,7 +35,7 @@ func BuildAiScanTargetView(entry aitargets.Entry) *gen.AiScanTarget {
 		Customized: entry.Customized,
 		// The same verdict the detections carry, so a target reads the same
 		// whether or not the device agent has seen it.
-		Access:    BuildAIToolAccessSummaryView(aitargets.SummarizeAccess(entry.Target, entry.Decision)),
+		Access:    BuildAIToolAccessSummaryView(aitargets.SummarizeAccess(entry)),
 		CreatedAt: formatOptionalTime(entry.CreatedAt),
 		UpdatedAt: formatOptionalTime(entry.UpdatedAt),
 	}

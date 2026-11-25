@@ -166,8 +166,13 @@ type Service interface {
 	// only by a self-reported client name, or by nothing at all — cannot be
 	// decided on: the request is rejected with bad_request, nothing is recorded,
 	// and no summary is returned. An id the organization's scan target catalog
-	// does not know is rejected with not_found. Requires an authenticated session
-	// authorized for org:admin on the active organization.
+	// does not know is rejected with not_found. A tool Speakeasy removed from its
+	// catalog, or whose sign-in documents are all turned off, is still recognized
+	// through them, so a decision already recorded about it (anything other than
+	// unreviewed) can be changed or cleared; with no such decision the request is
+	// rejected, with failed_precondition for a removed tool and bad_request
+	// otherwise. Requires an authenticated session authorized for org:admin on the
+	// active organization.
 	SetAIToolDecision(context.Context, *SetAIToolDecisionPayload) (res *SetAIToolDecisionResult, err error)
 	// List who can reach one resource: the principals granted or blocked on it,
 	// and the organization-wide rules they inherit.

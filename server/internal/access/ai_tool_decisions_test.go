@@ -382,6 +382,11 @@ func TestService_SetAIToolDecision_EditsExistingDecisionForRemovedProduct(t *tes
 			require.NoError(t, err)
 			removeProduct(t, ctx, ti, "claude-code", "Claude Code", tc.fresh)
 
+			saved, err := ti.service.SetAIToolDecision(ctx, &gen.SetAIToolDecisionPayload{TargetID: "claude-code", Decision: "blocked", Rationale: new("Still not approved.")})
+			require.NoError(t, err)
+			require.Equal(t, "blocked", saved.Access.State, "the block still applies, so it reads blocked")
+			require.True(t, saved.Access.Enforceable)
+			require.Equal(t, "removed", conv.PtrValOr(saved.Access.CatalogStatus, ""))
 			for _, decision := range []string{"approved", "unreviewed"} {
 				saved, err := ti.service.SetAIToolDecision(ctx, &gen.SetAIToolDecisionPayload{TargetID: "claude-code", Decision: decision})
 				require.NoError(t, err)
@@ -395,6 +400,13 @@ func TestService_SetAIToolDecision_EditsExistingDecisionForRemovedProduct(t *tes
 			record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionAIToolDecisionSet)
 			require.NoError(t, err)
 			require.Equal(t, "Claude Code", record.SubjectDisplay)
+
+			// Cleared, the leftover unreviewed row is not a decision, so a new one is refused.
+			_, err = ti.service.SetAIToolDecision(ctx, &gen.SetAIToolDecisionPayload{TargetID: "claude-code", Decision: "blocked"})
+			var shareableErr *oops.ShareableError
+			require.ErrorAs(t, err, &shareableErr)
+			require.Equal(t, oops.CodeFailedPrecondition, shareableErr.Code)
+			require.Equal(t, removedAIToolMessage, shareableErr.Error())
 		})
 	}
 }
@@ -404,6 +416,7 @@ func TestService_SetAIToolDecision_EditsExistingDecisionWhenEveryDocumentIsDisab
 	ctx, ti := newTestAccessService(t)
 	ctx, orgID, _ := withUniqueDetectionOrg(t, ctx, ti)
 	require.NoError(t, catalogseed.EnsureCatalog(ctx, ti.conn))
+	seedAIDetection(t, ctx, ti, orgID, "zed", "serial-1", "alex@example.com", "installed", "harness", "", time.Now().UTC())
 	_, err := ti.service.SetAIToolDecision(ctx, &gen.SetAIToolDecisionPayload{TargetID: "zed", Decision: "blocked"})
 	require.NoError(t, err)
 	docs, err := seedrepo.New(ti.conn).ListDocuments(ctx)
@@ -417,6 +430,12 @@ func TestService_SetAIToolDecision_EditsExistingDecisionWhenEveryDocumentIsDisab
 	require.NoError(t, err)
 	ti.service.aiCatalog = aivendors.NewStore(snapshot)
 
+	listed, err := ti.service.ListAIDetections(ctx, &gen.ListAIDetectionsPayload{Category: nil, DirectoryGroupID: nil, SessionToken: nil})
+	require.NoError(t, err)
+	require.Len(t, listed.Detections, 1)
+	require.Equal(t, "blocked", listed.Detections[0].Access.State, "the inventory shows the block that still applies")
+	require.Equal(t, "documents_disabled", conv.PtrValOr(listed.Detections[0].Access.CatalogStatus, ""))
+
 	_, err = ti.service.SetAIToolDecision(ctx, &gen.SetAIToolDecisionPayload{TargetID: "zed", Decision: "unreviewed"})
 	require.NoError(t, err, "a disabled document still enforces the block, so it stays clearable")
 	rows, err := agentrepo.New(ti.conn).ListAIScanTargets(ctx, orgID)
@@ -424,10 +443,12 @@ func TestService_SetAIToolDecision_EditsExistingDecisionWhenEveryDocumentIsDisab
 	require.Len(t, rows, 1)
 	require.Equal(t, "unreviewed", rows[0].Status)
 
-	_, err = ti.service.SetAIToolDecision(ctx, &gen.SetAIToolDecisionPayload{TargetID: "goose", Decision: "blocked"})
-	var shareableErr *oops.ShareableError
-	require.ErrorAs(t, err, &shareableErr)
-	require.Equal(t, oops.CodeBadRequest, shareableErr.Code, "a new decision still needs a document Speakeasy can recognize")
+	for _, id := range []string{"zed", "goose"} {
+		_, err = ti.service.SetAIToolDecision(ctx, &gen.SetAIToolDecisionPayload{TargetID: id, Decision: "blocked"})
+		var shareableErr *oops.ShareableError
+		require.ErrorAs(t, err, &shareableErr, id)
+		require.Equal(t, oops.CodeBadRequest, shareableErr.Code, "%s: a new decision, or one after a leftover unreviewed row, still needs a document Speakeasy can admit", id)
+	}
 }
 
 func TestService_SetAIToolDecision_LinksExistingDecision(t *testing.T) {
@@ -491,4 +512,23 @@ func TestService_SetAIToolDecision_LeavesCustomTargetUnlinked(t *testing.T) {
 			require.Equal(t, original, rows[0], "a decision update preserves the custom definition and reference")
 		})
 	}
+}
+
+func TestService_ListAIDetections_ShowsBlockOnRemovedProduct(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAccessService(t)
+	ctx, orgID, _ := withUniqueDetectionOrg(t, ctx, ti)
+	require.NoError(t, catalogseed.EnsureCatalog(ctx, ti.conn))
+	seedAIDetection(t, ctx, ti, orgID, "claude-code", "serial-1", "alex@example.com", "installed", "harness", "", time.Now().UTC())
+	_, err := ti.service.SetAIToolDecision(ctx, &gen.SetAIToolDecisionPayload{TargetID: "claude-code", Decision: "blocked"})
+	require.NoError(t, err)
+	removeProduct(t, ctx, ti, "claude-code", "Claude Code", true)
+
+	listed, err := ti.service.ListAIDetections(ctx, &gen.ListAIDetectionsPayload{Category: nil, DirectoryGroupID: nil, SessionToken: nil})
+	require.NoError(t, err)
+	require.Len(t, listed.Detections, 1)
+	require.Equal(t, "Claude Code", listed.Detections[0].DisplayName)
+	require.Equal(t, "blocked", listed.Detections[0].Access.State)
+	require.True(t, listed.Detections[0].Access.Enforceable)
+	require.Equal(t, "removed", conv.PtrValOr(listed.Detections[0].Access.CatalogStatus, ""))
 }

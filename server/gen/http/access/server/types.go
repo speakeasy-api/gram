@@ -10905,11 +10905,19 @@ type AIToolAccessSummaryResponseBody struct {
 	// the stored decision is left untouched and takes effect again if the tool
 	// gains a verifiable gateway matcher.
 	Decision string `form:"decision" json:"decision" xml:"decision"`
-	// Whether a block on this tool would actually reach the gateway. False when
-	// the tool is linked only by a self-reported client name, or by nothing at
-	// all: the decision is recorded honestly and enforces nothing. Surfaced so an
-	// admin is never told a tool is blocked when it is not.
+	// Whether a block on this tool would actually reach the gateway, and so
+	// whether a decision about it can be recorded. False when the tool is linked
+	// only by a self-reported client name, or by nothing at all: the decision is
+	// recorded honestly and enforces nothing. Surfaced so an admin is never told a
+	// tool is blocked when it is not. True for a tool with catalog_status set,
+	// whose stored decision still applies.
 	Enforceable bool `form:"enforceable" json:"enforceable" xml:"enforceable"`
+	// Set only when the Speakeasy catalog no longer admits this tool but a
+	// decision the organization recorded still applies: removed when Speakeasy
+	// removed the tool from its catalog, documents_disabled when every sign-in
+	// document for it is turned off. The decision can be changed or cleared, but
+	// once cleared it cannot be set again. Absent for every other tool.
+	CatalogStatus *string `form:"catalog_status,omitempty" json:"catalog_status,omitempty" xml:"catalog_status,omitempty"`
 	// Why the decision was made, when an admin gave a reason. Who recorded it and
 	// when are in the audit log rather than here, so there is one record of that
 	// and not two.

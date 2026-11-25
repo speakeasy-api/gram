@@ -15,5 +15,7 @@ func BuildAIToolAccessSummaryView(summary aitargets.AccessSummary) *types.AITool
 		Decision:    string(summary.Decision),
 		Enforceable: summary.Enforceable,
 		Rationale:   conv.PtrEmpty(summary.Record.Rationale),
+		// Empty for a listed tool, so the field is omitted.
+		CatalogStatus: conv.PtrEmpty(string(summary.Catalog)),
 	}
 }

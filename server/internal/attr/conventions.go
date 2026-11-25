@@ -567,6 +567,11 @@ const (
 	// McpSkillTargetIDKey is the id of the stored MCP surface a skill
 	// resolution served, or the nil UUID for a row-less surface.
 	McpSkillTargetIDKey = attribute.Key("gram.mcp.skill.target_id")
+	// AIToolTargetIDKey is the AI scan target id a gateway block resolved to.
+	AIToolTargetIDKey = attribute.Key("gram.ai_tool.target_id")
+	// AIToolBlockMatchKey is how a gateway block found its target: "live" for a
+	// target the catalog admits, "last_known" for a removed or disabled document.
+	AIToolBlockMatchKey = attribute.Key("gram.ai_tool.block_match")
 	// McpKillswitchSurfaceKey is the kill-switch enforcement surface a covered
 	// MCP tools/call reached: "hosted" or "private_proxy".
 	McpKillswitchSurfaceKey = attribute.Key("gram.mcp.killswitch.surface")
@@ -2725,6 +2730,12 @@ func OAuthAuthorizationEndpoint(v string) attribute.KeyValue {
 func SlogOAuthAuthorizationEndpoint(v string) slog.Attr {
 	return slog.String(string(OAuthAuthorizationEndpointKey), v)
 }
+
+func AIToolTargetID(v string) attribute.KeyValue { return AIToolTargetIDKey.String(v) }
+func SlogAIToolTargetID(v string) slog.Attr      { return slog.String(string(AIToolTargetIDKey), v) }
+
+func AIToolBlockMatch(v string) attribute.KeyValue { return AIToolBlockMatchKey.String(v) }
+func SlogAIToolBlockMatch(v string) slog.Attr      { return slog.String(string(AIToolBlockMatchKey), v) }
 
 func OAuthClientID(v string) attribute.KeyValue { return OAuthClientIDKey.String(v) }
 func SlogOAuthClientID(v string) slog.Attr      { return slog.String(string(OAuthClientIDKey), v) }

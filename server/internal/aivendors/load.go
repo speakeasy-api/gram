@@ -31,7 +31,7 @@ var errRejected = errors.New("AI catalog rejected")
 
 // Load reads the catalog, falling back to the built-in one minus database removals when it is empty or invalid; only a failed read is an error.
 func Load(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, validate func(*Snapshot) error) (*Snapshot, error) {
-	snapshot, skipped, err := load(ctx, db, validate)
+	snapshot, skipped, err := load(ctx, db, validate, maxRemovedDocuments)
 	keys := make([]string, 0, len(skipped))
 	for _, row := range skipped {
 		logger.WarnContext(ctx, "skip AI catalog row", attr.SlogError(row))
@@ -55,7 +55,7 @@ func Load(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, validate f
 
 // load returns the snapshot and the rows it skipped, so callers decide how often to report them.
 // A rejected catalog comes back with errRejected and the built-in fallback as the snapshot.
-func load(ctx context.Context, db *pgxpool.Pool, validate func(*Snapshot) error) (*Snapshot, []error, error) {
+func load(ctx context.Context, db *pgxpool.Pool, validate func(*Snapshot) error, removedCap int64) (*Snapshot, []error, error) {
 	if validate == nil {
 		return nil, nil, fmt.Errorf("AI catalog validator is required")
 	}
@@ -77,13 +77,16 @@ func load(ctx context.Context, db *pgxpool.Pool, validate func(*Snapshot) error)
 	if err != nil {
 		return nil, nil, fmt.Errorf("read AI catalog documents: %w", err)
 	}
-	retiredRows, err := q.ListRetiredCatalogDocuments(ctx, maxRetiredDocuments)
+	removedRows, err := q.ListRemovedCatalogDocuments(ctx, removedCap)
 	if err != nil {
-		return nil, nil, fmt.Errorf("read removed AI catalog documents for blocks: %w", err)
+		return nil, nil, fmt.Errorf("read removed AI catalog documents: %w", err)
 	}
-	retired := make([]retiredDocument, 0, len(retiredRows))
-	for _, r := range retiredRows {
-		retired = append(retired, retiredDocument{ProductID: r.AiProductID, DisplayName: r.ProductDisplayName, URL: r.Url, Pattern: r.IsPattern})
+	removed := make([]removedDocument, 0, len(removedRows))
+	for _, r := range removedRows {
+		removed = append(removed, removedDocument{
+			LastKnownProduct: LastKnownProduct{ProductID: r.AiProductID, VendorKey: r.VendorKey, DisplayName: r.ProductDisplayName, Category: Category(r.Category.String), URL: r.Url},
+			Pattern:          r.IsPattern,
+		})
 	}
 	products := make([]Product, 0, len(rows))
 	byID := make(map[string]int, len(rows))
@@ -109,6 +112,9 @@ func load(ctx context.Context, db *pgxpool.Pool, validate func(*Snapshot) error)
 		})
 	}
 	var skipped, malformed []error
+	if int64(len(removedRows)) >= removedCap {
+		skipped = append(skipped, fmt.Errorf("removed AI catalog documents reached the cap of %d; blocks on older removals no longer apply", removedCap))
+	}
 	for _, d := range docs {
 		// ListCatalogDocuments joins live products in the same transaction, so the product is present.
 		i := byID[d.AiProductID]
@@ -127,7 +133,7 @@ func load(ctx context.Context, db *pgxpool.Pool, validate func(*Snapshot) error)
 		products[i].Documents = append(products[i].Documents, Document{URL: d.Url, DisplayName: d.DisplayName, Enabled: d.Enabled, Pattern: d.IsPattern})
 	}
 	snapshot := NewSnapshot(products)
-	snapshot.retire(retired)
+	snapshot.keepRemoved(removed)
 	rejection := errors.Join(malformed...)
 	if rejection != nil {
 		rejection = fmt.Errorf("%w: %w", errInvalidCatalog, rejection)
@@ -137,7 +143,7 @@ func load(ctx context.Context, db *pgxpool.Pool, validate func(*Snapshot) error)
 		rejection = err
 	}
 	if rejection != nil {
-		fallback, err := readFallback(ctx, q, retired)
+		fallback, err := readFallback(ctx, q, removed)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -151,7 +157,7 @@ func load(ctx context.Context, db *pgxpool.Pool, validate func(*Snapshot) error)
 
 // readFallback builds the built-in catalog minus what the database removed,
 // keeping the removed documents for block enforcement.
-func readFallback(ctx context.Context, q *repo.Queries, retired []retiredDocument) (*Snapshot, error) {
+func readFallback(ctx context.Context, q *repo.Queries, removed []removedDocument) (*Snapshot, error) {
 	products, err := q.ListDeletedProductIDs(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("read removed AI catalog products: %w", err)
@@ -175,7 +181,7 @@ func readFallback(ctx context.Context, q *repo.Queries, retired []retiredDocumen
 	if len(fallback.products) == 0 {
 		return CompiledSnapshot(), nil
 	}
-	fallback.retire(retired)
+	fallback.keepRemoved(removed)
 	return fallback, nil
 }
 
@@ -183,7 +189,7 @@ func readFallback(ctx context.Context, q *repo.Queries, retired []retiredDocumen
 func (s *Store) Refresh(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, validate func(*Snapshot) error) error {
 	s.refreshMu.Lock()
 	defer s.refreshMu.Unlock()
-	next, skipped, err := load(ctx, db, validate)
+	next, skipped, err := load(ctx, db, validate, maxRemovedDocuments)
 	if err == nil || errors.Is(err, errRejected) {
 		reported := make(map[string]struct{}, len(skipped))
 		for _, row := range skipped {

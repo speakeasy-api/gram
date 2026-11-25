@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"net/url"
 	"testing"
 	"time"
 
@@ -183,4 +184,66 @@ func TestHandleToken_BlockSurvivesProductRemoval(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
 	requireTokenOAuthError(t, w, "unauthorized_client")
 	requireTokenErrorDescription(t, w, "Claude Code")
+}
+
+func TestCheckAIToolGatewayBlock_OrganizationTargetKeepsCatalogMatchersAfterRemoval(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name     string
+		clientID string
+		gateway  func() ([]string, []string)
+		remove   func(t *testing.T, ctx context.Context, ti *testInstance)
+	}{
+		{name: "vendor key", clientID: zedCIMDClientID, gateway: func() ([]string, []string) { return []string{"zed"}, []string{} }, remove: func(t *testing.T, ctx context.Context, ti *testInstance) {
+			t.Helper()
+			require.NoError(t, testrepo.New(ti.conn).EditProductFixture(ctx, testrepo.EditProductFixtureParams{ID: "zed", DisplayName: "Zed", DeletedAt: catalogRemovedAt}))
+		}},
+		{name: "catalog pattern", clientID: "https://pi.dev/oauth/fixture-server/client.json", gateway: func() ([]string, []string) { return []string{}, []string{"https://pi.dev/oauth/*/client.json"} }, remove: func(t *testing.T, ctx context.Context, ti *testInstance) {
+			t.Helper()
+			removeDocument(t, ctx, ti, "https://pi.dev/oauth/*/client.json", true, catalogRemovedAt)
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestMCPService(t)
+			authCtx, ok := contextvalues.GetAuthContext(ctx)
+			require.True(t, ok)
+			orgID := authCtx.ActiveOrganizationID
+			snapshot := loadCatalogAfter(t, ctx, ti, func() { tc.remove(t, ctx, ti) })
+			vendorKeys, clientIDs := tc.gateway()
+			_, err := agentrepo.New(ti.conn).UpsertAIScanTarget(ctx, agentrepo.UpsertAIScanTargetParams{
+				OrganizationID: orgID, ID: "our-tool", DisplayName: conv.ToPGText("Our tool"), Category: conv.ToPGText("harness"),
+				BundleIds: []string{}, Binaries: []string{"our-tool"}, ConfigDirs: []string{}, ProcessNames: []string{},
+				VersionPlistKey: pgtype.Text{}, CimdVendorKeys: vendorKeys, OauthClientIds: clientIDs, ClientInfoNames: []string{},
+			})
+			require.NoError(t, err)
+			blockTarget(t, ctx, ti, orgID, "our-tool")
+
+			err = ti.service.CheckAIToolGatewayBlock(ctx, snapshot, orgID, tc.clientID)
+			blockedErr, isBlocked := errors.AsType[*mcp.AIToolBlockedError](err)
+			require.True(t, isBlocked, "%v", err)
+			require.Equal(t, "our-tool", blockedErr.TargetID)
+		})
+	}
+}
+
+func TestHandleToken_RefreshRefusedAfterProductRemoval(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	toolset, issuer, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	snapshot := loadCatalogAfter(t, ctx, ti, func() {
+		require.NoError(t, testrepo.New(ti.conn).EditProductFixture(ctx, testrepo.EditProductFixtureParams{ID: "claude-code", DisplayName: "Claude Code", DeletedAt: catalogRemovedAt}))
+	})
+	ti.service.SetAICatalog(aivendors.NewStore(snapshot))
+
+	client := seedCIMDClient(t, ctx, ti, issuer.ID, claudeCodeCIMDClientID)
+	blockTarget(t, ctx, ti, authCtx.ActiveOrganizationID, "claude-code")
+
+	w := postForm(t, ti, toolset.McpSlug.String, "token", url.Values{"grant_type": {"refresh_token"}, "client_id": {client.ClientID}, "refresh_token": {"unused-refresh-token"}})
+
+	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+	requireTokenOAuthError(t, w, "invalid_grant")
+	requireTokenErrorDescription(t, w, "administrator must approve")
 }

@@ -19,7 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// removedAIToolMessage refuses a new decision about a product staff removed from the catalog.
+// removedAIToolMessage refuses a decision about a product removed from the catalog when no decision is on file.
 const removedAIToolMessage = "This AI client was removed from the catalog. You can change or clear an existing decision, but not add a new one."
 
 // SetAIToolDecision records whether a detected AI tool may reach the
@@ -75,9 +75,14 @@ func (s *Service) SetAIToolDecision(ctx context.Context, payload *gen.SetAIToolD
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "read AI target catalog state").LogError(ctx, s.logger)
 	}
-	// A removed product's block keeps applying at the gateway, so its existing decision stays editable.
+	// A built-in the catalog no longer admits, because it was removed or its
+	// documents are all disabled, is still recognized through those documents.
+	// One rule covers both: its decision may be changed or cleared only while
+	// a stored decision other than unreviewed exists. SummarizeAccess applies
+	// it, so this check and every read agree.
 	removed := state.ProductRemoved && (!known || entry.Source == aitargets.SourceDefault)
-	if removed {
+	if removed && entry.Catalog != aitargets.CatalogRemoved {
+		// The pod's catalog has not caught up with the removal yet.
 		row, err := queries.GetAIScanTargetForUpdate(ctx, agentrepo.GetAIScanTargetForUpdateParams{OrganizationID: organizationID, ID: targetID})
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeFailedPrecondition, nil, "%s", removedAIToolMessage).LogWarn(ctx, s.logger)
@@ -87,26 +92,21 @@ func (s *Service) SetAIToolDecision(ctx context.Context, payload *gen.SetAIToolD
 		}
 		entry = aitargets.EntryFromRow(row)
 		entry.DisplayName = state.ProductDisplayName
-	} else if !known {
-		return nil, oops.E(oops.CodeNotFound, nil, "%q is not an AI detection target in this organization's catalog", targetID)
+		entry.Source = aitargets.SourceDefault
+		entry.Catalog = aitargets.CatalogRemoved
 	}
-
-	// Enforceability now has exactly one cause, so there is one answer. A
-	// target is in the organization's inventory or it is not; there is no
-	// switched-off state that could leave a recorded decision inert, which is
-	// what used to need a second, differently worded refusal here.
-	//
-	// A tool Speakeasy cannot recognize at the gateway cannot be decided about.
-	// Refused rather than recorded-and-ignored for two reasons: the inventory
-	// would report unreviewed whatever was stored, so the write would look
-	// like it did nothing; and a block stored against a tool that later starts
-	// publishing a document would silently begin enforcing months after
-	// somebody set it.
-	//
-	// An existing decision on a built-in stays editable even so: a disabled
-	// document still enforces it, and the organization must be able to clear it.
-	editingExisting := entry.Source == aitargets.SourceDefault && entry.Customized
-	if !removed && !editingExisting && !aitargets.Enforceable(entry.Target) {
+	switch {
+	case removed && !aitargets.SummarizeAccess(entry).Enforceable:
+		return nil, oops.E(oops.CodeFailedPrecondition, nil, "%s", removedAIToolMessage).LogWarn(ctx, s.logger)
+	case !removed && !known:
+		return nil, oops.E(oops.CodeNotFound, nil, "%q is not an AI detection target in this organization's catalog", targetID)
+	case !removed && !aitargets.SummarizeAccess(entry).Enforceable:
+		// A tool Speakeasy cannot recognize at the gateway cannot be decided
+		// about. Refused rather than recorded-and-ignored for two reasons: the
+		// inventory would report unreviewed whatever was stored, so the write
+		// would look like it did nothing; and a block stored against a tool
+		// that later starts publishing a document would silently begin
+		// enforcing months after somebody set it.
 		return nil, oops.E(oops.CodeBadRequest, nil, "%q publishes no client ID metadata document, so Speakeasy cannot recognize it at the gateway and cannot enforce a decision about it", targetID)
 	}
 
@@ -134,6 +134,7 @@ func (s *Service) SetAIToolDecision(ctx context.Context, payload *gen.SetAIToolD
 		return nil, oops.E(oops.CodeUnexpected, err, "save ai tool decision").LogError(ctx, s.logger)
 	}
 	after := aitargets.EntryFromRow(saved).Decision
+	entry.Decision = after
 
 	if err := s.audit.LogAIToolDecisionSet(ctx, dbtx, audit.LogAIToolDecisionSetEvent{
 		OrganizationID:         organizationID,
@@ -153,6 +154,6 @@ func (s *Service) SetAIToolDecision(ctx context.Context, payload *gen.SetAIToolD
 
 	return &gen.SetAIToolDecisionResult{
 		TargetID: targetID,
-		Access:   mv.BuildAIToolAccessSummaryView(aitargets.SummarizeAccess(entry.Target, after)),
+		Access:   mv.BuildAIToolAccessSummaryView(aitargets.SummarizeAccess(entry)),
 	}, nil
 }

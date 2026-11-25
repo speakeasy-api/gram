@@ -113,12 +113,23 @@ function columns(
             displayName={row.target.displayName}
             className="h-6 w-6 shrink-0"
           />
-          <Text className="truncate font-medium">{row.target.displayName}</Text>
-          {row.target.origin === "organization" ? (
-            <Badge variant="neutral">
-              <Badge.Text>Custom</Badge.Text>
-            </Badge>
-          ) : null}
+          <div className="min-w-0">
+            <div className="flex min-w-0 items-center gap-3">
+              <Text className="truncate font-medium">
+                {row.target.displayName}
+              </Text>
+              {row.target.origin === "organization" ? (
+                <Badge variant="neutral">
+                  <Badge.Text>Custom</Badge.Text>
+                </Badge>
+              ) : null}
+            </div>
+            {row.catalogNote ? (
+              <Text small muted>
+                {row.catalogNote}
+              </Text>
+            ) : null}
+          </div>
         </div>
       ),
     },

@@ -10,6 +10,60 @@ import {
 } from "./access-rows";
 
 describe("buildAccessRows", () => {
+  it("keeps a block on a tool the catalog no longer admits, and lets it be cleared", () => {
+    const removed = scanTarget({
+      id: "zed",
+      displayName: "Zed",
+      gatewayClient: {
+        cimdVendorKeys: [],
+        oauthClientIds: [],
+        clientInfoNames: [],
+      },
+      access: {
+        state: "blocked",
+        decision: "blocked",
+        enforceable: true,
+        catalogStatus: "removed",
+      },
+    });
+    const disabled = scanTarget({
+      id: "goose",
+      displayName: "Goose",
+      access: {
+        state: "allowed",
+        decision: "approved",
+        enforceable: true,
+        catalogStatus: "documents_disabled",
+      },
+    });
+    const rows = buildAccessRows([removed, disabled], []);
+    expect(rows[0]).toMatchObject({
+      stored: "blocked",
+      enforceable: true,
+      catalogNote:
+        "Removed from the Speakeasy catalog. This block still applies.",
+    });
+    expect(rows[1]?.catalogNote).toBe(
+      "Sign-in documents are turned off for this client. This decision still applies.",
+    );
+    expect(
+      changedDecisions(rows, new Map([["zed", "unreviewed" as const]])),
+    ).toEqual([
+      {
+        targetId: "zed",
+        displayName: "Zed",
+        decision: "unreviewed",
+        rationale: undefined,
+      },
+    ]);
+  });
+
+  it("adds no note for a tool the catalog lists as usual", () => {
+    expect(
+      buildAccessRows(accessLibrary(), [])[0]?.catalogNote,
+    ).toBeUndefined();
+  });
+
   it("keeps an unknown stored decision out of editable and known decision counts", () => {
     const target = scanTarget({
       access: {

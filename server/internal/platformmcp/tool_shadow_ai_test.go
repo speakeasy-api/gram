@@ -249,3 +249,36 @@ func TestShadowAIListInventoryRejectsUnknownCategory(t *testing.T) {
 	require.NotErrorIs(t, err, ErrShadowAIUnavailable, "the service is configured; only the argument is wrong")
 	require.Empty(t, detections.lastInput.OrganizationID, "the read must not run for an argument that cannot be valid")
 }
+
+func TestShadowAIReadToolsShowABlockThatOutlivesTheCatalog(t *testing.T) {
+	t.Parallel()
+
+	removed := aitargets.ZeroTarget()
+	removed.ID = "zed"
+	removed.DisplayName = "Zed"
+	list := &aitargets.OrganizationList{
+		Entries: []aitargets.Entry{
+			{Target: removed, Source: aitargets.SourceDefault, Customized: true, Catalog: aitargets.CatalogRemoved, Decision: aitargets.DecisionRecord{TargetID: "zed", Decision: aitargets.DecisionBlocked}},
+		},
+		Snapshot: aitargets.NewSnapshot(7, nil),
+	}
+	detections := &stubDetectionReader{result: &accessgen.ListAIDetectionsResult{Detections: []*accessgen.AIDetection{{
+		TargetID: "zed", DisplayName: "Zed", Category: "harness",
+		Access: &types.AIToolAccessSummary{State: "blocked", Decision: "blocked", Enforceable: true, CatalogStatus: new("removed")},
+	}}}}
+	service := NewShadowAIService(detections, &stubLibraryReader{list: list}, stubAuthorizer{}, allowingBudget())
+	require.NotNil(t, service)
+
+	library, err := service.ListLibrary(t.Context(), aivendors.CompiledSnapshot(), shadowAIPrincipal(), ListAIScanLibraryInput{})
+	require.NoError(t, err)
+	require.Len(t, library.Targets, 1)
+	require.Equal(t, "blocked", library.Targets[0].State)
+	require.True(t, library.Targets[0].Blockable)
+	require.Equal(t, "removed", library.Targets[0].CatalogStatus)
+
+	inventory, err := service.ListInventory(t.Context(), aivendors.CompiledSnapshot(), shadowAIPrincipal(), ListShadowAIInventoryInput{})
+	require.NoError(t, err)
+	require.Len(t, inventory.Tools, 1)
+	require.Equal(t, "blocked", inventory.Tools[0].State)
+	require.Equal(t, "removed", inventory.Tools[0].CatalogStatus)
+}

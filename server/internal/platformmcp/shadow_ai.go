@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
 	"github.com/speakeasy-api/gram/server/internal/aivendors"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 var (
@@ -102,16 +103,22 @@ type ShadowAIToolSummary struct {
 	DisplayName string `json:"display_name"`
 	Category    string `json:"category"`
 	// State is the enforcement verdict: allowed, blocked or unreviewed. A
-	// tool Speakeasy cannot recognize at the gateway always reads unreviewed.
+	// tool Speakeasy cannot recognize at the gateway reads unreviewed.
 	State string `json:"state"`
-	// Enforceable reports whether a decision about this tool could reach the
-	// gateway at all, which requires it to publish a client ID metadata
-	// document. Explains why a tool cannot leave unreviewed.
-	Enforceable bool     `json:"enforceable"`
-	Signals     []string `json:"signals"`
-	UserCount   int64    `json:"user_count"`
-	DeviceCount int64    `json:"device_count"`
-	LastSeen    string   `json:"last_seen"`
+	// Enforceable reports whether a decision about this tool reaches the
+	// gateway, which needs a client ID metadata document. A tool with
+	// catalog_status set is still recognized through its removed or disabled
+	// documents while a decision is on file. Explains why a tool cannot leave
+	// unreviewed.
+	Enforceable bool `json:"enforceable"`
+	// CatalogStatus is removed or documents_disabled when the Speakeasy
+	// catalog no longer admits the tool but the organization's decision on it
+	// still applies; it can be changed or cleared, not set anew.
+	CatalogStatus string   `json:"catalog_status,omitempty"`
+	Signals       []string `json:"signals"`
+	UserCount     int64    `json:"user_count"`
+	DeviceCount   int64    `json:"device_count"`
+	LastSeen      string   `json:"last_seen"`
 }
 
 type ListShadowAIInventoryOutput struct {
@@ -143,19 +150,21 @@ func (s *ShadowAIService) ListInventory(ctx context.Context, catalog *aivendors.
 			continue
 		}
 		summary := ShadowAIToolSummary{
-			TargetID:    detection.TargetID,
-			DisplayName: detection.DisplayName,
-			Category:    detection.Category,
-			State:       "",
-			Enforceable: false,
-			Signals:     detection.Signals,
-			UserCount:   detection.UserCount,
-			DeviceCount: detection.DeviceCount,
-			LastSeen:    detection.LastSeen,
+			TargetID:      detection.TargetID,
+			DisplayName:   detection.DisplayName,
+			Category:      detection.Category,
+			State:         "",
+			Enforceable:   false,
+			CatalogStatus: "",
+			Signals:       detection.Signals,
+			UserCount:     detection.UserCount,
+			DeviceCount:   detection.DeviceCount,
+			LastSeen:      detection.LastSeen,
 		}
 		if detection.Access != nil {
 			summary.State = detection.Access.State
 			summary.Enforceable = detection.Access.Enforceable
+			summary.CatalogStatus = conv.PtrValOr(detection.Access.CatalogStatus, "")
 		}
 		tools = append(tools, summary)
 	}
@@ -171,16 +180,23 @@ type AIScanTargetSummary struct {
 	DisplayName string `json:"display_name"`
 	Category    string `json:"category"`
 	// Origin is default for a target Speakeasy ships or organization for one
-	// this organization added. Everything listed is probed for either way.
+	// this organization added. Everything listed is probed for either way,
+	// except a removed built-in (CatalogStatus removed).
 	Origin string `json:"origin"`
-	// Blockable reports whether the target publishes a client ID metadata
-	// document, which is the only thing a gateway block can be enforced
-	// through.
+	// Blockable reports whether a gateway block on the target is enforced,
+	// which needs a client ID metadata document. A target with
+	// catalog_status set is still recognized through its removed or disabled
+	// documents while a decision is on file.
 	Blockable bool `json:"blockable"`
 	// State is the enforcement verdict: allowed, blocked or unreviewed. A
 	// target that is not blockable always reads unreviewed, whatever was
 	// recorded about it.
 	State string `json:"state"`
+	// CatalogStatus is removed or documents_disabled when the Speakeasy
+	// catalog no longer admits the target but the organization's decision on
+	// it still applies. A removed target is listed only for that decision and
+	// is never probed for.
+	CatalogStatus string `json:"catalog_status,omitempty"`
 	// Decision is the organization's effective decision behind state:
 	// unreviewed, approved or blocked.
 	Decision string `json:"decision"`
@@ -211,16 +227,17 @@ func (s *ShadowAIService) ListLibrary(ctx context.Context, catalog *aivendors.Sn
 		if category != "" && string(entry.Category) != category {
 			continue
 		}
-		access := aitargets.SummarizeAccess(entry.Target, entry.Decision)
+		access := aitargets.SummarizeAccess(entry)
 		targets = append(targets, AIScanTargetSummary{
-			TargetID:    entry.ID,
-			DisplayName: entry.DisplayName,
-			Category:    string(entry.Category),
-			Origin:      string(entry.Source),
-			Blockable:   access.Enforceable,
-			State:       string(access.State),
-			Decision:    string(access.Decision),
-			Rationale:   access.Record.Rationale,
+			TargetID:      entry.ID,
+			DisplayName:   entry.DisplayName,
+			Category:      string(entry.Category),
+			Origin:        string(entry.Source),
+			Blockable:     access.Enforceable,
+			State:         string(access.State),
+			CatalogStatus: string(access.Catalog),
+			Decision:      string(access.Decision),
+			Rationale:     access.Record.Rationale,
 		})
 	}
 	return ListAIScanLibraryOutput{LibraryVersion: int64(list.Snapshot.ListVersion), Targets: targets}, nil

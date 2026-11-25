@@ -143,6 +143,7 @@ func (s *Service) checkAIToolGatewayBlock(ctx context.Context, logger *slog.Logg
 		caller.CIMDCatalogURL = preset.URL
 	}
 
+	match := "live"
 	target, matched := aitargets.MatchGatewayCaller(list.Snapshot.Targets(), caller)
 	if !matched {
 		// A removed or disabled catalog document still names its product, so a block on it keeps applying.
@@ -150,12 +151,10 @@ func (s *Service) checkAIToolGatewayBlock(ctx context.Context, logger *slog.Logg
 		if !known {
 			return nil
 		}
-		if entry, ok := list.Entry(last.ProductID); ok && entry.Source == aitargets.SourceOrganization {
+		match = "last_known"
+		if target, matched = aitargets.MatchLastKnownCaller(list, clientID, last); !matched {
 			return nil
 		}
-		target = aitargets.ZeroTarget()
-		target.ID = last.ProductID
-		target.DisplayName = last.DisplayName
 	}
 	blockedIDs := make(map[string]struct{}, len(blocked))
 	for _, id := range blocked {
@@ -167,6 +166,8 @@ func (s *Service) checkAIToolGatewayBlock(ctx context.Context, logger *slog.Logg
 
 	logger.InfoContext(ctx, "ai tool blocked at the gateway",
 		attr.SlogOAuthClientID(truncateClientIDForLog(clientID)),
+		attr.SlogAIToolTargetID(target.ID),
+		attr.SlogAIToolBlockMatch(match),
 	)
 	return &AIToolBlockedError{
 		TargetID:    target.ID,

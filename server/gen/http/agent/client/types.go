@@ -3586,8 +3586,11 @@ type AiScanTargetResponseBody struct {
 	Customized *bool `form:"customized,omitempty" json:"customized,omitempty" xml:"customized,omitempty"`
 	// The organization's access decision for the target, computed with the same
 	// rules the AI detections carry: unreviewed when nothing is recorded, and
-	// never enforceable without a verifiable gateway matcher. Absent only from a
-	// server that predates it; read a missing summary as unreviewed.
+	// never enforceable without a verifiable gateway matcher, except a built-in
+	// the catalog no longer admits whose recorded decision still applies (see
+	// catalog_status). Such a built-in is listed for its decision only and is
+	// never served to device agents. Absent only from a server that predates it;
+	// read a missing summary as unreviewed.
 	Access *AIToolAccessSummaryResponseBody `form:"access,omitempty" json:"access,omitempty" xml:"access,omitempty"`
 	// When the organization's row was created; absent for an untouched default.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
@@ -3645,11 +3648,19 @@ type AIToolAccessSummaryResponseBody struct {
 	// the stored decision is left untouched and takes effect again if the tool
 	// gains a verifiable gateway matcher.
 	Decision *string `form:"decision,omitempty" json:"decision,omitempty" xml:"decision,omitempty"`
-	// Whether a block on this tool would actually reach the gateway. False when
-	// the tool is linked only by a self-reported client name, or by nothing at
-	// all: the decision is recorded honestly and enforces nothing. Surfaced so an
-	// admin is never told a tool is blocked when it is not.
+	// Whether a block on this tool would actually reach the gateway, and so
+	// whether a decision about it can be recorded. False when the tool is linked
+	// only by a self-reported client name, or by nothing at all: the decision is
+	// recorded honestly and enforces nothing. Surfaced so an admin is never told a
+	// tool is blocked when it is not. True for a tool with catalog_status set,
+	// whose stored decision still applies.
 	Enforceable *bool `form:"enforceable,omitempty" json:"enforceable,omitempty" xml:"enforceable,omitempty"`
+	// Set only when the Speakeasy catalog no longer admits this tool but a
+	// decision the organization recorded still applies: removed when Speakeasy
+	// removed the tool from its catalog, documents_disabled when every sign-in
+	// document for it is turned off. The decision can be changed or cleared, but
+	// once cleared it cannot be set again. Absent for every other tool.
+	CatalogStatus *string `form:"catalog_status,omitempty" json:"catalog_status,omitempty" xml:"catalog_status,omitempty"`
 	// Why the decision was made, when an admin gave a reason. Who recorded it and
 	// when are in the audit log rather than here, so there is one record of that
 	// and not two.
@@ -11433,6 +11444,11 @@ func ValidateAIToolAccessSummaryResponseBody(body *AIToolAccessSummaryResponseBo
 	if body.Decision != nil {
 		if !(*body.Decision == "unreviewed" || *body.Decision == "approved" || *body.Decision == "blocked") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.decision", *body.Decision, []any{"unreviewed", "approved", "blocked"}))
+		}
+	}
+	if body.CatalogStatus != nil {
+		if !(*body.CatalogStatus == "removed" || *body.CatalogStatus == "documents_disabled") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.catalog_status", *body.CatalogStatus, []any{"removed", "documents_disabled"}))
 		}
 	}
 	return

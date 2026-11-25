@@ -4250,10 +4250,11 @@ func unmarshalAIToolAccessSummaryResponseBodyToTypesAIToolAccessSummary(v *AIToo
 		return nil
 	}
 	res := &types.AIToolAccessSummary{
-		State:       *v.State,
-		Decision:    *v.Decision,
-		Enforceable: *v.Enforceable,
-		Rationale:   v.Rationale,
+		State:         *v.State,
+		Decision:      *v.Decision,
+		Enforceable:   *v.Enforceable,
+		CatalogStatus: v.CatalogStatus,
+		Rationale:     v.Rationale,
 	}
 
 	return res

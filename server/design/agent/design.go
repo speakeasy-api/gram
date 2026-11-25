@@ -958,7 +958,7 @@ var AiScanTargetModel = Type("AiScanTarget", func() {
 	// Optional for one release, like the detection's access summary: a
 	// dashboard that meets an older or rolling-back server must still load
 	// the library, reading a missing summary as unreviewed.
-	Attribute("access", shared.AIToolAccessSummaryModel, "The organization's access decision for the target, computed with the same rules the AI detections carry: unreviewed when nothing is recorded, and never enforceable without a verifiable gateway matcher. Absent only from a server that predates it; read a missing summary as unreviewed.")
+	Attribute("access", shared.AIToolAccessSummaryModel, "The organization's access decision for the target, computed with the same rules the AI detections carry: unreviewed when nothing is recorded, and never enforceable without a verifiable gateway matcher, except a built-in the catalog no longer admits whose recorded decision still applies (see catalog_status). Such a built-in is listed for its decision only and is never served to device agents. Absent only from a server that predates it; read a missing summary as unreviewed.")
 	Attribute("created_at", String, "When the organization's row was created; absent for an untouched default.", func() { Format(FormatDateTime) })
 	Attribute("updated_at", String, "When the organization's row last changed; absent for an untouched default.", func() { Format(FormatDateTime) })
 	Required("id", "display_name", "category", "signatures", "gateway_client", "origin", "customized")

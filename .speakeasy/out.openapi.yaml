@@ -4173,7 +4173,7 @@ paths:
         type: mutation
   /rpc/access.setAIToolDecision:
     post:
-      description: 'Record whether a detected AI tool may reach this organization''s MCP gateway. The decision is organization-level and applies to every server: a blocked tool is refused when it authenticates, so its users see an error their client cannot recover from. Enforcement needs a credential Speakeasy can verify, so a tool that carries no verifiable gateway matcher — one linked only by a self-reported client name, or by nothing at all — cannot be decided on: the request is rejected with bad_request, nothing is recorded, and no summary is returned. An id the organization''s scan target catalog does not know is rejected with not_found. Requires an authenticated session authorized for org:admin on the active organization.'
+      description: 'Record whether a detected AI tool may reach this organization''s MCP gateway. The decision is organization-level and applies to every server: a blocked tool is refused when it authenticates, so its users see an error their client cannot recover from. Enforcement needs a credential Speakeasy can verify, so a tool that carries no verifiable gateway matcher — one linked only by a self-reported client name, or by nothing at all — cannot be decided on: the request is rejected with bad_request, nothing is recorded, and no summary is returned. An id the organization''s scan target catalog does not know is rejected with not_found. A tool Speakeasy removed from its catalog, or whose sign-in documents are all turned off, is still recognized through them, so a decision already recorded about it (anything other than unreviewed) can be changed or cleared; with no such decision the request is rejected, with failed_precondition for a removed tool and bad_request otherwise. Requires an authenticated session authorized for org:admin on the active organization.'
       operationId: setAIToolDecision
       parameters:
         - allowEmptyValue: true
@@ -91062,6 +91062,12 @@ components:
     AIToolAccessSummary:
       type: object
       properties:
+        catalog_status:
+          type: string
+          description: 'Set only when the Speakeasy catalog no longer admits this tool but a decision the organization recorded still applies: removed when Speakeasy removed the tool from its catalog, documents_disabled when every sign-in document for it is turned off. The decision can be changed or cleared, but once cleared it cannot be set again. Absent for every other tool.'
+          enum:
+            - removed
+            - documents_disabled
         decision:
           type: string
           description: The effective organization decision behind state, which is not always the stored one. Absent rows read as unreviewed, so every tool has a value, and a tool that is not enforceable reads as unreviewed however it was decided — the stored decision is left untouched and takes effect again if the tool gains a verifiable gateway matcher.
@@ -91071,7 +91077,7 @@ components:
             - blocked
         enforceable:
           type: boolean
-          description: 'Whether a block on this tool would actually reach the gateway. False when the tool is linked only by a self-reported client name, or by nothing at all: the decision is recorded honestly and enforces nothing. Surfaced so an admin is never told a tool is blocked when it is not.'
+          description: 'Whether a block on this tool would actually reach the gateway, and so whether a decision about it can be recorded. False when the tool is linked only by a self-reported client name, or by nothing at all: the decision is recorded honestly and enforces nothing. Surfaced so an admin is never told a tool is blocked when it is not. True for a tool with catalog_status set, whose stored decision still applies.'
         rationale:
           type: string
           description: Why the decision was made, when an admin gave a reason. Who recorded it and when are in the audit log rather than here, so there is one record of that and not two.

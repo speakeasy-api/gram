@@ -54,6 +54,10 @@ type Entry struct {
 	// UpdatedAt is when the organization's row last changed; zero for an
 	// untouched default.
 	UpdatedAt time.Time
+
+	// Catalog is set on a built-in the catalog no longer admits. Such an
+	// entry is listed for its decision and never served to agents.
+	Catalog CatalogStatus
 }
 
 // Overlay applies an organization's rows to the defaults: a row whose id
@@ -88,6 +92,7 @@ func Overlay(defaults []Target, rows []Entry) []Entry {
 			Decision:   UnreviewedDecisionRecord(target.ID),
 			CreatedAt:  time.Time{},
 			UpdatedAt:  time.Time{},
+			Catalog:    CatalogListed,
 		})
 	}
 	for _, row := range rows {
@@ -101,9 +106,8 @@ func Overlay(defaults []Target, rows []Entry) []Entry {
 		// columns were always empty. Promoting that to an organization target
 		// would serve agents a target with no name, no category and no
 		// signatures, and keep them probing for a product the catalog no
-		// longer ships. Skip it: the row records a decision about something
-		// that no longer exists, and purging it is part of removing the
-		// built-in.
+		// longer ships. Skip it here; NewOrganizationList lists it for its
+		// decision when that decision still applies.
 		if strings.TrimSpace(row.DisplayName) == "" {
 			continue
 		}
@@ -218,6 +222,7 @@ func (l *OrganizationList) Entry(id string) (Entry, bool) {
 		Decision:   UnreviewedDecisionRecord(id),
 		CreatedAt:  time.Time{},
 		UpdatedAt:  time.Time{},
+		Catalog:    CatalogListed,
 	}, false
 }
 
@@ -238,13 +243,40 @@ func LoadOrganizationList(ctx context.Context, queries *repo.Queries, organizati
 // NewOrganizationList overlays entries on the catalog defaults. The served
 // list_version identifies the built-in targets; organization edits move only
 // the ETag.
+//
+// Entries also lists a removed built-in whose stored decision still applies,
+// as the catalog last listed it, so an admin can see and clear it. It is
+// never served.
 func NewOrganizationList(catalog *aivendors.Snapshot, entries []Entry) *OrganizationList {
 	defaults := catalogDefaultsOf(catalog)
 	overlaid := Overlay(defaults.targets, entries)
-	return &OrganizationList{
-		Entries:  overlaid,
-		Snapshot: NewSnapshot(defaults.listVersion, Served(overlaid)),
+	served := NewSnapshot(defaults.listVersion, Served(overlaid))
+	listed := make(map[string]struct{}, len(overlaid))
+	for i, entry := range overlaid {
+		listed[entry.ID] = struct{}{}
+		if entry.Source == SourceDefault && catalog.DocumentsDisabled(entry.ID) {
+			overlaid[i].Catalog = CatalogDocumentsDisabled
+		}
 	}
+	for _, row := range entries {
+		if _, ok := listed[row.ID]; ok || row.Decision.Decision == DecisionUnreviewed {
+			continue
+		}
+		product, removed := catalog.RemovedProduct(row.ID)
+		if !removed {
+			continue
+		}
+		row.Target = ZeroTarget()
+		row.ID = product.ProductID
+		row.DisplayName = product.DisplayName
+		row.Category = Category(product.Category)
+		row.Source = SourceDefault
+		row.Customized = true
+		row.Catalog = CatalogRemoved
+		overlaid = append(overlaid, row)
+	}
+	slices.SortFunc(overlaid, func(a, b Entry) int { return strings.Compare(a.ID, b.ID) })
+	return &OrganizationList{Entries: overlaid, Snapshot: served}
 }
 
 // ListVersion hashes the built-in targets exactly as devices are served them,
@@ -310,6 +342,7 @@ func EntryFromRow(row repo.AiScanTarget) Entry {
 		},
 		CreatedAt: row.CreatedAt.Time,
 		UpdatedAt: row.UpdatedAt.Time,
+		Catalog:   CatalogListed,
 	}
 }
 
