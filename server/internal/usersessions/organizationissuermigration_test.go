@@ -501,7 +501,7 @@ func TestOrganizationUserSessionIssuerMigratePreservesRemoteBindings(t *testing.
 		CodeChallengeMethodsSupported:     []string{"S256"},
 	})
 	require.NoError(t, err)
-	_, err = remoteRepo.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+	targetRemoteClient, err := remoteRepo.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
 		ProjectID:             conv.ToNullUUID(*authCtx.ProjectID),
 		OrganizationID:        conv.ToPGText(authCtx.ActiveOrganizationID),
 		RemoteSessionIssuerID: targetRemoteIssuer.ID,
@@ -634,6 +634,10 @@ func TestOrganizationUserSessionIssuerMigratePreservesRemoteBindings(t *testing.
 	require.NoError(t, err)
 	require.Equal(t, targetID, mcpServerAfter.UserSessionIssuerID.UUID)
 	require.False(t, mcpServerAfter.RemoteSessionIssuerID.Valid, "issuer-client links do not determine the stamp")
+	_, err = remoteRepo.GetRemoteSessionClientByID(ctx, remotesessionsrepo.GetRemoteSessionClientByIDParams{
+		ID: targetRemoteClient.ID, ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err, "neighboring target registration survives issuer migration")
 
 	require.Empty(t, preflight.ServerImpacts)
 	require.Empty(t, result.ServerImpacts)

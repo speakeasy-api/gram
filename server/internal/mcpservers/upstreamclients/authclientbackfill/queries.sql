@@ -1765,9 +1765,9 @@ LIMIT @page_size::int;
 -- restricts results to choices that do not yet name a typed auth client.
 --
 -- What the upstream client choice reads today (GetUpstreamClientSelection):
--- whether the server has any upstream OAuth client association, whether the
--- chosen registration is live, and whether the choice names
--- the server's headers, which reads as no-auth.
+-- whether the server has any enabled typed OAuth auth client offer
+-- (server_has_oauth_clients), whether the chosen registration is live, and
+-- whether the choice names the server's headers, which reads as no-auth.
 --
 -- The typed auth clients: an OAuth choice can name the live, enabled
 -- remote_session or service_account clients of its registration linked to

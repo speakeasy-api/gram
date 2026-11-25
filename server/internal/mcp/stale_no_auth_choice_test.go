@@ -289,7 +289,7 @@ func TestStaleNoAuthChoiceConsentCannotFix(t *testing.T) {
 	}{
 		"every typed client is denied": {arrange: func(t *testing.T, ctx context.Context, g *staleChoiceGateway) {
 			t.Helper()
-			g.attachTypedOnly(t, ctx, nil)
+			g.attachTypedOnly(t, ctx)
 		}},
 		"pending on a secret header": {arrange: func(t *testing.T, ctx context.Context, g *staleChoiceGateway) {
 			t.Helper()
@@ -373,7 +373,7 @@ func TestValidGatewayChoiceIsUntouched(t *testing.T) {
 }
 
 // attachTypedOnly gives the server a personal auth client with no older association.
-func (g *staleChoiceGateway) attachTypedOnly(t *testing.T, ctx context.Context, issuers []uuid.UUID) uuid.UUID {
+func (g *staleChoiceGateway) attachTypedOnly(t *testing.T, ctx context.Context) uuid.UUID {
 	t.Helper()
 	registration := createConsentRemoteClient(t, ctx, g.ti.conn, g.project, g.org, "typed-only-"+uuid.NewString()[:8], "")
 	fixtures := authclientfixtures.New(g.ti.conn)
@@ -419,7 +419,7 @@ func TestStaleNoAuthReconnectCopyFollowsTypedOffers(t *testing.T) {
 		g.enforce(t, ctx)
 		g.ti.service.SetAuthClientPermission(func() bool { return true })
 		connection := g.approve(t, ctx)
-		registration := g.attachTypedOnly(t, ctx, []uuid.UUID{g.issuer})
+		registration := g.attachTypedOnly(t, ctx)
 		seedPrincipalMCPConnectGrant(t, ctx, g.ti, g.org, urn.NewPrincipal(urn.PrincipalTypeUser, mockidp.MockUserID), g.serverID)
 		requireStaleError(t, g.call(t, connection.token, "source--tool_000"), staleReconnectCopy)
 		w, err := g.postConnect(t, ctx, registration)
@@ -432,7 +432,7 @@ func TestStaleNoAuthReconnectCopyFollowsTypedOffers(t *testing.T) {
 		g.enforce(t, ctx)
 		g.ti.service.SetAuthClientPermission(func() bool { return true })
 		connection := g.approve(t, ctx)
-		registration := g.attachTypedOnly(t, ctx, nil)
+		registration := g.attachTypedOnly(t, ctx)
 		_, err := upstreamclientsrepo.New(g.ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: g.org, ProjectID: g.project, McpServerID: g.serverID, RemoteSessionClientID: registration})
 		require.NoError(t, err)
 		requireStaleError(t, g.call(t, connection.token, "source--tool_000"), staleReconnectCopy)
@@ -443,7 +443,7 @@ func TestStaleNoAuthReconnectCopyFollowsTypedOffers(t *testing.T) {
 		g.enforce(t, ctx)
 		g.ti.service.SetAuthClientPermission(func() bool { return true })
 		connection := g.approve(t, ctx)
-		g.attachTypedOnly(t, ctx, nil)
+		g.attachTypedOnly(t, ctx)
 		requireStaleError(t, g.call(t, connection.token, "source--tool_000"), staleReconnectCopy)
 	})
 	t.Run("already connected needs no Connect", func(t *testing.T) {
@@ -452,7 +452,7 @@ func TestStaleNoAuthReconnectCopyFollowsTypedOffers(t *testing.T) {
 		g.enforce(t, ctx)
 		g.ti.service.SetAuthClientPermission(func() bool { return true })
 		connection := g.approve(t, ctx)
-		registration := g.attachTypedOnly(t, ctx, nil)
+		registration := g.attachTypedOnly(t, ctx)
 		insertQualifiedRemoteSessionToken(t, ctx, g.ti, g.issuer, registration, urn.NewUserSubject(mockidp.MockUserID), "fixture-token", g.source.url)
 		requireStaleError(t, g.call(t, connection.token, "source--tool_000"), staleReconnectCopy)
 		renewed := g.approve(t, ctx)

@@ -345,9 +345,12 @@ func TestServeConsentAction_MetaMCPConnectAmbiguityDoesNotFallBack(t *testing.T)
 
 	// A member-owned issuer that the stored derivation can resolve on its own.
 	memberIssuer := createUserSessionIssuer(t, ctx, fx.ti.conn, fx.projectID)
-	attachConsentRemoteMcpServer(t, ctx, fx.ti.conn, fx.projectID, memberIssuer, "aim87-ambig-fb-srv", consentUpstreamA)
+	outsideServerID := attachConsentRemoteMcpServer(t, ctx, fx.ti.conn, fx.projectID, memberIssuer, "aim87-ambig-fb-srv", consentUpstreamA)
 
 	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-ambig-fb", "")
+	require.NoError(t, testrepo.New(fx.ti.conn).InsertMCPServerRemoteSessionClientFixture(ctx, testrepo.InsertMCPServerRemoteSessionClientFixtureParams{
+		ProjectID: fx.projectID, OrganizationID: fx.orgID, McpServerID: outsideServerID, RemoteSessionClientID: clientID,
+	}))
 	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
 
 	requireConnectRefused(t, fx, clientID, "a server outside the gateway never qualifies a gateway credential")
@@ -370,9 +373,12 @@ func TestServeConsentAction_MetaMCPConnectInvisibleMemberQualifiesNothing(t *tes
 	ctx, fx, metaServerID := seedMetaConsentEndpoint(t, "aim87-invis-gw")
 
 	memberIssuer := createUserSessionIssuer(t, ctx, fx.ti.conn, fx.projectID)
-	attachConsentRemoteMcpServer(t, ctx, fx.ti.conn, fx.projectID, memberIssuer, "aim87-invis-srv", consentUpstreamA)
+	outsideServerID := attachConsentRemoteMcpServer(t, ctx, fx.ti.conn, fx.projectID, memberIssuer, "aim87-invis-srv", consentUpstreamA)
 
 	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-invis", "")
+	require.NoError(t, testrepo.New(fx.ti.conn).InsertMCPServerRemoteSessionClientFixture(ctx, testrepo.InsertMCPServerRemoteSessionClientFixtureParams{
+		ProjectID: fx.projectID, OrganizationID: fx.orgID, McpServerID: outsideServerID, RemoteSessionClientID: clientID,
+	}))
 	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
 
 	requireConnectRefused(t, fx, clientID, "a server outside the gateway never qualifies a gateway credential")
