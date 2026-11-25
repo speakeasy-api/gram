@@ -67,7 +67,7 @@ func (s *Service) upstreamOAuthMigrationStatus(ctx context.Context, organization
 		status.AuthClients, status.ReconnectCredentials = s.authClientMigrationStatus(ctx, organizationID)
 		status.ExecutionProfiles = s.executionProfileMigrationStatus(ctx, organizationID, enforced)
 		if clients := status.AuthClients; clients != nil {
-			status.Migrated = clients.Complete
+			status.Migrated = clients.Complete && clients.PendingSelectionMappings != nil && *clients.PendingSelectionMappings == 0
 			if clients.PendingSelectionMappings != nil {
 				status.PendingSelections = *clients.PendingSelectionMappings
 			}
