@@ -40,7 +40,7 @@ import { invalidateAllShadowMCPInventory } from "@gram/client/react-query/shadow
 import { invalidateAllShadowMCPInventoryServer } from "@gram/client/react-query/shadowMCPInventoryServer.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { audienceGroups } from "./audienceGroups";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 /**
@@ -167,6 +167,10 @@ export function DecideAccessSheet({
   // decision lands: the mutations' isPending flags all read false there, and
   // a double click in that window would append a duplicate decision.
   const [submitting, setSubmitting] = useState(false);
+  // A toast's Retry outlives the render that raised it. It calls the latest
+  // submit, so a retry after the request opened reuses that request instead
+  // of opening another.
+  const latestSubmit = useRef<() => Promise<void>>(async () => {});
 
   useEffect(() => {
     if (!open) return;
@@ -246,7 +250,10 @@ export function DecideAccessSheet({
     } catch (err) {
       handleError(err, {
         title: "Couldn't open the access request. Nothing changed.",
-        customAction: { label: "Retry", onClick: () => void submit() },
+        customAction: {
+          label: "Retry",
+          onClick: () => void latestSubmit.current(),
+        },
       });
       setSubmitting(false);
       return;
@@ -278,7 +285,10 @@ export function DecideAccessSheet({
           target.approvalRequestId && !target.pendingBypassRequestId
             ? "Couldn't record the decision. The request is unchanged."
             : "The access request is open, but the decision wasn't recorded. Retry to decide it.",
-        customAction: { label: "Retry", onClick: () => void submit() },
+        customAction: {
+          label: "Retry",
+          onClick: () => void latestSubmit.current(),
+        },
       });
       if (!target.approvalRequestId || target.pendingBypassRequestId) {
         // This submit changed request state before failing; refresh the
@@ -310,6 +320,8 @@ export function DecideAccessSheet({
     onDecided?.(decision);
     onOpenChange(false);
   };
+
+  latestSubmit.current = submit;
 
   return (
     <Sheet

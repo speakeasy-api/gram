@@ -109,7 +109,7 @@ export function InlineEditableText({
         {(dirty || submitting) && (
           <InputGroupAddon align="inline-end">
             <InputGroupButton
-              aria-label="Save change"
+              aria-label={submitting ? "Saving change" : "Save change"}
               disabled={disabled || submitting}
               onClick={() => void submit()}
               onMouseDown={(event) => event.preventDefault()}
@@ -117,11 +117,7 @@ export function InlineEditableText({
               title="Save change"
               variant="tertiary"
             >
-              {submitting ? (
-                <Spinner className="mr-0" label="Saving" />
-              ) : (
-                <Check />
-              )}
+              {submitting ? <Spinner className="mr-0" /> : <Check />}
             </InputGroupButton>
           </InputGroupAddon>
         )}

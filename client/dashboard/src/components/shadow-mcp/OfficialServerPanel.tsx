@@ -26,6 +26,7 @@ import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { useRBAC } from "@/hooks/useRBAC";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
+import { describeApiError } from "@/lib/api-error";
 import { handleError } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 import { CatalogLogo } from "@/pages/catalog/CatalogLogo";
@@ -569,6 +570,7 @@ function UnlinkedPanel({
   const canCreateServer = !rbacLoading && hasScope("mcp:write", project.id);
   const [result, setResult] = useState<ProbeURLResult | null>(null);
   const [checkFailed, setCheckFailed] = useState(false);
+  const [checkFailedReason, setCheckFailedReason] = useState("");
   const [searchParams, setSearchParams] = useSearchParams();
   // Keyed by project and server so a request sent for one server never
   // reads as sent for another. It only remembers that this browser asked;
@@ -594,8 +596,9 @@ function UnlinkedPanel({
         if (latestUrl.current !== target) return;
         setResult(response);
       })
-      .catch(() => {
+      .catch((err: unknown) => {
         if (latestUrl.current !== target) return;
+        setCheckFailedReason(describeApiError(err).message);
         setCheckFailed(true);
       });
   };
@@ -706,7 +709,7 @@ function UnlinkedPanel({
       {checkFailed ? (
         <div className="flex flex-wrap items-center gap-3">
           <Text muted small>
-            The server could not be checked. Try again.
+            The server could not be checked. {checkFailedReason}
           </Text>
           <Button variant="secondary" size="sm" onClick={() => runChecks(url)}>
             <Button.Text>Check again</Button.Text>

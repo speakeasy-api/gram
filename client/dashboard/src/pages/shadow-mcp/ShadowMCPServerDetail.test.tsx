@@ -711,6 +711,9 @@ describe("ShadowMCPServerDetail", () => {
         screen.queryByRole("textbox", { name: "Shadow MCP server name" }),
       ).toBeNull();
     });
+    expect(mocks.toastSuccess).toHaveBeenCalledWith(
+      "Renamed to “Engineering GitHub”",
+    );
   });
 
   it("clears the custom server name with an empty string", async () => {
@@ -738,6 +741,9 @@ describe("ShadowMCPServerDetail", () => {
           },
         },
       });
+    });
+    await waitFor(() => {
+      expect(mocks.toastSuccess).toHaveBeenCalledWith("Server name cleared");
     });
   });
 

@@ -505,9 +505,15 @@ export default function ShadowMCPServerDetail(): JSX.Element {
   const routes = useRoutes();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const policiesQuery = useRiskListPolicies();
-  const membersQuery = useMembers();
-  const rolesQuery = useRoles();
+  // Every read on this page reports its own failure inline (with the
+  // reason and a Retry), so none rethrows to the page error boundary.
+  const policiesQuery = useRiskListPolicies(undefined, undefined, {
+    throwOnError: false,
+  });
+  const membersQuery = useMembers(undefined, undefined, {
+    throwOnError: false,
+  });
+  const rolesQuery = useRoles(undefined, undefined, { throwOnError: false });
   let shadowMCPPolicies: ShadowMCPPolicy[] = [];
   if (!policiesQuery.isError) {
     shadowMCPPolicies = eligibleShadowMCPAllowRulePolicies(
@@ -524,7 +530,7 @@ export default function ShadowMCPServerDetail(): JSX.Element {
       serverSlug,
     },
     undefined,
-    { enabled: queryEnabled },
+    { enabled: queryEnabled, throwOnError: false },
   );
   const server = serverQuery.data;
   const serverDisplayName =
@@ -548,6 +554,7 @@ export default function ShadowMCPServerDetail(): JSX.Element {
     : { projectId: project.id, serverUrl: serverURL, limit: USERS_PAGE_LIMIT };
   const usersQuery = useShadowMCPInventoryUsers(usersRequest, undefined, {
     enabled: usersQueryEnabled,
+    throwOnError: false,
   });
   const updateServerName = useUpdateShadowMCPInventoryServerNameMutation({
     onError: () => {},
@@ -683,7 +690,7 @@ export default function ShadowMCPServerDetail(): JSX.Element {
         invalidateAllShadowMCPInventoryServer(queryClient),
         invalidateAllShadowMCPInventory(queryClient),
       ]);
-      toast.success(`Renamed to “${name}”`);
+      toast.success(name ? `Renamed to “${name}”` : "Server name cleared");
       return true;
     } catch (err) {
       handleError(err, { title: "Couldn't rename the server" });

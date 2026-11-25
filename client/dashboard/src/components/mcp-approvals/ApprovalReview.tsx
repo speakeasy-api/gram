@@ -82,6 +82,8 @@ export function ApprovalReview({
     undefined,
     {
       enabled: requestId.length > 0 && project.slug.length > 0,
+      // The failure renders inline with its reason and a Retry.
+      throwOnError: false,
       // A running research report resolves server-side; poll until it does
       // so the report appears without a manual refresh.
       refetchInterval: (query) =>
