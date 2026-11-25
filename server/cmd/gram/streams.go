@@ -360,7 +360,7 @@ func newStreamsCommand() *cli.Command {
 	flags = append(flags, svixFlags()...)
 	flags = append(flags, posthogFlags()...)
 	flags = append(flags, riskIngestFlags()...)
-	flags = append(flags, transcriptShadowFlag())
+	flags = append(flags, transcriptShadowReadOnlyFlag())
 	flags = append(flags, riskLLMFlags()...)
 	flags = append(flags, clickHouseFlags()...)
 

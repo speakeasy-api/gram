@@ -98,9 +98,6 @@ func (t *Transcripts) ListOwnedChatTranscriptMessagesForRecall(ctx context.Conte
 		r := &rows[i]
 		joined[i] = joinedRow{body: Body{MessageID: r.ID, Content: &r.Content, ContentRaw: nil, ToolCalls: &r.ToolCalls, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}, chatID: params.ChatID, ciphertext: r.ShadowCiphertext, current: r.ShadowCurrent, shape: nil}
 	}
-	if !params.OpenShadows {
-		return rows, nil
-	}
 	if err := t.openJoined(ctx, db, projectID, "ListOwnedChatTranscriptMessagesForRecall", joined); err != nil {
 		return nil, err
 	}

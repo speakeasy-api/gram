@@ -22,7 +22,9 @@ var ErrPlaintextRead = errors.New("plaintext chat transcript read for a project 
 // messages that have no shadow yet.
 const meterPlaintextReads = "chat.transcript_shadow.plaintext_reads"
 
-// outcomeUnopened is a listed project read by a process with no store.
+// outcomeUnopened is a listed project read by a process with no store. With
+// a strict guard the read fails; otherwise it is served from plaintext,
+// logged and counted.
 const outcomeUnopened outcome = "unopened"
 
 // plaintextGuard reports reads that bypass the shadows of a listed project.

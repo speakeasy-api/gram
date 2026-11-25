@@ -40,8 +40,9 @@ var durationBuckets = []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.15, 0.2, 0.25, 
 
 // outcome classifies a Capture or LoadMany call for metrics and spans. Any
 // capture outcome other than success rolls back the caller's message write.
-// On reads, success and plaintext_fallback both serve the message; every
-// other read outcome fails the caller's read.
+// On reads, success and plaintext_fallback both serve the message, and so
+// does unopened (see plaintext_guard.go) when the plaintext guard is not
+// strict; every other read outcome fails the caller's read.
 type outcome string
 
 const (

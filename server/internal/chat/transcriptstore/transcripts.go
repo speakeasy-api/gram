@@ -79,10 +79,13 @@ type Body struct {
 // capture began still load. A stale or unopenable shadow fails the whole read:
 // it means capture or the data is broken, and plaintext must not hide that.
 func (t *Transcripts) Open(ctx context.Context, organizationID string, projectID uuid.UUID, bodies []Body) error {
+	if len(bodies) == 0 {
+		return nil
+	}
 	if err := t.checkOpenable(ctx, projectID, "Open"); err != nil {
 		return err
 	}
-	if len(bodies) == 0 || !t.Enabled(projectID) {
+	if !t.Enabled(projectID) {
 		return nil
 	}
 	ids := make([]uuid.UUID, len(bodies))
@@ -106,8 +109,12 @@ func (t *Transcripts) Open(ctx context.Context, organizationID string, projectID
 // OpenRows is Open for a page of rows of any sqlc row type. body maps a row to
 // pointers at its body fields.
 func OpenRows[T any](ctx context.Context, t *Transcripts, organizationID string, projectID uuid.UUID, rows []T, body func(*T) Body) error {
-	if len(rows) == 0 || !t.Enabled(projectID) {
+	if len(rows) == 0 {
 		return nil
+	}
+	if !t.Enabled(projectID) {
+		// Open reports a listed project this process cannot open.
+		return t.checkOpenable(ctx, projectID, "OpenRows")
 	}
 	bodies := make([]Body, len(rows))
 	for i := range rows {

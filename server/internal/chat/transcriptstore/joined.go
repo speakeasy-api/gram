@@ -35,10 +35,13 @@ type joinedRow struct {
 // keeps shadows. The rules match Open: no shadow at all keeps plaintext and
 // counts as plaintext_fallback; a stale or unauthentic shadow fails the read.
 func (t *Transcripts) openJoined(ctx context.Context, db plainrepo.DBTX, projectID uuid.UUID, reader string, rows []joinedRow) error {
+	if len(rows) == 0 {
+		return nil
+	}
 	if err := t.checkOpenable(ctx, projectID, reader); err != nil {
 		return err
 	}
-	if len(rows) == 0 || !t.Enabled(projectID) {
+	if !t.Enabled(projectID) {
 		return nil
 	}
 	s := t.store

@@ -153,3 +153,81 @@ func TestNoReaderServesForgedPlaintext(t *testing.T) {
 }
 
 func fmtAny(v any) string { return fmt.Sprintf("%+v", v) }
+
+// plantCanary captures a message, then puts the canary in its plaintext and
+// forges the shadow's source hash so SQL still calls it current.
+func plantCanary(t *testing.T, f *fixture, id uuid.UUID) {
+	t.Helper()
+	f.capture(t, id)
+	_, err := f.db.Exec(t.Context(), `UPDATE chat_messages SET content = $1 WHERE id = $2`, canary, id) //nolint:glint // notestingrawsql: plants the canary in plaintext behind the shadow.
+	require.NoError(t, err)
+	n, err := fixturerepo.New(f.db).ForgeSourceHash(t.Context(), id, project(f.project), f.org)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, n)
+}
+
+func TestNoOtherReaderServesForgedPlaintext(t *testing.T) {
+	t.Parallel()
+	f := setup(t, true)
+	calls, result, prompt, later := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	for _, id := range []uuid.UUID{calls, result, prompt, later} {
+		f.add(t, id)
+	}
+	// Shape the fixtures: a tool result answering the call's "example" ID, a
+	// user prompt, an owned chat and a later message to evaluate history for.
+	// None of these columns feed the source hash.
+	//nolint:glint // notestingrawsql: fixture columns outside the transcript fingerprint.
+	_, err := f.db.Exec(t.Context(), `
+UPDATE chat_messages SET role = 'tool', tool_call_id = 'example' WHERE id = $1;
+`, result)
+	require.NoError(t, err)
+	_, err = f.db.Exec(t.Context(), `UPDATE chat_messages SET role = 'user' WHERE id = $1`, prompt) //nolint:glint // notestingrawsql: fixture role outside the transcript fingerprint.
+	require.NoError(t, err)
+	_, err = f.db.Exec(t.Context(), `UPDATE chat_messages SET created_at = clock_timestamp() + interval '1 hour' WHERE id = $1`, later) //nolint:glint // notestingrawsql: orders the evaluated message after its history.
+	require.NoError(t, err)
+	_, err = f.db.Exec(t.Context(), `UPDATE chats SET user_id = 'owner' WHERE id = $1`, f.chat) //nolint:glint // notestingrawsql: makes the fixture chat owned for recall.
+	require.NoError(t, err)
+	f.capture(t, calls, later)
+	for _, id := range []uuid.UUID{result, prompt} {
+		plantCanary(t, f, id)
+	}
+
+	transcripts := NewTranscripts(f.store, f.project)
+	ctx := t.Context()
+	targets, err := NewTranscripts(f.store).LoadEvaluationMessages(ctx, f.db, LoadEvaluationMessagesParams{OpenShadows: false, ProjectID: f.project, OrganizationID: f.org, MessageIds: []uuid.UUID{later}})
+	require.NoError(t, err)
+	require.Len(t, targets, 1)
+	target := targets[0]
+
+	readers := map[string]func() (any, error){
+		"GetToolCallSummaryContext": func() (any, error) {
+			return transcripts.GetToolCallSummaryContext(ctx, f.db, ToolCallSummaryContext{ProjectID: f.project, ChatID: f.chat, MessageID: calls, ToolCallID: "example"})
+		},
+		"ListClaudeUserMessagesForPromptAttachmentParent": func() (any, error) {
+			return transcripts.ListClaudeUserMessagesForPromptAttachmentParent(ctx, f.db, f.project, f.chat)
+		},
+		"SearchPlatformChatMessages": func() (any, error) {
+			return transcripts.SearchPlatformChatMessages(ctx, f.db, SearchPlatformChatMessagesParams{OpenShadows: false, ProjectID: f.project, OrganizationID: f.org,
+				FromTime: pgtype.Timestamptz{Time: target.CreatedAt.Time.Add(-48 * 3600e9), InfinityModifier: pgtype.Finite, Valid: true}, ToTime: pgtype.Timestamptz{Time: target.CreatedAt.Time.Add(48 * 3600e9), InfinityModifier: pgtype.Finite, Valid: true},
+				ChatIds: []uuid.UUID{}, OwnUserID: "", OwnedAgentIds: []uuid.UUID{}, OwnerUserID: "", Source: "", Pattern: "", ParticipantID: "", ParticipantProvider: "",
+				HasCursor: false, OldestFirst: true, CursorAt: pgtype.Timestamptz{Valid: false}, CursorID: uuid.Nil, RowLimit: 10})
+		},
+		"ReadPlatformChatMessages": func() (any, error) {
+			return transcripts.ReadPlatformChatMessages(ctx, f.db, ReadPlatformChatMessagesParams{OpenShadows: false, ProjectID: f.project, OrganizationID: f.org, MessageID: uuid.NullUUID{Valid: false}, ChatID: f.chat, ContextSize: 10, FollowingLimit: 10})
+		},
+		"ListOwnedChatTranscriptMessagesForRecall": func() (any, error) {
+			return transcripts.ListOwnedChatTranscriptMessagesForRecall(ctx, f.db, ListOwnedChatTranscriptMessagesForRecallParams{OpenShadows: false, ChatID: f.chat, ProjectID: project(f.project), OrganizationID: f.org, UserID: "owner", RowLimit: 10})
+		},
+		"LoadEvaluationHistory": func() (any, error) {
+			return transcripts.LoadEvaluationHistory(ctx, f.db, LoadEvaluationHistoryParams{OpenShadows: false, ProjectID: f.project, OrganizationID: f.org, ChatID: f.chat, Generation: target.Generation, TargetID: target.ID, TargetCreatedAt: target.CreatedAt, TargetSeq: target.Seq, HistoryLimit: 10, ContentBudget: 1 << 20})
+		},
+	}
+	for name, read := range readers {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			result, err := read()
+			require.ErrorIs(t, err, ErrStale, "a forged source hash must not let plaintext through")
+			require.NotContains(t, strings.ToLower(fmtAny(result)), strings.ToLower(canary))
+		})
+	}
+}

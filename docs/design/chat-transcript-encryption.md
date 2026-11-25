@@ -140,13 +140,15 @@ the same transaction.
 
 A process that reads chat messages without the shadow store (today `streams`,
 for the prompt-injection judge and signal evaluation) builds read-only
-`Transcripts` from the same project list. A read for a listed project there is
-reported, not hidden: an error log and `chat.transcript_shadow.plaintext_reads`
-by `gram.transcript_shadow.reader` and `gram.outcome:unopened`. Local
-development fails the read instead. A prod Datadog monitor pages on any count.
-A test plants a canary in plaintext behind a captured shadow, forges the source
-hash so SQL calls it current, and checks that every reader fails as stale
-instead of serving it.
+`Transcripts` from the same project list. In production a read for a listed
+project there is still served from plaintext, but it is reported: an error log
+and `chat.transcript_shadow.plaintext_reads` by `gram.transcript_shadow.reader`,
+with `gram.outcome:unopened`, the one outcome that serves plaintext besides
+`plaintext_fallback`. Local development fails the read instead. A prod Datadog
+monitor that pages on any count is planned in gram-infra. A test plants a
+canary in plaintext behind a captured shadow, forges the source hash so SQL
+calls it current, and checks that every reader fails as stale instead of
+serving it.
 
 Still open: search (`ILIKE`), tool-call counts and the hooks tool-call lookup,
 byte budgets, and the kit projection compare still work on plaintext inside SQL.

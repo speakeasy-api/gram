@@ -106,6 +106,10 @@ func configureTranscriptShadow(ctx context.Context, c *cli.Context, db *pgxpool.
 func configureReadOnlyTranscripts(c *cli.Context, logger *slog.Logger, meterProvider metric.MeterProvider) (*transcriptstore.Transcripts, error) {
 	values := c.StringSlice(chatTranscriptShadowProjectIDsFlag)
 	if len(values) == 0 {
+		// An explicitly supplied blank must not silently disable reporting.
+		if c.IsSet(chatTranscriptShadowProjectIDsFlag) {
+			return nil, fmt.Errorf("chat transcript shadow requires explicit nonempty project UUIDs")
+		}
 		return nil, nil
 	}
 	projectIDs, err := parseTranscriptShadowProjectIDs(values)

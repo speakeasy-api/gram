@@ -2,6 +2,7 @@ package gram
 
 import (
 	"flag"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"os"
 	"strings"
 	"testing"
@@ -18,7 +19,12 @@ import (
 
 func newTranscriptShadowCLIContext(t *testing.T, values map[string]string) *cli.Context {
 	t.Helper()
-	c := newOrgEncryptionCLIContext(t, nil)
+	return newTranscriptShadowCLIContextIn(t, "", values)
+}
+
+func newTranscriptShadowCLIContextIn(t *testing.T, environment string, values map[string]string) *cli.Context {
+	t.Helper()
+	c := newOrgEncryptionCLIContext(t, map[string]string{"environment": environment})
 	set := flag.NewFlagSet("transcript-shadow", flag.ContinueOnError)
 	// Apply the flags without their environment variables, so a developer's
 	// shell cannot change what these tests see. Parallel tests cannot use
@@ -245,4 +251,23 @@ func TestReadOnlyTranscripts(t *testing.T) {
 
 	_, err = configureReadOnlyTranscripts(newTranscriptShadowCLIContext(t, map[string]string{chatTranscriptShadowProjectIDsFlag: "not-a-uuid"}), testenv.NewLogger(t), testenv.NewMeterProvider(t))
 	require.Error(t, err)
+}
+
+func TestReadOnlyTranscriptsStrictInLocalDevelopment(t *testing.T) {
+	t.Parallel()
+	listed := uuid.MustParse("10000000-0000-4000-8000-000000000001")
+	values := map[string]string{chatTranscriptShadowProjectIDsFlag: listed.String()}
+	body := []transcriptstore.Body{{MessageID: uuid.New(), Content: new(string), ContentRaw: nil, ToolCalls: nil, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}}
+
+	local, err := configureReadOnlyTranscripts(newTranscriptShadowCLIContextIn(t, "local", values), testenv.NewLogger(t), testenv.NewMeterProvider(t))
+	require.NoError(t, err)
+	require.ErrorIs(t, local.Open(t.Context(), "org", listed, body), transcriptstore.ErrPlaintextRead, "local development rejects the plaintext read")
+
+	prod, err := configureReadOnlyTranscripts(newTranscriptShadowCLIContextIn(t, "prod", values), testenv.NewLogger(t), testenv.NewMeterProvider(t))
+	require.NoError(t, err)
+	require.NoError(t, prod.Open(t.Context(), "org", listed, body), "production serves, logs and counts")
+
+	blank := newTranscriptShadowCLIContextIn(t, "prod", map[string]string{chatTranscriptShadowProjectIDsFlag: ""})
+	_, err = configureReadOnlyTranscripts(blank, testenv.NewLogger(t), testenv.NewMeterProvider(t))
+	require.Error(t, err, "an explicitly blank list must not disable reporting")
 }
