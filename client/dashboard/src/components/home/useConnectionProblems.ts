@@ -5,8 +5,8 @@ import { useConnectionHealthFlag } from "@/pages/mcp-sessions/connection-health/
 import type { ProjectSuspectedProblem } from "@/pages/mcp-sessions/connection-health/types";
 import { useLogsEnabled } from "./useLogsEnabled";
 
-/** Whether this viewer gets connection problem rows: the flag, logs on and `log:read`. */
-export function useConnectionProblemsAccess(): "pending" | "on" | "off" {
+/** Whether this viewer may ask for connection problems: the flag, logs on and `log:read`. */
+function useConnectionProblemsEligibility(): "pending" | "on" | "off" {
   const flag = useConnectionHealthFlag();
   const project = useProject();
   const logs = useLogsEnabled();
@@ -20,9 +20,12 @@ export function useConnectionProblemsAccess(): "pending" | "on" | "off" {
     : "off";
 }
 
-/** The project's suspected MCP connection problems, for viewers who may read them. */
+/**
+ * The project's suspected MCP connection problems. `display` is "tall" once
+ * the viewer is eligible, unless the API answers that they may not see them.
+ */
 export function useConnectionProblems(limit: number): {
-  access: "pending" | "on" | "off";
+  display: "pending" | "tall" | "base";
   problems: ProjectSuspectedProblem[];
   total: number;
   /** When the problems were read; links to Connection Logs end there. */
@@ -30,22 +33,24 @@ export function useConnectionProblems(limit: number): {
   pending: boolean;
   error: boolean;
 } {
-  const access = useConnectionProblemsAccess();
-  const on = access === "on";
+  const eligibility = useConnectionProblemsEligibility();
+  const on = eligibility === "on";
   const query = useProjectSuspectedProblems({ limit, enabled: on });
+  const error = on && query.isError;
+  // A failed refetch keeps the old data; never show rows from it.
+  const answer = on && !query.isError ? query.data : undefined;
   // Problems name other people: none with logging off or for own-scope readers.
-  const data =
-    on &&
-    query.data?.loggingEnabled === true &&
-    query.data.viewerScope === "all"
-      ? query.data
-      : undefined;
+  const denied =
+    answer !== undefined &&
+    (!answer.loggingEnabled || answer.viewerScope !== "all");
+  const shown = answer && !denied ? answer : undefined;
   return {
-    access,
-    problems: data?.problems ?? [],
-    total: data?.problemsTotal ?? 0,
+    display:
+      eligibility === "pending" ? "pending" : !on || denied ? "base" : "tall",
+    problems: shown?.problems ?? [],
+    total: shown?.problemsTotal ?? 0,
     asOf: new Date(query.dataUpdatedAt),
-    pending: access === "pending" || (on && query.isPending),
-    error: on && query.isError,
+    pending: eligibility === "pending" || (on && query.isPending),
+    error,
   };
 }

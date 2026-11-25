@@ -39,7 +39,7 @@ const DAY_MS = 24 * HOUR_MS;
 const MOST_ACTIVE_LIMIT = 5;
 // Rows in Needs attention: one grid cell, or two when it lists connection problems.
 const ATTENTION_ROWS = 5;
-const TALL_ATTENTION_ROWS = 6;
+export const TALL_ATTENTION_ROWS = 6;
 // Rows the tall card keeps for its own items under connection problems.
 const OWN_ROWS_KEPT = 2;
 // Widgets live in fixed-height grid rows on wide screens: the card clips and
@@ -139,7 +139,7 @@ function NeedsAttention({ className }: { className?: string }): JSX.Element {
     throwOnError: false,
   });
   const connections = useConnectionProblems(TALL_ATTENTION_ROWS);
-  const tall = connections.access === "on";
+  const tall = connections.display === "tall";
   const now = new Date();
 
   const own: AttentionItem[] = [
@@ -262,7 +262,7 @@ function NeedsAttention({ className }: { className?: string }): JSX.Element {
                 <span className="min-w-0 flex-1">
                   <span
                     title={item.label}
-                    className="line-clamp-2 block text-sm break-words lg:line-clamp-1"
+                    className="text-sm max-lg:line-clamp-2 max-lg:break-words lg:block lg:truncate"
                   >
                     {item.label}
                   </span>

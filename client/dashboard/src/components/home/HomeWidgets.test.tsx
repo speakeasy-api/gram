@@ -20,6 +20,10 @@ const state = vi.hoisted(() => ({
   rbacLoading: false,
   logsEnabled: true,
   projectId: "project-1",
+  projectSlug: "project",
+  // The project the viewer's log:read grant is on.
+  logReadProject: "project-1",
+  hold: null as null | { release: () => void },
   connections: {
     ok: true,
     loggingEnabled: true,
@@ -50,7 +54,7 @@ vi.mock(
     ) => {
       state.connectionCalls.push(request);
       const c = state.connections;
-      return Promise.resolve(
+      const answer = () =>
         c.ok
           ? {
               ok: true,
@@ -61,8 +65,11 @@ vi.mock(
                 problemsTotal: c.total ?? c.problems.length,
               },
             }
-          : { ok: false, error: unavailable() },
-      );
+          : { ok: false, error: unavailable() };
+      if (!state.hold) return Promise.resolve(answer());
+      return new Promise((resolve) => {
+        state.hold = { release: () => resolve(answer()) };
+      });
     },
   }),
 );
@@ -130,13 +137,13 @@ vi.mock("@/hooks/useRBAC", () => ({
     hasScope: (scope: string, resourceId?: string) =>
       !state.rbacLoading &&
       state.scopes.includes(scope) &&
-      (scope === "org:admin" || resourceId === state.projectId),
+      (scope === "org:admin" || resourceId === state.logReadProject),
     isLoading: state.rbacLoading,
   }),
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org-1" }),
-  useProject: () => ({ id: state.projectId, slug: "project" }),
+  useProject: () => ({ id: state.projectId, slug: state.projectSlug }),
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
@@ -177,7 +184,7 @@ vi.mock("@/components/ui/Card", () => ({
 }));
 
 import { HomeWidgets } from "./HomeWidgets";
-import { useConnectionProblemsAccess } from "./useConnectionProblems";
+import { useConnectionProblems } from "./useConnectionProblems";
 
 const NOW = new Date(2026, 10, 20, 12, 0);
 const today = (h: number, m: number) => new Date(2026, 10, 20, h, m);
@@ -201,7 +208,7 @@ function problem(
   };
 }
 
-function renderWidgets(): { rerender: () => void } {
+function renderWidgets(): { rerender: () => void; client: QueryClient } {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -213,7 +220,7 @@ function renderWidgets(): { rerender: () => void } {
     </QueryClientProvider>
   );
   const view = render(tree());
-  return { rerender: () => view.rerender(tree()) };
+  return { rerender: () => view.rerender(tree()), client };
 }
 
 const failingTool = {
@@ -253,6 +260,9 @@ afterEach(() => {
   state.rbacLoading = false;
   state.logsEnabled = true;
   state.projectId = "project-1";
+  state.projectSlug = "project";
+  state.logReadProject = "project-1";
+  state.hold = null;
   state.connections = {
     ok: true,
     loggingEnabled: true,
@@ -306,8 +316,8 @@ describe("Needs attention connection rows", () => {
   });
 
   it("reads nothing with log:read on another project only", async () => {
-    state.projectId = "project-2";
-    state.scopes = [];
+    state.logReadProject = "project-a";
+    state.projectId = "project-b";
     renderWidgets();
     await settled();
     expect(state.connectionCalls).toHaveLength(0);
@@ -330,7 +340,8 @@ describe("Needs attention connection rows", () => {
       expect.stringContaining("Problem a"),
     ]);
     state.projectId = "project-2";
-    state.scopes = ["log:read"];
+    state.projectSlug = "project-b";
+    state.logReadProject = "project-2";
     state.connections.problems = [problem("b")];
     view.rerender();
     await waitFor(() =>
@@ -339,6 +350,54 @@ describe("Needs attention connection rows", () => {
       ]),
     );
     expect(state.connectionCalls).toHaveLength(2);
+    expect(state.connectionCalls[1]).toEqual(
+      expect.objectContaining({ gramProject: "project-b" }),
+    );
+  });
+
+  it("keeps the skeleton until a slow read answers", async () => {
+    state.hold = { release: () => undefined };
+    state.failingTools = [failingTool];
+    state.connections.problems = [problem("a")];
+    renderWidgets();
+    await waitFor(() => expect(state.connectionCalls).toHaveLength(1));
+    // Let every other source settle while the read is held.
+    await waitFor(() =>
+      expect(
+        within(
+          screen.getByRole("region", { name: "Most active" }),
+        ).queryAllByTestId("skeleton"),
+      ).toHaveLength(0),
+    );
+    await act(async () => {});
+    expect(within(card()).getAllByTestId("skeleton").length).toBeGreaterThan(0);
+    expect(within(card()).queryByText("search is failing")).toBeNull();
+    await act(async () => {
+      state.hold?.release();
+    });
+    await settled();
+    expect(within(card()).getAllByRole("listitem")[0]!.textContent).toContain(
+      "Problem a",
+    );
+  });
+
+  it("drops rows from a read that later fails", async () => {
+    state.connections.problems = [problem("a")];
+    state.connections.total = 9;
+    const { client } = renderWidgets();
+    await settled();
+    expect(rows().length).toBeGreaterThan(0);
+    state.connections.ok = false;
+    await act(async () => {
+      await client.refetchQueries({
+        queryKey: ["mcpConnectionHealth", "project-1"],
+      });
+    });
+    await waitFor(() =>
+      expect(within(card()).getByText(LOAD_ERROR)).toBeTruthy(),
+    );
+    expect(rows()).toHaveLength(0);
+    expect(within(card()).queryByRole("link", { name: "View all" })).toBeNull();
   });
 
   it("names connection problems in the tooltip only for viewers who get them", async () => {
@@ -382,6 +441,26 @@ describe("Needs attention connection rows", () => {
     expect(rows()).toHaveLength(0);
     expect(within(card()).queryByText(PARTIAL)).toBeNull();
     expect(within(card()).getByText(EMPTY)).toBeTruthy();
+    expect(card().getAttribute("data-tooltip")).toBe(
+      "High-risk signals, failing tools, and pending access requests from the last 7 days.",
+    );
+  });
+
+  it("keeps the five-row card when the API says the viewer reads only their own logs", async () => {
+    state.scopes = ["log:read", "org:admin"];
+    state.signals = ["1", "2", "3"].map((id) => ({
+      ...criticalSignal,
+      ruleId: `rule-${id}`,
+      description: `Signal ${id}`,
+    }));
+    state.failingTools = ["a", "b", "c"].map((t) => ({
+      ...failingTool,
+      gramUrn: `tools:http:x:${t}`,
+    }));
+    state.connections.viewerScope = "own";
+    renderWidgets();
+    await settled();
+    expect(within(card()).getAllByRole("listitem")).toHaveLength(5);
   });
 
   it("shows no placeholder for zero problems", async () => {
@@ -476,22 +555,25 @@ describe("Needs attention connection rows", () => {
   it("keeps room for the card's own rows and offers View all for the problems cut", async () => {
     state.scopes = ["log:read", "org:admin"];
     state.signals = [criticalSignal];
+    state.failingTools = [failingTool];
     state.connections.problems = ["1", "2", "3", "4", "5", "6"].map((id) =>
       problem(id),
     );
     renderWidgets();
     await settled();
-    const texts = rows()
-      .filter((l) => l.textContent !== "View all")
-      .map((l) => l.textContent);
-    expect(texts).toHaveLength(6);
-    expect(texts.slice(0, 5)).toEqual(
-      ["1", "2", "3", "4", "5"].map((id) =>
+    const items = within(card())
+      .getAllByRole("listitem")
+      .map((li) => li.textContent ?? "");
+    expect(items).toHaveLength(6);
+    expect(items.slice(0, 4)).toEqual(
+      ["1", "2", "3", "4"].map((id) =>
         expect.stringContaining(`Problem ${id} since`),
       ),
     );
-    expect(texts[5]).toContain("Agent reads secrets");
-    expect(within(card()).getByRole("link", { name: "View all" })).toBeTruthy();
+    expect(items[4]).toContain("Agent reads secrets");
+    expect(items[5]).toContain("search is failing");
+    const viewAll = within(card()).getByRole("link", { name: "View all" });
+    expect(viewAll.closest("ul")).toBeNull();
   });
 
   it("has no View all when every problem is shown", async () => {
@@ -530,17 +612,45 @@ describe("Needs attention connection rows", () => {
   });
 });
 
-describe("useConnectionProblemsAccess", () => {
+describe("useConnectionProblems display", () => {
   it.each([
-    ["on", {}],
-    ["off", { logsEnabled: false }],
-    ["off", { flag: "disabled" as const }],
-    ["off", { scopes: [] }],
-    ["pending", { flag: "loading" as const }],
-    ["pending", { rbacLoading: true }],
-  ])("is %s for %o", (want, patch) => {
+    ["tall", "an authorized answer", {}, {}],
+    ["tall", "an authorized answer with no problems", {}, { problems: [] }],
+    ["base", "an own-logs answer", {}, { viewerScope: "own" }],
+    ["base", "a logging-off answer", {}, { loggingEnabled: false }],
+    ["tall", "a failed read", {}, { ok: false }],
+    ["base", "logs off", { logsEnabled: false }, {}],
+    ["base", "the flag off", { flag: "disabled" as const }, {}],
+    ["base", "no log:read", { scopes: [] }, {}],
+    ["pending", "the flag loading", { flag: "loading" as const }, {}],
+    ["pending", "permissions loading", { rbacLoading: true }, {}],
+  ])("is %s for %s", async (want, _name, patch, answer) => {
     Object.assign(state, patch);
-    const { result } = renderHook(() => useConnectionProblemsAccess());
-    expect(result.current).toBe(want);
+    Object.assign(state.connections, { problems: [problem("a")] }, answer);
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const { result } = renderHook(() => useConnectionProblems(6), {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      ),
+    });
+    await waitFor(() =>
+      expect(result.current.pending).toBe(want === "pending"),
+    );
+    expect(result.current.display).toBe(want);
+  });
+
+  it("is tall while an eligible viewer's first read is in flight", async () => {
+    state.hold = { release: () => undefined };
+    const client = new QueryClient();
+    const { result } = renderHook(() => useConnectionProblems(6), {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      ),
+    });
+    await act(async () => {});
+    expect(result.current.pending).toBe(true);
+    expect(result.current.display).toBe("tall");
   });
 });

@@ -13,9 +13,12 @@ import { useProject } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useRoutes } from "@/routes";
 import { Navigate } from "react-router";
-import { HomeWidgets } from "@/components/home/HomeWidgets";
+import {
+  HomeWidgets,
+  TALL_ATTENTION_ROWS,
+} from "@/components/home/HomeWidgets";
 import { HomeTerminal } from "@/components/home/HomeTerminal";
-import { useConnectionProblemsAccess } from "@/components/home/useConnectionProblems";
+import { useConnectionProblems } from "@/components/home/useConnectionProblems";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -124,7 +127,7 @@ export default function Home(): JSX.Element {
  */
 function TerminalHomeGrid(): JSX.Element {
   // Who may see connection problems, not whether any exist, so the grid stays put.
-  const tall = useConnectionProblemsAccess() === "on";
+  const tall = useConnectionProblems(TALL_ATTENTION_ROWS).display === "tall";
   return (
     // On wide screens the grid fills the viewport below the header: three
     // equal rows, the terminal spanning the top two, and every widget

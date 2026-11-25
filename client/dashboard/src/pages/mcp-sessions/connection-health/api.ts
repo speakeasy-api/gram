@@ -336,6 +336,8 @@ export function useProjectSuspectedProblems(options: {
       sdk.listProjectSuspectedProblems(client, gramProject, options.limit),
     enabled: options.enabled,
     ...PROBLEM_QUERY,
+    // The overview stays open; a stale list must not look current on return.
+    refetchOnWindowFocus: true,
   });
 }
 
