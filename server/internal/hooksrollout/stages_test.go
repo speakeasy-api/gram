@@ -92,6 +92,7 @@ func TestStageStore_AdvancesThroughStagesAndMovesDefaultPin(t *testing.T) {
 	current, err = stages.Current(ctx)
 	require.NoError(t, err)
 	require.Equal(t, hooksrollout.StageWorkflowActor, current.SetBy)
+	require.Equal(t, current, advanced, "Advance reports the stored stage")
 
 	advanced, err = stages.Advance(ctx, current.SetAt.Add(hooksrollout.StageSoak))
 	require.NoError(t, err)
@@ -105,6 +106,20 @@ func TestStageStore_AdvancesThroughStagesAndMovesDefaultPin(t *testing.T) {
 	advanced, err = stages.Advance(ctx, time.Now().Add(48*time.Hour))
 	require.NoError(t, err)
 	require.Nil(t, advanced)
+}
+
+func TestStageStore_StartRefusesOlderThanActive(t *testing.T) {
+	t.Parallel()
+
+	conn := newTestDB(t)
+	stages := hooksrollout.NewStageStore(conn)
+	ctx := t.Context()
+
+	require.NoError(t, stages.Start(ctx, 0, 42, operator))
+	current, err := stages.Current(ctx)
+	require.NoError(t, err)
+	require.ErrorIs(t, stages.Start(ctx, current.Revision, 41, operator), hooksrollout.ErrStageVersionOlder)
+	require.NoError(t, stages.Start(ctx, current.Revision, 43, operator))
 }
 
 func TestStageStore_PauseResumeCancel(t *testing.T) {

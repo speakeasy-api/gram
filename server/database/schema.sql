@@ -12051,9 +12051,9 @@ COMMENT ON COLUMN hooks_rollout_pins.updated_at IS '@access: confidential';
 -- organizations that follow the default pin for a newer hooks generator
 -- version before the default pin itself moves to it. The share is picked by a
 -- stable hash of the organization id, so an organization stays cleared as the
--- share grows. A scheduled workflow advances the share after each soak period
--- and pauses the rollout when hook health degrades; staff can pause, resume or
--- cancel it from the admin dashboard.
+-- share grows. A scheduled workflow advances the share after each soak period.
+-- It does not watch hook health: staff pause, resume or cancel the rollout from
+-- the admin dashboard.
 --
 -- The table is append-only like hooks_rollout_pins: the row with the highest
 -- seq is the current state and older rows are its history.
