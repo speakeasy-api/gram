@@ -1,5 +1,5 @@
 {
-  "judge_prompt_version": "v11",
+  "judge_prompt_version": "v12",
   "judge_model": "google/gemini-3.1-flash-lite",
   "minimum_agreement": 0.8,
   "recommendation_schema_version": 3,
