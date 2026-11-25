@@ -181,7 +181,8 @@ func TestRequestAccess_RefusesWhatCannotBeRequested(t *testing.T) {
 	userCtx := perUserCtx(t, ctx)
 	file := func(scope authz.Scope, resourceID *string) error {
 		_, err := ti.service.RequestAccess(userCtx, &gen.RequestAccessPayload{ApikeyToken: nil, Scope: string(scope), ResourceID: resourceID, Message: nil, Duration: nil, RequestedUntil: nil})
-		return err
+		return err //nolint:wrapcheck // the test reads the handler's own error
+
 	}
 
 	requireCode(t, file(authz.ScopeOrgAdmin, nil), oops.CodeBadRequest)

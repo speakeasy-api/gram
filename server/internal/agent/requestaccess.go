@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 
@@ -100,7 +101,7 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 	case errors.Is(err, access.ErrAccessRequestsOff):
 		return nil, oops.E(oops.CodeNotFound, err, "access requests are off")
 	case err != nil:
-		return nil, err
+		return nil, fmt.Errorf("file access request: %w", err)
 	}
 	return &gen.AgentRequestAccessResult{Request: ownAccessRequestView(request), Created: created}, nil
 }

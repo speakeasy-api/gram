@@ -19,13 +19,20 @@ import (
 // pending requests.
 const maxOwnPendingForDevice = 50
 
-// projectScopeChecks are the checks that say whether a member holds a
-// temporary-grant scope that applies to a project on one project. A scope
-// missing here can only be asked for on every project.
-var projectScopeChecks = map[authz.Scope]func(authz.ProjectRef) authz.Check{
-	authz.ScopeProjectRead:  authz.ProjectRef.Read,
-	authz.ScopeProjectWrite: authz.ProjectRef.Write,
-	authz.ScopeLogRead:      authz.ProjectRef.LogRead,
+// projectScopeCheck returns the check that says whether a member holds a
+// temporary-grant scope that applies to a project on one project. ok is false
+// for a scope that can only be asked for on every project.
+func projectScopeCheck(scope authz.Scope) (check func(authz.ProjectRef) authz.Check, ok bool) {
+	switch scope {
+	case authz.ScopeProjectRead:
+		return authz.ProjectRef.Read, true
+	case authz.ScopeProjectWrite:
+		return authz.ProjectRef.Write, true
+	case authz.ScopeLogRead:
+		return authz.ProjectRef.LogRead, true
+	default:
+		return nil, false
+	}
 }
 
 // RequestablePermission is a permission a member can ask for as temporary
@@ -64,7 +71,7 @@ func (s *Service) RequestablePermissions(ctx context.Context, organizationID str
 			continue
 		}
 		permission := RequestablePermission{Entry: entry, AllResources: true, Projects: []RequestableProject{}}
-		if check, ok := projectScopeChecks[entry.Scope]; ok {
+		if check, ok := projectScopeCheck(entry.Scope); ok {
 			if !projectsLoaded {
 				rows, err := projectsrepo.New(s.db).ListProjectsByOrganization(ctx, organizationID)
 				if err != nil {
