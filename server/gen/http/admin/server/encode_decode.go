@@ -16735,9 +16735,6 @@ func DecodeGetAIProductRequest(mux goahttp.Muxer, decoder func(*http.Request) go
 		if utf8.RuneCountInString(id) < 1 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("id", id, utf8.RuneCountInString(id), 1, true))
 		}
-		if utf8.RuneCountInString(id) > 256 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("id", id, utf8.RuneCountInString(id), 256, false))
-		}
 		adminSessionTokenRaw := r.Header.Get("Authorization")
 		if adminSessionTokenRaw != "" {
 			adminSessionToken = &adminSessionTokenRaw

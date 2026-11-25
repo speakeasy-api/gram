@@ -17,7 +17,12 @@ import { aiProductsListQuery } from "@/lib/adminQueries";
 import { badgeTone } from "@/lib/badgeTone";
 import { errorMessage } from "@/lib/gramAdminApi";
 
-import { aiProductsSearch, type AIProductsSearch } from "./aiProductsSearch";
+import {
+  aiProductsSearch,
+  capQuery,
+  MAX_QUERY_LENGTH,
+  type AIProductsSearch,
+} from "./aiProductsSearch";
 import { categoryLabel } from "./aiProductLabels";
 
 const COLUMNS = 6;
@@ -26,17 +31,23 @@ export function AIProductList(): JSX.Element {
   const location = useLocation();
   const search = aiProductsSearch(location.search);
   const navigate = useNavigate();
-  // The box keeps its own text so a mid-string edit keeps the caret; it takes
-  // the address's term only after a navigation it did not make.
+  // The box keeps its own text so a mid-string edit keeps the caret. Its own
+  // edits replace the current history entry, so it keeps that text only when
+  // the entry is still the one it edited; a new entry or a step back or
+  // forward takes the address's term.
   const [draft, setDraft] = useState({
     text: search.q ?? "",
     key: location.state.__TSR_key,
+    index: location.state.__TSR_index,
   });
   if (draft.key !== location.state.__TSR_key) {
+    const ownEdit =
+      "aiProductsFilter" in location.state &&
+      location.state.__TSR_index === draft.index;
     setDraft({
-      text:
-        "aiProductsFilter" in location.state ? draft.text : (search.q ?? ""),
+      text: ownEdit ? draft.text : (search.q ?? ""),
       key: location.state.__TSR_key,
+      index: location.state.__TSR_index,
     });
   }
   const filter = (next: AIProductsSearch): void => {
@@ -56,16 +67,19 @@ export function AIProductList(): JSX.Element {
     placeholderData: keepPreviousData,
   });
   const products = list.data?.products;
+  // Rows from the previous filters stay on screen until the new ones land, so
+  // they are dimmed and cannot be opened.
+  const stale = list.isPlaceholderData;
 
   return (
     <div className="space-y-6 p-6">
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold">AI clients</h1>
         <p className="text-muted-foreground text-sm">
-          This page shows the catalog as stored in the database. If those rows
-          are missing or invalid, servers use a built-in list instead, so what
-          they serve can differ. Shadow AI finds a product on devices by its
-          signatures. Sign-in recognizes it by its documents.
+          This page shows the catalog as stored in the database. Servers use a
+          built-in list if it is missing or invalid at startup, and keep their
+          last good copy if a later change is invalid. Shadow AI finds a product
+          on devices by its signatures. Sign-in recognizes it by its documents.
         </p>
       </div>
       <div className="flex flex-wrap items-center gap-4">
@@ -73,10 +87,12 @@ export function AIProductList(): JSX.Element {
           aria-label="Search products"
           placeholder="Search by name or ID"
           className="w-full sm:w-80"
+          maxLength={MAX_QUERY_LENGTH}
           value={draft.text}
           onChange={(event) => {
-            setDraft({ ...draft, text: event.target.value });
-            filter({ q: event.target.value || undefined });
+            const text = capQuery(event.target.value);
+            setDraft({ ...draft, text });
+            filter({ q: text || undefined });
           }}
         />
         <label className="flex items-center gap-2 text-sm">
@@ -104,7 +120,11 @@ export function AIProductList(): JSX.Element {
           </Button>
         </div>
       )}
-      <div className="overflow-x-auto rounded-lg border">
+      <div
+        className={`overflow-x-auto rounded-lg border transition-opacity ${stale ? "opacity-60" : ""}`}
+        aria-busy={stale}
+        inert={stale}
+      >
         <DataTable cellPadding="condensed">
           <TableHeader className="bg-muted">
             <TableRow>
@@ -133,7 +153,9 @@ export function AIProductList(): JSX.Element {
               >
                 {search.q
                   ? "No products match your search."
-                  : "No products in the database. Servers use the built-in list until the catalog is seeded."}
+                  : search.deleted
+                    ? "No products in the database. Servers use the built-in list until the catalog is seeded."
+                    : "No active products. Turn on Show deleted products to see removed ones."}
               </DataTable.NoResultsMessage>
             ) : (
               products?.map((product) => (

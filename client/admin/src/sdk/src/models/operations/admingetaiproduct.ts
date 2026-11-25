@@ -5,6 +5,9 @@
 import * as z from "zod/v4-mini";
 
 export type AdminGetAIProductRequest = {
+  /**
+   * Stored product ids have no length limit, so none is imposed here.
+   */
   id: string;
 };
 

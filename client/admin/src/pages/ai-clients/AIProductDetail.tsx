@@ -103,7 +103,8 @@ function Blocks({ product }: { product: AdminAIProduct }): JSX.Element {
       <Field label="Organizations with a block">
         {count}
         <div className="text-muted-foreground">
-          These blocks do not apply while the product is deleted.
+          These blocks stop applying once servers load the change (about a
+          minute).
         </div>
       </Field>
     );
@@ -175,8 +176,9 @@ function Documents({ product }: { product: AdminAIProduct }): JSX.Element {
         <p className="text-muted-foreground text-sm">
           The sign-in documents this product publishes. A pattern matches many
           addresses: each * stands for one part of the path. Off documents are
-          kept but no longer let the app sign in. Check shows whether Speakeasy
-          fetched the live document.
+          kept but no longer admit the app from the catalog. An issuer that
+          accepts any client, or lists the address itself, can still admit it.
+          Check shows whether Speakeasy fetched the live document.
         </p>
       </div>
       <div className="overflow-x-auto rounded-lg border">
@@ -330,8 +332,9 @@ export function AIProductDetail(): JSX.Element {
         </div>
         {data.deleted && (
           <p className="text-muted-foreground text-sm">
-            This product is deleted. Shadow AI no longer finds it, and sign-in
-            no longer recognizes it. Blocks on it no longer apply.
+            This product is deleted. Once servers load the change (about a
+            minute), Shadow AI stops finding it, sign-in stops recognizing it,
+            and blocks on it stop applying.
           </p>
         )}
       </div>

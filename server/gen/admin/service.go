@@ -3288,7 +3288,8 @@ type GcpIamCredential struct {
 // method.
 type GetAIProductPayload struct {
 	AdminSessionToken *string
-	ID                string
+	// Stored product ids have no length limit, so none is imposed here.
+	ID string
 }
 
 // GetGcpIamPlatformCredentialPayload is the payload type of the admin service

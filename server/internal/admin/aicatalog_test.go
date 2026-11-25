@@ -209,6 +209,25 @@ func TestGetAIProduct_DetailDocumentsAndBlockCount(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	// A legacy unlinked decision-only row counts by id; an organization's own
+	// target that reuses the id does not.
+	seedOrg(t, ctx, db, orgFixture{id: "org_aicat_legacy", name: "org_aicat_legacy", slug: "org_aicat_legacy"})
+	_, err = agent.SetAIScanTargetStatus(ctx, agentrepo.SetAIScanTargetStatusParams{
+		OrganizationID: "org_aicat_legacy", ID: productID, AiProductID: pgtype.Text{String: "", Valid: false}, Status: "blocked", Rationale: pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
+	seedOrg(t, ctx, db, orgFixture{id: "org_aicat_custom", name: "org_aicat_custom", slug: "org_aicat_custom"})
+	_, err = agent.UpsertAIScanTarget(ctx, agentrepo.UpsertAIScanTargetParams{
+		OrganizationID: "org_aicat_custom", ID: productID, DisplayName: conv.ToPGText("Our own tool"), Category: conv.ToPGText("harness"),
+		BundleIds: []string{}, Binaries: []string{"own-tool"}, ConfigDirs: []string{}, ProcessNames: []string{},
+		VersionPlistKey: pgtype.Text{String: "", Valid: false}, CimdVendorKeys: []string{}, OauthClientIds: []string{}, ClientInfoNames: []string{},
+	})
+	require.NoError(t, err)
+	_, err = agent.SetAIScanTargetStatus(ctx, agentrepo.SetAIScanTargetStatusParams{
+		OrganizationID: "org_aicat_custom", ID: productID, AiProductID: pgtype.Text{String: "", Valid: false}, Status: "blocked", Rationale: pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
+
 	product, err := svc.GetAIProduct(ctx, &gen.GetAIProductPayload{ID: productID})
 	require.NoError(t, err)
 	require.Equal(t, productID, product.ID)
@@ -223,7 +242,7 @@ func TestGetAIProduct_DetailDocumentsAndBlockCount(t *testing.T) {
 	require.Equal(t, []string{"Detail Product Client"}, product.ClientInfoNames)
 	require.Nil(t, product.CreatedBy, "seeded rows have no author")
 	require.False(t, product.Deleted)
-	require.Equal(t, 2, product.BlockedOrganizationCount, "counts organizations, not rows")
+	require.Equal(t, 3, product.BlockedOrganizationCount, "counts organizations, not rows, and skips a custom target reusing the id")
 
 	require.Len(t, product.Documents, 3, "deleted documents are listed")
 	pattern, exact, gone := product.Documents[0], product.Documents[1], product.Documents[2]
@@ -243,7 +262,7 @@ func TestGetAIProduct_DetailDocumentsAndBlockCount(t *testing.T) {
 	deleted, err := svc.GetAIProduct(ctx, &gen.GetAIProductPayload{ID: productID})
 	require.NoError(t, err)
 	require.True(t, deleted.Deleted, "deleted products stay readable")
-	require.Equal(t, 2, deleted.BlockedOrganizationCount)
+	require.Equal(t, 3, deleted.BlockedOrganizationCount)
 }
 
 func TestGetAIProduct_NotFound(t *testing.T) {

@@ -94,7 +94,7 @@ func aiCatalogMethods() {
 		Description("Staff-only: get one product in the AI client catalog, deleted or not.")
 		Payload(func() {
 			security.AdminAuthPayload()
-			Attribute("id", String, func() { MinLength(1); MaxLength(256) })
+			Attribute("id", String, "Stored product ids have no length limit, so none is imposed here.", func() { MinLength(1) })
 			Required("id")
 		})
 		Result(AdminAIProduct)

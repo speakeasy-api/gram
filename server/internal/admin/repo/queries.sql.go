@@ -451,7 +451,18 @@ SELECT
   (
     SELECT count(DISTINCT t.organization_id)
     FROM ai_scan_targets t
-    WHERE (t.ai_product_id = p.id OR t.id = p.id) AND t.status = 'blocked'
+    WHERE t.status = 'blocked'
+      AND (
+        t.ai_product_id = p.id
+        OR (
+          t.id = p.id AND t.ai_product_id IS NULL
+          AND t.display_name IS NULL AND t.category IS NULL AND t.version_plist_key IS NULL
+          AND cardinality(t.bundle_ids) = 0 AND cardinality(t.binaries) = 0
+          AND cardinality(t.config_dirs) = 0 AND cardinality(t.process_names) = 0
+          AND cardinality(t.cimd_vendor_keys) = 0 AND cardinality(t.oauth_client_ids) = 0
+          AND cardinality(t.client_info_names) = 0
+        )
+      )
   )::bigint AS blocked_organization_count
 FROM ai_products p
 WHERE p.id = $1
@@ -477,8 +488,10 @@ type AdminGetAIProductRow struct {
 }
 
 // NULL array elements are dropped and nested arrays flattened so one bad row
-// cannot fail the read. The block count matches both kinds of decision row,
-// as the catalog removal runbook does, and counts organizations, not rows.
+// cannot fail the read. The block count counts organizations, not rows. A row
+// matches by its catalog link, or by id only when it is a legacy unlinked
+// decision-only row, so an organization's own target that reuses the id is
+// not counted.
 func (q *Queries) AdminGetAIProduct(ctx context.Context, id string) (AdminGetAIProductRow, error) {
 	row := q.db.QueryRow(ctx, adminGetAIProduct, id)
 	var i AdminGetAIProductRow

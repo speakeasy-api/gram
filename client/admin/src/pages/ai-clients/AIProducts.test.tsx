@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AdminAIProduct } from "@gram/admin-client/models/components/adminaiproduct";
 import { GramError } from "@gram/admin-client/models/errors/gramerror";
@@ -122,7 +128,7 @@ describe("AIProductList", () => {
       includeDeleted: false,
     });
     expect(screen.getByText("Coding agent")).toBeTruthy();
-    expect(screen.getByText("None (sign-in documents only)")).toBeTruthy();
+    expect(screen.getByText("No category")).toBeTruthy();
     expect(screen.getByText("Deleted")).toBeTruthy();
     expect(
       screen.getByRole("link", { name: "Example CLI" }).getAttribute("href"),
@@ -154,13 +160,84 @@ describe("AIProductList", () => {
 
   it("says when the database holds no products", async () => {
     mocks.list.mockResolvedValue({ products: [], truncated: false });
-    await renderRouteTree(routeTree, { initialPath: "/ai-clients/products" });
+    await renderRouteTree(routeTree, {
+      initialPath: "/ai-clients/products?deleted=true",
+    });
 
     expect(
       await screen.findByText(
         "No products in the database. Servers use the built-in list until the catalog is seeded.",
       ),
     ).toBeTruthy();
+  });
+
+  it("points to deleted products when no active one exists", async () => {
+    mocks.list.mockResolvedValue({ products: [], truncated: false });
+    await renderRouteTree(routeTree, { initialPath: "/ai-clients/products" });
+
+    expect(
+      await screen.findByText(
+        "No active products. Turn on Show deleted products to see removed ones.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("restores the search box when history steps back", async () => {
+    const { router } = await renderRouteTree(routeTree, {
+      initialPath: "/ai-clients/products",
+    });
+    await screen.findByText("Example CLI");
+    const box = () =>
+      screen.getByLabelText("Search products") as HTMLInputElement;
+
+    fireEvent.change(box(), { target: { value: "exa" } });
+    await waitFor(() =>
+      expect(router.state.location.search).toEqual({ q: "exa" }),
+    );
+
+    await act(() => router.navigate({ to: "/ai-clients/products" }));
+    await waitFor(() => expect(box().value).toBe(""));
+
+    await act(async () => {
+      router.history.back();
+    });
+    await waitFor(() =>
+      expect(router.state.location.search).toEqual({ q: "exa" }),
+    );
+    await waitFor(() => expect(box().value).toBe("exa"));
+  });
+
+  it("dims stale rows and makes them inert while new filters load", async () => {
+    const { container } = await renderRouteTree(routeTree, {
+      initialPath: "/ai-clients/products",
+    });
+    await screen.findByText("Example CLI");
+    mocks.list.mockReturnValue(new Promise(() => {}));
+
+    fireEvent.click(screen.getByRole("switch"));
+
+    await waitFor(() =>
+      expect(container.querySelector('[aria-busy="true"]')).not.toBeNull(),
+    );
+    const table = container.querySelector('[aria-busy="true"]');
+    expect(table?.hasAttribute("inert")).toBe(true);
+    expect(table?.textContent).toContain("Example CLI");
+  });
+
+  it("caps search text from the address at the API limit", async () => {
+    await renderRouteTree(routeTree, {
+      initialPath: `/ai-clients/products?q=${"a".repeat(300)}`,
+    });
+
+    await waitFor(() =>
+      expect(mocks.list).toHaveBeenCalledWith({
+        query: "a".repeat(256),
+        includeDeleted: false,
+      }),
+    );
+    expect(
+      (screen.getByLabelText("Search products") as HTMLInputElement).maxLength,
+    ).toBe(256);
   });
 
   it("says when the list is cut short", async () => {
@@ -233,12 +310,12 @@ describe("AIProductDetail", () => {
     });
 
     expect(
-      await screen.findByText(/Blocks on it no longer apply\./),
+      await screen.findByText(/blocks\s+on it stop applying\./),
     ).toBeTruthy();
     expect(screen.getByText("Organizations with a block")).toBeTruthy();
     expect(
       screen.getByText(
-        "These blocks do not apply while the product is deleted.",
+        "These blocks stop applying once servers load the change (about a minute).",
       ),
     ).toBeTruthy();
     expect(screen.queryByText("Organizations blocking it")).toBeNull();

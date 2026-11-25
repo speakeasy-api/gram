@@ -12,11 +12,12 @@ paths:
             operationId: adminGetAIProduct
             parameters:
                 - allowEmptyValue: true
+                  description: Stored product ids have no length limit, so none is imposed here.
                   in: query
                   name: id
                   required: true
                   schema:
-                    maxLength: 256
+                    description: Stored product ids have no length limit, so none is imposed here.
                     minLength: 1
                     type: string
             responses:

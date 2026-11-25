@@ -2886,9 +2886,6 @@ func BuildGetAIProductPayload(adminGetAIProductID string, adminGetAIProductAdmin
 		if utf8.RuneCountInString(id) < 1 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("id", id, utf8.RuneCountInString(id), 1, true))
 		}
-		if utf8.RuneCountInString(id) > 256 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("id", id, utf8.RuneCountInString(id), 256, false))
-		}
 		if err != nil {
 			return nil, err
 		}
