@@ -25,8 +25,8 @@ func metadataOf(content string, contentRaw, toolCalls []byte) metadata {
 	calls := toolCallsOf(toolCalls)
 	ids := make([]string, 0, len(calls))
 	for _, call := range calls {
-		if call.ID != "" {
-			ids = append(ids, call.ID)
+		if id := toolCallID(call); id != "" {
+			ids = append(ids, id)
 		}
 	}
 	return metadata{
@@ -42,31 +42,43 @@ type toolCall struct {
 	ID string `json:"id"`
 }
 
-// toolCallsOf reads a tool_calls value. Some rows hold the array
-// double-encoded as a JSON string; both forms are read. Anything else yields
-// no calls, never an error: metadata must not fail a message write.
-func toolCallsOf(raw []byte) []toolCall {
+// toolCallsOf reads a tool_calls value as its array elements. Some rows hold
+// the array double-encoded as a JSON string; both forms are read. Anything
+// else yields no elements, never an error: metadata must not fail a message
+// write.
+func toolCallsOf(raw []byte) []json.RawMessage {
 	if len(bytes.TrimSpace(raw)) == 0 {
 		return nil
 	}
-	var calls []toolCall
-	if err := json.Unmarshal(raw, &calls); err == nil {
-		return calls
+	var elements []json.RawMessage
+	if err := json.Unmarshal(raw, &elements); err == nil {
+		return elements
 	}
 	var inner string
 	if err := json.Unmarshal(raw, &inner); err != nil {
 		return nil
 	}
-	if err := json.Unmarshal([]byte(inner), &calls); err != nil {
+	if err := json.Unmarshal([]byte(inner), &elements); err != nil {
 		return nil
 	}
-	return calls
+	return elements
+}
+
+// toolCallID returns an element's "id", or "" when it is not an object with
+// a string id.
+func toolCallID(element json.RawMessage) string {
+	var call toolCall
+	if err := json.Unmarshal(element, &call); err != nil {
+		return ""
+	}
+	return call.ID
 }
 
 // toolCallCount matches how the dashboard decides a message carries tool
-// calls: a non-empty array counts its elements, and a double-encoded string
-// that is not empty, "[]" or "null" but cannot be parsed counts as one.
-func toolCallCount(raw []byte, calls []toolCall) int {
+// calls: an array counts its elements, whatever they are, and a
+// double-encoded string that is not empty, "[]" or "null" but cannot be
+// parsed counts as one.
+func toolCallCount(raw []byte, calls []json.RawMessage) int {
 	if len(calls) > 0 {
 		return len(calls)
 	}
@@ -77,10 +89,6 @@ func toolCallCount(raw []byte, calls []toolCall) int {
 	switch string(bytes.TrimSpace([]byte(inner))) {
 	case "", "[]", "null":
 		return 0
-	}
-	var parsed []json.RawMessage
-	if err := json.Unmarshal([]byte(inner), &parsed); err == nil {
-		return len(parsed)
 	}
 	return 1
 }
