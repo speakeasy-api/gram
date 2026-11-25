@@ -3,6 +3,7 @@ use agentkit_tools_core::{
     CatalogReader, Tool, ToolContext, ToolError, ToolRequest, ToolResult, ToolSource, ToolSpec,
 };
 use std::collections::BTreeSet;
+use std::sync::atomic::Ordering;
 use std::sync::{Mutex, PoisonError};
 
 use async_trait::async_trait;
@@ -10,6 +11,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use tokio::sync::{mpsc, oneshot};
 
+use crate::compaction::TranscriptEpoch;
 use crate::mcp_actor::{McpCmd, McpServerStatus};
 
 pub const TOOL_NAME: &str = "tool_search";
@@ -31,22 +33,27 @@ pub struct ToolSearchTool {
     cmd_tx: mpsc::Sender<McpCmd>,
     spec: ToolSpec,
     sent: Mutex<SentThisTurn>,
+    transcript_epoch: TranscriptEpoch,
 }
 
 /// What earlier searches in the current turn already put in the transcript,
-/// so later searches in the same turn do not repeat it.
+/// so later searches in the same turn do not repeat it. Mid-turn compaction
+/// can summarise those results away, so the record also resets when the
+/// transcript epoch moves.
 #[derive(Default)]
 struct SentThisTurn {
     turn_id: Option<String>,
+    epoch: u64,
     catalog: bool,
     schemas: BTreeSet<String>,
 }
 
 impl SentThisTurn {
-    fn for_turn(&mut self, turn_id: &str) -> &mut Self {
-        if self.turn_id.as_deref() != Some(turn_id) {
+    fn for_turn(&mut self, turn_id: &str, epoch: u64) -> &mut Self {
+        if self.turn_id.as_deref() != Some(turn_id) || self.epoch != epoch {
             *self = Self {
                 turn_id: Some(turn_id.to_string()),
+                epoch,
                 ..Self::default()
             };
         }
@@ -55,12 +62,17 @@ impl SentThisTurn {
 }
 
 impl ToolSearchTool {
-    pub fn new(catalog: CatalogReader, cmd_tx: mpsc::Sender<McpCmd>) -> Self {
+    pub fn new(
+        catalog: CatalogReader,
+        cmd_tx: mpsc::Sender<McpCmd>,
+        transcript_epoch: TranscriptEpoch,
+    ) -> Self {
         Self {
             catalog,
             cmd_tx,
             spec: build_spec(),
             sent: Mutex::new(SentThisTurn::default()),
+            transcript_epoch,
         }
     }
 }
@@ -140,10 +152,12 @@ impl Tool for ToolSearchTool {
             .filter(|spec| live_names.contains(spec.name.0.as_str()))
             .collect();
         let selecting = input.query.trim().starts_with("select:");
-        let matches = rank(&specs, &input.query);
+        let server_ids: Vec<&str> = servers.iter().map(|server| server.id.as_str()).collect();
+        let matches = rank(&specs, &input.query, &server_ids);
 
+        let epoch = self.transcript_epoch.load(Ordering::Acquire);
         let mut sent = self.sent.lock().unwrap_or_else(PoisonError::into_inner);
-        let sent = sent.for_turn(&request.turn_id.0);
+        let sent = sent.for_turn(&request.turn_id.0, epoch);
 
         let mut matched_tools: Vec<Value> = Vec::new();
         let mut already_returned: Vec<String> = Vec::new();
@@ -238,12 +252,17 @@ fn server_status(server: &McpServerStatus) -> Value {
     status
 }
 
-fn names_tool(full_name: &str, wanted: &str) -> bool {
+/// Whether `wanted` names `full_name`, either exactly or as the whole tool
+/// name after one attached server's `mcp_<server id>_` namespace.
+fn names_tool(full_name: &str, wanted: &str, server_ids: &[&str]) -> bool {
     full_name == wanted
-        || (full_name.starts_with("mcp__")
-            && full_name
-                .strip_suffix(wanted)
-                .is_some_and(|prefix| prefix.ends_with('_')))
+        || server_ids.iter().any(|id| {
+            full_name
+                .strip_prefix("mcp_")
+                .and_then(|rest| rest.strip_prefix(id))
+                .and_then(|rest| rest.strip_prefix('_'))
+                == Some(wanted)
+        })
 }
 
 fn brief(description: &str) -> String {
@@ -255,7 +274,7 @@ fn brief(description: &str) -> String {
     out
 }
 
-fn rank<'a>(specs: &'a [ToolSpec], query: &str) -> Vec<&'a ToolSpec> {
+fn rank<'a>(specs: &'a [ToolSpec], query: &str, server_ids: &[&str]) -> Vec<&'a ToolSpec> {
     let query = query.trim();
     if let Some(selection) = query.strip_prefix("select:") {
         let wanted: Vec<&str> = selection
@@ -268,7 +287,11 @@ fn rank<'a>(specs: &'a [ToolSpec], query: &str) -> Vec<&'a ToolSpec> {
         // the way instructions and server docs name tools.
         return specs
             .iter()
-            .filter(|spec| wanted.iter().any(|w| names_tool(&spec.name.0, w)))
+            .filter(|spec| {
+                wanted
+                    .iter()
+                    .any(|w| names_tool(&spec.name.0, w, server_ids))
+            })
             .collect();
     }
 
@@ -329,7 +352,7 @@ mod tests {
             spec("mcp_srv_list_cities", "Cities with weather stations."),
             spec("mcp_srv_unrelated", "Nothing relevant."),
         ];
-        let ranked = rank(&specs, "weather");
+        let ranked = rank(&specs, "weather", &["srv"]);
         let names: Vec<&str> = ranked.iter().map(|s| s.name.0.as_str()).collect();
         assert_eq!(names, ["mcp_srv_get_weather", "mcp_srv_list_cities"]);
     }
@@ -340,7 +363,7 @@ mod tests {
             spec("mcp_srv_get_weather", "Reads a forecast."),
             spec("mcp_srv_get_weather_history", "Historical data."),
         ];
-        let ranked = rank(&specs, "select: mcp_srv_get_weather");
+        let ranked = rank(&specs, "select: mcp_srv_get_weather", &["srv"]);
         let names: Vec<&str> = ranked.iter().map(|s| s.name.0.as_str()).collect();
         assert_eq!(names, ["mcp_srv_get_weather"]);
     }
@@ -352,9 +375,14 @@ mod tests {
             spec("mcp__p-platform_get_project_overview_extra", "Other."),
             spec("get_project_overview_local", "Not namespaced."),
         ];
-        let ranked = rank(&specs, "select:get_project_overview");
+        let server_ids = ["_p-platform"];
+        let ranked = rank(&specs, "select:get_project_overview", &server_ids);
         let names: Vec<&str> = ranked.iter().map(|s| s.name.0.as_str()).collect();
         assert_eq!(names, ["mcp__p-platform_get_project_overview"]);
+
+        // A trailing fragment of a tool name is not a name.
+        assert!(rank(&specs, "select:overview", &server_ids).is_empty());
+        assert!(rank(&specs, "select:project_overview", &server_ids).is_empty());
     }
 
     #[test]
@@ -362,13 +390,13 @@ mod tests {
         let specs: Vec<ToolSpec> = (0..20)
             .map(|i| spec(&format!("mcp_srv_widget_{i}"), "Manages widgets."))
             .collect();
-        assert_eq!(rank(&specs, "widget").len(), MAX_MATCHES);
+        assert_eq!(rank(&specs, "widget", &["srv"]).len(), MAX_MATCHES);
     }
 
     #[test]
     fn rank_empty_query_matches_nothing() {
         let specs = vec![spec("mcp_srv_get_weather", "Reads a forecast.")];
-        assert!(rank(&specs, "   ").is_empty());
+        assert!(rank(&specs, "   ", &["srv"]).is_empty());
     }
 
     #[test]
@@ -475,7 +503,8 @@ mod tests {
                 }
             }
         });
-        let tool = ToolSearchTool::new(reader, cmd_tx);
+        let epoch = TranscriptEpoch::default();
+        let tool = ToolSearchTool::new(reader, cmd_tx, epoch.clone());
 
         // First search: catalog, the schemas that fit the budget, and the
         // oversized match listed by name only. Servers carry no tool lists.
@@ -500,6 +529,15 @@ mod tests {
         // select: returns exactly what was asked for, budget or not.
         let selected = search(&tool, "t1", "select:mcp_srv_c_widget").await;
         assert_eq!(names(&selected["matched_tools"]), ["mcp_srv_c_widget"]);
+
+        // Compaction mid-turn may drop earlier results, so it starts over too.
+        epoch.fetch_add(1, Ordering::AcqRel);
+        let after_compaction = search(&tool, "t1", "widget").await;
+        assert_eq!(
+            names(&after_compaction["matched_tools"]),
+            ["mcp_srv_a_widget", "mcp_srv_b_widget"]
+        );
+        assert_eq!(after_compaction["catalog"].as_array().unwrap().len(), 3);
 
         // A new turn starts over.
         let next_turn = search(&tool, "t2", "widget").await;
