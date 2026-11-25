@@ -7,6 +7,7 @@ package testrepo
 import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/tools/repo/models"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -41,8 +42,8 @@ type DeviceAgentStateReport struct {
 	// Marketplace and plugin slugs chosen by the organization.
 	// @access: opaque-confidential
 	WithheldPlugins []byte
-	// Speakeasy-defined tool ids and enforcement enums.
-	// @access: confidential
+	// Per-tool enforcement state. Tool ids are reported by the device agent and stored as sent; layer and outcome fields are normalized enums.
+	// @access: opaque-confidential
 	Tools []byte
 	// @access: confidential
 	DegradedToolCount int32
@@ -150,6 +151,35 @@ type FunctionToolDefinition struct {
 	IdempotentHint pgtype.Bool
 	// @access: confidential
 	OpenWorldHint pgtype.Bool
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
+type FunctionsAccess struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	Seq int64
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	DeploymentID uuid.UUID
+	// @access: confidential
+	FunctionID uuid.UUID
+	// @access: confidential
+	OrganizationID pgtype.Text
+	// @access: secret-restricted
+	EncryptionKey conv.Secret
+	// @access: secret-restricted
+	EncryptionKeyOrgEncrypted pgtype.Text
+	// @access: confidential
+	BearerFormat pgtype.Text
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
@@ -282,21 +312,27 @@ type RiskResult struct {
 	SkillVersionID uuid.NullUUID
 	// @access: confidential
 	Source string
-	// @access: confidential
+	// Whether the scan found a risk in the anchored content. Security finding.
+	// @access: restricted
 	Found bool
-	// @access: confidential
+	// Detection rule that matched. Security finding.
+	// @access: restricted
 	RuleID pgtype.Text
 	// @access: opaque-restricted
 	Description pgtype.Text
 	// @access: secret-restricted
 	Match pgtype.Text
-	// @access: confidential
+	// Start offset of the primary match in the scanned content. Security finding.
+	// @access: restricted
 	StartPos pgtype.Int4
-	// @access: confidential
+	// End offset of the primary match in the scanned content. Security finding.
+	// @access: restricted
 	EndPos pgtype.Int4
-	// @access: confidential
+	// Detector confidence for the finding. Security finding.
+	// @access: restricted
 	Confidence pgtype.Float8
-	// @access: confidential
+	// Detector tags for the finding. Security finding.
+	// @access: restricted
 	Tags []string
 	// @access: secret-restricted
 	Spans []byte

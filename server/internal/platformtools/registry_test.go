@@ -132,11 +132,10 @@ func TestBuildToolsetsIncludesPlatformMCPReadToolset(t *testing.T) {
 	}
 
 	toolsets := platformtools.BuildToolsets(platformtools.ToolsetDependencies{
-		AssistantMemoryTools:          nil,
-		AssistantSkillTools:           nil,
-		AssistantTriggerTools:         nil,
-		ManagedAssistantInsightsTools: nil,
-		PlatformMCPReadTools:          []platformtools.ExternalTool{tool},
+		AssistantMemoryTools:  nil,
+		AssistantSkillTools:   nil,
+		AssistantTriggerTools: nil,
+		PlatformMCPReadTools:  []platformtools.ExternalTool{tool},
 	})
 
 	ts, ok := toolsets[platformtools.PlatformMCPReadToolsetSlug]
@@ -150,6 +149,6 @@ func TestPlatformToolsetIdentityIsStableAndDistinct(t *testing.T) {
 
 	assistantsID := platformtools.PlatformToolsetID(platformtools.AssistantsPlatformToolsetSlug)
 	require.Equal(t, assistantsID, platformtools.PlatformToolsetID(platformtools.AssistantsPlatformToolsetSlug))
-	require.NotEqual(t, assistantsID, platformtools.PlatformToolsetID(platformtools.ManagedAssistantPlatformToolsetSlug))
+	require.NotEqual(t, assistantsID, platformtools.PlatformToolsetID(platformtools.PlatformMCPReadToolsetSlug))
 	require.Equal(t, "Speakeasy assistant tools", platformtools.PlatformToolsetName(platformtools.AssistantsPlatformToolsetSlug))
 }

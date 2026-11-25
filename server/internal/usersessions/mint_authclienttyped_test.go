@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
 	sessionsgen "github.com/speakeasy-api/gram/server/gen/user_sessions"
@@ -12,8 +13,8 @@ import (
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -66,10 +67,10 @@ func TestMintUserSessionRecordsTypedClientAfterNormalCapture(t *testing.T) {
 	require.Equal(t, uuid.NullUUID{UUID: authclientbackfill.OAuthClientID(orgID, registration, authclientbackfill.TypeRemoteSession), Valid: true}, choice.AuthClientID)
 }
 
-// With upstream auth enforced, a dashboard mint records each server's choice
+// Without issuer links, a dashboard mint records each server's choice
 // from the auth clients it offers. An association whose auth client the server
 // no longer offers is not a choice.
-func TestMintUserSessionRecordsChoicesFromAuthClientsUnderEnforcement(t *testing.T) {
+func TestMintUserSessionRecordsTypedChoicesWithoutIssuerLinks(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 	auth, ok := contextvalues.GetAuthContext(ctx)
@@ -78,8 +79,8 @@ func TestMintUserSessionRecordsChoicesFromAuthClientsUnderEnforcement(t *testing
 	require.NotNil(t, auth.ProjectID)
 	orgID := auth.ActiveOrganizationID
 	issuerID := seedIssuer(t, ctx, ti, "mint-enforced-issuer")
-	servers := make([]mcpserversrepo.McpServer, 0, 2)
-	for _, slug := range []string{"mint-offered", "mint-detached"} {
+	servers := make([]mcpserversrepo.McpServer, 0, 4)
+	for _, slug := range []string{"mint-offered", "mint-detached", "mint-ema", "mint-pending"} {
 		source, err := remotemcprepo.New(ti.conn).CreateServer(ctx, remotemcprepo.CreateServerParams{
 			ID:            uuid.New(),
 			ProjectID:     *auth.ProjectID,
@@ -105,8 +106,11 @@ func TestMintUserSessionRecordsChoicesFromAuthClientsUnderEnforcement(t *testing
 	seedMintEndpoint(t, ctx, ti, offered.ID, uuid.NullUUID{})
 
 	fixtures := authclientbackfill.New(ti.conn)
-	// The offered server's auth client has no association.
+	// The offered server's typed client has no legacy association or issuer link.
 	registration := seedUpstream(t, ctx, ti.conn, uuid.NullUUID{UUID: *auth.ProjectID, Valid: true}, issuerID, urn.NewUserSubject(auth.UserID), "mint-offered.example.test")
+	detachedCount, err := remotesessionsrepo.New(ti.conn).DetachProjectRemoteSessionClientFromUserSessionIssuer(ctx, remotesessionsrepo.DetachProjectRemoteSessionClientFromUserSessionIssuerParams{ProjectID: *auth.ProjectID, OrganizationID: orgID, RemoteSessionClientID: registration, UserSessionIssuerID: issuerID})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, detachedCount)
 	authClient, err := fixtures.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{OrganizationID: orgID, ProjectID: uuid.NullUUID{UUID: *auth.ProjectID, Valid: true}, ClientType: authclientbackfill.TypeRemoteSession, Source: "admin", RemoteSessionClientID: uuid.NullUUID{UUID: registration, Valid: true}})
 	require.NoError(t, err)
 	require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: orgID, McpServerID: offered.ID, AuthClientID: authClient, Source: "admin"}))
@@ -114,7 +118,18 @@ func TestMintUserSessionRecordsChoicesFromAuthClientsUnderEnforcement(t *testing
 	bound := seedUpstream(t, ctx, ti.conn, uuid.NullUUID{UUID: *auth.ProjectID, Valid: true}, issuerID, urn.NewUserSubject(auth.UserID), "mint-bound.example.test")
 	_, err = fixtures.SeedAssociationFixture(ctx, authclientbackfill.SeedAssociationFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: orgID, McpServerID: detached.ID, RemoteSessionClientID: bound})
 	require.NoError(t, err)
-	require.NoError(t, fixtures.SeedOrganizationFeatureFixture(ctx, authclientbackfill.SeedOrganizationFeatureFixtureParams{OrganizationID: orgID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)}))
+
+	// A past typed offer makes the leftover association historical. A server
+	// that never had a typed offer is incomplete, not explicitly no-auth.
+	require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: orgID, McpServerID: detached.ID, AuthClientID: authClient, Source: "admin"}))
+	require.NoError(t, fixtures.SoftDeleteServerAuthClientLinksFixture(ctx, detached.ID))
+	_, err = fixtures.SeedAssociationFixture(ctx, authclientbackfill.SeedAssociationFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: orgID, McpServerID: servers[3].ID, RemoteSessionClientID: bound})
+	require.NoError(t, err)
+
+	// An EMA offer is never chosen implicitly by dashboard minting.
+	ema, err := fixtures.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{OrganizationID: orgID, ProjectID: conv.ToNullUUID(*auth.ProjectID), ClientType: "ema", Source: "admin", RemoteSessionClientID: conv.ToNullUUID(registration)})
+	require.NoError(t, err)
+	require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: orgID, McpServerID: servers[2].ID, AuthClientID: ema, Source: "admin"}))
 
 	serverID := offered.ID.String()
 	minted, err := ti.service.MintUserSession(ctx, &sessionsgen.MintUserSessionPayload{McpServerID: &serverID})
@@ -134,4 +149,11 @@ func TestMintUserSessionRecordsChoicesFromAuthClientsUnderEnforcement(t *testing
 	require.True(t, choice.NoAuth)
 	require.False(t, choice.RemoteSessionClientID.Valid)
 	require.False(t, choice.AuthClientID.Valid)
+
+	_, err = fixtures.GetSelectionFixture(ctx, authclientbackfill.GetSelectionFixtureParams{CredentialID: session.ID, McpServerID: servers[2].ID})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+
+	_, err = fixtures.GetSelectionFixture(ctx, authclientbackfill.GetSelectionFixtureParams{CredentialID: session.ID, McpServerID: servers[3].ID})
+	require.ErrorIs(t, err, pgx.ErrNoRows, "incomplete typed setup is not an explicit no-auth choice")
+
 }

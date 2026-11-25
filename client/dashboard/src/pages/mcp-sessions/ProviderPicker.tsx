@@ -28,7 +28,7 @@ import { providerScopeLabel } from "./providers";
 const SEARCH_THRESHOLD = 8;
 
 /**
- * The header's name, as a picker: the current MCP Authentication Provider,
+ * The header's name, as a picker: the current MCP sign-in,
  * opening the others this project's servers can use.
  */
 export function ProviderPicker({
@@ -78,7 +78,7 @@ export function ProviderPicker({
           contain phrasing content. */}
       <h1 className={cn(DETAIL_HEADER_NAME, "min-w-0")}>
         <PopoverTrigger
-          aria-label={`MCP Authentication Provider: ${current.slug}. Switch provider`}
+          aria-label={`MCP sign-in: ${current.slug}. Switch to another one`}
           className="hover:text-foreground/80 inline-flex max-w-full min-w-0 items-center gap-2 text-left transition-colors"
         >
           <span className="min-w-0 break-words">{current.slug}</span>
@@ -94,10 +94,10 @@ export function ProviderPicker({
       >
         <Command>
           {providers.length > SEARCH_THRESHOLD ? (
-            <CommandInput placeholder="Find a provider" />
+            <CommandInput placeholder="Find an MCP sign-in" />
           ) : null}
           <CommandList>
-            <CommandEmpty>No provider matches.</CommandEmpty>
+            <CommandEmpty>No matches.</CommandEmpty>
             {organizationWide.length > 0 ? (
               <CommandGroup heading={providerScopeLabel({ projectId: "" })}>
                 {organizationWide.map(item)}
@@ -118,7 +118,7 @@ export function ProviderPicker({
 const SWITCHER_ID = "mcp-provider-switcher";
 
 /**
- * Switches the page between this project's MCP Authentication Providers.
+ * Switches the page between this project's MCP sign-ins.
  * Nothing to switch to, nothing shown.
  */
 export function ProviderSwitcher({
@@ -141,11 +141,11 @@ export function ProviderSwitcher({
     <div className="flex min-w-0 items-center gap-2">
       <span className="text-muted-foreground inline-flex items-center gap-1.5 text-sm">
         <label htmlFor={SWITCHER_ID} className="sr-only md:not-sr-only">
-          MCP Authentication Provider
+          MCP sign-in
         </label>
         <Tooltip>
           <TooltipTrigger
-            aria-label="What is an MCP Authentication Provider?"
+            aria-label="What is an MCP sign-in?"
             className="hover:text-foreground inline-flex cursor-help"
           >
             <Info className="size-3.5" aria-hidden />
@@ -164,8 +164,8 @@ export function ProviderSwitcher({
           const next = providers.find((p) => p.id === item.value);
           if (next && next.id !== current.id) onSelect(next);
         }}
-        searchPlaceholder="Find a provider"
-        emptyMessage="No provider matches."
+        searchPlaceholder="Find an MCP sign-in"
+        emptyMessage="No matches."
         className="h-8 max-w-[240px]"
         contentClassName="w-[300px]"
       >

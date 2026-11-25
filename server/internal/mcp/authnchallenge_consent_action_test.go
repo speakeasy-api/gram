@@ -23,7 +23,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	authclientfixtures "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	remotemcp_repo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -106,6 +108,18 @@ func createConsentRemoteClientWithCallback(t *testing.T, ctx context.Context, co
 	return rsc.ID
 }
 
+// seedConsentAuthOffer gives an interactive fixture a typed offer without
+// relying on the registration's sign-in links to select authentication.
+func seedConsentAuthOffer(t *testing.T, ctx context.Context, ti *testInstance, orgID string, projectID, serverID, registrationID uuid.UUID, clientType string) uuid.UUID {
+	t.Helper()
+	fixtures := authclientfixtures.New(ti.conn)
+	id, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: orgID, ProjectID: conv.ToNullUUID(projectID), ClientType: clientType, Source: "admin", RemoteSessionClientID: uuid.NullUUID{UUID: registrationID, Valid: registrationID != uuid.Nil}})
+	require.NoError(t, err)
+	require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{OrganizationID: orgID, ProjectID: projectID, McpServerID: serverID, AuthClientID: id, Source: "admin"}))
+	ti.service.SetAuthClientPermitted(true)
+	return id
+}
+
 // attachConsentRemoteMcpServer binds a remote-backed mcp_server to issuerID
 // so clients on that issuer derive serverURL as their resource.
 func attachConsentRemoteMcpServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID, issuerID uuid.UUID, slug, serverURL string) uuid.UUID {
@@ -153,6 +167,8 @@ func mintConsentEndpointState(t *testing.T, ctx context.Context, ti *testInstanc
 	}
 
 	subject := createTestUser(t, ctx, ti, uuid.NewString())
+	_, err := organizationsrepo.New(ti.conn).UpsertOrganizationUserRelationship(ctx, organizationsrepo.UpsertOrganizationUserRelationshipParams{OrganizationID: orgID, UserID: conv.ToPGText(subject.ID)})
+	require.NoError(t, err)
 	stateID := uuid.NewString()
 	require.NoError(t, ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
 		ID:                  stateID,
@@ -384,6 +400,7 @@ func seedSharedUpstreamEndpoint(t *testing.T, slug string) (context.Context, con
 	// As the endpoint resolves: server A, and the registered URL, verbatim.
 	endpoint.McpServerID = conv.ToNullUUID(serverA)
 	endpoint.UpstreamResource = consentUpstreamA + "/"
+	seedPrincipalMCPConnectGrant(t, ctx, ti, orgID, urn.NewPrincipal(urn.PrincipalTypeUser, subject.ID), serverA)
 
 	return ctx, consentActionFixture{
 		ti:        ti,
@@ -409,34 +426,34 @@ func TestServeConsentAction_ConnectSharedClientRecordsEndpointUpstream(t *testin
 	ctx, fx, other := seedSharedUpstreamEndpoint(t, "aim362-sole")
 	shared := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim362-sole", "", []uuid.UUID{fx.shared, other})
 
+	seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, fx.endpoint.McpServerID.UUID, shared, "remote_session")
 	loc := postConnectAction(t, fx, shared)
 	require.Equal(t, consentUpstreamA+"/", loc.Query().Get("resource"))
 	state := mintedRemoteLoginState(t, ctx, fx, loc.Query().Get("state"))
 	require.Equal(t, consentUpstreamA+"/", state.Resource)
 }
 
-// A shared client never claims the endpoint's upstream from a sibling that
-// derives it on its own: both recording it would fail routing closed as a
-// duplicate resource.
-func TestServeConsentAction_ConnectSharedClientDefersToOwningSibling(t *testing.T) {
+// An explicit offer pins the resource even when another provider serves it.
+func TestServeConsentAction_ConnectSharedClientUsesItsExplicitOffer(t *testing.T) {
 	t.Parallel()
 
 	ctx, fx, other := seedSharedUpstreamEndpoint(t, "aim362-owned")
 	owner := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim362-owner", "", []uuid.UUID{fx.shared})
 	shared := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim362-shared", "", []uuid.UUID{fx.shared, other})
 
+	for _, id := range []uuid.UUID{owner, shared} {
+		seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, fx.endpoint.McpServerID.UUID, id, "remote_session")
+	}
 	locOwner := postConnectAction(t, fx, owner)
 	require.Equal(t, consentUpstreamA+"/", locOwner.Query().Get("resource"))
 
 	locShared := postConnectAction(t, fx, shared)
-	_, hasResource := locShared.Query()["resource"]
-	require.False(t, hasResource, "the owning sibling holds the endpoint's upstream")
-	require.Empty(t, mintedRemoteLoginState(t, ctx, fx, locShared.Query().Get("state")).Resource)
+	require.Equal(t, consentUpstreamA+"/", locShared.Query().Get("resource"))
+	require.Equal(t, consentUpstreamA+"/", mintedRemoteLoginState(t, ctx, fx, locShared.Query().Get("state")).Resource)
 }
 
-// Two shared clients on one endpoint are ambiguous: neither claims its
-// upstream.
-func TestServeConsentAction_ConnectTwoSharedClientsClaimNothing(t *testing.T) {
+// Two registrations may independently offer the same direct target.
+func TestServeConsentAction_ConnectTwoOffersKeepTheSameTarget(t *testing.T) {
 	t.Parallel()
 
 	ctx, fx, other := seedSharedUpstreamEndpoint(t, "aim362-two")
@@ -444,9 +461,9 @@ func TestServeConsentAction_ConnectTwoSharedClientsClaimNothing(t *testing.T) {
 	second := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim362-second", "", []uuid.UUID{fx.shared, other})
 
 	for _, id := range []uuid.UUID{first, second} {
+		seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, fx.endpoint.McpServerID.UUID, id, "remote_session")
 		loc := postConnectAction(t, fx, id)
-		_, hasResource := loc.Query()["resource"]
-		require.False(t, hasResource)
+		require.Equal(t, consentUpstreamA+"/", loc.Query().Get("resource"))
 	}
 }
 
@@ -561,7 +578,7 @@ func newConsentCallbackManager(t *testing.T, ti *testInstance) *remotesessions.C
 	t.Helper()
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
-	return remotesessions.NewChallengeManager(ti.logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, ti.enc, policy, nil, ti.cacheAdapter, ti.serverURL)
+	return remotesessions.NewChallengeManager(ti.logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, ti.enc, policy, nil, ti.cacheAdapter, ti.serverURL, remotesessions.WithTypedAuthorizationValidator(ti.service.ValidateRemoteLoginTypedAuthorization))
 }
 
 // completeRemoteLogin drives the code-exchange callback for one authorize

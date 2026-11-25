@@ -1078,7 +1078,7 @@ WHERE id = @id;
 -- name: ListAgentColumnNamesFixture :many
 SELECT column_name::text
 FROM information_schema.columns
-WHERE table_schema = 'public' AND table_name = 'agents'
+WHERE table_schema = current_schema() AND table_name = 'agents'
 ORDER BY ordinal_position;
 
 -- name: CreateProjectFixture :one
@@ -2792,10 +2792,95 @@ SET updated_at = updated_at - interval '1 hour'
 WHERE network_ingress_id = @network_ingress_id
   AND state_key = 'issuance-lease';
 
+-- name: DeleteRegistrationJunctionFixture :exec
+DELETE FROM remote_session_client_user_session_issuers AS link
+USING remote_session_clients AS c
+WHERE link.remote_session_client_id = c.id
+  AND c.id = @remote_session_client_id
+  AND c.project_id IS NOT DISTINCT FROM sqlc.narg('project_id')::uuid;
+
+-- name: CreateFunctionsAccessFixture :one
+-- Test-only fixture: stores a function runner key as given, unfenced, for
+-- tests that need a deployment's function to have credentials.
+-- organization_id is the project's organization, or NULL when it has no
+-- metadata row. Production code writes runner keys through package
+-- runnerkeys.
+INSERT INTO functions_access (
+    project_id
+  , organization_id
+  , deployment_id
+  , function_id
+  , encryption_key
+  , bearer_format
+) VALUES (
+    @project_id
+  , (
+      SELECT p.organization_id
+      FROM projects AS p
+      JOIN organization_metadata AS om ON om.id = p.organization_id
+      WHERE p.id = @project_id
+    )
+  , @deployment_id
+  , @function_id
+  , @encryption_key
+  , @bearer_format
+)
+RETURNING id;
+
+-- name: ClearFunctionsAccessOrganizationFixture :exec
+-- Test-only fixture: reproduces a function runner key written before
+-- functions_access had an organization_id.
+UPDATE functions_access SET organization_id = NULL WHERE id = @id;
+
+-- name: SoftDeleteFunctionsAccessFixture :exec
+-- Test-only fixture: soft-deletes a function runner key.
+UPDATE functions_access SET deleted_at = clock_timestamp() WHERE id = @id;
+
+-- name: GetFunctionsAccessRowFixture :one
+-- Test-only fixture: reads a function runner key row as stored.
+SELECT * FROM functions_access WHERE id = @id;
+
+-- name: GetFunctionsAccessOrganizationFixture :one
+-- Test-only fixture: reads a function runner key's organization, soft-deleted
+-- or not.
+SELECT organization_id, updated_at FROM functions_access WHERE id = @id;
+
 -- name: SetAPIKeyActivityFixture :exec
 -- Backdates a key's creation and last use so the plugin key reaper sees it as
 -- old or recently used.
 UPDATE api_keys
 SET created_at = @created_at
   , last_accessed_at = sqlc.narg(last_accessed_at)
+WHERE id = @id;
+
+-- name: EditProductFixture :exec
+UPDATE ai_products
+SET display_name = @display_name, deleted_at = sqlc.narg('deleted_at')
+WHERE id = @id;
+
+-- Appends a NULL to every array column, which the schema allows.
+-- name: AddNullArrayElementsToProductFixture :exec
+UPDATE ai_products
+SET bundle_ids = array_append(bundle_ids, NULL),
+  binaries = array_append(binaries, NULL),
+  config_dirs = array_append(config_dirs, NULL),
+  process_names = array_append(process_names, NULL),
+  client_info_names = array_append(client_info_names, NULL)
+WHERE id = @id;
+
+-- Stores binaries as a nested array, which the schema allows.
+-- name: NestProductBinariesFixture :exec
+UPDATE ai_products
+SET binaries = ARRAY[ARRAY['nested-a', 'nested-b']]
+WHERE id = @id;
+
+-- Inserts even where a soft-deleted row holds the URL, unlike the seed.
+-- name: InsertDocumentFixture :exec
+INSERT INTO ai_product_cimd_documents (id, ai_product_id, url, display_name, enabled, is_pattern)
+VALUES (@id, @ai_product_id, @url, @display_name, @enabled, @is_pattern);
+
+-- name: EditDocumentFixture :exec
+UPDATE ai_product_cimd_documents
+SET url = @url, display_name = @display_name, enabled = @enabled,
+    deleted_at = sqlc.narg('deleted_at')
 WHERE id = @id;

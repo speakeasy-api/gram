@@ -51,6 +51,10 @@ func connectionLogStub() *stubRouteTestSource {
 	return &stubRouteTestSource{dataSource: dataexports.DataSourceMCPConnectionLogs, signals: []dataexports.Signal{dataexports.SignalLogs}}
 }
 
+func feedbackStub() *stubRouteTestSource {
+	return &stubRouteTestSource{dataSource: dataexports.DataSourceMCPFeedback, signals: []dataexports.Signal{dataexports.SignalLogs}}
+}
+
 func unsafeRouteTestPolicy(t *testing.T) *guardian.Policy {
 	t.Helper()
 	// Unsafe so the test can reach an httptest server on loopback.
@@ -61,7 +65,7 @@ func unsafeRouteTestPolicy(t *testing.T) *guardian.Policy {
 
 func newTestRouteTester(t *testing.T, policy *guardian.Policy) *RouteTester {
 	t.Helper()
-	tester, err := NewRouteTester(policy, append(NewRouteTestSources(testenv.NewLogger(t), testenv.NewMeterProvider(t)), connectionLogStub())...)
+	tester, err := NewRouteTester(policy, append(NewRouteTestSources(testenv.NewLogger(t), testenv.NewMeterProvider(t)), connectionLogStub(), feedbackStub())...)
 	require.NoError(t, err)
 	return tester
 }
@@ -132,13 +136,16 @@ func TestNewRouteTester_RequiresExactlyOneSourcePerRegistryEntry(t *testing.T) {
 	_, err := NewRouteTester(policy, NewRouteTestSources(logger, meterProvider)...)
 	require.ErrorContains(t, err, `"mcp_connection_logs" has no route test source`)
 
-	_, err = NewRouteTester(policy, append(NewRouteTestSources(logger, meterProvider), connectionLogStub(), connectionLogStub())...)
+	_, err = NewRouteTester(policy, append(NewRouteTestSources(logger, meterProvider), connectionLogStub())...)
+	require.ErrorContains(t, err, `"mcp_feedback" has no route test source`)
+
+	_, err = NewRouteTester(policy, append(NewRouteTestSources(logger, meterProvider), connectionLogStub(), connectionLogStub(), feedbackStub())...)
 	require.ErrorContains(t, err, "registered twice")
 
-	_, err = NewRouteTester(policy, append(NewRouteTestSources(logger, meterProvider), connectionLogStub(), &stubRouteTestSource{dataSource: "unknown", signals: nil})...)
+	_, err = NewRouteTester(policy, append(NewRouteTestSources(logger, meterProvider), connectionLogStub(), feedbackStub(), &stubRouteTestSource{dataSource: "unknown", signals: nil})...)
 	require.ErrorContains(t, err, "not a registered data export source")
 
-	_, err = NewRouteTester(policy, append(NewRouteTestSources(logger, meterProvider), connectionLogStub())...)
+	_, err = NewRouteTester(policy, append(NewRouteTestSources(logger, meterProvider), connectionLogStub(), feedbackStub())...)
 	require.NoError(t, err)
 }
 
@@ -150,6 +157,7 @@ func TestRouteTester_RefusesASourceMissingARegisteredSignal(t *testing.T) {
 		newRiskFindingTestSource(),
 		&stubRouteTestSource{dataSource: dataexports.DataSourceProductTelemetry, signals: []dataexports.Signal{dataexports.SignalLogs}},
 		connectionLogStub(),
+		feedbackStub(),
 	}
 	tester, err := NewRouteTester(unsafeRouteTestPolicy(t), sources...)
 	require.NoError(t, err)
@@ -489,7 +497,7 @@ func TestRouteTester_KeepsTheTestMessageAndRedactsTheRest(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	tester, err := NewRouteTester(unsafeRouteTestPolicy(t), append(NewRouteTestSources(testenv.NewLogger(t), testenv.NewMeterProvider(t)), &sensitiveLogSource{})...)
+	tester, err := NewRouteTester(unsafeRouteTestPolicy(t), append(NewRouteTestSources(testenv.NewLogger(t), testenv.NewMeterProvider(t)), &sensitiveLogSource{}, feedbackStub())...)
 	require.NoError(t, err)
 	_, err = tester.SendTest(t.Context(), dataexports.DataSourceMCPConnectionLogs, routeTestDestination(server.URL, false), routeTestEventID)
 	require.NoError(t, err)
@@ -617,7 +625,7 @@ func TestRouteTester_SendsNothingWhenARequestCannotBeEncoded(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	sources := []RouteTestSource{newToolCallLogTestSource(), newRiskFindingTestSource(), &partlyUnencodableSource{}, connectionLogStub()}
+	sources := []RouteTestSource{newToolCallLogTestSource(), newRiskFindingTestSource(), &partlyUnencodableSource{}, connectionLogStub(), feedbackStub()}
 	tester, err := NewRouteTester(unsafeRouteTestPolicy(t), sources...)
 	require.NoError(t, err)
 

@@ -472,6 +472,7 @@ func TestConnectionOutcome_FirstTimeMemberIsNotConnected(t *testing.T) {
 		remote := createConsentRemoteClient(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "first-"+uuid.NewString()[:8], "", []uuid.UUID{issuer.ID})
 		_, err := upstreamclientsrepo.New(ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID, McpServerID: memberID, RemoteSessionClientID: remote})
 		require.NoError(t, err)
+		seedConsentAuthOffer(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, memberID, remote, "remote_session")
 		stateID, _ := seedGatewayConsentChallenge(t, ctx, ti, issuer.ID, client, gateway.ID, slug)
 		state, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
 		require.NoError(t, err)

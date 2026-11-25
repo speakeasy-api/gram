@@ -494,8 +494,8 @@ WHERE a.mcp_server_id = ANY(@mcp_server_ids::uuid[])
 -- server's credential headers must be carried by it. A client or association
 -- an administrator created is authoritative and mirrors nothing, so those
 -- checks do not apply to it.
--- With typed_only, which the caller sets for an organization enforcing upstream
--- auth, auth client links alone say what a server offers: an offered client's
+-- With typed_only (always for serving, enrollment-dependent for consent),
+-- auth client links alone say what a server offers: an offered client's
 -- registration counts as attached, and an upstream OAuth client association
 -- does not give the server an OAuth client. upstream_auth_pending still reads
 -- associations, so a server no auth client was ever linked to stays
@@ -1071,15 +1071,25 @@ WHERE sel.credential_kind = @credential_kind::text
   AND sel.deleted IS FALSE;
 
 -- name: ListServersAssociatedWithClient :many
--- Every live MCP server with an association to the client, tombstoned ones
--- included, with the organization and project it sits in. Without an
--- organization it spans every organization, for a platform-global client.
-SELECT DISTINCT a.organization_id, a.mcp_server_id, a.project_id
-FROM mcp_server_remote_session_clients AS a
-JOIN mcp_servers AS s ON s.id = a.mcp_server_id AND s.deleted IS FALSE
-WHERE a.remote_session_client_id = @remote_session_client_id::uuid
-  AND (sqlc.narg('organization_id')::text IS NULL OR a.organization_id = sqlc.narg('organization_id')::text)
-ORDER BY a.organization_id, a.mcp_server_id;
+-- Discover both records that the caller may mutate: the association writer's
+-- mirror (including tombstones and associations of retired servers/projects)
+-- and typed offers, including unmirrored ones.
+SELECT DISTINCT reach.organization_id, reach.mcp_server_id, reach.project_id
+FROM (
+  SELECT a.organization_id, a.mcp_server_id, a.project_id
+  FROM mcp_server_remote_session_clients a
+  WHERE a.remote_session_client_id = @remote_session_client_id::uuid
+  UNION ALL
+  SELECT offer.organization_id, offer.mcp_server_id, offer.project_id
+  FROM mcp_server_auth_clients offer
+  JOIN mcp_auth_clients auth ON auth.id = offer.auth_client_id AND auth.organization_id = offer.organization_id
+  JOIN mcp_servers server ON server.id = offer.mcp_server_id AND server.project_id = offer.project_id AND NOT server.deleted
+  JOIN projects p ON p.id = offer.project_id AND p.organization_id = offer.organization_id AND NOT p.deleted
+  WHERE auth.remote_session_client_id = @remote_session_client_id::uuid AND NOT offer.deleted
+) reach
+JOIN projects p ON p.id = reach.project_id AND p.organization_id = reach.organization_id
+WHERE sqlc.narg('organization_id')::text IS NULL OR reach.organization_id = sqlc.narg('organization_id')::text
+ORDER BY reach.organization_id, reach.mcp_server_id;
 
 -- name: ListOrganizationProjectsWithServers :many
 -- The organization's live projects with a live MCP server, for a change that
@@ -1124,3 +1134,18 @@ WHERE g.user_session_issuer_id = ANY(@user_session_issuer_ids::uuid[])
   AND p.deleted IS FALSE
   AND g.deleted IS FALSE
 ORDER BY 1;
+
+-- name: ListHostedUpstreamAssignments :many
+-- Preserve the server row even without a live placement so readers can
+-- distinguish an explicit no-auth setting from missing configuration.
+SELECT s.id AS server_id, s.project_id, s.requires_upstream_auth, s.user_session_issuer_id,
+       a.remote_session_client_id AS registration_id
+FROM mcp_servers AS s
+JOIN projects AS p ON p.id = s.project_id AND NOT p.deleted
+JOIN organization_metadata AS org ON org.id = p.organization_id AND org.disabled_at IS NULL
+LEFT JOIN mcp_server_remote_session_clients AS a
+    ON a.mcp_server_id = s.id AND a.project_id = s.project_id
+   AND a.organization_id = org.id AND NOT a.deleted
+WHERE s.id = ANY(@server_ids::uuid[]) AND p.organization_id = @organization_id::text
+  AND s.toolset_id IS NOT NULL AND NOT s.deleted
+ORDER BY s.id, a.remote_session_client_id;

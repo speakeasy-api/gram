@@ -78,13 +78,14 @@ func DetachProvider(ctx context.Context, tx pgx.Tx, logger *slog.Logger, gateway
 			attr.SlogMcpServerID(serverID.String()))
 		return nil
 	}
-	if err := repo.New(tx).LockMemberProviderClientParents(ctx, repo.LockMemberProviderClientParentsParams{GatewayIssuerID: gateway.UserSessionIssuerID, RemoteIssuerID: provider}); err != nil {
+	if err := repo.New(tx).LockMemberProviderClientParents(ctx, repo.LockMemberProviderClientParentsParams{GatewayIssuerID: gateway.UserSessionIssuerID, RemoteIssuerID: provider, ProjectID: gateway.ProjectID, OrganizationID: gateway.OrganizationID}); err != nil {
 		return fmt.Errorf("lock member provider attachment parents: %w", err)
 	}
 	detached, err := repo.New(tx).AutoDetachMemberProviderClient(ctx, repo.AutoDetachMemberProviderClientParams{
 		GatewayIssuerID: gateway.UserSessionIssuerID,
 		RemoteIssuerID:  provider,
 		ProjectID:       gateway.ProjectID,
+		OrganizationID:  gateway.OrganizationID,
 	})
 	if err != nil {
 		return fmt.Errorf("detach member provider client: %w", err)

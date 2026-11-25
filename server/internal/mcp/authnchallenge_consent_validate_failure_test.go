@@ -13,17 +13,18 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
-	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
-	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // recordValidationAttempts gives the fixture's challenge an attempt and records its rows.
@@ -37,13 +38,13 @@ func recordValidationAttempts(t *testing.T, ctx context.Context, fx validationFi
 }
 
 // postValidatePage posts Verify through the browser error handler and returns the page, whitespace collapsed.
-func postValidatePage(t *testing.T, fx validationFixture, clientID uuid.UUID) (int, string) {
+func postValidatePage(t *testing.T, ctx context.Context, fx validationFixture, clientID uuid.UUID) (int, string) {
 	t.Helper()
 	form := url.Values{"state": {fx.stateID}, "csrf_token": {"csrf-token"}, "action": {"validate"}, "client_id": {clientID.String()}}
 	if fx.server != "" {
 		form.Set("server", fx.server)
 	}
-	req := httptest.NewRequest(http.MethodPost, "/mcp/"+fx.endpoint.Slug+"/connect/remote-session", strings.NewReader(form.Encode()))
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/mcp/"+fx.endpoint.Slug+"/connect/remote-session", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 	oops.BrowserErrHandle(testenv.NewLogger(t), func(w http.ResponseWriter, r *http.Request) error {
@@ -63,38 +64,16 @@ func checkRows(rec *mcpconnectionattemptstest.Recording) []mcpconnectionattempts
 	return rows
 }
 
-// A token lookup that breaks on our side records internal_error, and the page says so without suggesting a retry.
-func TestServeConsentAction_ValidateTokenLookupFaultRecordsAndSaysNoRetry(t *testing.T) {
+// A malformed agent actor causes the typed token resolver to fail internally.
+// The page reports the fault without suggesting a retry.
+func TestServeConsentAction_ValidateMalformedActorRecordsAndSaysNoRetry(t *testing.T) {
 	t.Parallel()
 
 	ctx, fx := seedMetaValidationFixture(t, "check-fault")
 	rec := recordValidationAttempts(t, ctx, fx)
-	projectID, orgID := consentTestTenant(t, ctx)
-	// The member is associated with the card's client and a second client of
-	// the same issuer, which breaks the one-client-per-issuer invariant its
-	// credential lookup asserts.
-	q := remotesessions_repo.New(fx.ti.conn)
-	twin, err := q.CreateRemoteSessionClient(ctx, remotesessions_repo.CreateRemoteSessionClientParams{
-		ProjectID:             conv.ToNullUUID(projectID),
-		OrganizationID:        conv.ToPGTextEmpty(orgID),
-		RemoteSessionIssuerID: clientRemoteIssuerID(t, ctx, fx.ti.conn, projectID, orgID, fx.clientID),
-		ClientID:              "check-fault-twin",
-		ClientIDIssuedAt:      pgtype.Timestamptz{Time: time.Now(), Valid: true, InfinityModifier: pgtype.Finite},
-		CallbackBaseUrl:       conv.ToPGTextEmpty(""),
-	})
-	require.NoError(t, err)
-	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessions_repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: twin.ID,
-		UserSessionIssuerID:   fx.endpoint.UserSessionIssuerID,
-	}))
-	member, err := mcpserversrepo.New(fx.ti.conn).GetMCPServerBySlug(ctx, mcpserversrepo.GetMCPServerBySlugParams{Slug: conv.ToPGText(fx.server), ProjectID: projectID})
-	require.NoError(t, err)
-	for _, clientID := range []uuid.UUID{fx.clientID, twin.ID} {
-		_, err := upstreamclientsrepo.New(fx.ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: orgID, ProjectID: projectID, McpServerID: member.ID, RemoteSessionClientID: clientID})
-		require.NoError(t, err)
-	}
-
-	status, page := postValidatePage(t, fx, fx.clientID)
+	// A zero agent ID passes URN parsing but is rejected by the typed token resolver.
+	requestCtx := contextvalues.WithAuthenticatedActor(t.Context(), &contextvalues.AuthContext{}, urn.NewPrincipal(urn.PrincipalTypeAgent, uuid.Nil.String()))
+	status, page := postValidatePage(t, requestCtx, fx, fx.clientID)
 	require.Equal(t, http.StatusInternalServerError, status)
 	require.Contains(t, page, "Couldn't check the connection")
 	require.Contains(t, page, "Checking the server's connection")
@@ -119,10 +98,11 @@ func TestServeConsentAction_ValidateUnroutableRecordsAndAsksAdmin(t *testing.T) 
 	projectID, orgID := consentTestTenant(t, ctx)
 	elsewhere := createConsentRemoteClient(t, ctx, fx.ti.conn, projectID, orgID, "check-unroutable-elsewhere", "", []uuid.UUID{fx.endpoint.UserSessionIssuerID})
 	elsewhereIssuer := clientRemoteIssuerID(t, ctx, fx.ti.conn, projectID, orgID, elsewhere)
-	createMetaMember(t, ctx, fx.ti.conn, projectID, fx.endpoint.MetaMcpServerID.UUID, "check-unroutable-claimant", "https://claimed.example.com/mcp", conv.ToNullUUID(elsewhereIssuer), 1)
+	member := createMetaMember(t, ctx, fx.ti.conn, projectID, fx.endpoint.MetaMcpServerID.UUID, "check-unroutable-claimant", "https://claimed.example.com/mcp", conv.ToNullUUID(elsewhereIssuer), 1)
+	seedConsentAuthOffer(t, ctx, fx.ti, orgID, projectID, member.mcpServerID, elsewhere, authz.AuthClientTypeRemoteSession)
 	insertQualifiedRemoteSessionToken(t, ctx, fx.ti, fx.endpoint.UserSessionIssuerID, elsewhere, fx.subject, "token-elsewhere", "https://elsewhere.example.com/mcp")
 
-	status, page := postValidatePage(t, fx, elsewhere)
+	status, page := postValidatePage(t, t.Context(), fx, elsewhere)
 	require.Equal(t, http.StatusBadRequest, status)
 	require.Contains(t, page, "Checking the server's connection")
 	require.Contains(t, page, "Ask your IT administrators")

@@ -47,7 +47,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/networkingress/ingresscredentials"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
@@ -579,20 +581,42 @@ func newAdminCommand() *cli.Command {
 				return err
 			}
 			gcpIdentity := newGCPIdentity(ctx, logger, c)
+			// Built whether or not the application key is set: the remote
+			// session service and the Tailscale OAuth client migration need
+			// both, but the organization encryption transition methods need
+			// only organization encryption. Building
+			// it here stops admin at startup when it is misconfigured.
+			orgEncryption, err := newOrgEncryption(ctx, logger, c, db, gcpIdentity, audit.NewLogger())
+			if err != nil {
+				return err
+			}
 			if applicationEncryption != nil {
-				// Admin reads OAuth credentials only through the remote session
-				// service, so organization encryption is built, and required,
-				// alongside it. Building it here stops admin at startup when it
-				// is misconfigured.
-				// TODO(AIM-1007): pass it to the admin service for organization
-				// encryption counts, backfills and finalization.
-				orgEncryption, err := newOrgEncryption(ctx, logger, c, db, gcpIdentity, audit.NewLogger())
-				if err != nil {
-					return err
-				}
 				adminService.SetRemoteSessionService(remotesessions.NewGlobalService(logger, tracerProvider, meterProvider, db, applicationEncryption, orgEncryption.ClientSecrets(logger, applicationEncryption), guardianPolicy))
+				if orgEncryption.Provisioner != nil {
+					adminService.SetTailscaleOAuthMigration(&admin.TailscaleOAuthMigration{
+						Transitions: orgEncryption.Transitions,
+						Runner:      orgencryption.NewRunner(logger, db, orgEncryption.Cipher(logger, applicationEncryption), meterProvider),
+						Store:       ingresscredentials.NewCopyStore(db),
+					})
+				}
 			} else {
 				logger.WarnContext(ctx, "Admin issuers unavailable; no application encryption key configured")
+			}
+			// Transitions change only where keys can be provisioned.
+			// Without Temporal, runs are unavailable and the hourly
+			// background run finishes the clear after finalize.
+			if orgEncryption.Service != nil && orgEncryption.Provisioner != nil {
+				var runs admin.OrganizationEncryptionRunStarter
+				if temporalEnv != nil {
+					runs = &background.TemporalOrganizationEncryptionRunStarter{TemporalEnv: temporalEnv}
+				}
+				adminService.SetOrganizationEncryption(admin.OrganizationEncryption{
+					Transitions: orgEncryption.Transitions,
+					UseCases:    orgEncryptionUseCaseStores(db),
+					Runs:        runs,
+				})
+			} else {
+				logger.WarnContext(ctx, "Admin organization encryption transitions unavailable; organization encryption is not configured")
 			}
 			var platformAssets *assets.Service
 			assetOptions, err := resolveAdminAssetStorage(c.String("assets-backend"), c.String("assets-uri"))

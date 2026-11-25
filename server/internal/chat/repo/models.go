@@ -25,7 +25,8 @@ type ChatMessage struct {
 	Content string
 	// @access: opaque-restricted
 	ContentRaw []byte
-	// @access: confidential
+	// Asset path of the stored message content; its file name is a digest of that content.
+	// @access: restricted
 	ContentAssetUrl pgtype.Text
 	// @access: confidential
 	Model pgtype.Text
@@ -67,7 +68,8 @@ type ChatMessage struct {
 	ToolOutcomeNotes pgtype.Text
 	// @access: opaque-restricted
 	ToolCallSummaries []byte
-	// @access: confidential
+	// SHA-256 digest of the message content. Reveals when two messages have equal content.
+	// @access: restricted
 	ContentHash []byte
 	// @access: confidential
 	Generation int32

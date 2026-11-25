@@ -32,7 +32,8 @@ import (
 // resourceClient is a remote session client registered for the resource a
 // remote MCP server serves.
 type resourceClient struct {
-	client remotesessionsrepo.ListReachableRemoteSessionClientsRow
+	targetID uuid.UUID
+	client   remotesessionsrepo.ListReachableRemoteSessionClientsRow
 }
 
 // resourceDisplay is what a client records about its resource's RFC 9728
@@ -94,18 +95,23 @@ func (s *Service) claimProtectedResource(ctx context.Context, dbtx pgx.Tx, authC
 		return nil, err
 	}
 	var clients []resourceClient
-	seen := make(map[uuid.UUID]bool)
+	seen := make(map[uuid.UUID]int)
 	q := remotesessionsrepo.New(dbtx)
-	for _, registrations := range offered {
+	for targetID, registrations := range offered {
 		for _, row := range registrations {
-			if seen[row.ClientID] {
-				continue
-			}
 			recorded := conv.FromPGTextOrEmpty[string](row.ResourceIdentifier)
 			if (recorded == resourceURL && !recordedRowDisplay(row).hasMembers()) ||
 				(recorded != resourceURL && (recorded == previousURL || (recorded == "" && len(registrations) == 1))) {
-				seen[row.ClientID] = true
-				clients = append(clients, resourceClient{client: row})
+				if index, exists := seen[row.ClientID]; exists {
+					// Pick one of the original targets deterministically; a different
+					// target cannot confer write authority after discovery starts.
+					if bytes.Compare(targetID[:], clients[index].targetID[:]) < 0 {
+						clients[index].targetID = targetID
+					}
+					continue
+				}
+				seen[row.ClientID] = len(clients)
+				clients = append(clients, resourceClient{targetID: targetID, client: row})
 			}
 		}
 	}
@@ -265,12 +271,9 @@ func (s *Service) writeDiscoveredDisplay(ctx context.Context, authCtx *contextva
 	if err != nil {
 		return err
 	}
-	stillOffered := false
-	for _, registrations := range offered {
-		stillOffered = stillOffered || slices.ContainsFunc(registrations, func(row remotesessionsrepo.ListReachableRemoteSessionClientsRow) bool {
-			return row.ClientID == rc.client.ClientID
-		})
-	}
+	stillOffered := slices.ContainsFunc(offered[rc.targetID], func(row remotesessionsrepo.ListReachableRemoteSessionClientsRow) bool {
+		return row.ClientID == rc.client.ClientID
+	})
 	if !stillOffered {
 		return nil
 	}

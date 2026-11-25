@@ -400,7 +400,7 @@ describe("ConsolidateIssuerDialog", () => {
     renderDialog();
 
     expect(
-      screen.getByText(/Another change to these MCP Authentication Providers/),
+      screen.getByText(/Another change to these MCP sign-ins/),
     ).toBeDefined();
   });
 
@@ -533,7 +533,7 @@ describe("ConsolidateIssuerDialog", () => {
 
     expect(
       screen.getByRole("status", {
-        name: "Loading MCP Authentication Providers",
+        name: "Loading MCP sign-ins",
       }),
     ).toBeDefined();
     expect(screen.queryByText(/No other authorization server/)).toBeNull();

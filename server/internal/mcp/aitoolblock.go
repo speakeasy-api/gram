@@ -17,8 +17,8 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 )
 
 // ErrAIToolBlockCheckUnavailable reports that the organization has blocked at
@@ -80,7 +80,7 @@ type aiToolBlockReads struct {
 
 	// catalog loads the organization's scan-target catalog, which is what
 	// matches the caller to a target.
-	catalog func(ctx context.Context, queries *agentrepo.Queries, organizationID string) (*aitargets.OrganizationList, error)
+	catalog func(ctx context.Context, queries *agentrepo.Queries, organizationID string, snapshot *aivendors.Snapshot) (*aitargets.OrganizationList, error)
 }
 
 // defaultAIToolBlockReads returns the production reads.
@@ -110,7 +110,7 @@ func defaultAIToolBlockReads() aiToolBlockReads {
 // it allows. Once that query says a block IS in force, a failure to load the
 // catalog means the answer is unknown rather than absent, and the request is
 // refused as retryable instead of quietly bypassing the control.
-func (s *Service) checkAIToolGatewayBlock(ctx context.Context, logger *slog.Logger, organizationID string, clientID string) error {
+func (s *Service) checkAIToolGatewayBlock(ctx context.Context, logger *slog.Logger, snapshot *aivendors.Snapshot, organizationID string, clientID string) error {
 	if organizationID == "" || clientID == "" {
 		return nil
 	}
@@ -125,7 +125,7 @@ func (s *Service) checkAIToolGatewayBlock(ctx context.Context, logger *slog.Logg
 		return nil
 	}
 
-	list, err := s.aiToolBlockReads.catalog(ctx, queries, organizationID)
+	list, err := s.aiToolBlockReads.catalog(ctx, queries, organizationID, snapshot)
 	if err != nil {
 		logger.ErrorContext(ctx, "ai scan targets unavailable while a block is in force", attr.SlogError(err))
 		return fmt.Errorf("%w: %w", ErrAIToolBlockCheckUnavailable, err)
@@ -138,7 +138,7 @@ func (s *Service) checkAIToolGatewayBlock(ctx context.Context, logger *slog.Logg
 	}
 	// A CIMD client_id is also a catalog entry, and the entry is the only
 	// stable handle on a vendor that mints one document per server.
-	if preset, known := admission.CatalogPreset(clientID); known {
+	if preset, known := snapshot.CatalogPreset(clientID); known {
 		caller.CIMDVendorKey = preset.VendorKey
 		caller.CIMDCatalogURL = preset.URL
 	}

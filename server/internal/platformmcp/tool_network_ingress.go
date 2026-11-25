@@ -62,6 +62,10 @@ const (
 // k8s.NetworkIngressErrorEncryptionKeyUnavailable for the same reason.
 const networkIngressEncryptionKeyUnavailable = "encryption_key_unavailable"
 
+// networkIngressUnsupportedProvider is the reconcile code for a row no
+// provider hosts, such as one created for the retired Kubernetes operator.
+const networkIngressUnsupportedProvider = "unsupported_provider"
+
 // networkIngressProviderConfigurationUnavailable is the reconcile code for a
 // provider this Speakeasy environment has not deployed or configured.
 const networkIngressProviderConfigurationUnavailable = "provider_configuration_unavailable"
@@ -179,7 +183,7 @@ func networkIngressNextAction(output GetNetworkIngressOutput) string {
 		return networkIngressNextRequestEntitlement
 	case ingress == nil:
 		return networkIngressNextConfigure
-	case ingress.Provider != networkingress.ProviderTailscale:
+	case ingress.Provider != networkingress.ProviderTailscale || ingress.LastError == networkIngressUnsupportedProvider:
 		return networkIngressNextUnsupportedProvider
 	case !ingress.CredentialsConfigured:
 		return networkIngressNextAddCredentials

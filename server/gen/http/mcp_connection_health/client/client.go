@@ -41,6 +41,14 @@ type Client struct {
 	// listDeniedClients endpoint.
 	ListDeniedClientsDoer goahttp.Doer
 
+	// ListSuspectedProblems Doer is the HTTP client used to make requests to the
+	// listSuspectedProblems endpoint.
+	ListSuspectedProblemsDoer goahttp.Doer
+
+	// GetSuspectedProblem Doer is the HTTP client used to make requests to the
+	// getSuspectedProblem endpoint.
+	GetSuspectedProblemDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -62,17 +70,19 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		ListAttemptsDoer:       doer,
-		GetAttemptCountsDoer:   doer,
-		GetAttemptDoer:         doer,
-		GetSignInSummaryDoer:   doer,
-		GetSessionActivityDoer: doer,
-		ListDeniedClientsDoer:  doer,
-		RestoreResponseBody:    restoreBody,
-		scheme:                 scheme,
-		host:                   host,
-		decoder:                dec,
-		encoder:                enc,
+		ListAttemptsDoer:          doer,
+		GetAttemptCountsDoer:      doer,
+		GetAttemptDoer:            doer,
+		GetSignInSummaryDoer:      doer,
+		GetSessionActivityDoer:    doer,
+		ListDeniedClientsDoer:     doer,
+		ListSuspectedProblemsDoer: doer,
+		GetSuspectedProblemDoer:   doer,
+		RestoreResponseBody:       restoreBody,
+		scheme:                    scheme,
+		host:                      host,
+		decoder:                   dec,
+		encoder:                   enc,
 	}
 }
 
@@ -215,6 +225,54 @@ func (c *Client) ListDeniedClients() goa.Endpoint {
 		resp, err := c.ListDeniedClientsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("mcpConnectionHealth", "listDeniedClients", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListSuspectedProblems returns an endpoint that makes HTTP requests to the
+// mcpConnectionHealth service listSuspectedProblems server.
+func (c *Client) ListSuspectedProblems() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListSuspectedProblemsRequest(c.encoder)
+		decodeResponse = DecodeListSuspectedProblemsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListSuspectedProblemsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListSuspectedProblemsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("mcpConnectionHealth", "listSuspectedProblems", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetSuspectedProblem returns an endpoint that makes HTTP requests to the
+// mcpConnectionHealth service getSuspectedProblem server.
+func (c *Client) GetSuspectedProblem() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetSuspectedProblemRequest(c.encoder)
+		decodeResponse = DecodeGetSuspectedProblemResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetSuspectedProblemRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetSuspectedProblemDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("mcpConnectionHealth", "getSuspectedProblem", err)
 		}
 		return decodeResponse(resp)
 	}

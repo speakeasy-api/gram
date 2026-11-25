@@ -182,6 +182,7 @@ it("recommends the server most of the agent's servers use", () => {
     ]),
   );
   expect(result.current.recommendedEndpointId).toBe("two");
+  expect(result.current.recommendedUsedBy).toBe(2);
   expect(result.current.mismatch).toEqual({
     target: { id: "two", slug: "two" },
     servers: [{ server: server("a", "one"), current: "one" }],
@@ -197,6 +198,17 @@ it("recommends the organization's server when no server uses one yet", () => {
     useSetupValues(undefined, [server("a", "private")]),
   );
   expect(result.current.recommendedEndpointId).toBe("org");
+  // Nothing uses it yet, so the step must not say most servers do.
+  expect(result.current.recommendedUsedBy).toBe(0);
+  expect(result.current.selectedProjectId).toBe("");
+});
+
+it("names the project that owns the chosen shared server", () => {
+  endpointQuery.items = [endpoint("proj", "proj", "proj-a", "Alpha")];
+  const { result } = renderHook(() =>
+    useSetupValues(undefined, [server("a", "private")]),
+  );
+  expect(result.current.selectedProjectId).toBe("proj-a");
 });
 
 it("recommends the organization's server for an agent whose servers don't sign in", () => {
