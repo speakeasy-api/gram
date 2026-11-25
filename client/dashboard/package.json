@@ -85,7 +85,7 @@
     "react-error-boundary": "^6.1.2",
     "react-grid-layout": "^2.2.4",
     "react-markdown": "^10.1.0",
-    "react-resizable-panels": "^4.12.2",
+    "react-resizable-panels": "^4.24.0",
     "react-router": "^8.5.2",
     "recharts": "^3.9.2",
     "remark-gfm": "^4.0.1",
