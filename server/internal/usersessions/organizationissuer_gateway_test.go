@@ -135,10 +135,8 @@ func requireOrganizationGatewayAssociation(t *testing.T, ctx context.Context, ti
 	require.Empty(t, links, "so the typed link derived from the association is retired")
 }
 
-// Whether an organization has one organization-level issuer decides whether
-// its organization gateway fronts every server. Creation and deletion still
-// prune legacy associations; a scope move does not infer offer ownership.
-func TestOrganizationIssuerWritersPruneOrganizationGatewayAssociations(t *testing.T) {
+// Organization-gateway reach can change without removing any server's own offer.
+func TestOrganizationIssuerWritersPreserveServerOffers(t *testing.T) {
 	t.Parallel()
 
 	t.Run("creating a second organization issuer", func(t *testing.T) {
@@ -154,7 +152,7 @@ func TestOrganizationIssuerWritersPruneOrganizationGatewayAssociations(t *testin
 		})
 		require.NoError(t, err)
 
-		requireOrganizationGatewayAssociation(t, ctx, ti, seeded, false)
+		requireOrganizationGatewayAssociation(t, ctx, ti, seeded, true)
 	})
 
 	t.Run("deleting the organization issuer", func(t *testing.T) {
@@ -164,7 +162,7 @@ func TestOrganizationIssuerWritersPruneOrganizationGatewayAssociations(t *testin
 
 		require.NoError(t, ti.service.DeleteIssuer(ctx, &orggen.DeleteIssuerPayload{ID: seeded.organizationIssuer.String(), SessionToken: nil}))
 
-		requireOrganizationGatewayAssociation(t, ctx, ti, seeded, false)
+		requireOrganizationGatewayAssociation(t, ctx, ti, seeded, true)
 	})
 
 	t.Run("moving the organization issuer preserves an existing offer", func(t *testing.T) {

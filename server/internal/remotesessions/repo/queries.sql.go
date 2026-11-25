@@ -5478,6 +5478,7 @@ SELECT
         FROM remote_session_client_user_session_issuers AS link
         JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
         WHERE link.remote_session_client_id = c.id
+          AND usi.deleted IS FALSE
           AND (usi.project_id = $1::uuid OR (usi.project_id IS NULL AND usi.organization_id = $2::text))
     )::uuid[] AS user_session_issuer_ids
 FROM remote_session_clients AS c
@@ -9306,6 +9307,144 @@ func (q *Queries) ListGlobalRemoteSessionIssuersByIssuerURL(ctx context.Context,
 	return items, nil
 }
 
+const listIdentityOfferClients = `-- name: ListIdentityOfferClients :many
+SELECT c.id, c.project_id, c.organization_id, c.attachment_scope, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_secret_org_encrypted, c.client_secret_generation, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.json_web_key_set_id, c.scope, c.grant_types, c.audience, c.token_endpoint_auth_audience_format, c.client_id_metadata_uri, c.legacy_callback_url, c.callback_base_url, c.resource_identifier, c.resource_name, c.resource_documentation, c.resource_policy_uri, c.resource_tos_uri, c.upstream_rejected_at, c.identity_provider_connection_id, c.credential_owner, c.display_name, c.forward_client_name, c.created_at, c.updated_at, c.deleted_at, c.deleted
+FROM remote_session_clients AS c
+JOIN remote_session_issuers AS provider
+  ON provider.id = c.remote_session_issuer_id
+ AND NOT provider.deleted
+ AND (provider.project_id = $1::uuid
+      OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = $2::text)))
+WHERE NOT c.deleted
+  AND (c.project_id = $1::uuid
+       OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $2::text)))
+  AND EXISTS (
+      SELECT 1
+      FROM mcp_server_auth_clients AS offer
+      JOIN mcp_servers AS s ON s.id = offer.mcp_server_id AND s.project_id = offer.project_id AND NOT s.deleted
+      JOIN projects AS p ON p.id = s.project_id AND p.organization_id = offer.organization_id AND NOT p.deleted
+      JOIN mcp_auth_clients AS ac ON ac.id = offer.auth_client_id AND ac.organization_id = offer.organization_id
+        AND (ac.project_id IS NULL OR ac.project_id = offer.project_id)
+      WHERE offer.mcp_server_id = $3::uuid
+        AND offer.project_id = $1::uuid AND offer.organization_id = $2::text
+        AND NOT offer.deleted AND NOT ac.deleted AND ac.enabled
+        AND ac.client_type IN ('remote_session', 'service_account') AND ac.remote_session_client_id = c.id
+  )
+ORDER BY c.id
+`
+
+type ListIdentityOfferClientsParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+	McpServerID    uuid.UUID
+}
+
+// The target server's enabled OAuth offers, independent of its downstream issuer.
+func (q *Queries) ListIdentityOfferClients(ctx context.Context, arg ListIdentityOfferClientsParams) ([]RemoteSessionClient, error) {
+	rows, err := q.db.Query(ctx, listIdentityOfferClients, arg.ProjectID, arg.OrganizationID, arg.McpServerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RemoteSessionClient
+	for rows.Next() {
+		var i RemoteSessionClient
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.OrganizationID,
+			&i.AttachmentScope,
+			&i.RemoteSessionIssuerID,
+			&i.ClientID,
+			&i.ClientSecretEncrypted,
+			&i.ClientSecretOrgEncrypted,
+			&i.ClientSecretGeneration,
+			&i.ClientIDIssuedAt,
+			&i.ClientSecretExpiresAt,
+			&i.TokenEndpointAuthMethod,
+			&i.JsonWebKeySetID,
+			&i.Scope,
+			&i.GrantTypes,
+			&i.Audience,
+			&i.TokenEndpointAuthAudienceFormat,
+			&i.ClientIDMetadataUri,
+			&i.LegacyCallbackUrl,
+			&i.CallbackBaseUrl,
+			&i.ResourceIdentifier,
+			&i.ResourceName,
+			&i.ResourceDocumentation,
+			&i.ResourcePolicyUri,
+			&i.ResourceTosUri,
+			&i.UpstreamRejectedAt,
+			&i.IdentityProviderConnectionID,
+			&i.CredentialOwner,
+			&i.DisplayName,
+			&i.ForwardClientName,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listIdentityReplacementTargets = `-- name: ListIdentityReplacementTargets :many
+SELECT s.id, s.toolset_id, s.name, s.slug, p.name AS project_name
+FROM mcp_servers AS s
+JOIN projects AS p ON p.id = s.project_id AND NOT p.deleted
+WHERE p.organization_id = $1::text AND s.project_id = $2::uuid
+  AND s.id = ANY($3::uuid[]) AND NOT s.deleted
+ORDER BY s.id
+`
+
+type ListIdentityReplacementTargetsParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	ServerIds      []uuid.UUID
+}
+
+type ListIdentityReplacementTargetsRow struct {
+	ID          uuid.UUID
+	ToolsetID   uuid.NullUUID
+	Name        pgtype.Text
+	Slug        pgtype.Text
+	ProjectName string
+}
+
+// The affected servers in the caller's project. Callers still check read grants.
+func (q *Queries) ListIdentityReplacementTargets(ctx context.Context, arg ListIdentityReplacementTargetsParams) ([]ListIdentityReplacementTargetsRow, error) {
+	rows, err := q.db.Query(ctx, listIdentityReplacementTargets, arg.OrganizationID, arg.ProjectID, arg.ServerIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListIdentityReplacementTargetsRow
+	for rows.Next() {
+		var i ListIdentityReplacementTargetsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ToolsetID,
+			&i.Name,
+			&i.Slug,
+			&i.ProjectName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOnlyOrganizationUserSessionIssuer = `-- name: ListOnlyOrganizationUserSessionIssuer :many
 SELECT issuer.id
 FROM user_session_issuers AS issuer
@@ -10553,6 +10692,47 @@ func (q *Queries) ListOrganizationTrustedUserSessionIssuersByRemoteSessionIssuer
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOtherIdentityOfferServers = `-- name: ListOtherIdentityOfferServers :many
+SELECT DISTINCT offer.mcp_server_id
+FROM mcp_server_auth_clients AS offer
+JOIN mcp_servers AS s ON s.id = offer.mcp_server_id AND s.project_id = offer.project_id AND NOT s.deleted
+JOIN projects AS p ON p.id = s.project_id AND p.organization_id = offer.organization_id AND NOT p.deleted
+JOIN mcp_auth_clients AS ac ON ac.id = offer.auth_client_id AND ac.organization_id = offer.organization_id
+  AND (ac.project_id IS NULL OR ac.project_id = offer.project_id)
+WHERE offer.organization_id = $1::text AND offer.mcp_server_id <> $2::uuid
+  AND NOT offer.deleted AND NOT ac.deleted AND ac.enabled
+  AND ac.client_type IN ('remote_session', 'service_account') AND ac.remote_session_client_id = $3::uuid
+ORDER BY offer.mcp_server_id
+`
+
+type ListOtherIdentityOfferServersParams struct {
+	OrganizationID        string
+	McpServerID           uuid.UUID
+	RemoteSessionClientID uuid.UUID
+}
+
+// Explicit replacement may move these offers only with confirmation and write
+// authorization. The caller refuses targets outside its locked project.
+func (q *Queries) ListOtherIdentityOfferServers(ctx context.Context, arg ListOtherIdentityOfferServersParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listOtherIdentityOfferServers, arg.OrganizationID, arg.McpServerID, arg.RemoteSessionClientID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var mcp_server_id uuid.UUID
+		if err := rows.Scan(&mcp_server_id); err != nil {
+			return nil, err
+		}
+		items = append(items, mcp_server_id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -12643,6 +12823,45 @@ type ListUserSessionIssuersBoundToProjectClientParams struct {
 // predicate exactly: narrower would miss bindings the purge still deletes.
 func (q *Queries) ListUserSessionIssuersBoundToProjectClient(ctx context.Context, arg ListUserSessionIssuersBoundToProjectClientParams) ([]uuid.UUID, error) {
 	rows, err := q.db.Query(ctx, listUserSessionIssuersBoundToProjectClient, arg.RemoteSessionClientID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var user_session_issuer_id uuid.UUID
+		if err := rows.Scan(&user_session_issuer_id); err != nil {
+			return nil, err
+		}
+		items = append(items, user_session_issuer_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listVisibleUserSessionIssuerIDsForRemoteSessionClient = `-- name: ListVisibleUserSessionIssuerIDsForRemoteSessionClient :many
+SELECT link.user_session_issuer_id
+FROM remote_session_client_user_session_issuers AS link
+JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
+WHERE link.remote_session_client_id = $1::uuid
+  AND usi.deleted IS FALSE
+  AND (usi.project_id = $2::uuid OR (usi.project_id IS NULL AND usi.organization_id = $3::text))
+ORDER BY link.user_session_issuer_id
+`
+
+type ListVisibleUserSessionIssuerIDsForRemoteSessionClientParams struct {
+	RemoteSessionClientID uuid.UUID
+	ProjectID             uuid.UUID
+	OrganizationID        string
+}
+
+// The caller must already have selected a client visible in this scope.
+// A platform-global client can be offered in multiple tenants, so only
+// return live issuer links visible in this project or its organization.
+func (q *Queries) ListVisibleUserSessionIssuerIDsForRemoteSessionClient(ctx context.Context, arg ListVisibleUserSessionIssuerIDsForRemoteSessionClientParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listVisibleUserSessionIssuerIDsForRemoteSessionClient, arg.RemoteSessionClientID, arg.ProjectID, arg.OrganizationID)
 	if err != nil {
 		return nil, err
 	}

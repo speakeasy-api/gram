@@ -17,8 +17,8 @@ import (
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
-// Changing the downstream sign-in for a hosted server does not configure a new upstream.
-func TestHostedServerIssuerMoveDoesNotInheritAssociations(t *testing.T) {
+// Moving a hosted server to another issuer does not inherit upstream offers.
+func TestHostedServerIssuerMoveDoesNotInheritOffers(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -88,7 +88,7 @@ func TestHostedServerIssuerMoveDoesNotInheritAssociations(t *testing.T) {
 
 			associations, err := upstreamclientsrepo.New(ti.conn).ListMCPServerRemoteSessionClients(ctx, upstreamclientsrepo.ListMCPServerRemoteSessionClientsParams{McpServerID: moved, ProjectID: projectID})
 			require.NoError(t, err)
-			require.Empty(t, associations, "a hosted server must not inherit registrations from a downstream issuer")
+			require.Empty(t, associations, "selecting the downstream issuer does not inherit upstream offers")
 		})
 	}
 }

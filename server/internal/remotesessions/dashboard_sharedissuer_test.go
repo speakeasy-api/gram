@@ -47,6 +47,9 @@ func seedSharedIssuerOn(t *testing.T, ctx context.Context, ti *testInstance, slu
 	require.NoError(t, err)
 	firstClient, err := uuid.Parse(result.Client.ID)
 	require.NoError(t, err)
+	// These tests exercise the separate legacy binding writers. Seed the
+	// junction row they used to get incidentally from server setup.
+	require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: firstClient, UserSessionIssuerID: userIssuerID}))
 	second, _ := sourceBackedTarget(t, ctx, ti, slug+"-second", userIssuerID)
 
 	shared := sharedIssuer{userIssuerID: userIssuerID, first: first, firstProvider: firstProvider, firstClient: firstClient, second: second}
@@ -164,7 +167,7 @@ func TestClientWritersLeaveADeletedServersClientOffTheSoleServerUnderEnforcement
 			require.NoError(t, err)
 			_, err = ti.service.DetachUserSessionIssuer(ctx, &clientsgen.DetachUserSessionIssuerPayload{ID: clientID.String(), UserSessionIssuerID: userIssuerID.String()})
 			require.NoError(t, err)
-			return nil
+			return []uuid.UUID{clientID}
 		}},
 	}
 	for _, tc := range tests {

@@ -869,6 +869,18 @@ FROM remote_session_client_user_session_issuers AS link
 WHERE link.remote_session_client_id = @remote_session_client_id
 ORDER BY link.user_session_issuer_id;
 
+-- name: ListVisibleUserSessionIssuerIDsForRemoteSessionClient :many
+-- The caller must already have selected a client visible in this scope.
+-- A platform-global client can be offered in multiple tenants, so only
+-- return live issuer links visible in this project or its organization.
+SELECT link.user_session_issuer_id
+FROM remote_session_client_user_session_issuers AS link
+JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
+WHERE link.remote_session_client_id = @remote_session_client_id::uuid
+  AND usi.deleted IS FALSE
+  AND (usi.project_id = @project_id::uuid OR (usi.project_id IS NULL AND usi.organization_id = @organization_id::text))
+ORDER BY link.user_session_issuer_id;
+
 -- name: ReplaceRemoteSessionClientRegistration :one
 -- Swaps the row onto a freshly registered upstream client in place, so the
 -- issuer bindings, MCP server attachments, and key set links that reference
@@ -1175,6 +1187,7 @@ SELECT
         FROM remote_session_client_user_session_issuers AS link
         JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
         WHERE link.remote_session_client_id = c.id
+          AND usi.deleted IS FALSE
           AND (usi.project_id = @project_id::uuid OR (usi.project_id IS NULL AND usi.organization_id = @organization_id::text))
     )::uuid[] AS user_session_issuer_ids
 FROM remote_session_clients AS c
@@ -7477,3 +7490,52 @@ VALUES (
     COALESCE(sqlc.narg('credential_owner')::text, 'subject')
 )
 RETURNING *;
+
+-- name: ListIdentityOfferClients :many
+-- The target server's enabled OAuth offers, independent of its downstream issuer.
+SELECT c.*
+FROM remote_session_clients AS c
+JOIN remote_session_issuers AS provider
+  ON provider.id = c.remote_session_issuer_id
+ AND NOT provider.deleted
+ AND (provider.project_id = @project_id::uuid
+      OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = @organization_id::text)))
+WHERE NOT c.deleted
+  AND (c.project_id = @project_id::uuid
+       OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = @organization_id::text)))
+  AND EXISTS (
+      SELECT 1
+      FROM mcp_server_auth_clients AS offer
+      JOIN mcp_servers AS s ON s.id = offer.mcp_server_id AND s.project_id = offer.project_id AND NOT s.deleted
+      JOIN projects AS p ON p.id = s.project_id AND p.organization_id = offer.organization_id AND NOT p.deleted
+      JOIN mcp_auth_clients AS ac ON ac.id = offer.auth_client_id AND ac.organization_id = offer.organization_id
+        AND (ac.project_id IS NULL OR ac.project_id = offer.project_id)
+      WHERE offer.mcp_server_id = @mcp_server_id::uuid
+        AND offer.project_id = @project_id::uuid AND offer.organization_id = @organization_id::text
+        AND NOT offer.deleted AND NOT ac.deleted AND ac.enabled
+        AND ac.client_type IN ('remote_session', 'service_account') AND ac.remote_session_client_id = c.id
+  )
+ORDER BY c.id;
+
+-- name: ListOtherIdentityOfferServers :many
+-- Explicit replacement may move these offers only with confirmation and write
+-- authorization. The caller refuses targets outside its locked project.
+SELECT DISTINCT offer.mcp_server_id
+FROM mcp_server_auth_clients AS offer
+JOIN mcp_servers AS s ON s.id = offer.mcp_server_id AND s.project_id = offer.project_id AND NOT s.deleted
+JOIN projects AS p ON p.id = s.project_id AND p.organization_id = offer.organization_id AND NOT p.deleted
+JOIN mcp_auth_clients AS ac ON ac.id = offer.auth_client_id AND ac.organization_id = offer.organization_id
+  AND (ac.project_id IS NULL OR ac.project_id = offer.project_id)
+WHERE offer.organization_id = @organization_id::text AND offer.mcp_server_id <> @mcp_server_id::uuid
+  AND NOT offer.deleted AND NOT ac.deleted AND ac.enabled
+  AND ac.client_type IN ('remote_session', 'service_account') AND ac.remote_session_client_id = @remote_session_client_id::uuid
+ORDER BY offer.mcp_server_id;
+
+-- name: ListIdentityReplacementTargets :many
+-- The affected servers in the caller's project. Callers still check read grants.
+SELECT s.id, s.toolset_id, s.name, s.slug, p.name AS project_name
+FROM mcp_servers AS s
+JOIN projects AS p ON p.id = s.project_id AND NOT p.deleted
+WHERE p.organization_id = @organization_id::text AND s.project_id = @project_id::uuid
+  AND s.id = ANY(@server_ids::uuid[]) AND NOT s.deleted
+ORDER BY s.id;

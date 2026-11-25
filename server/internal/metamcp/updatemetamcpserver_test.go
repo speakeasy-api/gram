@@ -315,10 +315,8 @@ func TestUpdateMetaMcpServer_ChangesVisibility(t *testing.T) {
 	require.Equal(t, disabled, updated.Visibility)
 }
 
-// A gateway's consent wiring binds member provider clients to a specific
-// issuer, so changing the gateway's issuer must re-run member attachment
-// against the new one rather than silently orphaning every provider tile.
-func TestUpdateMetaMcpServer_RewiresProviderClientsOnIssuerChange(t *testing.T) {
+// Changing the gateway issuer leaves member registration bindings untouched.
+func TestUpdateMetaMcpServer_DoesNotRewireProviderClientsOnIssuerChange(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -412,8 +410,8 @@ func TestUpdateMetaMcpServer_RewiresProviderClientsOnIssuerChange(t *testing.T) 
 		SortOrder:        nil,
 	})
 	require.NoError(t, err)
-	require.Equal(t, 1, boundCount(uuid.MustParse(*meta.UserSessionIssuerID)),
-		"add binds the member's client to the original issuer")
+	require.Equal(t, 1, boundCount(memberServer.UserSessionIssuerID.UUID), "the member binding survives")
+	require.Zero(t, boundCount(uuid.MustParse(*meta.UserSessionIssuerID)))
 
 	newIssuerID := seedUserSessionIssuer(t, ctx, ti.conn, projectID)
 	_, err = ti.service.UpdateMetaMcpServer(ctx, &gen.UpdateMetaMcpServerPayload{
@@ -425,12 +423,10 @@ func TestUpdateMetaMcpServer_RewiresProviderClientsOnIssuerChange(t *testing.T) 
 		UserSessionIssuerID: conv.PtrEmpty(newIssuerID.String()),
 	})
 	require.NoError(t, err)
-	require.Equal(t, 1, boundCount(newIssuerID),
-		"issuer change must re-bind member provider clients to the new issuer")
-	require.Equal(t, 0, boundCount(uuid.MustParse(*meta.UserSessionIssuerID)),
-		"the previous issuer no longer holds the binding the gateway put there")
+	require.Equal(t, 1, boundCount(memberServer.UserSessionIssuerID.UUID), "the member binding survives")
+	require.Zero(t, boundCount(newIssuerID))
 
-	// A second swap wires the members again: rewiring is not a one-shot.
+	// A later issuer change also leaves the member untouched.
 	thirdIssuerID := seedUserSessionIssuer(t, ctx, ti.conn, projectID)
 	_, err = ti.service.UpdateMetaMcpServer(ctx, &gen.UpdateMetaMcpServerPayload{
 		SessionToken:        nil,
@@ -441,10 +437,8 @@ func TestUpdateMetaMcpServer_RewiresProviderClientsOnIssuerChange(t *testing.T) 
 		UserSessionIssuerID: conv.PtrEmpty(thirdIssuerID.String()),
 	})
 	require.NoError(t, err)
-	require.Equal(t, 1, boundCount(thirdIssuerID),
-		"each issuer change must re-wire member provider clients")
-	require.Equal(t, 0, boundCount(newIssuerID),
-		"each issuer change removes the binding from the issuer it leaves")
+	require.Equal(t, 1, boundCount(memberServer.UserSessionIssuerID.UUID), "the member binding survives")
+	require.Zero(t, boundCount(thirdIssuerID))
 }
 
 // Instructions follow omit-preserves / blank-clears: an update that does not
