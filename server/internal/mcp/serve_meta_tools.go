@@ -604,18 +604,24 @@ func (s *Service) buildMemberDispatch(
 		return nil, hostingstate.NotHosted(), nil, err
 	}
 
-	// A hosted member records no upstream resource, so its credential is the
-	// token map entry keyed by its own derived remote_session_issuer: a token
-	// consented for a specific member must never reach another member's
-	// tools. No entry degrades to no token rather than an error, so partially
-	// connected meta sessions keep hosted members callable.
-	tokens, err := s.resolveMemberTokens(ctx, gate, member)
-	if err != nil {
-		return nil, hostingstate.NotHosted(), nil, err
+	// Signed-in gateways resolve and check the exact hosted placement.
+	// Legacy dispatch (including agent attachments) still uses the derived stamp.
+	hostedTokens, err := s.resolveMemberTokens(ctx, gate, member)
+	if err == nil && (gate.projectTokens == nil || gate.agentID != uuid.Nil) {
+		tokens := hostedTokens
+		hostedTokens, err = hostedMemberTokens(tokens, member)
+		s.compareHostedMemberTokens(ctx, logger, gate.organizationID, tokens, member, hostedTokens, err)
 	}
-	hostedTokens, err := hostedMemberTokens(tokens, member)
-	s.compareHostedMemberTokens(ctx, logger, gate.organizationID, tokens, member, hostedTokens, err)
 	if err != nil {
+		switch {
+		case errors.Is(err, remotesessions.ErrClientCredentialMisconfigured), errors.Is(err, remotesessions.ErrClientCredentialUnavailable),
+			errors.Is(err, remotesessions.ErrStoredSignInUnreadable), errors.Is(err, remotesessions.ErrRemoteSessionUnavailable):
+			err = metaMemberClientCredentialError(member, err)
+		case errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured), errors.Is(err, remotesessions.ErrChosenClientUnbound):
+			err = &metaMemberError{message: fmt.Sprintf("server %q has no usable upstream configuration", member.slug)}
+		case errors.Is(err, remotesessions.ErrNoValidToken):
+			err = &metaMemberError{message: fmt.Sprintf("server %q needs an upstream connection", member.slug)}
+		}
 		return nil, hostingstate.NotHosted(), nil, withMemberConnectLink(err, member, gate.memberCallerURL(member))
 	}
 	tokenInputs, err := appendRemoteSessionTokenInputs(nil, hostedTokens)

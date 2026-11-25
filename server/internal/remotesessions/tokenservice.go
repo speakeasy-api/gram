@@ -894,6 +894,9 @@ func (m *ChallengeManager) resolveClientTokens(
 		var selfResource string
 		if self {
 			selfResource = clientCredentialRequestResource(c, selfResources[c.ClientID])
+			if ctx.Value(hostedTokenResourceKey{}) == true && selfResource != "" {
+				return nil, ErrRemoteSessionMisconfigured
+			}
 			resolved, err = m.resolveClientCredential(ctx, ClientCredentialRequest{
 				OrganizationID: organizationID,
 				ClientID:       c.ClientID,
@@ -1252,6 +1255,9 @@ func (m *ChallengeManager) validateAndRefresh(
 	sess remotesessions_repo.RemoteSession,
 	resource string,
 ) (string, remotesessions_repo.RemoteSession, time.Time, error) {
+	if ctx.Value(hostedTokenResourceKey{}) == true && sess.Resource.String != "" {
+		return "", sess, sess.UpdatedAt.Time, ErrNoValidToken
+	}
 	now := time.Now()
 	if !authorizationUsable(sess, now) {
 		return "", sess, sess.UpdatedAt.Time, ErrNoValidToken
