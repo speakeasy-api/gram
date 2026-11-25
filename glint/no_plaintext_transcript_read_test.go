@@ -66,6 +66,8 @@ func TestSQLReadsPlaintextTranscript(t *testing.T) {
 
 		// SET strips only each assignment's target.
 		"UPDATE chat_messages SET role = CASE WHEN content = '' THEN 'x' ELSE role END WHERE id = $1": true,
+		"UPDATE chat_messages SET x = (SELECT a FROM t), content = $1 WHERE id = $2":                  false,
+		"UPDATE chat_messages SET x = (SELECT a FROM t WHERE b = content) WHERE id = $1":              true,
 		"UPDATE chat_messages SET content = $1, tool_calls = $2 WHERE id = $3":                        false,
 		"UPDATE chat_messages SET x = coalesce(y, 1), tool_calls = $2 WHERE id = $3":                  false,
 		"UPDATE chat_messages SET x = left(content, 4) WHERE id = $1":                                 true,
