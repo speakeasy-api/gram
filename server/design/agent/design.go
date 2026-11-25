@@ -1107,7 +1107,7 @@ var AgentRequestablePermissionModel = Type("AgentRequestablePermission", func() 
 	Attribute("label", String, "The scope's name as the role editor shows it.")
 	Attribute("description", String, "What a holder of the scope can do.")
 	Attribute("resource_type", String, "The kind of resource the scope applies to, such as project, mcp or chat.")
-	Attribute("all_resources", Boolean, "True when the user can ask for the scope on every resource of its kind. False when they hold it everywhere they can be given it, and only the projects below remain.")
+	Attribute("all_resources", Boolean, "True when the user can ask for the scope on every resource of its kind. For a scope that applies to a project, projects narrows the choice to one project.")
 	Attribute("projects", ArrayOf(AgentRequestableProjectModel), "For a scope that applies to a project, the projects the user can see but does not hold the scope on, so they can ask for one. Empty for other scopes.")
 })
 

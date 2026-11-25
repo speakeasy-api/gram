@@ -4538,9 +4538,9 @@ type AgentRequestablePermissionResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// The kind of resource the scope applies to, such as project, mcp or chat.
 	ResourceType *string `form:"resource_type,omitempty" json:"resource_type,omitempty" xml:"resource_type,omitempty"`
-	// True when the user can ask for the scope on every resource of its kind.
-	// False when they hold it everywhere they can be given it, and only the
-	// projects below remain.
+	// True when the user can ask for the scope on every resource of its kind. For
+	// a scope that applies to a project, projects narrows the choice to one
+	// project.
 	AllResources *bool `form:"all_resources,omitempty" json:"all_resources,omitempty" xml:"all_resources,omitempty"`
 	// For a scope that applies to a project, the projects the user can see but
 	// does not hold the scope on, so they can ask for one. Empty for other scopes.

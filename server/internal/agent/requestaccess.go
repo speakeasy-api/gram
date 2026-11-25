@@ -139,7 +139,7 @@ func (s *Service) requestablePermission(ctx context.Context, member agentMember,
 		}
 		return nil, nil
 	}
-	projectIdx := slices.IndexFunc(permission.Projects, func(p access.RequestableProject) bool { return strings.EqualFold(p.ID, resourceID) })
+	projectIdx := slices.IndexFunc(permission.Projects, func(p access.RequestableProject) bool { return p.ID == resourceID })
 	if projectIdx < 0 {
 		return nil, oops.E(oops.CodeBadRequest, nil, "%s cannot be requested on this resource from the device agent", scope)
 	}
@@ -166,7 +166,7 @@ func (s *Service) requestableServer(ctx context.Context, member agentMember, sco
 			continue
 		}
 		target := entry.RequestAccess
-		if target.Scope == string(scope) && strings.EqualFold(target.ResourceID, resourceID) {
+		if target.Scope == string(scope) && target.ResourceID == resourceID {
 			return target.ResourceName, nil
 		}
 	}

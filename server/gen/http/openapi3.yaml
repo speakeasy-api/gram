@@ -107332,7 +107332,7 @@ components:
             properties:
                 all_resources:
                     type: boolean
-                    description: True when the user can ask for the scope on every resource of its kind. False when they hold it everywhere they can be given it, and only the projects below remain.
+                    description: True when the user can ask for the scope on every resource of its kind. For a scope that applies to a project, projects narrows the choice to one project.
                 description:
                     type: string
                     description: What a holder of the scope can do.

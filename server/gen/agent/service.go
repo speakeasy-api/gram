@@ -433,9 +433,9 @@ type AgentRequestablePermission struct {
 	Description string
 	// The kind of resource the scope applies to, such as project, mcp or chat.
 	ResourceType string
-	// True when the user can ask for the scope on every resource of its kind.
-	// False when they hold it everywhere they can be given it, and only the
-	// projects below remain.
+	// True when the user can ask for the scope on every resource of its kind. For
+	// a scope that applies to a project, projects narrows the choice to one
+	// project.
 	AllResources bool
 	// For a scope that applies to a project, the projects the user can see but
 	// does not hold the scope on, so they can ask for one. Empty for other scopes.

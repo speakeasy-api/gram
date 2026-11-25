@@ -21,11 +21,10 @@ const maxOwnPendingForDevice = 50
 
 // projectScopeCheck returns the check that says whether a member holds a
 // temporary-grant scope that applies to a project on one project. ok is false
-// for a scope that can only be asked for on every project.
+// for a scope that can only be asked for on every project. project:read is
+// one: the projects offered are the ones the member can already read.
 func projectScopeCheck(scope authz.Scope) (check func(authz.ProjectRef) authz.Check, ok bool) {
 	switch scope {
-	case authz.ScopeProjectRead:
-		return authz.ProjectRef.Read, true
 	case authz.ScopeProjectWrite:
 		return authz.ProjectRef.Write, true
 	case authz.ScopeLogRead:
@@ -147,8 +146,8 @@ func (s *Service) ListOwnPending(ctx context.Context, organizationID, userID str
 	}
 	out := make([]OwnAccessRequest, 0, len(views))
 	for _, view := range views {
-		// A request whose window passed is listed by its row until something
-		// rewrites it; the view already reports it as expired.
+		// The query leaves out lapsed rows; this covers a request whose
+		// window passed between the query and rendering it.
 		if view.Status != AccessRequestStatusPending {
 			continue
 		}
