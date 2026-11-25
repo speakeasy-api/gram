@@ -177,17 +177,10 @@ function renderSheet(now: Date = NOW) {
 
 describe("SuspectedProblems", () => {
   afterEach(cleanup);
-  const EMPTY = "No suspected problems signing in right now.";
 
   it("lists API problems with the rule and no sample badge", () => {
     render(
-      <SuspectedProblems
-        query={listed([PROBLEM])}
-        now={NOW}
-        onOpen={noop}
-        empty={EMPTY}
-        expectVisible
-      />,
+      <SuspectedProblems query={listed([PROBLEM])} now={NOW} onOpen={noop} />,
     );
     expect(
       screen.getByText(/2 people can't connect to Linear since/),
@@ -202,8 +195,6 @@ describe("SuspectedProblems", () => {
         query={listed([PROBLEM], { problemsTotal: 140 })}
         now={NOW}
         onOpen={noop}
-        empty={EMPTY}
-        expectVisible
       />,
     );
     expect(screen.getByText("Suspected problems · 140")).toBeTruthy();
@@ -216,24 +207,38 @@ describe("SuspectedProblems", () => {
         query={listed([{ ...PROBLEM, peopleOnServerCount: 1 }])}
         now={NOW}
         onOpen={noop}
-        empty={EMPTY}
-        expectVisible
       />,
     );
     expect(screen.getByText(/1 on this server · 2 in all/)).toBeTruthy();
   });
 
-  it("says when there is nothing", () => {
-    render(
-      <SuspectedProblems
-        query={listed([])}
-        now={NOW}
-        onOpen={noop}
-        empty={EMPTY}
-        expectVisible
-      />,
+  it("renders nothing, not even the note, when there are no problems", () => {
+    const { container } = render(
+      <MemoryRouter>
+        <SuspectedProblems
+          query={listed([])}
+          now={NOW}
+          onOpen={noop}
+          note={<ServiceProblemsNote serversHref="/servers" />}
+        />
+      </MemoryRouter>,
     );
-    expect(screen.getByText(EMPTY)).toBeTruthy();
+    expect(container.innerHTML).toBe("");
+  });
+
+  it("shows the note only under a panel that lists problems", () => {
+    render(
+      <MemoryRouter>
+        <SuspectedProblems
+          query={listed([PROBLEM])}
+          now={NOW}
+          onOpen={noop}
+          note={<ServiceProblemsNote serversHref="/servers" />}
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.getByText("Suspected problems · 1")).toBeTruthy();
+    expect(screen.getByText(/Problems with a service show/)).toBeTruthy();
   });
 
   it("shows nothing with logging off or to someone who reads only their own logs", () => {
@@ -246,8 +251,6 @@ describe("SuspectedProblems", () => {
           query={listed([PROBLEM], more)}
           now={NOW}
           onOpen={noop}
-          empty={EMPTY}
-          expectVisible
         />,
       );
       expect(container.textContent).toBe("");
@@ -255,74 +258,79 @@ describe("SuspectedProblems", () => {
     }
   });
 
-  it("reserves space while loading only when the page already knew the panel will show", () => {
+  it("reserves no space while loading, so an empty result moves nothing", () => {
     const pending = {
       data: undefined,
       isPending: true,
       isError: false,
       error: null,
     };
-    // Unknown viewer: nothing while loading, even if the viewer becomes known mid-load.
-    const unknown = render(
-      <SuspectedProblems
-        query={pending}
-        now={NOW}
-        onOpen={noop}
-        empty={EMPTY}
-        expectVisible={false}
-      />,
+    const note = <ServiceProblemsNote serversHref="/servers" />;
+    // First visit without problems: nothing while loading, nothing after.
+    const first = render(
+      <MemoryRouter>
+        <SuspectedProblems
+          query={pending}
+          now={NOW}
+          onOpen={noop}
+          note={note}
+        />
+      </MemoryRouter>,
     );
-    expect(unknown.container.innerHTML).toBe("");
-    unknown.rerender(
-      <SuspectedProblems
-        query={pending}
-        now={NOW}
-        onOpen={noop}
-        empty={EMPTY}
-        expectVisible
-      />,
+    expect(first.container.innerHTML).toBe("");
+    first.rerender(
+      <MemoryRouter>
+        <SuspectedProblems
+          query={listed([])}
+          now={NOW}
+          onOpen={noop}
+          note={note}
+        />
+      </MemoryRouter>,
     );
-    expect(unknown.container.innerHTML).toBe("");
-    // Settled: the panel in one move.
-    unknown.rerender(
-      <SuspectedProblems
-        query={listed([PROBLEM])}
-        now={NOW}
-        onOpen={noop}
-        empty={EMPTY}
-        expectVisible
-      />,
+    expect(first.container.innerHTML).toBe("");
+    cleanup();
+    // First visit with problems: nothing while loading, then the panel in one move.
+    const second = render(
+      <MemoryRouter>
+        <SuspectedProblems
+          query={pending}
+          now={NOW}
+          onOpen={noop}
+          note={note}
+        />
+      </MemoryRouter>,
+    );
+    expect(second.container.innerHTML).toBe("");
+    second.rerender(
+      <MemoryRouter>
+        <SuspectedProblems
+          query={listed([PROBLEM])}
+          now={NOW}
+          onOpen={noop}
+          note={note}
+        />
+      </MemoryRouter>,
     );
     expect(screen.getByText("Suspected problems · 1")).toBeTruthy();
-    cleanup();
-    // Known viewer: the panel's header and one row hold its place.
-    render(
-      <SuspectedProblems
-        query={pending}
-        now={NOW}
-        onOpen={noop}
-        empty={EMPTY}
-        expectVisible
-      />,
-    );
-    expect(screen.getByText("Suspected problems")).toBeTruthy();
-    expect(screen.getByLabelText("Loading suspected problems")).toBeTruthy();
+    expect(screen.queryByLabelText("Loading suspected problems")).toBeNull();
   });
 
-  it("does not point someone who reads only their own logs at server pages", () => {
-    const { container } = render(
-      <MemoryRouter>
-        <ServiceProblemsNote viewerScope="own" serversHref="/servers" />
-      </MemoryRouter>,
+  it("shows a cached list at once and nothing for a cached empty one", () => {
+    // A revisit is not pending: the cached result renders while it refreshes.
+    const cached = (problems: SuspectedProblem[]) => ({
+      ...listed(problems),
+      isPending: false,
+    });
+    const withProblems = render(
+      <SuspectedProblems query={cached([PROBLEM])} now={NOW} onOpen={noop} />,
     );
-    expect(container.textContent).toBe("");
-    cleanup();
-    render(
-      <MemoryRouter>
-        <ServiceProblemsNote viewerScope="all" serversHref="/servers" />
-      </MemoryRouter>,
+    expect(screen.getByText("Suspected problems · 1")).toBeTruthy();
+    withProblems.unmount();
+    const empty = render(
+      <SuspectedProblems query={cached([])} now={NOW} onOpen={noop} />,
     );
-    expect(screen.getByText(/Problems with a service show/)).toBeTruthy();
+    expect(empty.container.innerHTML).toBe("");
   });
 
   it("says when it could not load", () => {
@@ -336,8 +344,6 @@ describe("SuspectedProblems", () => {
         }}
         now={NOW}
         onOpen={noop}
-        empty={EMPTY}
-        expectVisible
       />,
     );
     expect(screen.getByText("Couldn't load suspected problems")).toBeTruthy();
