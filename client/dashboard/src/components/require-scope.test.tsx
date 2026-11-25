@@ -140,7 +140,7 @@ describe("RequireScope page level", () => {
       </RequireScope>,
     );
 
-    expect(screen.getByText("Access restricted")).toBeTruthy();
+    expect(screen.getByText("You don't have access to this page")).toBeTruthy();
     expect(screen.getAllByTestId("page-header")).toHaveLength(1);
     expect(screen.queryByText("secret")).toBeNull();
   });
@@ -159,7 +159,7 @@ describe("RequireScope page level", () => {
       </Page>,
     );
 
-    expect(screen.getByText("Access restricted")).toBeTruthy();
+    expect(screen.getByText("You don't have access to this page")).toBeTruthy();
     expect(screen.getAllByTestId("page-header")).toHaveLength(1);
   });
 });

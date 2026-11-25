@@ -13,6 +13,7 @@ import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useRoles } from "@gram/client/react-query/roles.js";
 import { cn } from "@/lib/utils";
+import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { SplashScreen } from "@/components/ui/LogoLoader";
@@ -295,6 +296,11 @@ type RequestScopeAccessProps = {
    * the start of a banner's text above it.
    */
   align?: "center" | "start";
+  /**
+   * Says the access can be asked for next to the button, for a banner whose
+   * own text only says what is missing.
+   */
+  invite?: boolean;
   className?: string;
 };
 
@@ -408,6 +414,7 @@ function RequestScopeAccessButton({
   all = false,
   resourceId,
   resourceName,
+  invite = false,
   projectId,
   className,
   align = "center",
@@ -570,6 +577,11 @@ function RequestScopeAccessButton({
     case "sending":
       return (
         <>
+          {invite && (
+            <p className={cn("text-muted-foreground text-sm", stack)}>
+              You can request it. An organization admin reviews the request.
+            </p>
+          )}
           <Button
             variant="secondary"
             size="sm"
@@ -643,11 +655,14 @@ function RequestScopeAccessButton({
 }
 
 /**
- * Full-page unauthorized state. Used as the default fallback for page-level RequireScope.
+ * Page-level unauthorized state, the default fallback for page-level
+ * RequireScope. The page keeps its header; a banner at the top of its body
+ * says what is missing and, where the access can be asked for, offers a
+ * Request access button that opens the request dialog in place.
  */
 function Unauthorized({
-  title = "Access restricted",
-  description = "You don't have permission to view this page.",
+  title = "You don't have access to this page",
+  description,
   scopes,
   all,
   resourceId,
@@ -666,93 +681,84 @@ function Unauthorized({
   const { catalogue, tasks } = useScopeCatalogue();
 
   return (
-    <div className="flex h-full min-h-[400px] w-full items-center justify-center">
-      <div className="flex max-w-sm flex-col items-center gap-3 text-center">
-        <div className="bg-muted flex h-12 w-12 items-center justify-center rounded-full">
-          <Icon name="lock" className="text-muted-foreground h-5 w-5" />
-        </div>
-        <h2 className="text-lg font-medium">{title}</h2>
-        <p className="text-muted-foreground text-sm">{description}</p>
-
-        <RequestScopeAccess
-          scopes={scopes}
-          all={all}
-          resourceId={resourceId}
-          projectId={projectId}
-        />
-
-        {scopes.length > 0 && (
-          /* The wrapper keeps the collapsed height (h-7 == trigger height) in
-             flow while the card is absolutely positioned on top of it, so
-             expanding grows downward instead of re-centring the whole block. */
-          <div className="relative h-7 w-full">
-            <Collapsible
-              open={open}
-              onOpenChange={setOpen}
-              className="absolute inset-x-0 top-0"
-            >
-              <CollapsibleTrigger className="text-muted-foreground hover:text-foreground flex w-full cursor-pointer items-center justify-center gap-1 px-3 py-1.5 text-xs transition-colors">
-                <Icon
-                  name="chevron-right"
-                  className={cn(
-                    "size-3.5 transition-transform",
-                    open && "rotate-90",
-                  )}
-                />
-                What access do I need?
-              </CollapsibleTrigger>
-              <CollapsibleContent className="pt-2">
-                <div className="bg-muted/25 border px-3 py-5 text-left">
-                  <p className="text-muted-foreground text-center text-xs">
-                    {scopes.length === 1
-                      ? "An organization admin can grant you:"
-                      : all
-                        ? "An organization admin can grant you all of:"
-                        : "An organization admin can grant you any of:"}
-                  </p>
-                  <ul className="mt-2 space-y-2">
-                    {scopes.map((s) => {
-                      const entry = catalogue.get(s);
-                      return (
-                        <li
-                          key={s}
-                          className="bg-background text-foreground border px-2 py-1.5 text-xs"
-                        >
-                          <span className="font-medium">
-                            {scopeLabel(catalogue, s)}
-                          </span>{" "}
-                          <span className="text-muted-foreground font-mono">
-                            {s}
-                          </span>
-                          {entry?.description && (
-                            <p className="text-muted-foreground mt-0.5">
-                              {entry.description}
-                            </p>
-                          )}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                  <TaskHint
-                    scopes={scopes}
-                    catalogue={catalogue}
-                    tasks={tasks}
-                    held={(s) => hasScope(s, resourceId, projectId)}
+    <div className="w-full">
+      <Alert title={title} iconName="lock" className="w-full">
+        <div className="flex flex-col items-start gap-2">
+          {description && <span>{description}</span>}
+          <RequestScopeAccess
+            scopes={scopes}
+            all={all}
+            resourceId={resourceId}
+            projectId={projectId}
+            align="start"
+            invite
+          />
+          {scopes.length > 0 && (
+            <div className="w-full">
+              <Collapsible open={open} onOpenChange={setOpen}>
+                <CollapsibleTrigger className="text-muted-foreground hover:text-foreground flex cursor-pointer items-center gap-1 py-1.5 text-xs transition-colors">
+                  <Icon
+                    name="chevron-right"
+                    className={cn(
+                      "size-3.5 transition-transform",
+                      open && "rotate-90",
+                    )}
                   />
-                  {scopes.length === 1 && (
-                    <RoleHint
-                      scope={scopes[0]!}
+                  What access do I need?
+                </CollapsibleTrigger>
+                <CollapsibleContent className="pt-2">
+                  <div className="bg-muted/25 border px-3 py-5 text-left">
+                    <p className="text-muted-foreground text-center text-xs">
+                      {scopes.length === 1
+                        ? "An organization admin can grant you:"
+                        : all
+                          ? "An organization admin can grant you all of:"
+                          : "An organization admin can grant you any of:"}
+                    </p>
+                    <ul className="mt-2 space-y-2">
+                      {scopes.map((s) => {
+                        const entry = catalogue.get(s);
+                        return (
+                          <li
+                            key={s}
+                            className="bg-background text-foreground border px-2 py-1.5 text-xs"
+                          >
+                            <span className="font-medium">
+                              {scopeLabel(catalogue, s)}
+                            </span>{" "}
+                            <span className="text-muted-foreground font-mono">
+                              {s}
+                            </span>
+                            {entry?.description && (
+                              <p className="text-muted-foreground mt-0.5">
+                                {entry.description}
+                              </p>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                    <TaskHint
+                      scopes={scopes}
                       catalogue={catalogue}
-                      resourceId={resourceId}
-                      projectId={projectId}
+                      tasks={tasks}
+                      held={(s) => hasScope(s, resourceId, projectId)}
                     />
-                  )}
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
-          </div>
-        )}
-      </div>
+                    {scopes.length === 1 && (
+                      <RoleHint
+                        scope={scopes[0]!}
+                        catalogue={catalogue}
+                        resourceId={resourceId}
+                        projectId={projectId}
+                      />
+                    )}
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+            </div>
+          )}
+        </div>
+      </Alert>
     </div>
   );
 }

@@ -312,7 +312,9 @@ describe("MCPSkillsTabRoute", () => {
     renderTab(
       <MCPSkillsTabRoute mcpServer={mcpServer} mcpServerSlug="toolset-a" />,
     );
-    expect(screen.getByText("Access restricted")).toBeDefined();
+    expect(
+      screen.getByText("You don't have access to this page"),
+    ).toBeDefined();
     expect(state.links).not.toHaveBeenCalled();
   });
 
