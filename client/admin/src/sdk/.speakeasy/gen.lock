@@ -66,6 +66,7 @@ trackedFiles:
   src/funcs/adminGetGlobalIssuerDuplicatePreflight.ts: {}
   src/funcs/adminGetGlobalIssuerMigratePreflight.ts: {}
   src/funcs/adminGetHookClients.ts: {}
+  src/funcs/adminGetHooksReleaseProgress.ts: {}
   src/funcs/adminGetHooksRollout.ts: {}
   src/funcs/adminGetInferenceKeys.ts: {}
   src/funcs/adminGetInferenceSpendHistory.ts: {}
@@ -208,6 +209,11 @@ trackedFiles:
   src/models/components/adminhookfleetinstall.ts: {}
   src/models/components/adminhookfleetresult.ts: {}
   src/models/components/adminhookfleetversion.ts: {}
+  src/models/components/adminhooksreleasefleet.ts: {}
+  src/models/components/adminhooksreleaseinstallstatus.ts: {}
+  src/models/components/adminhooksreleaseinstallversion.ts: {}
+  src/models/components/adminhooksreleaseprogress.ts: {}
+  src/models/components/adminhooksreleaserepoversion.ts: {}
   src/models/components/adminhooksrollout.ts: {}
   src/models/components/adminhooksrolloutchange.ts: {}
   src/models/components/adminhooksrolloutoverride.ts: {}
@@ -517,6 +523,8 @@ trackedFiles:
   src/react-query/adminGetGlobalIssuerMigratePreflight.ts: {}
   src/react-query/adminGetHookClients.core.ts: {}
   src/react-query/adminGetHookClients.ts: {}
+  src/react-query/adminGetHooksReleaseProgress.core.ts: {}
+  src/react-query/adminGetHooksReleaseProgress.ts: {}
   src/react-query/adminGetHooksRollout.core.ts: {}
   src/react-query/adminGetHooksRollout.ts: {}
   src/react-query/adminGetInferenceKeys.core.ts: {}
@@ -1155,6 +1163,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  adminGetHooksReleaseProgress:
+    speakeasy-default-admin-get-hooks-release-progress:
+      responses:
+        "200":
+          application/json: {"current_version": 772702, "organizations": 426541, "organizations_cleared": 979587, "organizations_held": 863493, "organizations_on_legacy_flag": 136700, "repo_versions": [], "repos": 115027, "repos_on_current": 308105}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   adminGetHooksRollout:
     speakeasy-default-admin-get-hooks-rollout:
       responses:

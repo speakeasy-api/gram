@@ -3461,6 +3461,33 @@ type GetHooksRolloutResponseBody struct {
 	RecentChanges []*AdminHooksRolloutChangeResponseBody `form:"recent_changes" json:"recent_changes" xml:"recent_changes"`
 }
 
+// GetHooksReleaseProgressResponseBody is the type of the "admin" service
+// "getHooksReleaseProgress" endpoint HTTP response body.
+type GetHooksReleaseProgressResponseBody struct {
+	// The hooks generator version this server build publishes.
+	CurrentVersion int `form:"current_version" json:"current_version" xml:"current_version"`
+	// The hooks binary version this server build ships. Absent when unknown.
+	CurrentBinaryVersion *string `form:"current_binary_version,omitempty" json:"current_binary_version,omitempty" xml:"current_binary_version,omitempty"`
+	// Organizations with at least one marketplace repository.
+	Organizations int64 `form:"organizations" json:"organizations" xml:"organizations"`
+	// Of those, organizations whose next publish moves to current_version:
+	// canaries and organizations pinned at or above it.
+	OrganizationsCleared int64 `form:"organizations_cleared" json:"organizations_cleared" xml:"organizations_cleared"`
+	// Organizations pinned below current_version.
+	OrganizationsHeld int64 `form:"organizations_held" json:"organizations_held" xml:"organizations_held"`
+	// Organizations with no pin, which follow the legacy hooks-rollout PostHog
+	// flag the admin server cannot read.
+	OrganizationsOnLegacyFlag int64 `form:"organizations_on_legacy_flag" json:"organizations_on_legacy_flag" xml:"organizations_on_legacy_flag"`
+	// Marketplace repositories.
+	Repos int64 `form:"repos" json:"repos" xml:"repos"`
+	// Repositories whose last published hooks plugin carries current_version.
+	ReposOnCurrent int64 `form:"repos_on_current" json:"repos_on_current" xml:"repos_on_current"`
+	// Repositories per published hooks generator version, newest first.
+	RepoVersions []*AdminHooksReleaseRepoVersionResponseBody `form:"repo_versions" json:"repo_versions" xml:"repo_versions"`
+	// Installs running the release. Absent when the hooks fleet is unavailable.
+	Fleet *AdminHooksReleaseFleetResponseBody `form:"fleet,omitempty" json:"fleet,omitempty" xml:"fleet,omitempty"`
+}
+
 // SetHooksRolloutDefaultResponseBody is the type of the "admin" service
 // "setHooksRolloutDefault" endpoint HTTP response body.
 type SetHooksRolloutDefaultResponseBody struct {
@@ -27539,6 +27566,196 @@ type GetHooksRolloutGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetHooksReleaseProgressUnauthorizedResponseBody is the type of the "admin"
+// service "getHooksReleaseProgress" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetHooksReleaseProgressUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetHooksReleaseProgressForbiddenResponseBody is the type of the "admin"
+// service "getHooksReleaseProgress" endpoint HTTP response body for the
+// "forbidden" error.
+type GetHooksReleaseProgressForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetHooksReleaseProgressBadRequestResponseBody is the type of the "admin"
+// service "getHooksReleaseProgress" endpoint HTTP response body for the
+// "bad_request" error.
+type GetHooksReleaseProgressBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetHooksReleaseProgressNotFoundResponseBody is the type of the "admin"
+// service "getHooksReleaseProgress" endpoint HTTP response body for the
+// "not_found" error.
+type GetHooksReleaseProgressNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetHooksReleaseProgressConflictResponseBody is the type of the "admin"
+// service "getHooksReleaseProgress" endpoint HTTP response body for the
+// "conflict" error.
+type GetHooksReleaseProgressConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetHooksReleaseProgressUnsupportedMediaResponseBody is the type of the
+// "admin" service "getHooksReleaseProgress" endpoint HTTP response body for
+// the "unsupported_media" error.
+type GetHooksReleaseProgressUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetHooksReleaseProgressInvalidResponseBody is the type of the "admin"
+// service "getHooksReleaseProgress" endpoint HTTP response body for the
+// "invalid" error.
+type GetHooksReleaseProgressInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetHooksReleaseProgressInvariantViolationResponseBody is the type of the
+// "admin" service "getHooksReleaseProgress" endpoint HTTP response body for
+// the "invariant_violation" error.
+type GetHooksReleaseProgressInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetHooksReleaseProgressUnexpectedResponseBody is the type of the "admin"
+// service "getHooksReleaseProgress" endpoint HTTP response body for the
+// "unexpected" error.
+type GetHooksReleaseProgressUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetHooksReleaseProgressGatewayErrorResponseBody is the type of the "admin"
+// service "getHooksReleaseProgress" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetHooksReleaseProgressGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // SetHooksRolloutDefaultUnauthorizedResponseBody is the type of the "admin"
 // service "setHooksRolloutDefault" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -31765,6 +31982,43 @@ type AdminHooksRolloutChangeResponseBody struct {
 	SetAt string `form:"set_at" json:"set_at" xml:"set_at"`
 }
 
+// AdminHooksReleaseRepoVersionResponseBody is used to define fields on
+// response body types.
+type AdminHooksReleaseRepoVersionResponseBody struct {
+	// The hooks generator version last published, or empty for repositories that
+	// have never published the hooks plugin.
+	Version string `form:"version" json:"version" xml:"version"`
+	// Repositories on this version.
+	Repos int64 `form:"repos" json:"repos" xml:"repos"`
+}
+
+// AdminHooksReleaseFleetResponseBody is used to define fields on response body
+// types.
+type AdminHooksReleaseFleetResponseBody struct {
+	// Installs count when they sent a hook in this many full UTC days.
+	WindowDays int `form:"window_days" json:"window_days" xml:"window_days"`
+	// Installs seen in the window.
+	Installs int64 `form:"installs" json:"installs" xml:"installs"`
+	// Installs reporting exactly the binary version this build ships, on any
+	// endpoint.
+	InstallsOnCurrent int64 `form:"installs_on_current" json:"installs_on_current" xml:"installs_on_current"`
+	// Installs per binary version and status, newest first. A version can appear
+	// once per status, for example current and unsupported when some installs
+	// still send to a legacy endpoint.
+	Versions []*AdminHooksReleaseInstallVersionResponseBody `form:"versions" json:"versions" xml:"versions"`
+}
+
+// AdminHooksReleaseInstallVersionResponseBody is used to define fields on
+// response body types.
+type AdminHooksReleaseInstallVersionResponseBody struct {
+	// The hooks binary version, or empty for installs that sent no version.
+	Version string `form:"version" json:"version" xml:"version"`
+	// How the version compares to the release Speakeasy ships.
+	Status string `form:"status" json:"status" xml:"status"`
+	// Installs whose latest version is this one.
+	Installs int64 `form:"installs" json:"installs" xml:"installs"`
+}
+
 // AdminTailscaleOAuthMigrationOrganizationResponseBody is used to define
 // fields on response body types.
 type AdminTailscaleOAuthMigrationOrganizationResponseBody struct {
@@ -35094,6 +35348,37 @@ func NewGetHooksRolloutResponseBody(res *admin.AdminHooksRollout) *GetHooksRollo
 		}
 	} else {
 		body.RecentChanges = []*AdminHooksRolloutChangeResponseBody{}
+	}
+	return body
+}
+
+// NewGetHooksReleaseProgressResponseBody builds the HTTP response body from
+// the result of the "getHooksReleaseProgress" endpoint of the "admin" service.
+func NewGetHooksReleaseProgressResponseBody(res *admin.AdminHooksReleaseProgress) *GetHooksReleaseProgressResponseBody {
+	body := &GetHooksReleaseProgressResponseBody{
+		CurrentVersion:            res.CurrentVersion,
+		CurrentBinaryVersion:      res.CurrentBinaryVersion,
+		Organizations:             res.Organizations,
+		OrganizationsCleared:      res.OrganizationsCleared,
+		OrganizationsHeld:         res.OrganizationsHeld,
+		OrganizationsOnLegacyFlag: res.OrganizationsOnLegacyFlag,
+		Repos:                     res.Repos,
+		ReposOnCurrent:            res.ReposOnCurrent,
+	}
+	if res.RepoVersions != nil {
+		body.RepoVersions = make([]*AdminHooksReleaseRepoVersionResponseBody, len(res.RepoVersions))
+		for i, val := range res.RepoVersions {
+			if val == nil {
+				body.RepoVersions[i] = nil
+				continue
+			}
+			body.RepoVersions[i] = marshalAdminAdminHooksReleaseRepoVersionToAdminHooksReleaseRepoVersionResponseBody(val)
+		}
+	} else {
+		body.RepoVersions = []*AdminHooksReleaseRepoVersionResponseBody{}
+	}
+	if res.Fleet != nil {
+		body.Fleet = marshalAdminAdminHooksReleaseFleetToAdminHooksReleaseFleetResponseBody(res.Fleet)
 	}
 	return body
 }
@@ -54087,6 +54372,156 @@ func NewGetHooksRolloutGatewayErrorResponseBody(res *goa.ServiceError) *GetHooks
 	return body
 }
 
+// NewGetHooksReleaseProgressUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "getHooksReleaseProgress" endpoint of the
+// "admin" service.
+func NewGetHooksReleaseProgressUnauthorizedResponseBody(res *goa.ServiceError) *GetHooksReleaseProgressUnauthorizedResponseBody {
+	body := &GetHooksReleaseProgressUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetHooksReleaseProgressForbiddenResponseBody builds the HTTP response
+// body from the result of the "getHooksReleaseProgress" endpoint of the
+// "admin" service.
+func NewGetHooksReleaseProgressForbiddenResponseBody(res *goa.ServiceError) *GetHooksReleaseProgressForbiddenResponseBody {
+	body := &GetHooksReleaseProgressForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetHooksReleaseProgressBadRequestResponseBody builds the HTTP response
+// body from the result of the "getHooksReleaseProgress" endpoint of the
+// "admin" service.
+func NewGetHooksReleaseProgressBadRequestResponseBody(res *goa.ServiceError) *GetHooksReleaseProgressBadRequestResponseBody {
+	body := &GetHooksReleaseProgressBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetHooksReleaseProgressNotFoundResponseBody builds the HTTP response body
+// from the result of the "getHooksReleaseProgress" endpoint of the "admin"
+// service.
+func NewGetHooksReleaseProgressNotFoundResponseBody(res *goa.ServiceError) *GetHooksReleaseProgressNotFoundResponseBody {
+	body := &GetHooksReleaseProgressNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetHooksReleaseProgressConflictResponseBody builds the HTTP response body
+// from the result of the "getHooksReleaseProgress" endpoint of the "admin"
+// service.
+func NewGetHooksReleaseProgressConflictResponseBody(res *goa.ServiceError) *GetHooksReleaseProgressConflictResponseBody {
+	body := &GetHooksReleaseProgressConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetHooksReleaseProgressUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "getHooksReleaseProgress" endpoint of
+// the "admin" service.
+func NewGetHooksReleaseProgressUnsupportedMediaResponseBody(res *goa.ServiceError) *GetHooksReleaseProgressUnsupportedMediaResponseBody {
+	body := &GetHooksReleaseProgressUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetHooksReleaseProgressInvalidResponseBody builds the HTTP response body
+// from the result of the "getHooksReleaseProgress" endpoint of the "admin"
+// service.
+func NewGetHooksReleaseProgressInvalidResponseBody(res *goa.ServiceError) *GetHooksReleaseProgressInvalidResponseBody {
+	body := &GetHooksReleaseProgressInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetHooksReleaseProgressInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getHooksReleaseProgress" endpoint of
+// the "admin" service.
+func NewGetHooksReleaseProgressInvariantViolationResponseBody(res *goa.ServiceError) *GetHooksReleaseProgressInvariantViolationResponseBody {
+	body := &GetHooksReleaseProgressInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetHooksReleaseProgressUnexpectedResponseBody builds the HTTP response
+// body from the result of the "getHooksReleaseProgress" endpoint of the
+// "admin" service.
+func NewGetHooksReleaseProgressUnexpectedResponseBody(res *goa.ServiceError) *GetHooksReleaseProgressUnexpectedResponseBody {
+	body := &GetHooksReleaseProgressUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetHooksReleaseProgressGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "getHooksReleaseProgress" endpoint of the
+// "admin" service.
+func NewGetHooksReleaseProgressGatewayErrorResponseBody(res *goa.ServiceError) *GetHooksReleaseProgressGatewayErrorResponseBody {
+	body := &GetHooksReleaseProgressGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewSetHooksRolloutDefaultUnauthorizedResponseBody builds the HTTP response
 // body from the result of the "setHooksRolloutDefault" endpoint of the "admin"
 // service.
@@ -57618,6 +58053,15 @@ func NewMigrateOrganizationAssistantsToKitPayload(body *MigrateOrganizationAssis
 // payload.
 func NewGetHooksRolloutPayload(adminSessionToken *string) *admin.GetHooksRolloutPayload {
 	v := &admin.GetHooksRolloutPayload{}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewGetHooksReleaseProgressPayload builds a admin service
+// getHooksReleaseProgress endpoint payload.
+func NewGetHooksReleaseProgressPayload(adminSessionToken *string) *admin.GetHooksReleaseProgressPayload {
+	v := &admin.GetHooksReleaseProgressPayload{}
 	v.AdminSessionToken = adminSessionToken
 
 	return v

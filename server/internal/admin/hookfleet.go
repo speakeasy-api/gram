@@ -16,13 +16,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
 
-// HookFleetReader reads one organization's hooks installs. Implemented by
-// telemetry.HookFleet.
+// HookFleetReader reads hooks installs: one organization's, or the version mix
+// across every organization. Implemented by telemetry.HookFleet.
 type HookFleetReader interface {
 	HookInstalls(ctx context.Context, organizationID string, since time.Time, limit int) (telemetry.HookInstallPage, error)
+	HookVersionMixReader
 }
 
-// SetHookFleet enables getOrganizationHookFleet. A nil reader leaves it unavailable.
+// SetHookFleet enables getOrganizationHookFleet and the installs in
+// getHooksReleaseProgress. A nil reader leaves them unavailable.
 func (s *Service) SetHookFleet(reader HookFleetReader, versions hookversions.Policy) {
 	s.hookFleet = reader
 	s.hookFleetVersions = versions
