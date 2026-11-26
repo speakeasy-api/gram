@@ -32,13 +32,16 @@ import (
 
 // KitWorkloadBinding records an exact, runtime-owned admission, not a credential.
 type KitWorkloadBinding struct {
-	MCPDesiredSetHash string                            `json:"mcp_desired_set_hash,omitempty"`
-	IssuerID          uuid.UUID                         `json:"issuer_id"`
-	Subject           string                            `json:"subject"`
-	Identity          assistantidentity.RuntimeIdentity `json:"identity"`
-	ServiceAccount    string                            `json:"service_account"`
-	Audience          string                            `json:"audience"`
-	Generation        string                            `json:"generation"`
+	MCPDesiredSetHash string `json:"mcp_desired_set_hash,omitempty"`
+	// UserDelegation records whether the runtime's MCP configuration exchanges
+	// per-turn delegations. A runtime built otherwise is replaced, not reused.
+	UserDelegation bool                              `json:"user_delegation,omitempty"`
+	IssuerID       uuid.UUID                         `json:"issuer_id"`
+	Subject        string                            `json:"subject"`
+	Identity       assistantidentity.RuntimeIdentity `json:"identity"`
+	ServiceAccount string                            `json:"service_account"`
+	Audience       string                            `json:"audience"`
+	Generation     string                            `json:"generation"`
 }
 
 func kitWorkloadSubject(r assistantRuntimeRecord, c KitLocalCompositionConfig, gateway string) (string, string, error) {
@@ -245,7 +248,7 @@ func (s *ServiceCore) provisionKitWorkload(ctx context.Context, r assistantRunti
 	if err != nil {
 		return nil, fmt.Errorf("provision kit workload: %w", err)
 	}
-	return &KitWorkloadBinding{MCPDesiredSetHash: "", IssuerID: issuer.ID, Subject: subject, Identity: identity, ServiceAccount: sa, Audience: audience, Generation: generation}, nil
+	return &KitWorkloadBinding{MCPDesiredSetHash: "", UserDelegation: false, IssuerID: issuer.ID, Subject: subject, Identity: identity, ServiceAccount: sa, Audience: audience, Generation: generation}, nil
 }
 
 // revokeKitWorkload withdraws only this runtime's exact admission and assignment.

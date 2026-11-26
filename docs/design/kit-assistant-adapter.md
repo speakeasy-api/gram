@@ -52,6 +52,29 @@ deduplication remain control-plane decisions; caller-supplied assistant/chat
 headers do not establish authority. ACP session creation and resumption must omit
 `ai.speakeasy/gram-chat-id`; the canonical chat UUID is never sent to Kit.
 
+## Acting for the person in a turn
+
+With `--assistant-kit-user-delegation`, MCP calls act for the person behind
+each turn instead of for the runtime alone. Each workload MCP server is written
+with `delegation: "session"`. Before every prompt the adapter mints a
+delegation of the turn's agent credential (`agent` + `AuthorizerUserID`) whose
+`may_act` names this runtime's workload principal, and sends it with
+`_kit/session/update_delegation`. A turn with no person behind it sends `null`,
+so Kit falls back to the workload's own grant.
+
+Kit exchanges the delegation at the shared token endpoint with RFC 8693: the
+delegation is the `subject_token` and its workload assertion is the
+`actor_token`. The endpoint admits the actor as the workload grant does, checks
+`may_act` and the workload's assigned agent, then returns a fresh turn
+credential bound to the same thread. Admission still intersects the agent,
+its owner and the person. A delegation never authenticates a request itself,
+and Kit never holds the turn credential directly.
+
+A runtime built without delegation is replaced on its next turn when the flag
+changes. `--assistant-kit-disabled-tools` removes Kit built-ins (for example
+`shell,edit`) from every session through `_meta["kit/disabledTools"]`. Both
+need a Kit build with session delegation and disabled tools.
+
 ## MCP configuration lifecycle
 
 The approved `_kit/session/update_mcp` contract is **additive upsert**, not

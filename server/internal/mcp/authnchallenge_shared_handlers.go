@@ -353,6 +353,12 @@ func (s *Service) HandleSharedToken(w http.ResponseWriter, r *http.Request) erro
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidRequest, "grant_type is required")
 	}
 	switch grantType {
+	case oauthwire.GrantTypeTokenExchange:
+		// Only a workload acting for a delegated subject exchanges tokens here.
+		if !isDelegatedWorkloadExchange(r) {
+			return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeUnsupportedGrantType, "unsupported grant_type")
+		}
+		return s.handleDelegatedWorkloadExchange(ctx, w, r, issuer)
 	case oauthwire.GrantTypeAuthorizationCode:
 		endpoint, err = s.sharedAuthorizationCodeEndpoint(ctx, w, logger, issuer.authorizationServer.issuerID, r.PostForm.Get(oauthwire.ParamCode))
 	case oauthwire.GrantTypeRefreshToken:

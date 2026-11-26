@@ -27,6 +27,8 @@ type KitRuntimeProtocolConfig struct {
 	Projector    *KitTranscriptProjector
 	CWD          string
 	GatewayToken string
+	// DisabledTools are Kit built-in tools removed from each session.
+	DisabledTools []string
 }
 type KitRuntimeProtocol struct{ config KitRuntimeProtocolConfig }
 
@@ -135,6 +137,9 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 	}
 	defer closeKitTransport(c)
 	params := map[string]any{"cwd": p.config.CWD}
+	if len(p.config.DisabledTools) > 0 {
+		params["_meta"] = map[string]any{"kit/disabledTools": p.config.DisabledTools}
+	}
 	// Only new sessions receive an explicit initial configuration. Omission
 	// retains resident configuration; [] is not a clearing operation.
 	if req.MCPServers != nil {
@@ -288,6 +293,16 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 	if historyDropped {
 		if prompt, err = kitProtocolPrompt(req, true); err != nil {
 			return fmt.Errorf("kit protocol operation: %w", err)
+		}
+	}
+	if req.KitDelegation != nil {
+		// Set before the prompt: this turn's MCP calls act for its person.
+		var subject any
+		if *req.KitDelegation != "" {
+			subject = *req.KitDelegation
+		}
+		if _, err := c.Call(work, "_kit/session/update_delegation", map[string]any{"sessionId": session.SessionID, "subjectToken": subject}, session.SessionID); err != nil {
+			return fmt.Errorf("kit session delegation: %w", err)
 		}
 	}
 	// A processing event owns cancellation even before session/new returns.
