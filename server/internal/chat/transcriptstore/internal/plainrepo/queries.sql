@@ -358,12 +358,24 @@ LIMIT @lim::integer;
 
 -- name: PatchKitProjectionMessage :execrows
 -- @body_changed is decided in Go against the previous row the caller loaded
--- (and locked) through the store, so this write never compares plaintext.
-UPDATE chat_messages SET content = @content, content_raw = @content_raw,
+-- (and locked) through the store, so this write never compares plaintext. A
+-- body change stamps source_updated_at, so an encrypted copy of the old body
+-- reads as stale, and drops the metadata and tool-call IDs measured from it
+-- until the message is sealed again.
+WITH stale_tool_call_ids AS (
+  DELETE FROM chat_message_tool_call_ids tc
+  WHERE @body_changed::boolean AND tc.project_id = sqlc.narg('project_id') AND tc.message_id = @id
+)
+UPDATE chat_messages AS m SET content = @content, content_raw = @content_raw,
  tool_calls = @tool_calls, content_hash = @content_hash, finish_reason = @finish_reason,
- risk_analyzed_at = CASE WHEN @body_changed::boolean THEN NULL ELSE risk_analyzed_at END
-WHERE project_id = @project_id AND chat_id = @chat_id AND id = @id AND source = 'kit'
-AND (@body_changed::boolean OR finish_reason IS DISTINCT FROM @finish_reason);
+ risk_analyzed_at = CASE WHEN @body_changed::boolean THEN NULL ELSE m.risk_analyzed_at END,
+ source_updated_at = CASE WHEN @body_changed::boolean THEN clock_timestamp() ELSE m.source_updated_at END,
+ tool_call_count = CASE WHEN @body_changed::boolean THEN NULL ELSE m.tool_call_count END,
+ content_bytes = CASE WHEN @body_changed::boolean THEN NULL ELSE m.content_bytes END,
+ content_raw_bytes = CASE WHEN @body_changed::boolean THEN NULL ELSE m.content_raw_bytes END,
+ tool_calls_bytes = CASE WHEN @body_changed::boolean THEN NULL ELSE m.tool_calls_bytes END
+WHERE m.project_id = sqlc.narg('project_id') AND m.chat_id = @chat_id AND m.id = @id AND m.source = 'kit'
+AND (@body_changed::boolean OR m.finish_reason IS DISTINCT FROM @finish_reason);
 
 -- name: UpsertCorrelatedChatMessage :one
 -- Returns persisted metering fields and distinguishes initial inserts from
@@ -448,12 +460,15 @@ RETURNING id,
 -- name: StoreToolCallSummary :one
 -- Preserve summaries for sibling calls carried by the same assistant message.
 -- Used for projects that do not keep shadows; the others merge in Go.
+-- A body update stamps source_updated_at so an encrypted copy of the old body
+-- reads as stale.
 UPDATE chat_messages
 SET tool_call_summaries = jsonb_set(
   COALESCE(tool_call_summaries, '{}'::jsonb),
   ARRAY[@tool_call_id::text],
   @summary::jsonb
-)
+),
+    source_updated_at = clock_timestamp()
 WHERE id = @message_id
   AND chat_id = @chat_id
   AND project_id = @project_id::uuid
@@ -473,9 +488,10 @@ WHERE m.id = @message_id
 
 -- name: SetToolCallSummaries :execrows
 -- Write the whole merged summaries value of a message locked by
--- LockChatMessage.
+-- LockChatMessage, stamping source_updated_at as every body update does.
 UPDATE chat_messages
-SET tool_call_summaries = @tool_call_summaries::jsonb
+SET tool_call_summaries = @tool_call_summaries::jsonb,
+    source_updated_at = clock_timestamp()
 WHERE id = @message_id
   AND chat_id = @chat_id
   AND project_id = @project_id::uuid;
@@ -490,9 +506,11 @@ LEFT JOIN chat_message_transcripts t ON t.message_id = m.id AND t.project_id = m
 WHERE m.project_id = @project_id::uuid AND m.id = @id;
 
 -- name: UpdateToolCallOutcome :exec
+-- tool_outcome_notes is a body field: changing it stamps source_updated_at.
 UPDATE chat_messages
 SET tool_outcome = @tool_outcome,
-    tool_outcome_notes = @tool_outcome_notes
+    tool_outcome_notes = @tool_outcome_notes,
+    source_updated_at = CASE WHEN tool_outcome_notes IS DISTINCT FROM @tool_outcome_notes THEN clock_timestamp() ELSE source_updated_at END
 WHERE id = @id AND project_id = @project_id::uuid;
 
 -- name: GetMessageContentBatch :many
@@ -639,9 +657,9 @@ ORDER BY evidence.created_at, evidence.seq;
 -- Literal substring search over captured messages in one project and interval,
 -- newest or oldest first by (created_at, id). Fields over 128 KiB are neither
 -- matched nor returned. The caller requests one extra row to detect more pages.
--- For a project that keeps shadows the size of each returned field comes from
--- the shadow's metadata (sz), and the store blanks the opened shadow by the
--- same *_oversized flags.
+-- The size of each returned field comes from the message's metadata when
+-- sealing measured it (sz), and the store blanks the opened copy by the same
+-- *_oversized flags.
 SELECT m.id, m.chat_id, m.seq, m.created_at, m.role, m.generation,
        COALESCE(CASE WHEN octet_length(m.source) <= 512 THEN m.source END, '')::text AS source,
        COALESCE(CASE WHEN octet_length(m.user_id) <= 512 THEN m.user_id END, '')::text AS user_id,
@@ -745,8 +763,8 @@ SELECT n.id, n.chat_id, n.seq, n.created_at, n.role, n.generation,
        COALESCE(t.ciphertext IS NOT NULL AND CASE WHEN t.source_updated_at IS NULL AND t.source_hash IS NOT NULL THEN t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,n.content,n.content_raw IS NULL,n.content_raw,n.tool_calls IS NULL,n.tool_calls,n.tool_outcome_notes,n.tool_call_summaries IS NULL,n.tool_call_summaries,n.storage_error)::text,'UTF8')) ELSE t.source_updated_at IS NOT DISTINCT FROM n.source_updated_at END, false)::boolean AS shadow_current
 FROM neighbors n
 LEFT JOIN chat_message_transcripts t ON t.message_id = n.id AND t.project_id = n.project_id AND @open_shadows::boolean
--- Field sizes come from the shadow's metadata when the project keeps shadows,
--- as in SearchPlatformChatMessages.
+-- Field sizes come from the message's metadata when sealing measured it, as in
+-- SearchPlatformChatMessages.
 CROSS JOIN LATERAL (
   SELECT COALESCE(n.content_bytes, octet_length(n.content)) > 131072 AS content_oversized,
          COALESCE(n.tool_calls_bytes, octet_length(n.tool_calls::text), 0) > 131072 AS tool_calls_oversized,

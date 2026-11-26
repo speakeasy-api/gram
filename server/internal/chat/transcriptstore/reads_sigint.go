@@ -41,10 +41,9 @@ func (t *Transcripts) LoadEvaluationMessages(ctx context.Context, db DBTX, param
 type LoadEvaluationHistoryParams = plainrepo.LoadEvaluationHistoryParams
 
 // LoadEvaluationHistoryRow is one history message; bodies past the content
-// budget are blanked and marked ContentTooLarge. For a project that keeps
-// shadows the budget takes each body size from the shadow's metadata and falls
-// back to measuring the plaintext column only for a message with no shadow or
-// with NULL metadata. The opened shadow is blanked by the same flag.
+// budget are blanked and marked ContentTooLarge. The budget takes each body
+// size from the message's metadata and falls back to measuring the plaintext
+// column only for a message never sealed or changed since (NULL metadata). The opened shadow is blanked by the same flag.
 type LoadEvaluationHistoryRow = plainrepo.LoadEvaluationHistoryRow
 
 // LoadEvaluationHistory reads the history before an evaluated message,

@@ -63,11 +63,12 @@ rate/concurrency bound is implemented. Reusing transaction-loaded keys globally
 is unsafe because those keys or configuration may later roll back.
 
 Freshness does not come from the plaintext. `chat_messages.source_updated_at`
-records when the six body fields last changed. Two triggers stamp it with
-`clock_timestamp()` on every write path: on insert when unset (a restore keeps
-its value), and on an update that changes a body field (an identical rewrite
-does not count). Each copy records the `source_updated_at` it was sealed from,
-and it is current while the two are equal. Compare-and-swap persistence refuses
+records when the six body fields last changed. Its default stamps every insert.
+Every statement that updates a body field lives in `transcriptstore` and sets it
+to `clock_timestamp()`; the `no-plaintext-transcript-read` lint rule rejects a
+body update anywhere else.
+Each copy records the `source_updated_at` it was sealed from, and it is current
+while the two are equal. Compare-and-swap persistence refuses
 an outdated snapshot by the same comparison.
 
 Copies sealed before `source_updated_at` existed still carry the old unkeyed
@@ -146,17 +147,17 @@ of the shadow. Writes that change a shadowed field after insert
 unit with the write: in their own transaction, or under a savepoint inside a
 caller's transaction, so a failed recapture also rolls back its write.
 
-For a project with encrypted transcripts, values derived from a body come from the
-shadow's metadata, never from plaintext inside SQL. Each falls back to the
-plaintext expression only for a message with no shadow, or one captured before
-the metadata existed (NULL):
+Values derived from a body come from the message's metadata columns, never
+from plaintext inside SQL. Sealing writes them and a body update clears them, so
+they are either current or NULL. Each falls back to the plaintext expression
+only for a message never sealed, or changed since (NULL):
 
 - Chat entry totals count tool calls from `tool_call_count`.
-- The hooks tool-call lookup reads `chat_message_transcript_tool_calls` first,
+- The hooks tool-call lookup reads `chat_message_tool_call_ids` first,
   then scans plaintext tool calls only of messages whose IDs are not indexed.
 - Platform MCP size caps and the sigint history budget use the `*_bytes`
   columns. The query reports which fields it blanked, and the store blanks the
-  same fields of the opened shadow.
+  same fields of the opened copy.
 - The prompt-attachment parent lookup skips empty prompts by `content_bytes`.
 - The kit projection compares the new body with the previous row, locked and
   opened through the store, in Go, and passes the result to the update.

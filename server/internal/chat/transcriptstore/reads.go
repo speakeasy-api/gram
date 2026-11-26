@@ -260,8 +260,8 @@ func (t *Transcripts) GetToolCallSummaryContext(ctx context.Context, db DBTX, c 
 type ListClaudeUserMessagesForPromptAttachmentParentRow = plainrepo.ListClaudeUserMessagesForPromptAttachmentParentRow
 
 // ListClaudeUserMessagesForPromptAttachmentParent returns a chat's non-empty
-// user prompts, newest first. For a project that keeps shadows, whether a
-// prompt is empty comes from its shadow's metadata, not its plaintext.
+// user prompts, newest first. Whether a sealed prompt is empty comes from its
+// metadata, not its plaintext.
 func (t *Transcripts) ListClaudeUserMessagesForPromptAttachmentParent(ctx context.Context, db DBTX, projectID, chatID uuid.UUID) ([]ListClaudeUserMessagesForPromptAttachmentParentRow, error) {
 	rows, err := plainrepo.New(db).ListClaudeUserMessagesForPromptAttachmentParent(ctx, plainrepo.ListClaudeUserMessagesForPromptAttachmentParentParams{OpenShadows: t.Enabled(projectID), ChatID: chatID, ProjectID: projectID})
 	if err != nil {
@@ -329,11 +329,11 @@ func (p TranscriptPages) ListChatTranscriptMessagesPage(ctx context.Context, pag
 // FindAssistantToolCallMessageID returns the newest assistant message of a
 // chat that issued the tool call, or pgx.ErrNoRows (wrapped).
 //
-// For a project that keeps shadows, the tool-call IDs each shadow indexes
+// For a project with encrypted transcripts, the tool-call IDs sealing indexed
 // answer first. Only when they have no match are the plaintext tool calls
-// scanned, and then only for messages whose IDs are not indexed: messages with
-// no shadow (written before capture began, or by a writer that does not seal)
-// or with a shadow captured before the index existed. That is the same
+// scanned, and then only for messages whose IDs are not indexed: messages never
+// sealed (written before sealing began, or by a writer that does not seal) or
+// changed since. That is the same
 // fallback every read applies, so such a message is still found.
 func (t *Transcripts) FindAssistantToolCallMessageID(ctx context.Context, db DBTX, projectID, chatID uuid.UUID, toolCallID string) (uuid.UUID, error) {
 	indexed := t.Enabled(projectID)

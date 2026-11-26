@@ -94,3 +94,24 @@ func TestFuncPackagePath(t *testing.T) {
 	require.Equal(t, "github.com/x/y.z/p", funcPackagePath("(github.com/x/y.z/p.T).M"))
 	require.Equal(t, "github.com/x/y.z/p", funcPackagePath("github.com/x/y.z/p.F"))
 }
+
+func TestSQLUpdatesPlaintextTranscript(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]bool{
+		"UPDATE chat_messages SET tool_call_summaries = $1 WHERE id = $2":                                                            true,
+		"UPDATE chat_messages AS m SET content = $1, source_updated_at = now() WHERE m.id = $2":                                      true,
+		"UPDATE chat_messages SET tool_outcome = $1, tool_outcome_notes = $2 WHERE id = $3":                                          true,
+		`UPDATE "chat_messages" SET "storage_error" = $1 WHERE id = $2`:                                                              true,
+		"INSERT INTO chat_messages (id, content) VALUES ($1, $2) ON CONFLICT (id) DO UPDATE SET content = EXCLUDED.content":          true,
+		"INSERT INTO chat_messages (id, content) VALUES ($1, $2) ON CONFLICT (id) DO UPDATE SET source = EXCLUDED.source":            false,
+		"INSERT INTO chat_messages (content, tool_calls) VALUES ($1, $2)":                                                            false,
+		"UPDATE chat_messages SET risk_analyzed_at = now() WHERE content IS NULL":                                                    false,
+		"UPDATE chat_summaries SET content = $1 WHERE id = $2":                                                                       false,
+		"UPDATE chat_messages SET tool_call_summaries = jsonb_set(COALESCE(tool_call_summaries, '{}'), ARRAY[$1], $2) WHERE id = $3": true,
+		"-- name: X :exec\n-- SET content = $1\nUPDATE chat_messages SET risk_analyzed_at = now() WHERE id = $1":                     false,
+	}
+	for sql, want := range cases {
+		require.Equal(t, want, sqlUpdatesPlaintextTranscript(sql), sql)
+	}
+}

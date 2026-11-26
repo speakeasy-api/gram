@@ -13,9 +13,9 @@ import (
 // Readers for the Platform MCP chat tools.
 
 // The Platform MCP chat tools return no body field over 128 KiB. The query
-// decides which fields are over the cap, from the shadow's metadata for a
-// project that keeps shadows (jsonb text lengths, longer than the compact JSON
-// a shadow holds), blanks them in the plaintext columns and flags each one.
+// decides which fields are over the cap, from the message's metadata when
+// sealing measured it (jsonb text lengths, longer than the compact JSON a sealed
+// copy holds), blanks them in the plaintext columns and flags each one.
 // platformShape blanks the same fields of the opened shadow by those flags, so
 // both sides agree on which field was too large.
 type platformOversized struct {

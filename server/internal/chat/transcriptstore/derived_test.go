@@ -23,12 +23,12 @@ func int4(v int32) pgtype.Int4 { return pgtype.Int4{Int32: v, Valid: true} }
 
 var nullInt4 = pgtype.Int4{Int32: 0, Valid: false}
 
-// setMetadata overrides one shadow's metadata, keeping the captured value of
+// setMetadata overrides one message's metadata, keeping the sealed value of
 // any field passed as nil.
 func (f *fixture) setMetadata(t *testing.T, id uuid.UUID, toolCallCount, contentBytes *pgtype.Int4) {
 	t.Helper()
 	fixtures := fixturerepo.New(f.db)
-	meta, err := fixtures.ShadowMetadata(t.Context(), id)
+	meta, err := fixtures.MessageMetadata(t.Context(), id)
 	require.NoError(t, err)
 	if toolCallCount != nil {
 		meta.ToolCallCount = *toolCallCount
@@ -61,7 +61,7 @@ func TestEntryTotalsCountToolCallsFromShadowMetadata(t *testing.T) {
 
 	enabled := NewTranscripts(f.store, f.project)
 	require.Equal(t, int64(2), totals(enabled).ToolCalls, "the shadowed message counts from its metadata, the other from plaintext")
-	require.Equal(t, int64(1), totals(NewTranscripts(f.store)).ToolCalls, "a project off the list counts plaintext")
+	require.Equal(t, int64(2), totals(NewTranscripts(f.store)).ToolCalls, "the metadata lives on the message, so a project off the list reads it too")
 
 	// A shadow captured before the count existed falls back to plaintext.
 	f.setMetadata(t, shadowed, &nullInt4, nil)
@@ -171,11 +171,11 @@ func TestPlatformCapsFollowShadowMetadata(t *testing.T) {
 
 	off := NewTranscripts(f.store)
 	r = read(off)
-	require.False(t, r.Oversized, "a project off the list measures plaintext")
-	require.Equal(t, "sensitive example", r.Content)
+	require.True(t, r.Oversized, "the metadata lives on the message, so a project off the list reads it too")
+	require.Empty(t, r.Content)
 	s = search(off)
-	require.False(t, s.Oversized)
-	require.Equal(t, "sensitive example", s.Content)
+	require.True(t, s.Oversized)
+	require.Empty(t, s.Content)
 
 	// A shadow captured before the sizes existed measures plaintext.
 	f.setMetadata(t, id, nil, &nullInt4)
@@ -212,8 +212,8 @@ func TestEvaluationHistoryBudgetFollowsShadowMetadata(t *testing.T) {
 	require.Empty(t, r.Content, "the opened shadow is blanked by the same flag")
 
 	r = history(NewTranscripts(f.store))
-	require.False(t, r.ContentTooLarge, "a project off the list counts plaintext")
-	require.Equal(t, "sensitive example", r.Content)
+	require.True(t, r.ContentTooLarge, "the metadata lives on the message, so a project off the list reads it too")
+	require.Empty(t, r.Content)
 }
 
 func TestPromptParentsSkipEmptyByShadowMetadata(t *testing.T) {
@@ -237,7 +237,7 @@ func TestPromptParentsSkipEmptyByShadowMetadata(t *testing.T) {
 
 	f.setMetadata(t, id, nil, new(int4(0)))
 	require.Empty(t, list(enabled), "an empty prompt is recognized by its metadata")
-	require.Len(t, list(NewTranscripts(f.store)), 1, "a project off the list reads plaintext")
+	require.Empty(t, list(NewTranscripts(f.store)), "the metadata lives on the message, so a project off the list reads it too")
 
 	f.setMetadata(t, id, nil, &nullInt4)
 	require.Len(t, list(enabled), 1, "a shadow without sizes falls back to plaintext")
