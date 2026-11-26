@@ -105,16 +105,6 @@ func (s *seeder) seedVendorApp(ctx context.Context, v vendorApp) error {
 	}); err != nil {
 		return fmt.Errorf("insert client: %w", err)
 	}
-	// The server's own sign-in, and the organization sign-in, which reaches
-	// every server, both bind the client, as they do the Per-User OAuth
-	// Server's.
-	for _, issuer := range []uuid.UUID{v.id(s, "issuer"), s.det("issuer-workforce")} {
-		if err := s.q.ServersInsertRemoteSessionClientIssuerBinding(ctx, repo.ServersInsertRemoteSessionClientIssuerBindingParams{
-			RemoteSessionClientID: clientRowID, UserSessionIssuerID: issuer,
-		}); err != nil {
-			return fmt.Errorf("bind client to a sign-in: %w", err)
-		}
-	}
 	if err := s.q.ServersStampRemoteSessionIssuer(ctx, repo.ServersStampRemoteSessionIssuerParams{
 		RemoteSessionIssuerID: issuerID, McpServerID: serverID, ProjectID: proj,
 	}); err != nil {

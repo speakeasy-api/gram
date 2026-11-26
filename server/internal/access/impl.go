@@ -174,7 +174,7 @@ func (s *Service) ListRoles(ctx context.Context, _ *gen.ListRolesPayload) (*gen.
 	if ac.ProjectID != nil {
 		checks = append(checks, authz.Project(authz.ProjectIDOf(*ac.ProjectID)).Read())
 	}
-	if err := s.authz.RequireAny(ctx, checks...); err != nil {
+	if err := s.authz.Require(ctx, authz.Either(checks...)); err != nil {
 		return nil, err
 	}
 	if ac.ProjectID != nil {
@@ -430,7 +430,7 @@ func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*
 	if ac.ProjectID != nil {
 		checks = append(checks, authz.Project(authz.ProjectIDOf(*ac.ProjectID)).Read())
 	}
-	if err := s.authz.RequireAny(ctx, checks...); err != nil {
+	if err := s.authz.Require(ctx, authz.Either(checks...)); err != nil {
 		return nil, err
 	}
 	if ac.ProjectID != nil {
@@ -1686,7 +1686,14 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 	if err != nil {
 		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
 	}
+	result, _, err := s.requestAccess(ctx, ac, payload, isMemberCaller(ctx, ac))
+	return result, err
+}
 
+// requestAccess stores the request when member is true and the rollout is on,
+// then emails the organization's administrators unless the request was
+// already pending. It reports whether a new request was stored.
+func (s *Service) requestAccess(ctx context.Context, ac *contextvalues.AuthContext, payload *gen.RequestAccessPayload, member bool) (*gen.RequestAccessResult, bool, error) {
 	logger := s.logger.With(
 		attr.SlogOrganizationID(ac.ActiveOrganizationID),
 		attr.SlogUserID(ac.UserID),
@@ -1699,36 +1706,38 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 	// Get the requester's info
 	requester, err := usersrepo.New(s.db).GetUser(ctx, ac.UserID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "get requester info").LogError(ctx, logger)
+		return nil, false, oops.E(oops.CodeUnexpected, err, "get requester info").LogError(ctx, logger)
 	}
 
 	// Get organization info
 	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "get organization info").LogError(ctx, logger)
+		return nil, false, oops.E(oops.CodeUnexpected, err, "get organization info").LogError(ctx, logger)
 	}
 
-	stored, err := s.recordAccessRequest(ctx, ac, payload)
+	stored, err := s.recordAccessRequest(ctx, ac, payload, member)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
+	created := false
 	var storedView *gen.AccessRequest
 	if stored != nil {
 		storedView = stored.view
+		created = stored.created
 		if !stored.created {
-			return &gen.RequestAccessResult{SentToCount: 0, Request: storedView}, nil
+			return &gen.RequestAccessResult{SentToCount: 0, Request: storedView}, false, nil
 		}
 	}
 
 	// Get active organization administrators.
 	admins, err := repo.New(s.db).ListActiveOrganizationAdmins(ctx, ac.ActiveOrganizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list organization administrators").LogError(ctx, logger)
+		return nil, false, oops.E(oops.CodeUnexpected, err, "list organization administrators").LogError(ctx, logger)
 	}
 
 	if len(admins) == 0 {
 		logger.WarnContext(ctx, "no org admins found to notify for access request")
-		return &gen.RequestAccessResult{SentToCount: 0, Request: storedView}, nil
+		return &gen.RequestAccessResult{SentToCount: 0, Request: storedView}, created, nil
 	}
 
 	// The query params let the dashboard open a pre-filled grant dialog for
@@ -1801,7 +1810,7 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 			attr.SlogAccessRequestAdminCount(len(admins)),
 			attr.SlogAccessRequestScope(payload.Scope),
 		)
-		return &gen.RequestAccessResult{SentToCount: 0, Request: storedView}, nil
+		return &gen.RequestAccessResult{SentToCount: 0, Request: storedView}, created, nil
 	}
 
 	logger.InfoContext(ctx, "access request emails sent",
@@ -1810,7 +1819,7 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 		attr.SlogAccessRequestScope(payload.Scope),
 	)
 
-	return &gen.RequestAccessResult{SentToCount: sentCount, Request: storedView}, nil
+	return &gen.RequestAccessResult{SentToCount: sentCount, Request: storedView}, created, nil
 }
 
 // Access page tabs an access request link can open on.

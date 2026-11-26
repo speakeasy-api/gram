@@ -161,6 +161,7 @@ func TestPreparationIntegration_ExplicitSelectionPreservesInteractiveClient(t *t
 	t.Parallel()
 	ctx, ti, in := preparationFixture(t)
 	interactive := uuid.MustParse(createRemoteClient(t, ctx, ti, in.RemoteSessionIssuerID.String(), in.UserSessionIssuerID.String(), "interactive-client"))
+	placeClientForSignIn(t, ctx, ti.conn, interactive, in.UserSessionIssuerID)
 	preparationRecordGrants(t, ctx, ti, interactive, []string{oauthwire.GrantTypeJWTBearer, "authorization_code", "refresh_token"})
 	preparationRecordGrants(t, ctx, ti, in.ClientID, []string{oauthwire.GrantTypeJWTBearer})
 	selected := in.ClientID
@@ -175,8 +176,8 @@ func TestPreparationIntegration_ExplicitSelectionPreservesInteractiveClient(t *t
 	require.Equal(t, "ready", result.State)
 	require.Equal(t, selected, result.ClientID)
 	require.Equal(t, "downstream-client", result.ExternalClientID)
-	require.Equal(t, 1, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, interactive, in.UserSessionIssuerID))
-	require.Equal(t, 0, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, selected, in.UserSessionIssuerID))
+	requireClientBound(t, ctx, ti, interactive, in.UserSessionIssuerID, true)
+	requireClientBound(t, ctx, ti, selected, in.UserSessionIssuerID, false)
 }
 
 func TestPreparationIntegration_ConcurrentIdempotencyAndGeneration(t *testing.T) {

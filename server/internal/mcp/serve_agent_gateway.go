@@ -211,6 +211,16 @@ func (s *Service) resolveMemberTokensSkipping(ctx context.Context, gate *metaGat
 	if err != nil {
 		return nil, nil, fmt.Errorf("load agent member issuer: %w", err)
 	}
+	// Hosted members retain partial credentials: their tools declare their own
+	// inputs. Proxied members must never turn a missing attachment into an
+	// anonymous upstream request.
+	if member.backend != metaMemberBackendProxied {
+		tokens, err := s.hostedUpstreamTokens(ctx, remotesessions.RefreshIn(gate.connectionScope(ctx, s.aiCatalog.SnapshotFor(ctx))).NotingSkips(gate.skippedUpstreams).FromRequest(gate.request), gate.organizationID, member.projectID, member.serverID, server.UserSessionIssuerID.UUID, urn.NewAgentSubject(gate.agentID), true)
+		if err != nil {
+			return nil, nil, memberConnectionError{fmt.Errorf("resolve hosted member credentials: %w", err), resolveFailureHappened(err)}
+		}
+		return tokens, nil, nil
+	}
 	if !server.UserSessionIssuerID.Valid {
 		if member.backend == metaMemberBackendProxied {
 			_, credential, err := s.authorizeAgentMemberClient(ctx, gate, member, uuid.Nil, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, "")
@@ -218,16 +228,6 @@ func (s *Service) resolveMemberTokensSkipping(ctx context.Context, gate *metaGat
 			return nil, nil, err
 		}
 		return nil, nil, nil
-	}
-	// Hosted members retain partial credentials: their tools declare their own
-	// inputs. Proxied members must never turn a missing attachment into an
-	// anonymous upstream request.
-	if member.backend != metaMemberBackendProxied {
-		tokens, err := s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, remotesessions.RefreshIn(gate.connectionScope(ctx, s.aiCatalog.SnapshotFor(ctx))).NotingSkips(gate.skippedUpstreams).FromRequest(gate.request), member.projectID, gate.organizationID, server.UserSessionIssuerID.UUID, urn.NewAgentSubject(gate.agentID))
-		if err != nil {
-			return nil, nil, memberConnectionError{fmt.Errorf("resolve hosted member credentials: %w", err), resolveFailureHappened(err)}
-		}
-		return tokens, nil, nil
 	}
 	clients, err := s.agentServerClients(ctx, agentServerTarget{organizationID: gate.organizationID, agentID: gate.agentID, serverID: member.serverID, projectID: member.projectID, slug: member.slug})
 	if err != nil {

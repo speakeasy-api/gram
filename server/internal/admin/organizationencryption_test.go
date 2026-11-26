@@ -24,11 +24,20 @@ import (
 
 const testEncryptionUseCase = orgencryption.UseCaseOAuthClientSecrets
 
-// countingCopyStore reports fixed counts and stores no values, so tests can
-// place an organization anywhere in its transition without sealing values.
+// countingCopyStore reports fixed counts and organizations with values and
+// stores no values, so tests can place an organization anywhere in its
+// transition without sealing values.
 type countingCopyStore struct {
-	mu     sync.Mutex
-	counts orgencryption.CopyCounts
+	mu         sync.Mutex
+	counts     orgencryption.CopyCounts
+	withValues []orgencryption.OrganizationValues
+}
+
+func (c *countingCopyStore) setOrganizationsWithValues(withValues ...orgencryption.OrganizationValues) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.withValues = withValues
 }
 
 func (c *countingCopyStore) setCounts(counts orgencryption.CopyCounts) {
@@ -59,6 +68,13 @@ func (c *countingCopyStore) Count(context.Context, string) (orgencryption.CopyCo
 	defer c.mu.Unlock()
 
 	return c.counts, nil
+}
+
+func (c *countingCopyStore) ListOrganizationsWithValues(context.Context) ([]orgencryption.OrganizationValues, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	return append([]orgencryption.OrganizationValues(nil), c.withValues...), nil
 }
 
 func (c *countingCopyStore) ClearPlatformCopies(context.Context, string, int64, int32) (orgencryption.ClearedCopies, error) {
@@ -111,7 +127,7 @@ func newEncryptionFixture(t *testing.T) (context.Context, *encryptionFixture) {
 
 	ctx, svc, conn := newTestAdminService(t)
 	keys := orgencryptiontest.New(t, conn)
-	store := &countingCopyStore{mu: sync.Mutex{}, counts: orgencryption.CopyCounts{Waiting: 0, Unreadable: 0, Unattributed: 0, PlatformCopies: 0}}
+	store := &countingCopyStore{mu: sync.Mutex{}, counts: orgencryption.CopyCounts{Waiting: 0, Unreadable: 0, Unattributed: 0, PlatformCopies: 0}, withValues: nil}
 	runs := &recordingRunStarter{mu: sync.Mutex{}, runs: nil, actors: nil, err: nil}
 
 	svc.SetOrganizationEncryption(OrganizationEncryption{
@@ -390,7 +406,7 @@ func TestOrganizationEncryption_ListReportsOrganizationsByState(t *testing.T) {
 	f.enroll(ctx, t, "org_enc_list_b")
 
 	platformKey := string(orgencryption.TransitionStatePlatformKey)
-	list, err := f.svc.ListOrganizationEncryptionTransitions(ctx, &gen.ListOrganizationEncryptionTransitionsPayload{UseCase: nil, State: &platformKey, Limit: 200, Offset: 0})
+	list, err := f.svc.ListOrganizationEncryptionTransitions(ctx, &gen.ListOrganizationEncryptionTransitionsPayload{UseCase: nil, State: &platformKey, Values: "all", Sort: "oldest", Limit: 200, Offset: 0})
 	require.NoError(t, err)
 	require.Equal(t, string(testEncryptionUseCase), list.UseCase, "the first use case is listed when none is named")
 	require.Equal(t, []string{string(testEncryptionUseCase)}, list.UseCases)
@@ -402,7 +418,7 @@ func TestOrganizationEncryption_ListReportsOrganizationsByState(t *testing.T) {
 	require.NotContains(t, ids, "org_enc_list_b")
 
 	dualWrite := string(orgencryption.TransitionStateDualWrite)
-	list, err = f.svc.ListOrganizationEncryptionTransitions(ctx, &gen.ListOrganizationEncryptionTransitionsPayload{UseCase: new(string(testEncryptionUseCase)), State: &dualWrite, Limit: 1, Offset: 0})
+	list, err = f.svc.ListOrganizationEncryptionTransitions(ctx, &gen.ListOrganizationEncryptionTransitionsPayload{UseCase: new(string(testEncryptionUseCase)), State: &dualWrite, Values: "all", Sort: "oldest", Limit: 1, Offset: 0})
 	require.NoError(t, err)
 	require.Len(t, list.Organizations, 1)
 	require.Equal(t, "org_enc_list_b", list.Organizations[0].OrganizationID)
@@ -464,13 +480,129 @@ func TestOrganizationEncryption_ListPages(t *testing.T) {
 		seedOrg(t, ctx, f.conn, orgFixture{id: id, name: id, slug: id, createdAt: new(time.Date(2020, time.January, i+1, 0, 0, 0, 0, time.UTC))})
 	}
 
-	first, err := f.svc.ListOrganizationEncryptionTransitions(ctx, &gen.ListOrganizationEncryptionTransitionsPayload{UseCase: nil, State: nil, Limit: 2, Offset: 0})
+	first, err := f.svc.ListOrganizationEncryptionTransitions(ctx, &gen.ListOrganizationEncryptionTransitionsPayload{UseCase: nil, State: nil, Values: "all", Sort: "oldest", Limit: 2, Offset: 0})
 	require.NoError(t, err)
 	require.Len(t, first.Organizations, 2)
 	require.True(t, first.HasMore)
 	require.Equal(t, "org_enc_page_a", first.Organizations[0].OrganizationID, "oldest first")
 
-	second, err := f.svc.ListOrganizationEncryptionTransitions(ctx, &gen.ListOrganizationEncryptionTransitionsPayload{UseCase: nil, State: nil, Limit: 2, Offset: 2})
+	second, err := f.svc.ListOrganizationEncryptionTransitions(ctx, &gen.ListOrganizationEncryptionTransitionsPayload{UseCase: nil, State: nil, Values: "all", Sort: "oldest", Limit: 2, Offset: 2})
 	require.NoError(t, err)
 	require.Equal(t, "org_enc_page_c", second.Organizations[0].OrganizationID)
+}
+
+// seedOrganizationsWithValues seeds three organizations, oldest first, of which
+// the two newer have values: org_enc_values_b written first and org_enc_values_c
+// written last.
+func (f *encryptionFixture) seedOrganizationsWithValues(ctx context.Context, t *testing.T) (time.Time, time.Time) {
+	t.Helper()
+
+	for i, id := range []string{"org_enc_values_a", "org_enc_values_b", "org_enc_values_c"} {
+		seedOrg(t, ctx, f.conn, orgFixture{id: id, name: id, slug: id, createdAt: new(time.Date(2019, time.January, i+1, 0, 0, 0, 0, time.UTC))})
+	}
+
+	writtenB := time.Date(2026, time.March, 1, 12, 0, 0, 0, time.UTC)
+	writtenC := time.Date(2026, time.March, 2, 12, 0, 0, 0, time.UTC)
+	f.store.setOrganizationsWithValues(
+		orgencryption.OrganizationValues{OrganizationID: "org_enc_values_b", Values: 3, LastWrittenAt: writtenB},
+		orgencryption.OrganizationValues{OrganizationID: "org_enc_values_c", Values: 1, LastWrittenAt: writtenC},
+	)
+
+	return writtenB, writtenC
+}
+
+// requireSameInstant checks that an RFC 3339 view names want, in whatever
+// time zone the database reported it.
+func requireSameInstant(t *testing.T, want time.Time, got *string) {
+	t.Helper()
+
+	require.NotNil(t, got)
+	parsed, err := time.Parse(time.RFC3339, *got)
+	require.NoError(t, err)
+	require.True(t, want.Equal(parsed), "want %s, got %s", want.Format(time.RFC3339), *got)
+}
+
+func transitionRowIDs(rows []*gen.AdminOrganizationEncryptionTransitionRow) []string {
+	ids := make([]string, 0, len(rows))
+	for _, row := range rows {
+		ids = append(ids, row.OrganizationID)
+	}
+
+	return ids
+}
+
+func TestOrganizationEncryption_ListKeepsOrganizationsWithValues(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newEncryptionFixture(t)
+	writtenB, writtenC := f.seedOrganizationsWithValues(ctx, t)
+
+	list, err := f.svc.ListOrganizationEncryptionTransitions(ctx, &gen.ListOrganizationEncryptionTransitionsPayload{UseCase: nil, State: nil, Values: "present", Sort: "last_written", Limit: 200, Offset: 0})
+	require.NoError(t, err)
+	require.Equal(t, []string{"org_enc_values_c", "org_enc_values_b"}, transitionRowIDs(list.Organizations), "only organizations with values, most recently written first")
+	require.Equal(t, int64(1), list.Organizations[0].ValueCount)
+	requireSameInstant(t, writtenC, list.Organizations[0].LastWrittenAt)
+	require.Equal(t, int64(3), list.Organizations[1].ValueCount)
+	requireSameInstant(t, writtenB, list.Organizations[1].LastWrittenAt)
+	require.False(t, list.HasMore)
+
+	require.Len(t, list.StateCounts, 1, "the counts cover only organizations with values")
+	require.Equal(t, string(orgencryption.TransitionStatePlatformKey), list.StateCounts[0].State)
+	require.Equal(t, int64(2), list.StateCounts[0].Organizations)
+}
+
+func TestOrganizationEncryption_ListSortsOrganizationsWithValuesOldestFirst(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newEncryptionFixture(t)
+	f.seedOrganizationsWithValues(ctx, t)
+
+	list, err := f.svc.ListOrganizationEncryptionTransitions(ctx, &gen.ListOrganizationEncryptionTransitionsPayload{UseCase: nil, State: nil, Values: "present", Sort: "oldest", Limit: 200, Offset: 0})
+	require.NoError(t, err)
+	require.Equal(t, []string{"org_enc_values_b", "org_enc_values_c"}, transitionRowIDs(list.Organizations))
+}
+
+func TestOrganizationEncryption_ListAllPutsRecentlyWrittenOrganizationsFirst(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newEncryptionFixture(t)
+	f.seedOrganizationsWithValues(ctx, t)
+
+	list, err := f.svc.ListOrganizationEncryptionTransitions(ctx, &gen.ListOrganizationEncryptionTransitionsPayload{UseCase: nil, State: nil, Values: "all", Sort: "last_written", Limit: 200, Offset: 0})
+	require.NoError(t, err)
+	ids := transitionRowIDs(list.Organizations)
+	require.GreaterOrEqual(t, len(ids), 3)
+	require.Equal(t, []string{"org_enc_values_c", "org_enc_values_b"}, ids[:2], "organizations with values lead, most recently written first")
+	require.Contains(t, ids[2:], "org_enc_values_a", "an organization without values follows")
+
+	for _, row := range list.Organizations[2:] {
+		require.Zero(t, row.ValueCount)
+		require.Nil(t, row.LastWrittenAt)
+	}
+
+	var total int64
+	for _, count := range list.StateCounts {
+		total += count.Organizations
+	}
+	require.False(t, list.HasMore)
+	require.Equal(t, int64(len(list.Organizations)), total, "the counts cover every organization the list shows")
+}
+
+func TestOrganizationEncryption_ListFiltersOrganizationsWithValuesByState(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newEncryptionFixture(t)
+	f.seedOrganizationsWithValues(ctx, t)
+	f.enroll(ctx, t, "org_enc_values_b")
+
+	dualWrite := string(orgencryption.TransitionStateDualWrite)
+	list, err := f.svc.ListOrganizationEncryptionTransitions(ctx, &gen.ListOrganizationEncryptionTransitionsPayload{UseCase: nil, State: &dualWrite, Values: "present", Sort: "last_written", Limit: 200, Offset: 0})
+	require.NoError(t, err)
+	require.Equal(t, []string{"org_enc_values_b"}, transitionRowIDs(list.Organizations))
+
+	counts := map[string]int64{}
+	for _, count := range list.StateCounts {
+		counts[count.State] = count.Organizations
+	}
+	require.Equal(t, map[string]int64{dualWrite: 1, string(orgencryption.TransitionStatePlatformKey): 1}, counts)
 }

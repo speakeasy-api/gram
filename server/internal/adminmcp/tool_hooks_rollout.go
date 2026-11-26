@@ -21,6 +21,7 @@ const maxHooksRolloutOverrides = 100
 type HooksRolloutReader interface {
 	GetHooksRollout(context.Context, *gen.GetHooksRolloutPayload) (*gen.AdminHooksRollout, error)
 	GetOrganizationHooksRollout(context.Context, *gen.GetOrganizationHooksRolloutPayload) (*gen.AdminOrganizationHooksRollout, error)
+	GetHooksReleaseProgress(context.Context, *gen.GetHooksReleaseProgressPayload) (*gen.AdminHooksReleaseProgress, error)
 }
 
 // HooksRolloutPin is a hooks rollout pin.
@@ -66,6 +67,80 @@ type OrganizationHooksRollout struct {
 	Eligible         *bool            `json:"eligible,omitempty"`
 	Override         *HooksRolloutPin `json:"override,omitempty"`
 	DefaultPin       *HooksRolloutPin `json:"default_pin,omitempty"`
+}
+
+// HooksReleaseRepoVersion counts repositories on one published hooks
+// generator version. Version is empty for repositories never published.
+type HooksReleaseRepoVersion struct {
+	Version string `json:"version"`
+	Repos   int64  `json:"repos"`
+}
+
+// HooksReleaseInstallVersion counts installs on one hooks binary version.
+type HooksReleaseInstallVersion struct {
+	Version  string `json:"version"`
+	Status   string `json:"status"`
+	Installs int64  `json:"installs"`
+}
+
+// HooksReleaseFleet counts installs across every organization.
+type HooksReleaseFleet struct {
+	WindowDays        int                          `json:"window_days"`
+	Installs          int64                        `json:"installs"`
+	InstallsOnCurrent int64                        `json:"installs_on_current"`
+	Versions          []HooksReleaseInstallVersion `json:"versions"`
+}
+
+// HooksReleaseProgress is how far the current hooks release has reached.
+type HooksReleaseProgress struct {
+	CurrentVersion            int                       `json:"current_version"`
+	CurrentBinaryVersion      string                    `json:"current_binary_version,omitempty"`
+	Organizations             int64                     `json:"organizations"`
+	OrganizationsCleared      int64                     `json:"organizations_cleared"`
+	OrganizationsHeld         int64                     `json:"organizations_held"`
+	OrganizationsOnLegacyFlag int64                     `json:"organizations_on_legacy_flag"`
+	Repos                     int64                     `json:"repos"`
+	ReposOnCurrent            int64                     `json:"repos_on_current"`
+	RepoVersions              []HooksReleaseRepoVersion `json:"repo_versions"`
+	Fleet                     *HooksReleaseFleet        `json:"fleet,omitempty"`
+}
+
+func hooksReleaseProgress(result *gen.AdminHooksReleaseProgress) HooksReleaseProgress {
+	out := HooksReleaseProgress{
+		CurrentVersion:            result.CurrentVersion,
+		CurrentBinaryVersion:      "",
+		Organizations:             result.Organizations,
+		OrganizationsCleared:      result.OrganizationsCleared,
+		OrganizationsHeld:         result.OrganizationsHeld,
+		OrganizationsOnLegacyFlag: result.OrganizationsOnLegacyFlag,
+		Repos:                     result.Repos,
+		ReposOnCurrent:            result.ReposOnCurrent,
+		RepoVersions:              make([]HooksReleaseRepoVersion, 0, len(result.RepoVersions)),
+		Fleet:                     nil,
+	}
+	if result.CurrentBinaryVersion != nil {
+		out.CurrentBinaryVersion = *result.CurrentBinaryVersion
+	}
+	for _, v := range result.RepoVersions {
+		if v != nil {
+			out.RepoVersions = append(out.RepoVersions, HooksReleaseRepoVersion{Version: v.Version, Repos: v.Repos})
+		}
+	}
+	if result.Fleet != nil {
+		fleet := &HooksReleaseFleet{
+			WindowDays:        result.Fleet.WindowDays,
+			Installs:          result.Fleet.Installs,
+			InstallsOnCurrent: result.Fleet.InstallsOnCurrent,
+			Versions:          make([]HooksReleaseInstallVersion, 0, len(result.Fleet.Versions)),
+		}
+		for _, v := range result.Fleet.Versions {
+			if v != nil {
+				fleet.Versions = append(fleet.Versions, HooksReleaseInstallVersion{Version: v.Version, Status: v.Status, Installs: v.Installs})
+			}
+		}
+		out.Fleet = fleet
+	}
+	return out
 }
 
 func hooksRolloutPin(pin *gen.AdminHooksRolloutPin) *HooksRolloutPin {
@@ -128,6 +203,26 @@ func registerHooksRolloutTools(server *mcp.Server, organizations OrganizationRea
 			OverridesTruncated:      len(result.Overrides) > maxHooksRolloutOverrides,
 			RecentChanges:           changes,
 		}, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:         "get_hooks_release_progress",
+		Title:        "Get Hooks Release Progress",
+		Description:  "Read how far the current hooks release has reached across every organization: how many organizations with a marketplace repository the rollout pins clear for current_version (canaries and pins at or above it), hold below it, or leave to the legacy PostHog flag; how many repositories have republished the hooks plugin at current_version, with a per-version breakdown; and, in fleet, how many installs seen in the last full UTC days report the current hooks binary version. fleet is absent when install data is unavailable. Does not change pins.",
+		Annotations:  readOnlyAnnotations(),
+		Meta:         nil,
+		InputSchema:  nil,
+		OutputSchema: nil,
+		Icons:        nil,
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, HooksReleaseProgress, error) {
+		if rollout == nil {
+			return nil, HooksReleaseProgress{}, errHooksRolloutUnavailable
+		}
+		result, err := rollout.GetHooksReleaseProgress(ctx, &gen.GetHooksReleaseProgressPayload{AdminSessionToken: nil})
+		if err != nil || result == nil {
+			return nil, HooksReleaseProgress{}, errHooksRolloutUnavailable
+		}
+		return nil, hooksReleaseProgress(result), nil
 	})
 
 	mcp.AddTool(server, &mcp.Tool{

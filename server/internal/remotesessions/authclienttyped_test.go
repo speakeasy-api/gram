@@ -17,8 +17,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/remotesessions"
-	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -67,7 +65,7 @@ func requireReady(t *testing.T, ctx context.Context, ti *testInstance) {
 
 // recordSelectionFixture exercises the selection repository query with a synthetic
 // credential ID. It does not mint a credential or exercise request enforcement.
-func recordSelectionFixture(t *testing.T, ctx context.Context, ti *testInstance, userIssuerID, serverID uuid.UUID) uuid.NullUUID {
+func recordSelectionFixture(t *testing.T, ctx context.Context, ti *testInstance, userIssuerID, serverID, registrationID, authClientID uuid.UUID) uuid.NullUUID {
 	t.Helper()
 	credentialID := uuid.New()
 	_, err := usersessionsrepo.New(ti.conn).RecordUpstreamClientSelections(ctx, usersessionsrepo.RecordUpstreamClientSelectionsParams{
@@ -75,9 +73,10 @@ func recordSelectionFixture(t *testing.T, ctx context.Context, ti *testInstance,
 		CredentialKind:      upstreamclients.CredentialKindUserSession,
 		CredentialID:        credentialID,
 		Source:              upstreamclients.SelectionSourceIssuance,
-		PickedMcpServerIds:  []uuid.UUID{},
-		PickedClientIds:     []uuid.UUID{},
-		PickedAuthClientIds: nil,
+		PickedMcpServerIds:  []uuid.UUID{serverID},
+		PickedClientIds:     []uuid.UUID{registrationID},
+		PickedAuthClientIds: []uuid.UUID{authClientID},
+		TypedOnly:           true,
 	})
 	require.NoError(t, err)
 	choice, err := authclientbackfill.New(ti.conn).GetSelectionFixture(ctx, authclientbackfill.GetSelectionFixtureParams{
@@ -108,7 +107,7 @@ func TestCommitServerIdentityConfigurationRecordsTheTypedClientAfterMigration(t 
 	require.Equal(t, []string{"X-Tenant-Key"}, copiedHeaderNames(t, ctx, ti, authClientID),
 		"the source's credential header is not carried by the typed client")
 
-	require.Equal(t, uuid.NullUUID{UUID: authClientID, Valid: true}, recordSelectionFixture(t, ctx, ti, userIssuerID, target),
+	require.Equal(t, uuid.NullUUID{UUID: authClientID, Valid: true}, recordSelectionFixture(t, ctx, ti, userIssuerID, target, registration, authClientID),
 		"the selection query records the choice without its typed client")
 	requireReady(t, ctx, ti)
 
@@ -116,33 +115,6 @@ func TestCommitServerIdentityConfigurationRecordsTheTypedClientAfterMigration(t 
 	_, err = ti.service.CommitServerIdentityConfiguration(ctx, existingServerIdentityPayload(target, providerID, registration))
 	require.NoError(t, err)
 	require.Equal(t, authClientID, requireTypedClient(t, ctx, ti, registration, target))
-	requireReady(t, ctx, ti)
-}
-
-// Binding a client to a server's user session issuer associates it with the
-// server when the server is the issuer's only consumer; that capture records
-// the typed client too, from the post-commit resync's own transaction.
-func TestResyncCaptureRecordsTheTypedClientAfterMigration(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-	migrateOrganization(t, ctx, ti)
-	projectID := projectIDFromContext(t, ctx)
-	orgID := activeOrganizationID(t, ctx)
-	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "typed-capture-issuer")
-	target, _ := sourceBackedTarget(t, ctx, ti, "typed-capture-target", userIssuerID)
-	providerID := createServerIdentityProvider(t, ctx, ti, "typed-capture-provider", "", false, []string{"none"})
-	registration := createServerIdentityClient(t, ctx, ti, "typed-capture-client", providerID, false)
-	require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: registration,
-		UserSessionIssuerID:   userIssuerID,
-	}))
-
-	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, orgID, projectID, []uuid.UUID{userIssuerID}))
-
-	require.Equal(t, []uuid.UUID{registration}, associatedClients(t, ctx, ti.conn, projectID, target))
-	authClientID := requireTypedClient(t, ctx, ti, registration, target)
-	require.Equal(t, uuid.NullUUID{UUID: authClientID, Valid: true}, recordSelectionFixture(t, ctx, ti, userIssuerID, target))
 	requireReady(t, ctx, ti)
 }
 
@@ -205,7 +177,7 @@ func (tx *failedAssociationTx) Exec(ctx context.Context, sql string, args ...any
 	return tag, nil
 }
 
-func TestReconcileCaptureRollsBackWhenTypedStateFails(t *testing.T) {
+func TestExplicitCaptureRollsBackWhenTypedStateFails(t *testing.T) {
 	t.Parallel()
 	for _, name := range []string{"exhausted race", "write failure"} {
 		t.Run(name, func(t *testing.T) {
@@ -218,14 +190,11 @@ func TestReconcileCaptureRollsBackWhenTypedStateFails(t *testing.T) {
 			target, _ := sourceBackedTarget(t, ctx, ti, "rollback-target", issuer)
 			provider := createServerIdentityProvider(t, ctx, ti, "rollback-provider", "", false, []string{"none"})
 			registration := createServerIdentityClient(t, ctx, ti, "rollback-client", provider, false)
-			require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-				RemoteSessionClientID: registration, UserSessionIssuerID: issuer,
-			}))
 			pool := &failedAssociationPool{Pool: ti.conn}
 			if name == "write failure" {
 				pool.linkErr = errors.New("injected link failure")
 			}
-			err := upstreamclients.Reconcile(ctx, pool, orgID, projectID, []uuid.UUID{issuer})
+			err := upstreamclients.CaptureSoleConsumers(ctx, pool, orgID, projectID, []uuid.UUID{issuer}, []uuid.UUID{registration})
 			require.Error(t, err)
 			if pool.linkErr != nil {
 				require.ErrorIs(t, err, pool.linkErr)
@@ -243,7 +212,7 @@ func TestReconcileCaptureRollsBackWhenTypedStateFails(t *testing.T) {
 			require.ErrorIs(t, err, pgx.ErrNoRows, "typed client inserted before the failed link must roll back")
 			// Capture uses ON CONFLICT DO NOTHING RETURNING. If the failed capture
 			// had committed, this retry would not synchronize that association again.
-			require.NoError(t, upstreamclients.Reconcile(ctx, ti.conn, orgID, projectID, []uuid.UUID{issuer}))
+			require.NoError(t, upstreamclients.CaptureSoleConsumers(ctx, ti.conn, orgID, projectID, []uuid.UUID{issuer}, []uuid.UUID{registration}))
 			require.Equal(t, []uuid.UUID{registration}, associatedClients(t, ctx, ti.conn, projectID, target))
 			require.Equal(t, clientID, requireTypedClient(t, ctx, ti, registration, target))
 			requireReady(t, ctx, ti)

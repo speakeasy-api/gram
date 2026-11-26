@@ -47,21 +47,21 @@ func TestCheckOrganization_AnotherOrganizationIsRefused(t *testing.T) {
 		require.Contains(t, logs.String(), otherOrganizationLog, name)
 
 		requireForbidden(t, engine.Require(ctx, own, other))
-		requireForbidden(t, engine.Require(ctx, AnyOf(other)))
-		requireForbidden(t, engine.RequireAny(ctx, other))
-		requireForbidden(t, engine.RequireAnyUnblocked(ctx, other))
+		requireForbidden(t, engine.Require(ctx, Either(other)))
+		requireForbidden(t, engine.Require(ctx, Either(other)))
+		requireForbidden(t, engine.Require(ctx, Either(other)))
 
 		allowed, err := engine.Can(ctx, other)
 		require.NoError(t, err, name)
 		require.False(t, allowed, name)
 
-		allowed, err = engine.Can(ctx, AnyOf(other))
+		allowed, err = engine.Can(ctx, Either(other))
 		require.NoError(t, err, name)
 		require.False(t, allowed, name)
 
 		// Another alternative can still satisfy the request.
-		require.NoError(t, engine.RequireAny(ctx, other, own), name)
-		require.NoError(t, engine.Require(ctx, AnyOf(other, own)), name)
+		require.NoError(t, engine.Require(ctx, Either(other, own)), name)
+		require.NoError(t, engine.Require(ctx, Either(other, own)), name)
 
 		ids, err := engine.Filter(ctx, []Check{other, own})
 		require.NoError(t, err, name)

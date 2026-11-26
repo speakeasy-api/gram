@@ -220,7 +220,7 @@ func (s *seeder) seedConnectionHealth(ctx context.Context) error {
 			if err := s.q.ServersInsertUpstreamClientChoice(ctx, repo.ServersInsertUpstreamClientChoiceParams{
 				ID: s.det("health-org-choice-" + strconv.Itoa(i) + "-" + srv.key), ProjectID: proj, OrgID: org,
 				CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: s.det("org-gateway-session-" + strconv.Itoa(i)),
-				McpServerID: s.healthServerID(srv.key), RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, Source: upstreamclients.SelectionSourceIssuance,
+				McpServerID: s.healthServerID(srv.key), AuthClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, Source: upstreamclients.SelectionSourceIssuance,
 			}); err != nil {
 				return fmt.Errorf("insert organization sign-in choice on %s: %w", srv.name, err)
 			}
@@ -336,7 +336,7 @@ func (s *seeder) seedHealthSessions(ctx context.Context) error {
 			if err := s.q.ServersInsertUpstreamClientChoice(ctx, repo.ServersInsertUpstreamClientChoiceParams{
 				ID: s.det("health-choice-" + strconv.Itoa(n) + "-" + srv.key), ProjectID: s.projectID(), OrgID: s.orgID(),
 				CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: id, McpServerID: s.healthServerID(srv.key),
-				RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, Source: upstreamclients.SelectionSourceIssuance,
+				AuthClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, Source: upstreamclients.SelectionSourceIssuance,
 			}); err != nil {
 				return fmt.Errorf("insert connection health session %d choice on %s: %w", n, srv.name, err)
 			}

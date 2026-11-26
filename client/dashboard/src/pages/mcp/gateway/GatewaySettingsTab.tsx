@@ -172,8 +172,10 @@ function GatewayNameSection({
   const dirty = trimmedDraft !== metaMcpServer.name.trim();
   // Same check as the Save gate below: an edit nobody can save is no change
   // worth guarding.
-  const { hasScope } = useRBAC();
-  useReportUnsavedChanges(hasScope("mcp:write") && dirty);
+  const { canWriteProjectMCPServers } = useRBAC();
+  useReportUnsavedChanges(
+    canWriteProjectMCPServers(metaMcpServer.projectId) && dirty,
+  );
   const saveDisabled =
     !dirty ||
     trimmedDraft === "" ||
@@ -201,7 +203,12 @@ function GatewayNameSection({
         </SettingsSection.Body>
         <SettingsSection.Footer>
           <SettingsSection.FooterActions>
-            <RequireScope scope="mcp:write" level="component">
+            <RequireScope
+              scope="mcp:write"
+              resourceId={metaMcpServer.projectId}
+              projectId={metaMcpServer.projectId}
+              level="component"
+            >
               <FooterSaveButton
                 pending={update.isPending}
                 disabled={saveDisabled}
@@ -232,8 +239,8 @@ export function GatewayInstructionsSection({
 }: {
   metaMcpServer: MetaMcpServer;
 }): JSX.Element {
-  const { hasScope } = useRBAC();
-  const canWrite = hasScope("mcp:write", metaMcpServer.projectId);
+  const { canWriteProjectMCPServers } = useRBAC();
+  const canWrite = canWriteProjectMCPServers(metaMcpServer.projectId);
   const servedMode =
     metaMcpServer.discoveryMode === "code_mode" &&
     !metaMcpServer.codeModeEnabled
@@ -357,6 +364,7 @@ export function GatewayInstructionsSection({
             <RequireScope
               scope="mcp:write"
               resourceId={metaMcpServer.projectId}
+              projectId={metaMcpServer.projectId}
               level="component"
             >
               <FooterSaveButton
@@ -500,7 +508,12 @@ function GatewayDangerZoneSection({
                 } and its member list. Member MCP servers are untouched.`}
               </Text>
             </div>
-            <RequireScope scope="mcp:write" level="component">
+            <RequireScope
+              scope="mcp:write"
+              resourceId={metaMcpServer.projectId}
+              projectId={metaMcpServer.projectId}
+              level="component"
+            >
               <Button
                 variant="destructive-primary"
                 disabled={remove.isPending}

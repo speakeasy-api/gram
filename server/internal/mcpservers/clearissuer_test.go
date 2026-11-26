@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remoterepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -191,15 +192,7 @@ func createOrganizationIssuer(t *testing.T, ctx context.Context, ti *testInstanc
 	return issuer.ID.String()
 }
 
-// linkRemoteClient configures an upstream OAuth client on a user session issuer and resyncs, so servers carrying the
-// issuer get a derived remote issuer.
-func linkRemoteClient(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, projectID uuid.UUID, issuerID string) uuid.UUID {
-	t.Helper()
-	issuer, _ := linkRemoteClientWithID(t, ctx, ti, organizationID, projectID, issuerID)
-	return issuer
-}
-
-func linkRemoteClientWithID(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, projectID uuid.UUID, issuerID string) (uuid.UUID, uuid.UUID) {
+func seedRemoteRegistration(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, projectID uuid.UUID) (uuid.UUID, uuid.UUID) {
 	t.Helper()
 
 	q := remoterepo.New(ti.conn)
@@ -216,10 +209,6 @@ func linkRemoteClientWithID(t *testing.T, ctx context.Context, ti *testInstance,
 		ClientID: slug + "-client", ClientIDIssuedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
 	})
 	require.NoError(t, err)
-	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remoterepo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: client.ID, UserSessionIssuerID: uuid.MustParse(issuerID),
-	}))
-	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, organizationID, projectID, []uuid.UUID{uuid.MustParse(issuerID)}))
 	return remoteIssuer.ID, client.ID
 }
 
@@ -249,12 +238,19 @@ func TestUpdateMcpServer_ClearSharedOrganizationIssuerKeepsOtherServer(t *testin
 		servers = append(servers, created.ID)
 		backends = append(backends, remoteID)
 	}
-	remoteIssuerID := linkRemoteClient(t, ctx, ti, authCtx.ActiveOrganizationID, projectID, issuer)
+	remoteIssuerID, registration := seedRemoteRegistration(t, ctx, ti, authCtx.ActiveOrganizationID, projectID)
+	fixtures := authclientbackfill.New(ti.conn)
+	typed, err := fixtures.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: conv.ToNullUUID(projectID), ClientType: "remote_session", Source: "admin", RemoteSessionClientID: conv.ToNullUUID(registration)})
+	require.NoError(t, err)
+	for _, id := range servers {
+		require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: projectID, McpServerID: uuid.MustParse(id), AuthClientID: typed, Source: "admin"}))
+	}
+	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, authCtx.ActiveOrganizationID, projectID, []uuid.UUID{uuid.MustParse(issuer)}))
 	for _, id := range servers {
 		require.Equal(t, uuid.NullUUID{UUID: remoteIssuerID, Valid: true}, storedServer(t, ctx, ti, projectID, id).RemoteSessionIssuerID, "the derived remote issuer starts populated")
 	}
 
-	_, err := ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
+	_, err = ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
 		ID: servers[0], RemoteMcpServerID: &backends[0], ClearUserSessionIssuer: new(true), Visibility: types.McpServerVisibility("disabled"),
 	})
 	require.NoError(t, err, "an organization-owned issuer can be detached")

@@ -52,8 +52,7 @@ func newResolveManager(t *testing.T, conn *pgxpool.Pool, enc *encryption.Client)
 }
 
 // seedActiveClient creates a remote_session_issuer + remote_session_client
-// (attached to userIssuerID through the join table) and returns the client id
-// and its remote_session_issuer id.
+// and places the client on the requested sign-in, unless userIssuerID is nil.
 func seedActiveClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID, userIssuerID uuid.UUID, organizationID, slug string) (clientID, remoteIssuerID uuid.UUID) {
 	t.Helper()
 
@@ -89,11 +88,13 @@ func seedActiveClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool, pro
 	})
 	require.NoError(t, err)
 
-	err = q.AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: client.ID,
-		UserSessionIssuerID:   userIssuerID,
-	})
-	require.NoError(t, err)
+	if userIssuerID != uuid.Nil {
+		placementOrg := organizationID
+		if placementOrg == "" {
+			placementOrg = activeOrganizationID(t, ctx)
+		}
+		placeClientForSignInInProject(t, ctx, conn, projectID, placementOrg, client.ID, userIssuerID)
+	}
 
 	return client.ID, issuer.ID
 }
@@ -165,9 +166,7 @@ func TestResolveAccessTokens_LoginMadeThroughAnotherIssuerBoundToTheClient(t *te
 	member := createUserSessionIssuer(t, ctx, ti.conn, "usi-cross-member")
 	gateway := createUserSessionIssuer(t, ctx, ti.conn, "usi-cross-gateway")
 	clientID, remoteIssuerID := seedActiveClient(t, ctx, ti.conn, *authCtx.ProjectID, member, authCtx.ActiveOrganizationID, "rsi-cross-issuer")
-	require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: clientID, UserSessionIssuerID: gateway,
-	}))
+	placeClientForSignIn(t, ctx, ti.conn, clientID, gateway)
 
 	for _, tc := range []struct {
 		name          string
@@ -220,9 +219,7 @@ func TestResolveOrganizationGatewayTokens_LoginMadeThroughAnotherIssuerBoundToTh
 	member := createUserSessionIssuer(t, ctx, ti.conn, "usi-orggw-member")
 	organization := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "usi-orggw-organization")
 	clientID, remoteIssuerID := seedActiveClient(t, ctx, ti.conn, *authCtx.ProjectID, member, authCtx.ActiveOrganizationID, "rsi-orggw-cross-issuer")
-	require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: clientID, UserSessionIssuerID: organization,
-	}))
+	placeClientForSignIn(t, ctx, ti.conn, clientID, organization)
 
 	for _, tc := range []struct {
 		name          string
@@ -418,6 +415,7 @@ func TestResolveAccessTokens_TenantClientOnPlatformIssuer(t *testing.T) {
 	platformID := seedGlobalRemoteIssuer(t, ctx, ti.conn, "resolve-platform")
 	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "resolve-platform-usi")
 	clientID := createRemoteClient(t, ctx, ti, platformID.String(), userIssuerID.String(), "resolve-platform-client")
+	placeClientForSignIn(t, ctx, ti.conn, uuid.MustParse(clientID), userIssuerID)
 
 	subject := urn.NewUserSubject("resolve-platform-subject")
 	accessEnc, err := enc.Encrypt([]byte("platform-upstream-token"))

@@ -6,14 +6,22 @@ import (
 	"fmt"
 	"os"
 	"testing"
+	"time"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	aiintegrationsrepo "github.com/speakeasy-api/gram/server/internal/aiintegrations/repo"
 	"github.com/speakeasy-api/gram/server/internal/aiproviderkeys"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	modelkeysrepo "github.com/speakeasy-api/gram/server/internal/modelkeys/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/orgencryption/orgencryptiontest"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	openrouterrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 )
 
 func TestQueriesFenceEveryKeyWrite(t *testing.T) {
@@ -187,4 +195,135 @@ func TestBackfillAndFinalizeMoveKeysToTheOrganizationKey(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, want, string(opened))
 	}
+}
+
+func TestCopyStoresReportValues(t *testing.T) {
+	t.Parallel()
+
+	ti := newTestInstance(t)
+	ctx := t.Context()
+	project, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           "AI Provider Keys Test Project",
+		Slug:           "ai-provider-keys-" + uuid.NewString()[:8],
+		OrganizationID: ti.orgID,
+	})
+	require.NoError(t, err)
+
+	none := pgtype.Text{String: "", Valid: false}
+
+	// Each seed stores a platform-only value and an organization-only value
+	// for the test organization, soft-deleting the first where the table
+	// supports it and adding a row that holds neither copy, and returns the
+	// latest updated_at of the rows storing a value.
+	seeds := map[string]func(t *testing.T) time.Time{
+		aiproviderkeys.AIIntegrationConfigs.PlatformColumn: func(t *testing.T) time.Time {
+			t.Helper()
+
+			q := aiintegrationsrepo.New(ti.conn)
+			insert := func(provider string) uuid.UUID {
+				row, err := q.InsertConfig(ctx, aiintegrationsrepo.InsertConfigParams{
+					OrganizationID: ti.orgID, Provider: provider, ProjectID: project.ID,
+					ExternalOrganizationID: none, Enabled: true, BillingMode: none, Settings: nil,
+				})
+				require.NoError(t, err)
+				return row.ID
+			}
+			set := func(id uuid.UUID, platform, org pgtype.Text) time.Time {
+				row, err := q.SetConfigAPIKey(ctx, aiintegrationsrepo.SetConfigAPIKeyParams{PlatformCopy: platform, OrgCopy: org, ID: id, OrganizationID: ti.orgID, DecidedGeneration: 0})
+				require.NoError(t, err)
+				return row.UpdatedAt.Time
+			}
+
+			deleted := set(insert("openai"), conv.ToPGText("platform-copy"), none)
+			require.NoError(t, q.SoftDeleteConfig(ctx, aiintegrationsrepo.SoftDeleteConfigParams{OrganizationID: ti.orgID, Provider: "openai"}))
+			live := set(insert("openai"), none, conv.ToPGText("org-copy"))
+			insert("anthropic")
+
+			return latest(deleted, live)
+		},
+		aiproviderkeys.ModelProviderKeys.PlatformColumn: func(t *testing.T) time.Time {
+			t.Helper()
+
+			q := modelkeysrepo.New(ti.conn)
+			insert := func(slot string) uuid.UUID {
+				row, err := q.InsertKey(ctx, modelkeysrepo.InsertKeyParams{OrganizationID: ti.orgID, ProjectID: project.ID, Slot: slot, Provider: "openrouter", Enabled: true})
+				require.NoError(t, err)
+				return row.ID
+			}
+			set := func(id uuid.UUID, platform, org pgtype.Text) time.Time {
+				row, err := q.SetKeyAPIKey(ctx, modelkeysrepo.SetKeyAPIKeyParams{PlatformCopy: platform, OrgCopy: org, ID: id, OrganizationID: ti.orgID, DecidedGeneration: 0})
+				require.NoError(t, err)
+				return row.UpdatedAt.Time
+			}
+
+			deletedID := insert("playground")
+			deleted := set(deletedID, conv.ToPGText("platform-copy"), none)
+			_, err := q.SoftDeleteKeyByID(ctx, modelkeysrepo.SoftDeleteKeyByIDParams{ID: deletedID, ProjectID: project.ID})
+			require.NoError(t, err)
+			live := set(insert("assistants"), none, conv.ToPGText("org-copy"))
+			insert("default")
+
+			return latest(deleted, live)
+		},
+		aiproviderkeys.OpenRouterAPIKeys.PlatformColumn: func(t *testing.T) time.Time {
+			t.Helper()
+
+			create := func(keyType string, platform, org pgtype.Text) time.Time {
+				row, err := openrouterrepo.New(ti.conn).CreateOpenRouterAPIKey(ctx, openrouterrepo.CreateOpenRouterAPIKeyParams{
+					OrganizationID: ti.orgID, KeyType: keyType, KeyEncrypted: platform, KeyOrgEncrypted: org,
+					KeyHash: "hash-" + keyType, MonthlyCredits: 10, DecidedGeneration: 0,
+				})
+				require.NoError(t, err)
+				return row.UpdatedAt.Time
+			}
+
+			return latest(create("chat", conv.ToPGText("platform-copy"), none), create("internal", none, conv.ToPGText("org-copy")))
+		},
+	}
+
+	emptyOrgID := "org_" + uuid.NewString()
+	for _, store := range aiproviderkeys.CopyStores(ti.conn) {
+		column := store.Columns().PlatformColumn
+		seed, ok := seeds[column]
+		require.True(t, ok, "no seed for %s", column)
+		lastWrittenAt := seed(t)
+
+		listed, err := store.ListOrganizationsWithValues(ctx)
+		require.NoError(t, err)
+		organization, ok := findOrganization(listed, ti.orgID)
+		require.True(t, ok, "%s lists the organization", column)
+		require.Equal(t, int64(2), organization.Values, column)
+		require.True(t, lastWrittenAt.Equal(organization.LastWrittenAt), "%s: listed %v, stored %v", column, organization.LastWrittenAt, lastWrittenAt)
+		_, ok = findOrganization(listed, emptyOrgID)
+		require.False(t, ok, column)
+
+		counted, err := store.Count(ctx, ti.orgID)
+		require.NoError(t, err)
+		require.Equal(t, organization.Values, counted.Values, column)
+		require.True(t, organization.LastWrittenAt.Equal(counted.LastWrittenAt), column)
+
+		empty, err := store.Count(ctx, emptyOrgID)
+		require.NoError(t, err)
+		require.Zero(t, empty.Values, column)
+		require.True(t, empty.LastWrittenAt.IsZero(), column)
+	}
+}
+
+func findOrganization(organizations []orgencryption.OrganizationValues, organizationID string) (orgencryption.OrganizationValues, bool) {
+	for _, h := range organizations {
+		if h.OrganizationID == organizationID {
+			return h, true
+		}
+	}
+	return orgencryption.OrganizationValues{}, false
+}
+
+func latest(times ...time.Time) time.Time {
+	var last time.Time
+	for _, at := range times {
+		if at.After(last) {
+			last = at
+		}
+	}
+	return last
 }

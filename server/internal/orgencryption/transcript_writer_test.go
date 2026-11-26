@@ -219,7 +219,7 @@ func TestTranscriptWriterOptOutWithoutStorageOrKeys(t *testing.T) {
 	t.Parallel()
 	f := newTranscriptWriterFixture(t, false, false)
 	// Dropping only in this isolated database proves the opt-out path never consults shadow storage.
-	_, err := f.conn.Exec(t.Context(), `DROP TABLE chat_message_transcripts`) //nolint:glint // notestingrawsql: deliberately simulate a legacy schema without shadow storage; no fixture query can drop this table.
+	_, err := f.conn.Exec(t.Context(), `DROP TABLE chat_message_transcripts CASCADE`) //nolint:glint // notestingrawsql: deliberately simulate a legacy schema without shadow storage; no fixture query can drop this table.
 	require.NoError(t, err)
 	m := f.message("EXAMPLE opt-out plaintext")
 	n, err := f.writer.Write(t.Context(), f.projectID, []chat.MessageWrite{m})

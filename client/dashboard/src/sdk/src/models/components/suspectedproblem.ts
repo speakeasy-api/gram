@@ -48,6 +48,24 @@ export type SuspectedProblemSuspectedProblemRule = OpenEnum<
   typeof SuspectedProblemSuspectedProblemRule
 >;
 
+/**
+ * Who has to fix it, unknown when that is not known.
+ */
+export const SuspectedProblemSuspectedProblemWhoFixes = {
+  Person: "person",
+  Admin: "admin",
+  Provider: "provider",
+  App: "app",
+  Speakeasy: "speakeasy",
+  Unknown: "unknown",
+} as const;
+/**
+ * Who has to fix it, unknown when that is not known.
+ */
+export type SuspectedProblemSuspectedProblemWhoFixes = OpenEnum<
+  typeof SuspectedProblemSuspectedProblemWhoFixes
+>;
+
 export type SuspectedProblem = {
   /**
    * What the data establishes about it, in plain words.
@@ -84,6 +102,12 @@ export type SuspectedProblem = {
    * When its earliest failure ended.
    */
   since: Date;
+  /**
+   * Who has to fix it, unknown when that is not known.
+   */
+  suspectedProblemWhoFixes?:
+    | SuspectedProblemSuspectedProblemWhoFixes
+    | undefined;
 };
 
 /** @internal */
@@ -97,6 +121,11 @@ export const SuspectedProblemSuspectedProblemRule$inboundSchema: z.ZodMiniType<
   SuspectedProblemSuspectedProblemRule,
   unknown
 > = openEnums.inboundSchema(SuspectedProblemSuspectedProblemRule);
+
+/** @internal */
+export const SuspectedProblemSuspectedProblemWhoFixes$inboundSchema:
+  z.ZodMiniType<SuspectedProblemSuspectedProblemWhoFixes, unknown> = openEnums
+    .inboundSchema(SuspectedProblemSuspectedProblemWhoFixes);
 
 /** @internal */
 export const SuspectedProblem$inboundSchema: z.ZodMiniType<
@@ -121,6 +150,9 @@ export const SuspectedProblem$inboundSchema: z.ZodMiniType<
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
+    who_fixes: z.optional(
+      SuspectedProblemSuspectedProblemWhoFixes$inboundSchema,
+    ),
   }),
   z.transform((v) => {
     return remap$(v, {
@@ -129,6 +161,7 @@ export const SuspectedProblem$inboundSchema: z.ZodMiniType<
       "people_count": "peopleCount",
       "people_on_server_count": "peopleOnServerCount",
       "rule": "suspectedProblemRule",
+      "who_fixes": "suspectedProblemWhoFixes",
     });
   }),
 );

@@ -26,9 +26,6 @@ func validateCheckOperation(c Check) error {
 	if c.operation == operationConnection && !isConnectScope(c.Scope) {
 		return invalidCheckReason(c.Scope, c.ResourceID, "only the connect permission has connections")
 	}
-	if c.operation == operationPolicyAudience && c.Scope != ScopeRiskPolicyEvaluate && c.Scope != ScopeRiskPolicyBypass {
-		return invalidCheckReason(c.Scope, c.ResourceID, "only the risk policy audience permission, or the bypass that takes it away, asks an audience question")
-	}
 	return nil
 }
 
@@ -66,7 +63,7 @@ func MCPAuthClientCheck(clientID string, dims MCPAuthClientDimensions) Check {
 	if dims.UpstreamClient != "" {
 		dimensions[SelectorKeyUpstreamClient] = dims.UpstreamClient
 	}
-	return Check{Scope: ScopeMCPAuth, ResourceKind: "", ResourceID: clientID, Dimensions: dimensions, exact: true, representedUser: "", probe: false, anyOf: nil, operation: operationDefault}
+	return Check{Scope: ScopeMCPAuth, ResourceKind: "", ResourceID: clientID, Dimensions: dimensions, exact: true, representedUser: "", probe: false, group: nil, operation: operationDefault}
 }
 
 // RequiredCheckDimensions returns the dimensions a check of resourceKind must
@@ -173,7 +170,7 @@ func expressionForCheck(check Check) GrantExpression {
 	return GrantDifference{
 		Base: base,
 		Exclusion: GrantCheck{
-			Check:    Check{Scope: exclusion, ResourceKind: check.ResourceKind, ResourceID: check.ResourceID, Dimensions: check.Dimensions, exact: true, representedUser: check.representedUser, probe: false, anyOf: nil, operation: check.operation},
+			Check:    Check{Scope: exclusion, ResourceKind: check.ResourceKind, ResourceID: check.ResourceID, Dimensions: check.Dimensions, exact: true, representedUser: check.representedUser, probe: false, group: nil, operation: check.operation},
 			Instance: instance,
 		},
 	}
@@ -185,11 +182,9 @@ type RiskPolicyDimensions struct {
 }
 
 // RiskPolicyEvaluateCheck asks whether the audience of a risk policy includes
-// the caller. It names no server, and an audience grant limited to some
-// servers still matches it: a match places the caller under the policy, so
-// leaving the server out can only apply the policy more widely.
+// the caller.
 func RiskPolicyEvaluateCheck(policyID string) Check {
-	return Check{Scope: ScopeRiskPolicyEvaluate, ResourceKind: "", ResourceID: policyID, Dimensions: nil, exact: false, representedUser: "", probe: false, anyOf: nil, operation: operationPolicyAudience}
+	return Check{Scope: ScopeRiskPolicyEvaluate, ResourceKind: "", ResourceID: policyID, Dimensions: nil, exact: false, representedUser: "", probe: false, group: nil, operation: operationDefault}
 }
 
 // RiskPolicyApplies builds the runtime authorization rule for applying a risk
@@ -225,23 +220,22 @@ func RiskPolicyBypassCheck(policyID string, dims RiskPolicyDimensions) Check {
 		}
 		dimensions[SelectorKeyServerIdentity] = dims.ServerIdentity
 	}
-	return Check{Scope: ScopeRiskPolicyBypass, ResourceKind: "", ResourceID: policyID, Dimensions: dimensions, exact: true, representedUser: "", probe: false, anyOf: nil, operation: operationDefault}
+	return Check{Scope: ScopeRiskPolicyBypass, ResourceKind: "", ResourceID: policyID, Dimensions: dimensions, exact: true, representedUser: "", probe: false, group: nil, operation: operationDefault}
 }
 
 // InferenceExecuteCheck authorizes inference in one project, not chat mutation.
 // It always carries project_id, so a project-bounded grant covers only its project.
 func InferenceExecuteCheck(projectID string) Check {
-	return Check{Scope: ScopeInferenceExecute, ResourceKind: "", ResourceID: projectID, Dimensions: map[string]string{SelectorKeyProjectID: projectID}, exact: false, representedUser: "", probe: false, anyOf: nil, operation: operationDefault}
+	return Check{Scope: ScopeInferenceExecute, ResourceKind: "", ResourceID: projectID, Dimensions: map[string]string{SelectorKeyProjectID: projectID}, exact: false, representedUser: "", probe: false, group: nil, operation: operationDefault}
 }
 
 // RequirePluginWrite authorizes project-scoped plugin content mutations and
 // publishing, without granting edits to the referenced skills or MCP servers.
 // Keep the org-admin alternative for existing roles, whose grants are not
-// rewritten when new default capabilities are introduced. Explicit exclusions
-// still win over either allow alternative.
+// rewritten when new default capabilities are introduced.
 func (e *Engine) RequirePluginWrite(ctx context.Context, organizationID, projectID string) error {
-	return e.RequireAnyUnblocked(ctx,
-		Check{Scope: ScopePluginWrite, ResourceKind: ResourceKindProject, ResourceID: projectID, Dimensions: nil, exact: false, representedUser: "", probe: false, anyOf: nil, operation: operationDefault},
-		Check{Scope: ScopeOrgAdmin, ResourceKind: ResourceKindOrg, ResourceID: organizationID, Dimensions: nil, exact: false, representedUser: "", probe: false, anyOf: nil, operation: operationDefault},
-	)
+	return e.Require(ctx, Either(
+		Check{Scope: ScopePluginWrite, ResourceKind: ResourceKindProject, ResourceID: projectID, Dimensions: nil, exact: false, representedUser: "", probe: false, group: nil, operation: operationDefault},
+		Check{Scope: ScopeOrgAdmin, ResourceKind: ResourceKindOrg, ResourceID: organizationID, Dimensions: nil, exact: false, representedUser: "", probe: false, group: nil, operation: operationDefault},
+	))
 }

@@ -6164,23 +6164,6 @@ CREATE INDEX IF NOT EXISTS workload_identity_admissions_workload_issuer_id_idx
 ON workload_identity_admissions (workload_issuer_id)
 WHERE deleted IS FALSE;
 
-CREATE TABLE IF NOT EXISTS remote_session_client_user_session_issuers (
-  remote_session_client_id uuid NOT NULL,
-  user_session_issuer_id uuid NOT NULL,
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-
-  CONSTRAINT remote_session_client_user_session_issuers_pkey PRIMARY KEY (remote_session_client_id, user_session_issuer_id),
-  CONSTRAINT remote_session_client_user_session_issuers_client_fkey FOREIGN KEY (remote_session_client_id) REFERENCES remote_session_clients (id) ON DELETE CASCADE,
-  CONSTRAINT remote_session_client_user_session_issuers_issuer_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE CASCADE
-);
-
-COMMENT ON COLUMN remote_session_client_user_session_issuers.remote_session_client_id IS '@access: confidential';
-COMMENT ON COLUMN remote_session_client_user_session_issuers.user_session_issuer_id IS '@access: confidential';
-COMMENT ON COLUMN remote_session_client_user_session_issuers.created_at IS '@access: confidential';
-
-CREATE INDEX IF NOT EXISTS remote_session_client_user_session_issuers_issuer_idx
-ON remote_session_client_user_session_issuers (user_session_issuer_id, remote_session_client_id);
-
 -- Human delegation credentials, independent of downstream service sessions.
 -- Consumers require a live session, client and tenant with matching scope.
 -- Writes require an organization and client; project_id remains NULL.
@@ -7280,6 +7263,15 @@ CREATE TABLE IF NOT EXISTS chat_message_transcripts (
   created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
 
+  -- Plaintext-free metadata sealed alongside the ciphertext, so readers can
+  -- count, budget and filter without decrypting. Each value describes the
+  -- same source as source_hash, so it is current exactly when the shadow is.
+  -- NULL means the shadow was captured before the column existed.
+  tool_call_count INTEGER,
+  content_bytes INTEGER,
+  content_raw_bytes INTEGER,
+  tool_calls_bytes INTEGER,
+
   CONSTRAINT chat_message_transcripts_pkey PRIMARY KEY (message_id),
   CONSTRAINT chat_message_transcripts_project_id_message_id_fkey FOREIGN KEY (project_id, message_id) REFERENCES chat_messages(project_id, id) ON DELETE CASCADE,
   CONSTRAINT chat_message_transcripts_organization_id_project_id_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects(organization_id, id) ON DELETE CASCADE,
@@ -7299,9 +7291,46 @@ COMMENT ON COLUMN chat_message_transcripts.source_hash IS 'Unkeyed freshness dig
 @access: opaque-restricted';
 COMMENT ON COLUMN chat_message_transcripts.created_at IS '@access: confidential';
 COMMENT ON COLUMN chat_message_transcripts.updated_at IS '@access: confidential';
+COMMENT ON COLUMN chat_message_transcripts.tool_call_count IS 'Number of tool calls in the source message tool_calls, 0 when it has none.
+@access: confidential';
+COMMENT ON COLUMN chat_message_transcripts.content_bytes IS 'octet_length of the source message content.
+@access: confidential';
+COMMENT ON COLUMN chat_message_transcripts.content_raw_bytes IS 'octet_length of the source message content_raw as text, 0 when NULL.
+@access: confidential';
+COMMENT ON COLUMN chat_message_transcripts.tool_calls_bytes IS 'octet_length of the source message tool_calls as text, 0 when NULL.
+@access: confidential';
 
 CREATE INDEX IF NOT EXISTS chat_message_transcripts_project_id_idx ON chat_message_transcripts (project_id);
 CREATE INDEX IF NOT EXISTS chat_message_transcripts_organization_id_idx ON chat_message_transcripts (organization_id);
+
+-- Provider tool-call IDs of a shadowed assistant message, so a tool result can
+-- find the message that issued its call without decrypting tool_calls. Rows
+-- are rewritten with their shadow and go with it.
+CREATE TABLE IF NOT EXISTS chat_message_transcript_tool_calls (
+  message_id UUID NOT NULL,
+  tool_call_id TEXT NOT NULL,
+  chat_id UUID NOT NULL,
+  project_id UUID NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT chat_message_transcript_tool_calls_pkey PRIMARY KEY (message_id, tool_call_id),
+  CONSTRAINT chat_message_transcript_tool_calls_message_id_fkey FOREIGN KEY (message_id) REFERENCES chat_message_transcripts(message_id) ON DELETE CASCADE,
+  -- Binds project_id to the message's own project, so a row cannot name
+  -- another tenant. chat_id is written only from the message by the store.
+  CONSTRAINT chat_message_transcript_tool_calls_project_id_message_id_fkey FOREIGN KEY (project_id, message_id) REFERENCES chat_messages(project_id, id) ON DELETE CASCADE
+);
+
+COMMENT ON COLUMN chat_message_transcript_tool_calls.message_id IS 'Shadowed assistant message that issued the tool call.
+@access: confidential';
+COMMENT ON COLUMN chat_message_transcript_tool_calls.tool_call_id IS 'Provider-issued tool call identifier from the message tool_calls.
+@access: opaque-confidential';
+COMMENT ON COLUMN chat_message_transcript_tool_calls.chat_id IS 'Chat that owns the message.
+@access: confidential';
+COMMENT ON COLUMN chat_message_transcript_tool_calls.project_id IS 'Project that owns the message.
+@access: confidential';
+COMMENT ON COLUMN chat_message_transcript_tool_calls.created_at IS '@access: confidential';
+
+CREATE INDEX IF NOT EXISTS chat_message_transcript_tool_calls_chat_id_tool_call_id_idx ON chat_message_transcript_tool_calls (chat_id, tool_call_id);
 
 CREATE INDEX IF NOT EXISTS chat_messages_chat_id_generation_seq_idx ON chat_messages (chat_id, generation, seq);
 
@@ -8562,7 +8591,6 @@ CREATE TABLE IF NOT EXISTS principal_remote_session_bindings (
   CONSTRAINT principal_remote_session_bindings_principal_tenant_fkey FOREIGN KEY (organization_id, principal_id) REFERENCES agents (organization_id, id) ON DELETE CASCADE,
   CONSTRAINT principal_remote_session_bindings_issuer_scope_fkey FOREIGN KEY (user_session_issuer_id, issuer_attachment_scope) REFERENCES user_session_issuers (id, attachment_scope) ON UPDATE CASCADE ON DELETE CASCADE,
   CONSTRAINT principal_remote_session_bindings_client_scope_fkey FOREIGN KEY (remote_session_client_id, client_attachment_scope) REFERENCES remote_session_clients (id, attachment_scope) ON DELETE CASCADE,
-  CONSTRAINT principal_remote_session_bindings_client_issuer_fkey FOREIGN KEY (remote_session_client_id, user_session_issuer_id) REFERENCES remote_session_client_user_session_issuers (remote_session_client_id, user_session_issuer_id) ON DELETE CASCADE,
   -- The attached session shares the binding's client but may have been made
   -- through another issuer bound to that client, such as a team gateway's.
   CONSTRAINT principal_remote_session_bindings_client_session_fkey FOREIGN KEY (remote_session_client_id, remote_session_id) REFERENCES remote_sessions (remote_session_client_id, id) ON UPDATE CASCADE ON DELETE CASCADE,
@@ -12047,6 +12075,49 @@ COMMENT ON COLUMN hooks_rollout_pins.set_by IS 'Email of the staff operator who 
 @access: confidential-pii';
 COMMENT ON COLUMN hooks_rollout_pins.created_at IS '@access: confidential';
 COMMENT ON COLUMN hooks_rollout_pins.updated_at IS '@access: confidential';
+
+-- Staged hooks rollouts. A staged rollout clears a growing share of the
+-- organizations that follow the default pin for a newer hooks generator
+-- version before the default pin itself moves to it. The share is picked by a
+-- stable hash of the organization id, so an organization stays cleared as the
+-- share grows. A scheduled workflow advances the share after each soak period
+-- and pauses the rollout when hook health degrades; staff can pause, resume or
+-- cancel it from the admin dashboard.
+--
+-- The table is append-only like hooks_rollout_pins: the row with the highest
+-- seq is the current state and older rows are its history.
+CREATE TABLE IF NOT EXISTS hooks_rollout_stages (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  seq BIGINT NOT NULL GENERATED BY DEFAULT AS IDENTITY,
+  version integer NOT NULL,
+  percent integer NOT NULL,
+  state TEXT NOT NULL CHECK (state <> ''),
+  reason TEXT,
+  set_by TEXT NOT NULL CHECK (set_by <> ''),
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT hooks_rollout_stages_pkey PRIMARY KEY (id)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS hooks_rollout_stages_seq_key
+  ON hooks_rollout_stages (seq);
+
+COMMENT ON COLUMN hooks_rollout_stages.id IS '@access: confidential';
+COMMENT ON COLUMN hooks_rollout_stages.seq IS '@access: confidential';
+COMMENT ON COLUMN hooks_rollout_stages.version IS 'Hooks generator version being rolled out.
+@access: confidential';
+COMMENT ON COLUMN hooks_rollout_stages.percent IS 'Share of organizations following the default pin, from 0 to 100, cleared for version.
+@access: confidential';
+COMMENT ON COLUMN hooks_rollout_stages.state IS 'running, paused, completed or cancelled.
+@access: confidential';
+COMMENT ON COLUMN hooks_rollout_stages.reason IS 'Why the rollout was paused or cancelled, when it was. Free text from staff or the rollout workflow.
+@access: opaque-restricted';
+COMMENT ON COLUMN hooks_rollout_stages.set_by IS 'Email of the staff operator who made the change, or the rollout workflow.
+@access: confidential-pii';
+COMMENT ON COLUMN hooks_rollout_stages.created_at IS '@access: confidential';
+COMMENT ON COLUMN hooks_rollout_stages.updated_at IS '@access: confidential';
 
 -- Per-project marketplace configuration applied to the marketplace.json
 -- generated for Claude Code, Cursor, and Codex. Designed to be extensible:

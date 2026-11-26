@@ -71,6 +71,11 @@ func testFixtureServersPointAtHostedFixture(t *testing.T, spec Spec) {
 		require.Equal(t, "Bearer "+fixtureauth.SharedToken, static.Value.String)
 		require.False(t, static.IsSecret, "a secret header must hold ciphertext; this one holds the checked-in token")
 
+		sharedHeader, err := q.GetAuthClientHeaderFixture(ctx, s.det("auth-client-slack-header"))
+		require.NoError(t, err)
+		require.Equal(t, static.Value, sharedHeader.Value)
+		require.Equal(t, static.IsSecret, sharedHeader.IsSecret)
+
 		header, err := q.GetAuthClientHeaderFixture(ctx, s.det("auth-client-github-token-header"))
 		require.NoError(t, err)
 		require.Equal(t, "Bearer "+fixtureauth.SharedToken, header.Value.String)

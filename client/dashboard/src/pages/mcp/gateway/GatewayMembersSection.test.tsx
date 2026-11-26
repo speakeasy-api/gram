@@ -44,6 +44,17 @@ vi.mock("@/hooks/useRBAC", () => ({
       resource === undefined
         ? [...permissions.scopes].some((grant) => grant.startsWith(`${scope}:`))
         : permissions.scopes.has(`${scope}:${resource}`),
+    canWriteMCPServer: ({
+      serverId,
+      projectId,
+    }: {
+      serverId: string;
+      projectId: string;
+    }) =>
+      projectId === "project" &&
+      permissions.scopes.has(`mcp:write:${serverId}`),
+    canWriteProjectMCPServers: (projectId: string) =>
+      permissions.scopes.has(`mcp:write:${projectId}`),
     isLoading: false,
   }),
 }));

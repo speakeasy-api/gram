@@ -917,6 +917,12 @@ const ROUTE_STRUCTURE = {
     icon: "book-open",
     external: true,
   },
+  // Standalone chat-first prototype: no app chrome, not in the nav.
+  prototype: {
+    title: "Prototype",
+    url: "prototype",
+    outsideMainLayout: true,
+  },
 } satisfies Record<string, RouteEntry>;
 
 export type RouteStructure = typeof ROUTE_STRUCTURE;

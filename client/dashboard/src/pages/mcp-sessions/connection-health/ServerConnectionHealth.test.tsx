@@ -23,7 +23,6 @@ vi.mock("./api", async (original) => ({
     isPending: false,
     isError: state.problemsError,
   }),
-  useKnownViewer: () => undefined,
 }));
 
 vi.mock("./ConnectionLogsView", () => ({
@@ -96,6 +95,18 @@ describe("ServerConnectionHealth", () => {
     state.problems = [problem("p2", "service")];
     renderTab();
     expect(screen.getByText(SERVICE_DEFINITION)).toBeTruthy();
+  });
+
+  it("shows no panel and no gap when there are no problems", () => {
+    renderTab();
+    expect(screen.queryByText(/Suspected problems/)).toBeNull();
+    expect(screen.queryByText(/No suspected problems/)).toBeNull();
+    expect(screen.queryByText(SERVICE_DEFINITION)).toBeNull();
+    // The view switch is in the tab's first block, so nothing above it leaves a gap.
+    const views = screen.getByRole("group", { name: "Connections view" });
+    expect(
+      views.closest(".space-y-8")?.firstElementChild?.contains(views),
+    ).toBe(true);
   });
 
   it("shows no problems while logging is off", () => {

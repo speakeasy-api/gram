@@ -9,14 +9,13 @@ import (
 var AdminBackfillMCPAuthGrantsResult = Type("AdminBackfillMCPAuthGrantsResult", func() {
 	Required("granted")
 
-	Attribute("granted", Int64, "How many principals gained the mcp:auth grant.")
+	Attribute("granted", Int64, "Legacy response field; the retired endpoint does not grant access.")
 })
 
-// MCP parity: not exposed through Staff Admin MCP. This is a one-off
-// fleet-wide data backfill run by a person from the admin dashboard.
+// The retired endpoint is kept for existing HTTP clients, not exposed in Staff Admin MCP.
 func mcpAuthBackfillMethods() {
 	Method("backfillMcpAuthGrants", func() {
-		Description("Grants unrestricted mcp:auth to every principal that holds any mcp:connect grant, in every organization. The connect grant's selectors are ignored. Safe to run more than once.")
+		Description("Retired. Rejects authenticated calls and does not modify grants.")
 
 		Payload(func() {
 			security.AdminAuthPayload()

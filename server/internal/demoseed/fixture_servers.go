@@ -215,6 +215,11 @@ func (s *seeder) seedFixtureServers(ctx context.Context) error {
 		return err
 	}
 
+	n, err = q.FixtureSetHeaderValue(ctx, repo.FixtureSetHeaderValueParams{Value: "Bearer " + fixtureauth.SharedToken, ID: s.det("auth-client-slack-header"), OrganizationID: org})
+	if err := expect("set the typed static credential", n, err); err != nil {
+		return err
+	}
+
 	// The typed shared token Example OAuth also offers carries the same
 	// checked-in token.
 	n, err = q.FixtureSetHeaderValue(ctx, repo.FixtureSetHeaderValueParams{Value: "Bearer " + fixtureauth.SharedToken, ID: s.det("auth-client-github-token-header"), OrganizationID: org})

@@ -1866,6 +1866,35 @@ type ChatMessageTranscript struct {
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
 	UpdatedAt pgtype.Timestamptz
+	// Number of tool calls in the source message tool_calls, 0 when it has none.
+	// @access: confidential
+	ToolCallCount pgtype.Int4
+	// octet_length of the source message content.
+	// @access: confidential
+	ContentBytes pgtype.Int4
+	// octet_length of the source message content_raw as text, 0 when NULL.
+	// @access: confidential
+	ContentRawBytes pgtype.Int4
+	// octet_length of the source message tool_calls as text, 0 when NULL.
+	// @access: confidential
+	ToolCallsBytes pgtype.Int4
+}
+
+type ChatMessageTranscriptToolCall struct {
+	// Shadowed assistant message that issued the tool call.
+	// @access: confidential
+	MessageID uuid.UUID
+	// Provider-issued tool call identifier from the message tool_calls.
+	// @access: opaque-confidential
+	ToolCallID string
+	// Chat that owns the message.
+	// @access: confidential
+	ChatID uuid.UUID
+	// Project that owns the message.
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
 }
 
 type ChatResolution struct {
@@ -3154,6 +3183,32 @@ type HooksRolloutPin struct {
 	// @access: confidential
 	Version pgtype.Int4
 	// Email of the staff operator who made the change.
+	// @access: confidential-pii
+	SetBy string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
+type HooksRolloutStage struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	Seq int64
+	// Hooks generator version being rolled out.
+	// @access: confidential
+	Version int32
+	// Share of organizations following the default pin, from 0 to 100, cleared for version.
+	// @access: confidential
+	Percent int32
+	// running, paused, completed or cancelled.
+	// @access: confidential
+	State string
+	// Why the rollout was paused or cancelled, when it was. Free text from staff or the rollout workflow.
+	// @access: opaque-restricted
+	Reason pgtype.Text
+	// Email of the staff operator who made the change, or the rollout workflow.
 	// @access: confidential-pii
 	SetBy string
 	// @access: confidential
@@ -6494,15 +6549,6 @@ type RemoteSessionClient struct {
 	DeletedAt pgtype.Timestamptz
 	// @access: confidential
 	Deleted bool
-}
-
-type RemoteSessionClientUserSessionIssuer struct {
-	// @access: confidential
-	RemoteSessionClientID uuid.UUID
-	// @access: confidential
-	UserSessionIssuerID uuid.UUID
-	// @access: confidential
-	CreatedAt pgtype.Timestamptz
 }
 
 type RemoteSessionEmaBinding struct {

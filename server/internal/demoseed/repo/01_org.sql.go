@@ -12,6 +12,26 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const orgBackdateLogsFeature = `-- name: OrgBackdateLogsFeature :exec
+UPDATE organization_features
+SET created_at = $1::timestamptz
+WHERE organization_id = $2::text
+  AND feature_name = 'logs'
+  AND deleted IS FALSE
+  AND created_at > $1::timestamptz
+`
+
+type OrgBackdateLogsFeatureParams struct {
+	Since pgtype.Timestamptz
+	OrgID string
+}
+
+// Logs count as on from before the seeded connection events, so their problems are read.
+func (q *Queries) OrgBackdateLogsFeature(ctx context.Context, arg OrgBackdateLogsFeatureParams) error {
+	_, err := q.db.Exec(ctx, orgBackdateLogsFeature, arg.Since, arg.OrgID)
+	return err
+}
+
 const orgCountCustomDomainDiagnostics = `-- name: OrgCountCustomDomainDiagnostics :one
 SELECT count(*) FROM custom_domains WHERE organization_id = $1
  AND domain = $2 AND dns_configuration_status = 'unconfirmed' AND health_status = 'healthy'

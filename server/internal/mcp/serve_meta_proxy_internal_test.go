@@ -336,13 +336,13 @@ func TestMemberTokens_StoreOutageReadsAsUnavailable(t *testing.T) {
 	t.Parallel()
 
 	gate := func(err error) metaGateContext {
-		return metaGateContext{projectTokens: &projectTokenCache{resolve: func(context.Context, uuid.UUID) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+		return metaGateContext{projectTokens: &projectTokenCache{resolveMember: func(context.Context, metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 			return nil, err
-		}, byProject: map[uuid.UUID]map[uuid.UUID]remotesessions.UpstreamToken{}}}
+		}}}
 	}
 	outageGate, brokenGate := gate(&pgconn.PgError{Code: "57P01"}), gate(&pgconn.PgError{Code: "42P01"})
+	member := metaMember{slug: "m", backend: metaMemberBackendHosted}
 
-	member := metaMember{slug: "m", backend: metaMemberBackendProxied}
 	_, err := outageGate.memberTokens(t.Context(), member)
 	_, unavailable := errors.AsType[memberUnavailableError](err)
 	require.True(t, unavailable, "error: %v", err)
@@ -458,8 +458,30 @@ func TestMemberAuthFailure_NoConnectPageNamesAdministrator(t *testing.T) {
 	require.EqualError(t, memberAuthFailure(member, memberDial{}, http.StatusUnauthorized, false, true), `server "m" rejected the stored credential. Ask your administrator to reconnect it`)
 }
 
-// Hosted members and proxied members with associations use member resolution.
-// Unassociated proxied members retain project resolution.
+func TestMemberTokens_MissingMemberResolverDoesNotUseProjectCredentials(t *testing.T) {
+	t.Parallel()
+
+	projectID := uuid.New()
+	projectTokens := map[uuid.UUID]remotesessions.UpstreamToken{uuid.New(): {Token: "project"}}
+	gate := metaGateContext{projectTokens: &projectTokenCache{
+		byProject: map[uuid.UUID]map[uuid.UUID]remotesessions.UpstreamToken{projectID: projectTokens},
+	}}
+
+	for _, member := range []metaMember{
+		{serverID: uuid.New(), projectID: projectID, slug: "hosted", backend: metaMemberBackendHosted},
+		{serverID: uuid.New(), projectID: projectID, slug: "associated", backend: metaMemberBackendProxied, associatedClients: map[uuid.UUID]bool{uuid.New(): true}},
+	} {
+		t.Run(member.slug, func(t *testing.T) {
+			t.Parallel()
+			got, err := gate.memberTokens(t.Context(), member)
+			require.ErrorContains(t, err, "could not load its connection credentials")
+			require.Nil(t, got)
+		})
+	}
+}
+
+// Hosted members and proxied members with associations resolve their own
+// credentials. Proxied members without associations use project credentials.
 func TestMemberTokens_ProxiedMemberResolvesFromItsAssociations(t *testing.T) {
 	t.Parallel()
 
@@ -475,6 +497,7 @@ func TestMemberTokens_ProxiedMemberResolvesFromItsAssociations(t *testing.T) {
 			return memberTokens, nil
 		},
 		byProject: map[uuid.UUID]map[uuid.UUID]remotesessions.UpstreamToken{},
+		byMember:  map[memberTokenKey]map[uuid.UUID]remotesessions.UpstreamToken{},
 	}}
 
 	associated := metaMember{serverID: uuid.New(), slug: "associated", backend: metaMemberBackendProxied, associatedClients: map[uuid.UUID]bool{uuid.New(): true}}
@@ -494,4 +517,5 @@ func TestMemberTokens_ProxiedMemberResolvesFromItsAssociations(t *testing.T) {
 	got, err = gate.memberTokens(t.Context(), hosted)
 	require.NoError(t, err)
 	require.Equal(t, memberTokens, got)
+	require.Equal(t, []uuid.UUID{associated.serverID, hosted.serverID}, resolvedFor)
 }

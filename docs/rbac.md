@@ -423,6 +423,10 @@ Read that as:
 The most important rule: **exclusion grants do not create access by themselves**.
 They only subtract from something that the base side already proved.
 
+A `risk_policy:evaluate` grant cannot name a server: a policy's audience is the
+same on every server, so saving one with `server_url` or `server_identity` is
+refused. Only bypass and block grants are limited to a server.
+
 `risk_policy:block` is the inverse rule store for allow-by-default (allow_all)
 shadow MCP blocking policies: each grant names a policy and a `server_url`
 selector and is always held by the all-users principal (`user:all`), meaning
@@ -994,7 +998,7 @@ A grant key the check does not include never matches: absence is not permission.
 - a connection to a server (`authz.MCPServer(authz.MCPServerIDOf(toolset.ID), authz.ProjectIDOf(projectID)).Connect()`), which names no tool, so a grant limited to some tools or dispositions still lets the caller connect;
 - the risk policy audience question (`authz.RiskPolicyEvaluateCheck`), which names no server, so an audience grant limited to a server still places the caller under the policy.
 
-Blocks, auth client checks and `WithStrictSelectorMatch` allow none of them. A `Require` or `RequireAny` refusal caused only by a missing key is logged as an error naming the key, so a call site that should carry it shows up.
+Blocks, auth client checks and `WithStrictSelectorMatch` allow none of them. A `Require` refusal caused only by a missing key is logged as an error naming the key, so a call site that should carry it shows up.
 
 Some resource kinds also require a dimension on every check. `requiredCheckDimensions` in `server/internal/authz/checks.go` lists them, and the engine rejects a check of that kind that omits one, or sets it to `*`, as an invalid check (it fails closed). Today only `mcp` is listed, with `project_id`: an MCP grant can be bounded to one project (`{"resource_kind":"mcp","resource_id":"*","project_id":"<PROJECT_ID>"}`), and a check without the project should be refused as invalid rather than match no project-bounded grant. Build MCP checks with `authz.MCPServer(authz.MCPServerIDOf(toolset.ID), authz.ProjectIDOf(projectID))`, which always carries the project. Project-level operations use `authz.MCPServers(authz.ProjectIDOf(projectID))`, which names the project as both the resource and the `project_id`.
 
@@ -1041,11 +1045,11 @@ The `mcp.authz.mandatory_shadow` counter is labelled by organization, `surface`,
 - **Legacy API keys.** A live key that reaches MCP and has no policy gets `mcp:connect` on every server in its project (or in every existing project, for an organization-wide key) and `mcp:auth` on those servers' shared clients, never EMA clients, since a key represents no user. A key whose live policy is entirely provisioned gets clients recorded since, in the projects it covers. A key holding any grant an admin wrote, or whose provisioned policy was removed, is left alone. Key policies wait until every auth client is recorded (the upstream OAuth migration has nothing left to record and no failed phase or gap), so none is written from an incomplete set of clients.
 - **Agent attachments.** An unrevoked attachment of a live agent to its owner's connection becomes `mcp:auth` for the agent on that connection: `upstream_client` is the attached upstream OAuth client and `connection_owner` is the owner, concretely, so the grant covers every auth client sharing that upstream client and never another user's connection. The attachment keeps working until the attachment runtime is retired. An attachment the runtime would no longer serve (no user made it, the attacher no longer owns the agent, the connection is someone else's, the agent is suspended, revoked or waiting for a new owner, its owner is no longer an active member, the connection was removed or authorized again, or its sign-in, project, upstream client or issuer was removed or no longer reaches the attachment's project) or whose upstream client no personal auth client uses yet is reported for remediation by id, never carried over to another user or a broader grant.
 
-The grants phase of the auth client backfill writes them. It runs as part of the upstream OAuth migration, and on its own for every organization through the offline `auth-permission-defaults` backfill (`server/cmd/tools/migrations/AUTH_PERMISSION_DEFAULTS_BACKFILL.md`). It only ever adds grants and covers only auth clients already recorded. Agent attachment grants name `upstream_client`, so they are written only where the organization's `auth-client-upstream-selector-writes` flag is on: the staff upstream OAuth migration, which runs in the server, writes them once it is, and the offline backfill, which has no flag provider, only reports them as waiting. Every grant it writes is recorded in `auth_permission_provisions`, and a grant recorded there is never written again, so a rerun never restores one an admin removed. An admin writing the same grant takes it over: every explicit grant write (`UpsertPrincipalGrant`, used by role, resource-audience and key policy writes, and agent policy create and update) marks the ledger row taken over afterwards, so a rollback leaves it and a rerun still never writes it again. A new explicit write path must do the same. New organizations' personal default is recorded too, as `creation_default`, which a backfill rollback leaves. A key policy is topped up only while it is exactly what was provisioned. A rollback deletes the live grants the ledger names that no admin took over, then the ledger.
+The upstream OAuth migration and offline grant backfill are retired. The existing grants and their records in `auth_permission_provisions` remain. An admin writing the same grant takes it over: every explicit grant write (`UpsertPrincipalGrant`, used by role, resource-audience and key policy writes, and agent policy create and update) marks the ledger row as taken over so the grant is no longer treated as inferred. A new explicit write path must do the same. New organizations' personal default is recorded as `creation_default`.
 
-Not covered here: keys, server links, agents and connect grants created after a run (write-time provisioning is a separate change before enforcement), projects created after a run for organization-wide keys, stored delegated policies on agent and workload credentials (renewed separately), demo-org sessions (which use a fixed grant set), and anonymous callers on public servers.
+The historical backfill did not cover keys, server links, agents, connect grants, and projects created after it ran. It also did not cover stored delegated policies on agent and workload credentials, demo-org sessions, or anonymous callers on public servers.
 
-Before promoting typed serving, enable `mandatory-authz-shadow` and record the `mcp.authz.mandatory_shadow` baseline (legacy keys without policy report `api_key`/`no_policy`). Run the auth client and default grant backfills described above. Review the backfill results, remediate gaps or pending grants, and confirm that the shadow reports no missing policies or unexplained denials for the affected callers. The shadow does not grant access; typed serving requires the live grants regardless of enrollment.
+Before enabling enforcement, check typed auth coverage and enforcement readiness in the staff dashboard. Review `mcp.authz.mandatory_shadow` outcomes where available. Investigate `no_policy` and unexplained `deny` outcomes and correct missing permissions through the current grant-management paths.
 
 #### Typed upstream authentication
 
@@ -1073,23 +1077,24 @@ if err := s.authz.Require(
 
 This requires both write access where the clone will be created and read access to the source toolset. That is the right shape for operations that combine multiple resources or multiple permissions. Cloning is not just "read source" and not just "write destination"; it needs both.
 
-### `RequireAny`
+### `Either`
 
-Use `RequireAny` when several scopes are legitimate alternatives and any one of them should authorize the operation.
+Use `Require(ctx, authz.Either(...))` when several scopes are legitimate alternatives and any one of them should authorize the operation. A block on any alternative still refuses the request, unless a direct user grant on the concrete resource outranks it.
 
-For example, if a future handler could be reached by either an organization admin or a project writer, it could express that as two checks and require any one of them:
+For example, a handler reached by either an organization admin or a project writer:
 
 ```go
-if err := s.authz.RequireAny(
-	ctx,
-	authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil},
-	authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil},
-); err != nil {
+if err := s.authz.Require(ctx, authz.Either(
+	authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin(),
+	authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write(),
+)); err != nil {
 	return nil, err
 }
 ```
 
-Do not use `RequireAny` to avoid deciding what permission an operation needs. Use it only when the alternatives are intentionally equivalent authorization paths.
+With org admin granted and a block on project write, this is refused.
+
+Do not use `Either` to avoid deciding what permission an operation needs. Use it only when the alternatives are intentionally equivalent authorization paths.
 
 ### `Filter`
 

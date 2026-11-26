@@ -65,9 +65,9 @@ type healthAttempt struct {
 
 // healthRow is what a row says beyond its step and result.
 type healthRow struct {
-	userID, family, version, grant, service, device string
-	member                                          uuid.UUID
-	repeats                                         uint32
+	userID, family, version, grant, service, device, detail string
+	member                                                  uuid.UUID
+	repeats                                                 uint32
 }
 
 // begin starts an attempt on a server key or the gateway.
@@ -98,6 +98,9 @@ func (a *healthAttempt) row(step mcpconnectionattempts.Step, what mcpconnectiona
 	}
 	if f.service != "" {
 		opts = append(opts, mcpconnectionattempts.Provider(f.service))
+	}
+	if f.detail != "" {
+		opts = append(opts, mcpconnectionattempts.Detail(f.detail))
 	}
 	row, err := mcpconnectionattempts.RowAt(a.attempt, step, what, final, at, opts...)
 	if err != nil {
@@ -143,7 +146,7 @@ func (g *healthGen) service(server string, member string) string {
 
 // person is the row of a person's app.
 func (g *healthGen) person(p healthPerson) healthRow {
-	return healthRow{userID: g.userID(p), family: p.family, version: p.version, grant: "", service: "", device: g.device(p.key), member: uuid.Nil, repeats: 0}
+	return healthRow{userID: g.userID(p), family: p.family, version: p.version, grant: "", service: "", device: g.device(p.key), detail: "", member: uuid.Nil, repeats: 0}
 }
 
 // browser is a sign-in page row: opened in the person's browser.
@@ -261,7 +264,7 @@ func (g *healthGen) listing(p healthPerson, t time.Time, missing string) {
 
 // network is a row of nobody known yet: an app or browser on one of a few networks.
 func (g *healthGen) network(n int, family, version string) healthRow {
-	return healthRow{userID: "", family: family, version: version, grant: "", service: "", device: g.device("network-" + strconv.Itoa(n)), member: uuid.Nil, repeats: 0}
+	return healthRow{userID: "", family: family, version: version, grant: "", service: "", device: g.device("network-" + strconv.Itoa(n)), detail: "", member: uuid.Nil, repeats: 0}
 }
 
 // refusedApp is an app refused when it asks for its token: a blocked AI app, or an app
@@ -359,6 +362,9 @@ func (g *healthGen) busy(p healthPerson, server string, t time.Time) bool {
 	case g.cursorNotionBusy(p, server, t):
 		return true
 	case server == "wiki" && !t.Before(g.clk.wikiBrokenFrom()) && slices.Contains([]string{"ken", "ivy", "theo", "amara"}, p.key):
+		return true
+	// Far enough back that a blip's recovery and served request land before storyNow's failure.
+	case p.key == "felix" && server == "notion" && t.After(g.clk.now.Add(-45*time.Minute)):
 		return true
 	}
 	return false
@@ -745,6 +751,20 @@ func (g *healthGen) storyNow() {
 	}
 }
 
+// storyConnect: Ana and Mei's apps ask for Support Desk, where neither has connected an account.
+// It draws nothing, so the stories before it keep their rows.
+func (g *healthGen) storyConnect() {
+	for i, key := range []string{"ana", "mei"} {
+		p := g.personByKey(key)
+		for k := range 4 {
+			t := g.clk.now.Add(-3*time.Hour + time.Duration(i)*7*time.Minute + time.Duration(k)*50*time.Minute)
+			f := g.person(p)
+			f.grant, f.detail = oauthwire.GrantTypeJWTBearer, "no_credential_ready"
+			g.begin(t, "support", healthApp(p.family)).row(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeInvalidRemoteSession, t.Add(time.Second), true, f)
+		}
+	}
+}
+
 // storyFirsts: each person's first sign-ins, about a month ago, so every server shows connections.
 func (g *healthGen) storyFirsts() {
 	for _, p := range healthPeople {
@@ -770,6 +790,7 @@ func (s *seeder) connectionHealthRows() ([]mcpconnectionattempts.Row, []mcpconne
 	g.storyKillswitch()
 	g.storyDenied()
 	g.storyNow()
+	g.storyConnect()
 	served := slices.SortedFunc(maps.Values(g.served), func(a, b mcpconnectionattempts.Served) int {
 		return cmp.Or(cmp.Compare(a.ServerID, b.ServerID), cmp.Compare(a.MemberID, b.MemberID), cmp.Compare(a.SubjectURN, b.SubjectURN), cmp.Compare(a.ClientFamily, b.ClientFamily))
 	})

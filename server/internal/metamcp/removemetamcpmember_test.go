@@ -123,136 +123,38 @@ func TestRemoveMetaMcpMember_UnknownIDNotFound(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeNotFound)
 }
 
-// Removing a member reverses the add-side auto-attach: the member's provider
-// client is unbound from the gateway issuer once no other live member fronts
-// that upstream, so it stops appearing on the consent screen. While another
-// member still fronts the same upstream, the binding is retained.
-func TestRemoveMetaMcpMember_DetachesProviderClient(t *testing.T) {
+// Removing a member from one gateway does not change either server's offer,
+// even when both gateways use the same downstream issuer.
+func TestRemoveMetaMcpMember_PreservesOffersAcrossSharedIssuer(t *testing.T) {
 	t.Parallel()
-
 	ctx, ti := newTestService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	auth, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	projectID := *authCtx.ProjectID
-	orgID := authCtx.ActiveOrganizationID
-
-	meta := seedMetaMcpServer(t, ctx, ti, "auto detach host")
-	require.NotNil(t, meta.UserSessionIssuerID, "create mints the gateway issuer")
-	gatewayIssuerID := uuid.MustParse(*meta.UserSessionIssuerID)
-
-	remoteIssuerID := seedRemoteSessionIssuer(t, ctx, ti.conn, projectID, orgID, "auto-detach-rsi")
-
-	addMember := func(serverID uuid.UUID) string {
-		member, err := ti.service.AddMetaMcpMember(ctx, &gen.AddMetaMcpMemberPayload{
-			SessionToken:     nil,
-			ApikeyToken:      nil,
-			ProjectSlugInput: nil,
-			MetaMcpServerID:  meta.ID,
-			McpServerID:      serverID.String(),
-			SortOrder:        nil,
-		})
-		require.NoError(t, err)
-		return member.ID
-	}
-	count := func() int {
-		return countGatewayClientsForUpstream(t, ctx, ti.conn, projectID, orgID, gatewayIssuerID, remoteIssuerID)
-	}
-
-	// Two members of the same gateway fronting the same upstream AS; the "one
-	// client per upstream per issuer" rule leaves exactly one binding.
-	firstServer := seedMcpServer(t, ctx, ti.conn, projectID)
-	stampAndWireMemberClient(t, ctx, ti.conn, projectID, orgID, firstServer, createRemoteSessionClient(t, ctx, ti.conn, projectID, orgID, remoteIssuerID, "auto-detach-client-1"))
-	firstMember := addMember(firstServer)
-
-	secondServer := seedMcpServer(t, ctx, ti.conn, projectID)
-	stampAndWireMemberClient(t, ctx, ti.conn, projectID, orgID, secondServer, createRemoteSessionClient(t, ctx, ti.conn, projectID, orgID, remoteIssuerID, "auto-detach-client-2"))
-	secondMember := addMember(secondServer)
-
-	require.Equal(t, 1, count(), "one client per upstream per issuer")
-
-	// Removing the first member leaves the second still fronting the upstream,
-	// so the provider binding is retained.
-	require.NoError(t, ti.service.RemoveMetaMcpMember(ctx, &gen.RemoveMetaMcpMemberPayload{
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
-		ID:               firstMember,
-	}))
-	require.Equal(t, 1, count(), "binding retained while another member fronts the upstream")
-
-	// Removing the last member fronting the upstream unbinds the provider.
-	require.NoError(t, ti.service.RemoveMetaMcpMember(ctx, &gen.RemoveMetaMcpMemberPayload{
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
-		ID:               secondMember,
-	}))
-	require.Equal(t, 0, count(), "binding detached once no member fronts the upstream")
-}
-
-// When two gateways share one user_session_issuer, the provider binding is
-// scoped to that issuer, so removing a member from one gateway must NOT detach
-// a provider the OTHER gateway still fronts.
-func TestRemoveMetaMcpMember_RetainsProviderForSharedIssuer(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	projectID := *authCtx.ProjectID
-	orgID := authCtx.ActiveOrganizationID
-
+	projectID, orgID := *auth.ProjectID, auth.ActiveOrganizationID
 	metaA := seedMetaMcpServer(t, ctx, ti, "shared issuer gateway A")
 	require.NotNil(t, metaA.UserSessionIssuerID)
-	sharedIssuerID := *metaA.UserSessionIssuerID
-	gatewayIssuerID := uuid.MustParse(sharedIssuerID)
-
-	// Gateway B reuses gateway A's issuer.
 	metaB, err := ti.service.CreateMetaMcpServer(ctx, &gen.CreateMetaMcpServerPayload{
-		SessionToken:        nil,
-		ApikeyToken:         nil,
-		ProjectSlugInput:    nil,
-		Name:                "shared issuer gateway B",
-		UserSessionIssuerID: &sharedIssuerID,
-		Visibility:          nil,
+		Name: "shared issuer gateway B", UserSessionIssuerID: metaA.UserSessionIssuerID,
 	})
 	require.NoError(t, err)
-	require.Equal(t, sharedIssuerID, *metaB.UserSessionIssuerID, "gateway B shares gateway A's issuer")
+	require.Equal(t, metaA.UserSessionIssuerID, metaB.UserSessionIssuerID)
 
-	remoteIssuerID := seedRemoteSessionIssuer(t, ctx, ti.conn, projectID, orgID, "shared-rsi")
-
-	addMember := func(metaID string, serverID uuid.UUID) string {
-		member, err := ti.service.AddMetaMcpMember(ctx, &gen.AddMetaMcpMemberPayload{
-			SessionToken:     nil,
-			ApikeyToken:      nil,
-			ProjectSlugInput: nil,
-			MetaMcpServerID:  metaID,
-			McpServerID:      serverID.String(),
-			SortOrder:        nil,
-		})
+	provider := seedRemoteSessionIssuer(t, ctx, ti.conn, projectID, orgID, "shared-provider")
+	add := func(gatewayID, name string) (string, uuid.UUID, uuid.UUID) {
+		server := seedMcpServer(t, ctx, ti.conn, projectID)
+		registration := createRemoteSessionClient(t, ctx, ti.conn, projectID, orgID, provider, name)
+		offer := seedMemberOffer(t, ctx, ti.conn, projectID, orgID, server, registration)
+		member, err := ti.service.AddMetaMcpMember(ctx, &gen.AddMetaMcpMemberPayload{MetaMcpServerID: gatewayID, McpServerID: server.String()})
 		require.NoError(t, err)
-		return member.ID
+		return member.ID, server, offer
 	}
-	count := func() int {
-		return countGatewayClientsForUpstream(t, ctx, ti.conn, projectID, orgID, gatewayIssuerID, remoteIssuerID)
-	}
+	memberA, serverA, offerA := add(metaA.ID, "registration-a")
+	_, serverB, offerB := add(metaB.ID, "registration-b")
 
-	serverA := seedMcpServer(t, ctx, ti.conn, projectID)
-	stampAndWireMemberClient(t, ctx, ti.conn, projectID, orgID, serverA, createRemoteSessionClient(t, ctx, ti.conn, projectID, orgID, remoteIssuerID, "shared-client-a"))
-	memberA := addMember(metaA.ID, serverA)
-
-	serverB := seedMcpServer(t, ctx, ti.conn, projectID)
-	stampAndWireMemberClient(t, ctx, ti.conn, projectID, orgID, serverB, createRemoteSessionClient(t, ctx, ti.conn, projectID, orgID, remoteIssuerID, "shared-client-b"))
-	addMember(metaB.ID, serverB)
-
-	require.Equal(t, 1, count(), "one client per upstream on the shared issuer")
-
-	// Removing gateway A's member must not strip the provider gateway B fronts.
-	require.NoError(t, ti.service.RemoveMetaMcpMember(ctx, &gen.RemoveMetaMcpMemberPayload{
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
-		ID:               memberA,
-	}))
-	require.Equal(t, 1, count(), "binding retained: gateway B still fronts the upstream on the shared issuer")
+	require.NoError(t, ti.service.RemoveMetaMcpMember(ctx, &gen.RemoveMetaMcpMemberPayload{ID: memberA}))
+	listed, err := ti.service.ListMetaMcpMembers(ctx, &gen.ListMetaMcpMembersPayload{MetaMcpServerID: metaA.ID})
+	require.NoError(t, err)
+	require.Empty(t, listed.Members)
+	requireMemberOffers(t, ctx, ti, serverA, offerA)
+	requireMemberOffers(t, ctx, ti, serverB, offerB)
 }

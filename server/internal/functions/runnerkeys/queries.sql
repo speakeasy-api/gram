@@ -91,6 +91,9 @@ LIMIT @limit_value;
 -- platform-key copy. Unattributed counts keys of the organization's projects
 -- stored without organization_id, which the organization-scoped queries never
 -- reach.
+-- value_count and last_written_at cover every row of the organization storing
+-- a value under either key, soft-deleted rows included, as
+-- ListOrganizationsWith* reports them.
 WITH platform_copies AS (
   SELECT fa.encryption_key_org_encrypted, u.id AS unreadable_id
   FROM functions_access AS fa
@@ -102,6 +105,14 @@ WITH platform_copies AS (
     AND u.platform_ciphertext_sha256 = sha256(fa.encryption_key)
   WHERE fa.organization_id = @organization_id::text
     AND fa.encryption_key IS NOT NULL
+),
+-- One scan reads both value columns: a value stored only under the
+-- organization key has no platform-key copy, so platform_copies leaves it out.
+stored_values AS (
+  SELECT COUNT(*) AS value_count, MAX(fa.updated_at) AS last_written_at
+  FROM functions_access AS fa
+  WHERE fa.organization_id = @organization_id::text
+    AND (fa.encryption_key IS NOT NULL OR fa.encryption_key_org_encrypted IS NOT NULL)
 )
 SELECT
     COUNT(*) FILTER (
@@ -120,7 +131,9 @@ SELECT
         AND p.organization_id = @organization_id::text
         AND (fa.encryption_key IS NOT NULL OR fa.encryption_key_org_encrypted IS NOT NULL)
     )::bigint AS unattributed,
-    COUNT(*)::bigint AS platform_copies
+    COUNT(*)::bigint AS platform_copies,
+    (SELECT v.value_count FROM stored_values AS v)::bigint AS value_count,
+    (SELECT v.last_written_at FROM stored_values AS v)::timestamptz AS last_written_at
 FROM platform_copies AS k;
 
 -- name: ClearRunnerKeyPlatformCopies :one
@@ -153,3 +166,16 @@ SELECT
     COUNT(*) FILTER (WHERE cleared.platform_only)::bigint AS platform_only,
     COUNT(*) FILTER (WHERE NOT cleared.platform_only)::bigint AS beside_org_copy
 FROM cleared;
+
+-- name: ListOrganizationsWithRunnerKeys :many
+-- Every organization storing a function runner key under either key,
+-- soft-deleted rows included, with how many and the latest updated_at of the
+-- rows storing them. Rows without organization_id are left out.
+SELECT
+    fa.organization_id::text AS organization_id,
+    COUNT(*)::bigint AS value_count,
+    MAX(fa.updated_at)::timestamptz AS last_written_at
+FROM functions_access AS fa
+WHERE fa.organization_id IS NOT NULL
+  AND (fa.encryption_key IS NOT NULL OR fa.encryption_key_org_encrypted IS NOT NULL)
+GROUP BY fa.organization_id;

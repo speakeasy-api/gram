@@ -895,13 +895,17 @@ func (m *ChallengeManager) resolveClientTokens(
 		if self {
 			selfResource = clientCredentialRequestResource(c, selfResources[c.ClientID])
 			if ctx.Value(hostedTokenResourceKey{}) == true && selfResource != "" {
-				return nil, ErrRemoteSessionMisconfigured
+				err = ErrNoValidToken
+				// Preserve the unavailable entry without making it routeable as
+				// a resource-qualified token or contacting the provider.
+				selfResource = ""
+			} else {
+				resolved, err = m.resolveClientCredential(ctx, ClientCredentialRequest{
+					OrganizationID: organizationID,
+					ClientID:       c.ClientID,
+					Resource:       selfResource,
+				})
 			}
-			resolved, err = m.resolveClientCredential(ctx, ClientCredentialRequest{
-				OrganizationID: organizationID,
-				ClientID:       c.ClientID,
-				Resource:       selfResource,
-			})
 		} else {
 			// The grant-time metadata (the recorded RFC 8707 resource) comes
 			// from the same row load that produced the token, so a
@@ -922,6 +926,9 @@ func (m *ChallengeManager) resolveClientTokens(
 				}
 				attribution.skipped.Note(projectID, c.RemoteSessionIssuerID, c.ClientID, err)
 				continue
+			}
+			if i == len(clients)-1 {
+				return nil, err
 			}
 			// A refined failure can still be outranked by a later client that
 			// needs re-linking. Resolving the rest could cost one failing
@@ -1152,6 +1159,19 @@ func (m *ChallengeManager) storedGrantsNeedReconnect(
 	clients []remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow,
 	subject urn.SessionSubject,
 ) (bool, error) {
+	return m.storedGrantsNeedReconnectForResource(ctx, lookup, projectID, organizationID, userSessionIssuerID, clients, subject, nil)
+}
+
+func (m *ChallengeManager) storedGrantsNeedReconnectForResource(
+	ctx context.Context,
+	lookup tokenLookup,
+	projectID uuid.UUID,
+	organizationID string,
+	userSessionIssuerID uuid.UUID,
+	clients []remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow,
+	subject urn.SessionSubject,
+	resource *string,
+) (bool, error) {
 	// The auth client resolver serves principal credentials from the
 	// authorizing user's session, as resolveCallerUpstreamToken does. The
 	// sign-in lookup keeps its existing reconnect check unchanged, so behavior
@@ -1213,6 +1233,9 @@ func (m *ChallengeManager) storedGrantsNeedReconnect(
 			return true, nil
 		case err != nil:
 			return false, fmt.Errorf("get remote_session for reconnect check: %w", err)
+		}
+		if resource != nil && sess.Resource.String != *resource {
+			return true, nil
 		}
 		if attached && sess.SubjectUrn.Kind != urn.SessionSubjectKindUser {
 			return true, nil

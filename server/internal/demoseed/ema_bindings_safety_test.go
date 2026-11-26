@@ -38,11 +38,6 @@ func TestReseedCleansVisitorEMABindings(t *testing.T) {
 		}
 	}
 	plantBindings(otherTenantSpec)
-	unattached, err := queries.CountVisitorEMABindingsWithoutAttachment(ctx, demoseedtest.CountVisitorEMABindingsWithoutAttachmentParams{
-		OrganizationID: otherTenantSpec.OrgID, ProjectID: otherTenantSpec.ProjectID(),
-	})
-	require.NoError(t, err)
-	require.Zero(t, unattached, "bindings must use an attached issuer, not the first tenant issuer")
 	before, err := demoseedtest.SnapshotPostgres(ctx, db)
 	require.NoError(t, err)
 
@@ -81,10 +76,6 @@ func TestRemoteSessionFixturesRejectForeignTenants(t *testing.T) {
 		OrganizationID: conv.ToPGText(DefaultSpec().OrgID), ProjectID: DefaultSpec().ProjectID(),
 	})
 	require.NoError(t, err)
-	foreign, err := queries.GetVisitorEMAFixtureParents(ctx, demoseedtest.GetVisitorEMAFixtureParentsParams{
-		OrganizationID: conv.ToPGText(otherTenantSpec.OrgID), ProjectID: otherTenantSpec.ProjectID(),
-	})
-	require.NoError(t, err)
 	clientID, issuerID := uuid.UUID(parents.ClientID.Bytes), uuid.UUID(parents.RemoteSessionIssuerID.Bytes)
 	project := conv.ToNullUUID(uuid.MustParse(DefaultSpec().ProjectID()))
 	organization := conv.ToPGText(DefaultSpec().OrgID)
@@ -118,13 +109,10 @@ func TestRemoteSessionFixturesRejectForeignTenants(t *testing.T) {
 			require.Zero(t, n)
 		}
 	}
-	n, err := q.AttachPreparationFixtureInteractiveClient(ctx, testrepo.AttachPreparationFixtureInteractiveClientParams{ID: clientID, UserID: uuid.UUID(foreign.UserSessionIssuerID.Bytes), ProjectID: project})
-	require.NoError(t, err)
-	require.Zero(t, n, "a valid client scope must not admit a foreign user issuer")
 	after, err := demoseedtest.SnapshotPostgres(ctx, db)
 	require.NoError(t, err)
 	require.Equal(t, before, after, "rejected fixture mutations must leave all tenants unchanged")
-	n, err = q.ForceRemoteSessionClientRegistrationFixture(ctx, testrepo.ForceRemoteSessionClientRegistrationFixtureParams{ID: clientID, ProjectID: project, OrganizationID: organization})
+	n, err := q.ForceRemoteSessionClientRegistrationFixture(ctx, testrepo.ForceRemoteSessionClientRegistrationFixtureParams{ID: clientID, ProjectID: project, OrganizationID: organization})
 	require.NoError(t, err)
 	require.EqualValues(t, 1, n)
 	n, err = q.ForceRemoteSessionIssuerRegistrationEndpointFixture(ctx, testrepo.ForceRemoteSessionIssuerRegistrationEndpointFixtureParams{ClientID: clientID, ProjectID: project, OrganizationID: organization, RegistrationEndpoint: conv.ToPGText("https://fixture.example.invalid/register")})

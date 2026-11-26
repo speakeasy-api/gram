@@ -40,29 +40,9 @@ func (s *Service) WithAccessRequestsLimiter(limiter *ratelimit.Limiter) *Service
 // tokens, workload sessions and agent identities are refused. While access
 // requests are off for the organization the endpoints answer not found.
 func (s *Service) accessRequestMember(ctx context.Context) (*contextvalues.AuthContext, agentMember, error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil {
-		return nil, agentMember{}, oops.C(oops.CodeUnauthorized)
-	}
-	// The flag comes first, so every caller reads the endpoint as absent
-	// while access requests are off.
-	if s.accessRequests == nil || !s.accessRequests.AccessRequestsEnabled(ctx, authCtx.ActiveOrganizationID, authCtx.OrganizationSlug) {
-		return nil, agentMember{}, oops.C(oops.CodeNotFound)
-	}
-	if slices.Contains(authCtx.APIKeyScopes, auth.APIKeyScopeAgent.String()) {
-		return nil, agentMember{}, oops.E(oops.CodeForbidden, nil, "access requests require a per-user agent key; the org install key cannot act for a member")
-	}
-	if _, ok := deviceagenttoken.EffectiveAgent(ctx); ok {
-		return nil, agentMember{}, oops.E(oops.CodeForbidden, nil, "access requests belong to a person; an agent identity has none")
-	}
-	if mode, ok := contextvalues.APIKeyAuthorization(ctx); ok && mode == contextvalues.APIKeyAuthorizationModePrincipal {
-		return nil, agentMember{}, oops.E(oops.CodeForbidden, nil, "access requests belong to a person; an agent identity has none")
-	}
-	if actor, ok := contextvalues.AuthenticatedActor(ctx); ok && actor.Type != urn.PrincipalTypeUser {
-		return nil, agentMember{}, oops.E(oops.CodeForbidden, nil, "access requests belong to a person; %s has none", actor.Type)
-	}
-	if authCtx.UserID == "" {
-		return nil, agentMember{}, oops.C(oops.CodeUnauthorized)
+	authCtx, err := s.accessRequestCaller(ctx)
+	if err != nil {
+		return nil, agentMember{}, err
 	}
 
 	member, err := s.memberFor(ctx, nil, "access requests")
@@ -78,6 +58,44 @@ func (s *Service) accessRequestMember(ctx context.Context) (*contextvalues.AuthC
 		return nil, agentMember{}, err
 	}
 	return authCtx, member, nil
+}
+
+// deviceCanRequestAccess reports whether the caller could file an access
+// request from the device agent: access requests are on and the caller holds
+// a per-user key.
+func (s *Service) deviceCanRequestAccess(ctx context.Context) bool {
+	_, err := s.accessRequestCaller(ctx)
+	return err == nil
+}
+
+// accessRequestCaller checks the caller of an access request endpoint without
+// resolving the member: the flag, then the credential.
+func (s *Service) accessRequestCaller(ctx context.Context) (*contextvalues.AuthContext, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	// The flag comes first, so every caller reads the endpoint as absent
+	// while access requests are off.
+	if s.accessRequests == nil || !s.accessRequests.AccessRequestsEnabled(ctx, authCtx.ActiveOrganizationID, authCtx.OrganizationSlug) {
+		return nil, oops.C(oops.CodeNotFound)
+	}
+	if slices.Contains(authCtx.APIKeyScopes, auth.APIKeyScopeAgent.String()) {
+		return nil, oops.E(oops.CodeForbidden, nil, "access requests require a per-user agent key; the org install key cannot act for a member")
+	}
+	if _, ok := deviceagenttoken.EffectiveAgent(ctx); ok {
+		return nil, oops.E(oops.CodeForbidden, nil, "access requests belong to a person; an agent identity has none")
+	}
+	if mode, ok := contextvalues.APIKeyAuthorization(ctx); ok && mode == contextvalues.APIKeyAuthorizationModePrincipal {
+		return nil, oops.E(oops.CodeForbidden, nil, "access requests belong to a person; an agent identity has none")
+	}
+	if actor, ok := contextvalues.AuthenticatedActor(ctx); ok && actor.Type != urn.PrincipalTypeUser {
+		return nil, oops.E(oops.CodeForbidden, nil, "access requests belong to a person; %s has none", actor.Type)
+	}
+	if authCtx.UserID == "" {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	return authCtx, nil
 }
 
 // ListPendingAccessRequests lists the organization's pending requests for an

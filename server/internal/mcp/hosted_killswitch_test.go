@@ -57,7 +57,7 @@ func TestServePublic_HostedToolsCallKillswitch(t *testing.T) {
 	require.NotContains(t, unsupported.Body.String(), note)
 	require.NotContains(t, unsupported.Body.String(), "mcp_tool_calls_paused")
 
-	attachMissingRemoteSession(t, ctx, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, issuerID)
+	attachMissingRemoteSession(t, ctx, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, issuerID, mcpServer.ID)
 
 	response, err := servePublicHTTP(t, ctx, ti, endpointSlug, makeToolsListBody(), userToken, sessionHeaders)
 	requireOopsCode(t, err, oops.CodeUnauthorized)
@@ -88,7 +88,7 @@ func TestServePublic_HostedToolsCallKillswitch(t *testing.T) {
 	require.NotContains(t, unavailable.Body.String(), "mcp_tool_calls_paused")
 }
 
-func attachMissingRemoteSession(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID, organizationID string, userSessionIssuerID uuid.UUID) {
+func attachMissingRemoteSession(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID, organizationID string, userSessionIssuerID, serverID uuid.UUID) {
 	t.Helper()
 
 	repo := remotesessionsrepo.New(ti.conn)
@@ -114,10 +114,7 @@ func attachMissingRemoteSession(t *testing.T, ctx context.Context, ti *testInsta
 		ClientIDIssuedAt:      pgtype.Timestamptz{Time: time.Now(), Valid: true},
 	})
 	require.NoError(t, err)
-	require.NoError(t, repo.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: remoteClient.ID,
-		UserSessionIssuerID:   userSessionIssuerID,
-	}))
+	assignHostedOAuth(t, ctx, ti.conn, organizationID, projectID, serverID, remoteClient.ID)
 }
 
 func insertHostedKillswitchPrescription(t *testing.T, ctx context.Context, ti *testInstance, organizationID, userID string, serverID uuid.UUID, externalNote string) {
