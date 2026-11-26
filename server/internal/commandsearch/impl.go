@@ -70,8 +70,7 @@ type featureChecker interface {
 }
 
 type authorizer interface {
-	Evaluate(context.Context, ...authz.Check) (bool, error)
-	Filter(context.Context, []authz.Check) ([]string, error)
+	Decide(context.Context, ...authz.Check) (authz.Decisions, error)
 	RequirePluginWrite(context.Context, string, string) error
 }
 
@@ -486,13 +485,17 @@ func (s *Service) authorizedKinds(ctx context.Context, organizationID string, pr
 	// Assistant and MCP rows are authorized after their bounded prefix queries,
 	// matching their list endpoints and allowing resource-specific grants.
 	result := map[string]bool{"agent_identity": true, "assistant": true, "mcp": true}
-	for _, candidate := range checks {
-		ok, err := s.authz.Evaluate(ctx, candidate.check)
-		if err != nil {
-			return nil, fmt.Errorf("authorize command search kind %s: %w", strings.Join(candidate.kinds, "/"), err)
-		}
+	kindChecks := make([]authz.Check, len(checks))
+	for i, candidate := range checks {
+		kindChecks[i] = candidate.check
+	}
+	decisions, err := s.authz.Decide(authz.WithoutChallenges(ctx), kindChecks...)
+	if err != nil {
+		return nil, fmt.Errorf("authorize command search kinds: %w", err)
+	}
+	for i, candidate := range checks {
 		for _, kind := range candidate.kinds {
-			result[kind] = result[kind] || ok
+			result[kind] = result[kind] || decisions.Each[i].Allowed
 		}
 	}
 	if !result["plugin"] {
@@ -521,17 +524,13 @@ func (s *Service) filterRows(ctx context.Context, rows []*gen.Commandresourceind
 	for i, row := range rows {
 		checks[i] = check(row.ID)
 	}
-	allowedIDs, err := s.authz.Filter(ctx, checks)
+	decisions, err := s.authz.Decide(ctx, checks...)
 	if err != nil {
 		return nil, fmt.Errorf("authorize command search rows: %w", err)
 	}
-	allowed := make(map[string]struct{}, len(allowedIDs))
-	for _, id := range allowedIDs {
-		allowed[id] = struct{}{}
-	}
-	kept := make([]*gen.Commandresourceindexitem, 0, len(allowedIDs))
-	for _, row := range rows {
-		if _, ok := allowed[row.ID]; ok {
+	kept := make([]*gen.Commandresourceindexitem, 0, len(rows))
+	for i, row := range rows {
+		if decisions.Each[i].Allowed {
 			kept = append(kept, row)
 		}
 	}

@@ -76,7 +76,7 @@ func TestEngineRequire_RecordsNothingWhenABlockRefuses(t *testing.T) {
 	require.False(t, ok)
 }
 
-func TestEngineEvaluateLoadedGrants_DoesNotRecord(t *testing.T) {
+func TestDecideWithoutChallengesOnLoadedGrants_DoesNotRecord(t *testing.T) {
 	t.Parallel()
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	ctx := WithDenialRecorder(GrantsToContext(enterpriseSessionCtx(t), nil))
@@ -176,7 +176,7 @@ func TestRecordedDenial_WithoutARecorder(t *testing.T) {
 	require.False(t, ok)
 }
 
-func TestDenialReasons_WhenRBACIsNotEnforced(t *testing.T) {
+func TestDecideReason_WhenRBACIsNotEnforced(t *testing.T) {
 	t.Parallel()
 
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
@@ -189,18 +189,18 @@ func TestDenialReasons_WhenRBACIsNotEnforced(t *testing.T) {
 	invalid := Check{Scope: ScopeMCPConnect, ResourceKind: "", ResourceID: "", Dimensions: nil}
 	authClient := MCPAuthClientCheck("ac_1", MCPAuthClientDimensions{ClientType: AuthClientTypeServiceAccount, ProjectID: authProjectP, ConnectionOwner: "", UpstreamClient: ""})
 
-	reasons, err := engine.DenialReasons(ctx, []Check{valid, authClient})
-	require.NoError(t, err, "unenforced callers get the unenforced result, like FindMatched")
+	reasons, err := decisionReasons(ctx, engine, []Check{valid, authClient})
+	require.NoError(t, err, "unenforced callers get the unenforced result")
 	require.Equal(t, []Reason{ReasonNone, ReasonNotGranted}, reasons)
 
-	_, err = engine.DenialReasons(ctx, []Check{valid, invalid})
+	_, err = decisionReasons(ctx, engine, []Check{valid, invalid})
 	require.ErrorIs(t, err, ErrInvalidCheck, "in tests an invalid check fails even when RBAC is skipped")
 }
 
 // A call refused only because the caller's grant names another disposition
 // than read_only is reported as a disposition refusal, even though a missing
 // key never matches on a decision.
-func TestDenialReasons_OtherDispositionIsReported(t *testing.T) {
+func TestDecideReason_OtherDispositionIsReported(t *testing.T) {
 	t.Parallel()
 
 	selector := NewSelector(ScopeMCPConnect, "toolset_1")
@@ -209,14 +209,14 @@ func TestDenialReasons_OtherDispositionIsReported(t *testing.T) {
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrantWithSelector(ScopeMCPConnect, selector)})
 
 	call := MCPServer(MCPServerIDFrom("toolset_1"), ProjectIDFrom(authProjectP)).ToolCall("delete_all", DispositionDestructive)
-	reasons, err := engine.DenialReasons(ctx, []Check{call})
+	reasons, err := decisionReasons(ctx, engine, []Check{call})
 	require.NoError(t, err)
 	require.Equal(t, []Reason{ReasonDisposition}, reasons)
 }
 
 // A call refused because it names no tool while the grant is limited to one
 // is not a disposition refusal: no other disposition would allow it.
-func TestDenialReasons_MissingToolIsNotADispositionRefusal(t *testing.T) {
+func TestDecideReason_MissingToolIsNotADispositionRefusal(t *testing.T) {
 	t.Parallel()
 
 	selector := NewSelector(ScopeMCPConnect, "toolset_1")
@@ -226,7 +226,7 @@ func TestDenialReasons_MissingToolIsNotADispositionRefusal(t *testing.T) {
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrantWithSelector(ScopeMCPConnect, selector)})
 
 	call := MCPServer(MCPServerIDFrom("toolset_1"), ProjectIDFrom(authProjectP)).ToolCall("", DispositionDestructive)
-	reasons, err := engine.DenialReasons(ctx, []Check{call})
+	reasons, err := decisionReasons(ctx, engine, []Check{call})
 	require.NoError(t, err)
 	require.Equal(t, []Reason{ReasonNotGranted}, reasons)
 }

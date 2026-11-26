@@ -186,11 +186,11 @@ func (s *Service) authorizeServerIdentityTarget(ctx context.Context, logger *slo
 // project-level commit change bindings every project on an organization-level
 // user session issuer shares.
 func (s *Service) actorIsOrganizationAdmin(ctx context.Context, organizationID string) (bool, error) {
-	admin, err := s.authz.Evaluate(ctx, authz.Org(authz.OrgIDFrom(organizationID)).Admin())
+	admin, err := s.authz.Decide(authz.WithoutChallenges(ctx), authz.Org(authz.OrgIDFrom(organizationID)).Admin())
 	if err != nil {
 		return false, fmt.Errorf("evaluate organization admin: %w", err)
 	}
-	return admin, nil
+	return admin.AllAllowed, nil
 }
 
 // checkServerIdentityRequest checks what only this flow knows about: the MCP

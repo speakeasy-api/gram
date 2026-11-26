@@ -120,30 +120,32 @@ func (f *fakeStore) ListCommandIndexCustomRules(ctx context.Context, _ repo.List
 }
 
 type fakeAuthz struct {
-	denied      authz.Scope
-	evaluate    func(authz.Check) bool
-	evaluateCtx func(context.Context, authz.Check) (bool, error)
-	filter      func([]authz.Check) []string
+	denied   authz.Scope
+	allow    func(authz.Check) bool
+	allowCtx func(context.Context, authz.Check) (bool, error)
 }
 
-func (f fakeAuthz) Evaluate(ctx context.Context, checks ...authz.Check) (bool, error) {
-	if f.evaluateCtx != nil {
-		return f.evaluateCtx(ctx, checks[0])
+func (f fakeAuthz) Decide(ctx context.Context, checks ...authz.Check) (authz.Decisions, error) {
+	decisions := authz.Decisions{AllAllowed: len(checks) > 0, Each: make([]authz.Decision, len(checks))}
+	for i, check := range checks {
+		allowed := check.Scope != f.denied
+		switch {
+		case f.allowCtx != nil:
+			var err error
+			if allowed, err = f.allowCtx(ctx, check); err != nil {
+				return authz.Decisions{AllAllowed: false, Each: nil}, err
+			}
+		case f.allow != nil:
+			allowed = f.allow(check)
+		}
+		reason := authz.ReasonNone
+		if !allowed {
+			reason = authz.ReasonNotGranted
+		}
+		decisions.Each[i] = authz.Decision{Allowed: allowed, Enforced: true, Reason: reason}
+		decisions.AllAllowed = decisions.AllAllowed && allowed
 	}
-	if f.evaluate != nil {
-		return f.evaluate(checks[0]), nil
-	}
-	return checks[0].Scope != f.denied, nil
-}
-func (f fakeAuthz) Filter(_ context.Context, checks []authz.Check) ([]string, error) {
-	if f.filter != nil {
-		return f.filter(checks), nil
-	}
-	ids := make([]string, 0, len(checks))
-	for _, check := range checks {
-		ids = append(ids, check.ResourceID)
-	}
-	return ids, nil
+	return decisions, nil
 }
 func (fakeAuthz) RequirePluginWrite(context.Context, string, string) error { return nil }
 
@@ -281,7 +283,7 @@ func TestSearchAuthorizesPeopleForOrganizationOrProjectReaders(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			store := storeWithAllKinds()
-			authorizer := fakeAuthz{evaluate: func(check authz.Check) bool {
+			authorizer := fakeAuthz{allow: func(check authz.Check) bool {
 				switch check.Scope {
 				case authz.ScopeOrgRead:
 					return tc.orgRead
@@ -400,19 +402,19 @@ func TestSearchFiltersAssistantRowsBeforeApplyingResultLimit(t *testing.T) {
 	hidden, visible := uuid.New(), uuid.New()
 	store := storeWithAllKinds()
 	store.assistants = []repo.ListCommandIndexAssistantsRow{{ID: hidden, Name: "Assistant hidden"}, {ID: visible, Name: "Assistant visible"}}
-	authorizer := fakeAuthz{filter: func(checks []authz.Check) []string {
-		if checks[0].Scope != authz.ScopeAssistantRead {
-			return checkIDs(checks)
+	var assistantChecks int
+	authorizer := fakeAuthz{allow: func(check authz.Check) bool {
+		if check.Scope != authz.ScopeAssistantRead {
+			return true
 		}
-		require.Len(t, checks, 2)
-		for _, check := range checks {
-			require.Equal(t, map[string]string{authz.SelectorKeyProjectID: projectID.String()}, check.Dimensions)
-		}
-		return []string{visible.String()}
+		assistantChecks++
+		require.Equal(t, map[string]string{authz.SelectorKeyProjectID: projectID.String()}, check.Dimensions)
+		return check.ResourceID == visible.String()
 	}}
 	result, err := service(t, store, authorizer).Search(ctxFor(projectID), &gen.SearchPayload{Q: "as"})
 	require.NoError(t, err)
 	require.Equal(t, []string{visible.String()}, itemIDs(result.Items, "assistant"))
+	require.Equal(t, 2, assistantChecks)
 }
 
 func TestSearchGatesGatewayCollectionAndFiltersMCPRows(t *testing.T) {
@@ -421,37 +423,25 @@ func TestSearchGatesGatewayCollectionAndFiltersMCPRows(t *testing.T) {
 	projectID := uuid.New()
 	store := storeWithAllKinds()
 	mcpID := store.mcpServers[0].ID.String()
-	authorizer := fakeAuthz{
-		evaluate: func(check authz.Check) bool {
-			if check.Scope != authz.ScopeMCPRead {
-				return true
-			}
-			require.Equal(t, projectID.String(), check.ResourceID)
+	var rowChecks int
+	authorizer := fakeAuthz{allow: func(check authz.Check) bool {
+		switch {
+		case check.Scope != authz.ScopeMCPRead:
+			return true
+		case check.ResourceID == projectID.String():
 			return false
-		},
-		filter: func(checks []authz.Check) []string {
-			if checks[0].Scope != authz.ScopeMCPRead {
-				return checkIDs(checks)
-			}
-			require.Len(t, checks, 1)
-			require.Equal(t, mcpID, checks[0].ResourceID)
-			require.Equal(t, map[string]string{authz.SelectorKeyProjectID: projectID.String()}, checks[0].Dimensions)
-			return []string{mcpID}
-		},
-	}
+		}
+		rowChecks++
+		require.Equal(t, mcpID, check.ResourceID)
+		require.Equal(t, map[string]string{authz.SelectorKeyProjectID: projectID.String()}, check.Dimensions)
+		return true
+	}}
 	result, err := service(t, store, authorizer).Search(ctxFor(projectID), &gen.SearchPayload{Q: "mc"})
 	require.NoError(t, err)
 	require.Zero(t, store.calls["gateway"])
 	require.Equal(t, 1, store.calls["mcp"])
 	require.Contains(t, itemKinds(result.Items), "mcp")
-}
-
-func checkIDs(checks []authz.Check) []string {
-	ids := make([]string, 0, len(checks))
-	for _, check := range checks {
-		ids = append(ids, check.ResourceID)
-	}
-	return ids
+	require.Equal(t, 1, rowChecks)
 }
 
 func itemIDs(items []*gen.Commandresourceindexitem, kind string) []string {
@@ -540,7 +530,7 @@ func TestSearchSkillsFeatureGateAndFailure(t *testing.T) {
 	t.Run("check error fails before authorization or queries", func(t *testing.T) {
 		t.Parallel()
 		store := storeWithAllKinds()
-		svc := service(t, store, fakeAuthz{evaluate: func(authz.Check) bool { t.Fatal("authorization must not run"); return false }})
+		svc := service(t, store, fakeAuthz{allow: func(authz.Check) bool { t.Fatal("authorization must not run"); return false }})
 		svc.features = fakeFeatures{err: errors.New("feature store unavailable")}
 		_, err := svc.Search(ctxFor(uuid.New()), &gen.SearchPayload{Q: "sk"})
 		require.ErrorContains(t, err, "check skills feature")
@@ -563,7 +553,7 @@ func TestSearchPreflightDeadlineIsRequestError(t *testing.T) {
 
 	started := make(chan struct{})
 	var once sync.Once
-	authorizer := fakeAuthz{evaluateCtx: func(ctx context.Context, _ authz.Check) (bool, error) {
+	authorizer := fakeAuthz{allowCtx: func(ctx context.Context, _ authz.Check) (bool, error) {
 		once.Do(func() { close(started) })
 		<-ctx.Done()
 		return false, fmt.Errorf("wait for preflight deadline: %w", ctx.Err())

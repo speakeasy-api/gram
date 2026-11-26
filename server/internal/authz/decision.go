@@ -425,7 +425,8 @@ func (q question) decide(check Check) (verdict, error) {
 		refused.Reason = ReasonBlocked
 		return refused, nil
 	}
-	return refused, nil
+	refused.Reason, err = q.grants.dispositionReason(check)
+	return refused, err
 }
 
 func (q question) verdict(check Check, allowed bool) verdict {

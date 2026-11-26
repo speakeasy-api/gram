@@ -281,11 +281,11 @@ func (s *Service) ListAccessRequests(ctx context.Context, payload *gen.ListAcces
 
 	requester := pgtype.Text{String: ac.UserID, Valid: true}
 	if !payload.Mine {
-		admin, err := s.authz.Can(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin())
+		admin, err := s.authz.Decide(authz.WithoutChallenges(ctx), authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin())
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "check organization admin").LogError(ctx, logger)
 		}
-		if admin {
+		if admin.AllAllowed {
 			requester = pgtype.Text{String: "", Valid: false}
 		}
 	}

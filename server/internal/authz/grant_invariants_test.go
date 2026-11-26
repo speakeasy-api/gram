@@ -382,12 +382,12 @@ func TestGrantInvariants_Either(t *testing.T) {
 				if allowed != engineAllows(t, engine.Require(ctx, Either(b.check, a.check))) {
 					failures.add("[%s] Either(%s on %s, %s on %s) depends on order", describeGrants(grants), a.name, a.server.id, b.name, b.server.id)
 				}
-				can, err := engine.Can(ctx, Either(a.check, b.check))
+				decided, err := engine.Decide(ctx, Either(a.check, b.check))
 				if err != nil {
-					t.Fatalf("Can(Either) errored: %v", err)
+					t.Fatalf("Decide(Either) errored: %v", err)
 				}
-				if can != allowed {
-					failures.add("[%s] Can(Either(%s on %s, %s on %s)) = %v, Require = %v", describeGrants(grants), a.name, a.server.id, b.name, b.server.id, can, allowed)
+				if decided.AllAllowed != allowed {
+					failures.add("[%s] Decide(Either(%s on %s, %s on %s)) = %v, Require = %v", describeGrants(grants), a.name, a.server.id, b.name, b.server.id, decided.AllAllowed, allowed)
 				}
 			}
 		}
@@ -502,30 +502,20 @@ func TestGrantInvariants_SameAnswerEverywhere(t *testing.T) {
 	}
 	forEachGrantSet(serverLevelGrants(), func(grants []Grant) {
 		ctx := GrantsToContext(enterpriseSessionCtx(t), grants)
-		matched, err := engine.FindMatched(ctx, all)
+		batch, err := engine.Decide(ctx, all...)
 		if err != nil {
-			t.Fatalf("FindMatched errored: %v", err)
+			t.Fatalf("Decide errored: %v", err)
 		}
 		for i, c := range checks {
 			want := isAllowed(t, grants, c.check)
-			evaluated, err := engine.Evaluate(ctx, c.check)
+			alone, err := engine.Decide(ctx, c.check)
 			if err != nil {
-				t.Fatalf("Evaluate errored: %v", err)
-			}
-			can, err := engine.Can(ctx, c.check)
-			if err != nil {
-				t.Fatalf("Can errored: %v", err)
-			}
-			filtered, err := engine.Filter(ctx, []Check{c.check})
-			if err != nil {
-				t.Fatalf("Filter errored: %v", err)
+				t.Fatalf("Decide errored: %v", err)
 			}
 			answers := map[string]bool{
-				"Require":     engineAllows(t, engine.Require(ctx, c.check)),
-				"Evaluate":    evaluated,
-				"Can":         can,
-				"Filter":      len(filtered) == 1,
-				"FindMatched": matched[i],
+				"Require":         engineAllows(t, engine.Require(ctx, c.check)),
+				"Decide alone":    alone.AllAllowed,
+				"Decide in batch": batch.Each[i].Allowed,
 			}
 			for name, got := range answers {
 				if got != want {

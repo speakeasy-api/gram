@@ -334,7 +334,7 @@ func (s *Service) ListTemporaryGrants(ctx context.Context, payload *gen.ListTemp
 	}
 	trace.SpanFromContext(ctx).SetAttributes(attr.OrganizationID(ac.ActiveOrganizationID), attr.UserID(ac.UserID))
 
-	isAdmin, err := s.authz.Evaluate(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin())
+	isAdmin, err := s.authz.Decide(authz.WithoutChallenges(ctx), authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin())
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "check organization admin").LogError(ctx, s.logger)
 	}
@@ -345,7 +345,7 @@ func (s *Service) ListTemporaryGrants(ctx context.Context, payload *gen.ListTemp
 	}
 	// A member who is not an administrator sees the boundary and remaining
 	// time of grants given directly to them only.
-	if !isAdmin && principal.String() != urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID).String() {
+	if !isAdmin.AllAllowed && principal.String() != urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID).String() {
 		return nil, oops.C(oops.CodeForbidden)
 	}
 	principalURN := principal.String()

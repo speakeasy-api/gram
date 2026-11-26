@@ -1,6 +1,6 @@
 ---
 name: gram-rbac
-description: Use when a task touches authorization in Speakeasy — gating a handler or list endpoint, `authz.Require` / `Decide` / `Either` / `Can` / `Evaluate` / `Filter`, typed refs like `authz.MCPServer(id, project).Write()` or `authz.Environments(p).Read()`, `authz.Check{...}` literals, adding or changing a scope, permission, resource type, block or dimension in `registry.Definitions` (`authz/internal/registry/definitions.go`), system role defaults, agent-safe scopes (`SafeSince`, `AgentUnsafe`), `mise run gen:authz`, `refs_gen.go`, `scopes_gen.go`, `tables_gen.go`, the `norawauthzchecks` lint, "invalid authz check", `ErrInvalidCheck`, `CodeForbidden` from authz, or RBAC state in the dashboard (`useRBAC`, `RequireScope`, access pages).
+description: Use when a task touches authorization in Speakeasy — gating a handler or list endpoint, `authz.Require` / `Decide` / `Either` / `WithoutChallenges`, typed refs like `authz.MCPServer(id, project).Write()` or `authz.Environments(p).Read()`, `authz.Check{...}` literals, adding or changing a scope, permission, resource type, block or dimension in `registry.Definitions` (`authz/internal/registry/definitions.go`), system role defaults, agent-safe scopes (`SafeSince`, `AgentUnsafe`), `mise run gen:authz`, `refs_gen.go`, `scopes_gen.go`, `tables_gen.go`, the `norawauthzchecks` lint, "invalid authz check", `ErrInvalidCheck`, `CodeForbidden` from authz, or RBAC state in the dashboard (`useRBAC`, `RequireScope`, access pages).
 metadata:
   relevant_files:
     - "server/internal/authz/**/*.go"
@@ -50,28 +50,30 @@ if err := s.authz.Require(ctx, authz.Either(authz.MCPServer(id, p).Write(), auth
 	return err
 }
 // a branch, not a denial (no challenge logged)
-ok, err := s.authz.Can(ctx, authz.Chat(id).Read())
+canRead, err := s.authz.Decide(authz.WithoutChallenges(ctx), authz.Chat(id).Read())
 // discovery: "could they act on any matching resource?"
-ok, err := s.authz.Can(ctx, authz.MCPServer(id, p).Connect().Probe())
+canConnect, err := s.authz.Decide(authz.WithoutChallenges(ctx), authz.MCPServer(id, p).Connect().Probe())
+// a list: one decision per row, in order, and one challenge row for the call
+decisions, err := s.authz.Decide(ctx, checks...)
 ```
 
-| Need                      | Use                                                                                                                                                                    |
-| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Refuse unless allowed     | `Require(ctx, checks...)` (all must pass)                                                                                                                              |
-| Any one of several grants | `Require(ctx, authz.Either(...))`: one alternative is enough, but a block on any alternative refuses the group                                                         |
-| Branch on the answer      | `Can(ctx, ...)`. Accepts a single `Either` group and probes. Returns an error, not false, for an invalid check.                                                        |
-| Narrow a list             | `Filter(ctx, checks)` returns the allowed `ResourceID`s. `FindMatched` returns a bool per check, for many checks that share one resource id (tools in a `tools/list`). |
-| MCP tool call             | `authz.MCPServer(id, p).ToolCall(tool, disposition)`, with `authz.DispositionFromHints`. A tool with no annotations is `unannotated`.                                  |
+| Need                      | Use                                                                                                                                                       |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Refuse unless allowed     | `Require(ctx, checks...)` (all must pass)                                                                                                                 |
+| Any one of several grants | `Require(ctx, authz.Either(...))`: one alternative is enough, but a block on any alternative refuses the group                                            |
+| Branch on the answer      | `Decide(authz.WithoutChallenges(ctx), ...)` and read `AllAllowed`. Accepts `Either` groups and probes. Returns an error, not false, for an invalid check. |
+| Narrow a list             | `Decide(ctx, checks...)` and keep the rows whose `Each[i].Allowed` is true. A refused tool call's `Each[i].Reason` names the disposition that would pass. |
+| MCP tool call             | `authz.MCPServer(id, p).ToolCall(tool, disposition)`, with `authz.DispositionFromHints`. A tool with no annotations is `unannotated`.                     |
 
-Ref constructors take typed ids, never a raw string or `uuid.UUID`: `authz.Environment(authz.EnvironmentIDOf(env.ID), authz.ProjectIDOf(projectID))`. Each kind that has a ref has an id type generated in `ids_gen.go` with two constructors, `<Kind>IDOf(uuid.UUID)` and `<Kind>IDFrom(string)`, so ids of different kinds cannot be swapped. The hand-written `mcp_auth_client`, `risk_policy` and `inference` checks keep their own constructors, listed below. An id that cannot name a resource (the nil uuid, an empty string, `*`, a `$` marker, a string containing whitespace) is kept as absent, and every check built from it is refused with `ErrInvalidCheck`: an absent id never grants. In the examples here `id`, `envID`, `p` and `project` are such typed ids, already built with `IDOf` or `IDFrom`. The argument order is always the resource, then its project. A project collection (`authz.Environments(p)`, `authz.MCPServers(p)`, `authz.Assistants(p)`) builds a check on the resource type whose resource id is the project id, so project-wide grants match it and `Filter` returns the project id for it.
+Ref constructors take typed ids, never a raw string or `uuid.UUID`: `authz.Environment(authz.EnvironmentIDOf(env.ID), authz.ProjectIDOf(projectID))`. Each kind that has a ref has an id type generated in `ids_gen.go` with two constructors, `<Kind>IDOf(uuid.UUID)` and `<Kind>IDFrom(string)`, so ids of different kinds cannot be swapped. The hand-written `mcp_auth_client`, `risk_policy` and `inference` checks keep their own constructors, listed below. An id that cannot name a resource (the nil uuid, an empty string, `*`, a `$` marker, a string containing whitespace) is kept as absent, and every check built from it is refused with `ErrInvalidCheck`: an absent id never grants. In the examples here `id`, `envID`, `p` and `project` are such typed ids, already built with `IDOf` or `IDFrom`. The argument order is always the resource, then its project. A project collection (`authz.Environments(p)`, `authz.MCPServers(p)`, `authz.Assistants(p)`) builds a check on the resource type whose resource id is the project id, so project-wide grants match it and `Decide` answers it with project-wide grants.
 
 Chats are the exception. Chat has no project dimension, and every chat grant the dashboard saves covers every chat, so the id in a chat check is a placeholder. `authz.Chats(p)`, `authz.OrgChats(org)` and `authz.UnrestrictedChats()` all ask whether the caller holds chat:read on every chat, and differ only in the placeholder they carry. None of them limits access to a project or an organization. A check about one real chat, such as a chat being read or unmasked, uses `authz.Chat(authz.ChatIDOf(chatID)).Read()` (or `.Write()`) instead, as `chat/session_access.go` and `risk/unmask_ch.go` do.
 
-Keep `Require` and its `CodeForbidden` branch where the code already has one. Swapping it for `Can` keeps enforcement the same but stops logging the challenge, so do that only where the denial is not a refusal the user sees.
+Keep `Require` and its `CodeForbidden` branch where the code already has one. Swapping it for `Decide` under `WithoutChallenges` keeps enforcement the same but stops logging the challenge, so do that only where the denial is not a refusal the user sees.
 
 Refs exist for every kind in the model except `mcp_auth_client` (`MCPAuthClientCheck`), `risk_policy` (`RiskPolicyApplies` / bypass checks) and `inference` (`InferenceExecuteCheck`). The list sits at the end of `refs_gen.go`.
 
-For a list endpoint, load the candidate rows, build one ref per row, call `Filter`, and rebuild the response from the ids it returns. Never call `Require` per item.
+For a list endpoint, load the candidate rows, build one ref per row, call `Decide`, and rebuild the response from the allowed rows. Never call `Require` per item.
 
 In the handler's test, add one case without the grant that asserts `oops.CodeForbidden`, and one case with it through `authztest.WithExactGrants(t, ctx, authz.NewGrant(scope, resourceID))`.
 
@@ -101,7 +103,7 @@ go test ./internal/agents/runtimepolicy -run TestStoredPolicyFixtures -args -wri
 
 The flag refuses to overwrite a fixture. Never regenerate an existing one, because those fixtures are what old stored policies are decoded against.
 
-A credential that acts for a user also carries that user's live policy. Today it decides auth-client checks only. For every other check, the engine logs one warning per engine call (`authz check passes the credential's policies but not the live policy of the user it acts for`) when the call is allowed a check that policy would refuse. `Require(Either(...))` and `Can(Either(...))` log only when it refuses every allowed alternative. After the logging window those checks will be refused. A workload session acts for nobody and is bounded by its owner only.
+A credential that acts for a user also carries that user's live policy. Today it decides auth-client checks only. For every other check, the engine logs one warning per engine call (`authz check passes the credential's policies but not the live policy of the user it acts for`) when the call is allowed a check that policy would refuse. `Require(Either(...))` and `Decide(Either(...))` log only when it refuses every allowed alternative. After the logging window those checks will be refused. A workload session acts for nobody and is bounded by its owner only.
 
 ## Never
 
@@ -109,7 +111,7 @@ A credential that acts for a user also carries that user's live policy. Today it
 - **A tool or disposition limit goes on a connect rule or a connect block and nowhere else.** The registry declares `tool` and `disposition` on `mcp:connect` only, so `ValidateSelector` refuses them on `mcp:read`, `mcp:write` and their blocks.
 - **A check with a scope the registry does not know, a resource kind that is not its scope's, or a dimension its scope does not declare is an invalid check.** `resource_kind` and `resource_id` are never dimensions.
 - **Never build a raw `authz.Check{...}` outside `internal/authz`.** The `norawauthzchecks` glint rule reports it in every package but `internal/authz` itself, outside `_test.go` files. Only a check rebuilt from data may carry `//nolint:glint // norawauthzchecks: <reason>`: stored data whatever its kind (a recorded challenge, a stored grant's own selector), or a scope a tool declares (a platform tool's `RequiredScope`). The zero `authz.Check{}` returned beside a non-nil error is allowed.
-- **Never pass a probe to `Require`, and never pass a group (`Either`) to `Require` or `Can` next to other checks, or to `Evaluate`, `Filter` or `FindMatched` at all.** `Decide` accepts both. Each misuse is an invalid check, which maps to an unexpected error rather than a 403.
+- **Never pass a probe to `Require`, and never pass a group (`Either`) to `Require` next to other checks.** `Decide` accepts both. Each misuse is an invalid check, which maps to an unexpected error rather than a 403.
 - **Never build a ref with an empty project.** An empty dimension is an invalid check. Take the project from the row you loaded, not from the request, when they can differ.
 - **Never decide whether a risk policy applies from `RiskPolicyApplies(...).Evaluate(...).Satisfied`.** Call `authz.EvaluateRiskPolicy(grants, policyID, dims)` and use `.Applies()`. It names the two reasons a policy leaves a caller alone (`RiskPolicyExempt`, `RiskPolicyNotInAudience`); anything else, including grants that could not be read or a policy that could not be evaluated, means the policy applies. The caller decides how to report the error and never uses it to skip the policy: the realtime scanner logs it and scans, `policycore` returns it.
 - **Never hand-edit a `*_gen.go` file in `authz`.** Change `registry.Definitions` (or the registry file that declares the name, such as `registry/scopes.go` or `registry/selectors.go`) and regenerate.

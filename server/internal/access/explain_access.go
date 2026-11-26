@@ -351,11 +351,11 @@ func (s *Service) ExplainResourceAccess(ctx context.Context, payload *gen.Explai
 	}
 	// Directory attribute values can carry personal data, so which mapping
 	// produced a role is shown to the same audience as the mappings.
-	showSources, err := s.authz.Evaluate(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin())
+	showSources, err := s.authz.Decide(authz.WithoutChallenges(ctx), authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin())
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "evaluate directory mapping visibility").LogError(ctx, logger)
 	}
-	if !showSources {
+	if !showSources.AllAllowed {
 		for principalURN, source := range sources {
 			source.mappings = nil
 			sources[principalURN] = source

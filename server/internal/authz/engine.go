@@ -292,8 +292,8 @@ func (e *Engine) ShouldEnforce(ctx context.Context) (bool, error) {
 // is why it disables enforcement. Three surfaces are session-less by design and
 // act for a real user anyway: assistant-token auth, the OAuth-authenticated
 // Platform MCP endpoint, and the Channels endpoint. Leaving any of them out
-// would silently turn every scope check they make into a no-op — Evaluate
-// returns true for every check when enforcement is off, so omitting a surface
+// would silently turn every scope check they make into a no-op — Decide
+// allows for every check when enforcement is off, so omitting a surface
 // here grants it everything rather than nothing.
 func enforcedWithoutSession(ctx context.Context) bool {
 	if _, isAssistant := contextvalues.GetAssistantPrincipal(ctx); isAssistant {

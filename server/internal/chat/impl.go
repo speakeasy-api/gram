@@ -711,11 +711,11 @@ func (s *Service) GetWorkUnitsTrend(ctx context.Context, payload *gen.GetWorkUni
 	if enforce, err := s.authz.ShouldEnforce(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to authorize work units trend").LogError(ctx, s.logger)
 	} else if enforce {
-		allowed, err := s.authz.Evaluate(ctx, authz.Chats(authz.ProjectIDFrom(projectID)).Read())
+		allowed, err := s.authz.Decide(authz.WithoutChallenges(ctx), authz.Chats(authz.ProjectIDFrom(projectID)).Read())
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to authorize work units trend").LogError(ctx, s.logger)
 		}
-		if !allowed {
+		if !allowed.AllAllowed {
 			return nil, oops.C(oops.CodeForbidden)
 		}
 	}
@@ -1102,7 +1102,7 @@ func (s *Service) chatVisibilityScope(ctx context.Context, authCtx *contextvalue
 	// — Evaluate short-circuits to true when enforcement is off, so check
 	// ShouldEnforce explicitly and treat the disabled case as constrained.
 	//
-	// Use Evaluate rather than Require here: this is a visibility branch, not an
+	// Use Decide rather than Require here: this is a visibility branch, not an
 	// access gate. Members legitimately hold no chat:read grant and fall through
 	// to own-session visibility, so a denial is the expected, non-error outcome.
 	// Require would stamp a chat:read "DENIED" authz challenge on every such
@@ -1113,14 +1113,14 @@ func (s *Service) chatVisibilityScope(ctx context.Context, authCtx *contextvalue
 	if enforce, err := s.authz.ShouldEnforce(ctx); err != nil {
 		s.logger.WarnContext(ctx, "could not determine RBAC enforcement for chat visibility; showing own sessions", attr.SlogError(err))
 	} else if enforce {
-		allowed, err := s.authz.Evaluate(ctx, authz.Chats(authz.ProjectIDOf(*authCtx.ProjectID)).Read())
+		allowed, err := s.authz.Decide(authz.WithoutChallenges(ctx), authz.Chats(authz.ProjectIDOf(*authCtx.ProjectID)).Read())
 		if err != nil {
 			// An unsatisfied grant yields (false, nil); a non-nil error is
 			// unexpected. Log it but still serve own sessions rather than
 			// failing the listing.
 			s.logger.WarnContext(ctx, "chat:read visibility check failed for chat listing; showing own sessions", attr.SlogError(err))
 		} else {
-			canReadAllSessions = allowed
+			canReadAllSessions = allowed.AllAllowed
 		}
 	}
 
@@ -1182,20 +1182,18 @@ func (s *Service) editableAgentIDs(ctx context.Context, authCtx *contextvalues.A
 	for _, id := range agentIDs {
 		checks = append(checks, agentWriteCheck(id))
 	}
-	allowed, err := s.authz.Filter(ctx, checks)
+	decisions, err := s.authz.Decide(ctx, checks...)
 	if err != nil {
 		// Visibility is never a hard gate: fall back to owned agents.
 		s.logger.WarnContext(ctx, "filter editable agents failed for agent session visibility; showing owned agents only", attr.SlogError(err))
 		return nil, nil
 	}
 
-	editable := make([]uuid.UUID, 0, len(allowed))
-	for _, raw := range allowed {
-		id, err := uuid.Parse(raw)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "parse editable agent id").LogError(ctx, s.logger)
+	editable := make([]uuid.UUID, 0, len(agentIDs))
+	for i, id := range agentIDs {
+		if decisions.Each[i].Allowed {
+			editable = append(editable, id)
 		}
-		editable = append(editable, id)
 	}
 	return editable, nil
 }

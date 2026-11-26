@@ -561,12 +561,12 @@ func (s *Service) readableLinkTargets(ctx context.Context, projectID uuid.UUID, 
 	if len(checks) == 0 {
 		return readable, nil
 	}
-	matched, err := s.authz.FindMatched(ctx, checks)
+	matched, err := s.authz.Decide(ctx, checks...)
 	if err != nil {
 		return nil, fmt.Errorf("filter skill links by readable target: %w", err)
 	}
 	for j, i := range checkRows {
-		readable[i] = matched[j]
+		readable[i] = matched.Each[j].Allowed
 	}
 	return readable, nil
 }
