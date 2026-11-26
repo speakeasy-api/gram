@@ -63,6 +63,7 @@ func readMessagesByOutcome(t *testing.T, reader *sdkmetric.ManualReader) map[str
 
 func captureTranscriptShadows(t *testing.T, ti *chatTestInstance, store *transcriptstore.Store, messageIDs ...uuid.UUID) {
 	t.Helper()
+	require.NoError(t, store.Prepare(t.Context(), ti.orgID))
 	tx, err := ti.conn.Begin(t.Context()) //nolint:glint // notestingrawsql: Capture runs inside the caller's message transaction; message rows come from generated seed queries.
 	require.NoError(t, err)
 	defer func() { _ = tx.Rollback(t.Context()) }()

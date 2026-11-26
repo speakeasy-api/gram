@@ -155,6 +155,9 @@ func (s *ServiceCore) RecordCompactedGeneration(ctx context.Context, projectID, 
 		})
 	}
 
+	if err := s.chatWriter.PrepareTranscripts(ctx, projectID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "prepare compacted chat messages").LogError(ctx, s.logger, logAttrs...)
+	}
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "begin compaction transaction").LogError(ctx, s.logger, logAttrs...)

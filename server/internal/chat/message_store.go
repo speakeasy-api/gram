@@ -154,6 +154,28 @@ func (w *ChatMessageWriter) WithTranscripts(transcripts *transcriptstore.Transcr
 	return w
 }
 
+// PrepareTranscripts loads the project's transcript key into the process
+// cache before a write transaction opens, so sealing inside it makes no KMS
+// call while it holds the transaction. Every caller that seals calls it before
+// it begins the transaction. A project without encrypted transcripts needs no
+// query. An error means sealing would fail too: the caller returns it in place
+// of sealing, and a write that turns out to seal nothing still succeeds.
+func (w *ChatMessageWriter) PrepareTranscripts(ctx context.Context, projectID uuid.UUID) error {
+	if w == nil || !w.transcripts.Enabled(projectID) {
+		return nil
+	}
+	organizationID, err := repo.New(w.db).GetProjectOrganizationID(ctx, projectID)
+	if err != nil {
+		return fmt.Errorf("get project organization id: %w", err)
+	}
+	return w.prepareTranscripts(ctx, organizationID, projectID)
+}
+
+func (w *ChatMessageWriter) prepareTranscripts(ctx context.Context, organizationID string, projectID uuid.UUID) error {
+	//nolint:wrapcheck // Prepare already wraps with the transcript context.
+	return w.transcripts.Prepare(ctx, organizationID, projectID)
+}
+
 func (w *ChatMessageWriter) sealTranscripts(ctx context.Context, db repo.DBTX, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID) error {
 	//nolint:wrapcheck // Seal already wraps with the transcript context.
 	return w.transcripts.Seal(ctx, db, organizationID, projectID, messageIDs)
@@ -161,9 +183,10 @@ func (w *ChatMessageWriter) sealTranscripts(ctx context.Context, db repo.DBTX, o
 
 // SealTranscripts reseals the encrypted transcripts of messages whose body the
 // caller just updated, inside the caller's transaction, for projects with
-// encrypted transcripts. Body updates delete the old transcript, so a caller
-// that skips this leaves the message on plaintext until backfill. A nil writer
-// seals nothing.
+// encrypted transcripts. Call PrepareTranscripts before beginning that
+// transaction. Body updates delete the old transcript, so a caller that skips
+// this leaves the message on plaintext until backfill. A nil writer seals
+// nothing.
 func (w *ChatMessageWriter) SealTranscripts(ctx context.Context, db repo.DBTX, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID) error {
 	if w == nil {
 		return nil
@@ -539,6 +562,9 @@ func (w *ChatMessageWriter) writeMessages(ctx context.Context, projectID uuid.UU
 	}
 	params := messageWriteParams(writes)
 
+	if err := w.prepareTranscripts(ctx, organizationID, projectID); err != nil {
+		return 0, nil, err
+	}
 	tx, err := w.db.Begin(ctx)
 	if err != nil {
 		return 0, nil, fmt.Errorf("begin chat message transaction: %w", err)
@@ -599,6 +625,9 @@ func (w *ChatMessageWriter) WriteCorrelated(ctx context.Context, projectID uuid.
 		return 0, fmt.Errorf("get project organization id: %w", err)
 	}
 
+	// An upsert that matches no row captures nothing, so it must not fail on
+	// the key. Keep the error for the write that does capture.
+	prepared := w.prepareTranscripts(ctx, organizationID, projectID)
 	tx, err := w.db.Begin(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("begin correlated chat message transaction: %w", err)
@@ -670,6 +699,9 @@ func (w *ChatMessageWriter) WriteCorrelated(ctx context.Context, projectID uuid.
 		if err := w.enqueueMessageEvents(ctx, tx, organizationID, projectID, writes, occurredAt); err != nil {
 			return 0, err
 		}
+	}
+	if prepared != nil {
+		return 0, prepared
 	}
 	if err := w.sealTranscripts(ctx, tx, organizationID, projectID, []uuid.UUID{stored.ID}); err != nil {
 		return 0, err
@@ -767,6 +799,9 @@ func (w *ChatMessageWriter) WriteExternalWithContentParts(ctx context.Context, p
 
 		publicationWrites := []MessageWrite{externalPublication(*write)}
 		inserted, err := func() (bool, error) {
+			// A retry that conflicts captures nothing, so it must not fail on
+			// the key. Keep the error for the insert that does capture.
+			prepared := w.prepareTranscripts(ctx, organizationID, projectID)
 			tx, err := w.db.Begin(ctx)
 			if err != nil {
 				return false, fmt.Errorf("begin external chat message transaction: %w", err)
@@ -790,6 +825,9 @@ func (w *ChatMessageWriter) WriteExternalWithContentParts(ctx context.Context, p
 				if _, err := repo.New(tx).CreateChatContentPart(ctx, attached); err != nil {
 					return false, fmt.Errorf("create external message content parts: %w", err)
 				}
+			}
+			if prepared != nil {
+				return false, prepared
 			}
 			if err := w.sealTranscripts(ctx, tx, organizationID, projectID, []uuid.UUID{param.ID}); err != nil {
 				return false, err
@@ -921,6 +959,9 @@ func (w *ChatMessageWriter) WriteTurn(ctx context.Context, projectID uuid.UUID, 
 	writes := pendingWrites
 	writes = append(writes, assistants...)
 
+	if err := w.prepareTranscripts(ctx, organizationID, projectID); err != nil {
+		return err
+	}
 	tx, err := w.db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)

@@ -51,6 +51,9 @@ func configureTranscripts(ctx context.Context, c *cli.Context, db *pgxpool.Pool,
 		return none, err
 	}
 	writer.WithTranscripts(transcripts)
+	// Sealing runs inside write transactions: keep the transcript key warm so
+	// a request does not wait for KMS each time the cached key expires.
+	go orgEncryption.Service.KeepWarm(ctx, orgencryption.UseCaseChatTranscripts)
 	return transcripts, nil
 }
 
