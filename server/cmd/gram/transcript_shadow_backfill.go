@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 
 	"github.com/google/uuid"
 	"github.com/urfave/cli/v2"
@@ -30,6 +31,19 @@ const (
 	// instead of spinning.
 	transcriptShadowBackfillChangedRetries = 5
 )
+
+// requireTranscriptShadowProject reports whether projectID is on the capture
+// allowlist, without touching the database or the encryption keys.
+func requireTranscriptShadowProject(values []string, projectID uuid.UUID) error {
+	projectIDs, err := parseTranscriptShadowProjectIDs(values)
+	if err != nil {
+		return err
+	}
+	if !slices.Contains(projectIDs, projectID) {
+		return fmt.Errorf("project must be listed in --%s", chatTranscriptShadowProjectIDsFlag)
+	}
+	return nil
+}
 
 // newTranscriptShadowBackfillCommand seals encrypted transcripts for a
 // project's existing chat messages, so its chat reads can open them. Run it in a
@@ -74,6 +88,12 @@ func newTranscriptShadowBackfillCommand() *cli.Command {
 			if apply && c.String("confirm-environment") != c.String("environment") {
 				return errors.New("--apply requires --confirm-environment to equal --environment")
 			}
+			// Check the allowlist before connecting or provisioning any keys.
+			// Sealing copies for a project that does not capture would leave
+			// encrypted copies that go stale on its next write.
+			if err := requireTranscriptShadowProject(c.StringSlice(chatTranscriptShadowProjectIDsFlag), projectID); err != nil {
+				return err
+			}
 
 			logger := PullLogger(ctx)
 			db, err := newDBClient(ctx, logger, otel.GetMeterProvider(), c.String("database-url"), dbClientOptions{enableUnsafeLogging: false})
@@ -92,14 +112,10 @@ func newTranscriptShadowBackfillCommand() *cli.Command {
 			}
 			// The same Transcripts the server builds at startup: it checks the
 			// schema and provisions keys for the projects on the capture
-			// allowlist. Sealing copies for a project that does not capture
-			// would leave encrypted copies that go stale on its next write.
+			// allowlist.
 			transcripts, err := newTranscripts(ctx, c, db, orgEncryption, otel.GetTracerProvider(), otel.GetMeterProvider())
 			if err != nil {
 				return err
-			}
-			if !transcripts.Enabled(projectID) {
-				return fmt.Errorf("project must be listed in --%s", chatTranscriptShadowProjectIDsFlag)
 			}
 
 			out := c.App.Writer
