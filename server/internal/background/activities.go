@@ -16,6 +16,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/sdk/temporal"
 
+	intentpolicyv1 "github.com/speakeasy-api/gram/infra/gen/gram/intentpolicy/v1"
 	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
@@ -111,6 +112,7 @@ type Publishers struct {
 	OTELLogs                gcp.Publisher[*otelv1.InboundLogRecord]
 	OTELMetrics             gcp.Publisher[*otelv1.InboundMetric]
 	OTELSpans               gcp.Publisher[*otelv1.InboundSpan]
+	IntentPolicyAssessments gcp.Publisher[*intentpolicyv1.Assessment]
 	Outbox                  topics.Publisher
 }
 
@@ -477,7 +479,7 @@ func NewActivities(
 		markTriggerFired:                 activities.NewMarkTriggerFired(triggerApp),
 		segmentChat:                      resolution_activities.NewSegmentChat(logger, db, chatClient),
 		deleteChatResolutions:            resolution_activities.NewDeleteChatResolutions(db),
-		analyzeSegment:                   resolution_activities.NewAnalyzeSegment(logger, db, chatClient, telemetryLogger),
+		analyzeSegment:                   resolution_activities.NewAnalyzeSegment(logger, db, chatClient, telemetryLogger, chatWriter),
 		getUserFeedbackForChat:           resolution_activities.NewGetUserFeedbackForChat(logger, db),
 		fetchUnanalyzedMessages:          risk_analysis.NewFetchUnanalyzed(logger, tracerProvider, db),
 		analyzeBatch:                     analyzeBatch,

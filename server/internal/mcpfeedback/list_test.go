@@ -294,3 +294,40 @@ func TestListOmitsTheEmailOfARemovedMember(t *testing.T) {
 	require.Equal(t, authCtx.UserID, *result.Feedback[0].UserID)
 	require.Nil(t, result.Feedback[0].UserEmail)
 }
+
+// ListForProject reads the project it is given rather than the request's
+// selected one, and applies the same server access check as List.
+func TestListForProjectUsesTheNamedProjectAndTheSameAccessCheck(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := seedHostedServer(t, ctx, ti)
+	other := seedHostedServer(t, ctx, ti)
+	submit(t, ctx, ti, server, mcpfeedback.SeverityBlocked, "search_logs", "search_logs timed out.")
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	// The selected project is somewhere else; only the argument names this one.
+	elsewhere := uuid.New()
+	selected := *authCtx
+	selected.ProjectID = &elsewhere
+	ctx = contextvalues.SetAuthContext(ctx, &selected)
+
+	payload := func(serverID uuid.UUID) *gen.ListPayload {
+		return &gen.ListPayload{McpServerID: serverID.String(), Severity: nil, ToolName: nil, Cursor: nil, Limit: 20, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil}
+	}
+
+	reader := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeMCPRead, server.ToolsetID.UUID.String()))
+	result, err := ti.service.ListForProject(reader, server.ProjectID, payload(server.ID))
+	require.NoError(t, err)
+	require.Len(t, result.Feedback, 1)
+
+	_, err = ti.service.ListForProject(reader, server.ProjectID, payload(other.ID))
+	requireOopsCode(t, err, oops.CodeForbidden)
+
+	_, err = ti.service.ListForProject(ctx, uuid.New(), payload(server.ID))
+	requireOopsCode(t, err, oops.CodeNotFound)
+
+	_, err = ti.service.ListForProject(ctx, server.ProjectID, &gen.ListPayload{McpServerID: server.ID.String(), Severity: nil, ToolName: nil, Cursor: nil, Limit: 0, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}

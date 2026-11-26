@@ -3178,6 +3178,20 @@ func (q *Queries) AdminSetStripeSubscription(ctx context.Context, arg AdminSetSt
 	return organization_id, err
 }
 
+const adminTryLockSecretBackfill = `-- name: AdminTryLockSecretBackfill :one
+SELECT pg_try_advisory_xact_lock(hashtextextended('secret-backfill:' || $1::text, 0)) AS locked
+`
+
+// Takes the transaction-level lock that keeps two runs of one secret backfill
+// from overlapping, on any admin replica. It reports false, without waiting,
+// when another run holds it. The lock is released when the transaction ends.
+func (q *Queries) AdminTryLockSecretBackfill(ctx context.Context, backfill string) (bool, error) {
+	row := q.db.QueryRow(ctx, adminTryLockSecretBackfill, backfill)
+	var locked bool
+	err := row.Scan(&locked)
+	return locked, err
+}
+
 const adminUpdateOrganization = `-- name: AdminUpdateOrganization :exec
 UPDATE organization_metadata
 SET

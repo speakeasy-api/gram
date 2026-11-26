@@ -130,14 +130,10 @@ func (s *ChannelsAccessService) Get(ctx context.Context, principal Principal, in
 	if !enabled {
 		return channelsAccessNotEnabled(), nil
 	}
-	permissions := make([]bool, 0, 3)
 	ref := authz.Project(authz.ProjectIDOf(project.ID))
-	for _, check := range []authz.Check{ref.ChannelsConnect(), ref.ChannelsAdmin(), ref.ChannelsReadAll()} {
-		allowed, err := s.engine.Evaluate(ctx, check)
-		if err != nil {
-			return GetMyChannelsAccessOutput{}, fmt.Errorf("evaluate %s: %w", check.Scope, err)
-		}
-		permissions = append(permissions, allowed)
+	decisions, err := s.engine.Decide(authz.WithoutChallenges(ctx), ref.ChannelsConnect(), ref.ChannelsAdmin(), ref.ChannelsReadAll())
+	if err != nil {
+		return GetMyChannelsAccessOutput{}, fmt.Errorf("evaluate channels permissions: %w", err)
 	}
 	// The answer is the access the Channels endpoint enforces: an access
 	// exception overrides the role-granted connect and read-all permissions,
@@ -147,9 +143,9 @@ func (s *ChannelsAccessService) Get(ctx context.Context, principal Principal, in
 		ProjectID:      project.ID.String(),
 		SubjectID:      principal.UserID,
 		SubjectName:    "",
-		CanConnect:     permissions[0],
-		CanAdmin:       permissions[1],
-		CanReadAll:     permissions[2],
+		CanConnect:     decisions.Each[0].Allowed,
+		CanAdmin:       decisions.Each[1].Allowed,
+		CanReadAll:     decisions.Each[2].Allowed,
 	})
 	if err != nil {
 		return GetMyChannelsAccessOutput{}, fmt.Errorf("resolve channels access: %w", err)

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
@@ -30,6 +31,8 @@ func TestMetadataOf(t *testing.T) {
 		{name: "double encoded empty", toolCalls: `"[]"`, count: 0, ids: []string{}},
 		{name: "double encoded null", toolCalls: `"null"`, count: 0, ids: []string{}},
 		{name: "unparseable string", toolCalls: `"not json"`, count: 1, ids: []string{}},
+		{name: "double encoded tab-padded empty array", toolCalls: `"\t[]"`, count: 1, ids: []string{}},
+		{name: "double encoded space-padded empty array", toolCalls: `" [] "`, count: 0, ids: []string{}},
 		{name: "object", toolCalls: `{"id":"call_a"}`, count: 0, ids: []string{}},
 		{name: "array of non-objects", toolCalls: `["call_a",1,{"id":"call_b"}]`, count: 3, ids: []string{"call_b"}},
 		{name: "id key is exact", toolCalls: `[{"ID":"call_a"},{"Id":"call_b"},{"id":"call_c"}]`, count: 3, ids: []string{"call_c"}},
@@ -228,7 +231,7 @@ func TestOpenRowsServesShadowsFallsBackAndFailsStale(t *testing.T) {
 	require.NoError(t, OpenRows(t.Context(), transcripts, f.org, f.project, rows, openRowBody))
 	opened := rows[0]
 	require.Equal(t, "sensitive example", opened.content, "a shadowed message is served from its shadow")
-	require.JSONEq(t, `{"large":9007199254740993,"n":1e2}`, string(opened.contentRaw))
+	require.True(t, sameJSON([]byte(`{"large":9007199254740993,"n":1e2}`), opened.contentRaw), "numbers survive exactly: %s", opened.contentRaw)
 	require.JSONEq(t, `[{"id":"example"}]`, string(opened.toolCalls))
 	require.Equal(t, pgtype.Text{String: "example note", Valid: true}, opened.notes)
 	require.JSONEq(t, `{"example":"summary"}`, string(opened.summaries))
@@ -262,10 +265,11 @@ func TestToolCallIDsStayWithTheirProject(t *testing.T) {
 	require.Equal(t, []string{"example"}, ids)
 }
 
-// Every body update moves source_updated_at, so a copy sealed from the old body
-// reads as stale in SQL, and a kit patch that changes content or tool calls also
-// drops the metadata and tool-call IDs measured from it.
-func TestBodyUpdatesStampSourceUpdatedAt(t *testing.T) {
+// Every body update deletes the transcript sealed from the old body, so no
+// stale transcript survives even when the caller does not reseal, and a kit
+// patch that changes content or tool calls also drops the metadata and
+// tool-call IDs measured from it. Callers reseal in the same transaction.
+func TestBodyUpdatesDeleteTheTranscript(t *testing.T) {
 	t.Parallel()
 	f := setup(t, true)
 	ctx := t.Context()
@@ -273,37 +277,31 @@ func TestBodyUpdatesStampSourceUpdatedAt(t *testing.T) {
 	f.add(t, id)
 	fixtures := fixturerepo.New(f.db)
 	messages := chatrepo.New(f.db)
-	stamp := func() pgtype.Timestamptz {
-		t.Helper()
-		row, err := fixtures.MessageFreshness(ctx, id)
-		require.NoError(t, err)
-		return row.SourceUpdatedAt
-	}
 	progress := func() Progress {
 		t.Helper()
 		p, err := f.store.Progress(ctx, f.org, f.project)
 		require.NoError(t, err)
 		return p
 	}
+	sealed := Progress{Current: 1, Waiting: 0, Unattributed: 0}
+	deleted := Progress{Current: 0, Waiting: 1, Unattributed: 0}
 	text := func(v string) pgtype.Text { return pgtype.Text{String: v, Valid: true} }
 
-	inserted := stamp()
-	require.True(t, inserted.Valid, "the column default stamps an insert")
 	f.capture(t, id)
-	require.Equal(t, Progress{Current: 1, Waiting: 0, Unattributed: 0}, progress())
+	require.Equal(t, sealed, progress())
 
 	require.NoError(t, messages.UpdateToolCallOutcome(ctx, chatrepo.UpdateToolCallOutcomeParams{ToolOutcome: text("success"), ToolOutcomeNotes: text("example note"), ID: id, ProjectID: f.project}))
-	require.Equal(t, inserted, stamp(), "unchanged notes keep the stamp")
+	require.Equal(t, sealed, progress(), "unchanged notes keep the transcript")
 	require.NoError(t, messages.UpdateToolCallOutcome(ctx, chatrepo.UpdateToolCallOutcomeParams{ToolOutcome: text("success"), ToolOutcomeNotes: text("changed note"), ID: id, ProjectID: f.project}))
-	afterNotes := stamp()
-	require.True(t, afterNotes.Time.After(inserted.Time), "changed notes move the stamp")
-	require.Equal(t, Progress{Current: 0, Waiting: 1, Unattributed: 0}, progress())
+	require.Equal(t, deleted, progress(), "changed notes delete the transcript")
 
 	f.capture(t, id)
-	_, err := messages.StoreToolCallSummary(ctx, chatrepo.StoreToolCallSummaryParams{ToolCallID: "example", Summary: []byte(`"done"`), MessageID: id, ChatID: f.chat, ProjectID: f.project})
+	_, err := messages.StoreToolCallSummary(ctx, chatrepo.StoreToolCallSummaryParams{ToolCallID: "example", Summary: []byte(`"done"`), MessageID: id, ChatID: uuid.New(), ProjectID: f.project})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	require.Equal(t, sealed, progress(), "a summary for another chat leaves the transcript")
+	_, err = messages.StoreToolCallSummary(ctx, chatrepo.StoreToolCallSummaryParams{ToolCallID: "example", Summary: []byte(`"done"`), MessageID: id, ChatID: f.chat, ProjectID: f.project})
 	require.NoError(t, err)
-	require.True(t, stamp().Time.After(afterNotes.Time), "a stored summary moves the stamp")
-	require.Equal(t, Progress{Current: 0, Waiting: 1, Unattributed: 0}, progress())
+	require.Equal(t, deleted, progress(), "a stored summary deletes the transcript")
 
 	f.capture(t, id)
 	_, err = fixtures.SetSource(ctx, pgtype.Text{String: "kit", Valid: true}, id)
@@ -321,5 +319,5 @@ func TestBodyUpdatesStampSourceUpdatedAt(t *testing.T) {
 	ids, err := fixtures.ShadowToolCallIDs(ctx, id)
 	require.NoError(t, err)
 	require.Empty(t, ids, "and its tool-call IDs")
-	require.Equal(t, Progress{Current: 0, Waiting: 1, Unattributed: 0}, progress())
+	require.Equal(t, deleted, progress(), "and the transcript")
 }

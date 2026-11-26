@@ -25175,6 +25175,723 @@ func DecodeBackfillMcpConnectGrantsResponse(decoder func(*http.Response) goahttp
 	}
 }
 
+// BuildGetSecretBackfillsRequest instantiates a HTTP request object with
+// method and path set to call the "admin" service "getSecretBackfills" endpoint
+func (c *Client) BuildGetSecretBackfillsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetSecretBackfillsAdminPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "getSecretBackfills", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetSecretBackfillsRequest returns an encoder for requests sent to the
+// admin getSecretBackfills server.
+func EncodeGetSecretBackfillsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.GetSecretBackfillsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "getSecretBackfills", "*admin.GetSecretBackfillsPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		return nil
+	}
+}
+
+// DecodeGetSecretBackfillsResponse returns a decoder for responses returned by
+// the admin getSecretBackfills endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeGetSecretBackfillsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetSecretBackfillsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetSecretBackfillsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getSecretBackfills", err)
+			}
+			err = ValidateGetSecretBackfillsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getSecretBackfills", err)
+			}
+			res := NewGetSecretBackfillsAdminSecretBackfillsOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetSecretBackfillsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getSecretBackfills", err)
+			}
+			err = ValidateGetSecretBackfillsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getSecretBackfills", err)
+			}
+			return nil, NewGetSecretBackfillsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetSecretBackfillsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getSecretBackfills", err)
+			}
+			err = ValidateGetSecretBackfillsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getSecretBackfills", err)
+			}
+			return nil, NewGetSecretBackfillsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetSecretBackfillsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getSecretBackfills", err)
+			}
+			err = ValidateGetSecretBackfillsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getSecretBackfills", err)
+			}
+			return nil, NewGetSecretBackfillsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetSecretBackfillsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getSecretBackfills", err)
+			}
+			err = ValidateGetSecretBackfillsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getSecretBackfills", err)
+			}
+			return nil, NewGetSecretBackfillsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetSecretBackfillsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getSecretBackfills", err)
+			}
+			err = ValidateGetSecretBackfillsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getSecretBackfills", err)
+			}
+			return nil, NewGetSecretBackfillsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetSecretBackfillsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getSecretBackfills", err)
+			}
+			err = ValidateGetSecretBackfillsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getSecretBackfills", err)
+			}
+			return nil, NewGetSecretBackfillsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetSecretBackfillsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getSecretBackfills", err)
+			}
+			err = ValidateGetSecretBackfillsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getSecretBackfills", err)
+			}
+			return nil, NewGetSecretBackfillsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetSecretBackfillsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getSecretBackfills", err)
+				}
+				err = ValidateGetSecretBackfillsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getSecretBackfills", err)
+				}
+				return nil, NewGetSecretBackfillsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetSecretBackfillsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getSecretBackfills", err)
+				}
+				err = ValidateGetSecretBackfillsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getSecretBackfills", err)
+				}
+				return nil, NewGetSecretBackfillsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "getSecretBackfills", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetSecretBackfillsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getSecretBackfills", err)
+			}
+			err = ValidateGetSecretBackfillsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getSecretBackfills", err)
+			}
+			return nil, NewGetSecretBackfillsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "getSecretBackfills", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildRunMarketplaceTokenBackfillRequest instantiates a HTTP request object
+// with method and path set to call the "admin" service
+// "runMarketplaceTokenBackfill" endpoint
+func (c *Client) BuildRunMarketplaceTokenBackfillRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RunMarketplaceTokenBackfillAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "runMarketplaceTokenBackfill", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeRunMarketplaceTokenBackfillRequest returns an encoder for requests
+// sent to the admin runMarketplaceTokenBackfill server.
+func EncodeRunMarketplaceTokenBackfillRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.RunMarketplaceTokenBackfillPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "runMarketplaceTokenBackfill", "*admin.RunMarketplaceTokenBackfillPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewRunMarketplaceTokenBackfillRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "runMarketplaceTokenBackfill", err)
+		}
+		return nil
+	}
+}
+
+// DecodeRunMarketplaceTokenBackfillResponse returns a decoder for responses
+// returned by the admin runMarketplaceTokenBackfill endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeRunMarketplaceTokenBackfillResponse may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeRunMarketplaceTokenBackfillResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body RunMarketplaceTokenBackfillResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runMarketplaceTokenBackfill", err)
+			}
+			err = ValidateRunMarketplaceTokenBackfillResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runMarketplaceTokenBackfill", err)
+			}
+			res := NewRunMarketplaceTokenBackfillAdminMarketplaceTokenBackfillOK(&body)
+			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body RunMarketplaceTokenBackfillUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runMarketplaceTokenBackfill", err)
+			}
+			err = ValidateRunMarketplaceTokenBackfillUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runMarketplaceTokenBackfill", err)
+			}
+			return nil, NewRunMarketplaceTokenBackfillUnavailable(&body)
+		case http.StatusUnauthorized:
+			var (
+				body RunMarketplaceTokenBackfillUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runMarketplaceTokenBackfill", err)
+			}
+			err = ValidateRunMarketplaceTokenBackfillUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runMarketplaceTokenBackfill", err)
+			}
+			return nil, NewRunMarketplaceTokenBackfillUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body RunMarketplaceTokenBackfillForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runMarketplaceTokenBackfill", err)
+			}
+			err = ValidateRunMarketplaceTokenBackfillForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runMarketplaceTokenBackfill", err)
+			}
+			return nil, NewRunMarketplaceTokenBackfillForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body RunMarketplaceTokenBackfillBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runMarketplaceTokenBackfill", err)
+			}
+			err = ValidateRunMarketplaceTokenBackfillBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runMarketplaceTokenBackfill", err)
+			}
+			return nil, NewRunMarketplaceTokenBackfillBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body RunMarketplaceTokenBackfillNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runMarketplaceTokenBackfill", err)
+			}
+			err = ValidateRunMarketplaceTokenBackfillNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runMarketplaceTokenBackfill", err)
+			}
+			return nil, NewRunMarketplaceTokenBackfillNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body RunMarketplaceTokenBackfillConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runMarketplaceTokenBackfill", err)
+			}
+			err = ValidateRunMarketplaceTokenBackfillConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runMarketplaceTokenBackfill", err)
+			}
+			return nil, NewRunMarketplaceTokenBackfillConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body RunMarketplaceTokenBackfillUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runMarketplaceTokenBackfill", err)
+			}
+			err = ValidateRunMarketplaceTokenBackfillUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runMarketplaceTokenBackfill", err)
+			}
+			return nil, NewRunMarketplaceTokenBackfillUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body RunMarketplaceTokenBackfillInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runMarketplaceTokenBackfill", err)
+			}
+			err = ValidateRunMarketplaceTokenBackfillInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runMarketplaceTokenBackfill", err)
+			}
+			return nil, NewRunMarketplaceTokenBackfillInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body RunMarketplaceTokenBackfillInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "runMarketplaceTokenBackfill", err)
+				}
+				err = ValidateRunMarketplaceTokenBackfillInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "runMarketplaceTokenBackfill", err)
+				}
+				return nil, NewRunMarketplaceTokenBackfillInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body RunMarketplaceTokenBackfillUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "runMarketplaceTokenBackfill", err)
+				}
+				err = ValidateRunMarketplaceTokenBackfillUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "runMarketplaceTokenBackfill", err)
+				}
+				return nil, NewRunMarketplaceTokenBackfillUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "runMarketplaceTokenBackfill", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body RunMarketplaceTokenBackfillGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runMarketplaceTokenBackfill", err)
+			}
+			err = ValidateRunMarketplaceTokenBackfillGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runMarketplaceTokenBackfill", err)
+			}
+			return nil, NewRunMarketplaceTokenBackfillGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "runMarketplaceTokenBackfill", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildRunRunnerKeyOrganizationBackfillRequest instantiates a HTTP request
+// object with method and path set to call the "admin" service
+// "runRunnerKeyOrganizationBackfill" endpoint
+func (c *Client) BuildRunRunnerKeyOrganizationBackfillRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RunRunnerKeyOrganizationBackfillAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "runRunnerKeyOrganizationBackfill", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeRunRunnerKeyOrganizationBackfillRequest returns an encoder for
+// requests sent to the admin runRunnerKeyOrganizationBackfill server.
+func EncodeRunRunnerKeyOrganizationBackfillRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.RunRunnerKeyOrganizationBackfillPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "runRunnerKeyOrganizationBackfill", "*admin.RunRunnerKeyOrganizationBackfillPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewRunRunnerKeyOrganizationBackfillRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "runRunnerKeyOrganizationBackfill", err)
+		}
+		return nil
+	}
+}
+
+// DecodeRunRunnerKeyOrganizationBackfillResponse returns a decoder for
+// responses returned by the admin runRunnerKeyOrganizationBackfill endpoint.
+// restoreBody controls whether the response body should be restored after
+// having been read.
+// DecodeRunRunnerKeyOrganizationBackfillResponse may return the following
+// errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeRunRunnerKeyOrganizationBackfillResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body RunRunnerKeyOrganizationBackfillResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runRunnerKeyOrganizationBackfill", err)
+			}
+			err = ValidateRunRunnerKeyOrganizationBackfillResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runRunnerKeyOrganizationBackfill", err)
+			}
+			res := NewRunRunnerKeyOrganizationBackfillAdminRunnerKeyOrganizationBackfillOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body RunRunnerKeyOrganizationBackfillUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runRunnerKeyOrganizationBackfill", err)
+			}
+			err = ValidateRunRunnerKeyOrganizationBackfillUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runRunnerKeyOrganizationBackfill", err)
+			}
+			return nil, NewRunRunnerKeyOrganizationBackfillUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body RunRunnerKeyOrganizationBackfillForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runRunnerKeyOrganizationBackfill", err)
+			}
+			err = ValidateRunRunnerKeyOrganizationBackfillForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runRunnerKeyOrganizationBackfill", err)
+			}
+			return nil, NewRunRunnerKeyOrganizationBackfillForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body RunRunnerKeyOrganizationBackfillBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runRunnerKeyOrganizationBackfill", err)
+			}
+			err = ValidateRunRunnerKeyOrganizationBackfillBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runRunnerKeyOrganizationBackfill", err)
+			}
+			return nil, NewRunRunnerKeyOrganizationBackfillBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body RunRunnerKeyOrganizationBackfillNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runRunnerKeyOrganizationBackfill", err)
+			}
+			err = ValidateRunRunnerKeyOrganizationBackfillNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runRunnerKeyOrganizationBackfill", err)
+			}
+			return nil, NewRunRunnerKeyOrganizationBackfillNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body RunRunnerKeyOrganizationBackfillConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runRunnerKeyOrganizationBackfill", err)
+			}
+			err = ValidateRunRunnerKeyOrganizationBackfillConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runRunnerKeyOrganizationBackfill", err)
+			}
+			return nil, NewRunRunnerKeyOrganizationBackfillConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body RunRunnerKeyOrganizationBackfillUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runRunnerKeyOrganizationBackfill", err)
+			}
+			err = ValidateRunRunnerKeyOrganizationBackfillUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runRunnerKeyOrganizationBackfill", err)
+			}
+			return nil, NewRunRunnerKeyOrganizationBackfillUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body RunRunnerKeyOrganizationBackfillInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runRunnerKeyOrganizationBackfill", err)
+			}
+			err = ValidateRunRunnerKeyOrganizationBackfillInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runRunnerKeyOrganizationBackfill", err)
+			}
+			return nil, NewRunRunnerKeyOrganizationBackfillInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body RunRunnerKeyOrganizationBackfillInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "runRunnerKeyOrganizationBackfill", err)
+				}
+				err = ValidateRunRunnerKeyOrganizationBackfillInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "runRunnerKeyOrganizationBackfill", err)
+				}
+				return nil, NewRunRunnerKeyOrganizationBackfillInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body RunRunnerKeyOrganizationBackfillUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "runRunnerKeyOrganizationBackfill", err)
+				}
+				err = ValidateRunRunnerKeyOrganizationBackfillUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "runRunnerKeyOrganizationBackfill", err)
+				}
+				return nil, NewRunRunnerKeyOrganizationBackfillUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "runRunnerKeyOrganizationBackfill", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body RunRunnerKeyOrganizationBackfillGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runRunnerKeyOrganizationBackfill", err)
+			}
+			err = ValidateRunRunnerKeyOrganizationBackfillGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runRunnerKeyOrganizationBackfill", err)
+			}
+			return nil, NewRunRunnerKeyOrganizationBackfillGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "runRunnerKeyOrganizationBackfill", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildGetProjectRedeployPreviewRequest instantiates a HTTP request object
 // with method and path set to call the "admin" service
 // "getProjectRedeployPreview" endpoint
@@ -34929,6 +35646,53 @@ func unmarshalAdminUpstreamOAuthMigrationStatusResponseBodyToAdminAdminUpstreamO
 	}
 	if v.Enforcement != nil {
 		res.Enforcement = unmarshalAdminUpstreamAuthEnforcementResponseBodyToAdminAdminUpstreamAuthEnforcement(v.Enforcement)
+	}
+
+	return res
+}
+
+// unmarshalAdminMarketplaceTokenBackfillResponseBodyToAdminAdminMarketplaceTokenBackfill
+// builds a value of type *admin.AdminMarketplaceTokenBackfill from a value of
+// type *AdminMarketplaceTokenBackfillResponseBody.
+func unmarshalAdminMarketplaceTokenBackfillResponseBodyToAdminAdminMarketplaceTokenBackfill(v *AdminMarketplaceTokenBackfillResponseBody) *admin.AdminMarketplaceTokenBackfill {
+	res := &admin.AdminMarketplaceTokenBackfill{
+		Attributed:           *v.Attributed,
+		Moved:                *v.Moved,
+		Skipped:              *v.Skipped,
+		NeedsOrganizationKey: *v.NeedsOrganizationKey,
+		Unattributed:         *v.Unattributed,
+		Legacy:               *v.Legacy,
+		Hashed:               *v.Hashed,
+		MissingOrganization:  *v.MissingOrganization,
+	}
+
+	return res
+}
+
+// unmarshalAdminRunnerKeyOrganizationBackfillResponseBodyToAdminAdminRunnerKeyOrganizationBackfill
+// builds a value of type *admin.AdminRunnerKeyOrganizationBackfill from a
+// value of type *AdminRunnerKeyOrganizationBackfillResponseBody.
+func unmarshalAdminRunnerKeyOrganizationBackfillResponseBodyToAdminAdminRunnerKeyOrganizationBackfill(v *AdminRunnerKeyOrganizationBackfillResponseBody) *admin.AdminRunnerKeyOrganizationBackfill {
+	res := &admin.AdminRunnerKeyOrganizationBackfill{
+		Filled:              *v.Filled,
+		Pending:             *v.Pending,
+		MissingOrganization: *v.MissingOrganization,
+	}
+
+	return res
+}
+
+// unmarshalAdminSecretBackfillOrganizationResponseBodyToAdminAdminSecretBackfillOrganization
+// builds a value of type *admin.AdminSecretBackfillOrganization from a value
+// of type *AdminSecretBackfillOrganizationResponseBody.
+func unmarshalAdminSecretBackfillOrganizationResponseBodyToAdminAdminSecretBackfillOrganization(v *AdminSecretBackfillOrganizationResponseBody) *admin.AdminSecretBackfillOrganization {
+	res := &admin.AdminSecretBackfillOrganization{
+		OrganizationID:          *v.OrganizationID,
+		Name:                    *v.Name,
+		Slug:                    *v.Slug,
+		LegacyTokens:            *v.LegacyTokens,
+		UnattributedConnections: *v.UnattributedConnections,
+		PendingRunnerKeys:       *v.PendingRunnerKeys,
 	}
 
 	return res

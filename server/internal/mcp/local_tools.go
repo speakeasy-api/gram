@@ -48,6 +48,11 @@ type localToolServer struct {
 
 	// mcpServerID is the server's mcp_servers id.
 	mcpServerID uuid.UUID
+
+	// feedbackToolEnabled reports whether the server has its feedback tool
+	// switched on, read with the mcp_servers row the request is served from.
+	// The tool's name and description are loaded only when it is true.
+	feedbackToolEnabled bool
 }
 
 // localToolCall is one call to a local tool.
@@ -127,7 +132,7 @@ func (s *Service) hostedLocalTools(ctx context.Context, logger *slog.Logger, org
 		return nil
 	}
 
-	return s.localTools(ctx, logger, localToolServer{organizationID: organizationID, projectID: payload.projectID, mcpServerID: *serverID})
+	return s.localTools(ctx, logger, localToolServer{organizationID: organizationID, projectID: payload.projectID, mcpServerID: *serverID, feedbackToolEnabled: payload.feedbackToolEnabled})
 }
 
 // localToolListEntry is a local tool as a hosted tools/list lists it.
@@ -323,7 +328,7 @@ func (s *Service) memberLocalTools(ctx context.Context, logger *slog.Logger, org
 		return nil
 	}
 
-	return s.localTools(ctx, logger, localToolServer{organizationID: organizationID, projectID: member.projectID, mcpServerID: member.serverID})
+	return s.localTools(ctx, logger, localToolServer{organizationID: organizationID, projectID: member.projectID, mcpServerID: member.serverID, feedbackToolEnabled: member.feedbackToolEnabled})
 }
 
 // localToolsOnlyKey marks a context whose tools/call only a local tool may

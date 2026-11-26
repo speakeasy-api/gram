@@ -79,8 +79,12 @@ type Service struct {
 	// tailscaleOAuthMigration serves the temporary Tailscale OAuth client
 	// migration to organization keys; nil without organization encryption.
 	tailscaleOAuthMigration *TailscaleOAuthMigration
-	assets                  *assets.Service
-	mcpSourceStorage        blobio.Reader
+
+	// secretBackfillPlatformKey lets the temporary marketplace token backfill
+	// seal tokens; nil without the platform key.
+	secretBackfillPlatformKey *SecretBackfillPlatformKey
+	assets                    *assets.Service
+	mcpSourceStorage          blobio.Reader
 
 	// gcpIdentity screens and verifies platform external credentials. Nil
 	// leaves those methods unavailable.
@@ -292,7 +296,7 @@ func NewService(
 		encryptionClient,
 	)
 
-	return &Service{orgEncryption: nil, mcpSourceStorage: nil, catalogPromotion: nil, providerHealth: nil, projectRedeployer: nil, assistantIdentities: nil, remoteSessions: nil, tailscaleOAuthMigration: nil, assets: nil, gcpIdentity: nil, mcpServerURL: nil, workosEnvironmentID: "", stripeDashboardBase: "", registry: registry,
+	return &Service{orgEncryption: nil, mcpSourceStorage: nil, catalogPromotion: nil, providerHealth: nil, projectRedeployer: nil, assistantIdentities: nil, remoteSessions: nil, tailscaleOAuthMigration: nil, secretBackfillPlatformKey: nil, assets: nil, gcpIdentity: nil, mcpServerURL: nil, workosEnvironmentID: "", stripeDashboardBase: "", registry: registry,
 		newOrganizationDefaultHost: pgtype.Text{String: "", Valid: false},
 		tracer:                     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/admin"),
 		logger:                     logger,
@@ -575,6 +579,9 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.ListOrganizationAssistants = service.preauthorizeAdmin(server.ListOrganizationAssistants)
 	server.MigrateOrganizationAssistantIdentities = service.strictAdminJSON(server.MigrateOrganizationAssistantIdentities, func() any { return new(adminserver.MigrateOrganizationAssistantIdentitiesRequestBody) })
 	server.MigrateOrganizationAssistantsToKit = service.strictAdminJSON(server.MigrateOrganizationAssistantsToKit, func() any { return new(adminserver.MigrateOrganizationAssistantsToKitRequestBody) })
+	server.GetSecretBackfills = service.preauthorizeAdmin(server.GetSecretBackfills)
+	server.RunMarketplaceTokenBackfill = service.strictAdminJSON(server.RunMarketplaceTokenBackfill, func() any { return new(adminserver.RunMarketplaceTokenBackfillRequestBody) })
+	server.RunRunnerKeyOrganizationBackfill = service.strictAdminJSON(server.RunRunnerKeyOrganizationBackfill, func() any { return new(adminserver.RunRunnerKeyOrganizationBackfillRequestBody) })
 	server.GetOrganizationEncryption = service.preauthorizeAdmin(server.GetOrganizationEncryption)
 	server.ListOrganizationEncryptionTransitions = service.preauthorizeAdmin(server.ListOrganizationEncryptionTransitions)
 	server.EnrollOrganizationEncryption = service.strictAdminJSON(server.EnrollOrganizationEncryption, func() any { return new(adminserver.EnrollOrganizationEncryptionRequestBody) })

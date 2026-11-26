@@ -534,7 +534,7 @@ func insertCHChallengeWithUser(t *testing.T, ti *testInstance, orgID, challengeI
 }
 
 // insertCHChallengeUnattributed inserts a challenge row with no scope and no
-// resource, as batch Filter and FindMatched calls log it: those record a single
+// resource, as batch Decide calls log it: those record a single
 // row for the whole batch with a nil focus check, so the dimensions that
 // identify what was checked are never written.
 func insertCHChallengeUnattributed(t *testing.T, ti *testInstance, orgID, challengeID, outcome, principalURN string) {
@@ -543,8 +543,8 @@ func insertCHChallengeUnattributed(t *testing.T, ti *testInstance, orgID, challe
 }
 
 // insertCHChallengeRow inserts a challenge row into ClickHouse for testing. An
-// empty scope/resourceKind/resourceID models the rows written by batch Filter
-// and FindMatched calls, which log without a focus check.
+// empty scope/resourceKind/resourceID models the rows written by batch Decide
+// calls, which log without a focus check.
 func insertCHChallengeRow(t *testing.T, ti *testInstance, orgID, challengeID, outcome, principalURN, scope, resourceKind, resourceID string, userID, userEmail *string) {
 	t.Helper()
 

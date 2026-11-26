@@ -149,7 +149,7 @@ func TestChannelsAdminRoleDoesNotReadPrivateConversations(t *testing.T) {
 
 // Channels is session-less by design: it authenticates an OAuth bearer or a
 // browser session through PrepareExternalContext, which binds no SessionID.
-// Evaluate reports every check as allowed when enforcement is off, so a
+// Decide reports non-auth-client checks as allowed when enforcement is off, so a
 // session-less surface left out of enforcedWithoutSession is granted
 // everything rather than nothing. This is the one place that asymmetry is
 // pinned down.
@@ -179,18 +179,18 @@ func TestChannelsSessionlessCallerIsDenied(t *testing.T) {
 	}
 	check := Check{Scope: ScopeChannelsConnect, ResourceID: "project_example"}
 
-	allowed, err := engine.Evaluate(channelsContext(), check)
+	allowed, err := allAllowed(channelsContext(), engine, check)
 	require.NoError(t, err)
 	require.False(t, allowed, "a channels caller holding no grant must be denied, not admitted by inactive enforcement")
 
-	allowed, err = engine.Evaluate(channelsContext(NewGrant(ScopeOrgAdmin, "org_example"), NewGrant(ScopeMCPConnect, "org_example")), check)
+	allowed, err = allAllowed(channelsContext(NewGrant(ScopeOrgAdmin, "org_example"), NewGrant(ScopeMCPConnect, "org_example")), engine, check)
 	require.NoError(t, err)
 	require.False(t, allowed, "organization administration and MCP access must not grant channels:connect")
 
-	allowed, err = engine.Evaluate(channelsContext(NewGrant(ScopeChannelsConnect, "project_example")), check)
+	allowed, err = allAllowed(channelsContext(NewGrant(ScopeChannelsConnect, "project_example")), engine, check)
 	require.NoError(t, err)
 	require.True(t, allowed)
-	allowed, err = engine.Evaluate(channelsContext(NewGrant(ScopeChannelsConnect, "other_project")), check)
+	allowed, err = allAllowed(channelsContext(NewGrant(ScopeChannelsConnect, "other_project")), engine, check)
 	require.NoError(t, err)
 	require.False(t, allowed, "a Channels grant for another project must not authorize this project")
 }

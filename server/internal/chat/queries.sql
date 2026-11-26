@@ -1812,27 +1812,37 @@ RETURNING id;
 
 -- name: StoreToolCallSummary :one
 -- Preserve summaries for sibling calls carried by the same assistant message.
--- A body update stamps source_updated_at so an encrypted copy of the old body
--- reads as stale.
-UPDATE chat_messages
+-- A body update deletes the encrypted transcript of the old body; the caller
+-- seals the new body in the same transaction.
+WITH stale_transcript AS (
+  DELETE FROM chat_message_transcripts t
+  WHERE t.message_id = @message_id AND t.project_id = @project_id::uuid
+    AND EXISTS (SELECT 1 FROM chat_messages cm WHERE cm.id = @message_id AND cm.chat_id = @chat_id AND cm.project_id = @project_id::uuid)
+)
+UPDATE chat_messages AS m
 SET tool_call_summaries = jsonb_set(
-  COALESCE(tool_call_summaries, '{}'::jsonb),
+  COALESCE(m.tool_call_summaries, '{}'::jsonb),
   ARRAY[@tool_call_id::text],
   @summary::jsonb
-),
-    source_updated_at = clock_timestamp()
-WHERE id = @message_id
-  AND chat_id = @chat_id
-  AND project_id = @project_id::uuid
-RETURNING (tool_call_summaries -> @tool_call_id::text)::text AS summary;
+)
+WHERE m.id = @message_id
+  AND m.chat_id = @chat_id
+  AND m.project_id = @project_id::uuid
+RETURNING (m.tool_call_summaries -> @tool_call_id::text)::text AS summary;
 
 -- name: UpdateToolCallOutcome :exec
--- tool_outcome_notes is a body field: changing it stamps source_updated_at.
-UPDATE chat_messages
+-- tool_outcome_notes is a body field: changing it deletes the encrypted
+-- transcript of the old body; the caller seals the new body in the same
+-- transaction.
+WITH stale_transcript AS (
+  DELETE FROM chat_message_transcripts t
+  WHERE t.message_id = @id AND t.project_id = @project_id::uuid
+    AND EXISTS (SELECT 1 FROM chat_messages cm WHERE cm.id = @id AND cm.project_id = @project_id::uuid AND cm.tool_outcome_notes IS DISTINCT FROM @tool_outcome_notes)
+)
+UPDATE chat_messages AS m
 SET tool_outcome = @tool_outcome,
-    tool_outcome_notes = @tool_outcome_notes,
-    source_updated_at = CASE WHEN tool_outcome_notes IS DISTINCT FROM @tool_outcome_notes THEN clock_timestamp() ELSE source_updated_at END
-WHERE id = @id AND project_id = @project_id::uuid;
+    tool_outcome_notes = @tool_outcome_notes
+WHERE m.id = @id AND m.project_id = @project_id::uuid;
 
 -- name: InsertChatResolution :one
 -- Nothing in the schema ties chat_resolutions.project_id to its chat's, so the
@@ -2380,9 +2390,9 @@ SELECT id FROM chats WHERE id = @id AND project_id = @project_id FOR NO KEY UPDA
 SELECT * FROM chat_messages WHERE project_id = @project_id AND id = @id;
 
 -- name: PatchKitProjectionMessage :execrows
--- A body change stamps source_updated_at, so an encrypted copy of the old body
--- reads as stale, and drops the metadata and tool-call IDs measured from it
--- until the message is sealed again.
+-- A body change deletes the encrypted transcript of the old body and drops
+-- the metadata and tool-call IDs measured from it; the caller seals the new
+-- body in the same transaction.
 WITH body_changed AS (
   SELECT cm.id FROM chat_messages cm
   WHERE cm.project_id = @project_id AND cm.chat_id = @chat_id AND cm.id = @id AND cm.source = 'kit'
@@ -2390,11 +2400,13 @@ WITH body_changed AS (
 ), stale_tool_call_ids AS (
   DELETE FROM chat_message_tool_call_ids tc
   WHERE tc.project_id = @project_id AND tc.message_id IN (SELECT bc.id FROM body_changed bc)
+), stale_transcript AS (
+  DELETE FROM chat_message_transcripts t
+  WHERE t.project_id = @project_id AND t.message_id IN (SELECT bc.id FROM body_changed bc)
 )
 UPDATE chat_messages AS m SET content = @content, content_raw = @content_raw,
  tool_calls = @tool_calls, content_hash = @content_hash, finish_reason = @finish_reason,
  risk_analyzed_at = CASE WHEN m.id IN (SELECT bc.id FROM body_changed bc) THEN NULL ELSE m.risk_analyzed_at END,
- source_updated_at = CASE WHEN m.id IN (SELECT bc.id FROM body_changed bc) THEN clock_timestamp() ELSE m.source_updated_at END,
  tool_call_count = CASE WHEN m.id IN (SELECT bc.id FROM body_changed bc) THEN NULL ELSE m.tool_call_count END,
  content_bytes = CASE WHEN m.id IN (SELECT bc.id FROM body_changed bc) THEN NULL ELSE m.content_bytes END,
  content_raw_bytes = CASE WHEN m.id IN (SELECT bc.id FROM body_changed bc) THEN NULL ELSE m.content_raw_bytes END,

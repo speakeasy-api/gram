@@ -4,7 +4,6 @@ import (
 	"context"
 	"log"
 	"os"
-	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -143,12 +142,6 @@ func TestCaptureLoadOwnershipAndStaleness(t *testing.T) {
 	opened, err = f.store.Load(t.Context(), f.org, f.project, id)
 	require.ErrorIs(t, err, ErrStale)
 	require.Equal(t, transcriptcrypto.Message{}, opened)
-	// Even a forged matching source_updated_at cannot make an authenticated older body current.
-	_, err = fixturerepo.New(f.db).ForgeSourceUpdatedAt(t.Context(), id, project(f.project), f.org)
-	require.NoError(t, err)
-	opened, err = f.store.Load(t.Context(), f.org, f.project, id)
-	require.ErrorIs(t, err, ErrStale)
-	require.Equal(t, transcriptcrypto.Message{}, opened)
 	f.capture(t, id)
 	opened, err = f.store.Load(t.Context(), f.org, f.project, id)
 	require.NoError(t, err)
@@ -162,21 +155,14 @@ func TestCaptureLoadOwnershipAndStaleness(t *testing.T) {
 	_, err = f.store.Load(t.Context(), f.org, f.project, other)
 	require.Error(t, err)
 }
-func TestCASRejectsChangedSnapshotAndLocksLiveSource(t *testing.T) {
+
+// Capture's message lock lasts until the caller commits, so no body update can
+// land between the snapshot it seals and the commit.
+func TestCaptureLocksTheMessageUntilCommit(t *testing.T) {
 	t.Parallel()
 	f := setup(t, true)
 	id := uuid.New()
 	f.add(t, id)
-	q := repo.New(f.db)
-	snapshot, err := q.Snapshot(t.Context(), repo.SnapshotParams{MessageID: id, ProjectID: project(f.project), OrganizationID: f.org})
-	require.NoError(t, err)
-	_, err = fixturerepo.New(f.db).ChangeNotes(t.Context(), id, project(f.project))
-	require.NoError(t, err)
-	n, err := q.Capture(t.Context(), repo.CaptureParams{ProjectID: f.project, OrganizationID: f.org, MessageID: id, ChatID: f.chat, Ciphertext: "not-used", SourceUpdatedAt: snapshot.SourceUpdatedAt})
-	require.NoError(t, err)
-	require.Zero(t, n)
-	// Capture's shared source lock lasts until the caller commits. A concurrent
-	// source edit cannot race ahead of the CAS and make it overwrite newer work.
 	tx, err := f.db.Begin(t.Context()) //nolint:glint // notestingrawsql: caller-owned transaction boundary exercises atomicity and lock lifetime; fixture data uses generated queries.
 	require.NoError(t, err)
 	defer func() { _ = tx.Rollback(t.Context()) }()
@@ -281,22 +267,6 @@ func TestSemanticJSON(t *testing.T) {
 	require.ErrorIs(t, err, ErrInvalid)
 }
 
-// beforeCAS injects a committed concurrent edit between the snapshot and CAS.
-type beforeCAS struct {
-	repo.DBTX
-	once func()
-}
-
-func (d *beforeCAS) Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
-	if d.once != nil {
-		f := d.once
-		d.once = nil
-		f()
-	}
-	tag, err := d.DBTX.Exec(ctx, sql, args...) //nolint:glint // notestingrawsql: transparently intercept generated CAS execution to synchronize concurrent transactions.
-	return tag, safe(err)
-}
-
 // afterCaptureExec runs a hook once, right after the Capture upsert and
 // before the metadata update that follows it in the same transaction.
 type afterCaptureExec struct {
@@ -346,10 +316,10 @@ func TestConcurrentCapturesOfOneMessageDoNotDeadlock(t *testing.T) {
 	require.NoError(t, second.Commit(ctx))
 }
 
-// A copy sealed before source_updated_at existed is still checked by its
-// source_hash: current while the hash matches, stale once the body changes,
-// and moved to source_updated_at (hash cleared) when it is sealed again.
-func TestLegacySourceHashCopies(t *testing.T) {
+// A transcript sealed before body updates resealed it still carries source_hash
+// and may be stale, so it reads as missing until backfill reseals it, which
+// clears the hash.
+func TestLegacySourceHashTranscripts(t *testing.T) {
 	t.Parallel()
 	f := setup(t, true)
 	ctx := t.Context()
@@ -361,19 +331,21 @@ func TestLegacySourceHashCopies(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, 1, n)
 
-	opened, err := f.store.Load(ctx, f.org, f.project, id)
-	require.NoError(t, err, "a legacy copy whose hash matches is current")
-	require.Equal(t, "sensitive example", opened.Content)
-
 	_, err = fixtures.ChangeContent(ctx, id, project(f.project))
 	require.NoError(t, err)
 	_, err = f.store.Load(ctx, f.org, f.project, id)
-	require.ErrorIs(t, err, ErrStale, "a changed body makes the legacy copy stale")
+	require.ErrorIs(t, err, ErrNotFound, "a legacy transcript reads as missing")
+	many, err := f.store.LoadMany(ctx, f.org, f.project, []uuid.UUID{id})
+	require.NoError(t, err)
+	require.Empty(t, many, "so the reader serves plaintext")
+	progress, err := f.store.Progress(ctx, f.org, f.project)
+	require.NoError(t, err)
+	require.Equal(t, Progress{Waiting: 1}, progress)
 
 	page, err := f.store.Backfill(ctx, f.org, f.project, uuid.Nil, 500)
 	require.NoError(t, err)
 	require.Equal(t, 1, page.Count)
-	opened, err = f.store.Load(ctx, f.org, f.project, id)
+	opened, err := f.store.Load(ctx, f.org, f.project, id)
 	require.NoError(t, err)
 	require.Equal(t, "changed", opened.Content)
 	hashed, err := fixtures.CopySourceHashIsSet(ctx, id)
@@ -381,23 +353,6 @@ func TestLegacySourceHashCopies(t *testing.T) {
 	require.False(t, hashed, "resealing clears the legacy hash")
 }
 
-func TestCaptureConcurrentEditReturnsChanged(t *testing.T) {
-	t.Parallel()
-	f := setup(t, true)
-	id := uuid.New()
-	f.add(t, id)
-	tx, err := f.db.Begin(t.Context()) //nolint:glint // notestingrawsql: caller-owned transaction boundary exercises atomicity and lock lifetime; fixture data uses generated queries.
-	require.NoError(t, err)
-	defer func() { _ = tx.Rollback(t.Context()) }()
-	racing := &beforeCAS{DBTX: tx, once: func() {
-		_, err := fixturerepo.New(f.db).RaceRawContent(t.Context(), id, project(f.project))
-		require.NoError(t, err)
-	}}
-	require.ErrorIs(t, f.store.Capture(t.Context(), racing, f.org, f.project, []uuid.UUID{id}), ErrChanged)
-	require.NoError(t, tx.Rollback(t.Context()))
-	_, err = f.store.Load(t.Context(), f.org, f.project, id)
-	require.ErrorIs(t, err, ErrNotFound)
-}
 func TestBackfillRollsBackEarlierSuccessfulCopies(t *testing.T) {
 	t.Parallel()
 	f := setup(t, true)
@@ -457,17 +412,16 @@ func TestNullnessFingerprintBackfill(t *testing.T) {
 		for _, value := range [][]byte{[]byte("null"), nil} {
 			_, err = fixturerepo.New(f.db).SetJSONField(t.Context(), column, value, id, project(f.project))
 			require.NoError(t, err)
+			// A write that bypasses the application leaves the transcript in
+			// place, and the read catches it.
 			_, err = f.store.Load(t.Context(), f.org, f.project, id)
 			require.ErrorIs(t, err, ErrStale)
-			progress, err := f.store.Progress(t.Context(), f.org, f.project)
-			require.NoError(t, err)
-			require.Equal(t, Progress{Waiting: 1}, progress)
 			page, err := f.store.Backfill(t.Context(), f.org, f.project, uuid.Nil, 1)
 			require.NoError(t, err)
 			require.Equal(t, 1, page.Count)
 			_, err = f.store.Load(t.Context(), f.org, f.project, id)
 			require.NoError(t, err)
-			progress, err = f.store.Progress(t.Context(), f.org, f.project)
+			progress, err := f.store.Progress(t.Context(), f.org, f.project)
 			require.NoError(t, err)
 			require.Equal(t, Progress{Current: 1}, progress)
 		}
@@ -475,9 +429,9 @@ func TestNullnessFingerprintBackfill(t *testing.T) {
 }
 
 // TestCaptureDoesNotInvertChatAndWrapLocks reproduces the compaction schedule:
-// compaction owns the chat lock, while ordinary capture has already unwrapped
-// its key and is about to take the CAS chat lock. Transactional key unwrap must
-// not UPDATE last_unwrapped_at and hold the wrap lock across that CAS.
+// compaction owns the chat lock, while ordinary capture waits for it at its
+// snapshot. Compaction must still unwrap its key and finish: ordinary capture
+// holds no wrap lock while it waits.
 func TestCaptureDoesNotInvertChatAndWrapLocks(t *testing.T) {
 	t.Parallel()
 	f := setup(t, true)
@@ -493,8 +447,6 @@ func TestCaptureDoesNotInvertChatAndWrapLocks(t *testing.T) {
 	normal, err := f.db.Begin(ctx) //nolint:glint // notestingrawsql: caller-owned transaction boundary exercises atomicity and lock lifetime; fixture data uses generated queries.
 	require.NoError(t, err)
 	defer func() { _ = normal.Rollback(ctx) }()
-	paused, release := make(chan struct{}), make(chan struct{})
-	released := false
 	// Fresh services ensure both captures unwrap cold keys through their own
 	// caller transactions rather than observing a warmed process cache.
 	cold := func() *Store {
@@ -505,39 +457,27 @@ func TestCaptureDoesNotInvertChatAndWrapLocks(t *testing.T) {
 		return store
 	}
 	ordinaryStore, compactionStore := cold(), cold()
-	intercepted := &beforeCAS{DBTX: normal, once: func() {
-		close(paused)
-		select {
-		case <-release:
-		case <-ctx.Done():
-		}
-	}}
 	result := make(chan error, 1)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		result <- ordinaryStore.Capture(ctx, intercepted, f.org, f.project, []uuid.UUID{normalID})
+		result <- ordinaryStore.Capture(ctx, normal, f.org, f.project, []uuid.UUID{normalID})
 	}()
 	defer func() {
-		if !released {
-			close(release)
-		}
 		cancel()
 		<-done // Join before rolling back the caller transaction on a failure path.
 	}()
-	select {
-	case <-paused:
-	case <-ctx.Done():
-		t.Fatal("ordinary capture did not reach CAS before deadline")
-	}
-	// This must finish before releasing the ordinary CAS. With an unwrap UPDATE,
-	// it waits on ordinary capture's wrap lock and cannot commit its chat lock.
+	require.Eventually(t, func() bool {
+		var waiting int
+		err := f.db.QueryRow(ctx, `SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'`).Scan(&waiting) //nolint:glint // notestingrawsql: observes lock waits to order two transactions deterministically.
+		return err == nil && waiting > 0
+	}, 5*time.Second, 10*time.Millisecond, "ordinary capture waits for the chat lock")
+	// This must finish while ordinary capture waits. If ordinary capture held a
+	// wrap lock, compaction's unwrap would wait on it and never commit.
 	compactionCtx, stop := context.WithTimeout(ctx, 2*time.Second)
 	defer stop()
 	require.NoError(t, compactionStore.Capture(compactionCtx, compaction, f.org, f.project, []uuid.UUID{compactionID}))
 	require.NoError(t, compaction.Commit(ctx))
-	close(release)
-	released = true
 	select {
 	case err := <-result:
 		require.NoError(t, err)
@@ -564,13 +504,10 @@ func TestStorageErrorFingerprintBackfill(t *testing.T) {
 		opened, err := f.store.Load(t.Context(), f.org, f.project, id)
 		require.ErrorIs(t, err, ErrStale)
 		require.Equal(t, transcriptcrypto.Message{}, opened)
-		progress, err := f.store.Progress(t.Context(), f.org, f.project)
-		require.NoError(t, err)
-		require.Equal(t, Progress{Waiting: 1}, progress)
 		page, err := f.store.Backfill(t.Context(), f.org, f.project, uuid.Nil, 1)
 		require.NoError(t, err)
 		require.Equal(t, 1, page.Count)
-		progress, err = f.store.Progress(t.Context(), f.org, f.project)
+		progress, err := f.store.Progress(t.Context(), f.org, f.project)
 		require.NoError(t, err)
 		require.Equal(t, Progress{Current: 1}, progress)
 		opened, err = f.store.Load(t.Context(), f.org, f.project, id)
@@ -585,10 +522,8 @@ func TestStorageErrorFingerprintBackfill(t *testing.T) {
 		require.NoError(t, err)
 		require.NotContains(t, ciphertext, "sensitive provider error")
 	}
-	// A forged public fingerprint cannot authenticate changed error text.
+	// Error text changed by a write that bypassed the application reads as stale.
 	_, err := fixturerepo.New(f.db).SetStorageError(t.Context(), pgtype.Text{String: "sensitive forged error", Valid: true}, id, project(f.project))
-	require.NoError(t, err)
-	_, err = fixturerepo.New(f.db).ForgeSourceUpdatedAt(t.Context(), id, project(f.project), f.org)
 	require.NoError(t, err)
 	opened, err := f.store.Load(t.Context(), f.org, f.project, id)
 	require.ErrorIs(t, err, ErrStale)
@@ -631,25 +566,4 @@ func TestShadowOwnershipForeignKeys(t *testing.T) {
 	n, err := q.InsertShadow(t.Context(), id, f.project, f.org)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, n)
-}
-
-// Copies sealed before source_updated_at existed still carry source_hash, and
-// the reads check them with this fingerprint until they are sealed again. Keep
-// every copy of the expression identical.
-func TestSourceFingerprintExpressionsAgree(t *testing.T) {
-	t.Parallel()
-	expression := regexp.MustCompile(`sha256\(convert_to\(jsonb_build_array\([^\n]*?\)::text,'UTF8'\)\)`)
-	var canonical string
-	for path, count := range map[string]int{"queries.sql": 4, "fixtures/queries.sql": 1} {
-		source, err := os.ReadFile(path)
-		require.NoError(t, err)
-		matches := expression.FindAllString(string(source), -1)
-		require.Len(t, matches, count, path)
-		for _, match := range matches {
-			if canonical == "" {
-				canonical = match
-			}
-			require.Equal(t, canonical, match, path)
-		}
-	}
 }

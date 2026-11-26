@@ -72,7 +72,7 @@ func TestSeededProblemsShowRightAfterAFreshSeed(t *testing.T) {
 	require.NoError(t, err)
 	logger := testenv.NewLogger(t)
 	require.NoError(t, catalogseed.EnsureCatalog(ctx, db))
-	s, err := seedPostgres(ctx, logger, db, assetstest.NewTestBlobStore(t), testenv.NewEncryptionClient(t), testAssistantIssuerURL, testServerURL, spec, aivendors.CompiledSnapshot())
+	s, err := seedPostgres(ctx, logger, db, assetstest.NewTestBlobStore(t), testenv.NewEncryptionClient(t), testAssistantIssuerURL, testServerURL, spec, aivendors.CompiledSnapshot(), time.Time{})
 	require.NoError(t, err)
 
 	rows, served, err := s.connectionHealthRows()

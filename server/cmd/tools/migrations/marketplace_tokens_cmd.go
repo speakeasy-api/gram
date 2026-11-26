@@ -15,9 +15,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/speakeasy-api/gram/server/cmd/tools/migrations/marketplacetokenbackfill"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/plugins/marketplacetokens"
+	"github.com/speakeasy-api/gram/server/internal/secretbackfills/marketplacetokenbackfill"
 )
 
 const (
@@ -115,8 +115,8 @@ func parseMarketplaceTokensFlags(args []string, getenv func(string) string) (mar
 }
 
 func formatMarketplaceTokensReport(mode, environment string, report marketplacetokenbackfill.Report) string {
-	return fmt.Sprintf("mode=%s environment=%s attributed=%d moved=%d skipped=%d needs_organization_key=%d unattributed=%d legacy=%d hashed=%d\n",
-		mode, environment, report.Attributed, report.Moved, report.Skipped, report.NeedsOrganizationKey, report.Counts.Unattributed, report.Counts.Legacy, report.Counts.Hashed)
+	return fmt.Sprintf("mode=%s environment=%s attributed=%d moved=%d skipped=%d needs_organization_key=%d unattributed=%d legacy=%d hashed=%d missing_organization=%d\n",
+		mode, environment, report.Attributed, report.Moved, report.Skipped, report.NeedsOrganizationKey, report.Counts.Unattributed, report.Counts.Legacy, report.Counts.Hashed, report.Counts.MissingOrganization)
 }
 
 func runMarketplaceTokens(args []string, stdout io.Writer, getenv func(string) string) int {
@@ -148,7 +148,7 @@ func runMarketplaceTokens(args []string, stdout io.Writer, getenv func(string) s
 		tokens = marketplacetokens.WithoutOrganizationEncryption(slog.New(slog.DiscardHandler), pool, platform)
 	}
 
-	report, err := marketplacetokenbackfill.Run(ctx, pool, tokens, marketplacetokenbackfill.Options{Apply: cfg.apply, BatchSize: cfg.batchSize})
+	report, err := marketplacetokenbackfill.Run(ctx, pool, tokens, marketplacetokenbackfill.Options{OrganizationID: "", Apply: cfg.apply, BatchSize: cfg.batchSize})
 	if err != nil {
 		_, _ = fmt.Fprintf(stdout, "migration failed after attributing %d and moving %d connections: %v\n", report.Attributed, report.Moved, err)
 		return 1

@@ -54,7 +54,6 @@ const (
 
 	outcomeNotFound outcome = "not_found"
 	outcomeStale    outcome = "stale"
-	outcomeChanged  outcome = "changed"
 	outcomeInvalid  outcome = "invalid"
 	outcomeError    outcome = "error"
 )
@@ -67,8 +66,6 @@ func classify(err error) outcome {
 		return outcomeNotFound
 	case errors.Is(err, ErrStale):
 		return outcomeStale
-	case errors.Is(err, ErrChanged):
-		return outcomeChanged
 	case errors.Is(err, ErrInvalid):
 		return outcomeInvalid
 	default:

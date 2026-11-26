@@ -132,11 +132,6 @@ func TestLoadManyFailsThePageWhenAShadowIsStale(t *testing.T) {
 	require.ErrorIs(t, err, ErrStale)
 	require.Nil(t, opened)
 
-	_, err = fixturerepo.New(f.db).ForgeSourceUpdatedAt(t.Context(), id, project(f.project), f.org)
-	require.NoError(t, err)
-	opened, err = f.store.LoadMany(t.Context(), f.org, f.project, []uuid.UUID{id})
-	require.ErrorIs(t, err, ErrStale, "a forged matching source_updated_at cannot make an older body current")
-	require.Nil(t, opened)
 }
 
 func TestLoadManyIsScopedToTheProjectAndOrganization(t *testing.T) {
@@ -186,7 +181,6 @@ func TestClassifyCoversFailureOutcomes(t *testing.T) {
 		{nil, outcomeSuccess},
 		{ErrNotFound, outcomeNotFound},
 		{fmt.Errorf("load: %w", ErrStale), outcomeStale},
-		{fmt.Errorf("capture: %w", ErrChanged), outcomeChanged},
 		{ErrInvalid, outcomeInvalid},
 		{safe(context.DeadlineExceeded), outcomeError},
 	} {
