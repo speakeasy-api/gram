@@ -122,6 +122,9 @@ type Endpoints struct {
 	DisableUpstreamAuthEnforcement          goa.Endpoint
 	BackfillMcpAuthGrants                   goa.Endpoint
 	BackfillMcpConnectGrants                goa.Endpoint
+	GetSecretBackfills                      goa.Endpoint
+	RunMarketplaceTokenBackfill             goa.Endpoint
+	RunRunnerKeyOrganizationBackfill        goa.Endpoint
 	GetProjectRedeployPreview               goa.Endpoint
 	RedeployProject                         goa.Endpoint
 	ListCustomDomains                       goa.Endpoint
@@ -284,6 +287,9 @@ func NewEndpoints(s Service) *Endpoints {
 		DisableUpstreamAuthEnforcement:          NewDisableUpstreamAuthEnforcementEndpoint(s, a.APIKeyAuth),
 		BackfillMcpAuthGrants:                   NewBackfillMcpAuthGrantsEndpoint(s, a.APIKeyAuth),
 		BackfillMcpConnectGrants:                NewBackfillMcpConnectGrantsEndpoint(s, a.APIKeyAuth),
+		GetSecretBackfills:                      NewGetSecretBackfillsEndpoint(s, a.APIKeyAuth),
+		RunMarketplaceTokenBackfill:             NewRunMarketplaceTokenBackfillEndpoint(s, a.APIKeyAuth),
+		RunRunnerKeyOrganizationBackfill:        NewRunRunnerKeyOrganizationBackfillEndpoint(s, a.APIKeyAuth),
 		GetProjectRedeployPreview:               NewGetProjectRedeployPreviewEndpoint(s, a.APIKeyAuth),
 		RedeployProject:                         NewRedeployProjectEndpoint(s, a.APIKeyAuth),
 		ListCustomDomains:                       NewListCustomDomainsEndpoint(s, a.APIKeyAuth),
@@ -426,6 +432,9 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.DisableUpstreamAuthEnforcement = m(e.DisableUpstreamAuthEnforcement)
 	e.BackfillMcpAuthGrants = m(e.BackfillMcpAuthGrants)
 	e.BackfillMcpConnectGrants = m(e.BackfillMcpConnectGrants)
+	e.GetSecretBackfills = m(e.GetSecretBackfills)
+	e.RunMarketplaceTokenBackfill = m(e.RunMarketplaceTokenBackfill)
+	e.RunRunnerKeyOrganizationBackfill = m(e.RunRunnerKeyOrganizationBackfill)
 	e.GetProjectRedeployPreview = m(e.GetProjectRedeployPreview)
 	e.RedeployProject = m(e.RedeployProject)
 	e.ListCustomDomains = m(e.ListCustomDomains)
@@ -2835,6 +2844,75 @@ func NewBackfillMcpConnectGrantsEndpoint(s Service, authAPIKeyFn security.AuthAP
 			return nil, err
 		}
 		return s.BackfillMcpConnectGrants(ctx, p)
+	}
+}
+
+// NewGetSecretBackfillsEndpoint returns an endpoint function that calls the
+// method "getSecretBackfills" of service "admin".
+func NewGetSecretBackfillsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetSecretBackfillsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetSecretBackfills(ctx, p)
+	}
+}
+
+// NewRunMarketplaceTokenBackfillEndpoint returns an endpoint function that
+// calls the method "runMarketplaceTokenBackfill" of service "admin".
+func NewRunMarketplaceTokenBackfillEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RunMarketplaceTokenBackfillPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.RunMarketplaceTokenBackfill(ctx, p)
+	}
+}
+
+// NewRunRunnerKeyOrganizationBackfillEndpoint returns an endpoint function
+// that calls the method "runRunnerKeyOrganizationBackfill" of service "admin".
+func NewRunRunnerKeyOrganizationBackfillEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RunRunnerKeyOrganizationBackfillPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.RunRunnerKeyOrganizationBackfill(ctx, p)
 	}
 }
 

@@ -286,14 +286,14 @@ func (s *Service) GetServerIdentityImpact(ctx context.Context, payload *gen.GetS
 		checks = append(checks, authz.MCPServers(authz.ProjectIDOf(row.ProjectID)).Read())
 	}
 
-	readable, err := s.authz.FindMatched(ctx, checks)
+	decisions, err := s.authz.Decide(ctx, checks...)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "check MCP server read access").LogError(ctx, logger)
 	}
 	result := &gen.ServerIdentityImpactResult{Servers: []*gen.ServerIdentityImpactServer{}, HiddenServerCount: 0, DetachClientIds: uuidStrings(change.detachClients), ReleaseClientIds: uuidStrings(change.releaseClients)}
 	for i, candidate := range candidates {
 		switch {
-		case !readable[i]:
+		case !decisions.Each[i].Allowed:
 			result.HiddenServerCount++
 		case candidate.Impact != "":
 			result.Servers = append(result.Servers, candidate)
@@ -328,12 +328,12 @@ func (s *Service) previewOfferReplacement(ctx context.Context, logger *slog.Logg
 	for _, server := range servers {
 		checks = append(checks, authz.MCPServer(authz.MCPServerIDOf(mcpGrantResourceID(server.ID, server.ToolsetID)), authz.ProjectIDOf(projectID)).Read())
 	}
-	readable, err := s.authz.FindMatched(ctx, checks)
+	decisions, err := s.authz.Decide(ctx, checks...)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "check MCP server read access").LogError(ctx, logger)
 	}
 	for i, server := range servers {
-		if !readable[i] {
+		if !decisions.Each[i].Allowed {
 			result.HiddenServerCount++
 			continue
 		}

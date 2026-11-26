@@ -111,13 +111,7 @@ func TestInvalidCheckOnUnenforcedPathFailsInTests(t *testing.T) {
 	require.ErrorIs(t, engine.Require(ctx, Either(typo, typo)), ErrInvalidCheck)
 	_, err := engine.Decide(ctx, typo)
 	require.ErrorIs(t, err, ErrInvalidCheck)
-	_, err = engine.Evaluate(ctx, typo)
-	require.ErrorIs(t, err, ErrInvalidCheck)
-	_, err = engine.Can(ctx, Either(typo, typo))
-	require.ErrorIs(t, err, ErrInvalidCheck)
-	_, err = engine.Filter(ctx, []Check{typo})
-	require.ErrorIs(t, err, ErrInvalidCheck)
-	_, err = engine.FindMatched(ctx, []Check{typo})
+	_, err = engine.Decide(ctx, Either(typo, typo))
 	require.ErrorIs(t, err, ErrInvalidCheck)
 
 	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeProjectRead, ResourceID: "project-one"}))
@@ -335,7 +329,7 @@ func TestGrantsAuthorizeRejectsWildcardResourceID(t *testing.T) {
 	require.False(t, allowed)
 }
 
-func TestGroup_OnlyAsTheSingleCheckOfRequireOrCan(t *testing.T) {
+func TestGroup_OnlyAsTheSingleCheckOfRequire(t *testing.T) {
 	t.Parallel()
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	group := Either(Project(ProjectIDFrom("project-one")).Write(), Project(ProjectIDFrom("project-one")).Read())
@@ -350,23 +344,15 @@ func TestGroup_OnlyAsTheSingleCheckOfRequireOrCan(t *testing.T) {
 		}
 		requireInvalid(engine.Require(ctx, group, Project(ProjectIDFrom("project-one")).Read()))
 		requireInvalid(engine.Require(ctx, Either(group)))
-		_, err := engine.Evaluate(ctx, group)
-		requireInvalid(err)
-		_, err = engine.Filter(ctx, []Check{group})
-		requireInvalid(err)
-		_, err = engine.FindMatched(ctx, []Check{group})
-		requireInvalid(err)
-		_, err = engine.Can(ctx, group, Project(ProjectIDFrom("project-one")).Read())
-		requireInvalid(err)
-		_, err = engine.Can(ctx, Either(group))
+		_, err := engine.Decide(ctx, Either(group))
 		requireInvalid(err)
 		requireInvalid(engine.Require(ctx, Either()))
-		_, err = engine.Can(ctx, Either())
+		_, err = engine.Decide(ctx, Either())
 		requireInvalid(err)
 	}
 }
 
-// A probe is a discovery question: Can and Filter answer it, Require refuses
+// A probe is a discovery question: Decide answers it, Require refuses
 // it, alone or inside Either, whether or not RBAC is enforced.
 func TestProbe_RefusedByRequire(t *testing.T) {
 	t.Parallel()
@@ -374,12 +360,9 @@ func TestProbe_RefusedByRequire(t *testing.T) {
 	probe := MCPServer(MCPServerIDFrom("server-1"), ProjectIDFrom("project-1")).Connect().Probe()
 
 	for name, ctx := range shapeTestContexts(t, []Grant{NewGrant(ScopeMCPConnect, "server-1")}) {
-		can, err := engine.Can(ctx, probe)
+		decided, err := engine.Decide(ctx, probe)
 		require.NoError(t, err, name)
-		require.True(t, can, name)
-		ids, err := engine.Filter(ctx, []Check{probe})
-		require.NoError(t, err, name)
-		require.Equal(t, []string{"server-1"}, ids, name)
+		require.True(t, decided.AllAllowed, name)
 
 		for call, err := range map[string]error{
 			"require":       engine.Require(ctx, probe),

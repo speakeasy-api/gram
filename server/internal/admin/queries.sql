@@ -1580,3 +1580,9 @@ WHERE NOT @with_values_only::boolean
    OR om.id = ANY(@value_organization_ids::text[])
 GROUP BY 1
 ORDER BY 1;
+
+-- name: AdminTryLockSecretBackfill :one
+-- Takes the transaction-level lock that keeps two runs of one secret backfill
+-- from overlapping, on any admin replica. It reports false, without waiting,
+-- when another run holds it. The lock is released when the transaction ends.
+SELECT pg_try_advisory_xact_lock(hashtextextended('secret-backfill:' || @backfill::text, 0)) AS locked;

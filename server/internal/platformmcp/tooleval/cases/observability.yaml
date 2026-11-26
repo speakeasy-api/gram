@@ -281,3 +281,21 @@
 - id: obs-negative-email-dashboard-pdf
   prompt: Email a PDF of the Weekly MCP usage dashboard to the exec team every Monday morning.
   expect: []
+
+# Feedback agents sent through an MCP server's own feedback tool, as opposed
+# to skill feedback or feedback about the Platform MCP itself.
+- id: obs-mcp-feedback-billing
+  prompt: What have agents been reporting about the Billing API server in Payments? Show me the feedback they left.
+  expect: [list_mcp_feedback]
+  allow: [get_mcp]
+  args:
+    project_slug: payments
+    mcp_id: 5f1e2a00-0000-4000-8000-000000000021
+- id: obs-mcp-feedback-blocked
+  prompt: Which reports from agents say they got completely stuck using Billing API in Payments? Just the blocking ones.
+  expect: [list_mcp_feedback]
+  allow: [get_mcp]
+  args:
+    project_slug: payments
+    mcp_id: 5f1e2a00-0000-4000-8000-000000000021
+    severity: blocked

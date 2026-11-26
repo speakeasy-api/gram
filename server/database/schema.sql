@@ -790,12 +790,15 @@ CREATE TABLE IF NOT EXISTS assets (
 COMMENT ON COLUMN assets.id IS '@access: confidential';
 COMMENT ON COLUMN assets.project_id IS '@access: confidential';
 COMMENT ON COLUMN assets.organization_id IS '@access: confidential';
-COMMENT ON COLUMN assets.name IS '@access: confidential';
-COMMENT ON COLUMN assets.url IS '@access: confidential';
+COMMENT ON COLUMN assets.name IS 'Stored asset name, which includes a content digest for chat attachments.
+@access: restricted';
+COMMENT ON COLUMN assets.url IS 'Storage path for the asset, which includes a content digest for chat attachments.
+@access: restricted';
 COMMENT ON COLUMN assets.kind IS '@access: confidential';
 COMMENT ON COLUMN assets.content_type IS '@access: confidential';
 COMMENT ON COLUMN assets.content_length IS '@access: confidential';
-COMMENT ON COLUMN assets.sha256 IS '@access: confidential';
+COMMENT ON COLUMN assets.sha256 IS 'SHA-256 digest of the stored asset content.
+@access: restricted';
 COMMENT ON COLUMN assets.created_at IS '@access: confidential';
 COMMENT ON COLUMN assets.updated_at IS '@access: confidential';
 COMMENT ON COLUMN assets.deleted_at IS '@access: confidential';
@@ -7442,7 +7445,8 @@ COMMENT ON COLUMN chat_content_parts.id IS '@access: confidential';
 COMMENT ON COLUMN chat_content_parts.chat_id IS '@access: confidential';
 COMMENT ON COLUMN chat_content_parts.project_id IS '@access: confidential';
 COMMENT ON COLUMN chat_content_parts.kind IS '@access: confidential';
-COMMENT ON COLUMN chat_content_parts.content_asset_url IS '@access: confidential';
+COMMENT ON COLUMN chat_content_parts.content_asset_url IS 'Storage path for the content part. Its file name is a digest of the content.
+@access: restricted';
 COMMENT ON COLUMN chat_content_parts.external_id IS '@access: confidential';
 COMMENT ON COLUMN chat_content_parts.parent_chat_message_id IS '@access: confidential';
 COMMENT ON COLUMN chat_content_parts.version IS '@access: confidential';

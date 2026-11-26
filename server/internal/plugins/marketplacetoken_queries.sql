@@ -60,8 +60,9 @@ WHERE c.id = @id
 -- name: AttributeGitHubConnections :execrows
 -- The backfill's first step: copies each project's organization onto up to
 -- limit connections stored without one, so every later write fences on the
--- right organization. projects.organization_id has no foreign key, so a
--- project whose organization has no metadata row is never picked: its
+-- right organization. With organization_id set, it picks only connections of
+-- that organization's projects. projects.organization_id has no foreign key,
+-- so a project whose organization has no metadata row is never picked: its
 -- connection keeps a NULL organization_id and counts as unattributed. It
 -- writes no token column, and updated_at stays the last-published timestamp.
 UPDATE plugin_github_connections AS c
@@ -72,6 +73,7 @@ WHERE c.id IN (
     JOIN projects AS tp ON tp.id = target.project_id
     JOIN organization_metadata AS om ON om.id = tp.organization_id
     WHERE target.organization_id IS NULL
+      AND (sqlc.narg('organization_id')::text IS NULL OR tp.organization_id = sqlc.narg('organization_id')::text)
     ORDER BY target.id
     LIMIT @limit_value
   )
@@ -80,23 +82,55 @@ WHERE c.id IN (
 
 -- name: ListLegacyMarketplaceTokens :many
 -- The backfill's next page of connections that still hold a plaintext token,
--- paged by id. Connections without an organization are left to
--- AttributeGitHubConnections.
+-- paged by id, of one organization when organization_id is set. Connections
+-- without an organization are left to AttributeGitHubConnections.
 SELECT c.id, c.organization_id::text AS organization_id, c.marketplace_token::text AS legacy_token
 FROM plugin_github_connections AS c
 WHERE c.marketplace_token IS NOT NULL
   AND c.organization_id IS NOT NULL
+  AND (sqlc.narg('organization_id')::text IS NULL OR c.organization_id = sqlc.narg('organization_id')::text)
   AND (sqlc.narg('after')::uuid IS NULL OR c.id > sqlc.narg('after')::uuid)
 ORDER BY c.id
 LIMIT @limit_value;
 
 -- name: CountMarketplaceTokenBackfill :one
--- What the backfill has left to do across every organization.
+-- What the backfill has left to do across every organization, or in one
+-- organization when organization_id is set. A connection without an
+-- organization_id belongs to its project's organization. A connection whose
+-- project's organization has no metadata row counts only as
+-- missing_organization: the backfill can neither attribute it nor move its
+-- plaintext token. projects.organization_id has no foreign key, so such a
+-- project can exist; a connection with an organization_id always has a
+-- metadata row, through plugin_github_connections_organization_id_fkey.
 SELECT
+    COUNT(*) FILTER (WHERE c.organization_id IS NULL AND om.id IS NOT NULL)::bigint AS unattributed,
+    COUNT(*) FILTER (WHERE c.marketplace_token IS NOT NULL AND om.id IS NOT NULL)::bigint AS legacy,
+    COUNT(*) FILTER (WHERE c.marketplace_token_hash IS NOT NULL)::bigint AS hashed,
+    COUNT(*) FILTER (WHERE om.id IS NULL)::bigint AS missing_organization
+FROM plugin_github_connections AS c
+LEFT JOIN projects AS p ON p.id = c.project_id
+LEFT JOIN organization_metadata AS om ON om.id = p.organization_id
+WHERE sqlc.narg('organization_id')::text IS NULL
+   OR COALESCE(c.organization_id, p.organization_id) = sqlc.narg('organization_id')::text;
+
+-- name: ListMarketplaceTokenBackfillOrganizations :many
+-- The organizations the backfill has work left in, with how much: connections
+-- without an organization_id and plaintext tokens. A connection without an
+-- organization_id belongs to its project's organization. Organizations without
+-- a metadata row are left out, because the backfill cannot attribute their
+-- connections.
+SELECT
+    om.id AS organization_id,
+    om.name AS organization_name,
+    om.slug AS organization_slug,
     COUNT(*) FILTER (WHERE c.organization_id IS NULL)::bigint AS unattributed,
-    COUNT(*) FILTER (WHERE c.marketplace_token IS NOT NULL)::bigint AS legacy,
-    COUNT(*) FILTER (WHERE c.marketplace_token_hash IS NOT NULL)::bigint AS hashed
-FROM plugin_github_connections AS c;
+    COUNT(*) FILTER (WHERE c.marketplace_token IS NOT NULL)::bigint AS legacy
+FROM plugin_github_connections AS c
+LEFT JOIN projects AS p ON p.id = c.project_id
+JOIN organization_metadata AS om ON om.id = COALESCE(c.organization_id, p.organization_id)
+WHERE c.organization_id IS NULL OR c.marketplace_token IS NOT NULL
+GROUP BY om.id, om.name, om.slug
+ORDER BY om.name, om.id;
 
 -- name: ListMarketplaceTokensWaiting :many
 -- Tokens of the organization with a platform-key copy and no

@@ -123,7 +123,8 @@ func (s *Service) HandleGetProtectedResource(w http.ResponseWriter, r *http.Requ
 
 	logger := s.logger.With(attr.SlogToolsetMCPSlug(mcpSlug))
 
-	mcpEndpoint, mcpServer, metaServer, err := s.ResolveMCPEndpointAndServer(ctx, logger, mcpSlug)
+	resolved, err := s.ResolveMCPEndpointAndServer(ctx, logger, mcpSlug)
+	mcpEndpoint, mcpServer, metaServer := resolved.Endpoint, resolved.Server, resolved.MetaServer
 	switch {
 	case err == nil:
 		if metaServer != nil {
@@ -151,7 +152,8 @@ func (s *Service) HandleGetAuthorizationServer(w http.ResponseWriter, r *http.Re
 
 	logger := s.logger.With(attr.SlogToolsetMCPSlug(mcpSlug))
 
-	mcpEndpoint, mcpServer, metaServer, err := s.ResolveMCPEndpointAndServer(ctx, logger, mcpSlug)
+	resolved, err := s.ResolveMCPEndpointAndServer(ctx, logger, mcpSlug)
+	mcpEndpoint, mcpServer, metaServer := resolved.Endpoint, resolved.Server, resolved.MetaServer
 	switch {
 	case err == nil:
 		if metaServer != nil {
