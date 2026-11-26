@@ -41,7 +41,7 @@ func TestTranscriptShadowDisabled(t *testing.T) {
 	require.NoError(t, os.Unsetenv("GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS"))
 	c := newTranscriptShadowCLIContext(t, nil)
 	require.Empty(t, c.StringSlice(chatTranscriptShadowProjectIDsFlag))
-	shadow, err := configureTranscriptShadow(t.Context(), c, nil, nil, orgEncryptionDeps{}, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t))
+	shadow, err := configureTranscripts(t.Context(), c, nil, nil, orgEncryptionDeps{}, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t))
 	require.NoError(t, err)
 	require.Nil(t, shadow)
 	require.False(t, shadow.Enabled(uuid.New()))
@@ -73,7 +73,7 @@ func TestTranscriptShadowRejectsInvalidConfiguration(t *testing.T) {
 			t.Setenv("GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS", "")
 			require.NoError(t, os.Unsetenv("GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS"))
 			c := newTranscriptShadowCLIContext(t, map[string]string{chatTranscriptShadowProjectIDsFlag: value})
-			_, err := configureTranscriptShadow(t.Context(), c, nil, nil, orgEncryptionDeps{}, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t))
+			_, err := configureTranscripts(t.Context(), c, nil, nil, orgEncryptionDeps{}, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t))
 			require.Error(t, err)
 		})
 	}
@@ -184,7 +184,7 @@ ON CONFLICT (message_id) DO UPDATE SET ciphertext = EXCLUDED.ciphertext`)
 			tx, err := db.BeginTx(t.Context(), pgx.TxOptions{AccessMode: pgx.ReadOnly}) //nolint:glint // notestingrawsql: proves preflight is read-only.
 			require.NoError(t, err)
 			defer func() { require.NoError(t, tx.Rollback(t.Context())) }()
-			err = checkTranscriptShadowSchema(t.Context(), tx)
+			err = checkTranscriptSchema(t.Context(), tx)
 			if tc.ok {
 				require.NoError(t, err)
 			} else {
@@ -192,7 +192,7 @@ ON CONFLICT (message_id) DO UPDATE SET ciphertext = EXCLUDED.ciphertext`)
 				// Empty dependencies would panic if provisioning or activation were
 				// attempted. A nonexistent project also proves schema runs first.
 				c := newTranscriptShadowCLIContext(t, map[string]string{chatTranscriptShadowProjectIDsFlag: "10000000-0000-4000-8000-000000000001"})
-				_, err := configureTranscriptShadow(t.Context(), c, db, &chat.ChatMessageWriter{}, orgEncryptionDeps{
+				_, err := configureTranscripts(t.Context(), c, db, &chat.ChatMessageWriter{}, orgEncryptionDeps{
 					Service: &orgencryption.Service{}, Provisioner: &orgencryption.Provisioner{},
 				}, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t))
 				require.EqualError(t, err, "chat transcript shadow schema is unavailable or incompatible")
@@ -225,10 +225,10 @@ CREATE TABLE app.chat_message_transcripts (message_id uuid NOT NULL PRIMARY KEY,
 	tx, err := db.BeginTx(t.Context(), pgx.TxOptions{AccessMode: pgx.ReadOnly}) //nolint:glint // notestingrawsql: proves preflight is read-only.
 	require.NoError(t, err)
 	defer func() { require.NoError(t, tx.Rollback(t.Context())) }()
-	require.EqualError(t, checkTranscriptShadowSchema(t.Context(), tx), "chat transcript shadow schema is unavailable or incompatible",
+	require.EqualError(t, checkTranscriptSchema(t.Context(), tx), "chat transcript shadow schema is unavailable or incompatible",
 		"a table outside the search_path is not the one the store would use")
 
 	_, err = tx.Exec(t.Context(), "SET LOCAL search_path = app") //nolint:glint // notestingrawsql: mirrors the deployed connection's search_path.
 	require.NoError(t, err)
-	require.NoError(t, checkTranscriptShadowSchema(t.Context(), tx))
+	require.NoError(t, checkTranscriptSchema(t.Context(), tx))
 }

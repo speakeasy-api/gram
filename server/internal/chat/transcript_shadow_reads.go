@@ -20,9 +20,9 @@ func searchWindowedMessageBody(m *repo.ListSearchWindowedMessagesRow) transcript
 	return transcriptstore.Body{MessageID: m.ID, Content: &m.Content, ContentRaw: &m.ContentRaw, ToolCalls: &m.ToolCalls, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}
 }
 
-// openShadowRows opens a page of chat.load rows through the caller's project.
+// openTranscriptRows opens a page of chat.load rows through the caller's project.
 // See transcriptstore.Transcripts.Open for the fallback and failure rules.
-func openShadowRows[T any](ctx context.Context, s *Service, authCtx *contextvalues.AuthContext, rows []T, body func(*T) transcriptstore.Body) error {
+func openTranscriptRows[T any](ctx context.Context, s *Service, authCtx *contextvalues.AuthContext, rows []T, body func(*T) transcriptstore.Body) error {
 	if authCtx == nil || authCtx.ProjectID == nil {
 		return nil
 	}

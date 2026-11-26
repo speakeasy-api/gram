@@ -144,19 +144,19 @@ func NewChatMessageWriter(logger *slog.Logger, db *pgxpool.Pool, assetStorage as
 	return w, shutdown
 }
 
-// WithTranscripts enables atomic encrypted shadow copies for shared writer
-// operations, for the projects the Transcripts serve. Configure it before
+// WithTranscripts seals an encrypted copy of each message in the same
+// transaction as the write, for projects with encrypted transcripts. Configure it before
 // serving requests, after the schema migration and organization key
 // provisioning. It does not encrypt assets or remove plaintext; direct SQL
-// updates still need backfill to refresh shadows.
+// updates still need backfill to refresh the encrypted copies.
 func (w *ChatMessageWriter) WithTranscripts(transcripts *transcriptstore.Transcripts) *ChatMessageWriter {
 	w.transcripts = transcripts
 	return w
 }
 
-func (w *ChatMessageWriter) captureTranscriptShadow(ctx context.Context, db repo.DBTX, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID) error {
-	//nolint:wrapcheck // Capture already wraps with the shadow capture context.
-	return w.transcripts.Capture(ctx, db, organizationID, projectID, messageIDs)
+func (w *ChatMessageWriter) sealTranscripts(ctx context.Context, db repo.DBTX, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID) error {
+	//nolint:wrapcheck // Seal already wraps with the transcript context.
+	return w.transcripts.Seal(ctx, db, organizationID, projectID, messageIDs)
 }
 
 func messageWriteIDs(writes []MessageWrite) []uuid.UUID {
@@ -537,7 +537,7 @@ func (w *ChatMessageWriter) writeMessages(ctx context.Context, projectID uuid.UU
 	if err != nil {
 		return 0, nil, err
 	}
-	if err := w.captureTranscriptShadow(ctx, tx, organizationID, projectID, messageWriteIDs(writes)); err != nil {
+	if err := w.sealTranscripts(ctx, tx, organizationID, projectID, messageWriteIDs(writes)); err != nil {
 		return 0, nil, err
 	}
 	if err := metering.Enqueue(ctx, tx, readings); err != nil {
@@ -659,7 +659,7 @@ func (w *ChatMessageWriter) WriteCorrelated(ctx context.Context, projectID uuid.
 			return 0, err
 		}
 	}
-	if err := w.captureTranscriptShadow(ctx, tx, organizationID, projectID, []uuid.UUID{stored.ID}); err != nil {
+	if err := w.sealTranscripts(ctx, tx, organizationID, projectID, []uuid.UUID{stored.ID}); err != nil {
 		return 0, err
 	}
 	// A correlated promotion only updates attribution/source metadata on an
@@ -779,7 +779,7 @@ func (w *ChatMessageWriter) WriteExternalWithContentParts(ctx context.Context, p
 					return false, fmt.Errorf("create external message content parts: %w", err)
 				}
 			}
-			if err := w.captureTranscriptShadow(ctx, tx, organizationID, projectID, []uuid.UUID{param.ID}); err != nil {
+			if err := w.sealTranscripts(ctx, tx, organizationID, projectID, []uuid.UUID{param.ID}); err != nil {
 				return false, err
 			}
 			if err := metering.Enqueue(ctx, tx, readings); err != nil {
@@ -845,7 +845,7 @@ func (w *ChatMessageWriter) WriteInTx(ctx context.Context, tx repo.DBTX, writes 
 	if err != nil {
 		return 0, err
 	}
-	if err := w.captureTranscriptShadow(ctx, tx, organizationID, projectID, messageWriteIDs(writes)); err != nil {
+	if err := w.sealTranscripts(ctx, tx, organizationID, projectID, messageWriteIDs(writes)); err != nil {
 		return 0, err
 	}
 	if err := metering.Enqueue(ctx, tx, readings); err != nil {
@@ -923,7 +923,7 @@ func (w *ChatMessageWriter) WriteTurn(ctx context.Context, projectID uuid.UUID, 
 	if err != nil {
 		return fmt.Errorf("store assistant chat messages: %w", err)
 	}
-	if err := w.captureTranscriptShadow(ctx, tx, organizationID, projectID, messageWriteIDs(writes)); err != nil {
+	if err := w.sealTranscripts(ctx, tx, organizationID, projectID, messageWriteIDs(writes)); err != nil {
 		return err
 	}
 	if err := metering.Enqueue(ctx, tx, readings); err != nil {
