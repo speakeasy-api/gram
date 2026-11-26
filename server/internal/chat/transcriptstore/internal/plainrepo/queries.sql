@@ -351,11 +351,27 @@ ORDER BY cm.created_at DESC, cm.seq DESC, cm.id DESC
 LIMIT @lim::integer;
 
 -- name: PatchKitProjectionMessage :execrows
-UPDATE chat_messages SET content = @content, content_raw = @content_raw,
+-- A body change stamps source_updated_at, so an encrypted copy of the old body
+-- reads as stale, and drops the metadata and tool-call IDs measured from it
+-- until the message is sealed again.
+WITH body_changed AS (
+  SELECT cm.id FROM chat_messages cm
+  WHERE cm.project_id = @project_id AND cm.chat_id = @chat_id AND cm.id = @id AND cm.source = 'kit'
+    AND (cm.content IS DISTINCT FROM @content OR cm.content_raw IS DISTINCT FROM @content_raw OR cm.tool_calls IS DISTINCT FROM @tool_calls)
+), stale_tool_call_ids AS (
+  DELETE FROM chat_message_tool_call_ids tc
+  WHERE tc.project_id = @project_id AND tc.message_id IN (SELECT bc.id FROM body_changed bc)
+)
+UPDATE chat_messages AS m SET content = @content, content_raw = @content_raw,
  tool_calls = @tool_calls, content_hash = @content_hash, finish_reason = @finish_reason,
- risk_analyzed_at = CASE WHEN content IS DISTINCT FROM @content OR content_raw IS DISTINCT FROM @content_raw OR tool_calls IS DISTINCT FROM @tool_calls THEN NULL ELSE risk_analyzed_at END
-WHERE project_id = @project_id AND chat_id = @chat_id AND id = @id AND source = 'kit'
-AND (content IS DISTINCT FROM @content OR content_raw IS DISTINCT FROM @content_raw OR tool_calls IS DISTINCT FROM @tool_calls OR finish_reason IS DISTINCT FROM @finish_reason);
+ risk_analyzed_at = CASE WHEN m.id IN (SELECT bc.id FROM body_changed bc) THEN NULL ELSE m.risk_analyzed_at END,
+ source_updated_at = CASE WHEN m.id IN (SELECT bc.id FROM body_changed bc) THEN clock_timestamp() ELSE m.source_updated_at END,
+ tool_call_count = CASE WHEN m.id IN (SELECT bc.id FROM body_changed bc) THEN NULL ELSE m.tool_call_count END,
+ content_bytes = CASE WHEN m.id IN (SELECT bc.id FROM body_changed bc) THEN NULL ELSE m.content_bytes END,
+ content_raw_bytes = CASE WHEN m.id IN (SELECT bc.id FROM body_changed bc) THEN NULL ELSE m.content_raw_bytes END,
+ tool_calls_bytes = CASE WHEN m.id IN (SELECT bc.id FROM body_changed bc) THEN NULL ELSE m.tool_calls_bytes END
+WHERE m.project_id = @project_id AND m.chat_id = @chat_id AND m.id = @id AND m.source = 'kit'
+AND (m.content IS DISTINCT FROM @content OR m.content_raw IS DISTINCT FROM @content_raw OR m.tool_calls IS DISTINCT FROM @tool_calls OR m.finish_reason IS DISTINCT FROM @finish_reason);
 
 -- name: UpsertCorrelatedChatMessage :one
 -- Returns persisted metering fields and distinguishes initial inserts from
@@ -434,21 +450,26 @@ RETURNING id, content, tool_calls, model, user_id, external_user_id, source, use
 
 -- name: StoreToolCallSummary :one
 -- Preserve summaries for sibling calls carried by the same assistant message.
+-- A body update stamps source_updated_at so an encrypted copy of the old body
+-- reads as stale.
 UPDATE chat_messages
 SET tool_call_summaries = jsonb_set(
   COALESCE(tool_call_summaries, '{}'::jsonb),
   ARRAY[@tool_call_id::text],
   @summary::jsonb
-)
+),
+    source_updated_at = clock_timestamp()
 WHERE id = @message_id
   AND chat_id = @chat_id
   AND project_id = @project_id::uuid
 RETURNING (tool_call_summaries -> @tool_call_id::text)::text AS summary;
 
 -- name: UpdateToolCallOutcome :exec
+-- tool_outcome_notes is a body field: changing it stamps source_updated_at.
 UPDATE chat_messages
 SET tool_outcome = @tool_outcome,
-    tool_outcome_notes = @tool_outcome_notes
+    tool_outcome_notes = @tool_outcome_notes,
+    source_updated_at = CASE WHEN tool_outcome_notes IS DISTINCT FROM @tool_outcome_notes THEN clock_timestamp() ELSE source_updated_at END
 WHERE id = @id AND project_id = @project_id::uuid;
 
 -- name: GetMessageContentBatch :many
