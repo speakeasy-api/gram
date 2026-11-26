@@ -311,9 +311,8 @@ func (r Registry) DeriveCatalog() []CatalogEntry {
 // ScopeOpenKeys lists, for one scope, the grant keys each kind of check may
 // leave out. The generator writes each as an authz openKeys, field for field.
 type ScopeOpenKeys struct {
-	Probe          []string
-	Connection     []string
-	PolicyAudience []string
+	Probe      []string
+	Connection []string
 }
 
 // DeriveOpenKeys maps each permission's scope that opens a key to the keys it
@@ -331,8 +330,6 @@ func (r Registry) DeriveOpenKeys() map[Scope]ScopeOpenKeys {
 				keys.Probe = open.Keys
 			case OpenOnConnection:
 				keys.Connection = open.Keys
-			case OpenOnPolicyAudience:
-				keys.PolicyAudience = open.Keys
 			}
 		}
 		out[s.Scope] = keys
