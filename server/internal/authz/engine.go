@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -55,7 +56,11 @@ type Engine struct {
 	db                               *pgxpool.Pool
 	challengeLoggingEnabled          ChallengeLoggingEnabled
 	isDev                            bool
-	membership                       MembershipFetcher
+	// refuseInvalidChecks is on in tests and local dev, so a handler bug such
+	// as the typo "project:reed" fails there even on a path only legacy API
+	// keys reach.
+	refuseInvalidChecks bool
+	membership          MembershipFetcher
 }
 
 func NewEngine(
@@ -92,6 +97,7 @@ func NewEngine(
 		db:                               db,
 		challengeLoggingEnabled:          challengeLogging,
 		isDev:                            devMode,
+		refuseInvalidChecks:              devMode || testing.Testing(),
 		membership:                       membership,
 	}
 }
@@ -243,7 +249,9 @@ func (e *Engine) Require(ctx context.Context, checks ...Check) error {
 		return err
 	}
 	if !enforce {
-		e.logInvalidUnenforced(ctx, checks)
+		if err := e.validateUnenforced(ctx, checks); err != nil {
+			return e.mapError(ctx, err)
+		}
 		if !all(checks, unenforcedAllows) {
 			return e.mapError(ctx, Denied(ScopeMCPAuth, nil))
 		}
@@ -351,7 +359,7 @@ func (e *Engine) evaluateRequired(ctx context.Context, authorization grantAuthor
 		}
 		matches = append(matches, grantMatch{Grant: *evaluation.Grant, ViaCheck: *evaluation.Check})
 	}
-	e.reportAuthorizerRefusals(ctx, authorization, checks, false)
+	e.reportAuthorizerRefusals(ctx, authorization, checks)
 
 	challengeLogger{
 		Operation:            authzrepo.OperationRequire,
@@ -380,7 +388,9 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 		return e.mapError(ctx, err)
 	}
 	if !enforce {
-		e.logInvalidUnenforced(ctx, checks)
+		if err := e.validateUnenforced(ctx, checks); err != nil {
+			return e.mapError(ctx, err)
+		}
 		if len(checks) > 0 && !slices.ContainsFunc(checks, unenforcedAllows) {
 			return e.mapError(ctx, Denied(ScopeMCPAuth, nil))
 		}
@@ -428,7 +438,8 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 		return e.mapError(ctx, err)
 	}
 	if decision.allowed() {
-		e.reportAuthorizerRefusals(ctx, authorization, authorization.allowedAlternatives(checks), true)
+		refused, err := authorization.authorizerRefusesAny(checks)
+		reportAuthorizerRefusal(ctx, e.logger, authorization, refused, err)
 		challengeLogger{
 			Operation:            authzrepo.OperationRequireAny,
 			Outcome:              authzrepo.OutcomeAllow,
@@ -567,7 +578,9 @@ func (e *Engine) Evaluate(ctx context.Context, checks ...Check) (bool, error) {
 		return false, err
 	}
 	if !enforce {
-		e.logInvalidUnenforced(ctx, checks)
+		if err := e.validateUnenforced(ctx, checks); err != nil {
+			return false, e.mapError(ctx, err)
+		}
 		return all(checks, unenforcedAllows), nil
 	}
 	if len(checks) == 0 {
@@ -591,7 +604,7 @@ func (e *Engine) Evaluate(ctx context.Context, checks ...Check) (bool, error) {
 			return false, nil
 		}
 	}
-	e.reportAuthorizerRefusals(ctx, authorization, checks, false)
+	e.reportAuthorizerRefusals(ctx, authorization, checks)
 
 	return true, nil
 }
@@ -622,7 +635,9 @@ func (e *Engine) canAnyOf(ctx context.Context, alternatives []Check) (bool, erro
 		return false, err
 	}
 	if !enforce {
-		e.logInvalidUnenforced(ctx, alternatives)
+		if err := e.validateUnenforced(ctx, alternatives); err != nil {
+			return false, e.mapError(ctx, err)
+		}
 		return slices.ContainsFunc(alternatives, unenforcedAllows), nil
 	}
 	authorization, ok := grantAuthorizationFromContext(ctx)
@@ -646,7 +661,8 @@ func (e *Engine) canAnyOf(ctx context.Context, alternatives []Check) (bool, erro
 		return false, e.mapError(ctx, err)
 	}
 	if decision.allowed() {
-		e.reportAuthorizerRefusals(ctx, authorization, authorization.allowedAlternatives(alternatives), true)
+		refused, err := authorization.authorizerRefusesGroup(alternatives)
+		reportAuthorizerRefusal(ctx, e.logger, authorization, refused, err)
 	}
 	return decision.allowed(), nil
 }
@@ -702,7 +718,9 @@ func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
 	}
 
 	if !enforce {
-		e.logInvalidUnenforced(ctx, checks)
+		if err := e.validateUnenforced(ctx, checks); err != nil {
+			return nil, e.mapError(ctx, err)
+		}
 		ids := make([]string, 0, len(checks))
 		for _, c := range checks {
 			if unenforcedAllows(c) {
@@ -763,7 +781,7 @@ func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
 			matches = append(matches, grantMatch{Grant: *evaluation.Grant, ViaCheck: *evaluation.Check})
 		}
 	}
-	e.reportAuthorizerRefusals(ctx, authorization, allowedChecks, false)
+	e.reportAuthorizerRefusals(ctx, authorization, allowedChecks)
 
 	if len(checks) > 0 {
 		outcome := authzrepo.OutcomeDeny
@@ -834,7 +852,9 @@ func (e *Engine) FindMatched(ctx context.Context, checks []Check) ([]bool, error
 	}
 
 	if !enforce {
-		e.logInvalidUnenforced(ctx, checks)
+		if err := e.validateUnenforced(ctx, checks); err != nil {
+			return nil, e.mapError(ctx, err)
+		}
 		out := make([]bool, len(checks))
 		for i, c := range checks {
 			out[i] = unenforcedAllows(c)
@@ -895,7 +915,7 @@ func (e *Engine) FindMatched(ctx context.Context, checks []Check) ([]bool, error
 			allowedCount++
 		}
 	}
-	e.reportAuthorizerRefusals(ctx, authorization, allowedChecks, false)
+	e.reportAuthorizerRefusals(ctx, authorization, allowedChecks)
 
 	if len(checks) > 0 {
 		outcome := authzrepo.OutcomeDeny
@@ -1017,15 +1037,16 @@ func validateInput(c Check) error {
 	}
 }
 
-// logInvalidUnenforced reports checks that would be refused as invalid if the
-// caller were enforced. Enforcement is skipped for this caller, so the request
-// still goes through: this is the logging window before such checks are
-// refused for every caller.
-func (e *Engine) logInvalidUnenforced(ctx context.Context, checks []Check) {
+// validateUnenforced only logs in production: the skip allows any valid check
+// anyway, so refusing would only let a handler bug break the caller.
+func (e *Engine) validateUnenforced(ctx context.Context, checks []Check) error {
 	for _, check := range checks {
 		err := validateInput(check)
 		if err == nil {
 			continue
+		}
+		if e.refuseInvalidChecks {
+			return err
 		}
 		e.logger.ErrorContext(
 			ctx,
@@ -1034,6 +1055,7 @@ func (e *Engine) logInvalidUnenforced(ctx context.Context, checks []Check) {
 			attr.SlogError(err),
 		)
 	}
+	return nil
 }
 
 // logMissingKeys logs an error for each refused check that a grant would have

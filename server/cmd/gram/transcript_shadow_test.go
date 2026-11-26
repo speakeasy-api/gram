@@ -157,8 +157,7 @@ func TestTranscriptShadowSchemaCompatibility(t *testing.T) {
 			t.Parallel()
 			db, err := infra.CloneTestDatabase(t, "transcript_shadow_preflight")
 			require.NoError(t, err)
-			// CASCADE drops only the tool-call table's foreign key; the table
-			// itself stays, as the check requires.
+			// CASCADE drops only the tool-call table's foreign key.
 			_, err = db.Exec(t.Context(), "DROP TABLE IF EXISTS chat_message_transcripts CASCADE") //nolint:glint // notestingrawsql: isolated DDL fixture for catalog compatibility checks.
 			require.NoError(t, err)
 			if tc.ddl != "" {

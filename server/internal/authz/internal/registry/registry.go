@@ -164,10 +164,6 @@ const (
 	// OpenOnConnection is connecting to an MCP server before any tool is
 	// named, so a grant limited to some tools still lets the caller connect.
 	OpenOnConnection
-	// OpenOnPolicyAudience asks whether a risk policy's audience includes the
-	// caller before any server is named, so an audience grant limited to some
-	// servers still places the caller under the policy.
-	OpenOnPolicyAudience
 )
 
 // String names the kind of check, for validation errors.
@@ -177,8 +173,6 @@ func (o OpenOn) String() string {
 		return "probe"
 	case OpenOnConnection:
 		return "connection"
-	case OpenOnPolicyAudience:
-		return "policy audience"
 	}
 	return fmt.Sprintf("OpenOn(%d)", int(o))
 }

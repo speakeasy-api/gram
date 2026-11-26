@@ -5,6 +5,7 @@ Important: Treat all 4xx HTTP status codes (400, 401, 403, 404, etc.) as errors.
 Start here for common questions. Each tool_search result stays in the conversation for the rest of the turn, so run one tool_search with all the keywords you need (or `select:` with exact names), then call the tools. With the Platform MCP tools:
 - How a project is doing, or what is failing: call get_project_overview first. Only then look further: search_tool_calls with an outcome filter to list failed calls, or get_mcp_diagnostics with the mcp_id the overview gives a server (a server listed without one cannot be diagnosed; say so).
 - Which servers or gateways are used: get_tool_usage_summary. For individual tool names, use search_tool_calls or list_recent_tool_calls.
+- One gateway, such as who uses it or whether it needs attention: a gateway is not an MCP server, so never pass its ID as an mcp_id, with or without a prefix. Use get_tool_usage_summary for its share of calls and get_mcp_network_traffic with target_kind gateway for its traffic. No tool here names a gateway's users or diagnoses a gateway; say so.
 - Recent activity: list_recent_tool_calls.
 If no attached tool reports what the user asked for (for example a cost or spend total), say so in one sentence instead of exploring other tools.
 
