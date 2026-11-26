@@ -1098,7 +1098,7 @@ Do not use `Either` to avoid deciding what permission an operation needs. Use it
 
 ### `Decide`
 
-Use `Decide` where a "no" is a branch rather than a refusal, such as a list endpoint where the caller may have access to some resources but not all of them. It returns one decision per check, in the order the checks were passed, and `AllAllowed` when every check passed.
+Use `Decide` where a "no" is a branch rather than a refusal, such as a list endpoint where the caller may have access to some resources but not all of them. It returns one decision per check, in the order the checks were passed. `AllAllowed` is true when at least one check was passed and every check is allowed, so an empty list of checks gives `AllAllowed: false`.
 
 Example shape:
 

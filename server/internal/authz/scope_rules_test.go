@@ -149,7 +149,7 @@ func TestChannelsAdminRoleDoesNotReadPrivateConversations(t *testing.T) {
 
 // Channels is session-less by design: it authenticates an OAuth bearer or a
 // browser session through PrepareExternalContext, which binds no SessionID.
-// Decide reports every check as allowed when enforcement is off, so a
+// Decide reports non-auth-client checks as allowed when enforcement is off, so a
 // session-less surface left out of enforcedWithoutSession is granted
 // everything rather than nothing. This is the one place that asymmetry is
 // pinned down.

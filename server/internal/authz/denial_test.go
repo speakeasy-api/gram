@@ -76,7 +76,7 @@ func TestEngineRequire_RecordsNothingWhenABlockRefuses(t *testing.T) {
 	require.False(t, ok)
 }
 
-func TestDecideWithoutChallengesOnLoadedGrants_DoesNotRecord(t *testing.T) {
+func TestEngineEvaluateLoadedGrants_DoesNotRecord(t *testing.T) {
 	t.Parallel()
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	ctx := WithDenialRecorder(GrantsToContext(enterpriseSessionCtx(t), nil))
