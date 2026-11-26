@@ -103,7 +103,7 @@ func (w *ChatMessageWriter) ProjectMessage(ctx context.Context, projectID, messa
 				return false, fmt.Errorf("look up projection shadow organization: %w", err)
 			}
 		}
-		if err := w.captureTranscriptShadow(ctx, tx, organizationID, projectID, []uuid.UUID{messageID}); err != nil {
+		if err := w.sealTranscripts(ctx, tx, organizationID, projectID, []uuid.UUID{messageID}); err != nil {
 			return false, err
 		}
 	}

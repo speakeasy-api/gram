@@ -267,7 +267,7 @@ func TestPatchKitProjectionComparesPreviousBodyInGo(t *testing.T) {
 		})
 		require.NoError(t, err)
 		if n > 0 {
-			require.NoError(t, transcripts.Capture(t.Context(), tx, f.org, f.project, []uuid.UUID{id}))
+			require.NoError(t, transcripts.Seal(t.Context(), tx, f.org, f.project, []uuid.UUID{id}))
 		}
 		require.NoError(t, tx.Commit(t.Context()))
 		return n

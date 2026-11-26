@@ -36,7 +36,7 @@ func (t *Transcripts) UpsertCorrelatedChatMessage(ctx context.Context, db DBTX, 
 	if err != nil {
 		return row, fmt.Errorf("upsert correlated chat message: %w", err)
 	}
-	if err := t.Capture(ctx, db, organizationID, params.ProjectID, []uuid.UUID{row.ID}); err != nil {
+	if err := t.Seal(ctx, db, organizationID, params.ProjectID, []uuid.UUID{row.ID}); err != nil {
 		return row, err
 	}
 	if !params.OpenShadows {
@@ -178,7 +178,7 @@ func (t *Transcripts) withCapture(ctx context.Context, db DBTX, projectID, messa
 		if err != nil {
 			return err
 		}
-		return t.Capture(ctx, db, organizationID, projectID, []uuid.UUID{messageID})
+		return t.Seal(ctx, db, organizationID, projectID, []uuid.UUID{messageID})
 	}
 	b, ok := db.(beginner)
 	if !ok {

@@ -94,8 +94,8 @@ type Service struct {
 	staffOrg     staff.Organization
 	riskFindings *chatfindings.Reader
 
-	// transcripts opens encrypted shadow copies of message bodies for the
-	// projects that keep them. Nil opens none.
+	// transcripts opens the encrypted copies of message bodies for projects
+	// with encrypted transcripts. Nil opens none.
 	transcripts *transcriptstore.Transcripts
 	// access is the per-chat gate, shared with services that reveal session
 	// content under another name (see SessionAccess).

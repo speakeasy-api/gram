@@ -104,17 +104,17 @@ func TestTranscriptsGateByProject(t *testing.T) {
 
 	var none *Transcripts
 	require.False(t, none.Enabled(f.project))
-	require.NoError(t, none.Capture(t.Context(), f.db, f.org, f.project, []uuid.UUID{id}))
+	require.NoError(t, none.Seal(t.Context(), f.db, f.org, f.project, []uuid.UUID{id}))
 
 	other := NewTranscripts(f.store, uuid.New())
 	require.False(t, other.Enabled(f.project))
-	require.NoError(t, other.Capture(t.Context(), f.db, f.org, f.project, []uuid.UUID{id}))
+	require.NoError(t, other.Seal(t.Context(), f.db, f.org, f.project, []uuid.UUID{id}))
 	_, err := fixturerepo.New(f.db).ShadowMetadata(t.Context(), id)
 	require.Error(t, err, "a project off the list captures nothing")
 
 	enabled := NewTranscripts(f.store, f.project)
 	require.True(t, enabled.Enabled(f.project))
-	require.NoError(t, enabled.Capture(t.Context(), f.db, f.org, f.project, []uuid.UUID{id}))
+	require.NoError(t, enabled.Seal(t.Context(), f.db, f.org, f.project, []uuid.UUID{id}))
 	_, err = fixturerepo.New(f.db).ShadowMetadata(t.Context(), id)
 	require.NoError(t, err)
 }
