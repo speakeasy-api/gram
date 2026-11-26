@@ -145,7 +145,7 @@ of the shadow. Writes that change a shadowed field after insert
 unit with the write: in their own transaction, or under a savepoint inside a
 caller's transaction, so a failed recapture also rolls back its write.
 
-For a project that keeps shadows, values derived from a body come from the
+For a project with encrypted transcripts, values derived from a body come from the
 shadow's metadata, never from plaintext inside SQL. Each falls back to the
 plaintext expression only for a message with no shadow, or one captured before
 the metadata existed (NULL):
