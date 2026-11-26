@@ -114,8 +114,8 @@ type ChatMessageWriter struct {
 	assetStorage assets.BlobStore
 	stokenCodec  *stokens.Codec
 	observers    []MessageObserver
-	// transcripts captures encrypted shadows for the projects that keep them.
-	// Nil captures none.
+	// transcripts seals encrypted copies for projects with encrypted
+	// transcripts. Nil seals none.
 	transcripts *transcriptstore.Transcripts
 	// turnStream, when set, receives a frame per persisted row so dashboard
 	// subscribers can render a turn without polling. Nil disables publishing.
