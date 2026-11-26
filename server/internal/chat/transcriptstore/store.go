@@ -83,8 +83,10 @@ func message(content string, raw, calls []byte, notes pgtype.Text, summaries []b
 // committed key cache through the pool. Call it before opening the transaction
 // that Capture will use: Capture never calls KMS, and fails with
 // orgencryption.ErrKeyNotWarm when the key is not cached. A warm cache needs
-// no KMS call here either. An error means Capture would fail too. Capture
-// still reads the configuration in its transaction and fails closed on its own.
+// no KMS call here either. A failed early refresh of a key that is still
+// cached is not an error. Any error it returns means the key is not cached, so
+// Capture would fail too. Capture still reads the configuration in its
+// transaction and fails closed on its own.
 func (s *Store) Prepare(ctx context.Context, organizationID string) error {
 	if organizationID == "" {
 		return ErrInvalid

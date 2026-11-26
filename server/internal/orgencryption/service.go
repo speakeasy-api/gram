@@ -224,6 +224,12 @@ func (s *Service) Warm(ctx context.Context, organizationID string, useCase UseCa
 	}
 	dataKey, err := s.unwrapShared(ctx, organizationID, cfg.activeDataKeyID)
 	if err != nil {
+		// The cached DEK is still within DataKeyCacheTTL, the bound For keeps
+		// too, so a failed early refresh does not refuse it.
+		if cached, ok := s.dataKeys.Get(cfg.activeDataKeyID); ok {
+			s.noteUse(cfg.activeDataKeyID, cached.useCase)
+			return nil
+		}
 		return err
 	}
 	s.noteUse(cfg.activeDataKeyID, dataKey.useCase)

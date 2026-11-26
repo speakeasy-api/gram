@@ -13,7 +13,9 @@
 // acquiring another pooled connection. It reads configuration through that
 // transaction, privately, so uncommitted state never enters the process cache.
 // It never calls KMS while the transaction is open: it takes DEKs only from
-// the process cache, and Warm fills that cache before the transaction opens.
+// the process cache and fails with ErrKeyNotWarm on a miss. Warm caches only
+// the use case's active DEK, which is all encryption needs; decrypting a value
+// sealed under an older DEK in a transaction needs that DEK cached first.
 //
 // KeepWarm unwraps recently used DEKs again shortly before DataKeyCacheTTL runs
 // out, so a request on a quiet process does not wait for KMS. Each refresh is

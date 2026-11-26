@@ -103,6 +103,7 @@ func TestCaptureWithOneConnectionNeedsAWarmKey(t *testing.T) {
 	before := f.keys.KMS.Decrypts()
 	cold, err := pool.Begin(ctx) //nolint:glint // notestingrawsql: caller-owned transaction boundary exercises atomicity and lock lifetime; fixture data uses generated queries.
 	require.NoError(t, err)
+	defer func() { _ = cold.Rollback(context.Background()) }()
 	require.ErrorIs(t, store.Capture(ctx, cold, f.org, f.project, []uuid.UUID{first}), orgencryption.ErrKeyNotWarm)
 	require.NoError(t, cold.Rollback(ctx))
 	require.Equal(t, before, f.keys.KMS.Decrypts(), "no KMS call inside the transaction")

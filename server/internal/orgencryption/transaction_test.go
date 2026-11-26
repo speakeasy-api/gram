@@ -3,6 +3,7 @@ package orgencryption_test
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -10,7 +11,9 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/orgencryption/repo"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpkms"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/oauth2"
 
 	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -185,4 +188,39 @@ func TestWarmRefreshesAKeyCloseToExpiry(t *testing.T) {
 	service.AgeDataKey(active.ID, orgencryption.DataKeyCacheTTL-10*time.Second)
 	require.NoError(t, service.Warm(t.Context(), ti.orgID, useCase))
 	require.Equal(t, before+2, ti.fixture.KMS.Decrypts(), "a key about to expire is unwrapped again")
+}
+
+// failingKMS fails every unwrap once fail is set.
+type failingKMS struct {
+	gcpkms.EncryptionClient
+	fail atomic.Bool
+}
+
+func (k *failingKMS) Decrypt(ctx context.Context, keyName string, ciphertext, aad []byte) ([]byte, error) {
+	if k.fail.Load() {
+		return nil, errors.New("example KMS outage")
+	}
+	return k.EncryptionClient.Decrypt(ctx, keyName, ciphertext, aad) //nolint:wrapcheck // the test stand-in is transparent
+}
+
+// When the early refresh fails, Warm keeps a cached DEK that is still within
+// DataKeyCacheTTL instead of failing the write.
+func TestWarmKeepsAValidKeyWhenTheRefreshFails(t *testing.T) {
+	t.Parallel()
+	ti := newTestInstance(t)
+	ti.provision(t)
+	_, pool := transactionService(t, ti)
+	kms := &failingKMS{EncryptionClient: ti.fixture.KMS, fail: atomic.Bool{}}
+	service, err := orgencryption.NewService(testenv.NewLogger(t), pool, newIdentity(), func(context.Context, oauth2.TokenSource) (gcpkms.EncryptionClient, error) { return kms, nil }, ti.fixture.Keys)
+	require.NoError(t, err)
+	active, err := repo.New(ti.conn).GetActiveDataEncryptionKey(t.Context(), repo.GetActiveDataEncryptionKeyParams{OrganizationID: ti.orgID, UseCase: string(useCase)})
+	require.NoError(t, err)
+	require.NoError(t, service.Warm(t.Context(), ti.orgID, useCase))
+
+	service.AgeDataKey(active.ID, orgencryption.DataKeyCacheTTL-10*time.Second)
+	kms.fail.Store(true)
+	require.NoError(t, service.Warm(t.Context(), ti.orgID, useCase), "the cached key is still valid")
+
+	service.Forget(ti.orgID)
+	require.ErrorIs(t, service.Warm(t.Context(), ti.orgID, useCase), orgencryption.ErrKeyUnavailable, "with nothing cached the outage fails")
 }
