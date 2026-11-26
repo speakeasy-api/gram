@@ -85,6 +85,11 @@ type metaMember struct {
 	// selects across issuers, so it is not an address and is never dialed.
 	tunneledResourceIdentifier string
 
+	// feedbackToolEnabled reports whether the member server has its feedback
+	// tool switched on, read with the member listing. The tool's name and
+	// description are loaded only when it is true.
+	feedbackToolEnabled bool
+
 	// chosenClientID is the upstream client the request's credential chose
 	// for a proxied member, when serving reads credential choices. When set,
 	// remoteSessionIssuerID is that client's issuer rather than the derived
@@ -159,6 +164,7 @@ type metaMemberCandidate struct {
 	toolVariationsGroupID      uuid.NullUUID
 	upstreamIssuer             upstreamIssuerKeys
 	tunneledResourceIdentifier string
+	feedbackToolEnabled        bool
 }
 
 // memberUpstreamIssuer is a listed member's two upstream issuer sources: its
@@ -220,6 +226,7 @@ func (s *Service) resolveMetaMemberSnapshot(
 			toolVariationsGroupID:      row.McpServerToolVariationsGroupID,
 			upstreamIssuer:             memberUpstreamIssuer(row.McpServerRemoteSessionIssuerID, row.McpServerAssociationProviderIds),
 			tunneledResourceIdentifier: row.TunneledResourceIdentifier,
+			feedbackToolEnabled:        row.McpServerFeedbackToolEnabled,
 		})
 	}
 
@@ -404,6 +411,7 @@ func (s *Service) resolveOrganizationMemberSnapshotWithRecheck(
 			toolVariationsGroupID:      row.McpServerToolVariationsGroupID,
 			upstreamIssuer:             memberUpstreamIssuer(row.McpServerRemoteSessionIssuerID, row.McpServerAssociationProviderIds),
 			tunneledResourceIdentifier: row.TunneledResourceIdentifier,
+			feedbackToolEnabled:        row.McpServerFeedbackToolEnabled,
 		})
 	}
 
@@ -635,6 +643,7 @@ func (s *Service) admitMetaMembers(
 			upstreamIssuer:                 candidate.upstreamIssuer,
 			upstreamIssuerFromAssociations: fromAssociations,
 			tunneledResourceIdentifier:     candidate.tunneledResourceIdentifier,
+			feedbackToolEnabled:            candidate.feedbackToolEnabled,
 			chosenClientID:                 uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 			upstreamNoAuth:                 false,
 			upstreamUnavailable:            nil,

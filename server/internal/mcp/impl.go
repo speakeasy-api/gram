@@ -459,6 +459,10 @@ type mcpInputs struct {
 	// attributionServerID is the server internal callers attribute a toolset's
 	// calls to, kept separate from route authorization.
 	attributionServerID *uuid.UUID
+	// feedbackToolEnabled reports whether the serving server has its feedback
+	// tool switched on, read with its mcp_servers row. False when no server
+	// row is read.
+	feedbackToolEnabled bool
 	// wrapperRBACResourceID overrides the resource id for per-tool mcp:connect
 	// checks: the fronting mcp_servers id when the request is wrapper-governed
 	// (AIS-633). Empty falls back to the described toolset's own id, which is
@@ -1231,7 +1235,8 @@ func (s *Service) serveProxyBackedEndpoint(w http.ResponseWriter, r *http.Reques
 	}
 	logger := s.logger.With(attr.SlogToolsetMCPSlug(mcpSlug))
 
-	mcpEndpoint, mcpServer, metaServer, err := s.ResolveMCPEndpointAndServer(ctx, logger, mcpSlug)
+	resolved, err := s.ResolveMCPEndpointAndServer(ctx, logger, mcpSlug)
+	mcpEndpoint, mcpServer, metaServer := resolved.Endpoint, resolved.Server, resolved.MetaServer
 	switch {
 	case err == nil:
 	case mcpendpoints.IsAddressMiss(err):
@@ -1256,7 +1261,7 @@ func (s *Service) serveProxyBackedEndpoint(w http.ResponseWriter, r *http.Reques
 		return true, err
 	}
 
-	return true, s.serveResolvedMCPEndpoint(w, r, logger, mcpEndpoint, mcpServer, mcpSlug, mcproute.MCP)
+	return true, s.serveResolvedMCPEndpoint(w, r, logger, mcpEndpoint, mcpServer, resolved.FeedbackToolEnabled, mcpSlug, mcproute.MCP)
 }
 
 // writeOAuthServerMetadataResponse builds the OAuth server metadata body and
@@ -1317,7 +1322,8 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 
 	logger := s.logger.With(attr.SlogToolsetMCPSlug(mcpSlug))
 
-	mcpEndpoint, mcpServer, metaServer, err := s.ResolveMCPEndpointAndServer(ctx, logger, mcpSlug)
+	resolved, err := s.ResolveMCPEndpointAndServer(ctx, logger, mcpSlug)
+	mcpEndpoint, mcpServer, metaServer := resolved.Endpoint, resolved.Server, resolved.MetaServer
 	switch {
 	case err == nil:
 		attributeMCPBandwidthServer(ctx, mcpServer, metaServer, mcpSlug)
@@ -1327,7 +1333,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		if metaServer != nil {
 			return s.serveResolvedMetaMCPEndpoint(w, r, logger, mcpEndpoint, metaServer, metaMembership{agentID: uuid.Nil, organization: false}, nil)
 		}
-		return s.serveResolvedMCPEndpoint(w, r, logger, mcpEndpoint, mcpServer, mcpSlug, mcproute.MCP)
+		return s.serveResolvedMCPEndpoint(w, r, logger, mcpEndpoint, mcpServer, resolved.FeedbackToolEnabled, mcpSlug, mcproute.MCP)
 	case mcpendpoints.IsAddressMiss(err), mcpendpoints.IsPolicyDenied(err):
 		// A denial must answer exactly as a miss, or it reveals the endpoint.
 		return rejectMissingMCPTarget(w, r, logger, mcpversions.SupportedHostedToolset(),
@@ -1361,6 +1367,10 @@ type hostedServing struct {
 
 	// mcpEndpointID for telemetry.
 	mcpEndpointID *uuid.UUID
+
+	// feedbackToolEnabled reports whether the server has its feedback tool
+	// switched on, read with its mcp_servers row.
+	feedbackToolEnabled bool
 }
 
 // serveToolsetResolved serves an MCP runtime request after the slug has
@@ -1569,6 +1579,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		mcpServerID:              cfg.mcpServerID,
 		mcpEndpointID:            cfg.mcpEndpointID,
 		attributionServerID:      nil,
+		feedbackToolEnabled:      cfg.feedbackToolEnabled,
 		wrapperRBACResourceID:    wrapperRBACResourceID,
 		wrapperIsPublic:          wrapperIsPublic,
 		metaMcpServerID:          "",

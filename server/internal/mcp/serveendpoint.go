@@ -175,6 +175,7 @@ func (s *Service) serveResolvedMCPEndpoint(
 	logger *slog.Logger,
 	mcpEndpoint *mcpendpointsrepo.McpEndpoint,
 	mcpServer *mcpserversrepo.McpServer,
+	feedbackToolEnabled bool,
 	slug string, mcpRouteBase mcproute.Base,
 ) error {
 	ctx := r.Context()
@@ -309,7 +310,7 @@ func (s *Service) serveResolvedMCPEndpoint(
 				return oops.E(oops.CodeConflict, nil, "mcp server access changed during the request; retry")
 			}
 		}
-		if err := s.serveToolsetResolved(w, r, &toolset, slug, mcpRouteBase, hostedServingFromWrapper(mcpEndpoint.ID, mcpServer, issuerGated), nil, sessionToolSelection, pendingIssuerGate, prepared); err != nil {
+		if err := s.serveToolsetResolved(w, r, &toolset, slug, mcpRouteBase, hostedServingFromWrapper(mcpEndpoint.ID, mcpServer, issuerGated, feedbackToolEnabled), nil, sessionToolSelection, pendingIssuerGate, prepared); err != nil {
 			return fmt.Errorf("serve toolset-backed mcp: %w", err)
 		}
 		return nil
@@ -324,8 +325,9 @@ func (s *Service) serveResolvedMCPEndpoint(
 // that resolved through an mcp_endpoints → mcp_servers pair: the wrapper row
 // governs visibility, issuer gating, RBAC, and the variation group (AIS-633).
 // callerGated reports whether the caller already ran the issuer gate keyed on
-// mcp_servers.user_session_issuer_id.
-func hostedServingFromWrapper(endpointID uuid.UUID, mcpServer *mcpserversrepo.McpServer, callerGated bool) *hostedServing {
+// mcp_servers.user_session_issuer_id. feedbackToolEnabled is the endpoint
+// resolution's ResolutionResult.FeedbackToolEnabled.
+func hostedServingFromWrapper(endpointID uuid.UUID, mcpServer *mcpserversrepo.McpServer, callerGated, feedbackToolEnabled bool) *hostedServing {
 	var groupID *uuid.UUID
 	if mcpServer.ToolVariationsGroupID.Valid {
 		id := mcpServer.ToolVariationsGroupID.UUID
@@ -339,6 +341,7 @@ func hostedServingFromWrapper(endpointID uuid.UUID, mcpServer *mcpserversrepo.Mc
 		toolVariationsGroupID: groupID,
 		mcpServerID:           &serverID,
 		mcpEndpointID:         &endpointID,
+		feedbackToolEnabled:   feedbackToolEnabled,
 	}
 }
 
@@ -551,10 +554,10 @@ func routeFailClosed(ctx context.Context, logger *slog.Logger, reason string, to
 // Transient ingress lookup failures return 503;
 // stale, deleted, disabled, or mismatched authority remains externally 404 while
 // being warning-logged. logger should already carry the slug attribute.
-func (s *Service) ResolveMCPEndpointAndServer(ctx context.Context, logger *slog.Logger, slug string) (*mcpendpointsrepo.McpEndpoint, *mcpserversrepo.McpServer, *metamcprepo.MetaMcpServer, error) {
+func (s *Service) ResolveMCPEndpointAndServer(ctx context.Context, logger *slog.Logger, slug string) (mcpendpoints.ResolutionResult, error) {
 	origin, ok := requestorigin.FromContext(ctx)
 	if !ok || origin.Surface != requestorigin.SurfacePrivateNetwork {
-		return mcpendpoints.BySlugAndCustomDomain(ctx, s.db, logger, slug) //nolint:wrapcheck // thin passthrough; underlying error already carries context.
+		return mcpendpoints.ResolveFromContext(ctx, s.db, logger, slug) //nolint:wrapcheck // thin passthrough; underlying error already carries context.
 	}
 
 	started := time.Now()
@@ -564,18 +567,18 @@ func (s *Service) ResolveMCPEndpointAndServer(ctx context.Context, logger *slog.
 	authority, err := networkingress.LoadRequestAuthority(ctx, s.db)
 	if errors.Is(err, networkingress.ErrAuthorityUnavailable) {
 		record(networkingress.ResultError, networkingress.ReasonAuthorityUnavailable)
-		return nil, nil, nil, oops.E(oops.CodeUnavailable, err, "private network ingress authority is unavailable").LogError(ctx, logger)
+		return mcpendpoints.ResolutionResult{}, oops.E(oops.CodeUnavailable, err, "private network ingress authority is unavailable").LogError(ctx, logger)
 	}
 	if err != nil {
 		record(networkingress.ResultDenied, networkingress.ReasonAuthorityRejected)
 		logger.WarnContext(ctx, "private network ingress authority rejected", attr.SlogError(err))
-		return nil, nil, nil, oops.E(oops.CodeNotFound, errors.Join(mcpendpoints.ErrPolicyDenied, err), "mcp endpoint not found")
+		return mcpendpoints.ResolutionResult{}, oops.E(oops.CodeNotFound, errors.Join(mcpendpoints.ErrPolicyDenied, err), "mcp endpoint not found")
 	}
 	namespaceKind, err := privateEndpointNamespace(authority.NamespaceKind)
 	if err != nil {
 		record(networkingress.ResultDenied, networkingress.ReasonNamespaceRejected)
 		logger.WarnContext(ctx, "private network ingress namespace rejected", attr.SlogError(err))
-		return nil, nil, nil, oops.E(oops.CodeNotFound, errors.Join(mcpendpoints.ErrPolicyDenied, err), "mcp endpoint not found")
+		return mcpendpoints.ResolutionResult{}, oops.E(oops.CodeNotFound, errors.Join(mcpendpoints.ErrPolicyDenied, err), "mcp endpoint not found")
 	}
 	result, err := mcpendpoints.Resolve(ctx, s.db, logger, mcpendpoints.ResolutionInput{
 		Slug:                 slug,
@@ -586,18 +589,18 @@ func (s *Service) ResolveMCPEndpointAndServer(ctx context.Context, logger *slog.
 	})
 	if err != nil {
 		record(networkingress.ResultError, networkingress.ReasonDependencyFailed)
-		return nil, nil, nil, fmt.Errorf("resolve private MCP endpoint: %w", err)
+		return mcpendpoints.ResolutionResult{}, fmt.Errorf("resolve private MCP endpoint: %w", err)
 	}
 	if !result.Found {
 		record(networkingress.ResultDenied, networkingress.ReasonEndpointNotFound)
-		return nil, nil, nil, oops.E(oops.CodeNotFound, mcpendpoints.ErrPolicyDenied, "mcp endpoint not found")
+		return mcpendpoints.ResolutionResult{}, oops.E(oops.CodeNotFound, mcpendpoints.ErrPolicyDenied, "mcp endpoint not found")
 	}
 	if !result.Allowed {
 		record(networkingress.ResultDenied, networkingress.ReasonPolicyDenied)
-		return nil, nil, nil, oops.E(oops.CodeNotFound, mcpendpoints.ErrPolicyDenied, "mcp endpoint not found")
+		return mcpendpoints.ResolutionResult{}, oops.E(oops.CodeNotFound, mcpendpoints.ErrPolicyDenied, "mcp endpoint not found")
 	}
 	record(networkingress.ResultAllowed, networkingress.ReasonNone)
-	return result.Endpoint, result.Server, result.MetaServer, nil
+	return result, nil
 }
 
 func privateEndpointNamespace(kind string) (mcpendpoints.NamespaceKind, error) {
@@ -634,7 +637,8 @@ func (s *Service) LoadResolvedMcpEndpointBySlug(ctx context.Context, logger *slo
 		}
 		return gateway.resolved, nil
 	}
-	mcpEndpoint, mcpServer, metaServer, err := s.ResolveMCPEndpointAndServer(ctx, logger, slug)
+	resolved, err := s.ResolveMCPEndpointAndServer(ctx, logger, slug)
+	mcpEndpoint, mcpServer, metaServer := resolved.Endpoint, resolved.Server, resolved.MetaServer
 	switch {
 	case err == nil:
 		if metaServer != nil {

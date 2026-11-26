@@ -677,7 +677,7 @@ func TestResolveMCPEndpointAndServerPrivateOriginUsesIngressNamespace(t *testing
 	require.NoError(t, err)
 	require.EqualValues(t, 1, rows)
 
-	_, _, _, err = ti.service.ResolveMCPEndpointAndServer(ctx, ti.logger, slug)
+	_, err = ti.service.ResolveMCPEndpointAndServer(ctx, ti.logger, slug)
 	require.Error(t, err, "private-only endpoint must remain hidden on the public origin")
 
 	ingressID := uuid.New()
@@ -699,7 +699,8 @@ func TestResolveMCPEndpointAndServerPrivateOriginUsesIngressNamespace(t *testing
 	})
 	require.NoError(t, err)
 
-	endpoint, resolvedServer, metaServer, err := ti.service.ResolveMCPEndpointAndServer(privateCtx, ti.logger, slug)
+	resolved, err := ti.service.ResolveMCPEndpointAndServer(privateCtx, ti.logger, slug)
+	endpoint, resolvedServer, metaServer := resolved.Endpoint, resolved.Server, resolved.MetaServer
 	require.NoError(t, err)
 	require.NotNil(t, endpoint)
 	require.NotNil(t, resolvedServer)
