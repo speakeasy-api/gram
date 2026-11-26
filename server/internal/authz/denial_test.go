@@ -3,7 +3,12 @@ package authz
 import (
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
+
+	authzv1 "github.com/speakeasy-api/gram/infra/gen/gram/authz/v1"
+	authzrepo "github.com/speakeasy-api/gram/server/internal/authz/repo"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -212,6 +217,42 @@ func TestDecideReason_OtherDispositionIsReported(t *testing.T) {
 	reasons, err := decisionReasons(ctx, engine, []Check{call})
 	require.NoError(t, err)
 	require.Equal(t, []Reason{ReasonDisposition}, reasons)
+}
+
+// Require on a tool call refused only by its disposition stays an ordinary
+// refusal: forbidden, recorded, and logged as an unsatisfied scope rather than
+// a block.
+func TestEngineRequire_DispositionRefusalIsAnOrdinaryRefusal(t *testing.T) {
+	t.Parallel()
+
+	orgID := "org_" + uuid.NewString()
+	selector := NewSelector(ScopeMCPConnect, "toolset_1")
+	selector[SelectorKeyDisposition] = DispositionReadOnly
+	ctx := WithDenialRecorder(GrantsToContext(enterpriseSessionCtxWithOrg(t, orgID), []Grant{NewGrantWithSelector(ScopeMCPConnect, selector)}))
+	conn := newTestDB(t)
+	seedOrganization(t, ctx, conn, orgID)
+	engine := NewEngine(testenv.NewLogger(t), conn, staticChallengeLogging(true), workos.NewStubClient())
+
+	call := MCPServer(MCPServerIDFrom("toolset_1"), ProjectIDFrom(authProjectP)).ToolCall("delete_all", DispositionDestructive)
+	reasons, err := decisionReasons(WithoutChallenges(ctx), engine, []Check{call})
+	require.NoError(t, err)
+	require.Equal(t, []Reason{ReasonReadOnly}, reasons)
+
+	err = engine.Require(ctx, call)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+
+	denial, ok := RecordedDenial(ctx)
+	require.True(t, ok)
+	require.Equal(t, ScopeMCPConnect, denial.Scope)
+
+	rows := listChallengeOutboxRows(t, conn)
+	require.Len(t, rows, 1)
+	message := &authzv1.Challenge{}
+	require.NoError(t, proto.Unmarshal(rows[0].Message, message))
+	require.Equal(t, string(authzrepo.OutcomeDeny), message.GetOutcome())
+	require.Equal(t, string(authzrepo.ReasonScopeUnsatisfied), message.GetReason())
 }
 
 // A call refused because it names no tool while the grant is limited to one
