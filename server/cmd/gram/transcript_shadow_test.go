@@ -147,6 +147,8 @@ func TestTranscriptShadowSchemaCompatibility(t *testing.T) {
 		{name: "sidecar without source_updated_at", ddl: "CREATE TABLE chat_message_transcripts (" + strings.Replace(columns, ", source_updated_at timestamptz", "", 1) + ", PRIMARY KEY (message_id))"},
 		{name: "source_hash still required", ddl: "CREATE TABLE chat_message_transcripts (" + strings.Replace(columns, "source_hash bytea", "source_hash bytea NOT NULL", 1) + ", PRIMARY KEY (message_id))"},
 		{name: "source_updated_at without default", ddl: "ALTER TABLE chat_messages ALTER COLUMN source_updated_at DROP DEFAULT; CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id))"},
+		{name: "source_updated_at default NULL", ddl: "ALTER TABLE chat_messages ALTER COLUMN source_updated_at SET DEFAULT NULL; CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id))"},
+		{name: "sidecar without source_hash", ddl: "CREATE TABLE chat_message_transcripts (" + strings.Replace(columns, " source_hash bytea,", "", 1) + ", PRIMARY KEY (message_id))"},
 		{name: "tool call extra required column without default", ddl: "ALTER TABLE chat_message_tool_call_ids ADD COLUMN extra text NOT NULL; CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id))"},
 		{name: "tool call defaulted extra column", ddl: "ALTER TABLE chat_message_tool_call_ids ADD COLUMN extra text NOT NULL DEFAULT ''; CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id))", ok: true},
 	}

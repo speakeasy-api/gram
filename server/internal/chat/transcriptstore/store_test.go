@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"regexp"
+	"strings"
 	"testing"
 	"time"
 
@@ -295,6 +296,91 @@ func (d *beforeCAS) Exec(ctx context.Context, sql string, args ...any) (pgconn.C
 	tag, err := d.DBTX.Exec(ctx, sql, args...) //nolint:glint // notestingrawsql: transparently intercept generated CAS execution to synchronize concurrent transactions.
 	return tag, safe(err)
 }
+
+// afterCaptureExec runs a hook once, right after the Capture upsert and
+// before the metadata update that follows it in the same transaction.
+type afterCaptureExec struct {
+	repo.DBTX
+	once func()
+}
+
+func (d *afterCaptureExec) Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
+	tag, err := d.DBTX.Exec(ctx, sql, args...) //nolint:glint // notestingrawsql: transparently intercept generated capture execution to interleave two transactions.
+	if d.once != nil && strings.Contains(sql, "-- name: Capture ") {
+		f := d.once
+		d.once = nil
+		f()
+	}
+	return tag, safe(err)
+}
+
+// Two captures of one message must not deadlock: each one updates the message
+// after its upsert, so the upsert takes a lock that makes the second wait.
+func TestConcurrentCapturesOfOneMessageDoNotDeadlock(t *testing.T) {
+	t.Parallel()
+	f := setup(t, true)
+	ctx := t.Context()
+	id := uuid.New()
+	f.add(t, id)
+	first, err := f.db.Begin(ctx) //nolint:glint // notestingrawsql: caller-owned transaction boundary exercises lock lifetime; fixture data uses generated queries.
+	require.NoError(t, err)
+	defer func() { _ = first.Rollback(ctx) }()
+	second, err := f.db.Begin(ctx) //nolint:glint // notestingrawsql: caller-owned transaction boundary exercises lock lifetime; fixture data uses generated queries.
+	require.NoError(t, err)
+	defer func() { _ = second.Rollback(ctx) }()
+
+	secondDone := make(chan error, 1)
+	hook := &afterCaptureExec{DBTX: first, once: func() {
+		go func() { secondDone <- f.store.Capture(ctx, second, f.org, f.project, []uuid.UUID{id}) }()
+		// Let the second capture take every lock it can get, until it waits
+		// on one, before the first goes on to update the message.
+		require.Eventually(t, func() bool {
+			var waiting int
+			err := f.db.QueryRow(ctx, `SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'`).Scan(&waiting) //nolint:glint // notestingrawsql: observes lock waits to order two transactions deterministically.
+			return err == nil && waiting > 0
+		}, 5*time.Second, 10*time.Millisecond)
+	}}
+	require.NoError(t, f.store.Capture(ctx, hook, f.org, f.project, []uuid.UUID{id}))
+	require.NoError(t, first.Commit(ctx))
+	require.NoError(t, <-secondDone)
+	require.NoError(t, second.Commit(ctx))
+}
+
+// A copy sealed before source_updated_at existed is still checked by its
+// source_hash: current while the hash matches, stale once the body changes,
+// and moved to source_updated_at (hash cleared) when it is sealed again.
+func TestLegacySourceHashCopies(t *testing.T) {
+	t.Parallel()
+	f := setup(t, true)
+	ctx := t.Context()
+	id := uuid.New()
+	f.add(t, id)
+	f.capture(t, id)
+	fixtures := fixturerepo.New(f.db)
+	n, err := fixtures.MakeLegacyCopy(ctx, id, project(f.project))
+	require.NoError(t, err)
+	require.EqualValues(t, 1, n)
+
+	opened, err := f.store.Load(ctx, f.org, f.project, id)
+	require.NoError(t, err, "a legacy copy whose hash matches is current")
+	require.Equal(t, "sensitive example", opened.Content)
+
+	_, err = fixtures.ChangeContent(ctx, id, project(f.project))
+	require.NoError(t, err)
+	_, err = f.store.Load(ctx, f.org, f.project, id)
+	require.ErrorIs(t, err, ErrStale, "a changed body makes the legacy copy stale")
+
+	page, err := f.store.Backfill(ctx, f.org, f.project, uuid.Nil, 500)
+	require.NoError(t, err)
+	require.Equal(t, 1, page.Count)
+	opened, err = f.store.Load(ctx, f.org, f.project, id)
+	require.NoError(t, err)
+	require.Equal(t, "changed", opened.Content)
+	hashed, err := fixtures.CopySourceHashIsSet(ctx, id)
+	require.NoError(t, err)
+	require.False(t, hashed, "resealing clears the legacy hash")
+}
+
 func TestCaptureConcurrentEditReturnsChanged(t *testing.T) {
 	t.Parallel()
 	f := setup(t, true)
@@ -557,7 +643,7 @@ func TestSourceFingerprintExpressionsAgree(t *testing.T) {
 	// Readers in internal/plainrepo hash other table aliases; the expression
 	// must match once the alias is set aside.
 	alias := regexp.MustCompile(`\b[a-z_]+\.(content_raw|content|tool_calls|tool_outcome_notes|tool_call_summaries|storage_error)\b`)
-	for path, count := range map[string]int{"queries.sql": 4, "internal/plainrepo/queries.sql": 22} {
+	for path, count := range map[string]int{"queries.sql": 4, "fixtures/queries.sql": 1, "internal/plainrepo/queries.sql": 22} {
 		source, err := os.ReadFile(path)
 		require.NoError(t, err)
 		matches := expression.FindAllString(string(source), -1)
