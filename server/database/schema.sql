@@ -7186,6 +7186,14 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   -- version rescans and backfills are coordinated outside this field.
   risk_analyzed_at timestamptz,
 
+  -- Plaintext-free metadata of the message body, so readers can count, budget
+  -- and filter without reading or decrypting it. Written in the transaction
+  -- that seals the transcript, from the same body. NULL until then.
+  tool_call_count INTEGER,
+  content_bytes INTEGER,
+  content_raw_bytes INTEGER,
+  tool_calls_bytes INTEGER,
+
   CONSTRAINT chat_messages_pkey PRIMARY KEY (id),
   CONSTRAINT chat_messages_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE,
   CONSTRAINT chat_messages_seq_key UNIQUE (seq)
@@ -7251,6 +7259,14 @@ COMMENT ON COLUMN chat_messages.original_message_id IS 'Original source-message 
 COMMENT ON COLUMN chat_messages.replayed IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.created_at IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.risk_analyzed_at IS '@access: confidential';
+COMMENT ON COLUMN chat_messages.tool_call_count IS 'Number of tool calls in tool_calls, 0 when it has none.
+@access: confidential';
+COMMENT ON COLUMN chat_messages.content_bytes IS 'octet_length of content.
+@access: confidential';
+COMMENT ON COLUMN chat_messages.content_raw_bytes IS 'octet_length of content_raw as text, 0 when NULL.
+@access: confidential';
+COMMENT ON COLUMN chat_messages.tool_calls_bytes IS 'octet_length of tool_calls as text, 0 when NULL.
+@access: confidential';
 
 -- A non-partial unique index supplies the composite message ownership target.
 CREATE UNIQUE INDEX IF NOT EXISTS chat_messages_project_id_id_key
@@ -7262,18 +7278,15 @@ CREATE TABLE IF NOT EXISTS chat_message_transcripts (
   project_id UUID NOT NULL,
   organization_id TEXT NOT NULL,
   ciphertext TEXT NOT NULL,
-  source_hash BYTEA NOT NULL,
+  -- Deprecated: every body update now reseals the transcript in the same
+  -- transaction, so a transcript is always current and needs no freshness
+  -- check. A legacy unkeyed digest of the plaintext: it confirms guessed
+  -- payloads and correlates equal ones without a key, even after key
+  -- destruction, so a row carrying it is plaintext-equivalent. New transcripts
+  -- leave it NULL; backfill reseals the rest, then the column is dropped.
+  source_hash BYTEA,
   created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
-
-  -- Plaintext-free metadata sealed alongside the ciphertext, so readers can
-  -- count, budget and filter without decrypting. Each value describes the
-  -- same source as source_hash, so it is current exactly when the shadow is.
-  -- NULL means the shadow was captured before the column existed.
-  tool_call_count INTEGER,
-  content_bytes INTEGER,
-  content_raw_bytes INTEGER,
-  tool_calls_bytes INTEGER,
 
   CONSTRAINT chat_message_transcripts_pkey PRIMARY KEY (message_id),
   CONSTRAINT chat_message_transcripts_project_id_message_id_fkey FOREIGN KEY (project_id, message_id) REFERENCES chat_messages(project_id, id) ON DELETE CASCADE,
@@ -7290,50 +7303,41 @@ COMMENT ON COLUMN chat_message_transcripts.organization_id IS 'Owning organizati
 @access: confidential';
 COMMENT ON COLUMN chat_message_transcripts.ciphertext IS 'Organization-key encrypted transcript payload.
 @access: opaque-restricted';
-COMMENT ON COLUMN chat_message_transcripts.source_hash IS 'Unkeyed freshness digest of sensitive transcript fields.
+COMMENT ON COLUMN chat_message_transcripts.source_hash IS 'Deprecated: transcripts are resealed with every body update, so no freshness check is needed. Legacy unkeyed digest of sensitive transcript fields; NULL for new transcripts. A row carrying it is plaintext-equivalent until backfill reseals it and the column is dropped.
 @access: opaque-restricted';
 COMMENT ON COLUMN chat_message_transcripts.created_at IS '@access: confidential';
 COMMENT ON COLUMN chat_message_transcripts.updated_at IS '@access: confidential';
-COMMENT ON COLUMN chat_message_transcripts.tool_call_count IS 'Number of tool calls in the source message tool_calls, 0 when it has none.
-@access: confidential';
-COMMENT ON COLUMN chat_message_transcripts.content_bytes IS 'octet_length of the source message content.
-@access: confidential';
-COMMENT ON COLUMN chat_message_transcripts.content_raw_bytes IS 'octet_length of the source message content_raw as text, 0 when NULL.
-@access: confidential';
-COMMENT ON COLUMN chat_message_transcripts.tool_calls_bytes IS 'octet_length of the source message tool_calls as text, 0 when NULL.
-@access: confidential';
 
 CREATE INDEX IF NOT EXISTS chat_message_transcripts_project_id_idx ON chat_message_transcripts (project_id);
 CREATE INDEX IF NOT EXISTS chat_message_transcripts_organization_id_idx ON chat_message_transcripts (organization_id);
 
--- Provider tool-call IDs of a shadowed assistant message, so a tool result can
--- find the message that issued its call without decrypting tool_calls. Rows
--- are rewritten with their shadow and go with it.
-CREATE TABLE IF NOT EXISTS chat_message_transcript_tool_calls (
+-- Provider tool-call IDs of an assistant message, so a tool result can find
+-- the message that issued its call without reading or decrypting tool_calls.
+-- Rewritten whenever the transcript is sealed, from the same snapshot.
+CREATE TABLE IF NOT EXISTS chat_message_tool_call_ids (
   message_id UUID NOT NULL,
   tool_call_id TEXT NOT NULL,
   chat_id UUID NOT NULL,
   project_id UUID NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
 
-  CONSTRAINT chat_message_transcript_tool_calls_pkey PRIMARY KEY (message_id, tool_call_id),
-  CONSTRAINT chat_message_transcript_tool_calls_message_id_fkey FOREIGN KEY (message_id) REFERENCES chat_message_transcripts(message_id) ON DELETE CASCADE,
+  CONSTRAINT chat_message_tool_call_ids_pkey PRIMARY KEY (message_id, tool_call_id),
   -- Binds project_id to the message's own project, so a row cannot name
-  -- another tenant. chat_id is written only from the message by the store.
-  CONSTRAINT chat_message_transcript_tool_calls_project_id_message_id_fkey FOREIGN KEY (project_id, message_id) REFERENCES chat_messages(project_id, id) ON DELETE CASCADE
+  -- another tenant. chat_id is written only from the message.
+  CONSTRAINT chat_message_tool_call_ids_project_id_message_id_fkey FOREIGN KEY (project_id, message_id) REFERENCES chat_messages(project_id, id) ON DELETE CASCADE
 );
 
-COMMENT ON COLUMN chat_message_transcript_tool_calls.message_id IS 'Shadowed assistant message that issued the tool call.
+COMMENT ON COLUMN chat_message_tool_call_ids.message_id IS 'Assistant message that issued the tool call.
 @access: confidential';
-COMMENT ON COLUMN chat_message_transcript_tool_calls.tool_call_id IS 'Provider-issued tool call identifier from the message tool_calls.
+COMMENT ON COLUMN chat_message_tool_call_ids.tool_call_id IS 'Provider-issued tool call identifier from the message tool_calls.
 @access: opaque-confidential';
-COMMENT ON COLUMN chat_message_transcript_tool_calls.chat_id IS 'Chat that owns the message.
+COMMENT ON COLUMN chat_message_tool_call_ids.chat_id IS 'Chat that owns the message.
 @access: confidential';
-COMMENT ON COLUMN chat_message_transcript_tool_calls.project_id IS 'Project that owns the message.
+COMMENT ON COLUMN chat_message_tool_call_ids.project_id IS 'Project that owns the message.
 @access: confidential';
-COMMENT ON COLUMN chat_message_transcript_tool_calls.created_at IS '@access: confidential';
+COMMENT ON COLUMN chat_message_tool_call_ids.created_at IS '@access: confidential';
 
-CREATE INDEX IF NOT EXISTS chat_message_transcript_tool_calls_chat_id_tool_call_id_idx ON chat_message_transcript_tool_calls (chat_id, tool_call_id);
+CREATE INDEX IF NOT EXISTS chat_message_tool_call_ids_chat_id_tool_call_id_idx ON chat_message_tool_call_ids (chat_id, tool_call_id);
 
 CREATE INDEX IF NOT EXISTS chat_messages_chat_id_generation_seq_idx ON chat_messages (chat_id, generation, seq);
 

@@ -1823,6 +1823,18 @@ type ChatMessage struct {
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
 	RiskAnalyzedAt pgtype.Timestamptz
+	// Number of tool calls in tool_calls, 0 when it has none.
+	// @access: confidential
+	ToolCallCount pgtype.Int4
+	// octet_length of content.
+	// @access: confidential
+	ContentBytes pgtype.Int4
+	// octet_length of content_raw as text, 0 when NULL.
+	// @access: confidential
+	ContentRawBytes pgtype.Int4
+	// octet_length of tool_calls as text, 0 when NULL.
+	// @access: confidential
+	ToolCallsBytes pgtype.Int4
 }
 
 type ChatMessageParticipant struct {
@@ -1850,42 +1862,8 @@ type ChatMessageParticipant struct {
 	UpdatedAt pgtype.Timestamptz
 }
 
-type ChatMessageTranscript struct {
-	// Source message identity.
-	// @access: confidential
-	MessageID uuid.UUID
-	// Owning project identity.
-	// @access: confidential
-	ProjectID uuid.UUID
-	// Owning organization identity.
-	// @access: confidential
-	OrganizationID string
-	// Organization-key encrypted transcript payload.
-	// @access: opaque-restricted
-	Ciphertext string
-	// Unkeyed freshness digest of sensitive transcript fields.
-	// @access: opaque-restricted
-	SourceHash []byte
-	// @access: confidential
-	CreatedAt pgtype.Timestamptz
-	// @access: confidential
-	UpdatedAt pgtype.Timestamptz
-	// Number of tool calls in the source message tool_calls, 0 when it has none.
-	// @access: confidential
-	ToolCallCount pgtype.Int4
-	// octet_length of the source message content.
-	// @access: confidential
-	ContentBytes pgtype.Int4
-	// octet_length of the source message content_raw as text, 0 when NULL.
-	// @access: confidential
-	ContentRawBytes pgtype.Int4
-	// octet_length of the source message tool_calls as text, 0 when NULL.
-	// @access: confidential
-	ToolCallsBytes pgtype.Int4
-}
-
-type ChatMessageTranscriptToolCall struct {
-	// Shadowed assistant message that issued the tool call.
+type ChatMessageToolCallID struct {
+	// Assistant message that issued the tool call.
 	// @access: confidential
 	MessageID uuid.UUID
 	// Provider-issued tool call identifier from the message tool_calls.
@@ -1899,6 +1877,28 @@ type ChatMessageTranscriptToolCall struct {
 	ProjectID uuid.UUID
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
+}
+
+type ChatMessageTranscript struct {
+	// Source message identity.
+	// @access: confidential
+	MessageID uuid.UUID
+	// Owning project identity.
+	// @access: confidential
+	ProjectID uuid.UUID
+	// Owning organization identity.
+	// @access: confidential
+	OrganizationID string
+	// Organization-key encrypted transcript payload.
+	// @access: opaque-restricted
+	Ciphertext string
+	// Deprecated: transcripts are resealed with every body update, so no freshness check is needed. Legacy unkeyed digest of sensitive transcript fields; NULL for new transcripts. A row carrying it is plaintext-equivalent until backfill reseals it and the column is dropped.
+	// @access: opaque-restricted
+	SourceHash []byte
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 type ChatResolution struct {
