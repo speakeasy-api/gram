@@ -229,7 +229,9 @@ func TestSharedAuthorizationServer_ServesMetadataAtBothLocations(t *testing.T) {
 		require.Equal(t, f.issuerURL+"/token", meta["token_endpoint"])
 		require.Equal(t, f.issuerURL+"/register", meta["registration_endpoint"])
 		require.Equal(t, f.issuerURL+"/revoke", meta["revocation_endpoint"])
-		require.ElementsMatch(t, []any{"authorization_code", "refresh_token", "urn:ietf:params:oauth:grant-type:jwt-bearer"}, meta["grant_types_supported"])
+		// The issuer serves a workload grant, so an assistant runtime it admits can
+		// also exchange a turn's delegation.
+		require.ElementsMatch(t, []any{"authorization_code", "refresh_token", "urn:ietf:params:oauth:grant-type:jwt-bearer", "urn:ietf:params:oauth:grant-type:token-exchange"}, meta["grant_types_supported"])
 		require.Equal(t, true, meta["authorization_response_iss_parameter_supported"])
 	}
 }
