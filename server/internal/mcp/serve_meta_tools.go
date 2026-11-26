@@ -677,6 +677,7 @@ func (s *Service) buildMemberDispatch(
 		mcpServerID:           &serverID,
 		mcpEndpointID:         nil,
 		attributionServerID:   nil,
+		feedbackToolEnabled:   member.feedbackToolEnabled,
 		// Meta members keep their toolset-keyed per-tool checks; the meta
 		// surface's RBAC model is outside the wrapper-governance cutover.
 		// Publicness is the hosting state the member was admitted under.
