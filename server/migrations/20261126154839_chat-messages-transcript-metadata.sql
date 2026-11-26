@@ -1,27 +1,15 @@
 -- Modify "chat_message_transcripts" table
 ALTER TABLE "chat_message_transcripts" ALTER COLUMN "source_hash" DROP NOT NULL, ADD COLUMN "source_updated_at" timestamptz NULL;
 -- Set comment to column: "source_hash" on table: "chat_message_transcripts"
-COMMENT ON COLUMN "chat_message_transcripts"."source_hash" IS 'Deprecated unkeyed freshness digest of sensitive transcript fields; NULL for copies sealed with source_updated_at.
+COMMENT ON COLUMN "chat_message_transcripts"."source_hash" IS 'Legacy unkeyed freshness digest of sensitive transcript fields; NULL for copies sealed with source_updated_at.
 @access: opaque-restricted';
--- Set comment to column: "tool_call_count" on table: "chat_message_transcripts"
-COMMENT ON COLUMN "chat_message_transcripts"."tool_call_count" IS 'Deprecated, moved to chat_messages. Number of tool calls in the source message tool_calls, 0 when it has none.
-@access: confidential';
--- Set comment to column: "content_bytes" on table: "chat_message_transcripts"
-COMMENT ON COLUMN "chat_message_transcripts"."content_bytes" IS 'Deprecated, moved to chat_messages. octet_length of the source message content.
-@access: confidential';
--- Set comment to column: "content_raw_bytes" on table: "chat_message_transcripts"
-COMMENT ON COLUMN "chat_message_transcripts"."content_raw_bytes" IS 'Deprecated, moved to chat_messages. octet_length of the source message content_raw as text, 0 when NULL.
-@access: confidential';
--- Set comment to column: "tool_calls_bytes" on table: "chat_message_transcripts"
-COMMENT ON COLUMN "chat_message_transcripts"."tool_calls_bytes" IS 'Deprecated, moved to chat_messages. octet_length of the source message tool_calls as text, 0 when NULL.
-@access: confidential';
 -- Set comment to column: "source_updated_at" on table: "chat_message_transcripts"
-COMMENT ON COLUMN "chat_message_transcripts"."source_updated_at" IS 'The chat_messages.source_updated_at this copy was sealed from.
+COMMENT ON COLUMN "chat_message_transcripts"."source_updated_at" IS 'The parent chat_messages.updated_at this copy was sealed from.
 @access: confidential';
 -- Modify "chat_messages" table
-ALTER TABLE "chat_messages" ADD COLUMN "source_updated_at" timestamptz NULL, ADD COLUMN "tool_call_count" integer NULL, ADD COLUMN "content_bytes" integer NULL, ADD COLUMN "content_raw_bytes" integer NULL, ADD COLUMN "tool_calls_bytes" integer NULL;
--- Set comment to column: "source_updated_at" on table: "chat_messages"
-COMMENT ON COLUMN "chat_messages"."source_updated_at" IS 'When the message body last changed; set on insert and by every body update.
+ALTER TABLE "chat_messages" ADD COLUMN "updated_at" timestamptz NULL, ADD COLUMN "tool_call_count" integer NULL, ADD COLUMN "content_bytes" integer NULL, ADD COLUMN "content_raw_bytes" integer NULL, ADD COLUMN "tool_calls_bytes" integer NULL;
+-- Set comment to column: "updated_at" on table: "chat_messages"
+COMMENT ON COLUMN "chat_messages"."updated_at" IS 'When the message body last changed; set on insert and by every body update.
 @access: confidential';
 -- Set comment to column: "tool_call_count" on table: "chat_messages"
 COMMENT ON COLUMN "chat_messages"."tool_call_count" IS 'Number of tool calls in tool_calls, 0 when it has none.

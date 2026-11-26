@@ -87,7 +87,7 @@ type ChatMessage struct {
 	RiskAnalyzedAt pgtype.Timestamptz
 	// When the message body last changed; set on insert and by every body update.
 	// @access: confidential
-	SourceUpdatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
 	// Number of tool calls in tool_calls, 0 when it has none.
 	// @access: confidential
 	ToolCallCount pgtype.Int4
