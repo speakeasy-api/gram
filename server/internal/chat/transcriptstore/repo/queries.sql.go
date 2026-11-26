@@ -60,7 +60,11 @@ WITH live AS MATERIALIZED (
  WHERE m.id = $5 AND m.project_id = $1 AND p.organization_id = $2
  AND m.chat_id = $6
  AND m.source_updated_at IS NOT DISTINCT FROM $4::timestamptz
- FOR SHARE OF m, c, p
+ -- NO KEY UPDATE on the message, because UpdateMessageMetadata then updates it
+ -- in the same transaction: two captures holding SHARE would deadlock on the
+ -- upgrade. It still lets readers and key-share locks through.
+ FOR NO KEY UPDATE OF m
+ FOR SHARE OF c, p
 )
 INSERT INTO chat_message_transcripts (message_id, project_id, organization_id, ciphertext, source_updated_at)
 SELECT live.id, $1, $2, $3, $4::timestamptz FROM live

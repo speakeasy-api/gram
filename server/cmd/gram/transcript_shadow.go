@@ -167,11 +167,15 @@ SELECT EXISTS (SELECT 1 FROM sidecar)
  )
  AND EXISTS (SELECT 1 FROM arbiters WHERE indimmediate AND indisready)
  AND NOT EXISTS (SELECT 1 FROM arbiters WHERE NOT indimmediate)
- AND EXISTS (
- SELECT 1 FROM pg_catalog.pg_attribute a
- JOIN sidecar s ON s.oid = a.attrelid
- WHERE a.attname = 'source_updated_at' AND a.atttypid = 'timestamptz'::regtype AND NOT a.attisdropped
- )
+ AND NOT EXISTS (
+ -- Nullable, but the store writes source_updated_at and reads the legacy
+ -- source_hash of copies sealed before it existed.
+ SELECT 1 FROM (VALUES ('source_updated_at', 'timestamptz'::regtype), ('source_hash', 'bytea'::regtype)) AS freshness(name, type_oid)
+ WHERE NOT EXISTS (
+  SELECT 1 FROM pg_catalog.pg_attribute a
+  JOIN sidecar s ON s.oid = a.attrelid
+  WHERE a.attname = freshness.name AND a.atttypid = freshness.type_oid AND NOT a.attisdropped
+ ))
  AND NOT EXISTS (
  -- Sealing writes the metadata to chat_messages and compares source_updated_at.
  SELECT 1 FROM (VALUES ('tool_call_count', 'integer'::regtype), ('content_bytes', 'integer'::regtype),
@@ -183,10 +187,14 @@ SELECT EXISTS (SELECT 1 FROM sidecar)
   WHERE a.attname = column_needed.name AND a.atttypid = column_needed.type_oid AND NOT a.attisdropped
  ))
  AND EXISTS (
- -- Inserts rely on the column default to stamp source_updated_at.
+ -- Inserts rely on the column default to stamp source_updated_at, so it must
+ -- be clock_timestamp(): no default, or a NULL one, would leave new messages
+ -- without a freshness marker.
  SELECT 1 FROM pg_catalog.pg_attribute a
  JOIN messages m ON m.oid = a.attrelid
- WHERE a.attname = 'source_updated_at' AND a.atthasdef AND NOT a.attisdropped
+ JOIN pg_catalog.pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+ WHERE a.attname = 'source_updated_at' AND NOT a.attisdropped
+   AND pg_catalog.pg_get_expr(d.adbin, d.adrelid) = 'clock_timestamp()'
  )
  AND NOT EXISTS (
  SELECT 1 FROM (VALUES ('message_id', 'uuid'::regtype), ('tool_call_id', 'text'::regtype), ('chat_id', 'uuid'::regtype), ('project_id', 'uuid'::regtype)) AS tool_call(name, type_oid)
