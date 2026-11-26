@@ -73,7 +73,7 @@ After applying, run the preview again and confirm `legacy=0`. If it is not 0, se
 - `unattributed`: connections still without an `organization_id` whose project's organization exists, counted after the run. An apply gives these one.
 - `legacy`: connections that still hold a plaintext token, counted after the run, not counting those in `missing_organization`.
 - `hashed`: connections whose token is stored as a hash and a sealed copy.
-- `missing_organization`: connections whose project's organization has no `organization_metadata` row (`projects.organization_id` has no foreign key). The backfill can't give them an organization, and their token, if any, stays in plaintext. Investigate any nonzero count. The admin page shows them as **Connections that can't get one** and marks the card **Needs a look**.
+- `missing_organization`: connections whose project's organization has no `organization_metadata` row (`projects.organization_id` has no foreign key). The backfill leaves them unchanged: it can't give them an organization, so a plaintext token on one stays in plaintext. Investigate any nonzero count. The admin page shows them as **Connections that can't get one** and marks the card **Needs a look**.
 
 Counts never name organizations or connections. Do not record organization IDs in tickets or pull requests.
 
