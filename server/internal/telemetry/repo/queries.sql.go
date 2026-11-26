@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"maps"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/Masterminds/squirrel"
+	"github.com/google/uuid"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -2881,6 +2883,15 @@ func (q *Queries) GetOverviewSummary(ctx context.Context, arg GetOverviewSummary
 // path off the unfiltered view.
 func (arg GetOverviewSummaryParams) hasFilters() bool {
 	return !arg.User.IsEmpty() || arg.CanonicalUser.Enabled() || arg.ExternalUserID != "" || arg.APIKeyID != "" || arg.ToolsetSlug != "" || arg.RemoteMCPServerID != "" || arg.MCPServerID != "" || arg.MetaMCPServerID != "" || arg.EventSource != "" || arg.HookSource != "" || arg.AccountType != "" || arg.ExternalOrgID != "" || len(arg.ExcludedHookSources) > 0
+}
+
+// toolCallSummariesCanServe reports whether every filter is a column of mcp_tool_call_summaries.
+func (arg GetOverviewSummaryParams) toolCallSummariesCanServe() bool {
+	// Organization gateway rows share the nil project; only a gateway filter tells them apart.
+	if slices.Contains(arg.GramProjectIDs, uuid.Nil.String()) && arg.MetaMCPServerID == "" {
+		return false
+	}
+	return arg.User.IsEmpty() && !arg.CanonicalUser.Enabled() && arg.ExternalUserID == "" && arg.APIKeyID == "" && arg.EventSource == "" && arg.AccountType == "" && arg.ExternalOrgID == ""
 }
 
 // getOverviewSummaryMV builds a query against the pre-aggregated metrics_summaries table.
@@ -6477,10 +6488,11 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 
 	conversationID := chFirstNonEmpty(chAttr("gen_ai.conversation.id"), "toString(attributes.`genai.conversation.id`)")
 	triggerInstanceID := chAttr("gram.trigger.instance_id")
+	// Read the arguments from their typed paths only. Serializing the whole
+	// attributes object to find them cost more than the rest of the row.
 	toolCallArguments := chFirstNonEmpty(
 		chAttr("gen_ai.tool.call.arguments"),
 		"toString(attributes.`gen_ai.tool.call.arguments`)",
-		"JSONExtractString(toString(attributes), 'gen_ai.tool.call.arguments')",
 	)
 	toolCallSkillName := "JSONExtractString(" + toolCallArguments + ", 'skill')"
 	rawSB := sq.Select(
@@ -6585,14 +6597,26 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 	// result alone). Every row of the log group inherits them, so the call
 	// classifies as one target instead of splitting into a gateway or MCP row
 	// and a shadow or local-tool row, matching the max() the summary path reads.
-	logGroupWindow := "OVER (PARTITION BY " + logGroupKind + ", " + logGroupValue + ")"
+	//
+	// Every per-log-group value is computed in this one SELECT over one named
+	// window, so ClickHouse sorts the rows once instead of once per layer.
+	eventSkillName := chFirstNonEmpty("skill_name", "JSONExtractString(tool_call_arguments, 'skill')")
 	rawSQL = fmt.Sprintf(
 		"SELECT * REPLACE ("+
-			"if(tool_source != '', tool_source, max(tool_source) %[1]s) AS tool_source, "+
-			"if(mcp_match != '', mcp_match, max(mcp_match) %[1]s) AS mcp_match, "+
-			"if(mcp_server_url != '', mcp_server_url, max(mcp_server_url) %[1]s) AS mcp_server_url"+
-			") FROM (%[2]s)",
-		logGroupWindow, rawSQL,
+			"if(tool_source != '', tool_source, max(tool_source) OVER log_group) AS tool_source, "+
+			"if(mcp_match != '', mcp_match, max(mcp_match) OVER log_group) AS mcp_match, "+
+			"if(mcp_server_url != '', mcp_server_url, max(mcp_server_url) OVER log_group) AS mcp_server_url"+
+			"), "+
+			"%[1]s AS log_group_kind, "+
+			"%[2]s AS log_group_value, "+
+			"max(agent_id) OVER log_group AS g_agent_id, "+
+			"max(authorizer_user_id) OVER log_group AS g_authorizer_user_id, "+
+			"anyIf(%[3]s, %[3]s != '') OVER log_group AS g_skill_name, "+
+			"max(raw_tool_name) OVER log_group AS g_raw_tool_name, "+
+			"max(toUInt8(raw_tool_name = 'Skill')) OVER log_group AS g_has_skill_tool "+
+			"FROM (%[4]s) "+
+			"WINDOW log_group AS (PARTITION BY %[1]s, %[2]s)",
+		logGroupKind, logGroupValue, eventSkillName, rawSQL,
 	)
 
 	hostedToolsetSlugs, hostedMCPSlugs, hostedURLSuffixes := toolUsageHostedMatcherArrays(arg.HostedMCPMatchers)
@@ -6623,8 +6647,8 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 
 	// Reuse the existing trace/log-group window so sparse actor attributes win
 	// before user identity enters GROUP BY, without another scan or join.
-	traceAgentID := "max(agent_id) OVER (PARTITION BY " + logGroupKind + ", " + logGroupValue + ")"
-	traceAuthorizerUserID := "max(authorizer_user_id) OVER (PARTITION BY " + logGroupKind + ", " + logGroupValue + ")"
+	traceAgentID := "g_agent_id"
+	traceAuthorizerUserID := "g_authorizer_user_id"
 	userKind := chMultiIf(
 		traceAgentID+" != ''", "'"+ToolUsageUserKindAgentID+"'",
 		"user_email != ''", "'"+toolUsageUserKindEmail+"'",
@@ -6634,12 +6658,11 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 	)
 	userKey := chFirstNonEmpty(traceAgentID, "user_email", "external_user_id", "user_id", "'Unknown'")
 	userLabel := chMultiIf(traceAgentID+" != ''", "concat('agent:', "+traceAgentID+")", userKey)
-	eventSkillName := chFirstNonEmpty("skill_name", "JSONExtractString(tool_call_arguments, 'skill')")
-	skillName := "anyIf(" + eventSkillName + ", " + eventSkillName + " != '') OVER (PARTITION BY " + logGroupKind + ", " + logGroupValue + ")"
+	skillName := "g_skill_name"
 	// Spans without a name inherit one from their trace before grouping. Keep
 	// explicit names intact when a trace contains multiple named tool calls.
-	resolvedToolName := chFirstNonEmpty("raw_tool_name", "max(raw_tool_name) OVER (PARTITION BY "+logGroupKind+", "+logGroupValue+")")
-	hasSkillTool := "max(toUInt8(raw_tool_name = 'Skill')) OVER (PARTITION BY " + logGroupKind + ", " + logGroupValue + ") = 1"
+	resolvedToolName := chFirstNonEmpty("raw_tool_name", "g_raw_tool_name")
+	hasSkillTool := "g_has_skill_tool = 1"
 	isSkillCall := "(" + hasSkillTool + " OR " + skillName + " != '')"
 	skillLabel := chFirstNonEmpty(skillName, "''")
 	mcpSkillLoad := toolUsageRawMCPSkillLoad
@@ -6738,8 +6761,8 @@ SELECT
 	log_id,
 	time_unix_nano,
 	trace_id,
-	%s AS log_group_kind,
-	%s AS log_group_value,
+	log_group_kind,
+	log_group_value,
 	gram_urn,
 	%s AS tool_name,
 	%s AS target_type,
@@ -6761,7 +6784,7 @@ SELECT
 	mcp_client_name,
 	mcp_client_version,
 	row_mcp_server_id
-FROM (%s)`, logGroupKind, logGroupValue, chMultiIf(isSkillCall, skillLabel, resolvedToolName), targetType, targetKind, targetID, targetLabel, userKey, userLabel, userKind, traceAuthorizerUserID, sourceSQL)
+FROM (%s)`, chMultiIf(isSkillCall, skillLabel, resolvedToolName), targetType, targetKind, targetID, targetLabel, userKey, userLabel, userKind, traceAuthorizerUserID, sourceSQL)
 
 	normalizedArgs := make([]any, 0, 7+len(sourceArgs))
 	if len(mcpSourceIDs) > 0 {

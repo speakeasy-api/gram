@@ -5,15 +5,17 @@ import type { ChatMessage } from "@gram/client/models/components/chatmessage.js"
 // complete in as few round trips as possible.
 export const FULL_LOAD_PAGE_SIZE = 200;
 
-/** Every message of the chat's latest generation, walked by seq keyset from
- * the start until the server reports nothing newer. */
+/** Every message of one generation (default: the latest), walked by seq keyset
+ * from the start until the server reports nothing newer. */
 export async function fetchFullTranscript(
   client: Gram,
   chatId: string,
+  generation?: number,
 ): Promise<ChatMessage[]> {
   const messages: ChatMessage[] = [];
   let page = await client.chat.load({
     id: chatId,
+    generation,
     fromStart: true,
     limit: FULL_LOAD_PAGE_SIZE,
   });
@@ -22,6 +24,7 @@ export async function fetchFullTranscript(
     const newest = page.messages[page.messages.length - 1]!;
     page = await client.chat.load({
       id: chatId,
+      generation,
       afterSeq: newest.seq,
       limit: FULL_LOAD_PAGE_SIZE,
     });

@@ -15,11 +15,11 @@ choice, so they live together.
 The API exposes three records for what an administrator experiences as one
 thing:
 
-| Record                                       | What it really is                   |
-| -------------------------------------------- | ----------------------------------- |
-| `remote_session_issuers`                     | where users sign in                 |
-| `remote_session_clients`                     | the OAuth client registered there   |
-| `remote_session_client_user_session_issuers` | that client bound to one MCP server |
+| Record                    | What it really is                 |
+| ------------------------- | --------------------------------- |
+| `remote_session_issuers`  | where users sign in               |
+| `remote_session_clients`  | the OAuth client registered there |
+| `mcp_server_auth_clients` | a typed offer on one MCP server   |
 
 Nobody configuring a server thinks in those terms, and AIM-230 says so
 outright: _"Administrators experience the upstream provider and client as one
@@ -58,15 +58,13 @@ lib/remote-identity/
 
   model/                    pure. no React, no network
     identity.ts             IdentityMode and its derivation
-    headers.ts              Authorization rules, ManagedHeader
+    headers.ts              Authorization header classification
     provider.ts             capabilities, tier, display names
     credential.ts           AgentCredential <-> Authorization header
     secret.ts               Secret: { unchanged } | { set, value }
 
   drafts/                   editing server state
     draft.ts                Draft<T>, reconcile, DraftError
-    headerDrafts.ts         one header row, and the rules for writing it
-    useHeaderDrafts.ts      the header rows, as one editable list
     useIdentityDraft.ts     the provider and client choice
     useCredentialDraft.ts   the static credential
 
@@ -77,7 +75,6 @@ lib/remote-identity/
 
   components/               the shared UI of the concept
     IdentityModeCards.tsx   User identity / Shared credential / Manual
-    ProviderRow.tsx         the provider and registration choice
     CredentialFields.tsx    format, fields, live Authorization preview
     IdentityExplainer.tsx   content and inline callout
     ProviderLink.tsx        deep link to the CRUD surface
@@ -90,34 +87,14 @@ components stay free of query wiring.
 
 ## What does not live here
 
-- **Page composition.** `RemoteMcpIdentitySection` arranges these pieces into
-  a settings panel; it stays in `pages/`.
+- **Page composition.** Proxied server settings show typed offers in `UpstreamCredentialsSection` under `pages/`.
 - **Provider CRUD.** The sheets and pages under
   `pages/remote-identity-providers/` edit an issuer _as an issuer_. They
   consume `model/` but keep their own forms — AIM-230 deliberately keeps the
   complex OAuth surface there, out of the linear setup flow.
-- **Header row markup.** `HeadersSection` still draws the rows. It is
-  presentational now: the state, the validation and the write are
-  `useHeaderDrafts`, so the identity panel's Save can commit rows and identity
-  together.
-
-## The rule the module exists to enforce
-
-The identity choice **owns** the `Authorization` header: a shared credential writes
-one, User identity forbids one, Manual rejects the name outright. That
-ownership flows one direction only.
-
-```ts
-type ManagedHeader = {
-  ownedBy: "user" | "agent";
-  headerId: string | null; // null: owned, not written yet
-};
-```
-
-`HeadersSection` used to call the derivation itself and re-find the managed row
-— the same computation the identity section had already done, from a second
-fetch that nothing kept in step. One owner publishes it now, and the rows
-neither validate that row nor write it.
+- **Typed credential headers.** The credential editor under
+  `pages/mcp/x/tabs/settings/sections/authentication/` edits the headers on
+  an offered credential. Sign-in settings no longer edit source headers.
 
 ## Drafts
 
@@ -140,7 +117,7 @@ baseline moves under a dirty draft — is written up on AIM-230.
 
 ## Migration
 
-Done. The table records where each piece came from.
+The table records the origins of the shared pieces still used today.
 
 | Moves from                                            | To                                        |
 | ----------------------------------------------------- | ----------------------------------------- |
@@ -153,7 +130,6 @@ Done. The table records where each piece came from.
 | `…/authentication/identityModes.tsx`                  | `components/IdentityModeCards.tsx`        |
 | `…/authentication/IdentityExplainer.tsx`              | `components/IdentityExplainer.tsx`        |
 | `…/authentication/AgentIdentityRow.tsx`               | `components/CredentialFields.tsx`         |
-| `…/authentication/UserIdentityRow.tsx`                | `components/ProviderRow.tsx`              |
 | `pages/remote-identity-providers/clientDisplay.ts`    | `model/provider.ts`                       |
 | `pages/remote-identity-providers/IssuerLink.tsx`      | `components/ProviderLink.tsx`             |
 | `pages/remote-identity-providers/ScopeBadge.tsx`      | `components/ScopeBadge.tsx`               |
@@ -171,9 +147,6 @@ changes:
    `useIdentityDraft` compared values instead of recording an interaction, and
    `useCredentialDraft` stopped reading validity as dirtiness.
 4. `components/`, one at a time, each a pure move with its tests.
-5. `ManagedHeader`, then one Save: identity and header rows now commit
-   together, and the Custom Headers disclosure no longer carries its own
-   button.
 
 Still deferred: `Secret` reaching the wire, and the provider CRUD pages under
 `pages/remote-identity-providers/`.

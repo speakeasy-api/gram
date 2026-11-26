@@ -245,34 +245,56 @@ func describeToolsMemberArguments(slug string, toolNames []string) []byte {
 	return arguments
 }
 
+// memberToolDispositions is which member tools one gateway call may run.
+type memberToolDispositions string
+
+const (
+	// memberToolAnyDisposition runs any member tool the caller may call.
+	memberToolAnyDisposition memberToolDispositions = "any"
+
+	// memberToolReadOnly runs only member tools whose effective annotations
+	// classify them read-only, the classification per-tool RBAC uses.
+	memberToolReadOnly memberToolDispositions = "read_only"
+)
+
+// readOnlyToolRefusal is the isError message for a tool that
+// execute_read_only_tool may not run.
+func readOnlyToolRefusal(toolName string) string {
+	return fmt.Sprintf("tool %q is not annotated read-only, so %s cannot run it; call it with %s instead", toolName, metamcp.ToolExecuteReadOnlyTool, metamcp.ToolExecuteTool)
+}
+
 // handleMetaExecuteToolCall routes into the member's hosted dispatch. The
 // synthetic tools/call carries the outer request ID, so the dispatch envelope
-// answers directly; the result's _meta identity stays the member's.
+// answers directly; the result's _meta identity stays the member's. toolName
+// is the gateway tool called, execute_tool or execute_read_only_tool.
 func (s *Service) handleMetaExecuteToolCall(
 	ctx context.Context,
 	logger *slog.Logger,
 	gate *metaGateContext,
 	members []metaMember,
 	req *rawRequest,
+	toolName string,
 	argsRaw json.RawMessage,
 	meta *mcprequests.WireMeta,
+	dispositions memberToolDispositions,
 ) (json.RawMessage, error) {
 	start := time.Now()
 	qualified, arguments, err := processExecuteToolCall(ctx, logger, argsRaw)
 	if err != nil {
-		s.logMetaToolCallFailure(ctx, gate, metamcp.ToolExecuteTool, argsRaw, newMetaToolCallAttempt(start), err)
+		s.logMetaToolCallFailure(ctx, gate, toolName, argsRaw, newMetaToolCallAttempt(start), err)
 		return nil, err
 	}
 
-	return s.executeMetaMemberTool(ctx, logger, gate, members, req, qualified, arguments, meta)
+	return s.executeMetaMemberTool(ctx, logger, gate, members, req, qualified, arguments, meta, dispositions)
 }
 
-// executeMetaMemberTool is shared by Direct calls, Progressive execute_tool,
-// and Code Mode. A call that fails before its member dispatch writes the
-// member's tool_call row is logged here, so every failed call leaves one row
-// stamped with this gateway.
-func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger, gate *metaGateContext, members []metaMember, req *rawRequest, qualified string, arguments json.RawMessage, meta *mcprequests.WireMeta) (json.RawMessage, error) {
+// executeMetaMemberTool is shared by Direct calls, Progressive execute_tool
+// and execute_read_only_tool, and Code Mode. A call that fails before its
+// member dispatch writes the member's tool_call row is logged here, so every
+// failed call leaves one row stamped with this gateway.
+func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger, gate *metaGateContext, members []metaMember, req *rawRequest, qualified string, arguments json.RawMessage, meta *mcprequests.WireMeta, dispositions memberToolDispositions) (json.RawMessage, error) {
 	attempt := newMetaToolCallAttempt(time.Now())
+	attempt.dispositions = dispositions
 	// A row from earlier in the request is about something else, not this call.
 	callCtx := contextvalues.WithConnectionReferenceSlot(context.WithValue(ctx, metaToolCallAttemptKey{}, attempt))
 	body, err := s.dispatchMetaMemberTool(callCtx, logger, gate, members, req, qualified, arguments, meta, attempt)
@@ -297,6 +319,13 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 	// Resolved before the cached-view check so the named server's check is
 	// recorded on both paths; an unknown server is still refused after it.
 	member, ok := s.findNamedMember(ctx, gate, members, serverSlug)
+	namesLocalTool := false
+	if ok {
+		_, namesLocalTool = localToolNamed(s.memberLocalTools(ctx, logger, gate.organizationID, member), toolName)
+	}
+	// A local tool's calls are not the member's tool calls, so a failed one
+	// is not written to the tool logs either.
+	attempt.localTool = namesLocalTool
 	if gate.catalog != nil && gate.catalogRef.Mode == toolfilter.CatalogModeCached {
 		found := false
 		for _, tool := range gate.catalog.Tools {
@@ -304,6 +333,14 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 				found = true
 				break
 			}
+		}
+		// A member's local tools are not part of what was approved at connect
+		// time: access to them follows access to the member, not to any one of
+		// its tools.
+		if !found && namesLocalTool {
+			found = true
+			// The member must answer it with that local tool or refuse it.
+			ctx = withLocalToolsOnly(ctx)
 		}
 		if !found {
 			// Absence from this cached view does not prove consent excluded a real
@@ -328,6 +365,19 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 		return nil, oops.E(oops.CodeUnavailable, err, "could not verify the approved server; retry shortly").LogError(ctx, logger)
 	}
 	if member.backend != metaMemberBackendHosted {
+		// A hosted member's tool is checked once handleToolsCall resolves it.
+		if attempt.dispositions == memberToolReadOnly {
+			dispositions, err := s.remoteProxyManager.Dispositions(ctx, member.serverID.String(), member.projectID.String())
+			if err != nil {
+				return nil, oops.E(oops.CodeUnavailable, err, "could not read the tool's annotations; retry shortly").LogError(ctx, logger)
+			}
+			// A tool the catalog has not recorded has no disposition and is refused.
+			if dispositions[toolName] != authz.DispositionReadOnly {
+				message := readOnlyToolRefusal(toolName)
+				attempt.fail(http.StatusForbidden, message)
+				return marshalMetaToolError(ctx, logger, req.ID, message)
+			}
+		}
 		return s.executeProxiedMemberTool(ctx, logger, gate, member, req, toolName, arguments, meta)
 	}
 
@@ -385,7 +435,9 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 	body, err := handleToolsCall(ctx, logger, s.metrics, nil, s.authz, s.db, s.env,
 		inputs, syntheticReq, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache,
 		s.telemLogger, s.toolCallLogger, s.vectorToolStore, s.mcpMetadataRepo, s.auditLogger,
-		s.platformExtras, s.sessionClientInfo, s.scanEvaluator)
+		// The member's local tools are answered here, after the checks this
+		// dispatch makes, exactly where its own tools would be dispatched.
+		s.platformExtras, s.sessionClientInfo, s.scanEvaluator, s.hostedLocalTools)
 	// A refusal keeps its own code, as on a hosted server; otherwise the provider's rejection is recorded.
 	code, refused := toolsCallRefusal(err)
 	if !refused {
@@ -428,8 +480,12 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 
 // memberCatalog is one member's permission-filtered tool inventory.
 type memberCatalog struct {
-	entries    []*toolListEntry
-	byName     map[string]*toolListEntry
+	entries []*toolListEntry
+	byName  map[string]*toolListEntry
+	// local names the entries that are the member's local tools. Consent
+	// and the catalogs it freezes leave them out: access to them follows
+	// access to the member, not approval of any one of its tools.
+	local      map[string]struct{}
 	incomplete bool
 	// From a live upstream handshake. Cached catalogs do not probe upstream.
 	instructions string
@@ -463,7 +519,7 @@ func (s *Service) describeMemberToolset(
 		return nil, oops.E(oops.CodeUnexpected, err, "describe member toolset").LogError(ctx, logger)
 	}
 
-	catalog := &memberCatalog{entries: nil, byName: map[string]*toolListEntry{}, incomplete: false, instructions: ""}
+	catalog := &memberCatalog{entries: nil, byName: map[string]*toolListEntry{}, local: nil, incomplete: false, instructions: ""}
 	duplicates := map[string]bool{}
 	for _, tool := range described.Tools {
 		entry := toolToListEntry(tool)
@@ -510,7 +566,7 @@ func (s *Service) describeMemberToolset(
 			catalog.entries = append(catalog.entries, kept)
 		}
 	}
-	return catalog, nil
+	return withLocalToolsInCatalog(catalog, s.memberLocalTools(ctx, logger, gate.organizationID, member)), nil
 }
 
 // withMemberProjectAuthContext scopes the caller's auth context to a hosted
@@ -548,21 +604,27 @@ func (s *Service) buildMemberDispatch(
 		return nil, hostingstate.NotHosted(), nil, err
 	}
 
-	// A hosted member records no upstream resource, so its credential is the
-	// token map entry keyed by its own derived remote_session_issuer: a token
-	// consented for a specific member must never reach another member's
-	// tools. No entry degrades to no token rather than an error, so partially
-	// connected meta sessions keep hosted members callable.
+	// A hosted member accepts only an unqualified token for its exact
+	// registration. In particular, a token resolved for a different member
+	// (even at the same provider) must never become a tool input.
 	tokens, err := s.resolveMemberTokens(ctx, gate, member)
-	if err != nil {
-		return nil, hostingstate.NotHosted(), nil, err
+	var qualified map[uuid.UUID]remotesessions.UpstreamToken
+	if err == nil {
+		qualified, err = hostedMemberTokens(tokens, member)
 	}
-	hostedTokens, err := hostedMemberTokens(tokens, member)
-	s.compareHostedMemberTokens(ctx, logger, gate.organizationID, tokens, member, hostedTokens, err)
 	if err != nil {
+		switch {
+		case errors.Is(err, remotesessions.ErrClientCredentialMisconfigured), errors.Is(err, remotesessions.ErrClientCredentialUnavailable),
+			errors.Is(err, remotesessions.ErrStoredSignInUnreadable), errors.Is(err, remotesessions.ErrRemoteSessionUnavailable):
+			err = metaMemberClientCredentialError(member, err)
+		case errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured), errors.Is(err, remotesessions.ErrChosenClientUnbound):
+			err = &metaMemberError{message: fmt.Sprintf("server %q has no usable upstream configuration", member.slug)}
+		case errors.Is(err, remotesessions.ErrNoValidToken):
+			err = &metaMemberError{message: fmt.Sprintf("server %q needs an upstream connection", member.slug)}
+		}
 		return nil, hostingstate.NotHosted(), nil, withMemberConnectLink(err, member, gate.memberCallerURL(member))
 	}
-	tokenInputs, err := appendRemoteSessionTokenInputs(nil, hostedTokens)
+	tokenInputs, err := appendRemoteSessionTokenInputs(nil, qualified)
 	if err != nil {
 		return nil, hostingstate.NotHosted(), nil, oops.E(oops.CodeUnexpected, err, "resolve upstream tokens for meta MCP member").LogError(ctx, logger)
 	}
@@ -636,27 +698,29 @@ func (s *Service) buildMemberDispatch(
 	return toolset, hosting, inputs, nil
 }
 
-// hostedMemberTokens narrows a gate's token map to what a hosted member may
-// receive: the entry keyed by the member's own derived remote_session_issuer,
-// and only when its grant is unqualified. The tunneled arm of
-// routeMetaMemberToken applies the same rule. A lone-token fallback would
-// forward a sibling's bearer once partial resolution leaves gaps in the map,
-// and a resource-qualified token is audience-bound to the remote upstream it
-// was consented for; both cases yield no token. A self client whose
-// credential could not be obtained yields the member-scoped remedy instead,
-// so the member's tools never run without the credential it holds.
+// hostedMemberTokens accepts only an unqualified credential for the unique
+// registration already admitted on this server. An issuer match is not a
+// placement; even a single token must match the actual registration.
 func hostedMemberTokens(tokens map[uuid.UUID]remotesessions.UpstreamToken, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
-	if !member.remoteSessionIssuerID.Valid {
+	if len(member.associatedClients) != 1 || len(tokens) == 0 {
 		return nil, nil
 	}
-	entry, ok := tokens[member.remoteSessionIssuerID.UUID]
-	if !ok || entry.Resource != "" {
-		return nil, nil
+	var qualified map[uuid.UUID]remotesessions.UpstreamToken
+	for issuer, token := range tokens {
+		if !member.associatedClients[token.RemoteSessionClientID] || token.Resource != "" {
+			continue
+		}
+		if qualified != nil {
+			return nil, fmt.Errorf("hosted member %q resolved multiple credentials for its assigned registration", member.slug)
+		}
+		qualified = map[uuid.UUID]remotesessions.UpstreamToken{issuer: token}
 	}
-	if err := entry.ClientCredentialErr; err != nil {
-		return nil, metaMemberClientCredentialError(member, err)
+	for _, token := range qualified {
+		if token.ClientCredentialErr != nil {
+			return nil, metaMemberClientCredentialError(member, token.ClientCredentialErr)
+		}
 	}
-	return map[uuid.UUID]remotesessions.UpstreamToken{member.remoteSessionIssuerID.UUID: entry}, nil
+	return qualified, nil
 }
 
 // loadMemberToolset loads the member's toolset row, applying the member

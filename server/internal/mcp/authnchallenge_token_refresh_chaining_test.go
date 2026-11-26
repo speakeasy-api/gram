@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
@@ -40,18 +41,19 @@ const chainedRefreshResourceIssuer = "https://as.chained-refresh.example.test"
 // naming the endpoint's upstream, the binding's resource client attached with
 // no interactive session, and a human holding a refreshable MCP grant.
 type chainedRefreshFixture struct {
-	ti           *testInstance
-	org          string
-	human        string
-	idpIssuer    uuid.UUID
-	idpClient    uuid.UUID
-	configHash   string
-	slug         string
-	clientID     string
-	refreshToken string
-	resourceKey  string
-	userIssuer   uuid.UUID
-	serverID     uuid.UUID
+	ti             *testInstance
+	org            string
+	human          string
+	idpIssuer      uuid.UUID
+	idpClient      uuid.UUID
+	configHash     string
+	slug           string
+	clientID       string
+	refreshToken   string
+	resourceKey    string
+	userIssuer     uuid.UUID
+	serverID       uuid.UUID
+	resourceClient uuid.UUID
 }
 
 func newChainedRefreshFixture(t *testing.T) (context.Context, chainedRefreshFixture) {
@@ -98,7 +100,6 @@ func newChainedRefreshFixture(t *testing.T) (context.Context, chainedRefreshFixt
 	require.NoError(t, err)
 	_, err = rs.SetEMAClientGrants(ctx, remotesessions_repo.SetEMAClientGrantsParams{GrantTypes: []string{oauthwire.GrantTypeJWTBearer}, ID: resourceClient.ID, ProjectID: uuid.NullUUID{}, OrganizationID: conv.ToPGText(org)})
 	require.NoError(t, err)
-	require.NoError(t, rs.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessions_repo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: resourceClient.ID, UserSessionIssuerID: userIssuer.ID}))
 
 	const upstream = "https://api.chained-refresh.example.test/mcp"
 	key := remotesessions_repo.GetEMABindingParams{ProjectID: project, OrganizationID: org, UserSessionIssuerID: userIssuer.ID, RemoteSessionIssuerID: resourceIssuer.ID, Resource: upstream}
@@ -115,6 +116,7 @@ func newChainedRefreshFixture(t *testing.T) (context.Context, chainedRefreshFixt
 
 	slug := "chained-refresh-" + uuid.NewString()[:8]
 	serverID := attachConsentRemoteMcpServer(t, ctx, ti.conn, project, userIssuer.ID, slug, upstream)
+	associateServerRegistration(t, ctx, ti.conn, org, project, serverID, resourceClient.ID)
 	_, err = mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID: project, CustomDomainID: uuid.NullUUID{}, McpServerID: conv.ToNullUUID(serverID), MetaMcpServerID: uuid.NullUUID{}, Slug: slug,
 	})
@@ -128,14 +130,18 @@ func newChainedRefreshFixture(t *testing.T) (context.Context, chainedRefreshFixt
 	require.NoError(t, err)
 	refreshToken := "refresh-" + uuid.NewString()
 	refreshHash := sha256.Sum256([]byte(refreshToken))
+	jti := uuid.NewString()
 	_, err = us.CreateUserSession(ctx, usersessions_repo.CreateUserSessionParams{
 		UserSessionIssuerID: userIssuer.ID, UserSessionClientID: uuid.NullUUID{UUID: client.ID, Valid: true},
-		SubjectUrn: urn.NewUserSubject(human), Jti: uuid.NewString(),
+		SubjectUrn: urn.NewUserSubject(human), Jti: jti,
 		RefreshTokenHash: conv.ToPGText(base64.RawURLEncoding.EncodeToString(refreshHash[:])),
 		RefreshExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), ExpiresAt: conv.ToPGTimestamptz(time.Now().Add(-time.Minute)),
 		SignInID: uuid.NullUUID{},
 	})
 	require.NoError(t, err)
+
+	offer := seedTypedSessionClient(t, ctx, ti, org, project, serverID, resourceClient.ID, authz.AuthClientTypeRemoteSession, urn.NewUserSubject(human))
+	seedTypedSessionChoice(t, ctx, ti, org, userIssuer.ID, jti, serverID, offer)
 
 	trusted, err := rs.GetTrustedRemoteSessionClientForOrganization(ctx, remotesessions_repo.GetTrustedRemoteSessionClientForOrganizationParams{OrganizationID: org, IssuerID: idpIssuer, ClientID: idpClient})
 	require.NoError(t, err)
@@ -143,7 +149,7 @@ func newChainedRefreshFixture(t *testing.T) (context.Context, chainedRefreshFixt
 		ti: ti, org: org, human: human, idpIssuer: idpIssuer, idpClient: idpClient,
 		configHash: remotesessions.FederatedDelegationConfigurationHash(org, trusted.RemoteSessionIssuer, trusted.RemoteSessionClient),
 		slug:       slug, clientID: client.ClientID, refreshToken: refreshToken, resourceKey: resourceKey,
-		userIssuer: userIssuer.ID, serverID: serverID,
+		userIssuer: userIssuer.ID, serverID: serverID, resourceClient: resourceClient.ID,
 	}
 }
 
@@ -304,6 +310,9 @@ func (f chainedRefreshFixture) callEndpoint(t *testing.T, ctx context.Context) (
 	})
 	require.NoError(t, err)
 	persistTestUserSession(t, f.ti, f.userIssuer, subject, jti)
+	project := *requireProjectAuthContext(t, ctx).ProjectID
+	client := seedTypedSessionClient(t, ctx, f.ti, f.org, project, f.serverID, f.resourceClient, authz.AuthClientTypeEMA, subject)
+	seedTypedSessionChoice(t, ctx, f.ti, f.org, f.userIssuer, jti, f.serverID, client)
 	return servePublicHTTP(t, context.Background(), f.ti, f.slug, makeInitializeBody(), token, nil)
 }
 

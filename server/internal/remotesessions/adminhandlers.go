@@ -1321,7 +1321,7 @@ func (s *Service) DeleteGlobalClient(ctx context.Context, payload *adminrsgen.De
 		if err := authclientbackfill.LockEMAWriterScope(ctx, dbtx, organizationID, projects); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "lock auth client writer scope").LogError(ctx, logger)
 		}
-		if err := authclientbackfill.PreflightServerAssociations(ctx, dbtx, organizationID, scope.servers...); err != nil {
+		if err := authclientbackfill.PreflightServerAssociationsWithRegistrations(ctx, dbtx, organizationID, scope.servers, []uuid.UUID{clientID}); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "lock auth client scope of the affected servers").LogError(ctx, logger)
 		}
 	}
@@ -1350,8 +1350,8 @@ func (s *Service) DeleteGlobalClient(ctx context.Context, payload *adminrsgen.De
 		return oops.E(oops.CodeUnexpected, err, "delete global remote session client").LogError(ctx, logger)
 	}
 
-	if err := txRepo.DeleteUserSessionIssuerAttachmentsForDeletedRemoteSessionClient(ctx, deleted.ID); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "delete user session issuer attachments for deleted client").LogError(ctx, logger)
+	if err := txRepo.RetirePrincipalAttachmentsForDeletedRegistration(ctx, repo.RetirePrincipalAttachmentsForDeletedRegistrationParams{ID: deleted.ID, OrganizationID: conv.ToPGTextEmpty(""), ProjectID: deleted.ProjectID}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "retire principal attachments for deleted client").LogError(ctx, logger)
 	}
 
 	cascaded, err := txRepo.SoftDeleteRemoteSessionsByClientID(ctx, deleted.ID)
@@ -1366,6 +1366,9 @@ func (s *Service) DeleteGlobalClient(ctx context.Context, payload *adminrsgen.De
 		if err := authclientbackfill.SyncServerAssociations(ctx, dbtx, organizationID, affected[organizationID].servers...); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "sync auth clients of the global client's servers").LogError(ctx, logger)
 		}
+	}
+	if err := txRepo.RetireOffersForDeletedRegistration(ctx, repo.RetireOffersForDeletedRegistrationParams{ID: deleted.ID, OrganizationID: conv.ToPGTextEmpty(""), ProjectID: deleted.ProjectID}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "retire typed offers for deleted client").LogError(ctx, logger)
 	}
 	if err := bindingServers.Derive(ctx, dbtx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "derive upstream issuer of the global client's servers").LogError(ctx, logger)

@@ -1284,6 +1284,75 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       x-speakeasy-name-override: getHooksRollout
+  /admin/hooksRollout.progress:
+    get:
+      tags:
+        - admin
+      summary: getHooksReleaseProgress admin
+      description: 'Returns how far the current hooks release has reached: organizations the rollout pins clear for it, marketplace repositories republished with it, and installs reporting its binary version.'
+      operationId: adminGetHooksReleaseProgress
+      responses:
+        "200":
+          description: OK response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminHooksReleaseProgress'
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'conflict: resource already exists'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: getHooksReleaseProgress
   /admin/hooksRollout.setDefault:
     post:
       tags:
@@ -1361,7 +1430,7 @@ paths:
       x-speakeasy-name-override: setHooksRolloutDefault
   /admin/mcpAuthGrants.backfill:
     post:
-      description: Grants unrestricted mcp:auth to every principal that holds any mcp:connect grant, in every organization. The connect grant's selectors are ignored. Safe to run more than once.
+      description: Retired. Rejects authenticated calls and does not modify grants.
       operationId: adminBackfillMcpAuthGrants
       responses:
         "200":
@@ -5741,6 +5810,551 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       x-speakeasy-name-override: updateOrganization
+  /admin/organizationEncryption.enroll:
+    post:
+      description: Moves one organization's use case from platform_key to dual_write. Provisions the organization's key and data key first and changes nothing if that fails. Each enroll can mint a KMS key, so enroll several organizations one at a time.
+      operationId: adminEnrollOrganizationEncryption
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnrollOrganizationEncryptionRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOrganizationEncryptionUseCase'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      summary: enrollOrganizationEncryption admin
+      tags:
+        - admin
+      x-speakeasy-name-override: enrollOrganizationEncryption
+  /admin/organizationEncryption.finalize:
+    post:
+      description: 'Moves one organization''s use case from dual_write to org_kms, then starts a run that destroys its platform-key copies, including every unreadable value. Irreversible: rollback is no longer possible afterwards. Refused unless no value waits for an organization-key copy, every value is attributed to the organization, a clean verification ran since the last backfill, the use case spent the minimum time in dual_write, the confirmation matches, and the acknowledged unreadable count matches the count when finalize runs.'
+      operationId: adminFinalizeOrganizationEncryption
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FinalizeOrganizationEncryptionRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOrganizationEncryptionFinalizeResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      summary: finalizeOrganizationEncryption admin
+      tags:
+        - admin
+      x-speakeasy-name-override: finalizeOrganizationEncryption
+  /admin/organizationEncryption.get:
+    get:
+      description: Reports an organization's encryption configuration and, for each use case that moves to organization keys, its transition state with live counts.
+      operationId: adminGetOrganizationEncryption
+      parameters:
+        - allowEmptyValue: true
+          description: The organization ID or slug.
+          in: query
+          name: organization_id
+          required: true
+          schema:
+            description: The organization ID or slug.
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOrganizationEncryption'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      summary: getOrganizationEncryption admin
+      tags:
+        - admin
+      x-speakeasy-name-override: getOrganizationEncryption
+  /admin/organizationEncryption.listTransitions:
+    get:
+      description: Lists organizations by transition state for one use case. Organizations never enrolled are in platform_key. By default it lists only organizations with values for the use case, most recently written first.
+      operationId: adminListOrganizationEncryptionTransitions
+      parameters:
+        - allowEmptyValue: true
+          description: The use case, such as oauth-client-secrets. Absent lists the first use case that moves to organization keys.
+          in: query
+          name: use_case
+          schema:
+            description: The use case, such as oauth-client-secrets. Absent lists the first use case that moves to organization keys.
+            type: string
+        - allowEmptyValue: true
+          description: Only organizations in this state.
+          in: query
+          name: state
+          schema:
+            description: Only organizations in this state.
+            enum:
+              - platform_key
+              - dual_write
+              - org_kms
+            type: string
+        - allowEmptyValue: true
+          description: present lists only organizations with at least one value for the use case under either key, soft-deleted rows included. all lists every organization.
+          in: query
+          name: values
+          schema:
+            default: present
+            description: present lists only organizations with at least one value for the use case under either key, soft-deleted rows included. all lists every organization.
+            enum:
+              - present
+              - all
+            type: string
+        - allowEmptyValue: true
+          description: last_written lists the most recently written organizations first, then organizations without values oldest first. oldest lists the oldest organizations first. The list pages by offset, so an organization whose last write changes between page requests can repeat or be skipped.
+          in: query
+          name: sort
+          schema:
+            default: last_written
+            description: last_written lists the most recently written organizations first, then organizations without values oldest first. oldest lists the oldest organizations first. The list pages by offset, so an organization whose last write changes between page requests can repeat or be skipped.
+            enum:
+              - last_written
+              - oldest
+            type: string
+        - allowEmptyValue: true
+          description: Organizations per page.
+          in: query
+          name: limit
+          schema:
+            default: 50
+            description: Organizations per page.
+            format: int64
+            maximum: 200
+            minimum: 1
+            type: integer
+        - allowEmptyValue: true
+          description: Organizations to skip.
+          in: query
+          name: offset
+          schema:
+            default: 0
+            description: Organizations to skip.
+            format: int64
+            minimum: 0
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOrganizationEncryptionTransitionList'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      summary: listOrganizationEncryptionTransitions admin
+      tags:
+        - admin
+      x-speakeasy-name-override: listOrganizationEncryptionTransitions
+  /admin/organizationEncryption.rollback:
+    post:
+      description: Moves one organization's use case from dual_write back to platform_key. Both copies still exist in dual_write, so nothing is lost. Not available once the use case is in org_kms.
+      operationId: adminRollbackOrganizationEncryption
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RollbackOrganizationEncryptionRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOrganizationEncryptionUseCase'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      summary: rollbackOrganizationEncryption admin
+      tags:
+        - admin
+      x-speakeasy-name-override: rollbackOrganizationEncryption
+  /admin/organizationEncryption.run:
+    post:
+      description: 'Starts a background run for one organization''s use case: in dual_write it converts waiting values and verifies both copies, and in org_kms it finishes destroying the platform-key copies after finalize. Joins a run already in progress. Returns at once with the current state.'
+      operationId: adminRunOrganizationEncryption
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RunOrganizationEncryptionRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOrganizationEncryptionUseCase'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      summary: runOrganizationEncryption admin
+      tags:
+        - admin
+      x-speakeasy-name-override: runOrganizationEncryption
   /admin/organizationHookFleet.get:
     get:
       description: 'The hooks installs of one organization: which versions, install routes and endpoints its users'' machines use, which machines have gone quiet, and how much traffic still reaches the legacy endpoints.'
@@ -9509,6 +10123,164 @@ paths:
       x-speakeasy-name-override: updateSupportMatrix
       x-speakeasy-react-hook:
         name: AdminUpdateSupportMatrix
+  /admin/tailscaleOAuthMigration.organizations:
+    get:
+      description: Lists every organization with saved Tailscale OAuth credentials and where it stands in moving them to its organization key.
+      operationId: adminListTailscaleOAuthMigration
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminTailscaleOAuthMigrationOrganizations'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      summary: listTailscaleOAuthMigration admin
+      tags:
+        - admin
+      x-speakeasy-name-override: listTailscaleOAuthMigration
+  /admin/tailscaleOAuthMigration.run:
+    post:
+      description: Runs one step of moving an organization's saved Tailscale OAuth credentials to its organization key. enroll provisions the organization key and starts dual_write; backfill seals every waiting credential with the organization key and verifies both copies; finalize moves to org_kms once the backfill and verification are clean and the minimum time in dual_write has passed; clear_platform_copies then destroys the platform-key copies; rollback returns a dual_write organization to platform_key. Each step is safe to run again.
+      operationId: adminRunTailscaleOAuthMigrationStep
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RunTailscaleOAuthMigrationStepRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminTailscaleOAuthMigrationOrganization'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      summary: runTailscaleOAuthMigrationStep admin
+      tags:
+        - admin
+      x-speakeasy-name-override: runTailscaleOAuthMigrationStep
+      x-speakeasy-react-hook:
+        name: AdminRunTailscaleOAuthMigrationStep
   /admin/trial.changeEndDate:
     post:
       tags:
@@ -9886,7 +10658,7 @@ paths:
       x-speakeasy-name-override: startTrial
   /admin/upstreamOAuthMigration.disableEnforcement:
     post:
-      description: 'Disables upstream auth enforcement for one organization. This is its rollback: requests return to the upstream client choice within a minute. Safe to call when enforcement is already off.'
+      description: Retired. Older staff clients can still reach this endpoint, but requests are rejected. Upstream auth enforcement cannot be turned off.
       operationId: adminDisableUpstreamAuthEnforcement
       requestBody:
         content:
@@ -10105,7 +10877,7 @@ paths:
       x-speakeasy-name-override: listUpstreamOAuthMigrationOrganizations
   /admin/upstreamOAuthMigration.run:
     post:
-      description: 'Migrates one organization''s upstream OAuth configuration: records the server to client associations its configuration proves, then each live credential''s client choice. Idempotent, so it is safe to run again; a server the configuration does not prove is reported and never guessed.'
+      description: Retired. Rejects authenticated calls and does not change upstream authentication configuration.
       operationId: adminRunUpstreamOAuthMigration
       requestBody:
         content:
@@ -10180,7 +10952,7 @@ paths:
       x-speakeasy-name-override: runUpstreamOAuthMigration
   /admin/upstreamOAuthMigration.status:
     get:
-      description: Reports where one organization stands in the upstream OAuth migration from a dry run that writes nothing.
+      description: Reports typed upstream authentication readiness for one organization without making changes.
       operationId: adminGetUpstreamOAuthMigrationStatus
       parameters:
         - allowEmptyValue: true
@@ -10712,7 +11484,7 @@ components:
       properties:
         granted:
           type: integer
-          description: How many principals gained the mcp:auth grant.
+          description: Legacy response field; the retired endpoint does not grant access.
           format: int64
       required:
         - granted
@@ -11246,6 +12018,114 @@ components:
         - version
         - status
         - installs
+    AdminHooksReleaseFleet:
+      type: object
+      properties:
+        installs:
+          type: integer
+          description: Installs seen in the window.
+          format: int64
+        installs_on_current:
+          type: integer
+          description: Installs reporting exactly the binary version this build ships, on any endpoint.
+          format: int64
+        versions:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminHooksReleaseInstallVersion'
+          description: Installs per binary version and status, newest first. A version can appear once per status, for example current and unsupported when some installs still send to a legacy endpoint.
+        window_days:
+          type: integer
+          description: Installs count when they sent a hook in this many full UTC days.
+          format: int64
+      description: Hooks installs across every organization, by binary version.
+      required:
+        - window_days
+        - installs
+        - installs_on_current
+        - versions
+    AdminHooksReleaseInstallVersion:
+      type: object
+      properties:
+        installs:
+          type: integer
+          description: Installs whose latest version is this one.
+          format: int64
+        version:
+          type: string
+          description: The hooks binary version, or empty for installs that sent no version.
+        status:
+          $ref: "#/components/schemas/AdminHooksReleaseInstallStatus"
+      description: Hooks installs reporting one binary version.
+      required:
+        - version
+        - status
+        - installs
+    AdminHooksReleaseProgress:
+      type: object
+      properties:
+        current_binary_version:
+          type: string
+          description: The hooks binary version this server build ships. Absent when unknown.
+        current_version:
+          type: integer
+          description: The hooks generator version this server build publishes.
+          format: int64
+        fleet:
+          $ref: '#/components/schemas/AdminHooksReleaseFleet'
+        organizations:
+          type: integer
+          description: Organizations with at least one marketplace repository.
+          format: int64
+        organizations_cleared:
+          type: integer
+          description: 'Of those, organizations whose next publish moves to current_version: canaries and organizations pinned at or above it.'
+          format: int64
+        organizations_held:
+          type: integer
+          description: Organizations pinned below current_version.
+          format: int64
+        organizations_on_legacy_flag:
+          type: integer
+          description: Organizations with no pin, which follow the legacy hooks-rollout PostHog flag the admin server cannot read.
+          format: int64
+        repo_versions:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminHooksReleaseRepoVersion'
+          description: Repositories per published hooks generator version, newest first.
+        repos:
+          type: integer
+          description: Marketplace repositories.
+          format: int64
+        repos_on_current:
+          type: integer
+          description: Repositories whose last published hooks plugin carries current_version.
+          format: int64
+      description: 'How far the current hooks release has reached: organizations cleared by the rollout pins, marketplace repositories republished with it, and installs running it.'
+      required:
+        - current_version
+        - organizations
+        - organizations_cleared
+        - organizations_held
+        - organizations_on_legacy_flag
+        - repos
+        - repos_on_current
+        - repo_versions
+    AdminHooksReleaseRepoVersion:
+      type: object
+      properties:
+        repos:
+          type: integer
+          description: Repositories on this version.
+          format: int64
+        version:
+          type: string
+          description: The hooks generator version last published, or empty for repositories that have never published the hooks plugin.
+      description: Marketplace repositories whose last published hooks plugin carries one hooks generator version.
+      required:
+        - version
+        - repos
     AdminHooksRollout:
       type: object
       properties:
@@ -12835,6 +13715,284 @@ components:
       required:
         - organization_id
         - assistants
+    AdminOrganizationEncryption:
+      type: object
+      properties:
+        config:
+          $ref: '#/components/schemas/AdminOrganizationEncryptionConfig'
+        finalize_confirmation:
+          type: string
+          description: The phrase finalize requires as its confirmation.
+        minimum_dual_write_seconds:
+          type: integer
+          description: How long a use case must be in dual_write before finalize is allowed.
+          format: int64
+        organization_id:
+          type: string
+          description: The organization ID.
+        runs_available:
+          type: boolean
+          description: Whether this server can start backfill and clearing runs. When false, finalize leaves clearing to the hourly background run.
+        use_cases:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminOrganizationEncryptionUseCase'
+          description: One entry per use case that moves from the platform key to organization keys.
+      description: An organization's encryption configuration and, for each use case that moves to organization keys, its transition state.
+      required:
+        - organization_id
+        - use_cases
+        - minimum_dual_write_seconds
+        - finalize_confirmation
+        - runs_available
+    AdminOrganizationEncryptionConfig:
+      type: object
+      properties:
+        last_check_at:
+          type: string
+          description: When the key's health was last checked.
+          format: date-time
+        last_check_error:
+          type: string
+          description: A short provider error summary from the last failed health check.
+        mode:
+          type: string
+          description: Who controls the organization's key.
+          enum:
+            - speakeasy_managed
+            - customer_managed
+        state:
+          type: string
+          description: 'Whether the key is usable: active and switching are, suspended is not.'
+          enum:
+            - active
+            - switching
+            - suspended
+        suspended_at:
+          type: string
+          description: When the configuration was suspended because its key became unusable.
+          format: date-time
+        suspended_reason:
+          type: string
+          description: A short provider error summary for the suspension.
+        switch_started_at:
+          type: string
+          description: When the switch to another key started. Absent unless one is in flight.
+          format: date-time
+      description: 'An organization''s encryption configuration: who controls its key, and whether the key is usable.'
+      required:
+        - mode
+        - state
+    AdminOrganizationEncryptionFinalizeResult:
+      type: object
+      properties:
+        clearing_started:
+          type: boolean
+          description: Whether a run destroying the platform-key copies was started. When false, the hourly background run finishes clearing, or an administrator starts a run.
+        use_case:
+          $ref: '#/components/schemas/AdminOrganizationEncryptionUseCase'
+      required:
+        - use_case
+        - clearing_started
+    AdminOrganizationEncryptionStateCount:
+      type: object
+      properties:
+        organizations:
+          type: integer
+          description: Organizations in the state.
+          format: int64
+        state:
+          type: string
+          description: The transition state.
+          enum:
+            - platform_key
+            - dual_write
+            - org_kms
+      required:
+        - state
+        - organizations
+    AdminOrganizationEncryptionTransitionList:
+      type: object
+      properties:
+        has_more:
+          type: boolean
+          description: Whether another page follows.
+        organizations:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminOrganizationEncryptionTransitionRow'
+          description: The page of organizations, in the requested order.
+        state_counts:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminOrganizationEncryptionStateCount'
+          description: How many organizations the values filter keeps are in each state, across every page.
+        use_case:
+          type: string
+          description: The use case listed.
+        use_cases:
+          type: array
+          items:
+            type: string
+          description: Every use case that moves from the platform key to organization keys.
+      required:
+        - use_case
+        - use_cases
+        - organizations
+        - state_counts
+        - has_more
+    AdminOrganizationEncryptionTransitionRow:
+      type: object
+      properties:
+        disabled:
+          type: boolean
+          description: Whether the organization is disabled.
+        last_backfill_completed_at:
+          type: string
+          description: When the last backfill run ended.
+          format: date-time
+        last_backfill_error:
+          type: string
+          description: Why the last backfill run stopped early.
+        last_backfill_remaining:
+          type: integer
+          description: Values still waiting when the last backfill run ended.
+          format: int64
+        last_backfill_started_at:
+          type: string
+          description: When the last backfill run started.
+          format: date-time
+        last_backfill_unreadable:
+          type: integer
+          description: Values recorded as unreadable when the last backfill run ended.
+          format: int64
+        last_verified_at:
+          type: string
+          description: When the last clean verification pass started.
+          format: date-time
+        last_written_at:
+          type: string
+          description: The latest updated_at of a row storing one of the organization's values. A change that updates the row's updated_at moves it, such as a session's token refresh or an OpenRouter key's limit change; a write that leaves updated_at alone, such as a backfill seal, does not. Absent when the organization has none.
+          format: date-time
+        name:
+          type: string
+          description: The organization name.
+        organization_id:
+          type: string
+          description: The organization ID.
+        platform_copies_cleared_at:
+          type: string
+          description: When the platform-key copies were destroyed after finalize.
+          format: date-time
+        slug:
+          type: string
+          description: The organization slug.
+        state:
+          type: string
+          description: The transition state.
+          enum:
+            - platform_key
+            - dual_write
+            - org_kms
+        state_changed_at:
+          type: string
+          description: When the state was entered.
+          format: date-time
+        value_count:
+          type: integer
+          description: How many values the organization stores for the use case under either key, soft-deleted rows included. A row storing values in two columns counts once in each.
+          format: int64
+      description: One organization's transition state for a use case, from stored state only.
+      required:
+        - organization_id
+        - name
+        - slug
+        - disabled
+        - state
+        - value_count
+    AdminOrganizationEncryptionUseCase:
+      type: object
+      properties:
+        finalize_blockers:
+          type: array
+          items:
+            type: string
+          description: 'Why finalize would be refused now, empty when it would proceed. Advisory: finalize checks again when it runs.'
+        generation:
+          type: integer
+          description: Increases on every state change; 0 while the organization has never been enrolled.
+          format: int64
+        last_backfill_completed_at:
+          type: string
+          description: When the last backfill run ended. Absent while it runs.
+          format: date-time
+        last_backfill_converted:
+          type: integer
+          description: Values the last backfill run gave an organization-key copy.
+          format: int64
+        last_backfill_error:
+          type: string
+          description: Why the last backfill run stopped early.
+        last_backfill_remaining:
+          type: integer
+          description: Values still waiting when the last backfill run ended.
+          format: int64
+        last_backfill_started_at:
+          type: string
+          description: When the last backfill run started.
+          format: date-time
+        last_backfill_unreadable:
+          type: integer
+          description: Values recorded as unreadable when the last backfill run ended.
+          format: int64
+        last_verified_at:
+          type: string
+          description: When the last clean verification pass started.
+          format: date-time
+        platform_copies:
+          type: integer
+          description: Platform-key copies still stored.
+          format: int64
+        platform_copies_cleared_at:
+          type: string
+          description: When the platform-key copies were destroyed after finalize. Absent until clearing completes.
+          format: date-time
+        state:
+          type: string
+          description: The transition state.
+          enum:
+            - platform_key
+            - dual_write
+            - org_kms
+        state_changed_at:
+          type: string
+          description: When the state was entered. Absent while the organization has never been enrolled.
+          format: date-time
+        unattributed_values:
+          type: integer
+          description: Values stored without an organization they can be attributed to. They block finalize.
+          format: int64
+        unreadable_values:
+          type: integer
+          description: Values whose platform-key copy does not decrypt. Finalize destroys them with the rest.
+          format: int64
+        use_case:
+          type: string
+          description: The registered use case, such as oauth-client-secrets.
+        waiting_values:
+          type: integer
+          description: Values that still wait for an organization-key copy.
+          format: int64
+      description: Where one organization stands in moving one use case's values from the platform key to its own key. Counts are read live.
+      required:
+        - use_case
+        - state
+        - generation
+        - waiting_values
+        - unreadable_values
+        - unattributed_values
+        - platform_copies
+        - finalize_blockers
     AdminOrganizationHooksRollout:
       type: object
       properties:
@@ -13677,6 +14835,93 @@ components:
         - id
         - customer_id
         - status
+    AdminTailscaleOAuthMigrationOrganization:
+      type: object
+      properties:
+        generation:
+          type: integer
+          description: The transition generation; 0 before the organization is enrolled.
+          format: int64
+        last_backfill_completed_at:
+          type: string
+          description: When the last backfill ended.
+          format: date-time
+        last_backfill_error:
+          type: string
+          description: Why the last backfill stopped early. Never carries values or key material.
+        last_backfill_started_at:
+          type: string
+          description: When the last backfill started.
+          format: date-time
+        last_verified_at:
+          type: string
+          description: When the last clean verification pass started.
+          format: date-time
+        name:
+          type: string
+          description: The organization name.
+        organization_id:
+          type: string
+          description: The organization ID.
+        platform_copies:
+          type: integer
+          description: Saved credentials that still hold a platform-key copy.
+          format: int64
+        platform_copies_cleared_at:
+          type: string
+          description: When the platform-key copies were destroyed after finalize.
+          format: date-time
+        slug:
+          type: string
+          description: The organization slug.
+        state:
+          type: string
+          description: The transition state.
+          enum:
+            - platform_key
+            - dual_write
+            - org_kms
+        state_changed_at:
+          type: string
+          description: When the current state was entered. Absent before the organization is enrolled.
+          format: date-time
+        unreadable:
+          type: integer
+          description: Saved credentials whose platform-key copy does not decrypt. They do not block finalize; clearing the platform-key copies destroys them.
+          format: int64
+        verification_failures:
+          type: integer
+          description: 'Only returned by the backfill step: credentials whose two copies did not match, whose platform-key copy no longer decrypts beside an organization-key copy, or whose organization-key copy did not open, in the verification that step just ran. Above zero means no clean verification was recorded, so finalize stays blocked.'
+          format: int64
+        waiting:
+          type: integer
+          description: Saved credentials with only a platform-key copy, which the backfill still has to seal with the organization key.
+          format: int64
+      description: Where one organization stands in moving its saved Tailscale OAuth clients from the platform key to its own organization key (the tailscale-oauth-clients use case).
+      required:
+        - organization_id
+        - name
+        - slug
+        - state
+        - generation
+        - waiting
+        - unreadable
+        - platform_copies
+    AdminTailscaleOAuthMigrationOrganizations:
+      type: object
+      properties:
+        minimum_dual_write_seconds:
+          type: integer
+          description: How long an organization must stay in dual_write before it can be finalized.
+          format: int64
+        organizations:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminTailscaleOAuthMigrationOrganization'
+          description: Every organization with saved Tailscale OAuth credentials, by name.
+      required:
+        - organizations
+        - minimum_dual_write_seconds
     AdminUploadImageResult:
       type: object
       properties:
@@ -14725,6 +15970,18 @@ components:
         - organization_id
         - shadow_parity_confirmed
         - cross_organization_denial_communicated
+    EnrollOrganizationEncryptionRequestBody:
+      type: object
+      properties:
+        organization_id:
+          type: string
+          description: The organization ID.
+        use_case:
+          type: string
+          description: The use case, such as oauth-client-secrets.
+      required:
+        - organization_id
+        - use_case
     Error:
       type: object
       properties:
@@ -14817,6 +16074,28 @@ components:
           description: Issuer URL to fetch metadata for (e.g. https://login.linear.com).
       required:
         - issuer
+    FinalizeOrganizationEncryptionRequestBody:
+      type: object
+      properties:
+        acknowledged_unreadable_values:
+          type: integer
+          description: The number of unreadable values the administrator acknowledged will be destroyed.
+          format: int64
+          minimum: 0
+        confirmation:
+          type: string
+          description: The finalize_confirmation phrase, typed by the administrator.
+        organization_id:
+          type: string
+          description: The organization ID.
+        use_case:
+          type: string
+          description: The use case, such as oauth-client-secrets.
+      required:
+        - organization_id
+        - use_case
+        - confirmation
+        - acknowledged_unreadable_values
     GcpIamCredential:
       type: object
       properties:
@@ -15784,6 +17063,48 @@ components:
           format: uuid
       required:
         - id
+    RollbackOrganizationEncryptionRequestBody:
+      type: object
+      properties:
+        organization_id:
+          type: string
+          description: The organization ID.
+        use_case:
+          type: string
+          description: The use case, such as oauth-client-secrets.
+      required:
+        - organization_id
+        - use_case
+    RunOrganizationEncryptionRequestBody:
+      type: object
+      properties:
+        organization_id:
+          type: string
+          description: The organization ID.
+        use_case:
+          type: string
+          description: The use case, such as oauth-client-secrets.
+      required:
+        - organization_id
+        - use_case
+    RunTailscaleOAuthMigrationStepRequestBody:
+      type: object
+      properties:
+        organization_id:
+          type: string
+          description: The organization ID.
+        step:
+          type: string
+          description: The step to run.
+          enum:
+            - enroll
+            - backfill
+            - finalize
+            - clear_platform_copies
+            - rollback
+      required:
+        - organization_id
+        - step
     RunUpstreamOAuthMigrationRequestBody:
       type: object
       properties:
@@ -16600,6 +17921,14 @@ components:
         - organization
         - default
         - legacy_flag
+    AdminHooksReleaseInstallStatus:
+      type: string
+      description: How the version compares to the release Speakeasy ships.
+      enum:
+        - current
+        - behind
+        - unsupported
+        - unknown
   securitySchemes:
     apikey_header_Authorization:
       type: apiKey

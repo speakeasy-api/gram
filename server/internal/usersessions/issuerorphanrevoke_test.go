@@ -1,6 +1,5 @@
-// Pins the issuer-delete cascade for orphaned upstream grants: sessions on a
-// client whose only live binding was the deleted issuer are tombstoned and
-// revoked upstream; a client with a live sibling binding is left alone.
+// Issuer retirement uses exact grant provenance, not the registration's
+// compatibility links, and calls the upstream only after commit.
 
 package usersessions_test
 
@@ -133,11 +132,6 @@ func seedRevocableClient(t *testing.T, ctx context.Context, ti *testInstance, us
 	})
 	require.NoError(t, err)
 
-	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: client.ID,
-		UserSessionIssuerID:   userSessionIssuerID,
-	}))
-
 	return client.ID
 }
 
@@ -190,10 +184,6 @@ func seedLegacyProjectRevocableClient(t *testing.T, ctx context.Context, ti *tes
 		LegacyCallbackUrl:       false,
 	})
 	require.NoError(t, err)
-	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: client.ID,
-		UserSessionIssuerID:   userSessionIssuerID,
-	}))
 	return client.ID
 }
 
@@ -294,42 +284,6 @@ func TestDeleteUserSessionIssuer_RevokesOrphanedClientSessions(t *testing.T) {
 	require.Equal(t, []string{refreshToken}, tokens, "the stored refresh token is what gets revoked")
 }
 
-// A client also bound to a live sibling issuer keeps its sessions: they remain
-// reachable and revocable through the sibling's bindings.
-func TestDeleteUserSessionIssuer_SparesClientsBoundToSiblingIssuer(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-
-	spy := &orphanRevocationSpy{}
-	upstream := newOrphanRevocationUpstream(t, spy)
-
-	issuerID := createIssuerForOrphanTest(t, ctx, ti, "orphan-shared-issuer")
-	siblingID := createIssuerForOrphanTest(t, ctx, ti, "orphan-shared-sibling")
-	clientID, refreshToken := seedRevocableUpstream(t, ctx, ti, issuerID, "orphan-shared", upstream.URL+"/revoke")
-
-	require.NoError(t, remotesessionsrepo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: clientID,
-		UserSessionIssuerID:   siblingID,
-	}))
-
-	deleteIssuerForOrphanTest(t, ctx, ti, issuerID)
-
-	require.Equal(t, 1, countActiveClientSessions(t, ctx, ti, clientID), "sessions on a client with a live sibling binding stay live")
-
-	calls, _ := spy.snapshot()
-	require.Zero(t, calls, "no upstream revocation for a still-reachable grant")
-
-	// Deleting the sibling removes the client's last live binding, so the
-	// cascade must catch the grant it spared above.
-	deleteIssuerForOrphanTest(t, ctx, ti, siblingID)
-
-	require.Zero(t, countActiveClientSessions(t, ctx, ti, clientID), "the last binding's deletion tombstones the spared sessions")
-
-	_, tokens := spy.snapshot()
-	require.Equal(t, []string{refreshToken}, tokens, "the spared grant is revoked when its last binding goes")
-}
-
 // A sibling binding whose issuer is already tombstoned does not spare the
 // client: a dead binding counts as no binding.
 func TestDeleteUserSessionIssuer_DeadSiblingBindingDoesNotSpare(t *testing.T) {
@@ -345,11 +299,6 @@ func TestDeleteUserSessionIssuer_DeadSiblingBindingDoesNotSpare(t *testing.T) {
 	issuerID := createIssuerForOrphanTest(t, ctx, ti, "orphan-deadsib-issuer")
 	siblingID := createIssuerForOrphanTest(t, ctx, ti, "orphan-deadsib-sibling")
 	clientID, refreshToken := seedRevocableUpstream(t, ctx, ti, issuerID, "orphan-deadsib", upstream.URL+"/revoke")
-
-	require.NoError(t, remotesessionsrepo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: clientID,
-		UserSessionIssuerID:   siblingID,
-	}))
 
 	// Tombstone the sibling issuer directly so its binding row survives dead.
 	_, err := usersessionsrepo.New(ti.conn).DeleteUserSessionIssuer(ctx, usersessionsrepo.DeleteUserSessionIssuerParams{
@@ -436,7 +385,7 @@ func TestDeleteUserSessionIssuer_RevokesEverySubjectOnOrphanedClient(t *testing.
 
 // An organization-level client (project_id NULL) is still swept when orphaned,
 // including sessions whose provenance issuer lives in another project.
-func TestDeleteUserSessionIssuer_RevokesOrgLevelClientAcrossProjects(t *testing.T) {
+func TestDeleteUserSessionIssuer_SparesOtherProjectProvenanceOnSharedRegistration(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -463,14 +412,14 @@ func TestDeleteUserSessionIssuer_RevokesOrgLevelClientAcrossProjects(t *testing.
 
 	issuerID := createIssuerForOrphanTest(t, ctx, ti, "orphan-orglevel-issuer")
 	clientID := seedRevocableClient(t, ctx, ti, issuerID, "orphan-orglevel", upstream.URL+"/revoke", true)
-	refreshToken := seedRemoteSession(t, ctx, ti, otherIssuer.ID, clientID, "orphan-orglevel-subject")
+	seedRemoteSession(t, ctx, ti, otherIssuer.ID, clientID, "orphan-orglevel-subject")
 
 	deleteIssuerForOrphanTest(t, ctx, ti, issuerID)
 
-	require.Zero(t, countActiveClientSessions(t, ctx, ti, clientID), "the org-level client's sessions are tombstoned regardless of provenance project")
+	require.Equal(t, 1, countActiveClientSessions(t, ctx, ti, clientID), "issuer retirement does not widen to another project sharing the registration")
 
 	_, tokens := spy.snapshot()
-	require.Equal(t, []string{refreshToken}, tokens, "the cross-project grant is revoked with the client")
+	require.Empty(t, tokens)
 }
 
 func TestDeleteOrganizationUserSessionIssuer_RevokesLegacyProjectClient(t *testing.T) {
@@ -550,10 +499,6 @@ func TestDeleteUserSessionIssuer_RebindMintsFreshSessionWithoutResurrection(t *t
 
 	// Fresh connect: bind the client to a new issuer and re-auth the subject.
 	rebindIssuer := createIssuerForOrphanTest(t, ctx, ti, "orphan-rebind-fresh")
-	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: clientID,
-		UserSessionIssuerID:   rebindIssuer,
-	}))
 	seedRemoteSession(t, ctx, ti, rebindIssuer, clientID, "orphan-subject-orphan-rebind")
 
 	fresh, err := q.GetActiveRemoteSession(ctx, remotesessionsrepo.GetActiveRemoteSessionParams{
@@ -566,41 +511,20 @@ func TestDeleteUserSessionIssuer_RebindMintsFreshSessionWithoutResurrection(t *t
 	require.Equal(t, 1, countActiveClientSessions(t, ctx, ti, clientID), "exactly one live grant after the re-bind")
 }
 
-// Write-skew guard: a sibling delete that commits between this delete's issuer
-// tombstone and its orphan scan must still be observed. The fixture
-// transaction holds the client-row lock the cascade takes, so the service
-// delete deterministically blocks until the sibling is already dead — the
-// exact schedule the FOR UPDATE lock exists to serialize.
-func TestDeleteUserSessionIssuer_ConcurrentSiblingDeleteStillRevokes(t *testing.T) {
+// Issuer retirement serializes with an in-flight registration write. Once
+// that writer releases the registration, retirement rechecks the grant.
+func TestDeleteUserSessionIssuer_WaitsForRegistrationWriterBeforeRetiringGrant(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-
 	spy := &orphanRevocationSpy{}
 	upstream := newOrphanRevocationUpstream(t, spy)
 
 	issuerID := createIssuerForOrphanTest(t, ctx, ti, "orphan-race-issuer")
-	siblingID := createIssuerForOrphanTest(t, ctx, ti, "orphan-race-sibling")
 	clientID, refreshToken := seedRevocableUpstream(t, ctx, ti, issuerID, "orphan-race", upstream.URL+"/revoke")
 
-	require.NoError(t, remotesessionsrepo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: clientID,
-		UserSessionIssuerID:   siblingID,
-	}))
-
-	// This transaction only runs SQLc-generated methods; it exists to hold the
-	// client-row lock the cascade must wait on.
 	tx := testenv.BeginTx(t, ctx, ti.conn)
-
-	// Hold the client-row lock before the service delete starts, so it cannot
-	// scan for orphans until the sibling's delete below has committed.
-	_, err := remotesessionsrepo.New(tx).LockRemoteSessionClientsBoundToUserSessionIssuer(ctx, remotesessionsrepo.LockRemoteSessionClientsBoundToUserSessionIssuerParams{
-		UserSessionIssuerID: siblingID,
-		ProjectID:           *authCtx.ProjectID,
-		OrganizationID:      authCtx.ActiveOrganizationID,
-	})
+	_, err := remotesessionsrepo.New(tx).LockRemoteSessionClientForSessionWrite(ctx, clientID)
 	require.NoError(t, err)
 
 	deleteErr := make(chan error, 1)
@@ -615,25 +539,13 @@ func TestDeleteUserSessionIssuer_ConcurrentSiblingDeleteStillRevokes(t *testing.
 
 	testenv.WaitForBackendsBlockedBy(t, ctx, ti.conn, testenv.BackendPID(tx), 1)
 
-	// The sibling's delete, replayed inside the lock-holding transaction:
-	// tombstone the issuer and drop its bindings, then commit.
-	txIssuers := usersessionsrepo.New(tx)
-	_, err = txIssuers.DeleteUserSessionIssuer(ctx, usersessionsrepo.DeleteUserSessionIssuerParams{
-		ID:        siblingID,
-		ProjectID: *authCtx.ProjectID,
-	})
-	require.NoError(t, err)
-	require.NoError(t, remotesessionsrepo.New(tx).DeleteRemoteSessionClientAttachmentsForUserSessionIssuer(ctx, remotesessionsrepo.DeleteRemoteSessionClientAttachmentsForUserSessionIssuerParams{
-		UserSessionIssuerID: siblingID,
-		ProjectID:           *authCtx.ProjectID,
-	}))
 	require.NoError(t, tx.Commit(ctx))
 
 	require.NoError(t, <-deleteErr)
 
-	require.Zero(t, countActiveClientSessions(t, ctx, ti, clientID), "the surviving delete observes the committed sibling delete and revokes")
+	require.Zero(t, countActiveClientSessions(t, ctx, ti, clientID), "issuer retirement finds its exact grant after acquiring the registration lock")
 
 	calls, tokens := spy.snapshot()
-	require.Equal(t, 1, calls, "exactly one revocation despite the interleaved deletes")
+	require.Equal(t, 1, calls, "exactly one post-commit revocation")
 	require.Equal(t, []string{refreshToken}, tokens)
 }

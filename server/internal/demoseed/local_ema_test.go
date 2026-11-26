@@ -19,10 +19,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/fixture/fixtureauth"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
-	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/associationbackfill"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
@@ -236,7 +236,7 @@ func TestLocalFixturesWireEnterpriseSignIn(t *testing.T) {
 	}
 
 	spec := LocalSpec()
-	s := &seeder{spec: spec}
+	s := &seeder{spec: spec, catalog: aivendors.CompiledSnapshot()}
 	q := testrepo.New(db)
 	resource := fixtureauth.Resource(base, fixtureauth.PathEMAMCP)
 	for run := range 2 {
@@ -276,14 +276,10 @@ func TestLocalFixturesWireEnterpriseSignIn(t *testing.T) {
 		require.Equal(t, clientID, wiring.AuthorizationServerClientID, "the dev-idp's resource authorization server requires the client the ID-JAG names")
 
 		// The server exists only locally, so the local fixtures record its
-		// typed auth client on the fixture's endpoint and leave no
-		// association for the backfill to decide.
+		// typed auth client on the fixture's endpoint directly.
 		typedResource, err := q.GetLocalEMATypedAuthClientResourceFixture(ctx, testrepo.GetLocalEMATypedAuthClientResourceFixtureParams{RemoteSessionClientID: s.det("ema-client-tracker"), OrganizationID: spec.OrgID})
 		require.NoError(t, err)
 		require.Equal(t, resource, typedResource)
-		associations, err := associationbackfill.Run(ctx, db, associationbackfill.Options{OrganizationID: spec.OrgID, Apply: false, PageSize: 0})
-		require.NoError(t, err)
-		require.Zero(t, associations.Decided)
 
 		// After every run, including the one after the edits, the dev-idp
 		// holds one app with the shared secret, one resource for the

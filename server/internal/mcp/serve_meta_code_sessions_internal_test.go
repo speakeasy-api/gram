@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -45,7 +46,7 @@ func TestCodeMemberSessionWaitFailuresStayMemberScoped(t *testing.T) {
 			ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 			defer cancel()
 			ctx = context.WithValue(ctx, codeMemberSessionsKey{}, scope)
-			_, session, err := (&Service{}).openMemberSession(ctx, logger, dial, nil, member)
+			_, session, err := (&Service{aiCatalog: aivendorstest.NewStore()}).openMemberSession(ctx, logger, dial, nil, member)
 			require.Nil(t, session)
 			memberErr, ok := errors.AsType[*metaMemberError](err)
 			require.True(t, ok, "listing must skip this member rather than fail the inventory: %v", err)
@@ -82,7 +83,7 @@ func TestCodeMemberSessionRequiresCallerScope(t *testing.T) {
 	for _, caller := range []*codeCallerScope{nil, {}} {
 		scope := &codeSessionScope{callerScope: caller}
 		ctx := context.WithValue(t.Context(), codeMemberSessionsKey{}, scope)
-		_, session, err := (&Service{}).openMemberSession(ctx, testenv.NewLogger(t), memberDial{}, nil, metaMember{slug: "remote"})
+		_, session, err := (&Service{aiCatalog: aivendorstest.NewStore()}).openMemberSession(ctx, testenv.NewLogger(t), memberDial{}, nil, metaMember{slug: "remote"})
 		require.Nil(t, session)
 		memberErr, ok := errors.AsType[*metaMemberError](err)
 		require.True(t, ok)
@@ -170,7 +171,7 @@ func TestCodeMemberSessionRekeysWhenRouteChangesDuringWait(t *testing.T) {
 		return rotated, nil
 	}
 	ctx = context.WithValue(ctx, codeMemberSessionsKey{}, scope)
-	_, session, err := (&Service{}).openMemberSession(ctx, logger, stale, redial, member)
+	_, session, err := (&Service{aiCatalog: aivendorstest.NewStore()}).openMemberSession(ctx, logger, stale, redial, member)
 	require.NoError(t, err)
 	defer session.release(ctx, logger)
 	require.Equal(t, 1, redialed)

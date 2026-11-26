@@ -93,10 +93,18 @@ const (
 	// so clearing stops and reports it instead of looping.
 	maxClearPasses = 5
 
+	// clearUnlockTimeout bounds releasing the clear lock, which runs after the
+	// clear's own context may have ended.
+	clearUnlockTimeout = 30 * time.Second
+
 	// clearBatchSize is how many platform-key copies one clear statement
 	// destroys, keeping each statement's row locks short.
 	clearBatchSize = 500
 )
+
+// errPlatformCopiesAlreadyCleared means another clear recorded completion
+// while this one ran. ClearPlatformCopies reports success for it.
+var errPlatformCopiesAlreadyCleared = errors.New("orgencryption: platform-key copies already cleared")
 
 // Transition is one use case's transition state for an organization.
 type Transition struct {
@@ -388,10 +396,18 @@ type FinalizeRequest struct {
 	// Stores are the copy stores of every column pair that holds values for
 	// the use case.
 	Stores []CopyStore
+
+	// ExpectedUnreadable, when set, is the number of unreadable values the
+	// caller acknowledged would be destroyed. Finalize refuses when the count
+	// under the state row lock differs, so the count acknowledged is the
+	// count destroyed. Nil asks for no acknowledgement, for callers whose
+	// operators do not confirm a count.
+	ExpectedUnreadable *int64
 }
 
 // Finalize moves a use case from dual_write to org_kms. Under the state row
-// lock it checks that no value waits for an organization-key copy, that no
+// lock it checks that the organization's key is usable (not suspended), that
+// no value waits for an organization-key copy, that no
 // value is stored without an organization it can be attributed to, that a
 // clean verification pass ran after the last backfill in this dual_write
 // period, and that the use case has spent the minimum time in dual_write.
@@ -421,7 +437,17 @@ func (t *Transitions) Finalize(ctx context.Context, organizationID string, useCa
 				return repo.OrganizationEncryptionTransition{}, nil, err
 			}
 
-			counts, err := countStores(ctx, organizationID, req.Stores)
+			// Finalize leaves only the organization-key copies, so refuse
+			// while the key cannot open them.
+			config, err := getConfig(ctx, q, organizationID)
+			if err != nil {
+				return repo.OrganizationEncryptionTransition{}, nil, fmt.Errorf("%w: %w", ErrFinalizeBlocked, err)
+			}
+			if err := requireUsableState(config.State); err != nil {
+				return repo.OrganizationEncryptionTransition{}, nil, fmt.Errorf("%w: %w", ErrFinalizeBlocked, err)
+			}
+
+			counts, err := CountStores(ctx, organizationID, req.Stores)
 			if err != nil {
 				return repo.OrganizationEncryptionTransition{}, nil, err
 			}
@@ -430,6 +456,8 @@ func (t *Transitions) Finalize(ctx context.Context, organizationID string, useCa
 				return repo.OrganizationEncryptionTransition{}, nil, fmt.Errorf("%w: %d values still wait for an organization-key copy", ErrFinalizeBlocked, counts.Waiting)
 			case counts.Unattributed > 0:
 				return repo.OrganizationEncryptionTransition{}, nil, fmt.Errorf("%w: %d values are stored without an organization", ErrFinalizeBlocked, counts.Unattributed)
+			case req.ExpectedUnreadable != nil && *req.ExpectedUnreadable != counts.Unreadable:
+				return repo.OrganizationEncryptionTransition{}, nil, fmt.Errorf("%w: %d values are unreadable, not the %d acknowledged", ErrUnreadableCountChanged, counts.Unreadable, *req.ExpectedUnreadable)
 			}
 
 			row, err := updateTransitionState(ctx, q, *before, TransitionStateOrgKMS)
@@ -446,26 +474,66 @@ func (t *Transitions) Finalize(ctx context.Context, organizationID string, useCa
 }
 
 // checkFinalizeTiming checks the minimum time in dual_write and that a clean
-// verification pass started after both the move to dual_write and the last
-// backfill, all on the database clock.
+// verification pass started after both the move to dual_write and the start
+// of the last backfill, which verifies inside its own claim, all on the
+// database clock.
 func checkFinalizeTiming(row repo.OrganizationEncryptionTransition, now time.Time, minimum time.Duration) error {
-	if elapsed := now.Sub(row.StateChangedAt.Time); elapsed < minimum {
-		return fmt.Errorf("%w: in dual_write for %s, needs %s", ErrFinalizeBlocked, elapsed.Truncate(time.Second), minimum)
+	transition, err := toTransition(row)
+	if err != nil {
+		return err
 	}
-
-	if !row.LastVerifiedAt.Valid || row.LastVerifiedAt.Time.Before(row.StateChangedAt.Time) {
-		return fmt.Errorf("%w: no clean verification pass since entering dual_write", ErrFinalizeBlocked)
-	}
-
-	if row.LastBackfillStartedAt.Valid && !row.LastBackfillCompletedAt.Valid {
-		return fmt.Errorf("%w: a backfill is running or did not complete", ErrFinalizeBlocked)
-	}
-
-	if row.LastBackfillCompletedAt.Valid && row.LastVerifiedAt.Time.Before(row.LastBackfillCompletedAt.Time) {
-		return fmt.Errorf("%w: no clean verification pass since the last backfill", ErrFinalizeBlocked)
+	if reason := finalizeTimingBlocker(transition, now, minimum); reason != "" {
+		return fmt.Errorf("%w: %s", ErrFinalizeBlocked, reason)
 	}
 
 	return nil
+}
+
+// finalizeTimingBlocker returns why the timing of a dual_write transition
+// keeps it from being finalized, or "" when nothing does.
+func finalizeTimingBlocker(transition Transition, now time.Time, minimum time.Duration) string {
+	if elapsed := now.Sub(transition.StateChangedAt); elapsed < minimum {
+		return fmt.Sprintf("in dual_write for %s, needs %s", elapsed.Truncate(time.Second), minimum)
+	}
+
+	verified := transition.LastVerifiedAt
+	if verified == nil || verified.Before(transition.StateChangedAt) {
+		return "no clean verification pass since entering dual_write"
+	}
+
+	backfill := transition.LastBackfill
+	if backfill.StartedAt != nil && backfill.CompletedAt == nil {
+		return "a backfill is running or did not complete"
+	}
+
+	if backfill.StartedAt != nil && verified.Before(*backfill.StartedAt) {
+		return "no clean verification pass since the last backfill"
+	}
+
+	return ""
+}
+
+// FinalizeBlockers reports why Finalize would refuse a transition with these
+// counts at now, or nothing when it would proceed. It is advisory, for showing
+// an operator what is left: Finalize checks again under the state row lock on
+// the database clock. Values recorded as unreadable never block.
+func FinalizeBlockers(transition Transition, counts CopyCounts, now time.Time, minimumDualWrite time.Duration) []string {
+	if transition.State != TransitionStateDualWrite {
+		return []string{fmt.Sprintf("finalize needs dual_write, not %s", transition.State)}
+	}
+
+	var blockers []string
+	if reason := finalizeTimingBlocker(transition, now, max(minimumDualWrite, MinimumDualWriteFloor)); reason != "" {
+		blockers = append(blockers, reason)
+	}
+	if counts.Waiting > 0 {
+		blockers = append(blockers, fmt.Sprintf("%d values still wait for an organization-key copy", counts.Waiting))
+	}
+	if counts.Unattributed > 0 {
+		blockers = append(blockers, fmt.Sprintf("%d values are stored without an organization", counts.Unattributed))
+	}
+
+	return blockers
 }
 
 // ClearPlatformCopies destroys the platform-key copies of a finalized use case
@@ -494,6 +562,23 @@ func (t *Transitions) ClearPlatformCopies(ctx context.Context, organizationID st
 
 	logger := t.logger.With(attr.SlogOrganizationID(organizationID), attr.SlogOrgEncryptionUseCase(useCase))
 
+	// One clear at a time per organization and use case, so the clear that
+	// records completion is the one that destroyed the copies and its audit
+	// event counts them all.
+	unlock, err := t.lockClear(ctx, logger, organizationID, useCase)
+	if err != nil {
+		return Transition{}, err
+	}
+	defer unlock()
+
+	// Another clear may have finished while this one waited to start.
+	if current, err = t.GetFresh(ctx, organizationID, useCase); err != nil {
+		return Transition{}, err
+	}
+	if current.PlatformCopiesClearedAt != nil {
+		return current, nil
+	}
+
 	var cleared int64
 	for pass := range maxClearPasses {
 		n, err := clearStores(ctx, organizationID, current.Generation, stores)
@@ -506,7 +591,7 @@ func (t *Transitions) ClearPlatformCopies(ctx context.Context, organizationID st
 			return Transition{}, err
 		}
 
-		counts, err := countStores(ctx, organizationID, stores)
+		counts, err := CountStores(ctx, organizationID, stores)
 		if err != nil {
 			return Transition{}, err
 		}
@@ -520,10 +605,13 @@ func (t *Transitions) ClearPlatformCopies(ctx context.Context, organizationID st
 		}
 	}
 
-	return t.change(ctx, organizationID, useCase, actor, t.audit.LogOrganizationEncryptionTransitionClearPlatformCopies,
+	after, err := t.change(ctx, organizationID, useCase, actor, t.audit.LogOrganizationEncryptionTransitionClearPlatformCopies,
 		func(ctx context.Context, q *repo.Queries, before *repo.OrganizationEncryptionTransition) (repo.OrganizationEncryptionTransition, *audit.OrganizationEncryptionTransitionMetadata, error) {
 			if before == nil || TransitionState(before.State) != TransitionStateOrgKMS || before.Generation != current.Generation {
 				return repo.OrganizationEncryptionTransition{}, nil, ErrConcurrentChange
+			}
+			if before.PlatformCopiesClearedAt.Valid {
+				return repo.OrganizationEncryptionTransition{}, nil, errPlatformCopiesAlreadyCleared
 			}
 
 			row, err := q.MarkEncryptionTransitionPlatformCopiesCleared(ctx, repo.MarkEncryptionTransitionPlatformCopiesClearedParams{
@@ -537,28 +625,140 @@ func (t *Transitions) ClearPlatformCopies(ctx context.Context, organizationID st
 
 			return row, &audit.OrganizationEncryptionTransitionMetadata{MinimumDualWriteSeconds: 0, UnreadableValues: 0, ClearedValues: cleared}, nil
 		})
+	if errors.Is(err, errPlatformCopiesAlreadyCleared) {
+		// Another clear, such as the hourly resume, finished first. The
+		// copies are gone either way, and that clear recorded the event.
+		return t.GetFresh(ctx, organizationID, useCase)
+	}
+
+	return after, err
+}
+
+// lockClear takes the session advisory lock that keeps a second clear of the
+// same organization and use case from running at once, on a connection held
+// until the returned unlock runs. It returns ErrClearRunning without waiting
+// when another clear holds the lock. A connection whose unlock fails is closed
+// rather than returned to the pool still holding the lock.
+func (t *Transitions) lockClear(ctx context.Context, logger *slog.Logger, organizationID string, useCase UseCase) (func(), error) {
+	conn, err := t.db.Acquire(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("acquire connection for clear lock: %w", err)
+	}
+
+	params := repo.TryLockEncryptionClearParams{OrganizationID: organizationID, UseCase: string(useCase)}
+	locked, err := repo.New(conn).TryLockEncryptionClear(ctx, params)
+	if err != nil {
+		conn.Release()
+		return nil, fmt.Errorf("take clear lock: %w", err)
+	}
+	if !locked {
+		conn.Release()
+		return nil, ErrClearRunning
+	}
+
+	return func() {
+		unlockCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), clearUnlockTimeout)
+		defer cancel()
+
+		if _, err := repo.New(conn).UnlockEncryptionClear(unlockCtx, repo.UnlockEncryptionClearParams(params)); err != nil {
+			logger.ErrorContext(unlockCtx, "release clear lock; closing its connection", attr.SlogError(err))
+			if err := conn.Conn().Close(unlockCtx); err != nil {
+				logger.ErrorContext(unlockCtx, "close clear lock connection", attr.SlogError(err))
+			}
+		}
+		conn.Release()
+	}, nil
+}
+
+// StragglerCount reports the platform-key copies one column held after its
+// use case's clear had finished, as the sweep's clear destroyed them.
+type StragglerCount struct {
+	// Columns names the column pair.
+	Columns CopyColumns
+
+	// Cleared counts the copies the sweep destroyed, by whether each stood
+	// beside an organization-key copy when it was cleared.
+	Cleared ClearedCopies
+}
+
+// SweepPlatformCopies clears platform-key copies that appeared after a use
+// case's clear finished, and reports one StragglerCount per column that held
+// any value, counted by the statements that cleared them. A column whose only
+// cleared copies stored no value, such as a legacy ”, is cleared without a
+// report. It changes no transition state and records nothing on the
+// transition row. Any value it finds means a writer bypassed the fence or held
+// a transaction open far longer than the server's timeouts allow, because
+// writers decide org_kms after finalize and write only the organization-key
+// copy. It requires org_kms with the clear finished.
+func (t *Transitions) SweepPlatformCopies(ctx context.Context, organizationID string, useCase UseCase, stores []CopyStore) ([]StragglerCount, error) {
+	if err := useCase.validate(); err != nil {
+		return nil, err
+	}
+	if err := requireStores(useCase, stores); err != nil {
+		return nil, err
+	}
+
+	current, err := t.GetFresh(ctx, organizationID, useCase)
+	if err != nil {
+		return nil, err
+	}
+	switch {
+	case current.State != TransitionStateOrgKMS:
+		return nil, fmt.Errorf("%w: sweep platform-key copies in %s", ErrTransitionNotAllowed, current.State)
+	case current.PlatformCopiesClearedAt == nil:
+		return nil, fmt.Errorf("%w: sweep platform-key copies before they were cleared", ErrTransitionNotAllowed)
+	}
+
+	var stragglers []StragglerCount
+	for _, store := range stores {
+		cleared, err := clearStore(ctx, organizationID, current.Generation, store)
+		if cleared.Values() > 0 {
+			stragglers = append(stragglers, StragglerCount{Columns: store.Columns(), Cleared: cleared})
+		}
+		if err != nil {
+			return stragglers, err
+		}
+	}
+
+	return stragglers, nil
 }
 
 func clearStores(ctx context.Context, organizationID string, generation int64, stores []CopyStore) (int64, error) {
 	var cleared int64
 	for _, store := range stores {
-		for {
-			n, err := store.ClearPlatformCopies(ctx, organizationID, generation, clearBatchSize)
-			cleared += n
-			if err != nil {
-				return cleared, fmt.Errorf("clear platform-key copies in %s: %w", store.Columns().PlatformColumn, err)
-			}
-			if n < clearBatchSize {
-				break
-			}
+		n, err := clearStore(ctx, organizationID, generation, store)
+		cleared += n.Values()
+		if err != nil {
+			return cleared, err
 		}
 	}
 
 	return cleared, nil
 }
 
-func countStores(ctx context.Context, organizationID string, stores []CopyStore) (CopyCounts, error) {
-	total := CopyCounts{Waiting: 0, Unreadable: 0, Unattributed: 0, PlatformCopies: 0}
+// clearStore clears one column's platform-key copies in batches until a
+// batch comes back short.
+func clearStore(ctx context.Context, organizationID string, generation int64, store CopyStore) (ClearedCopies, error) {
+	var cleared ClearedCopies
+	for {
+		n, err := store.ClearPlatformCopies(ctx, organizationID, generation, clearBatchSize)
+		cleared.PlatformOnly += n.PlatformOnly
+		cleared.BesideOrgCopy += n.BesideOrgCopy
+		cleared.Empty += n.Empty
+		if err != nil {
+			return cleared, fmt.Errorf("clear platform-key copies in %s: %w", store.Columns().PlatformColumn, err)
+		}
+		if n.Rows() < clearBatchSize {
+			return cleared, nil
+		}
+	}
+}
+
+// CountStores sums the counts of every copy store for an organization, keeping
+// the latest LastWrittenAt. It reads the database only, so it is cheap enough
+// for an admin page load.
+func CountStores(ctx context.Context, organizationID string, stores []CopyStore) (CopyCounts, error) {
+	total := CopyCounts{Waiting: 0, Unreadable: 0, Unattributed: 0, PlatformCopies: 0, Values: 0, LastWrittenAt: time.Time{}}
 	for _, store := range stores {
 		counts, err := store.Count(ctx, organizationID)
 		if err != nil {
@@ -568,6 +768,8 @@ func countStores(ctx context.Context, organizationID string, stores []CopyStore)
 		total.Unreadable += counts.Unreadable
 		total.Unattributed += counts.Unattributed
 		total.PlatformCopies += counts.PlatformCopies
+		total.Values += counts.Values
+		total.LastWrittenAt = later(total.LastWrittenAt, counts.LastWrittenAt)
 	}
 
 	return total, nil

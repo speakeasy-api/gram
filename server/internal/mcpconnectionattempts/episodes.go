@@ -40,8 +40,14 @@ type Episode struct {
 	// ClientFamily is the client of the latest failure.
 	ClientFamily string
 
-	// ClientVersion is the client version of the latest failure, empty when not recorded.
+	// ClientVersion is the version on the row that named ClientFamily, empty when not recorded.
 	ClientVersion string
+
+	// Apps are the distinct apps of the run's failures, latest first, at most MaxEpisodeApps.
+	Apps []EpisodeApp
+
+	// AppsTotal counts the distinct apps of the run's failures, without the MaxEpisodeApps cap.
+	AppsTotal int
 
 	// ProviderHost is the provider of the latest failure.
 	ProviderHost string
@@ -72,6 +78,46 @@ type Episode struct {
 	LastWorkedAt time.Time
 }
 
+// MaxEpisodeApps bounds the apps an episode keeps.
+const MaxEpisodeApps = 5
+
+// EpisodeApp is one app a run's failures came from.
+type EpisodeApp struct {
+	// Key is the app key.
+	Key string
+
+	// Family is the client family, empty when not named.
+	Family string
+
+	// Version is the client version, empty when not recorded.
+	Version string
+}
+
+// BackingServerID is the mcp_servers id reached (server or gateway member), else empty.
+func (e Episode) BackingServerID() string {
+	var raw string
+	switch e.ServerKind {
+	case serverKindMCP:
+		raw = e.ServerID
+	case serverKindMeta:
+		raw = e.MemberID
+	}
+	id, err := uuid.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	return id.String()
+}
+
+// OnMCPServer reports whether the episode's server is an MCP server, gateway or toolset, by its kind and id only.
+func (e Episode) OnMCPServer() bool {
+	switch e.ServerKind {
+	case serverKindMCP, serverKindMeta, serverKindToolset:
+		return e.ServerID != ""
+	}
+	return false
+}
+
 // attemptFacts is one attempt reduced for episodes.
 type attemptFacts struct {
 	AttemptSummary
@@ -81,14 +127,31 @@ type attemptFacts struct {
 	MemberID       string `ch:"member"`
 	EndingClientID string `ch:"ending_client"`
 
-	// ClientVersion is the latest client version named.
+	// ClientVersion is the version on the row that named the client, empty when it had none.
 	ClientVersion string `ch:"version"`
 
-	// SignInMembers, SignInClients and SignInTimes are the member, service connection
-	// and time of each row where the person's sign-in to a service worked.
-	SignInMembers []string    `ch:"sign_in_members"`
-	SignInClients []string    `ch:"sign_in_clients"`
-	SignInTimes   []time.Time `ch:"sign_in_times"`
+	// NamedFamily and NamedVersion are the earliest row naming a client's family and version, empty when none does.
+	NamedFamily  string `ch:"named_family"`
+	NamedVersion string `ch:"named_version"`
+
+	// EndingSubject is the subject on the row End decides the attempt by.
+	EndingSubject string `ch:"ending_subject"`
+
+	// Users counts the attempt's distinct user subjects.
+	Users uint64 `ch:"users"`
+
+	// FirstUser is the earliest user subject on the attempt, empty when none.
+	FirstUser string `ch:"first_user"`
+
+	// SignInMembers, SignInClients, SignInSubjects and SignInTimes are the member, service
+	// connection, subject and time of each row where a sign-in to a service worked.
+	SignInMembers  []string    `ch:"sign_in_members"`
+	SignInClients  []string    `ch:"sign_in_clients"`
+	SignInSubjects []string    `ch:"sign_in_subjects"`
+	SignInTimes    []time.Time `ch:"sign_in_times"`
+
+	// Issuers are the providers recorded on the attempt's rows.
+	Issuers []string `ch:"issuers"`
 }
 
 // serviceSignInRows selects the rows where a person's sign-in to a service worked: they
@@ -98,6 +161,12 @@ var serviceSignInRows = `(
 	OR (step = '` + StepProviderRefresh.name + `' AND step_result IN ('` + ResultRefreshed.name + `', '` + ResultAdoptedConcurrentWinner.name + `'))
 	OR (step = '` + StepUpstreamEMA.name + `' AND step_result = '` + ResultAssertionIssued.name + `'))`
 
+// namedClientRows are the rows whose family NamedClient accepts.
+var namedClientRows = `client_family NOT IN ('', '` + FamilyOther + `', '` + FamilyScript + `', '` + FamilyBrowser + `')`
+
+// userRows are the rows whose subject is a user.
+var userRows = `startsWith(subject_urn, '` + string(urn.SessionSubjectKindUser) + `:')`
+
 // episodeColumns adds what episodes need to an attempt's summary.
 var episodeColumns = attemptColumns + `,
 	if(countIf(is_final) > 0,
@@ -106,11 +175,22 @@ var episodeColumns = attemptColumns + `,
 	if(countIf(is_final) > 0,
 		argMinIf(remote_session_client_id, (event_time, step, outcome, reason, remote_session_client_id), is_final),
 		argMax(remote_session_client_id, (event_time, step, reason, remote_session_client_id))) AS ending_client,
-	argMaxIf(client_version, (event_time, client_version), client_version != '') AS version,
-	groupArrayIf((member_id, remote_session_client_id, event_time), ` + serviceSignInRows + `) AS sign_ins,
+	if(countIf(is_final) > 0,
+		argMinIf(subject_urn, (event_time, step, outcome, reason, subject_urn), is_final),
+		argMax(subject_urn, (event_time, step, reason, subject_urn))) AS ending_subject,
+	uniqExactIf(subject_urn, ` + userRows + `) AS users,
+	argMinIf(subject_urn, (event_time, subject_urn), ` + userRows + `) AS first_user,
+	argMinIf(client_family, (event_time, client_family, client_version), ` + namedClientRows + `) AS named_family,
+	argMinIf(client_version, (event_time, client_family, client_version), ` + namedClientRows + `) AS named_version,
+	if(countIf(client_family NOT IN ('', 'browser')) > 0,
+		argMinIf(client_version, (event_time, client_family, client_version), client_family NOT IN ('', 'browser')),
+		argMinIf(client_version, (event_time, client_version), client_family = 'browser')) AS version,
+	groupArrayIf((member_id, remote_session_client_id, event_time, subject_urn), ` + serviceSignInRows + `) AS sign_ins,
 	arrayMap(x -> toString(x.1), sign_ins) AS sign_in_members,
 	arrayMap(x -> toString(x.2), sign_ins) AS sign_in_clients,
-	arrayMap(x -> x.3, sign_ins) AS sign_in_times`
+	arrayMap(x -> x.3, sign_ins) AS sign_in_times,
+	arrayMap(x -> toString(x.4), sign_ins) AS sign_in_subjects,
+	groupUniqArrayIf(user_session_issuer_id, user_session_issuer_id != '') AS issuers`
 
 // episodeHaving keeps the attempts that can be a failure or show a part working: ones
 // that connected, carry a reason, or hold a service sign-in.
@@ -119,11 +199,13 @@ const episodeHaving = ` AND ((` + fixCandidates + `) OR length(sign_ins) > 0)`
 // readEpisodeAttempts reads the attempts episodes are derived from, as recorded by now:
 // every attempt started from from by a person with an attempt that can read as failed
 // since since. An unfinished one does once its live window has passed.
-func readEpisodeAttempts(ctx context.Context, ch driver.Conn, organizationID string, from, since, now time.Time) ([]attemptFacts, error) {
+func readEpisodeAttempts(ctx context.Context, ch driver.Conn, filter FailingNowFilter, from, since, now time.Time) ([]attemptFacts, error) {
+	organizationID := filter.OrganizationID
 	until := now.Add(time.Nanosecond)
 	where, args, err := AttemptFilter{
 		StartedFrom: from, StartedBefore: until, OrganizationID: organizationID, ExcludeOrganizationIDs: nil, ProjectID: uuid.Nil, ServerID: "",
-		PeopleFailingFrom: later(from, since.Add(-AttemptLiveWindow)), PeopleFailingBefore: until, FixCandidatesOnly: false,
+		PeopleFailingFrom: later(from, since.Add(-AttemptLiveWindow)), PeopleFailingBefore: until,
+		PeopleProjectID: filter.ProjectID, PeopleIssuerID: filter.IssuerID, PeopleIssuerServerIDs: filter.IssuerServerIDs, FixCandidatesOnly: false,
 	}.where()
 	if err != nil {
 		return nil, err
@@ -141,6 +223,10 @@ func readEpisodeAttempts(ctx context.Context, ch driver.Conn, organizationID str
 		var a attemptFacts
 		if err := rows.ScanStruct(&a); err != nil {
 			return nil, fmt.Errorf("scan episode attempt: %w", err)
+		}
+		// A named client on any row names the attempt's app, so every episode read sees one pair.
+		if a.NamedFamily != "" {
+			a.ClientFamily, a.ClientVersion = a.NamedFamily, a.NamedVersion
 		}
 		out = append(out, a)
 	}
@@ -193,7 +279,7 @@ func (f failure) connectionKey() string {
 	a := f.a
 	key := string(f.part) + "|" + a.SubjectURN + "|" + a.ServerKind + "|" + a.ServerID + "|" + a.MemberID + "|" + a.AppKey
 	switch {
-	case f.part == PartAppSignIn && namedClient(a.ClientFamily):
+	case f.part == PartAppSignIn && NamedClient(a.ClientFamily):
 		key += "|" + a.ClientFamily
 	case f.part == PartServiceSignIn:
 		key += "|" + a.RemoteSessionClientID
@@ -256,15 +342,30 @@ func indexEvidence(attempts []attemptFacts, served, answers []lastServed, now ti
 		if e.Outcome == OutcomeConnected && (e.Step == StepInboundToken.name || e.Step == StepSignInRenewal.name ||
 			(e.Step == StepInboundConsent.name && a.AppKey == AppFirstParty.key)) {
 			s.at = e.At
-			ev.signIns[a.SubjectURN] = append(ev.signIns[a.SubjectURN], s)
+			if who := a.credited(a.EndingSubject); who != "" {
+				ev.signIns[who] = append(ev.signIns[who], s)
+			}
 		}
 		s.part = PartServiceSignIn
 		for i, at := range a.SignInTimes {
 			s.member, s.remoteClientID, s.at = a.SignInMembers[i], a.SignInClients[i], at
-			ev.signIns[a.SubjectURN] = append(ev.signIns[a.SubjectURN], s)
+			if who := a.credited(a.SignInSubjects[i]); who != "" {
+				ev.signIns[who] = append(ev.signIns[who], s)
+			}
 		}
 	}
 	return ev
+}
+
+// credited is the row's subject, else the attempt's only user, else none; a non-user subject is credited only to itself.
+func (a attemptFacts) credited(rowSubject string) string {
+	switch {
+	case rowSubject != "":
+		return rowSubject
+	case a.Users == 1:
+		return a.FirstUser
+	}
+	return ""
 }
 
 // lastWorked is the latest time the part f broke is known to have worked for f's
@@ -351,13 +452,17 @@ func (f failure) sameServer(s signIn) bool {
 	return a.ServerID != "" || (s.project == a.ProjectID && s.remoteClientID == a.RemoteSessionClientID)
 }
 
-// sameApp treats a failure filed under no verified app as any app's, and compares the
-// client only when both rows name a real one: one registration kind covers many apps.
+// sameApp: unnamed failures match any app but the dashboard; named ones the same family under any app key, else the same app key.
 func (f failure) sameApp(app, clientFamily string) bool {
-	if f.a.AppKey != AppUnverified.key && app != f.a.AppKey {
+	switch {
+	case !NamedClient(f.a.ClientFamily):
+		return app != AppFirstParty.key || f.a.AppKey == AppFirstParty.key
+	case f.a.ClientFamily == clientFamily:
+		return true
+	case f.a.AppKey != AppUnverified.key && app != f.a.AppKey:
 		return false
 	}
-	return !namedClient(f.a.ClientFamily) || !namedClient(clientFamily) || f.a.ClientFamily == clientFamily
+	return !NamedClient(clientFamily)
 }
 
 // servedBySameService reports whether the person's served connection s, on f's server,
@@ -422,13 +527,25 @@ func openEpisodes(failures []failure, ev evidence, since time.Time) []Episode {
 			AppKey: a.AppKey, ClientFamily: a.ClientFamily, ClientVersion: a.ClientVersion, ProviderHost: a.ProviderHost,
 			Part: latest.part, OpeningReason: latest.end.Reason, Reason: latest.end.Reason, Step: latest.end.Step,
 			OpenedAt: latest.end.At, LastFailureAt: latest.end.At, Failures: 0, LastWorkedAt: worked,
+			Apps:      []EpisodeApp{{Key: a.AppKey, Family: a.ClientFamily, Version: a.ClientVersion}},
+			AppsTotal: 1,
 		}
+		apps := map[EpisodeApp]bool{e.Apps[0]: true}
 		opening := latest
+		// Newest first, so the kept apps are the latest when there are more than MaxEpisodeApps.
+		slices.SortFunc(fs, func(x, y failure) int { return y.end.At.Compare(x.end.At) })
 		for _, f := range fs {
 			if f.end.At.Before(worked) {
 				continue
 			}
 			e.Failures += f.a.Weight
+			if app := (EpisodeApp{Key: f.a.AppKey, Family: f.a.ClientFamily, Version: f.a.ClientVersion}); !apps[app] {
+				apps[app] = true
+				e.AppsTotal++
+				if len(e.Apps) < MaxEpisodeApps {
+					e.Apps = append(e.Apps, app)
+				}
+			}
 			if cmp.Or(f.end.At.Compare(opening.end.At), slices.Compare(f.a.AttemptID[:], opening.a.AttemptID[:])) < 0 {
 				opening = f
 			}

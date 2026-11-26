@@ -212,10 +212,6 @@ func (f healthFixture) seedRemoteSessionClient(t *testing.T, remoteIssuerID, use
 		IdentityProviderConnectionID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
 	require.NoError(t, err)
-	require.NoError(t, queries.AttachRemoteSessionClientToUserSessionIssuer(t.Context(), remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: client.ID,
-		UserSessionIssuerID:   userIssuerID,
-	}))
 	return client.ID
 }
 
@@ -334,7 +330,7 @@ func requireHealthCode(t *testing.T, err error, code oops.Code) {
 	require.Equal(t, code, oopsErr.Code)
 }
 
-func TestDescribeMcpServerHealth_IssuerWithTwoClients(t *testing.T) {
+func TestDescribeMcpServerHealth_IssuerIgnoresClientWithoutProvenance(t *testing.T) {
 	t.Parallel()
 
 	f := newHealthFixture(t, true)
@@ -346,6 +342,7 @@ func TestDescribeMcpServerHealth_IssuerWithTwoClients(t *testing.T) {
 	remoteIssuerID := f.seedGlobalRemoteSessionIssuer(t, "upstream-"+uuid.NewString()[:8])
 	dcrClient := f.seedRemoteSessionClient(t, remoteIssuerID, issuerID, "dcr-client", true)
 	staticClient := f.seedRemoteSessionClient(t, remoteIssuerID, issuerID, "static-client", false)
+	f.revokeRemoteSession(t, f.seedRemoteSession(t, issuerID, staticClient, "former-user", 1))
 
 	alice := f.seedRemoteSession(t, issuerID, dcrClient, "alice", 3)
 	f.validateRemoteSession(t, alice, "valid")
@@ -389,7 +386,7 @@ func TestDescribeMcpServerHealth_IssuerWithTwoClients(t *testing.T) {
 	require.NotNil(t, issuer.Sessions.FirstIssuedAt)
 	require.NotNil(t, issuer.Sessions.LastIssuedAt)
 
-	require.Len(t, issuer.RemoteSessionClients, 2)
+	require.Len(t, issuer.RemoteSessionClients, 1)
 	dcr := issuer.RemoteSessionClients[0]
 	require.Equal(t, dcrClient.String(), dcr.ID)
 	require.Equal(t, "dcr", dcr.Registration)
@@ -411,13 +408,6 @@ func TestDescribeMcpServerHealth_IssuerWithTwoClients(t *testing.T) {
 	require.Equal(t, int64(3), dcr.Sessions.Reauthorizations)
 	require.NotNil(t, dcr.Sessions.FirstLinkedAt)
 	require.Equal(t, map[string]int64{"valid": 1}, dcr.Sessions.ValidationStatusCounts, "never-validated and revoked sessions are left out")
-
-	static := issuer.RemoteSessionClients[1]
-	require.Equal(t, staticClient.String(), static.ID)
-	require.Equal(t, "static", static.Registration)
-	require.Zero(t, static.Sessions.LinkedSubjects)
-	require.Nil(t, static.Sessions.FirstLinkedAt)
-	require.Empty(t, static.Sessions.ValidationStatusCounts)
 
 	require.Empty(t, f.reader.targets, "describe reads no telemetry")
 
@@ -727,10 +717,9 @@ func TestDescribeMcpServerHealth_IssuerOutsideProjectIsIgnored(t *testing.T) {
 	require.Equal(t, "gram_private", *got.LegacyAuth)
 }
 
-// A remote session belongs to its subject and client; the issuer that first
-// linked it is provenance. A client shared by two issuers reports the same
-// sessions under both.
-func TestDescribeMcpServerHealth_SharedClientCountsSessionsFromEitherIssuer(t *testing.T) {
+// A stale client link cannot attribute another issuer's sessions to this one.
+// Downstream health shows only sessions with the issuer's own provenance.
+func TestDescribeMcpServerHealth_SharedClientCountsOnlyIssuerProvenance(t *testing.T) {
 	t.Parallel()
 
 	f := newHealthFixture(t, true)
@@ -738,17 +727,19 @@ func TestDescribeMcpServerHealth_SharedClientCountsSessionsFromEitherIssuer(t *t
 	issuerA := f.seedUserSessionIssuer(t, "issuer-a")
 	issuerB := f.seedUserSessionIssuer(t, "issuer-b")
 	serverID := f.seedServerWithIssuer(t, toolsetID, issuerA, "sharing")
+	toolsetB := seedToolset(t, t.Context(), f.conn, f.orgID, f.projectID, "sharing-b", false)
+	serverB := f.seedServerWithIssuer(t, toolsetB, issuerB, "sharing-b")
 
 	remoteIssuerID := f.seedGlobalRemoteSessionIssuer(t, "shared-"+uuid.NewString()[:8])
 	clientID := f.seedRemoteSessionClient(t, remoteIssuerID, issuerA, "shared-client", true)
-	require.NoError(t, remotesessionsrepo.New(f.conn).AttachRemoteSessionClientToUserSessionIssuer(t.Context(), remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: clientID,
-		UserSessionIssuerID:   issuerB,
-	}))
 	session := f.seedRemoteSession(t, issuerB, clientID, "erin", 2)
 	f.validateRemoteSession(t, session, "valid")
 
 	got, err := f.describe(t, serverID, 14)
+	require.NoError(t, err)
+	require.Empty(t, got.UserSessionIssuer.RemoteSessionClients)
+
+	got, err = f.describe(t, serverB, 14)
 	require.NoError(t, err)
 	require.Len(t, got.UserSessionIssuer.RemoteSessionClients, 1)
 	sessions := got.UserSessionIssuer.RemoteSessionClients[0].Sessions
@@ -784,8 +775,7 @@ func TestDescribeMcpServerHealth_ReportsUpstreamAuthClients(t *testing.T) {
 	t.Parallel()
 
 	f := newHealthFixture(t, true)
-	toolsetID := seedToolset(t, t.Context(), f.conn, f.orgID, f.projectID, "upstream-auth", false)
-	serverID := f.seedServerWithIssuer(t, toolsetID, uuid.Nil, "upstream-auth")
+	serverID, _ := f.seedRemoteServer(t, "https://upstream-auth.example.test/mcp", uuid.Nil)
 
 	got, err := f.describe(t, serverID, 14)
 	require.NoError(t, err)

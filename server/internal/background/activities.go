@@ -49,6 +49,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
+	"github.com/speakeasy-api/gram/server/internal/functions/runnerkeys"
 	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
@@ -218,6 +219,7 @@ func NewActivities(
 	clientSecrets *clientsecrets.Secrets,
 	upstreamTokens *upstreamtokens.Tokens,
 	aiProviderKeys *aiproviderkeys.Keys,
+	runnerKeys *runnerkeys.Keys,
 	features feature.Provider,
 	assetStorage assets.BlobStore,
 	slackClient *slack_client.SlackClient,
@@ -327,6 +329,9 @@ func NewActivities(
 	}
 	if upstreamTokens == nil {
 		upstreamTokens = upstreamtokens.WithoutOrganizationEncryption(logger, db, encryption)
+	}
+	if runnerKeys == nil {
+		runnerKeys = runnerkeys.WithoutOrganizationEncryption(logger, db, encryption)
 	}
 
 	// The scheduled refresh shares the remotesessions single-flight primitive,
@@ -453,8 +458,8 @@ func NewActivities(
 		generateChatTitle:                activities.NewGenerateChatTitle(logger, db, chatClient),
 		memoryDigests:                    activities.NewMemoryDigests(logger, db, chatClient),
 		processDeployment:                activities.NewProcessDeployment(logger, tracerProvider, meterProvider, guardianPolicy, db, features, assetStorage, billingRepo),
-		provisionFunctionsAccess:         activities.NewProvisionFunctionsAccess(logger, db, encryption),
-		deployFunctionRunners:            activities.NewDeployFunctionRunners(logger, db, functionsDeployer, functionsVersion, encryption),
+		provisionFunctionsAccess:         activities.NewProvisionFunctionsAccess(logger, db, runnerKeys),
+		deployFunctionRunners:            activities.NewDeployFunctionRunners(logger, db, functionsDeployer, functionsVersion, runnerKeys),
 		reapFlyApps:                      activities.NewReapFlyApps(logger, meterProvider, db, functionsDeployer, 1),
 		weeklyUsageSummary:               activities.NewWeeklyUsageSummary(logger, db, meterReadConn, emailService, orgHosts),
 		directoryReviewEmails:            activities.NewDirectoryReviewEmails(logger, db, emailService, orgHosts),

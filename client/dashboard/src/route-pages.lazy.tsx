@@ -9,3 +9,6 @@ export const SetupWizard = React.lazy(
 export const SetupTaskRedirect = React.lazy(
   () => import("./pages/setup/SetupTaskRedirect"),
 );
+export const PrototypePage = React.lazy(
+  () => import("./pages/prototype/PrototypePage"),
+);

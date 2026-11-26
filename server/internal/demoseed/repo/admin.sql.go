@@ -13,8 +13,8 @@ import (
 
 const adminSeedEdgeUserCollision = `-- name: AdminSeedEdgeUserCollision :one
 SELECT EXISTS (
-   SELECT 1 FROM public.users WHERE id= $1::text AND (email<>id||'@admin-seed.invalid' OR workos_id IS NOT NULL)
-   UNION ALL SELECT 1 FROM public.organization_user_relationships WHERE user_id= $1::text AND NOT (organization_id=ANY($2::text[]))) AS collision
+   SELECT 1 FROM users WHERE id= $1::text AND (email<>id||'@admin-seed.invalid' OR workos_id IS NOT NULL)
+   UNION ALL SELECT 1 FROM organization_user_relationships WHERE user_id= $1::text AND NOT (organization_id=ANY($2::text[]))) AS collision
 `
 
 type AdminSeedEdgeUserCollisionParams struct {
@@ -44,10 +44,10 @@ func (q *Queries) AdminSeedLock(ctx context.Context) error {
 
 const adminSeedMemberCollision = `-- name: AdminSeedMemberCollision :one
 SELECT EXISTS (
- SELECT 1 FROM public.users WHERE id=ANY($1::text[])
+ SELECT 1 FROM users WHERE id=ANY($1::text[])
  AND (email<>id||'@admin-seed.invalid' OR workos_id IS NOT NULL)
  UNION ALL
- SELECT 1 FROM public.organization_user_relationships
+ SELECT 1 FROM organization_user_relationships
  WHERE user_id=ANY($1::text[]) AND organization_id<> $2::text) AS collision
 `
 
@@ -65,7 +65,7 @@ func (q *Queries) AdminSeedMemberCollision(ctx context.Context, arg AdminSeedMem
 
 const adminSeedOrganizationCollision = `-- name: AdminSeedOrganizationCollision :one
 SELECT EXISTS (
- SELECT 1 FROM public.organization_metadata WHERE id= $1::text
+ SELECT 1 FROM organization_metadata WHERE id= $1::text
  AND (slug<> $2::text OR workos_id IS NOT NULL)) AS collision
 `
 
@@ -82,7 +82,7 @@ func (q *Queries) AdminSeedOrganizationCollision(ctx context.Context, arg AdminS
 }
 
 const adminSeedUpsertEdgeMembership = `-- name: AdminSeedUpsertEdgeMembership :exec
-INSERT INTO public.organization_user_relationships (id,organization_id,user_id,deleted_at)
+INSERT INTO organization_user_relationships (id,organization_id,user_id,deleted_at)
     VALUES ($1::bigint,$2::text,$3::text,$4::timestamptz) ON CONFLICT (organization_id,user_id) DO UPDATE SET deleted_at=EXCLUDED.deleted_at,updated_at= $5::timestamptz
 `
 
@@ -106,7 +106,7 @@ func (q *Queries) AdminSeedUpsertEdgeMembership(ctx context.Context, arg AdminSe
 }
 
 const adminSeedUpsertEdgeUser = `-- name: AdminSeedUpsertEdgeUser :exec
-INSERT INTO public.users (id,email,display_name,deleted_at,workos_deleted_at,last_login)
+INSERT INTO users (id,email,display_name,deleted_at,workos_deleted_at,last_login)
    VALUES ($1::text,$2::text,$3::text,$4::timestamptz,$5::timestamptz,$6::timestamptz) ON CONFLICT (id) DO UPDATE SET display_name=EXCLUDED.display_name,
    deleted_at=EXCLUDED.deleted_at,workos_deleted_at=EXCLUDED.workos_deleted_at,last_login=EXCLUDED.last_login,updated_at= $7::timestamptz
 `
@@ -135,7 +135,7 @@ func (q *Queries) AdminSeedUpsertEdgeUser(ctx context.Context, arg AdminSeedUpse
 }
 
 const adminSeedUpsertMember = `-- name: AdminSeedUpsertMember :exec
-INSERT INTO public.users (id,email,display_name)
+INSERT INTO users (id,email,display_name)
     VALUES ($1::text,$2::text,$3::text) ON CONFLICT (id) DO UPDATE SET
     email=EXCLUDED.email,display_name=EXCLUDED.display_name,deleted_at=NULL,updated_at= $4::timestamptz
 `
@@ -158,7 +158,7 @@ func (q *Queries) AdminSeedUpsertMember(ctx context.Context, arg AdminSeedUpsert
 }
 
 const adminSeedUpsertMembership = `-- name: AdminSeedUpsertMembership :exec
-INSERT INTO public.organization_user_relationships
+INSERT INTO organization_user_relationships
     (id,organization_id,user_id) VALUES ($1::bigint,$2::text,$3::text)
     ON CONFLICT (organization_id,user_id) DO UPDATE SET deleted_at=NULL,updated_at= $4::timestamptz
 `
@@ -183,7 +183,7 @@ func (q *Queries) AdminSeedUpsertMembership(ctx context.Context, arg AdminSeedUp
 }
 
 const adminSeedUpsertOrganization = `-- name: AdminSeedUpsertOrganization :exec
-INSERT INTO public.organization_metadata
+INSERT INTO organization_metadata
    (id,name,slug,created_at,disabled_at) VALUES ($1::text,$2::text,$3::text,$4::timestamptz,$5::timestamptz)
    ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name,slug=EXCLUDED.slug,
    created_at=EXCLUDED.created_at,disabled_at=EXCLUDED.disabled_at,updated_at= $6::timestamptz
@@ -211,8 +211,8 @@ func (q *Queries) AdminSeedUpsertOrganization(ctx context.Context, arg AdminSeed
 }
 
 const lockAdminSeedIdentities = `-- name: LockAdminSeedIdentities :exec
-LOCK TABLE public.organization_metadata, public.users,
-  public.organization_user_relationships IN SHARE ROW EXCLUSIVE MODE
+LOCK TABLE organization_metadata, users,
+  organization_user_relationships IN SHARE ROW EXCLUSIVE MODE
 `
 
 // Blocks other writers to the local-only fixture tables, including inserts

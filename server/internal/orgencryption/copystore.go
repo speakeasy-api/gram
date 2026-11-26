@@ -1,6 +1,9 @@
 package orgencryption
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // CopyColumns names the pair of columns that hold one value's two copies,
 // and the use case whose data key seals the organization-key copy.
@@ -69,6 +72,60 @@ type CopyCounts struct {
 	// PlatformCopies counts values that still hold a platform-key copy,
 	// with or without an organization-key copy.
 	PlatformCopies int64
+
+	// Values counts every row of the organization storing a value under
+	// either key, soft-deleted rows included. It leaves out what Unattributed
+	// counts, so a zero Values with a nonzero Unattributed still leaves values
+	// to move.
+	Values int64
+
+	// LastWrittenAt is the latest updated_at of the rows Values counts. A
+	// change that updates a row's updated_at moves it, not only a write to
+	// the value, such as a session's refresh; a write that leaves updated_at
+	// alone, such as a backfill seal, does not. It is zero when Values is
+	// zero.
+	LastWrittenAt time.Time
+}
+
+// OrganizationValues summarizes the values one organization stores.
+type OrganizationValues struct {
+	// OrganizationID is the organization storing the values.
+	OrganizationID string
+
+	// Values is how many values the organization stores under either key. A
+	// row storing values in two columns counts once in each.
+	Values int64
+
+	// LastWrittenAt is the latest updated_at of the organization's rows that
+	// store a value, with the same meaning as CopyCounts.LastWrittenAt. It is
+	// zero when Values is zero.
+	LastWrittenAt time.Time
+}
+
+// ClearedCopies counts the platform-key copies one clear destroyed.
+type ClearedCopies struct {
+	// PlatformOnly counts copies with no organization-key copy beside them,
+	// read in the statement that cleared them. Clearing destroyed these
+	// values: nothing reads a platform-key copy in org_kms.
+	PlatformOnly int64
+
+	// BesideOrgCopy counts copies beside an organization-key copy, read in
+	// the statement that cleared them. Clearing them lost nothing.
+	BesideOrgCopy int64
+
+	// Empty counts cleared copies that stored no value, such as a legacy ''.
+	// They are neither platform-only nor beside an organization-key copy.
+	Empty int64
+}
+
+// Values is how many stored values lost their platform-key copy.
+func (c ClearedCopies) Values() int64 {
+	return c.PlatformOnly + c.BesideOrgCopy
+}
+
+// Rows is how many rows the clear changed, Empty included. Batches page by it.
+func (c ClearedCopies) Rows() int64 {
+	return c.Values() + c.Empty
 }
 
 // CopyStore is how the helper reaches the two stored copies of one value, a
@@ -103,8 +160,17 @@ type CopyStore interface {
 	// Count returns the column's counts for the organization.
 	Count(ctx context.Context, organizationID string) (CopyCounts, error)
 
+	// ListOrganizationsWithValues returns every organization storing at
+	// least one value in the column under either key, in no particular
+	// order, reading the rows Count reads for CopyCounts.Values. Rows
+	// without organization_id are left out; Count may report other values
+	// as unattributed too, such as a feature's plaintext values that a
+	// separate backfill has not encrypted yet.
+	ListOrganizationsWithValues(ctx context.Context) ([]OrganizationValues, error)
+
 	// ClearPlatformCopies sets the platform-key copy to NULL on up to limit
 	// rows of the organization that still hold one, fenced on generation,
-	// and returns how many it cleared.
-	ClearPlatformCopies(ctx context.Context, organizationID string, generation int64, limit int32) (int64, error)
+	// and returns how many it cleared, by whether each stood beside an
+	// organization-key copy as the clearing statement saw the row.
+	ClearPlatformCopies(ctx context.Context, organizationID string, generation int64, limit int32) (ClearedCopies, error)
 }

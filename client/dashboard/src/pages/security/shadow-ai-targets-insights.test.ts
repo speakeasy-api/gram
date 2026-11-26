@@ -31,7 +31,6 @@ function target(overrides: Partial<AiScanTarget>): AiScanTarget {
 describe("shadowAITargetsInsightsContext", () => {
   it("states the library size by origin and kind, and names the organization's own targets", () => {
     const context = shadowAITargetsInsightsContext({
-      listVersion: 7,
       targets: [
         target({ id: "cursor" }),
         target({
@@ -49,7 +48,7 @@ describe("shadowAITargetsInsightsContext", () => {
     });
 
     expect(context).toContain("Shadow AI targets tab");
-    expect(context).toContain("Library version 7.");
+    expect(context).not.toContain("Library version");
     expect(context).toContain(
       "Built-in targets: 2 (harnesses 1, assistants 0, open models 1).",
     );
@@ -62,7 +61,6 @@ describe("shadowAITargetsInsightsContext", () => {
 
   it("does not open an empty parenthesis when the organization added nothing", () => {
     const context = shadowAITargetsInsightsContext({
-      listVersion: 1,
       targets: [target({})],
     });
 

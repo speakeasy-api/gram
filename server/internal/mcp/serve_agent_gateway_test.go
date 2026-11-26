@@ -665,7 +665,6 @@ func seedOwnerAttachedMember(t *testing.T) (context.Context, ownerAttachedMember
 	require.NoError(t, err)
 	client, err := q.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{ProjectID: conv.ToNullUUID(projectID), RemoteSessionIssuerID: provider.ID, ClientID: "gateway-owner-client"})
 	require.NoError(t, err)
-	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: client.ID, UserSessionIssuerID: issuerID}))
 	// Shared issuers do not make a client eligible for every member.
 	require.NoError(t, testrepo.New(ti.conn).InsertMCPServerRemoteSessionClientFixture(ctx, testrepo.InsertMCPServerRemoteSessionClientFixtureParams{ProjectID: projectID, OrganizationID: authCtx.ActiveOrganizationID, McpServerID: serverID, RemoteSessionClientID: client.ID}))
 	insertQualifiedRemoteSessionToken(t, ctx, ti, issuerID, client.ID, urn.NewUserSubject(authCtx.UserID), "owner-assigned-token", upstream.url)
@@ -674,27 +673,47 @@ func seedOwnerAttachedMember(t *testing.T) (context.Context, ownerAttachedMember
 	require.Len(t, sessions, 1)
 	binding, err := q.AttachPrincipalRemoteSessionBinding(ctx, remotesessionsrepo.AttachPrincipalRemoteSessionBindingParams{ProjectID: projectID, OrganizationID: authCtx.ActiveOrganizationID, PrincipalID: fx.agent.ID, UserSessionIssuerID: issuerID, SubjectUrn: urn.NewUserSubject(authCtx.UserID).String(), RemoteSessionID: sessions[0].RemoteSession.ID})
 	require.NoError(t, err)
+	seedTypedSessionClient(t, ctx, ti, authCtx.ActiveOrganizationID, projectID, serverID, client.ID, authz.AuthClientTypeRemoteSession, urn.NewUserSubject(authCtx.UserID))
+	fx.token = issueMemberAuthRegressionKey(t, ctx, ti, fx, serverID)
 	return ctx, ownerAttachedMember{ti: ti, fx: fx, upstream: upstream, binding: binding}
 }
 
 func TestServeAgentGateway_UsesOwnerAttachment(t *testing.T) {
 	t.Parallel()
 	ctx, seeded := seedOwnerAttachedMember(t)
-	ti, fx, upstream, binding := seeded.ti, seeded.fx, seeded.upstream, seeded.binding
+	ti, fx, upstream := seeded.ti, seeded.fx, seeded.upstream
 	body := makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute_tool", "arguments": map[string]any{"name": fx.granted + "--ping", "arguments": map[string]any{}}})
 	response, err := serveAgentGatewayHTTP(t, ti, fx.agent.ID.String(), fx.token, body)
 	require.NoError(t, err)
 	text, isError := metaToolResultText(t, decodeRPCResponse(t, response))
 	require.False(t, isError, text)
 	upstream.requireToolCallAuth(t, "Bearer owner-assigned-token")
-	_, err = testrepo.New(ti.conn).RevokeAttachmentByIDFixture(ctx, binding.ID)
-	require.NoError(t, err)
+	upstream.awaitMetadataProbe(t)
+	disconnectOwnerAttachedMember(t, ctx, seeded)
 	upstream.mu.Lock()
 	upstream.requests = nil
 	upstream.mu.Unlock()
-	_, err = serveAgentGatewayHTTP(t, ti, fx.agent.ID.String(), fx.token, body)
+	response, err = serveAgentGatewayHTTP(t, ti, fx.agent.ID.String(), fx.token, body)
 	require.NoError(t, err)
-	upstream.requireNeverCarried(t, "Bearer owner-assigned-token")
+	text, isError = metaToolResultText(t, decodeRPCResponse(t, response))
+	require.True(t, isError, text)
+	require.Zero(t, upstream.requestCount(), "a disconnected member must not dial")
+}
+
+// The attached session also belongs to the key's authorizer. Disconnect the
+// source as well as the attachment so there is no independently authorized
+// connection left for the agent to use.
+func disconnectOwnerAttachedMember(t *testing.T, ctx context.Context, seeded ownerAttachedMember) {
+	t.Helper()
+	_, err := testrepo.New(seeded.ti.conn).RevokeAttachmentByIDFixture(ctx, seeded.binding.ID)
+	require.NoError(t, err)
+	auth := requireProjectAuthContext(t, ctx)
+	deleted, err := remotesessionsrepo.New(seeded.ti.conn).SoftDeleteRemoteSessionBySubjectAndClient(ctx, remotesessionsrepo.SoftDeleteRemoteSessionBySubjectAndClientParams{
+		SubjectUrn: urn.NewUserSubject(auth.UserID), RemoteSessionClientID: seeded.binding.RemoteSessionClientID,
+		UserSessionIssuerID: seeded.binding.UserSessionIssuerID, ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+	require.Len(t, deleted, 1)
 }
 
 // An agent whose delegated connection stops working cannot sign in itself.
@@ -705,8 +724,7 @@ func TestServeAgentGateway_BrokenConnectionLinksAgentSignIn(t *testing.T) {
 	t.Parallel()
 	ctx, seeded := seedOwnerAttachedMember(t)
 	ti, fx := seeded.ti, seeded.fx
-	_, err := testrepo.New(ti.conn).RevokeAttachmentByIDFixture(ctx, seeded.binding.ID)
-	require.NoError(t, err)
+	disconnectOwnerAttachedMember(t, ctx, seeded)
 
 	agent, err := agentsrepo.New(ti.conn).GetAgentByID(ctx, agentsrepo.GetAgentByIDParams{OrganizationID: fx.agent.OrganizationID, ID: fx.agent.ID})
 	require.NoError(t, err)
@@ -725,6 +743,7 @@ func TestServeAgentGateway_BrokenConnectionLinksAgentSignIn(t *testing.T) {
 	call := makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute_tool", "arguments": map[string]any{"name": fx.granted + "--ping", "arguments": map[string]any{}}})
 	response, err := serveAgentGatewayHTTP(t, ti, fx.agent.ID.String(), fx.token, call)
 	require.NoError(t, err)
+	require.Zero(t, seeded.upstream.requestCount(), "a disconnected member must not dial")
 	text, isError := metaToolResultText(t, decodeRPCResponse(t, response))
 	require.True(t, isError, text)
 	require.Contains(t, text, fmt.Sprintf("server %q needs re-authentication", fx.granted))
@@ -752,6 +771,7 @@ func TestServeAgentGateway_BrokenConnectionLinksAgentSignIn(t *testing.T) {
 	row := slices.IndexFunc(result.StructuredContent.Servers, func(s metamcp.ConnectionStatusServer) bool { return s.Slug == fx.granted })
 	require.GreaterOrEqual(t, row, 0)
 	require.True(t, result.StructuredContent.Servers[row].Reconnect, "the agent's sign-in step fixes the broken connection")
+	require.Zero(t, seeded.upstream.requestCount(), "status must not dial a disconnected member either")
 	require.Equal(t, "needs re-authentication", result.StructuredContent.Servers[row].Detail)
 	seeded.upstream.requireNeverCarried(t, "Bearer owner-assigned-token")
 }
@@ -821,6 +841,7 @@ func TestServeAgentGateway_ExecutesPlatformToolOnHostedMember(t *testing.T) {
 		ToolsetID: conv.ToNullUUID(toolset.ID), Visibility: mcpservers.VisibilityPrivate,
 	})
 	require.NoError(t, err)
+	markHostedDownstreamOnly(t, ctx, ti.conn, serverID)
 	seedUserMCPConnectGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authCtx.UserID, toolset.ID.String())
 	seedPrincipalMCPConnectGrant(t, ctx, ti, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeAgent, fx.agent.ID.String()), toolset.ID)
 	token := mintAgentGatewayKey(t, ctx, ti, fx.agent.ID, toolset.ID)
@@ -865,6 +886,7 @@ func TestServeAgentGateway_PlatformToolMissingSlackTokenSaysWhatToConfigure(t *t
 		ToolsetID: conv.ToNullUUID(toolset.ID), Visibility: mcpservers.VisibilityPrivate,
 	})
 	require.NoError(t, err)
+	markHostedDownstreamOnly(t, ctx, ti.conn, serverID)
 	seedUserMCPConnectGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authCtx.UserID, toolset.ID.String())
 	seedPrincipalMCPConnectGrant(t, ctx, ti, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeAgent, fx.agent.ID.String()), toolset.ID)
 	token := mintAgentGatewayKey(t, ctx, ti, fx.agent.ID, toolset.ID)

@@ -27,13 +27,16 @@ import { adminDisableOrganization } from "../funcs/adminDisableOrganization.js";
 import { adminDisableUpstreamAuthEnforcement } from "../funcs/adminDisableUpstreamAuthEnforcement.js";
 import { adminEnableOrganization } from "../funcs/adminEnableOrganization.js";
 import { adminEnableUpstreamAuthEnforcement } from "../funcs/adminEnableUpstreamAuthEnforcement.js";
+import { adminEnrollOrganizationEncryption } from "../funcs/adminEnrollOrganizationEncryption.js";
 import { adminExtendTrial } from "../funcs/adminExtendTrial.js";
 import { adminFetchGlobalIssuerMetadata } from "../funcs/adminFetchGlobalIssuerMetadata.js";
+import { adminFinalizeOrganizationEncryption } from "../funcs/adminFinalizeOrganizationEncryption.js";
 import { adminGetGcpIamPlatformCredential } from "../funcs/adminGetGcpIamPlatformCredential.js";
 import { adminGetGlobalIssuer } from "../funcs/adminGetGlobalIssuer.js";
 import { adminGetGlobalIssuerDuplicatePreflight } from "../funcs/adminGetGlobalIssuerDuplicatePreflight.js";
 import { adminGetGlobalIssuerMigratePreflight } from "../funcs/adminGetGlobalIssuerMigratePreflight.js";
 import { adminGetHookClients } from "../funcs/adminGetHookClients.js";
+import { adminGetHooksReleaseProgress } from "../funcs/adminGetHooksReleaseProgress.js";
 import { adminGetHooksRollout } from "../funcs/adminGetHooksRollout.js";
 import { adminGetInferenceKeys } from "../funcs/adminGetInferenceKeys.js";
 import { adminGetInferenceSpendHistory } from "../funcs/adminGetInferenceSpendHistory.js";
@@ -44,6 +47,7 @@ import { adminGetMeterUsage } from "../funcs/adminGetMeterUsage.js";
 import { adminGetOnboardingStackOptions } from "../funcs/adminGetOnboardingStackOptions.js";
 import { adminGetOrganization } from "../funcs/adminGetOrganization.js";
 import { adminGetOrganizationChatAnalysisSettings } from "../funcs/adminGetOrganizationChatAnalysisSettings.js";
+import { adminGetOrganizationEncryption } from "../funcs/adminGetOrganizationEncryption.js";
 import { adminGetOrganizationFeatures } from "../funcs/adminGetOrganizationFeatures.js";
 import { adminGetOrganizationHookFleet } from "../funcs/adminGetOrganizationHookFleet.js";
 import { adminGetOrganizationHooksRollout } from "../funcs/adminGetOrganizationHooksRollout.js";
@@ -75,6 +79,7 @@ import { adminListOnboardingSteps } from "../funcs/adminListOnboardingSteps.js";
 import { adminListOnboardingUseCases } from "../funcs/adminListOnboardingUseCases.js";
 import { adminListOrganizationActivity } from "../funcs/adminListOrganizationActivity.js";
 import { adminListOrganizationAssistants } from "../funcs/adminListOrganizationAssistants.js";
+import { adminListOrganizationEncryptionTransitions } from "../funcs/adminListOrganizationEncryptionTransitions.js";
 import { adminListOrganizationMembers } from "../funcs/adminListOrganizationMembers.js";
 import { adminListOrganizationProjects } from "../funcs/adminListOrganizationProjects.js";
 import { adminListOrganizations } from "../funcs/adminListOrganizations.js";
@@ -85,6 +90,7 @@ import { adminListRegistryEntries } from "../funcs/adminListRegistryEntries.js";
 import { adminListRegistryOktaUnmapped } from "../funcs/adminListRegistryOktaUnmapped.js";
 import { adminListRegistryPromotionCandidates } from "../funcs/adminListRegistryPromotionCandidates.js";
 import { adminListSignupOffers } from "../funcs/adminListSignupOffers.js";
+import { adminListTailscaleOAuthMigration } from "../funcs/adminListTailscaleOAuthMigration.js";
 import { adminListUpstreamOAuthMigrationOrganizations } from "../funcs/adminListUpstreamOAuthMigrationOrganizations.js";
 import { adminListUserOrganizations } from "../funcs/adminListUserOrganizations.js";
 import { adminListUsers } from "../funcs/adminListUsers.js";
@@ -101,6 +107,9 @@ import { adminRepairInferenceKey } from "../funcs/adminRepairInferenceKey.js";
 import { adminRepairOrganizationAssistantAgentNames } from "../funcs/adminRepairOrganizationAssistantAgentNames.js";
 import { adminResumeStripeSubscription } from "../funcs/adminResumeStripeSubscription.js";
 import { adminRetryRegistryPromotionDocs } from "../funcs/adminRetryRegistryPromotionDocs.js";
+import { adminRollbackOrganizationEncryption } from "../funcs/adminRollbackOrganizationEncryption.js";
+import { adminRunOrganizationEncryption } from "../funcs/adminRunOrganizationEncryption.js";
+import { adminRunTailscaleOAuthMigrationStep } from "../funcs/adminRunTailscaleOAuthMigrationStep.js";
 import { adminRunUpstreamOAuthMigration } from "../funcs/adminRunUpstreamOAuthMigration.js";
 import { adminSaveRegistryEntry } from "../funcs/adminSaveRegistryEntry.js";
 import { adminServeImage } from "../funcs/adminServeImage.js";
@@ -140,6 +149,7 @@ import { AdminChatAnalysisTriggerResult } from "../models/components/adminchatan
 import { AdminCustomerUsageResponse } from "../models/components/admincustomerusageresponse.js";
 import { AdminHookClientsResult } from "../models/components/adminhookclientsresult.js";
 import { AdminHookFleetResult } from "../models/components/adminhookfleetresult.js";
+import { AdminHooksReleaseProgress } from "../models/components/adminhooksreleaseprogress.js";
 import { AdminHooksRollout } from "../models/components/adminhooksrollout.js";
 import { AdminInferenceKey } from "../models/components/admininferencekey.js";
 import { AdminInferenceKeyLimit } from "../models/components/admininferencekeylimit.js";
@@ -166,6 +176,10 @@ import { AdminOnboardingUseCase } from "../models/components/adminonboardingusec
 import { AdminOnboardingUseCaseList } from "../models/components/adminonboardingusecaselist.js";
 import { AdminOrganization } from "../models/components/adminorganization.js";
 import { AdminOrganizationAssistants } from "../models/components/adminorganizationassistants.js";
+import { AdminOrganizationEncryption } from "../models/components/adminorganizationencryption.js";
+import { AdminOrganizationEncryptionFinalizeResult } from "../models/components/adminorganizationencryptionfinalizeresult.js";
+import { AdminOrganizationEncryptionTransitionList } from "../models/components/adminorganizationencryptiontransitionlist.js";
+import { AdminOrganizationEncryptionUseCase } from "../models/components/adminorganizationencryptionusecase.js";
 import { AdminOrganizationHooksRollout } from "../models/components/adminorganizationhooksrollout.js";
 import { AdminOrganizationOnboardingPlaybook } from "../models/components/adminorganizationonboardingplaybook.js";
 import { AdminOrganizationStats } from "../models/components/adminorganizationstats.js";
@@ -185,6 +199,8 @@ import { AdminSpendBreakdownResponse } from "../models/components/adminspendbrea
 import { AdminStripeCustomer } from "../models/components/adminstripecustomer.js";
 import { AdminStripeSubscription } from "../models/components/adminstripesubscription.js";
 import { AdminStripeSubscriptionCandidate } from "../models/components/adminstripesubscriptioncandidate.js";
+import { AdminTailscaleOAuthMigrationOrganization } from "../models/components/admintailscaleoauthmigrationorganization.js";
+import { AdminTailscaleOAuthMigrationOrganizations } from "../models/components/admintailscaleoauthmigrationorganizations.js";
 import { AdminUploadImageResult } from "../models/components/adminuploadimageresult.js";
 import { AdminUpstreamOAuthMigrationOrganizations } from "../models/components/adminupstreamoauthmigrationorganizations.js";
 import { AdminUpstreamOAuthMigrationRun } from "../models/components/adminupstreamoauthmigrationrun.js";
@@ -210,8 +226,10 @@ import { DisableOrganizationRequestBody } from "../models/components/disableorga
 import { DisableUpstreamAuthEnforcementRequestBody } from "../models/components/disableupstreamauthenforcementrequestbody.js";
 import { EnableOrganizationRequestBody } from "../models/components/enableorganizationrequestbody.js";
 import { EnableUpstreamAuthEnforcementRequestBody } from "../models/components/enableupstreamauthenforcementrequestbody.js";
+import { EnrollOrganizationEncryptionRequestBody } from "../models/components/enrollorganizationencryptionrequestbody.js";
 import { ExtendTrialRequestBody } from "../models/components/extendtrialrequestbody.js";
 import { FetchIssuerMetadataRequestBody } from "../models/components/fetchissuermetadatarequestbody.js";
+import { FinalizeOrganizationEncryptionRequestBody } from "../models/components/finalizeorganizationencryptionrequestbody.js";
 import { GcpIamCredential } from "../models/components/gcpiamcredential.js";
 import { GetRegistryPromotionCandidateRequestBody } from "../models/components/getregistrypromotioncandidaterequestbody.js";
 import { GlobalRemoteSessionIssuer } from "../models/components/globalremotesessionissuer.js";
@@ -238,6 +256,9 @@ import { RepairOrganizationAssistantAgentNamesRequestBody } from "../models/comp
 import { ResumeStripeSubscriptionRequestBody } from "../models/components/resumestripesubscriptionrequestbody.js";
 import { RetryRegistryPromotionDocsRequestBody } from "../models/components/retryregistrypromotiondocsrequestbody.js";
 import { RiskIDRequestBody } from "../models/components/riskidrequestbody.js";
+import { RollbackOrganizationEncryptionRequestBody } from "../models/components/rollbackorganizationencryptionrequestbody.js";
+import { RunOrganizationEncryptionRequestBody } from "../models/components/runorganizationencryptionrequestbody.js";
+import { RunTailscaleOAuthMigrationStepRequestBody } from "../models/components/runtailscaleoauthmigrationsteprequestbody.js";
 import { RunUpstreamOAuthMigrationRequestBody } from "../models/components/runupstreamoauthmigrationrequestbody.js";
 import { SaveRegistryEntryRequestBody } from "../models/components/saveregistryentryrequestbody.js";
 import { SetAdoptionDashboardURLRequestBody } from "../models/components/setadoptiondashboardurlrequestbody.js";
@@ -278,6 +299,7 @@ import { AdminGetMemoryEvalRunRequest } from "../models/operations/admingetmemor
 import { AdminGetMeterUsageRequest } from "../models/operations/admingetmeterusage.js";
 import { AdminGetOrganizationRequest } from "../models/operations/admingetorganization.js";
 import { AdminGetOrganizationChatAnalysisSettingsRequest } from "../models/operations/admingetorganizationchatanalysissettings.js";
+import { AdminGetOrganizationEncryptionRequest } from "../models/operations/admingetorganizationencryption.js";
 import { AdminGetOrganizationFeaturesRequest } from "../models/operations/admingetorganizationfeatures.js";
 import { AdminGetOrganizationHookFleetRequest } from "../models/operations/admingetorganizationhookfleet.js";
 import { AdminGetOrganizationHooksRolloutRequest } from "../models/operations/admingetorganizationhooksrollout.js";
@@ -314,6 +336,7 @@ import {
   AdminListOrganizationActivityResponse,
 } from "../models/operations/adminlistorganizationactivity.js";
 import { AdminListOrganizationAssistantsRequest } from "../models/operations/adminlistorganizationassistants.js";
+import { AdminListOrganizationEncryptionTransitionsRequest } from "../models/operations/adminlistorganizationencryptiontransitions.js";
 import { AdminListOrganizationMembersRequest } from "../models/operations/adminlistorganizationmembers.js";
 import { AdminListOrganizationProjectsRequest } from "../models/operations/adminlistorganizationprojects.js";
 import {
@@ -548,6 +571,21 @@ export class Admin extends ClientSDK {
   }
 
   /**
+   * getHooksReleaseProgress admin
+   *
+   * @remarks
+   * Returns how far the current hooks release has reached: organizations the rollout pins clear for it, marketplace repositories republished with it, and installs reporting its binary version.
+   */
+  async getHooksReleaseProgress(
+    options?: RequestOptions,
+  ): Promise<AdminHooksReleaseProgress> {
+    return unwrapAsync(adminGetHooksReleaseProgress(
+      this,
+      options,
+    ));
+  }
+
+  /**
    * setHooksRolloutDefault admin
    *
    * @remarks
@@ -568,7 +606,7 @@ export class Admin extends ClientSDK {
    * backfillMcpAuthGrants admin
    *
    * @remarks
-   * Grants unrestricted mcp:auth to every principal that holds any mcp:connect grant, in every organization. The connect grant's selectors are ignored. Safe to run more than once.
+   * Retired. Rejects authenticated calls and does not modify grants.
    */
   async backfillMcpAuthGrants(
     options?: RequestOptions,
@@ -1479,6 +1517,108 @@ export class Admin extends ClientSDK {
   }
 
   /**
+   * enrollOrganizationEncryption admin
+   *
+   * @remarks
+   * Moves one organization's use case from platform_key to dual_write. Provisions the organization's key and data key first and changes nothing if that fails. Each enroll can mint a KMS key, so enroll several organizations one at a time.
+   */
+  async enrollOrganizationEncryption(
+    request: EnrollOrganizationEncryptionRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminOrganizationEncryptionUseCase> {
+    return unwrapAsync(adminEnrollOrganizationEncryption(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * finalizeOrganizationEncryption admin
+   *
+   * @remarks
+   * Moves one organization's use case from dual_write to org_kms, then starts a run that destroys its platform-key copies, including every unreadable value. Irreversible: rollback is no longer possible afterwards. Refused unless no value waits for an organization-key copy, every value is attributed to the organization, a clean verification ran since the last backfill, the use case spent the minimum time in dual_write, the confirmation matches, and the acknowledged unreadable count matches the count when finalize runs.
+   */
+  async finalizeOrganizationEncryption(
+    request: FinalizeOrganizationEncryptionRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminOrganizationEncryptionFinalizeResult> {
+    return unwrapAsync(adminFinalizeOrganizationEncryption(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * getOrganizationEncryption admin
+   *
+   * @remarks
+   * Reports an organization's encryption configuration and, for each use case that moves to organization keys, its transition state with live counts.
+   */
+  async getOrganizationEncryption(
+    request: AdminGetOrganizationEncryptionRequest,
+    options?: RequestOptions,
+  ): Promise<AdminOrganizationEncryption> {
+    return unwrapAsync(adminGetOrganizationEncryption(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * listOrganizationEncryptionTransitions admin
+   *
+   * @remarks
+   * Lists organizations by transition state for one use case. Organizations never enrolled are in platform_key. By default it lists only organizations with values for the use case, most recently written first.
+   */
+  async listOrganizationEncryptionTransitions(
+    request?: AdminListOrganizationEncryptionTransitionsRequest | undefined,
+    options?: RequestOptions,
+  ): Promise<AdminOrganizationEncryptionTransitionList> {
+    return unwrapAsync(adminListOrganizationEncryptionTransitions(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * rollbackOrganizationEncryption admin
+   *
+   * @remarks
+   * Moves one organization's use case from dual_write back to platform_key. Both copies still exist in dual_write, so nothing is lost. Not available once the use case is in org_kms.
+   */
+  async rollbackOrganizationEncryption(
+    request: RollbackOrganizationEncryptionRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminOrganizationEncryptionUseCase> {
+    return unwrapAsync(adminRollbackOrganizationEncryption(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * runOrganizationEncryption admin
+   *
+   * @remarks
+   * Starts a background run for one organization's use case: in dual_write it converts waiting values and verifies both copies, and in org_kms it finishes destroying the platform-key copies after finalize. Joins a run already in progress. Returns at once with the current state.
+   */
+  async runOrganizationEncryption(
+    request: RunOrganizationEncryptionRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminOrganizationEncryptionUseCase> {
+    return unwrapAsync(adminRunOrganizationEncryption(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
    * getOrganizationHookFleet admin
    *
    * @remarks
@@ -2223,6 +2363,38 @@ export class Admin extends ClientSDK {
   }
 
   /**
+   * listTailscaleOAuthMigration admin
+   *
+   * @remarks
+   * Lists every organization with saved Tailscale OAuth credentials and where it stands in moving them to its organization key.
+   */
+  async listTailscaleOAuthMigration(
+    options?: RequestOptions,
+  ): Promise<AdminTailscaleOAuthMigrationOrganizations> {
+    return unwrapAsync(adminListTailscaleOAuthMigration(
+      this,
+      options,
+    ));
+  }
+
+  /**
+   * runTailscaleOAuthMigrationStep admin
+   *
+   * @remarks
+   * Runs one step of moving an organization's saved Tailscale OAuth credentials to its organization key. enroll provisions the organization key and starts dual_write; backfill seals every waiting credential with the organization key and verifies both copies; finalize moves to org_kms once the backfill and verification are clean and the minimum time in dual_write has passed; clear_platform_copies then destroys the platform-key copies; rollback returns a dual_write organization to platform_key. Each step is safe to run again.
+   */
+  async runTailscaleOAuthMigrationStep(
+    request: RunTailscaleOAuthMigrationStepRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminTailscaleOAuthMigrationOrganization> {
+    return unwrapAsync(adminRunTailscaleOAuthMigrationStep(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
    * changeTrialEndDate admin
    *
    * @remarks
@@ -2311,7 +2483,7 @@ export class Admin extends ClientSDK {
    * disableUpstreamAuthEnforcement admin
    *
    * @remarks
-   * Disables upstream auth enforcement for one organization. This is its rollback: requests return to the upstream client choice within a minute. Safe to call when enforcement is already off.
+   * Retired. Older staff clients can still reach this endpoint, but requests are rejected. Upstream auth enforcement cannot be turned off.
    */
   async disableUpstreamAuthEnforcement(
     request: DisableUpstreamAuthEnforcementRequestBody,
@@ -2360,7 +2532,7 @@ export class Admin extends ClientSDK {
    * runUpstreamOAuthMigration admin
    *
    * @remarks
-   * Migrates one organization's upstream OAuth configuration: records the server to client associations its configuration proves, then each live credential's client choice. Idempotent, so it is safe to run again; a server the configuration does not prove is reported and never guessed.
+   * Retired. Rejects authenticated calls and does not change upstream authentication configuration.
    */
   async runUpstreamOAuthMigration(
     request: RunUpstreamOAuthMigrationRequestBody,
@@ -2377,7 +2549,7 @@ export class Admin extends ClientSDK {
    * getUpstreamOAuthMigrationStatus admin
    *
    * @remarks
-   * Reports where one organization stands in the upstream OAuth migration from a dry run that writes nothing.
+   * Reports typed upstream authentication readiness for one organization without making changes.
    */
   async getUpstreamOAuthMigrationStatus(
     request: AdminGetUpstreamOAuthMigrationStatusRequest,

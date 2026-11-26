@@ -42,22 +42,30 @@ func (q *Queries) AttributeGitHubConnections(ctx context.Context, limitValue int
 	return result.RowsAffected(), nil
 }
 
-const clearMarketplaceTokenPlatformCopies = `-- name: ClearMarketplaceTokenPlatformCopies :execrows
-UPDATE plugin_github_connections AS c
-SET marketplace_token_encrypted = NULL
-WHERE c.id IN (
-    SELECT target.id FROM plugin_github_connections AS target
-    WHERE target.organization_id = $1::text
-      AND target.marketplace_token_encrypted IS NOT NULL
-    ORDER BY target.id
-    LIMIT $2
-  )
-  AND c.organization_id = $1::text
-  AND COALESCE((
-    SELECT t.generation FROM organization_encryption_transitions AS t
-    WHERE t.organization_id = c.organization_id AND t.use_case = 'marketplace-tokens'
-    FOR KEY SHARE
-  ), 0) = $3
+const clearMarketplaceTokenPlatformCopies = `-- name: ClearMarketplaceTokenPlatformCopies :one
+WITH cleared AS (
+    UPDATE plugin_github_connections AS c
+    SET marketplace_token_encrypted = NULL
+    WHERE c.id IN (
+        SELECT target.id FROM plugin_github_connections AS target
+        WHERE target.organization_id = $1::text
+          AND target.marketplace_token_encrypted IS NOT NULL
+        ORDER BY target.id
+        LIMIT $2
+      )
+      AND c.organization_id = $1::text
+      AND c.marketplace_token_encrypted IS NOT NULL
+      AND COALESCE((
+        SELECT t.generation FROM organization_encryption_transitions AS t
+        WHERE t.organization_id = c.organization_id AND t.use_case = 'marketplace-tokens'
+        FOR KEY SHARE
+      ), 0) = $3
+    RETURNING (c.marketplace_token_org_encrypted IS NULL) AS platform_only
+)
+SELECT
+    COUNT(*) FILTER (WHERE cleared.platform_only)::bigint AS platform_only,
+    COUNT(*) FILTER (WHERE NOT cleared.platform_only)::bigint AS beside_org_copy
+FROM cleared
 `
 
 type ClearMarketplaceTokenPlatformCopiesParams struct {
@@ -66,14 +74,22 @@ type ClearMarketplaceTokenPlatformCopiesParams struct {
 	DecidedGeneration int64
 }
 
+type ClearMarketplaceTokenPlatformCopiesRow struct {
+	PlatformOnly  int64
+	BesideOrgCopy int64
+}
+
 // Destroys up to limit platform-key copies of the organization's tokens after
 // finalize. The hash and the organization-key copy stay.
-func (q *Queries) ClearMarketplaceTokenPlatformCopies(ctx context.Context, arg ClearMarketplaceTokenPlatformCopiesParams) (int64, error) {
-	result, err := q.db.Exec(ctx, clearMarketplaceTokenPlatformCopies, arg.OrganizationID, arg.LimitValue, arg.DecidedGeneration)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+// Returns how many cleared copies stood alone and how many stood beside an
+// organization-key copy. The outer statement rechecks that the platform-key
+// copy is still set, so a row a concurrent clear already emptied is neither
+// updated nor counted.
+func (q *Queries) ClearMarketplaceTokenPlatformCopies(ctx context.Context, arg ClearMarketplaceTokenPlatformCopiesParams) (ClearMarketplaceTokenPlatformCopiesRow, error) {
+	row := q.db.QueryRow(ctx, clearMarketplaceTokenPlatformCopies, arg.OrganizationID, arg.LimitValue, arg.DecidedGeneration)
+	var i ClearMarketplaceTokenPlatformCopiesRow
+	err := row.Scan(&i.PlatformOnly, &i.BesideOrgCopy)
+	return i, err
 }
 
 const countMarketplaceTokenBackfill = `-- name: CountMarketplaceTokenBackfill :one
@@ -126,7 +142,15 @@ SELECT
     COUNT(*) FILTER (
         WHERE c.organization_id = $1::text
           AND c.marketplace_token_encrypted IS NOT NULL
-    )::bigint AS platform_copies
+    )::bigint AS platform_copies,
+    COUNT(*) FILTER (
+        WHERE c.organization_id = $1::text
+          AND (c.marketplace_token_encrypted IS NOT NULL OR c.marketplace_token_org_encrypted IS NOT NULL)
+    )::bigint AS value_count,
+    MAX(c.updated_at) FILTER (
+        WHERE c.organization_id = $1::text
+          AND (c.marketplace_token_encrypted IS NOT NULL OR c.marketplace_token_org_encrypted IS NOT NULL)
+    )::timestamptz AS last_written_at
 FROM plugin_github_connections AS c
 LEFT JOIN projects AS p ON p.id = c.project_id
 LEFT JOIN organization_encryption_unreadable_values AS u
@@ -144,6 +168,8 @@ type CountMarketplaceTokenCopiesRow struct {
 	Unreadable     int64
 	Unattributed   int64
 	PlatformCopies int64
+	ValueCount     int64
+	LastWrittenAt  pgtype.Timestamptz
 }
 
 // The organization's token counts for the organization encryption backfill and
@@ -153,6 +179,9 @@ type CountMarketplaceTokenCopiesRow struct {
 // connections of the organization's projects stored without organization_id,
 // and connections that still hold a plaintext token the marketplace token
 // backfill has not moved. Either keeps the organization from finalizing.
+// value_count and last_written_at cover every row of the organization storing
+// a value under either key, soft-deleted rows included, as
+// ListOrganizationsWith* reports them.
 func (q *Queries) CountMarketplaceTokenCopies(ctx context.Context, organizationID string) (CountMarketplaceTokenCopiesRow, error) {
 	row := q.db.QueryRow(ctx, countMarketplaceTokenCopies, organizationID)
 	var i CountMarketplaceTokenCopiesRow
@@ -161,6 +190,8 @@ func (q *Queries) CountMarketplaceTokenCopies(ctx context.Context, organizationI
 		&i.Unreadable,
 		&i.Unattributed,
 		&i.PlatformCopies,
+		&i.ValueCount,
+		&i.LastWrittenAt,
 	)
 	return i, err
 }
@@ -317,6 +348,46 @@ func (q *Queries) ListMarketplaceTokensWaiting(ctx context.Context, arg ListMark
 	for rows.Next() {
 		var i ListMarketplaceTokensWaitingRow
 		if err := rows.Scan(&i.ID, &i.PlatformCopy); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrganizationsWithMarketplaceTokens = `-- name: ListOrganizationsWithMarketplaceTokens :many
+SELECT
+    c.organization_id::text AS organization_id,
+    COUNT(*)::bigint AS value_count,
+    MAX(c.updated_at)::timestamptz AS last_written_at
+FROM plugin_github_connections AS c
+WHERE c.organization_id IS NOT NULL
+  AND (c.marketplace_token_encrypted IS NOT NULL OR c.marketplace_token_org_encrypted IS NOT NULL)
+GROUP BY c.organization_id
+`
+
+type ListOrganizationsWithMarketplaceTokensRow struct {
+	OrganizationID string
+	ValueCount     int64
+	LastWrittenAt  pgtype.Timestamptz
+}
+
+// Every organization storing a marketplace token under either key,
+// soft-deleted rows included, with how many and the latest updated_at of the
+// rows storing them. Rows without organization_id are left out.
+func (q *Queries) ListOrganizationsWithMarketplaceTokens(ctx context.Context) ([]ListOrganizationsWithMarketplaceTokensRow, error) {
+	rows, err := q.db.Query(ctx, listOrganizationsWithMarketplaceTokens)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOrganizationsWithMarketplaceTokensRow
+	for rows.Next() {
+		var i ListOrganizationsWithMarketplaceTokensRow
+		if err := rows.Scan(&i.OrganizationID, &i.ValueCount, &i.LastWrittenAt); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

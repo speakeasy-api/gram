@@ -109,6 +109,7 @@ var chPurgeProjectTables = []string{
 	"attribute_keys",
 	"shadow_mcp_inventory_urls",
 	"mcp_network_traffic_hourly_summaries",
+	"mcp_tool_call_summaries",
 	// No server the seed writes is tunnelled any more; the purge still clears
 	// the snapshots earlier seeds wrote.
 	"tunnel_metric_snapshots",
@@ -173,8 +174,9 @@ func (s *seeder) chPurge(ctx context.Context, ch driver.Conn) error {
 				+ (SELECT count() FROM sigint_readings_v2 WHERE organization_id = ?)
 				+ (SELECT count() FROM mcp_connection_events WHERE organization_id = ?)
 				+ (SELECT count() FROM mcp_connection_attempt_summaries WHERE organization_id = ?)
+				+ (SELECT count() FROM mcp_connection_last_served WHERE organization_id = ?)
 				+ (SELECT count() FROM hook_install_summaries WHERE organization_id = ?)
-		`, projectID, s.orgID(), s.orgID(), s.orgID(), s.orgID(), s.orgID(), s.orgID(), s.orgID()).Scan(&remaining)
+		`, projectID, s.orgID(), s.orgID(), s.orgID(), s.orgID(), s.orgID(), s.orgID(), s.orgID(), s.orgID()).Scan(&remaining)
 		if err != nil {
 			return 0, fmt.Errorf("count remaining demo telemetry, meter ledger, summary, and sensor reading rows: %w", err)
 		}

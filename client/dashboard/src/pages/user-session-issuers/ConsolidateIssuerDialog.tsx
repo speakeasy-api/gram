@@ -127,9 +127,8 @@ export function ConsolidateIssuerDialog({
         <Dialog.Header>
           <Dialog.Title>Consolidate {source.slug}</Dialog.Title>
           <Dialog.Description>
-            Move this MCP Authentication Provider's clients, sessions, and MCP
-            servers to another one, then remove it. Existing sessions keep
-            working.
+            Move this MCP sign-in's clients, sessions, and MCP servers to
+            another one, then remove it. Existing sessions keep working.
           </Dialog.Description>
         </Dialog.Header>
 
@@ -138,16 +137,13 @@ export function ConsolidateIssuerDialog({
             Consolidate into
           </Label>
           {candidatesLoading ? (
-            <div
-              role="status"
-              aria-label="Loading MCP Authentication Providers"
-            >
+            <div role="status" aria-label="Loading MCP sign-ins">
               <Skeleton className="h-9 w-full" />
             </div>
           ) : onRetryCandidates ? (
             <Stack direction="horizontal" align="center" gap={3}>
               <Text small className="text-destructive">
-                Couldn't load every MCP Authentication Provider.
+                Couldn't load every MCP sign-in.
               </Text>
               <Button variant="secondary" size="sm" onClick={onRetryCandidates}>
                 <Button.Text>Retry</Button.Text>
@@ -155,8 +151,8 @@ export function ConsolidateIssuerDialog({
             </Stack>
           ) : candidates.length === 0 ? (
             <Text small muted>
-              No other MCP Authentication Provider can take this one's place.
-              The target must be organization-wide, or in the same project.
+              No other MCP sign-in can take this one's place. The target must be
+              organization-wide, or in the same project.
             </Text>
           ) : (
             <Select
@@ -168,7 +164,7 @@ export function ConsolidateIssuerDialog({
               disabled={migrate.isPending}
             >
               <SelectTrigger aria-label="Consolidate into" className="w-full">
-                <SelectValue placeholder="Select an MCP Authentication Provider" />
+                <SelectValue placeholder="Select an MCP sign-in" />
               </SelectTrigger>
               <SelectContent>
                 {candidates.map((candidate) => (
@@ -293,7 +289,7 @@ function ConsolidateImpact({
         <Stack direction="horizontal" align="center" gap={3}>
           <span className="text-sm">
             {error instanceof GramError && error.statusCode === 409
-              ? "Another change to these MCP Authentication Providers is in progress. Try again in a moment."
+              ? "Another change to these MCP sign-ins is in progress. Try again in a moment."
               : "Couldn't check what consolidating changes."}
           </span>
           <Button variant="secondary" size="sm" onClick={onRetry}>

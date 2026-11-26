@@ -86,15 +86,6 @@ const (
 	// AuthClientReasonKey is why resolving a request's typed auth client did not succeed.
 	AuthClientReasonKey = attribute.Key("gram.auth_client.reason")
 
-	// AuthClientLegacyOutcomeKey is the outcome the legacy upstream client choice reached for the same request.
-	AuthClientLegacyOutcomeKey = attribute.Key("gram.auth_client.legacy_outcome")
-
-	// AuthClientParityAgreedKey reports whether a shadow comparison of the typed auth client resolver agreed with the legacy choice.
-	AuthClientParityAgreedKey = attribute.Key("gram.auth_client.parity_agreed")
-
-	// AuthClientResolverModeKey is the organization's typed auth client resolver mode: off, shadow or enforced, or unknown when it could not be read.
-	AuthClientResolverModeKey = attribute.Key("gram.auth_client.resolver_mode")
-
 	// UpstreamIssuerSurfaceKey is the serving surface an upstream issuer comparison ran on.
 	UpstreamIssuerSurfaceKey = attribute.Key("gram.upstream_issuer.surface")
 
@@ -160,6 +151,10 @@ const (
 	RegistryInvalidPathsKey          = attribute.Key("gram.registry.entry.invalid_paths") // JSON Pointers to the record fields that failed validation
 	RegistryEntryNameKey             = attribute.Key("gram.registry.entry.name")
 	RegistrySeedOutcomeKey           = attribute.Key("gram.registry.seed.outcome")
+	AICatalogSeedVersionKey          = attribute.Key("gram.ai_catalog.seed.version")
+	AICatalogProductsInsertedKey     = attribute.Key("gram.ai_catalog.products_inserted")
+	AICatalogDocumentsInsertedKey    = attribute.Key("gram.ai_catalog.documents_inserted")
+	AICatalogDecisionsLinkedKey      = attribute.Key("gram.ai_catalog.decisions_linked")
 	AdminOIDCSubjectKey              = attribute.Key("gram.admin.oidc_subject")
 	AuthSourceKey                    = attribute.Key("gram.auth.source")
 	AuthorizationOrganizationIDKey   = attribute.Key("gram.authorization.organization_id")
@@ -501,19 +496,6 @@ const (
 	NetworkIngressResultKey             = attribute.Key("gram.network_ingress.result")
 	NetworkIngressReasonKey             = attribute.Key("gram.network_ingress.reason")
 	NetworkIngressErrorCodeKey          = attribute.Key("gram.network_ingress.error_code")
-	// NetworkIngressKubernetesReasonKey is the machine-readable reason of a
-	// failed Kubernetes API call (for example Conflict or Forbidden).
-	NetworkIngressKubernetesReasonKey = attribute.Key("gram.network_ingress.kubernetes.reason")
-
-	// NetworkIngressKubernetesStatusCodeKey is the HTTP status of a failed
-	// Kubernetes API call.
-	NetworkIngressKubernetesStatusCodeKey = attribute.Key("gram.network_ingress.kubernetes.status_code")
-
-	// NetworkIngressKubernetesResourceKey is the type a failed Kubernetes API
-	// call addressed, qualified by its API group. The API server reports the
-	// plural resource for most failures (tailnets.tailscale.com) but the Kind
-	// for validation failures (Tailnet.tailscale.com), so filter on both.
-	NetworkIngressKubernetesResourceKey = attribute.Key("gram.network_ingress.kubernetes.resource")
 
 	TailnetGatewaySlotKey         = attribute.Key("gram.tailnet_gateway.slot")
 	TailnetGatewayTsnetPortKey    = attribute.Key("gram.tailnet_gateway.tsnet_port")
@@ -738,6 +720,23 @@ const (
 	// not open during verification.
 	OrgEncryptionUnopenableCountKey = attribute.Key("gram.orgencryption.unopenable_count")
 
+	// OrgEncryptionSourceColumnKey is the "table.column" of the platform-key
+	// copy a count or event is about, such as
+	// remote_sessions.access_token_encrypted.
+	OrgEncryptionSourceColumnKey = attribute.Key("gram.orgencryption.source_column")
+
+	// OrgEncryptionStragglerKindKey says whether a platform-key copy found
+	// after clearing stood alone or beside an organization-key copy.
+	OrgEncryptionStragglerKindKey = attribute.Key("gram.orgencryption.straggler_kind")
+
+	// OrgEncryptionPlatformOnlyCountKey counts platform-key copies cleared
+	// with no organization-key copy beside them.
+	OrgEncryptionPlatformOnlyCountKey = attribute.Key("gram.orgencryption.platform_only_count")
+
+	// OrgEncryptionBesideOrgCopyCountKey counts platform-key copies cleared
+	// beside an organization-key copy.
+	OrgEncryptionBesideOrgCopyCountKey = attribute.Key("gram.orgencryption.beside_org_copy_count")
+
 	// OAuthValidationTriggerKey names which caller presented a stored remote
 	// session credential to its upstream: the consent page's Verify, the
 	// connect callback, or the idle keepalive re-check. Used as a metric
@@ -839,6 +838,8 @@ const (
 	OpenRouterKeyPreviousLimitKey   = attribute.Key("gram.openrouter.key.previous_limit")
 	OpenRouterKeyTypeKey            = attribute.Key("gram.openrouter.key.type")
 	OpenRouterResponseBodyKey       = attribute.Key("gram.openrouter.response.body")
+	OpenRouterTimeToFirstChunkKey   = attribute.Key("gram.openrouter.time_to_first_chunk_ms")
+	OpenRouterUpstreamProviderKey   = attribute.Key("gram.openrouter.upstream_provider")
 	OpenRouterRateLimitLimitKey     = attribute.Key("gram.openrouter.ratelimit.limit")
 	OpenRouterRateLimitRemainingKey = attribute.Key("gram.openrouter.ratelimit.remaining")
 	OpenRouterRateLimitResetKey     = attribute.Key("gram.openrouter.ratelimit.reset")
@@ -900,6 +901,18 @@ const (
 	ExtMcpConnectionSubjectKindKey      = attribute.Key("speakeasy.mcp_connection.subject_kind")
 	ExtMcpConnectionClientNameKey       = attribute.Key("speakeasy.mcp_connection.client_name")
 	ExtMcpConnectionClientVersionKey    = attribute.Key("speakeasy.mcp_connection.client_version")
+
+	// ExtMcpFeedback keys are customer-facing, on exported MCP server feedback.
+	ExtMcpFeedbackIDKey            = attribute.Key("speakeasy.mcp_feedback.id")
+	ExtMcpFeedbackServerIDKey      = attribute.Key("speakeasy.mcp_feedback.server_id")
+	ExtMcpFeedbackSeverityKey      = attribute.Key("speakeasy.mcp_feedback.severity")
+	ExtMcpFeedbackToolNameKey      = attribute.Key("speakeasy.mcp_feedback.tool_name")
+	ExtMcpFeedbackWorkaroundKey    = attribute.Key("speakeasy.mcp_feedback.workaround")
+	ExtMcpFeedbackIntentionKey     = attribute.Key("speakeasy.mcp_feedback.intention")
+	ExtMcpFeedbackModelKey         = attribute.Key("speakeasy.mcp_feedback.model")
+	ExtMcpFeedbackClientNameKey    = attribute.Key("speakeasy.mcp_feedback.client_name")
+	ExtMcpFeedbackClientVersionKey = attribute.Key("speakeasy.mcp_feedback.client_version")
+	ExtMcpFeedbackUserIDKey        = attribute.Key("speakeasy.mcp_feedback.user_id")
 
 	// TestEventKey marks every record a data export test sends, so a destination can filter it out.
 	TestEventKey = attribute.Key("speakeasy.test_event")
@@ -1210,6 +1223,10 @@ const (
 	TelemetryCHRowCountKey         = attribute.Key("gram.telemetry.ch.row_count")
 	InferenceInputCountKey         = attribute.Key("gram.inference.input_count")
 	InferenceAcceptedMessagesKey   = attribute.Key("gram.inference.accepted_messages")
+
+	// TelemetryOverviewSourceKey names the table that served an observability overview.
+	TelemetryOverviewSourceKey = attribute.Key("gram.telemetry.overview.source")
+
 	// InferenceConversationOutcomeKey records how an Anthropic inference frame
 	// was mapped to a stored conversation: "session" (the frame's session id
 	// named an existing chat), "adopted_prefix" (the chat already holding the
@@ -1226,6 +1243,13 @@ const (
 	// InferenceMessageCountKey is the number of conversation messages in an
 	// Anthropic inference frame.
 	InferenceMessageCountKey = attribute.Key("gram.inference.message_count")
+	// TranscriptShadowMessageCountKey is the number of chat messages in one
+	// encrypted transcript shadow capture batch.
+	TranscriptShadowMessageCountKey = attribute.Key("gram.transcript_shadow.message_count")
+	// TranscriptShadowPlaintextFallbackCountKey is the number of messages in
+	// one encrypted transcript read that had no shadow and were served from
+	// plaintext.
+	TranscriptShadowPlaintextFallbackCountKey = attribute.Key("gram.transcript_shadow.plaintext_fallback_count")
 	// TelemetryLogIDKey carries the telemetry_logs row id on records relayed
 	// to a customer OTLP destination. Delivery is at-least-once, so this is
 	// the key a destination dedupes redeliveries on.
@@ -1479,14 +1503,6 @@ func AuthClientReason(v string) attribute.KeyValue { return AuthClientReasonKey.
 // SlogAuthClientReason is why resolving a typed auth client did not succeed.
 func SlogAuthClientReason(v string) slog.Attr { return slog.String(string(AuthClientReasonKey), v) }
 
-func AuthClientLegacyOutcome(v string) attribute.KeyValue {
-	return AuthClientLegacyOutcomeKey.String(v)
-}
-
-func AuthClientParityAgreed(v bool) attribute.KeyValue { return AuthClientParityAgreedKey.Bool(v) }
-
-func AuthClientResolverMode(v string) attribute.KeyValue { return AuthClientResolverModeKey.String(v) }
-
 func UpstreamIssuerSurface(v string) attribute.KeyValue { return UpstreamIssuerSurfaceKey.String(v) }
 
 // SlogUpstreamIssuerSurface is the serving surface of an upstream issuer comparison.
@@ -1563,11 +1579,6 @@ func SlogMandatoryAuthzSource(v string) slog.Attr {
 func MandatoryAuthzReason(v string) attribute.KeyValue { return MandatoryAuthzReasonKey.String(v) }
 func SlogMandatoryAuthzReason(v string) slog.Attr {
 	return slog.String(string(MandatoryAuthzReasonKey), v)
-}
-
-// SlogAuthClientLegacyOutcome is the outcome the legacy upstream client choice reached.
-func SlogAuthClientLegacyOutcome(v string) slog.Attr {
-	return slog.String(string(AuthClientLegacyOutcomeKey), v)
 }
 
 // SlogSigintRequestedWindowSize records the configured message count including the target.
@@ -1765,6 +1776,10 @@ func SlogCodexCloudTimestampFallbacks(v int) slog.Attr {
 }
 
 func TelemetryCHOperation(v string) attribute.KeyValue { return TelemetryCHOperationKey.String(v) }
+
+func TelemetryOverviewSource(v string) attribute.KeyValue {
+	return TelemetryOverviewSourceKey.String(v)
+}
 
 func TelemetryCHRowCount(v int) attribute.KeyValue { return TelemetryCHRowCountKey.Int(v) }
 func SlogTelemetryCHRowCount(v int) slog.Attr {
@@ -2617,18 +2632,6 @@ func SlogNetworkIngressErrorCode[V ~string](v V) slog.Attr {
 	return slog.String(string(NetworkIngressErrorCodeKey), string(v))
 }
 
-func SlogNetworkIngressKubernetesReason[V ~string](v V) slog.Attr {
-	return slog.String(string(NetworkIngressKubernetesReasonKey), string(v))
-}
-
-func SlogNetworkIngressKubernetesStatusCode(v int32) slog.Attr {
-	return slog.Int(string(NetworkIngressKubernetesStatusCodeKey), int(v))
-}
-
-func SlogNetworkIngressKubernetesResource(v string) slog.Attr {
-	return slog.String(string(NetworkIngressKubernetesResourceKey), v)
-}
-
 func TailnetGatewaySlot(v int32) attribute.KeyValue { return TailnetGatewaySlotKey.Int(int(v)) }
 func SlogTailnetGatewaySlot(v int32) slog.Attr {
 	return slog.Int(string(TailnetGatewaySlotKey), int(v))
@@ -2824,6 +2827,26 @@ func SlogOrgEncryptionMismatchedCount(v int64) slog.Attr {
 
 func SlogOrgEncryptionUnopenableCount(v int64) slog.Attr {
 	return slog.Int64(string(OrgEncryptionUnopenableCountKey), v)
+}
+
+func OrgEncryptionSourceColumn(v string) attribute.KeyValue {
+	return OrgEncryptionSourceColumnKey.String(v)
+}
+
+func SlogOrgEncryptionSourceColumn(v string) slog.Attr {
+	return slog.String(string(OrgEncryptionSourceColumnKey), v)
+}
+
+func OrgEncryptionStragglerKind[V ~string](v V) attribute.KeyValue {
+	return OrgEncryptionStragglerKindKey.String(string(v))
+}
+
+func SlogOrgEncryptionPlatformOnlyCount(v int64) slog.Attr {
+	return slog.Int64(string(OrgEncryptionPlatformOnlyCountKey), v)
+}
+
+func SlogOrgEncryptionBesideOrgCopyCount(v int64) slog.Attr {
+	return slog.Int64(string(OrgEncryptionBesideOrgCopyCountKey), v)
 }
 
 func OAuthValidationTrigger[V ~string](v V) attribute.KeyValue {
@@ -3191,6 +3214,14 @@ func SlogOpenRouterResponseBody(v string) slog.Attr {
 	return slog.String(string(OpenRouterResponseBodyKey), v)
 }
 
+func OpenRouterTimeToFirstChunk(v int64) attribute.KeyValue {
+	return OpenRouterTimeToFirstChunkKey.Int64(v)
+}
+
+func OpenRouterUpstreamProvider(v string) attribute.KeyValue {
+	return OpenRouterUpstreamProviderKey.String(v)
+}
+
 func OpenRouterRateLimitLimit(v string) attribute.KeyValue {
 	return OpenRouterRateLimitLimitKey.String(v)
 }
@@ -3446,6 +3477,72 @@ func SlogExtMcpConnectionStepResult(v string) slog.Attr {
 func ExtMcpConnectionFinal(v bool) attribute.KeyValue { return ExtMcpConnectionFinalKey.Bool(v) }
 func SlogExtMcpConnectionFinal(v bool) slog.Attr {
 	return slog.Bool(string(ExtMcpConnectionFinalKey), v)
+}
+
+func ExtMcpFeedbackID(v string) attribute.KeyValue { return ExtMcpFeedbackIDKey.String(v) }
+func SlogExtMcpFeedbackID(v string) slog.Attr {
+	return slog.String(string(ExtMcpFeedbackIDKey), v)
+}
+
+func ExtMcpFeedbackServerID(v string) attribute.KeyValue {
+	return ExtMcpFeedbackServerIDKey.String(v)
+}
+func SlogExtMcpFeedbackServerID(v string) slog.Attr {
+	return slog.String(string(ExtMcpFeedbackServerIDKey), v)
+}
+
+func ExtMcpFeedbackSeverity(v string) attribute.KeyValue {
+	return ExtMcpFeedbackSeverityKey.String(v)
+}
+func SlogExtMcpFeedbackSeverity(v string) slog.Attr {
+	return slog.String(string(ExtMcpFeedbackSeverityKey), v)
+}
+
+func ExtMcpFeedbackToolName(v string) attribute.KeyValue {
+	return ExtMcpFeedbackToolNameKey.String(v)
+}
+func SlogExtMcpFeedbackToolName(v string) slog.Attr {
+	return slog.String(string(ExtMcpFeedbackToolNameKey), v)
+}
+
+func ExtMcpFeedbackWorkaround(v string) attribute.KeyValue {
+	return ExtMcpFeedbackWorkaroundKey.String(v)
+}
+func SlogExtMcpFeedbackWorkaround(v string) slog.Attr {
+	return slog.String(string(ExtMcpFeedbackWorkaroundKey), v)
+}
+
+func ExtMcpFeedbackIntention(v string) attribute.KeyValue {
+	return ExtMcpFeedbackIntentionKey.String(v)
+}
+func SlogExtMcpFeedbackIntention(v string) slog.Attr {
+	return slog.String(string(ExtMcpFeedbackIntentionKey), v)
+}
+
+func ExtMcpFeedbackModel(v string) attribute.KeyValue { return ExtMcpFeedbackModelKey.String(v) }
+func SlogExtMcpFeedbackModel(v string) slog.Attr {
+	return slog.String(string(ExtMcpFeedbackModelKey), v)
+}
+
+func ExtMcpFeedbackClientName(v string) attribute.KeyValue {
+	return ExtMcpFeedbackClientNameKey.String(v)
+}
+func SlogExtMcpFeedbackClientName(v string) slog.Attr {
+	return slog.String(string(ExtMcpFeedbackClientNameKey), v)
+}
+
+func ExtMcpFeedbackClientVersion(v string) attribute.KeyValue {
+	return ExtMcpFeedbackClientVersionKey.String(v)
+}
+func SlogExtMcpFeedbackClientVersion(v string) slog.Attr {
+	return slog.String(string(ExtMcpFeedbackClientVersionKey), v)
+}
+
+func ExtMcpFeedbackUserID(v string) attribute.KeyValue {
+	return ExtMcpFeedbackUserIDKey.String(v)
+}
+func SlogExtMcpFeedbackUserID(v string) slog.Attr {
+	return slog.String(string(ExtMcpFeedbackUserIDKey), v)
 }
 
 func TestEvent(v bool) attribute.KeyValue { return TestEventKey.Bool(v) }
@@ -4417,6 +4514,10 @@ func SlogGenAIUsageCacheCreationInputTokens(v int) slog.Attr {
 	return slog.Int(string(GenAIUsageCacheCreationInputTokensKey), v)
 }
 
+func GenAIUsageReasoningTokens(v int) attribute.KeyValue {
+	return GenAIUsageReasoningTokensKey.Int(v)
+}
+
 func GenAIUsageCost(v float64) attribute.KeyValue { return GenAIUsageCostKey.Float64(v) }
 func SlogGenAIUsageCost(v float64) slog.Attr {
 	return slog.Float64(string(GenAIUsageCostKey), v)
@@ -4644,6 +4745,14 @@ func SlogInferenceMessageCount(v int) slog.Attr {
 	return slog.Int(string(InferenceMessageCountKey), v)
 }
 
+func TranscriptShadowMessageCount(v int) attribute.KeyValue {
+	return TranscriptShadowMessageCountKey.Int(v)
+}
+
+func TranscriptShadowPlaintextFallbackCount(v int) attribute.KeyValue {
+	return TranscriptShadowPlaintextFallbackCountKey.Int(v)
+}
+
 func SlogRegistryEntryID(v string) slog.Attr   { return slog.String(string(RegistryEntryIDKey), v) }
 func SlogRegistryUpdatedAt(v string) slog.Attr { return slog.String(string(RegistryUpdatedAtKey), v) }
 func SlogRegistryInvalidPaths(v []string) slog.Attr {
@@ -4652,4 +4761,16 @@ func SlogRegistryInvalidPaths(v []string) slog.Attr {
 func SlogRegistryEntryName(v string) slog.Attr { return slog.String(string(RegistryEntryNameKey), v) }
 func SlogRegistrySeedOutcome(v string) slog.Attr {
 	return slog.String(string(RegistrySeedOutcomeKey), v)
+}
+func SlogAICatalogSeedVersion(v string) slog.Attr {
+	return slog.String(string(AICatalogSeedVersionKey), v)
+}
+func SlogAICatalogProductsInserted(v int64) slog.Attr {
+	return slog.Int64(string(AICatalogProductsInsertedKey), v)
+}
+func SlogAICatalogDocumentsInserted(v int64) slog.Attr {
+	return slog.Int64(string(AICatalogDocumentsInsertedKey), v)
+}
+func SlogAICatalogDecisionsLinked(v int64) slog.Attr {
+	return slog.Int64(string(AICatalogDecisionsLinkedKey), v)
 }

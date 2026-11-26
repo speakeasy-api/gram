@@ -57,10 +57,6 @@ func emptyGatewayCaller() gatewayCaller {
 	return newGatewayCaller(0)
 }
 
-func personGatewayCaller() gatewayCaller {
-	return newGatewayCaller(gatewayCallerPerson)
-}
-
 func newGatewayCaller(kind gatewayCallerKind) gatewayCaller {
 	return gatewayCaller{
 		kind:         kind,

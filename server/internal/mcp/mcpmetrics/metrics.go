@@ -148,13 +148,9 @@ type Metrics struct {
 	mcpGatewayAdmissionCounter    metric.Int64Counter
 	mcpAgentGatewayRequestCounter metric.Int64Counter
 
-	// authClientParityCounter counts shadow comparisons of the typed auth
-	// client resolver against the upstream client choice, by whether they
-	// agreed and each side's outcome.
-	authClientParityCounter metric.Int64Counter
 	// upstreamIssuerParityCounter counts comparisons of a server's column
 	// upstream issuer against the one its client associations give, by
-	// surface, site, outcome, authoritative source and resolver mode.
+	// surface, site, outcome, and authoritative source.
 	upstreamIssuerParityCounter metric.Int64Counter
 	// upstreamIssuerReconsentCounter counts consent checks by whether taking
 	// the upstream issuer from the other source would have forced a new consent.
@@ -415,18 +411,9 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 		logger.ErrorContext(context.Background(), "failed to create metric", attr.SlogMetricName(InstrumentMCPSkillRead), attr.SlogError(err))
 	}
 
-	authClientParityCounter, err := meter.Int64Counter(
-		"mcp.auth_client.parity",
-		metric.WithDescription("Shadow comparisons of the typed auth client resolver against the upstream client choice, by agreement and each side's outcome"),
-		metric.WithUnit("{request}"),
-	)
-	if err != nil {
-		logger.ErrorContext(context.Background(), "failed to create auth client parity counter", attr.SlogError(err))
-	}
-
 	upstreamIssuerParityCounter, err := meter.Int64Counter(
 		"mcp.upstream_issuer.parity",
-		metric.WithDescription("Comparisons of an MCP server's column upstream issuer against its client associations' provider, by surface, site, outcome, authoritative source and resolver mode"),
+		metric.WithDescription("Comparisons of an MCP server's column upstream issuer against its client associations' provider, by surface, site, outcome, and authoritative source"),
 		metric.WithUnit("{comparison}"),
 	)
 	if err != nil {
@@ -486,7 +473,6 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 		mcpRequestRejectedCounter:            mcpRequestRejectedCounter,
 		mcpGatewayAdmissionCounter:           mcpGatewayAdmissionCounter,
 		mcpAgentGatewayRequestCounter:        mcpAgentGatewayRequestCounter,
-		authClientParityCounter:              authClientParityCounter,
 		upstreamIssuerParityCounter:          upstreamIssuerParityCounter,
 		upstreamIssuerReconsentCounter:       upstreamIssuerReconsentCounter,
 		metaStaleChoiceRefusalCounter:        metaStaleChoiceRefusalCounter,
@@ -690,22 +676,6 @@ func (m *Metrics) RecordMCPProtocolVersionRejected(ctx context.Context, protocol
 	))
 }
 
-// RecordAuthClientParity counts one shadow comparison of the typed auth client
-// resolver against the upstream client choice. Outcomes and reasons are closed
-// sets, so the series stay bounded; a resolver that failed counts as outcome
-// "error".
-func (m *Metrics) RecordAuthClientParity(ctx context.Context, agreed bool, outcome, legacyOutcome, reason string) {
-	if m == nil || m.authClientParityCounter == nil {
-		return
-	}
-	m.authClientParityCounter.Add(ctx, 1, metric.WithAttributes(
-		attr.AuthClientParityAgreed(agreed),
-		attr.AuthClientOutcome(outcome),
-		attr.AuthClientLegacyOutcome(legacyOutcome),
-		attr.AuthClientReason(reason),
-	))
-}
-
 // UpstreamIssuerParity is one comparison of a server's column upstream issuer
 // against its associations' provider. Every field is a closed set; there is
 // no organization label because every organization reports.
@@ -721,9 +691,6 @@ type UpstreamIssuerParity struct {
 
 	// Source is which upstream issuer was authoritative: column or associations.
 	Source string
-
-	// ResolverMode is the organization's typed auth client resolver mode.
-	ResolverMode string
 }
 
 // RecordUpstreamIssuerParity counts one upstream issuer comparison.
@@ -736,7 +703,6 @@ func (m *Metrics) RecordUpstreamIssuerParity(ctx context.Context, p UpstreamIssu
 		attr.UpstreamIssuerSite(p.Site),
 		attr.UpstreamIssuerOutcome(p.Outcome),
 		attr.UpstreamIssuerSource(p.Source),
-		attr.AuthClientResolverMode(p.ResolverMode),
 	))
 }
 

@@ -20,6 +20,11 @@ const mocks = vi.hoisted(() => ({
   invalidatePolicyInventory: vi.fn(),
   toastError: vi.fn(),
   toastSuccess: vi.fn(),
+  handleError: vi.fn(),
+}));
+
+vi.mock("@/lib/errors", () => ({
+  handleError: mocks.handleError,
 }));
 
 vi.mock("@/contexts/Auth", () => ({
@@ -309,7 +314,7 @@ describe("DecideAccessSheet", () => {
     fireEvent.click(screen.getByRole("button", { name: "Approve Server" }));
 
     await waitFor(() => {
-      expect(mocks.toastError).toHaveBeenCalled();
+      expect(mocks.handleError).toHaveBeenCalled();
     });
     expect(onOpenChange).not.toHaveBeenCalledWith(false);
     expect(mocks.invalidateInventory).not.toHaveBeenCalled();
@@ -321,7 +326,7 @@ describe("DecideAccessSheet", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Approve Server" }));
     await waitFor(() => {
-      expect(mocks.toastError).toHaveBeenCalledTimes(1);
+      expect(mocks.handleError).toHaveBeenCalledTimes(1);
     });
     expect(mocks.createMutateAsync).toHaveBeenCalledTimes(1);
 
@@ -350,7 +355,7 @@ describe("DecideAccessSheet", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Approve Server" }));
     await waitFor(() => {
-      expect(mocks.toastError).toHaveBeenCalledTimes(1);
+      expect(mocks.handleError).toHaveBeenCalledTimes(1);
     });
     expect(mocks.promoteMutateAsync).toHaveBeenCalledTimes(1);
 
@@ -502,8 +507,11 @@ describe("DecideAccessSheet", () => {
     fireEvent.click(screen.getByRole("button", { name: "Approve Server" }));
 
     await waitFor(() => {
-      expect(mocks.toastError).toHaveBeenCalledWith(
-        "Opening the access request failed — nothing was changed",
+      expect(mocks.handleError).toHaveBeenCalledWith(
+        expect.any(Error),
+        expect.objectContaining({
+          title: "Couldn't open the access request. Nothing changed.",
+        }),
       );
     });
     expect(mocks.decideMutateAsync).not.toHaveBeenCalled();
@@ -518,8 +526,12 @@ describe("DecideAccessSheet", () => {
     fireEvent.click(screen.getByRole("button", { name: "Approve Server" }));
 
     await waitFor(() => {
-      expect(mocks.toastError).toHaveBeenCalledWith(
-        "The access request was opened or updated, but recording the decision failed — retry to decide it",
+      expect(mocks.handleError).toHaveBeenCalledWith(
+        expect.any(Error),
+        expect.objectContaining({
+          title:
+            "The access request is open, but the decision wasn't recorded. Retry to decide it.",
+        }),
       );
     });
     // The request row now exists; the affected views refresh so the pending
@@ -538,8 +550,11 @@ describe("DecideAccessSheet", () => {
     fireEvent.click(screen.getByRole("button", { name: "Approve Server" }));
 
     await waitFor(() => {
-      expect(mocks.toastError).toHaveBeenCalledWith(
-        "Recording the decision failed — the request is unchanged",
+      expect(mocks.handleError).toHaveBeenCalledWith(
+        expect.any(Error),
+        expect.objectContaining({
+          title: "Couldn't record the decision. The request is unchanged.",
+        }),
       );
     });
     expect(mocks.invalidateInventory).not.toHaveBeenCalled();

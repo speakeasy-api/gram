@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -13,8 +14,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 const (
@@ -105,8 +108,20 @@ func seedChainedConsentEndpoint(t *testing.T, tag string) (context.Context, cons
 	ctx, fx := standaloneConsent(t, tag, consentChainedUpstream, func(ctx context.Context, ti *testInstance, projectID, issuerID uuid.UUID, slug string) uuid.UUID {
 		return attachConsentRemoteMcpServer(t, ctx, ti.conn, projectID, issuerID, slug, consentChainedUpstream)
 	})
-	fx.clientA = createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, tag, "", []uuid.UUID{fx.shared})
+	fx.clientA = createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, tag, "")
+	seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, fx.endpoint.McpServerID.UUID, fx.clientA, authz.AuthClientTypeEMA)
+	seedPrincipalMCPConnectGrant(t, ctx, fx.ti, fx.orgID, urn.NewPrincipal(urn.PrincipalTypeUser, fx.subject.ID), fx.endpoint.McpServerID.UUID)
 	return ctx, fx, clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, fx.clientA)
+}
+
+// chainedConsentChoice reads the typed choice the browser includes on approval.
+func chainedConsentChoice(t *testing.T, fx consentActionFixture) string {
+	t.Helper()
+	code, page, _ := render(t, fx)
+	require.Equal(t, http.StatusOK, code)
+	match := regexp.MustCompile(`name="auth_client" form="consent-approve-form" value="([a-f0-9-]+)"`).FindStringSubmatch(page)
+	require.Len(t, match, 2, "approval must carry the visible connection's exact credential")
+	return match[1]
 }
 
 func TestConsentPage_IdentityChainedServiceIsManagedWithFallback(t *testing.T) {
@@ -179,12 +194,13 @@ func TestConsentPage_UnroutableGrantIsNotChained(t *testing.T) {
 	require.NotContains(t, page, consentManagedCopy)
 }
 
-func TestConsentPage_ChainingLookupFaultDegrades(t *testing.T) {
+func TestConsentPage_UnavailableChainingResourceDegrades(t *testing.T) {
 	t.Parallel()
 
 	_, fx, issuer := seedChainedConsentEndpoint(t, "aim61-fault-page")
 	g := setConsentGovernor(t, fx, issuer, consentChainedUpstream)
-	fx.endpoint.McpServerID = conv.ToNullUUID(uuid.New())
+	// Keep the server and its typed offer live; only chaining lacks a resource.
+	fx.endpoint.UpstreamResource = ""
 
 	code, page, _ := render(t, fx)
 	require.NotEqual(t, http.StatusInternalServerError, code)
@@ -230,7 +246,8 @@ func TestConsentPage_DirectTunneledServiceIsManaged(t *testing.T) {
 		serverID = createTunneledServer(t, ctx, ti, projectID, issuerID, slug, identifier)
 		return serverID
 	})
-	fx.clientA = createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim480-tunnel-chained", "", []uuid.UUID{fx.shared})
+	fx.clientA = createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim480-tunnel-chained", "")
+	seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, serverID, fx.clientA, authz.AuthClientTypeEMA)
 	issuer := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, fx.clientA)
 	stampRemoteSessionIssuer(t, ctx, fx.ti.conn, fx.projectID, serverID, conv.ToNullUUID(issuer))
 	g := setConsentGovernor(t, fx, issuer, identifier)

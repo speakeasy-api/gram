@@ -67,13 +67,35 @@ vi.mock("./product-tier-badge", () => ({
   ProductTierBadge: () => null,
 }));
 
-vi.mock("./release-stage-badge", () => ({
-  ReleaseStageBadge: () => null,
-}));
-
 const TestIcon = ({ className }: { className?: string }) => (
   <svg data-testid="nav-icon" className={className} />
 );
+
+describe("NavButton release-stage marker", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("shows a dot while the page is not open", () => {
+    const { container } = render(
+      <NavButton title="Assistant" Icon={TestIcon} stage="beta" />,
+    );
+    const marker = container.querySelector("[data-release-stage=beta]");
+    expect(marker).not.toBeNull();
+    expect(marker?.hasAttribute("data-expanded")).toBe(false);
+    // The label stays in the DOM, clipped, so screen readers still hear it.
+    expect(marker?.textContent).toBe("Beta");
+  });
+
+  it("grows the dot into the stage tag on the open page", () => {
+    const { container } = render(
+      <NavButton title="Explore" Icon={TestIcon} stage="preview" active />,
+    );
+    const marker = container.querySelector("[data-release-stage=preview]");
+    expect(marker?.hasAttribute("data-expanded")).toBe(true);
+    expect(marker?.textContent).toBe("Preview");
+  });
+});
 
 describe("NavButton click loading state", () => {
   beforeEach(() => {

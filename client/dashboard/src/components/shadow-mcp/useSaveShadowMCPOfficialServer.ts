@@ -25,7 +25,7 @@ export function useSaveShadowMCPOfficialServer(): {
 } {
   const project = useProject();
   const queryClient = useQueryClient();
-  const mutation = useSetShadowMCPOfficialServerMutation();
+  const mutation = useSetShadowMCPOfficialServerMutation({ onError: () => {} });
   const save = async (choice: OfficialServerChoice) => {
     await mutation.mutateAsync({
       request: {

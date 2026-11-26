@@ -523,7 +523,7 @@ func BuildGetObservabilityOverviewPayload(telemetryGetObservabilityOverviewBody 
 	{
 		err = json.Unmarshal([]byte(telemetryGetObservabilityOverviewBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"account_type\": \"abc123\",\n      \"api_key_id\": \"abc123\",\n      \"event_source\": \"abc123\",\n      \"external_org_id\": \"abc123\",\n      \"external_user_id\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_source\": \"abc123\",\n      \"include_time_series\": false,\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"meta_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"toolset_slug\": \"abc123\",\n      \"user_id\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"account_type\": \"abc123\",\n      \"api_key_id\": \"abc123\",\n      \"event_source\": \"abc123\",\n      \"external_org_id\": \"abc123\",\n      \"external_user_id\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_source\": \"abc123\",\n      \"include_time_series\": false,\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"meta_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"tool_calls_only\": false,\n      \"toolset_slug\": \"abc123\",\n      \"user_id\": \"abc123\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
@@ -573,11 +573,18 @@ func BuildGetObservabilityOverviewPayload(telemetryGetObservabilityOverviewBody 
 		AccountType:       body.AccountType,
 		ExternalOrgID:     body.ExternalOrgID,
 		IncludeTimeSeries: body.IncludeTimeSeries,
+		ToolCallsOnly:     body.ToolCallsOnly,
 	}
 	{
 		var zero bool
 		if v.IncludeTimeSeries == zero {
 			v.IncludeTimeSeries = true
+		}
+	}
+	{
+		var zero bool
+		if v.ToolCallsOnly == zero {
+			v.ToolCallsOnly = false
 		}
 	}
 	v.ApikeyToken = apikeyToken

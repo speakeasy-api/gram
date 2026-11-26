@@ -115,22 +115,39 @@ func (c *CopyStore) Count(ctx context.Context, organizationID string) (orgencryp
 		Unreadable:     row.Unreadable,
 		Unattributed:   row.Unattributed,
 		PlatformCopies: row.PlatformCopies,
+		Values:         row.ValueCount,
+		LastWrittenAt:  orgencryption.LastWrittenAt(row.LastWrittenAt),
 	}, nil
+}
+
+// ListOrganizationsWithValues returns every organization storing a client secret.
+func (c *CopyStore) ListOrganizationsWithValues(ctx context.Context) ([]orgencryption.OrganizationValues, error) {
+	rows, err := repo.New(c.db).ListOrganizationsWithRemoteSessionClientSecrets(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list organizations with client secrets: %w", err)
+	}
+
+	organizations := make([]orgencryption.OrganizationValues, 0, len(rows))
+	for _, row := range rows {
+		organizations = append(organizations, orgencryption.NewOrganizationValues(row.OrganizationID, row.ValueCount, row.LastWrittenAt))
+	}
+
+	return organizations, nil
 }
 
 // ClearPlatformCopies destroys up to limit of the organization's
 // platform-key copies after finalize.
-func (c *CopyStore) ClearPlatformCopies(ctx context.Context, organizationID string, generation int64, limit int32) (int64, error) {
+func (c *CopyStore) ClearPlatformCopies(ctx context.Context, organizationID string, generation int64, limit int32) (orgencryption.ClearedCopies, error) {
 	cleared, err := repo.New(c.db).ClearRemoteSessionClientSecretPlatformCopies(ctx, repo.ClearRemoteSessionClientSecretPlatformCopiesParams{
 		OrganizationID:    organizationID,
 		LimitValue:        limit,
 		DecidedGeneration: generation,
 	})
 	if err != nil {
-		return 0, fmt.Errorf("clear client secret platform copies: %w", err)
+		return orgencryption.ClearedCopies{}, fmt.Errorf("clear client secret platform copies: %w", err)
 	}
 
-	return cleared, nil
+	return orgencryption.ClearedCopies{PlatformOnly: cleared.PlatformOnly, BesideOrgCopy: cleared.BesideOrgCopy, Empty: 0}, nil
 }
 
 // parseAfter parses a page cursor: "" for the first page, otherwise the

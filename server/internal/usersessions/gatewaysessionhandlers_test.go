@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 func seedSessionGateway(t *testing.T, ctx context.Context, ti *testInstance, issuer uuid.UUID) uuid.UUID {
@@ -187,7 +188,8 @@ func TestGatewaySessionAssociationFilters(t *testing.T) {
 	require.NoError(t, err)
 	_, err = seedUserSession(t, ctx, ti.conn, issuer, urn.NewUserSubject("no-accounts"))
 	require.NoError(t, err)
-	client := seedUpstream(t, ctx, ti.conn, conv.ToNullUUID(*auth.ProjectID), issuer, subject, "provider.example.test")
+	provenance := seedIssuerInProject(t, ctx, ti.conn, *auth.ProjectID, "association-origin")
+	client := seedUpstream(t, ctx, ti.conn, conv.ToNullUUID(*auth.ProjectID), provenance, subject, "provider.example.test")
 	toolset := attachIssuerToolset(t, ctx, ti, *auth.ProjectID, issuer, "associated-toolset")
 	member, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
 		ID: uuid.New(), ProjectID: *auth.ProjectID, ToolsetID: conv.ToNullUUID(toolset.ID), Name: conv.ToPGText("Example member"), Slug: conv.ToPGText("example-member"), Visibility: "private",
@@ -195,7 +197,7 @@ func TestGatewaySessionAssociationFilters(t *testing.T) {
 	require.NoError(t, err)
 	_, err = metarepo.New(ti.conn).CreateMetaMCPMember(ctx, metarepo.CreateMetaMCPMemberParams{ProjectID: *auth.ProjectID, MetaMcpServerID: gateway, McpServerID: member.ID})
 	require.NoError(t, err)
-	require.NoError(t, testrepo.New(ti.conn).InsertMCPServerRemoteSessionClientFixture(ctx, testrepo.InsertMCPServerRemoteSessionClientFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: member.ID, RemoteSessionClientID: client}))
+	seedInventoryOAuthOffer(t, ctx, ti, auth.ActiveOrganizationID, *auth.ProjectID, member.ID, client)
 	facets, err := ti.service.ListGatewaySessionFacets(ctx, &gen.ListGatewaySessionFacetsPayload{GatewayID: new(gateway.String())})
 	require.NoError(t, err)
 	require.Len(t, facets.Servers, 1)
@@ -205,6 +207,23 @@ func TestGatewaySessionAssociationFilters(t *testing.T) {
 	require.Len(t, result.Items, 1)
 	require.Equal(t, session.ID.String(), result.Items[0].ID)
 	require.Len(t, result.Items[0].Upstreams, 1)
+
+	// A selected gateway wins even if the caller omits the inventory mode.
+	// Another gateway ID must not inherit this member's typed offer.
+	q := usersessionsrepo.New(ti.conn)
+	params := usersessionsrepo.ListRemoteSessionUpstreamsForSubjectsParams{
+		SubjectUrns: []string{subject.String()}, IssuerIds: []uuid.UUID{issuer},
+		OrganizationID: auth.ActiveOrganizationID, ProjectIds: []uuid.UUID{*auth.ProjectID},
+		GatewayID: conv.ToNullUUID(gateway), GatewayInventory: false,
+	}
+	upstreams, err := q.ListRemoteSessionUpstreamsForSubjects(ctx, params)
+	require.NoError(t, err)
+	require.Len(t, upstreams, 1)
+	params.GatewayID = conv.ToNullUUID(uuid.New())
+	upstreams, err = q.ListRemoteSessionUpstreamsForSubjects(ctx, params)
+	require.NoError(t, err)
+	require.Empty(t, upstreams)
+
 	empty, err := ti.service.ListGatewaySessions(ctx, &gen.ListGatewaySessionsPayload{GatewayID: new(gateway.String()), ServerID: new(uuid.NewString())})
 	require.NoError(t, err)
 	require.Empty(t, empty.Items)

@@ -352,3 +352,107 @@ func BuildListDeniedClientsPayload(mcpConnectionHealthListDeniedClientsBody stri
 
 	return v, nil
 }
+
+// BuildListSuspectedProblemsPayload builds the payload for the
+// mcpConnectionHealth listSuspectedProblems endpoint from CLI flags.
+func BuildListSuspectedProblemsPayload(mcpConnectionHealthListSuspectedProblemsBody string, mcpConnectionHealthListSuspectedProblemsSessionToken string, mcpConnectionHealthListSuspectedProblemsApikeyToken string, mcpConnectionHealthListSuspectedProblemsProjectSlugInput string) (*mcpconnectionhealth.ListSuspectedProblemsPayload, error) {
+	var err error
+	var body ListSuspectedProblemsRequestBody
+	{
+		err = json.Unmarshal([]byte(mcpConnectionHealthListSuspectedProblemsBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"part\": \"service\",\n      \"server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", body.UserSessionIssuerID, goa.FormatUUID))
+		if body.ServerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.server_id", *body.ServerID, goa.FormatUUID))
+		}
+		if body.Part != nil {
+			if !(*body.Part == "speakeasy" || *body.Part == "service") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.part", *body.Part, []any{"speakeasy", "service"}))
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if mcpConnectionHealthListSuspectedProblemsSessionToken != "" {
+			sessionToken = &mcpConnectionHealthListSuspectedProblemsSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpConnectionHealthListSuspectedProblemsApikeyToken != "" {
+			apikeyToken = &mcpConnectionHealthListSuspectedProblemsApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if mcpConnectionHealthListSuspectedProblemsProjectSlugInput != "" {
+			projectSlugInput = &mcpConnectionHealthListSuspectedProblemsProjectSlugInput
+		}
+	}
+	v := &mcpconnectionhealth.ListSuspectedProblemsPayload{
+		UserSessionIssuerID: body.UserSessionIssuerID,
+		ServerID:            body.ServerID,
+	}
+	if body.Part != nil {
+		part := mcpconnectionhealth.SuspectedProblemPart(*body.Part)
+		v.Part = &part
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildGetSuspectedProblemPayload builds the payload for the
+// mcpConnectionHealth getSuspectedProblem endpoint from CLI flags.
+func BuildGetSuspectedProblemPayload(mcpConnectionHealthGetSuspectedProblemBody string, mcpConnectionHealthGetSuspectedProblemSessionToken string, mcpConnectionHealthGetSuspectedProblemApikeyToken string, mcpConnectionHealthGetSuspectedProblemProjectSlugInput string) (*mcpconnectionhealth.GetSuspectedProblemPayload, error) {
+	var err error
+	var body GetSuspectedProblemRequestBody
+	{
+		err = json.Unmarshal([]byte(mcpConnectionHealthGetSuspectedProblemBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"abc123\",\n      \"server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", body.UserSessionIssuerID, goa.FormatUUID))
+		if body.ServerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.server_id", *body.ServerID, goa.FormatUUID))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if mcpConnectionHealthGetSuspectedProblemSessionToken != "" {
+			sessionToken = &mcpConnectionHealthGetSuspectedProblemSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpConnectionHealthGetSuspectedProblemApikeyToken != "" {
+			apikeyToken = &mcpConnectionHealthGetSuspectedProblemApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if mcpConnectionHealthGetSuspectedProblemProjectSlugInput != "" {
+			projectSlugInput = &mcpConnectionHealthGetSuspectedProblemProjectSlugInput
+		}
+	}
+	v := &mcpconnectionhealth.GetSuspectedProblemPayload{
+		UserSessionIssuerID: body.UserSessionIssuerID,
+		ID:                  body.ID,
+		ServerID:            body.ServerID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}

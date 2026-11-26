@@ -22,6 +22,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
@@ -79,7 +80,7 @@ func metaConsent(t *testing.T, tag string) (context.Context, consentActionFixtur
 	t.Helper()
 	ctx, fx, metaID := seedMetaConsentEndpoint(t, tag+"-gw")
 	registerPageClient(t, ctx, fx)
-	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, tag, "", []uuid.UUID{fx.shared})
+	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, tag, "")
 	return ctx, fx, metaID, clientID, clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
 }
 
@@ -185,7 +186,9 @@ func TestServeConsent_MetaRemoteMemberLegacyGrantAsksForReconnect(t *testing.T) 
 	t.Parallel()
 	ctx, fx, metaID, clientID, issuerID := metaConsent(t, "rt-legacy")
 	const upstream = "https://member.example.com/mcp"
-	createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "rt-legacy-member", upstream, conv.ToNullUUID(issuerID), 0)
+	member := createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "rt-legacy-member", upstream, conv.ToNullUUID(issuerID), 0)
+	seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, member.mcpServerID, clientID, authz.AuthClientTypeRemoteSession)
+	seedUserMCPConnectGrant(t, ctx, fx.ti.conn, fx.orgID, fx.subject.ID, member.mcpServerID.String())
 	fx.server = "rt-legacy-member"
 
 	grant(t, ctx, fx, clientID, "")
@@ -204,7 +207,9 @@ func TestServeConsent_MetaTunneledMemberHonoursIdentifierRule(t *testing.T) {
 	t.Parallel()
 	ctx, fx, metaID, clientID, issuerID := metaConsent(t, "rt-tunnel")
 	const identifier = "urn:gram:tunnel:routability"
-	createTunneledMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "rt-tunnel-member", identifier, conv.ToNullUUID(issuerID), 0)
+	member := createTunneledMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "rt-tunnel-member", identifier, conv.ToNullUUID(issuerID), 0)
+	seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, member.mcpServerID, clientID, authz.AuthClientTypeRemoteSession)
+	seedUserMCPConnectGrant(t, ctx, fx.ti.conn, fx.orgID, fx.subject.ID, member.mcpServerID.String())
 	fx.server = "rt-tunnel-member"
 
 	grant(t, ctx, fx, clientID, "")
@@ -234,12 +239,13 @@ func TestServeConsent_AnotherMembersGrantForTheSameUpstreamDoesNotCompete(t *tes
 	t.Parallel()
 	ctx, fx, metaID, clientA, issuerA := metaConsent(t, "rt-dup-a")
 	const upstream = "https://dup.example.com/mcp"
-	clientB := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "rt-dup-b", "", []uuid.UUID{fx.shared})
+	clientB := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "rt-dup-b", "")
 	issuerB := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientB)
-	createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "rt-dup-member-a", upstream, conv.ToNullUUID(issuerA), 0)
-	createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "rt-dup-member-b", upstream, conv.ToNullUUID(issuerB), 1)
-	// Rendered before any grant, the migration associates each member with
-	// the client of its own authorization server.
+	memberA := createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "rt-dup-member-a", upstream, conv.ToNullUUID(issuerA), 0)
+	seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, memberA.mcpServerID, clientA, authz.AuthClientTypeRemoteSession)
+	memberB := createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "rt-dup-member-b", upstream, conv.ToNullUUID(issuerB), 1)
+	seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, memberB.mcpServerID, clientB, authz.AuthClientTypeRemoteSession)
+	// Before any grant, the focused member offers only its own client.
 	fx.server = "rt-dup-member-a"
 	expect(t, fx, 0, 1, false)
 
@@ -259,7 +265,9 @@ func TestServeConsent_RemoteServerLegacyGrantAsksForReconnect(t *testing.T) {
 		server, _ := createRemoteMcpEndpoint(t, ctx, ti.conn, projectID, upstream, slug, "public", issuerID)
 		return server.ID
 	})
-	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "rt-remote", "", []uuid.UUID{fx.shared})
+	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "rt-remote", "")
+	seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, fx.endpoint.McpServerID.UUID, clientID, authz.AuthClientTypeRemoteSession)
+	seedUserMCPConnectGrant(t, ctx, fx.ti.conn, fx.orgID, fx.subject.ID, fx.endpoint.McpServerID.UUID.String())
 
 	grant(t, ctx, fx, clientID, "")
 	expectAutoReconnect(t, fx, upstream)
@@ -279,7 +287,8 @@ func TestServeConsent_OtherResourceDisplayFallsBackToIssuer(t *testing.T) {
 		server, _ := createRemoteMcpEndpoint(t, ctx, ti.conn, projectID, upstreamB, slug, "public", issuerID)
 		return server.ID
 	})
-	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "rt-display", "", []uuid.UUID{fx.shared})
+	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "rt-display", "")
+	seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, fx.endpoint.McpServerID.UUID, clientID, authz.AuthClientTypeRemoteSession)
 	_, err := remotesessions_repo.New(fx.ti.conn).UpdateRemoteSessionClientResourceDisplay(ctx, remotesessions_repo.UpdateRemoteSessionClientResourceDisplayParams{
 		ResourceIdentifier:    conv.ToPGText(upstreamA),
 		ResourceName:          "Resource A",
@@ -318,9 +327,11 @@ func TestServeConsent_TunneledServerJudgesEachCardsGrant(t *testing.T) {
 		serverID = createTunneledServer(t, ctx, ti, projectID, issuerID, slug, identifier)
 		return serverID
 	})
-	own := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "rt-tunnel-own", "", []uuid.UUID{fx.shared})
+	own := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "rt-tunnel-own", "")
 	stampRemoteSessionIssuer(t, ctx, fx.ti.conn, fx.projectID, serverID, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, own)))
-	other := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "rt-tunnel-other", "", []uuid.UUID{fx.shared})
+	other := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "rt-tunnel-other", "")
+	seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, fx.endpoint.McpServerID.UUID, own, authz.AuthClientTypeRemoteSession)
+	seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, fx.endpoint.McpServerID.UUID, other, authz.AuthClientTypeRemoteSession)
 
 	grant(t, ctx, fx, other, "https://unrelated.example.com/mcp")
 	grant(t, ctx, fx, own, "")
@@ -346,7 +357,9 @@ func TestServeConsent_GatewayServerLinkGoesStraightToProvider(t *testing.T) {
 	t.Parallel()
 	ctx, fx, metaID, clientID, issuerID := metaConsent(t, "rt-link")
 	const upstream = "https://link.example.com/mcp"
-	createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "rt-link-member", upstream, conv.ToNullUUID(issuerID), 0)
+	member := createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "rt-link-member", upstream, conv.ToNullUUID(issuerID), 0)
+	seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, member.mcpServerID, clientID, authz.AuthClientTypeRemoteSession)
+	seedUserMCPConnectGrant(t, ctx, fx.ti.conn, fx.orgID, fx.subject.ID, member.mcpServerID.String())
 
 	fx.server = "rt-link-member"
 	code, html, _ := render(t, fx)
@@ -374,13 +387,15 @@ func TestServeConsent_GatewayListOpensOnlyWhenShort(t *testing.T) {
 	upstream := newRecordingUpstream(t, "tool")
 	grant(t, ctx, fx, clientID, upstream.url)
 	for i := range 5 {
-		createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, fmt.Sprintf("rt-list-%d", i), upstream.url, conv.ToNullUUID(issuerID), int32(i))
+		member := createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, fmt.Sprintf("rt-list-%d", i), upstream.url, conv.ToNullUUID(issuerID), int32(i))
+		seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, member.mcpServerID, clientID, authz.AuthClientTypeRemoteSession)
 	}
 	code, html, _ := render(t, fx)
 	require.Equal(t, http.StatusOK, code, html)
 	require.Regexp(t, `data-gateway-list data-state="[^"]+" open`, html)
 
-	createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "rt-list-5", upstream.url, conv.ToNullUUID(issuerID), 5)
+	member := createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "rt-list-5", upstream.url, conv.ToNullUUID(issuerID), 5)
+	seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, member.mcpServerID, clientID, authz.AuthClientTypeRemoteSession)
 	code, html, _ = render(t, fx)
 	require.Equal(t, http.StatusOK, code, html)
 	require.Regexp(t, `data-gateway-list data-state="[^"]+" >`, html)

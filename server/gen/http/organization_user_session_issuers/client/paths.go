@@ -32,11 +32,6 @@ func ListMcpServersOrganizationUserSessionIssuersPath() string {
 	return "/rpc/organizationUserSessionIssuers.listMcpServers"
 }
 
-// ListRemoteSessionClientBindingsOrganizationUserSessionIssuersPath returns the URL path to the organizationUserSessionIssuers service listRemoteSessionClientBindings HTTP endpoint.
-func ListRemoteSessionClientBindingsOrganizationUserSessionIssuersPath() string {
-	return "/rpc/organizationUserSessionIssuers.listRemoteSessionClientBindings"
-}
-
 // GetAuthenticationHostImpactOrganizationUserSessionIssuersPath returns the URL path to the organizationUserSessionIssuers service getAuthenticationHostImpact HTTP endpoint.
 func GetAuthenticationHostImpactOrganizationUserSessionIssuersPath() string {
 	return "/rpc/organizationUserSessionIssuers.getAuthenticationHostImpact"

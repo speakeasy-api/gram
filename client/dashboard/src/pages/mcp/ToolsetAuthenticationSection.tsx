@@ -97,7 +97,7 @@ export function ConvertToUserSessionsButton({
   return (
     <>
       <Button variant="tertiary" onClick={() => setSheetOpen(true)}>
-        <Button.Text>Convert to User Sessions</Button.Text>
+        <Button.Text>Convert to MCP sign-in</Button.Text>
       </Button>
       <AttachRemoteIdentityProviderSheet
         open={sheetOpen}

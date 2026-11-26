@@ -1,5 +1,17 @@
 # admin
 
+## 0.14.2
+
+### Patch Changes
+
+- 5a611c9: The admin encryption transitions list now shows only organizations with values for the selected use case by default, with how many values each has and when one was last written, most recently written first. Staff can switch to every organization or sort oldest first, and the state counts follow the filter.
+
+## 0.14.1
+
+### Patch Changes
+
+- bb54618: Staff can move an organization's saved Tailscale OAuth clients to its organization key from a temporary **Tailscale OAuth migration** page in the admin dashboard, one step at a time: enroll, backfill and verify, finalize, then clear the platform-key copies.
+
 ## 0.14.0
 
 ### Minor Changes

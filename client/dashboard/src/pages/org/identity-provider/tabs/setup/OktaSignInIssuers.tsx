@@ -45,7 +45,7 @@ function TrustBadge({ row }: { row: SignInIssuerRow }): JSX.Element {
   );
 }
 
-/** The one place to see and choose which sign-in issuers trust Okta sign-in. */
+/** The one place to see and choose which MCP sign-ins trust Okta sign-in. */
 export function OktaSignInIssuers({
   rows,
   issuers,
@@ -55,7 +55,7 @@ export function OktaSignInIssuers({
   onTrust,
 }: {
   rows: SignInIssuerRow[];
-  /** Every organization sign-in issuer, across all pages, for slug checks. */
+  /** Every organization MCP sign-in, across all pages, for slug checks. */
   issuers: UserSessionIssuer[];
   remoteSessionIssuerId: string;
   client: RemoteSessionClient | undefined;
@@ -78,7 +78,7 @@ export function OktaSignInIssuers({
   const columns: Column<SignInIssuerRow>[] = [
     {
       key: "slug",
-      header: "Sign-in issuer",
+      header: "MCP sign-in",
       width: "1fr",
       render: (row) => <Text className="font-mono">{row.issuer.slug}</Text>,
     },
@@ -111,19 +111,17 @@ export function OktaSignInIssuers({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-col gap-1">
-        <Label>Sign-in issuers</Label>
+        <Label>MCP sign-ins</Label>
         <Text small muted>
-          Each upstream vendor or authorization server needs its own sign-in
-          issuer, because one sign-in issuer serves one upstream.
+          Each upstream vendor or authorization server needs its own MCP
+          sign-in, because one MCP sign-in serves one upstream.
         </Text>
       </div>
       <Table
         columns={columns}
         data={rows}
         rowKey={(row) => row.issuer.id}
-        noResultsMessage={
-          <Text small>No organization sign-in issuers yet</Text>
-        }
+        noResultsMessage={<Text small>No organization MCP sign-ins yet</Text>}
       />
       <RequireScope scope="org:admin" level="component">
         <form
@@ -142,7 +140,7 @@ export function OktaSignInIssuers({
         >
           <div className="flex flex-1 flex-col gap-1.5">
             <Label htmlFor="okta-sign-in-issuer-slug">
-              New sign-in issuer slug
+              New MCP sign-in slug
             </Label>
             <Input
               id="okta-sign-in-issuer-slug"
@@ -159,13 +157,13 @@ export function OktaSignInIssuers({
             variant="secondary"
             disabled={!readyClient || add.isPending || !!slugError}
           >
-            {add.isPending ? "Adding…" : "Add sign-in issuer"}
+            {add.isPending ? "Adding…" : "Add MCP sign-in"}
           </Button>
         </form>
       </RequireScope>
       {!readyClient && (
         <Text small muted>
-          Set up Okta sign-in before adding more sign-in issuers.
+          Set up Okta sign-in before adding more MCP sign-ins.
         </Text>
       )}
       {slugError && slug !== "" && (

@@ -970,6 +970,43 @@ export type AdminOrganizationHooksRollout = {
   eligible?: boolean;
 };
 
+export type AdminHooksReleaseRepoVersion = {
+  version: string;
+  repos: number;
+};
+
+export type AdminHooksReleaseInstallVersion = {
+  version: string;
+  status: "current" | "behind" | "unsupported" | "unknown";
+  installs: number;
+};
+
+export type AdminHooksReleaseFleet = {
+  window_days: number;
+  installs: number;
+  installs_on_current: number;
+  versions: AdminHooksReleaseInstallVersion[];
+};
+
+export type AdminHooksReleaseProgress = {
+  current_version: number;
+  current_binary_version?: string;
+  organizations: number;
+  organizations_cleared: number;
+  organizations_held: number;
+  organizations_on_legacy_flag: number;
+  repos: number;
+  repos_on_current: number;
+  repo_versions: AdminHooksReleaseRepoVersion[];
+  fleet?: AdminHooksReleaseFleet;
+};
+
+export function getHooksReleaseProgress(): Promise<AdminHooksReleaseProgress> {
+  return gramAdminFetch<AdminHooksReleaseProgress>(
+    "/admin/hooksRollout.progress",
+  );
+}
+
 export function getHooksRollout(): Promise<AdminHooksRollout> {
   return gramAdminFetch<AdminHooksRollout>("/admin/hooksRollout.get");
 }

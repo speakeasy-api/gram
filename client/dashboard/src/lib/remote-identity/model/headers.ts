@@ -60,28 +60,3 @@ export function authorizationHeaderGuard(
   if (isManagedAuthorizationRow) return null;
   return IdentityErrors.ManagedAuthorization;
 }
-
-/**
- * The Authorization row the identity choice owns.
- *
- * The identity section publishes this; the header list consumes it. Before
- * this existed the header list re-derived the mode and re-found the row for
- * itself, which meant two places computing the same answer from two separate
- * fetches of the same data — and nothing guaranteeing they agreed.
- */
-export type ManagedHeader = {
-  readonly ownedBy: "user" | "agent";
-  /** Null when the mode owns the name but no row exists yet. */
-  readonly headerId: string | null;
-};
-
-export function managedAuthorizationHeader(
-  mode: IdentityMode,
-  headers: readonly RemoteMcpServerHeader[],
-): ManagedHeader | null {
-  if (mode === "none") return null;
-  return {
-    ownedBy: mode,
-    headerId: findStaticAuthorizationHeader(headers)?.id ?? null,
-  };
-}

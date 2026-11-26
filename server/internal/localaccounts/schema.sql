@@ -3,7 +3,7 @@ CREATE SCHEMA IF NOT EXISTS gram_local;
 
 CREATE TABLE IF NOT EXISTS gram_local.account_profiles (
   id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  organization_id text REFERENCES public.organization_metadata(id) ON DELETE SET NULL,
+  organization_id text REFERENCES organization_metadata(id) ON DELETE SET NULL,
   profile text NOT NULL,
   anchor timestamptz NOT NULL
 );

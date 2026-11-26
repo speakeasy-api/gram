@@ -1,5 +1,52 @@
 # dashboard
 
+## 0.157.0
+
+### Minor Changes
+
+- eb154bd: Intent-based policies now use six reusable primitive labels and ten composed rules, adding protections against broadcasting personal data and making unreviewed public releases.
+- f69af0d: Members can now ask for time-based access. Requesting access opens a dialog that shows what is being asked for, asks how long it is needed (1 hour, 2 hours, 4 hours or end of day on the member's own clock) and takes an optional note for the administrators. The Access Requests tab shows what each requester asked for in a new "Wants it" column, and the decide dialog suggests the matching window, or offers the requester's own deadline.
+- 1702f18: Behind the `terminal-home` flag, the project homepage puts the Project Assistant in a terminal-style panel beside five widgets: what needs attention, spend against last week, the servers whose usage changed most, live and recent agent sessions, and tool calls by hour. Clicking a row in a widget asks the assistant about it.
+
+### Patch Changes
+
+- 637f8cc: The Agent Feedback tab, the MCP feedback API description and the `mcp_feedback.submitted_v1` webhook payload now say that secrets and personal data in a report are masked on a best-effort basis, so some may remain.
+- b5a6e25: `telemetry.getObservabilityOverview` takes `tool_calls_only`. When set, chat, token, cost and session duration figures come back as 0, and overviews of two hours or more can be read from pre-summed tool call counts instead of raw logs, with periods aligned to 15-minute boundaries.
+- 3570e4d: The MCP server Overview tab, a gateway's activity section and a source's activity panel now ask only for tool-call figures, so the server can answer them faster.
+- 6261b60: An agent's tab and setup step for its MCP servers and how Speakeasy signs in to them is called MCP sign-in again, instead of Server sign-in.
+- 8a39bb4: The Shadow MCP page and server pages show progress and explain failures. Retry buttons spin while they work, gathering evidence and saving a server name show a spinner, and the decision button reads "Approving…" or "Blocking…". Failed loads show the reason under a plain title. Failed actions raise one toast with a plain title, the reason, and Retry where it helps, instead of a generic "Request failed" toast beside a second one with no reason. A successful rename is now confirmed.
+- 7e487f9: Beta and Preview pages in the sidebar now show a small blue or orange dot instead of a boxed section with an "In Beta" or "In Preview" caption. The dot grows into the Beta or Preview tag when that page is open, so the current page is the only row that stands out.
+- 05c984d: The suspected problem sheet says in a plain sentence where the failures came from, names the app only when every person in the problem shows it, and dates times that are not today, including in the chart's tooltips. When there are no suspected problems, the provider Overview and a server's Clients and Sessions tab no longer show an empty panel.
+
+## 0.156.0
+
+### Minor Changes
+
+- b598d9f: Add an Intent-based policies page, rolled out to selected people, that replays a stored or uploaded session and shows which tool calls the intent guardrail would permit, ask about, or block.
+- 65d5577: Add agent feedback for MCP servers. Turning it on from a server's new Agent Feedback tab adds one tool to the server, `submit_feedback` by default, that agents call to report what blocked or confused them. Nothing else needs configuring, and the tool's name and instructions can be changed. Reports are stored with secrets and personal data masked, and the tab shows 30-day counts by severity, the tools named most often, and every report. Reports can also be sent on: a new "MCP feedback" data export delivers each one as an OTLP log, and a new `mcp_feedback.submitted_v1` webhook event carries it to subscribers. It is available on MCP servers built from an OpenAPI document or functions.
+- 640125d: The Suspected problems panel on an MCP sign-in's Overview and on an MCP server's page now shows real problems instead of sample data. Each problem counts only the MCP sign-in's own servers. A problem that is no longer listed says so. Connection Logs can filter by more than one server or person, so a problem's link shows its attempts.
+
+### Patch Changes
+
+- bd8bc93: The shared authorization server step of agent setup now says where the chosen server is managed (the MCP Sign-in page) and links to it. It also no longer claims the agent's servers already use the recommended server when none of them do.
+- 4e7b2a9: When the Shadow AI policy saves but an AI tool decision does not, one toast now says the tool keeps the decision it had before, instead of calling it unreviewed and showing a second raw error.
+- e9190f0: A click anywhere inside a filter chip, including its padding, now opens it. Before, only a click on its text or coloured square did.
+- 8859e99: The MCP access pages count each tool under the one disposition the server matches it by. A read-only tool that is also idempotent no longer shows as covered by an idempotent rule, and role suggestions now leave out a role whose broader block takes the requested access away.
+- 4f04cf7: The MCP access pages now count and match each tool under its one disposition everywhere, including the tool picker and the Team Access narrowing dialog. A rule for unannotated tools now covers tools that declare no annotation.
+- 47a777e: The refresh button on an MCP sign-in connection now spins while it checks, then says what it found: still expired (reauthenticate), working, not connected yet, or that the check failed.
+- bb2b7ea: An MCP connection whose upstream token never expires now reads as "Never expires" on the agent sign-in step. Before, the server sent a zero date for the missing expiry, so the dashboard marked the connection as expired and said it ended almost 2026 years ago.
+- a14fba5: The Platform MCP install-method cards are clearer: the marketplace option shows a "Recommended" badge beside its title, and the manual option no longer labels itself a recovery option.
+- 609b076: The private network setup sheet always shows the tailnet gateway's Tailscale steps. It no longer waits for a rollout flag or switches to the Kubernetes operator's policy and tags.
+- 3a22595: The MCP Sessions page and the organization's MCP Authentication page are now both called MCP Sign-in, and what they list, formerly an MCP Authentication Provider or user session issuer, is now an MCP sign-in; page addresses stay the same.
+  
+  An agent's step and tab for how Speakeasy signs in to its MCP servers is now called Server sign-in, so it is not confused with MCP sign-in.
+- 74c0a9f: In the role editor, ticking one more tool on an MCP server whose Connect is limited to tool kinds (for example read-only and unannotated tools) now adds that tool beside the kinds instead of turning them into a list of tool names, so tools of those kinds added later stay covered. When a save does remove a kind rule, the review dialog lists it.
+- 23d78ce: The Shadow AI scan targets page no longer shows a library version number, and saving a target now simply confirms the save.
+- 2f31319: Opening a Shadow MCP server shows the app's page loader until the server is loaded, instead of a placeholder title, the raw URL slug and a skeleton table.
+- 1ebbf66: Clicking "Make official" on a Shadow MCP server no longer shifts the buttons beside it. The button keeps its size and shows a spinner while the link saves, and the official server panel fades in when it replaces the options.
+- 14c6536: On a Shadow MCP server's access review, "Who asked, and why" and "Have we decided on this before?" now end at the same height. An empty list is drawn in the same frame as a full one, so the two columns read as a matching pair.
+- 9a86ffe: MCP server Identity settings and agent setup now show the upstream credentials offered by each proxied server. Catalog setup shows a warning when upstream sign-in cannot be verified.
+
 ## 0.155.0
 
 ### Minor Changes

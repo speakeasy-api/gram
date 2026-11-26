@@ -114,9 +114,6 @@ func migrateWithRemoteBinding(t *testing.T) (uuid.UUID, []uuid.NullUUID) {
 		ClientID: "resync-migrate-client", ClientIDIssuedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
 	})
 	require.NoError(t, err)
-	require.NoError(t, remoteRepo.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: remoteClient.ID, UserSessionIssuerID: sourceID,
-	}))
 
 	first := seedMigrationToolset(t, ctx, ti, "resync-first", "resync-first-mcp", sourceID)
 	second := seedMigrationToolset(t, ctx, ti, "resync-second", "resync-second-mcp", sourceID)
@@ -129,6 +126,9 @@ func migrateWithRemoteBinding(t *testing.T) (uuid.UUID, []uuid.NullUUID) {
 	})
 	require.NoError(t, err)
 
+	for _, id := range []uuid.UUID{first.ID, second.ID, freeID} {
+		seedMigrationTypedOffer(t, ctx, ti, projectID, id, remoteClient.ID)
+	}
 	_, err = ti.service.MigrateIssuer(ctx, &orggen.MigrateIssuerPayload{SourceID: sourceID.String(), TargetID: target.ID})
 	require.NoError(t, err)
 

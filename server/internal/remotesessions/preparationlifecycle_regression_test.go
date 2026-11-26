@@ -3,7 +3,6 @@ package remotesessions_test
 import (
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
-	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"testing"
 
@@ -49,23 +48,6 @@ func TestPreparationLifecycle_ProjectDeleteDoesNotProbeSiblingBindings(t *testin
 	siblingCtx := contextvalues.SetAuthContext(ctx, &siblingAuth)
 	require.NoError(t, ti.service.DeleteRemoteSessionClient(siblingCtx, &clientsgen.DeleteRemoteSessionClientPayload{ID: in.ClientID.String()}))
 	requireOopsCode(t, ti.service.DeleteRemoteSessionClient(ctx, &clientsgen.DeleteRemoteSessionClientPayload{ID: in.ClientID.String()}), oops.CodeConflict)
-}
-
-func TestPreparationLifecycle_DetachAbsentJoinIgnoresEMABinding(t *testing.T) {
-	t.Parallel()
-	ctx, ti, in := preparationFixture(t)
-	preparationRecordGrants(t, ctx, ti, in.ClientID, []string{oauthwire.GrantTypeJWTBearer})
-	result, err := ti.service.PrepareIdentityChaining(ctx, in)
-	require.NoError(t, err)
-	require.Equal(t, "ready", result.State)
-	payload := &clientsgen.DetachUserSessionIssuerPayload{ID: in.ClientID.String(), UserSessionIssuerID: in.UserSessionIssuerID.String()}
-	_, err = ti.service.DetachUserSessionIssuer(ctx, payload)
-	require.NoError(t, err, "absent interactive join is a no-op despite the EMA binding")
-	err = repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: in.ClientID, UserSessionIssuerID: in.UserSessionIssuerID})
-	require.NoError(t, err)
-	_, err = ti.service.DetachUserSessionIssuer(ctx, payload)
-	requireOopsCode(t, err, oops.CodeConflict)
-	require.Equal(t, 1, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, in.ClientID, in.UserSessionIssuerID), "blocked removal rolls back the join")
 }
 
 func TestPreparationLifecycle_OrganizationDetachAbsentJoinIgnoresEMABinding(t *testing.T) {

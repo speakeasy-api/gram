@@ -1,0 +1,612 @@
+import { useRef, useState, type JSX } from "react";
+import {
+  keepPreviousData,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import {
+  Link,
+  useNavigate,
+  useRouter,
+  useSearch,
+} from "@tanstack/react-router";
+import { toast } from "sonner";
+import type { AdminOrganizationEncryptionTransitionRow } from "@gram/admin-client/models/components/adminorganizationencryptiontransitionrow";
+
+import { useConfirmDialog } from "@/components/ConfirmDialog";
+import { useOnUnmount } from "@/hooks/useOnUnmount";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { errorMessage } from "@/lib/gramAdminApi";
+import {
+  enrollOrganizationEncryption,
+  organizationEncryptionTransitionsKeyPrefix,
+  organizationEncryptionTransitionsQuery,
+} from "@/lib/gramAdminClient";
+import {
+  formatTimestamp,
+  pluralize,
+  TRANSITION_PHASE_LABELS,
+  TRANSITION_PHASE_TONES,
+  TRANSITION_STATE_LABELS,
+  TRANSITION_STATES,
+  transitionPhase,
+  transitionStateLabel,
+  labelForUseCase,
+} from "@/lib/organizationEncryption";
+
+import {
+  DEFAULT_SORT,
+  DEFAULT_VALUES,
+  TRANSITION_SORT_LABELS,
+  TRANSITION_SORTS,
+  VALUES_FILTER_LABELS,
+  VALUES_FILTERS,
+  type EncryptionTransitionsSearch,
+} from "./encryptionTransitionsSearch";
+
+const ALL = "all";
+
+/** Organizations per page. */
+const PAGE_SIZE = 50;
+
+/**
+ * How many organizations one "select next" request reads: the server's page
+ * limit. It pages on while disabled organizations leave the batch short.
+ */
+const NEXT_CANDIDATE_LIMIT = 200;
+
+/** The default size of a "select next" batch. */
+const DEFAULT_BATCH = 10;
+
+/**
+ * The pause between enrollments in a bulk run. Each enroll can mint a KMS key,
+ * so a batch runs one at a time at about one per second.
+ */
+export const ENROLL_INTERVAL_MS = 1000;
+
+type Selection = {
+  /** The use case the rows were selected for; a bulk enroll uses it. */
+  useCase: string;
+  rows: Map<string, AdminOrganizationEncryptionTransitionRow>;
+};
+
+const NO_SELECTION: Selection = { useCase: "", rows: new Map() };
+
+function enrollable(row: AdminOrganizationEncryptionTransitionRow): boolean {
+  return row.state === "platform_key" && !row.disabled;
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+export function EncryptionTransitions(): JSX.Element {
+  const search = useSearch({ from: "/encryption-transitions" });
+  const navigate = useNavigate({ from: "/encryption-transitions" });
+  const client = useQueryClient();
+  const [confirm, confirmDialog] = useConfirmDialog();
+  const [selection, setSelection] = useState<Selection>(NO_SELECTION);
+  const [batchSize, setBatchSize] = useState(String(DEFAULT_BATCH));
+  const [bulk, setBulk] = useState<{ done: number; total: number } | null>(
+    null,
+  );
+  const [failures, setFailures] = useState<
+    Map<string, { name: string; message: string }>
+  >(new Map());
+  // Checked between enrollments, so Stop ends the batch after the enrollment
+  // in flight. Leaving the page stops it too, so no batch runs unseen.
+  const stopRequested = useRef(false);
+  useOnUnmount(() => {
+    stopRequested.current = true;
+  });
+  const router = useRouter();
+
+  const page = search.page ?? 0;
+  const values = search.values ?? DEFAULT_VALUES;
+  const sort = search.sort ?? DEFAULT_SORT;
+  const query = useQuery({
+    ...organizationEncryptionTransitionsQuery({
+      // Absent lists the server's first use case.
+      useCase: search.useCase,
+      state: search.state,
+      values,
+      sort,
+      limit: PAGE_SIZE,
+      offset: page * PAGE_SIZE,
+    }),
+    placeholderData: keepPreviousData,
+  });
+  // The URL names the use case the admin chose; a list still loading for it
+  // must not leave a bulk action on the previous use case's placeholder data.
+  const useCase = search.useCase ?? query.data?.useCase ?? "";
+  // While the list for a new filter loads, the previous list stays on screen;
+  // its rows cannot be selected.
+  const stale = query.isPlaceholderData;
+  // A selection made for another use case does not carry over.
+  const selected =
+    selection.useCase === useCase ? selection.rows : NO_SELECTION.rows;
+  const rows = query.data?.organizations ?? [];
+  const counts = new Map(
+    (query.data?.stateCounts ?? []).map((count) => [
+      count.state,
+      count.organizations,
+    ]),
+  );
+
+  function filterBy(next: EncryptionTransitionsSearch) {
+    setSelection(NO_SELECTION);
+    void navigate({ search: next, replace: true });
+  }
+
+  function toggle(row: AdminOrganizationEncryptionTransitionRow) {
+    setSelection((current) => {
+      const next = new Map(
+        current.useCase === useCase ? current.rows : undefined,
+      );
+      if (next.has(row.organizationId)) next.delete(row.organizationId);
+      else next.set(row.organizationId, row);
+      return { useCase, rows: next };
+    });
+  }
+
+  async function selectNext() {
+    const size = Number.parseInt(batchSize, 10);
+    if (!Number.isFinite(size) || size < 1) {
+      toast.error("Enter how many organizations to select.");
+      return;
+    }
+    const requested = useCase;
+    const requestedSearch = search.useCase;
+    try {
+      // "Next" follows the list on screen: the same values filter and order.
+      // Disabled organizations are skipped, so page until enough are found.
+      // A write between pages can move an organization onto a later page
+      // again, so candidates are keyed by id.
+      const next = new Map<string, AdminOrganizationEncryptionTransitionRow>();
+      for (let offset = 0; next.size < size; offset += NEXT_CANDIDATE_LIMIT) {
+        const page = await client.fetchQuery(
+          organizationEncryptionTransitionsQuery({
+            useCase: requested,
+            state: "platform_key",
+            values,
+            sort,
+            limit: NEXT_CANDIDATE_LIMIT,
+            offset,
+          }),
+        );
+        for (const row of page.organizations.filter(enrollable)) {
+          if (next.size >= size) break;
+          next.set(row.organizationId, row);
+        }
+        if (!page.hasMore) break;
+      }
+      // Drop a response for a list the admin has since left.
+      const current = router.state.location
+        .search as EncryptionTransitionsSearch;
+      if (
+        current.useCase !== requestedSearch ||
+        (current.values ?? DEFAULT_VALUES) !== values ||
+        (current.sort ?? DEFAULT_SORT) !== sort
+      ) {
+        return;
+      }
+      setSelection({ useCase: requested, rows: next });
+      if (next.size < size) {
+        toast.info(
+          `Only ${pluralize(next.size, "organization")} can be enrolled.`,
+        );
+      }
+    } catch (e) {
+      toast.error(errorMessage(e));
+    }
+  }
+
+  async function enrollSelected() {
+    const batchUseCase = selection.useCase;
+    const batch = [...selected.values()];
+    if (batch.length === 0 || batchUseCase !== useCase) return;
+    const ok = await confirm({
+      title: `Enroll ${pluralize(batch.length, "organization")} for ${labelForUseCase(batchUseCase)}?`,
+      description:
+        "Provisions each organization's key, then writes both copies of every new value. They are enrolled one at a time, about one a second, because each can mint a KMS key. A failure doesn't stop the rest. Stay on this page until it finishes: leaving it stops the batch after the current organization, and enrollments already done stay done.",
+      details: (
+        <ul className="list-disc pl-5">
+          {batch.map((row) => (
+            <li key={row.organizationId}>{row.name}</li>
+          ))}
+        </ul>
+      ),
+      confirmLabel: "Enroll",
+    });
+    if (!ok) return;
+
+    setFailures(new Map());
+    setBulk({ done: 0, total: batch.length });
+    stopRequested.current = false;
+    const failed = new Map<string, { name: string; message: string }>();
+    let attempted = 0;
+    for (const [index, row] of batch.entries()) {
+      if (index > 0) await wait(ENROLL_INTERVAL_MS);
+      if (stopRequested.current) break;
+      attempted++;
+      try {
+        await enrollOrganizationEncryption(row.organizationId, batchUseCase);
+      } catch (e) {
+        failed.set(row.organizationId, {
+          name: row.name,
+          message: errorMessage(e),
+        });
+      }
+      setBulk({ done: index + 1, total: batch.length });
+    }
+    setBulk(null);
+    setFailures(failed);
+    setSelection(NO_SELECTION);
+    await client.invalidateQueries({
+      queryKey: organizationEncryptionTransitionsKeyPrefix,
+    });
+
+    const enrolled = attempted - failed.size;
+    if (attempted < batch.length) {
+      toast.info(
+        `Stopped after ${pluralize(attempted, "organization")}; enrolled ${enrolled}`,
+      );
+    } else if (failed.size === 0) {
+      toast.success(`Enrolled ${pluralize(enrolled, "organization")}`);
+    } else {
+      toast.warning(
+        `Enrolled ${pluralize(enrolled, "organization")}; ${failed.size} failed`,
+      );
+    }
+  }
+
+  const running = bulk !== null;
+
+  return (
+    <div className="space-y-6 p-6">
+      {confirmDialog}
+      <div className="flex items-start justify-between gap-4">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-semibold">Encryption transitions</h1>
+          <p className="text-muted-foreground max-w-3xl text-sm">
+            Where each organization stands in moving a use case from the
+            platform key to its own key. New organizations that could not start
+            on their own key appear in platform key. Enroll them here in
+            batches; roll back and finalize one organization at a time from its
+            Encryption page. By default the list shows organizations with values
+            for the use case, most recently written first.
+          </p>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <Select
+          value={useCase}
+          onValueChange={(value) =>
+            filterBy({ ...search, useCase: value, page: undefined })
+          }
+        >
+          <SelectTrigger size="sm" aria-label="Use case" className="bg-card">
+            <SelectValue placeholder="Use case" />
+          </SelectTrigger>
+          <SelectContent position="popper" align="start">
+            {(query.data?.useCases ?? (useCase ? [useCase] : [])).map(
+              (name) => (
+                <SelectItem key={name} value={name}>
+                  {labelForUseCase(name)}
+                </SelectItem>
+              ),
+            )}
+          </SelectContent>
+        </Select>
+        <Select
+          value={search.state ?? ALL}
+          onValueChange={(value) =>
+            filterBy({
+              ...search,
+              state: TRANSITION_STATES.find((state) => state === value),
+              page: undefined,
+            })
+          }
+        >
+          <SelectTrigger size="sm" aria-label="State" className="bg-card">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent position="popper" align="start">
+            <SelectItem value={ALL}>All states</SelectItem>
+            {TRANSITION_STATES.map((state) => (
+              <SelectItem key={state} value={state}>
+                {TRANSITION_STATE_LABELS[state]} ({counts.get(state) ?? 0})
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <div
+          role="group"
+          aria-label="Organizations"
+          className="flex flex-wrap gap-2"
+        >
+          {VALUES_FILTERS.map((value) => (
+            <Button
+              key={value}
+              variant={values === value ? "secondary" : "outline"}
+              size="sm"
+              aria-pressed={values === value}
+              onClick={() =>
+                filterBy({
+                  ...search,
+                  values: value === DEFAULT_VALUES ? undefined : value,
+                  page: undefined,
+                })
+              }
+            >
+              {VALUES_FILTER_LABELS[value]}
+            </Button>
+          ))}
+        </div>
+        <Select
+          value={sort}
+          onValueChange={(value) =>
+            filterBy({
+              ...search,
+              sort:
+                value === DEFAULT_SORT
+                  ? undefined
+                  : TRANSITION_SORTS.find((candidate) => candidate === value),
+              page: undefined,
+            })
+          }
+        >
+          <SelectTrigger size="sm" aria-label="Sort" className="bg-card">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent position="popper" align="start">
+            {TRANSITION_SORTS.map((value) => (
+              <SelectItem key={value} value={value}>
+                {TRANSITION_SORT_LABELS[value]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {query.isSuccess && (
+          <span className="text-muted-foreground text-sm" aria-live="polite">
+            {TRANSITION_STATES.map(
+              (state) =>
+                `${transitionStateLabel(state)}: ${(counts.get(state) ?? 0).toLocaleString()}`,
+            ).join(" · ")}
+          </span>
+        )}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <label
+          htmlFor="encryption-batch-size"
+          className="text-muted-foreground text-sm"
+        >
+          Batch size
+        </label>
+        <Input
+          id="encryption-batch-size"
+          type="number"
+          min={1}
+          max={NEXT_CANDIDATE_LIMIT}
+          value={batchSize}
+          onChange={(event) => setBatchSize(event.target.value)}
+          className="w-24"
+          disabled={running}
+        />
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={running || stale || !useCase}
+          onClick={() => void selectNext()}
+        >
+          Select next in platform key
+        </Button>
+        <Button
+          size="sm"
+          disabled={running || stale || selected.size === 0}
+          onClick={() => void enrollSelected()}
+        >
+          {bulk
+            ? `Enrolling ${bulk.done} of ${bulk.total}`
+            : `Enroll selected (${selected.size})`}
+        </Button>
+        {running && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              stopRequested.current = true;
+            }}
+          >
+            Stop
+          </Button>
+        )}
+        {selected.size > 0 && !running && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setSelection(NO_SELECTION)}
+          >
+            Clear selection
+          </Button>
+        )}
+      </div>
+
+      {failures.size > 0 && (
+        <div
+          role="alert"
+          className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm"
+        >
+          <p className="font-medium text-destructive">
+            {pluralize(failures.size, "organization")} could not be enrolled
+          </p>
+          <ul className="list-disc pl-5">
+            {[...failures].map(([id, failure]) => (
+              <li key={id}>
+                {failure.name}: {failure.message}
+              </li>
+            ))}
+          </ul>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setFailures(new Map())}
+          >
+            Dismiss
+          </Button>
+        </div>
+      )}
+
+      {query.isError && (
+        <p role="alert" className="text-sm">
+          Unable to load encryption transitions. {errorMessage(query.error)}
+          <Button variant="ghost" onClick={() => void query.refetch()}>
+            Retry
+          </Button>
+        </p>
+      )}
+
+      <div className="overflow-clip rounded-lg border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-0">
+                <span className="sr-only">Select</span>
+              </TableHead>
+              <TableHead>Organization</TableHead>
+              <TableHead>State</TableHead>
+              <TableHead className="text-right">Values</TableHead>
+              <TableHead>Last written</TableHead>
+              <TableHead>State changed</TableHead>
+              <TableHead className="text-right">Waiting (last run)</TableHead>
+              <TableHead className="text-right">
+                Unreadable (last run)
+              </TableHead>
+              <TableHead>Last verified</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={9} className="text-muted-foreground">
+                  {query.isPending
+                    ? "Loading..."
+                    : query.isError
+                      ? "Unable to load encryption transitions"
+                      : values !== "present"
+                        ? "No organization is in this state."
+                        : search.state
+                          ? "No organization with values is in this state."
+                          : "No organization has values for this use case. Choose All to see every organization."}
+                </TableCell>
+              </TableRow>
+            ) : (
+              rows.map((row) => {
+                const phase = transitionPhase(
+                  row.state,
+                  row.platformCopiesClearedAt,
+                );
+                return (
+                  <TableRow key={row.organizationId}>
+                    <TableCell>
+                      {enrollable(row) && (
+                        <Checkbox
+                          aria-label={`Select ${row.name}`}
+                          checked={selected.has(row.organizationId)}
+                          disabled={running || stale}
+                          onCheckedChange={() => toggle(row)}
+                        />
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Link
+                        to="/organizations/$idOrSlug/encryption"
+                        params={{ idOrSlug: row.slug }}
+                        className="font-medium hover:underline"
+                      >
+                        {row.name}
+                      </Link>
+                      <div className="text-muted-foreground font-mono text-xs">
+                        {row.slug}
+                        {row.disabled ? " · disabled" : ""}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant="outline"
+                        className={TRANSITION_PHASE_TONES[phase]}
+                      >
+                        {TRANSITION_PHASE_LABELS[phase]}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right text-sm">
+                      {row.valueCount.toLocaleString()}
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      {formatTimestamp(row.lastWrittenAt)}
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      {formatTimestamp(row.stateChangedAt)}
+                    </TableCell>
+                    <TableCell className="text-right text-sm">
+                      {row.lastBackfillRemaining?.toLocaleString() ?? "-"}
+                    </TableCell>
+                    <TableCell className="text-right text-sm">
+                      {row.lastBackfillUnreadable?.toLocaleString() ?? "-"}
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      {formatTimestamp(row.lastVerifiedAt)}
+                    </TableCell>
+                  </TableRow>
+                );
+              })
+            )}
+          </TableBody>
+        </Table>
+      </div>
+
+      <div className="flex items-center justify-end gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={page === 0}
+          onClick={() =>
+            filterBy({ ...search, page: page > 1 ? page - 1 : undefined })
+          }
+        >
+          Previous
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={!query.data?.hasMore}
+          onClick={() => filterBy({ ...search, page: page + 1 })}
+        >
+          Next
+        </Button>
+      </div>
+    </div>
+  );
+}

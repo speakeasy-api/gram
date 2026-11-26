@@ -13,8 +13,8 @@ import (
 	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
@@ -748,10 +748,6 @@ func TestDeleteGlobalClient_StopsServersOfferingItPerOrganization(t *testing.T) 
 	userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-global-typed")
 	serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "global-typed-server")
 	associate(t, ctx, ti.conn, orgID, projectID, serverID, clientID)
-	require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: clientID,
-		UserSessionIssuerID:   userIssuerID,
-	}))
 
 	// A second organization reaching the same platform-global client: the
 	// grouping is what this test is for, so one organization is not enough.
@@ -780,18 +776,33 @@ func TestDeleteGlobalClient_StopsServersOfferingItPerOrganization(t *testing.T) 
 	require.NotEmpty(t, offeredAuthClients(t, ctx, ti.conn, otherServerID),
 		"the second organization's association must be offered too")
 
+	// A typed-only offer has no association mirror for the legacy sync to
+	// remove. Global retirement must tombstone the exact offer itself.
+	typedOnly := seedRemoteMcpServerForLogin(t, ctx, ti.conn, projectID, userIssuerID, "global-typed-only", "https://registration.example.com/mcp")
+	existingOffer := offeredAuthClients(t, ctx, ti.conn, serverID)
+	require.Len(t, existingOffer, 1)
+	require.NoError(t, authclientbackfill.New(ti.conn).SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{
+		ProjectID: projectID, OrganizationID: orgID, McpServerID: typedOnly, AuthClientID: existingOffer[0], Source: "admin",
+	}))
+	require.Equal(t, existingOffer, offeredAuthClients(t, ctx, ti.conn, typedOnly))
+
 	require.NoError(t, ti.service.DeleteGlobalClient(adminCtx, &adminrsgen.DeleteGlobalClientPayload{
 		ID:           client.ID,
 		SessionToken: nil,
 	}))
 
+	require.Empty(t, offeredAuthClients(t, ctx, ti.conn, typedOnly), "the retired typed offer is still active")
+	// IsServerLinked also recognizes an admin tombstone, so this cannot pass
+	// if deletion simply removed the row.
+	tombstoned, err := authclientbackfill.New(ti.conn).IsServerLinked(ctx, authclientbackfill.IsServerLinkedParams{
+		McpServerID: typedOnly, OrganizationID: orgID, AuthClientID: existingOffer[0],
+	})
+	require.NoError(t, err)
+	require.True(t, tombstoned, "registration deletion did not retain the unmirrored typed offer's tombstone")
 	require.Empty(t, associatedClients(t, ctx, ti.conn, projectID, serverID))
 	require.Empty(t, offeredAuthClients(t, ctx, ti.conn, serverID),
 		"the consuming organization's link goes with the global client")
 	require.Empty(t, associatedClients(t, ctx, ti.conn, otherProjectID, otherServerID))
 	require.Empty(t, offeredAuthClients(t, ctx, ti.conn, otherServerID),
 		"a second organization on the same global client is reconciled too")
-	bindings, err := fixtures.CountRemoteSessionClientBindingsFixture(ctx, clientID)
-	require.NoError(t, err)
-	require.Zero(t, bindings, "a deleted global client keeps no user session issuer binding")
 }

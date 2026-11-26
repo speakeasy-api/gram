@@ -58,26 +58,6 @@ func (q *Queries) AdminBackdateUserSessionFixture(ctx context.Context, arg Admin
 	return err
 }
 
-const adminBackfillMCPAuthFromConnect = `-- name: AdminBackfillMCPAuthFromConnect :execrows
-INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
-SELECT DISTINCT g.organization_id, g.principal_urn, 'mcp:auth', '{"resource_kind":"mcp_auth_client","resource_id":"*"}'::jsonb
-FROM principal_grants AS g
-WHERE g.scope = 'mcp:connect'
-  AND g.expires_at IS NULL
-ON CONFLICT (organization_id, principal_urn, scope, selectors) DO NOTHING
-`
-
-// Grants unrestricted mcp:auth to every principal holding any mcp:connect
-// grant, whatever its selectors. Temporary grants are skipped: a permanent
-// grant must not be derived from access that ends.
-func (q *Queries) AdminBackfillMCPAuthFromConnect(ctx context.Context) (int64, error) {
-	result, err := q.db.Exec(ctx, adminBackfillMCPAuthFromConnect)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const adminBackfillMCPConnectFromReadWrite = `-- name: AdminBackfillMCPConnectFromReadWrite :one
 WITH locked AS (
   SELECT g.organization_id, g.principal_urn, g.selectors, g.expires_at
@@ -200,6 +180,55 @@ func (q *Queries) AdminBulkUpdateAccountType(ctx context.Context, arg AdminBulkU
 			return nil, err
 		}
 		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminCountOrganizationEncryptionTransitionStates = `-- name: AdminCountOrganizationEncryptionTransitionStates :many
+SELECT
+  COALESCE(t.state, 'platform_key')::text AS state,
+  count(*) AS organizations
+FROM organization_metadata om
+LEFT JOIN organization_encryption_transitions t
+  ON t.organization_id = om.id
+  AND t.use_case = $1
+WHERE NOT $2::boolean
+   OR om.id = ANY($3::text[])
+GROUP BY 1
+ORDER BY 1
+`
+
+type AdminCountOrganizationEncryptionTransitionStatesParams struct {
+	UseCase              string
+	WithValuesOnly       bool
+	ValueOrganizationIds []string
+}
+
+type AdminCountOrganizationEncryptionTransitionStatesRow struct {
+	State         string
+	Organizations int64
+}
+
+// How many organizations are in each transition state for one use case,
+// counting organizations without a row as platform_key. with_values_only
+// counts just the organizations in value_organization_ids, as
+// AdminListOrganizationEncryptionTransitions lists them.
+func (q *Queries) AdminCountOrganizationEncryptionTransitionStates(ctx context.Context, arg AdminCountOrganizationEncryptionTransitionStatesParams) ([]AdminCountOrganizationEncryptionTransitionStatesRow, error) {
+	rows, err := q.db.Query(ctx, adminCountOrganizationEncryptionTransitionStates, arg.UseCase, arg.WithValuesOnly, arg.ValueOrganizationIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminCountOrganizationEncryptionTransitionStatesRow
+	for rows.Next() {
+		var i AdminCountOrganizationEncryptionTransitionStatesRow
+		if err := rows.Scan(&i.State, &i.Organizations); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -870,6 +899,26 @@ func (q *Queries) AdminGetProjectDetailByID(ctx context.Context, id uuid.UUID) (
 	return i, err
 }
 
+const adminGetTailscaleOAuthMigrationOrganization = `-- name: AdminGetTailscaleOAuthMigrationOrganization :one
+SELECT o.id, o.name, o.slug
+FROM organization_metadata AS o
+WHERE o.id = $1
+`
+
+type AdminGetTailscaleOAuthMigrationOrganizationRow struct {
+	ID   string
+	Name string
+	Slug string
+}
+
+// The organization a Tailscale OAuth client migration step targets.
+func (q *Queries) AdminGetTailscaleOAuthMigrationOrganization(ctx context.Context, id string) (AdminGetTailscaleOAuthMigrationOrganizationRow, error) {
+	row := q.db.QueryRow(ctx, adminGetTailscaleOAuthMigrationOrganization, id)
+	var i AdminGetTailscaleOAuthMigrationOrganizationRow
+	err := row.Scan(&i.ID, &i.Name, &i.Slug)
+	return i, err
+}
+
 const adminGetUserSessionIssuer = `-- name: AdminGetUserSessionIssuer :one
 SELECT
     i.id,
@@ -1297,6 +1346,44 @@ func (q *Queries) AdminListCustomerUsageOrganizations(ctx context.Context) ([]Ad
 	return items, nil
 }
 
+const adminListHooksPublishState = `-- name: AdminListHooksPublishState :many
+SELECT
+    p.organization_id,
+    o.slug AS organization_slug,
+    COALESCE(c.published_hooks_version, '')::text AS published_hooks_version
+FROM plugin_github_connections c
+JOIN projects p ON p.id = c.project_id AND p.deleted IS FALSE
+JOIN organization_metadata o ON o.id = p.organization_id
+`
+
+type AdminListHooksPublishStateRow struct {
+	OrganizationID        string
+	OrganizationSlug      string
+	PublishedHooksVersion string
+}
+
+// One row per marketplace repository: its organization and the hooks generator
+// version it last published. Feeds the hooks release progress counts.
+func (q *Queries) AdminListHooksPublishState(ctx context.Context) ([]AdminListHooksPublishStateRow, error) {
+	rows, err := q.db.Query(ctx, adminListHooksPublishState)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListHooksPublishStateRow
+	for rows.Next() {
+		var i AdminListHooksPublishStateRow
+		if err := rows.Scan(&i.OrganizationID, &i.OrganizationSlug, &i.PublishedHooksVersion); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const adminListIssuerRemoteSessionClients = `-- name: AdminListIssuerRemoteSessionClients :many
 SELECT
     c.id,
@@ -1323,12 +1410,26 @@ SELECT
     r.metadata_fetched_at AS issuer_metadata_fetched_at,
     r.metadata_last_error_at AS issuer_metadata_last_error_at,
     r.jwks_last_error_at AS issuer_jwks_last_error_at
-FROM remote_session_client_user_session_issuers a
-JOIN remote_session_clients c ON c.id = a.remote_session_client_id AND c.deleted IS FALSE
+FROM user_session_issuers AS usi
+JOIN remote_session_clients AS c ON c.deleted IS FALSE AND (
+  c.id = usi.trusted_remote_session_client_id OR EXISTS (
+    SELECT 1 FROM remote_sessions AS s
+    WHERE s.remote_session_client_id = c.id AND s.user_session_issuer_id = usi.id
+      AND s.deleted IS FALSE
+  )
+)
 JOIN remote_session_issuers r ON r.id = c.remote_session_issuer_id AND r.deleted IS FALSE
-WHERE a.user_session_issuer_id = $1
+WHERE usi.id = $1
+  AND (c.project_id = $2::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $3::text)))
+  AND (r.project_id = $2::uuid OR (r.project_id IS NULL AND (r.organization_id IS NULL OR r.organization_id = $3::text)))
 ORDER BY c.created_at, c.id
 `
+
+type AdminListIssuerRemoteSessionClientsParams struct {
+	UserSessionIssuerID uuid.UUID
+	ProjectID           uuid.UUID
+	OrganizationID      string
+}
 
 type AdminListIssuerRemoteSessionClientsRow struct {
 	ID                                  uuid.UUID
@@ -1357,11 +1458,11 @@ type AdminListIssuerRemoteSessionClientsRow struct {
 	IssuerJwksLastErrorAt               pgtype.Timestamptz
 }
 
-// Live remote session clients attached to the issuer, with their upstream
-// issuer. Only the columns the health report exposes: no secrets, JWKS bodies
-// or error text.
-func (q *Queries) AdminListIssuerRemoteSessionClients(ctx context.Context, userSessionIssuerID uuid.UUID) ([]AdminListIssuerRemoteSessionClientsRow, error) {
-	rows, err := q.db.Query(ctx, adminListIssuerRemoteSessionClients, userSessionIssuerID)
+// Live registrations with consent provenance under this downstream issuer,
+// or used directly for its trusted login. Offered clients are reported by the
+// separate upstream authentication section. Never expose secrets or errors.
+func (q *Queries) AdminListIssuerRemoteSessionClients(ctx context.Context, arg AdminListIssuerRemoteSessionClientsParams) ([]AdminListIssuerRemoteSessionClientsRow, error) {
+	rows, err := q.db.Query(ctx, adminListIssuerRemoteSessionClients, arg.UserSessionIssuerID, arg.ProjectID, arg.OrganizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -1588,6 +1689,134 @@ func (q *Queries) AdminListOrganizationAssistants(ctx context.Context, organizat
 			&i.CreatedByUserEmail,
 			&i.CreatorActive,
 			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminListOrganizationEncryptionTransitions = `-- name: AdminListOrganizationEncryptionTransitions :many
+WITH organizations_with_values AS (
+  SELECT v.organization_id, v.value_count, v.last_written_at
+  FROM ROWS FROM (
+    unnest($7::text[]),
+    unnest($8::bigint[]),
+    unnest($9::timestamptz[])
+  ) AS v(organization_id, value_count, last_written_at)
+)
+SELECT
+  om.id AS organization_id,
+  om.name,
+  om.slug,
+  (om.disabled_at IS NOT NULL)::boolean AS disabled,
+  COALESCE(t.state, 'platform_key')::text AS state,
+  t.state_changed_at,
+  t.platform_copies_cleared_at,
+  t.last_backfill_started_at,
+  t.last_backfill_completed_at,
+  t.last_backfill_remaining_count,
+  t.last_backfill_unreadable_count,
+  t.last_backfill_error,
+  t.last_verified_at,
+  COALESCE(v.value_count, 0)::bigint AS value_count,
+  v.last_written_at::timestamptz AS last_written_at
+FROM organization_metadata om
+LEFT JOIN organization_encryption_transitions t
+  ON t.organization_id = om.id
+  AND t.use_case = $1
+LEFT JOIN organizations_with_values v ON v.organization_id = om.id
+WHERE (NOT $2::boolean OR v.organization_id IS NOT NULL)
+  AND (
+    $3::text IS NULL
+    OR COALESCE(t.state, 'platform_key') = $3::text
+  )
+ORDER BY
+  CASE WHEN $4::boolean THEN v.last_written_at END DESC NULLS LAST,
+  om.created_at,
+  om.id
+LIMIT $6
+OFFSET $5
+`
+
+type AdminListOrganizationEncryptionTransitionsParams struct {
+	UseCase              string
+	WithValuesOnly       bool
+	State                pgtype.Text
+	SortByLastWritten    bool
+	OffsetValue          int32
+	LimitValue           int32
+	ValueOrganizationIds []string
+	ValueCounts          []int64
+	ValueLastWrittenAt   []pgtype.Timestamptz
+}
+
+type AdminListOrganizationEncryptionTransitionsRow struct {
+	OrganizationID              string
+	Name                        string
+	Slug                        string
+	Disabled                    bool
+	State                       string
+	StateChangedAt              pgtype.Timestamptz
+	PlatformCopiesClearedAt     pgtype.Timestamptz
+	LastBackfillStartedAt       pgtype.Timestamptz
+	LastBackfillCompletedAt     pgtype.Timestamptz
+	LastBackfillRemainingCount  pgtype.Int8
+	LastBackfillUnreadableCount pgtype.Int8
+	LastBackfillError           pgtype.Text
+	LastVerifiedAt              pgtype.Timestamptz
+	ValueCount                  int64
+	LastWrittenAt               pgtype.Timestamptz
+}
+
+// Every organization with its transition state for one use case. An
+// organization without a transition row for the use case is in platform_key,
+// so the LEFT JOIN reports it there and the state filter matches it.
+//
+// The caller reads which organizations have values from the use case's copy
+// stores and passes them as three parallel arrays. with_values_only keeps just
+// those organizations; sort_by_last_written lists the most recently written
+// first, then every other organization oldest first. Pages with LIMIT and
+// OFFSET: the list is staff-only and small.
+func (q *Queries) AdminListOrganizationEncryptionTransitions(ctx context.Context, arg AdminListOrganizationEncryptionTransitionsParams) ([]AdminListOrganizationEncryptionTransitionsRow, error) {
+	rows, err := q.db.Query(ctx, adminListOrganizationEncryptionTransitions,
+		arg.UseCase,
+		arg.WithValuesOnly,
+		arg.State,
+		arg.SortByLastWritten,
+		arg.OffsetValue,
+		arg.LimitValue,
+		arg.ValueOrganizationIds,
+		arg.ValueCounts,
+		arg.ValueLastWrittenAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListOrganizationEncryptionTransitionsRow
+	for rows.Next() {
+		var i AdminListOrganizationEncryptionTransitionsRow
+		if err := rows.Scan(
+			&i.OrganizationID,
+			&i.Name,
+			&i.Slug,
+			&i.Disabled,
+			&i.State,
+			&i.StateChangedAt,
+			&i.PlatformCopiesClearedAt,
+			&i.LastBackfillStartedAt,
+			&i.LastBackfillCompletedAt,
+			&i.LastBackfillRemainingCount,
+			&i.LastBackfillUnreadableCount,
+			&i.LastBackfillError,
+			&i.LastVerifiedAt,
+			&i.ValueCount,
+			&i.LastWrittenAt,
 		); err != nil {
 			return nil, err
 		}
@@ -2332,6 +2561,44 @@ func (q *Queries) AdminListRegistryOktaMappings(ctx context.Context) ([]AdminLis
 	return items, nil
 }
 
+const adminListTailscaleOAuthMigrationOrganizations = `-- name: AdminListTailscaleOAuthMigrationOrganizations :many
+SELECT DISTINCT o.id, o.name, o.slug
+FROM network_ingresses AS n
+JOIN organization_metadata AS o ON o.id = n.organization_id
+WHERE n.credentials_encrypted IS NOT NULL
+   OR n.credentials_org_encrypted IS NOT NULL
+ORDER BY o.name, o.id
+`
+
+type AdminListTailscaleOAuthMigrationOrganizationsRow struct {
+	ID   string
+	Name string
+	Slug string
+}
+
+// Organizations with saved network ingress credentials in either copy,
+// soft-deleted ingresses included, for the temporary Tailscale OAuth client
+// move to organization keys.
+func (q *Queries) AdminListTailscaleOAuthMigrationOrganizations(ctx context.Context) ([]AdminListTailscaleOAuthMigrationOrganizationsRow, error) {
+	rows, err := q.db.Query(ctx, adminListTailscaleOAuthMigrationOrganizations)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListTailscaleOAuthMigrationOrganizationsRow
+	for rows.Next() {
+		var i AdminListTailscaleOAuthMigrationOrganizationsRow
+		if err := rows.Scan(&i.ID, &i.Name, &i.Slug); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const adminListUpstreamOAuthMigrationOrganizations = `-- name: AdminListUpstreamOAuthMigrationOrganizations :many
 WITH reached AS (
     SELECT p.organization_id, s.id AS server_id
@@ -2626,8 +2893,14 @@ SELECT
     min(created_at)::timestamptz AS first_linked_at
 FROM remote_sessions
 WHERE remote_session_client_id = ANY($1::uuid[])
+  AND user_session_issuer_id = $2
 GROUP BY remote_session_client_id
 `
+
+type AdminRemoteSessionStatsParams struct {
+	RemoteSessionClientIds []uuid.UUID
+	UserSessionIssuerID    uuid.UUID
+}
 
 type AdminRemoteSessionStatsRow struct {
 	RemoteSessionClientID uuid.UUID
@@ -2637,11 +2910,10 @@ type AdminRemoteSessionStatsRow struct {
 }
 
 // Per client: distinct users with a live upstream session, fresh
-// authorizations beyond each session's first, and the first link. Keyed on
-// the client alone: a session is one per (subject, client), and its
-// user_session_issuer_id records only which issuer first linked it.
-func (q *Queries) AdminRemoteSessionStats(ctx context.Context, remoteSessionClientIds []uuid.UUID) ([]AdminRemoteSessionStatsRow, error) {
-	rows, err := q.db.Query(ctx, adminRemoteSessionStats, remoteSessionClientIds)
+// authorizations beyond each session's first, and the first link. Scope
+// the stats to this downstream issuer's recorded consent provenance.
+func (q *Queries) AdminRemoteSessionStats(ctx context.Context, arg AdminRemoteSessionStatsParams) ([]AdminRemoteSessionStatsRow, error) {
+	rows, err := q.db.Query(ctx, adminRemoteSessionStats, arg.RemoteSessionClientIds, arg.UserSessionIssuerID)
 	if err != nil {
 		return nil, err
 	}
@@ -2672,10 +2944,16 @@ SELECT
     count(*)::bigint AS sessions
 FROM remote_sessions
 WHERE remote_session_client_id = ANY($1::uuid[])
+  AND user_session_issuer_id = $2
   AND deleted IS FALSE
   AND validation_status IS NOT NULL
 GROUP BY remote_session_client_id, validation_status
 `
+
+type AdminRemoteSessionValidationCountsParams struct {
+	RemoteSessionClientIds []uuid.UUID
+	UserSessionIssuerID    uuid.UUID
+}
 
 type AdminRemoteSessionValidationCountsRow struct {
 	RemoteSessionClientID uuid.UUID
@@ -2684,10 +2962,10 @@ type AdminRemoteSessionValidationCountsRow struct {
 }
 
 // Live sessions per client and last validation status. Sessions never
-// validated have a NULL status and are left out. Keyed on the client alone,
-// as AdminRemoteSessionStats is.
-func (q *Queries) AdminRemoteSessionValidationCounts(ctx context.Context, remoteSessionClientIds []uuid.UUID) ([]AdminRemoteSessionValidationCountsRow, error) {
-	rows, err := q.db.Query(ctx, adminRemoteSessionValidationCounts, remoteSessionClientIds)
+// validated have a NULL status and are left out. Use the same provenance
+// scope as AdminRemoteSessionStats.
+func (q *Queries) AdminRemoteSessionValidationCounts(ctx context.Context, arg AdminRemoteSessionValidationCountsParams) ([]AdminRemoteSessionValidationCountsRow, error) {
+	rows, err := q.db.Query(ctx, adminRemoteSessionValidationCounts, arg.RemoteSessionClientIds, arg.UserSessionIssuerID)
 	if err != nil {
 		return nil, err
 	}

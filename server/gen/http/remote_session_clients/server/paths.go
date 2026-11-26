@@ -37,16 +37,6 @@ func UpdateRemoteSessionClientRemoteSessionClientsPath() string {
 	return "/rpc/remoteSessionClients.update"
 }
 
-// AttachUserSessionIssuerRemoteSessionClientsPath returns the URL path to the remoteSessionClients service attachUserSessionIssuer HTTP endpoint.
-func AttachUserSessionIssuerRemoteSessionClientsPath() string {
-	return "/rpc/remoteSessionClients.attachUserSessionIssuer"
-}
-
-// DetachUserSessionIssuerRemoteSessionClientsPath returns the URL path to the remoteSessionClients service detachUserSessionIssuer HTTP endpoint.
-func DetachUserSessionIssuerRemoteSessionClientsPath() string {
-	return "/rpc/remoteSessionClients.detachUserSessionIssuer"
-}
-
 // AttachKeySetRemoteSessionClientsPath returns the URL path to the remoteSessionClients service attachKeySet HTTP endpoint.
 func AttachKeySetRemoteSessionClientsPath() string {
 	return "/rpc/remoteSessionClients.attachKeySet"

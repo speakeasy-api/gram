@@ -45,7 +45,11 @@ import {
 } from "./format";
 import { ProblemDetailSheet } from "./ProblemDetailSheet";
 import { SummaryPanel, type SummaryMetric } from "./SummaryPanel";
-import { SIGN_IN_PROBLEMS_RULE, SuspectedProblems } from "./SuspectedProblems";
+import {
+  ServiceProblemsNote,
+  SIGN_IN_PROBLEMS_RULE,
+  SuspectedProblems,
+} from "./SuspectedProblems";
 import {
   SIGN_IN_STEPS,
   type ActiveKillswitch,
@@ -74,7 +78,7 @@ const SIGN_IN_ACTIVITY_FILTERS: AttemptFilters = {
   steps: [...SIGN_IN_STEPS],
 };
 
-/** MCP Sessions › Overview: how sign-in through this provider is going. */
+/** MCP Sign-in › Overview: how sign-in through this MCP sign-in is going. */
 export function OverviewTab({
   provider,
 }: {
@@ -99,13 +103,6 @@ export function OverviewTab({
   const setParam = useSetSearchParam(SHEET_PARAMS);
 
   const problems = useSuspectedProblems(scope, "speakeasy");
-  // A problem link opens here only for a problem this page lists.
-  const problemParam = searchParams.get(PROBLEM_PARAM);
-  const listedProblemId = problems.data?.problems?.some(
-    (p) => p.id === problemParam,
-  )
-    ? problemParam
-    : null;
   const killswitches = useActiveKillswitches();
   const denied = useDeniedClients(scope, window);
   const activity = useConnectionAttempts(
@@ -121,36 +118,22 @@ export function OverviewTab({
   const activeKillswitches = killswitches.killswitches;
   const activityPage = activity.data?.pages[0];
   const activityRows = activityPage?.attempts ?? [];
-  // Problems name other people, so only viewers who read everyone's attempts see them.
-  const showProblems =
-    activityPage?.loggingEnabled === true && activityPage.viewerScope === "all";
 
   return (
     <div className="space-y-10 pb-8">
-      <div className="space-y-3">
-        {!showProblems ? null : problems.isPending ? (
-          <Skeleton className="h-40 w-full" />
-        ) : (
-          <SuspectedProblems
-            problems={problems.data?.problems ?? []}
-            now={now}
-            onOpen={(problem) => setParam(PROBLEM_PARAM, problem.id)}
-            rule={SIGN_IN_PROBLEMS_RULE}
+      <SuspectedProblems
+        query={problems}
+        now={now}
+        onOpen={(problem) => setParam(PROBLEM_PARAM, problem.id)}
+        rule={SIGN_IN_PROBLEMS_RULE}
+        note={
+          <ServiceProblemsNote
+            serversHref={routes.mcpSessions.provider.mcpServers.href(
+              providerId,
+            )}
           />
-        )}
-
-        <p className="text-muted-foreground text-sm">
-          Problems with a service show on the page of each MCP server that uses
-          it, under{" "}
-          <Link
-            to={routes.mcpSessions.provider.mcpServers.href(providerId)}
-            className="text-foreground underline-offset-4 hover:underline"
-          >
-            MCP servers
-          </Link>
-          .
-        </p>
-      </div>
+        }
+      />
 
       {activityPage?.viewerScope === "own" ? <OwnAttemptsNotice /> : null}
 
@@ -228,7 +211,7 @@ export function OverviewTab({
 
       <OverviewSection
         title="Sign-in activity"
-        description="Latest first. MCP sign-ins and renewals through this provider."
+        description="Latest first. Sign-ins and renewals."
         action={
           <ArrowLink
             to={logsHref(
@@ -251,7 +234,7 @@ export function OverviewTab({
           </p>
         ) : activityRows.length === 0 ? (
           <p className="text-muted-foreground border px-4 py-6 text-sm">
-            No MCP sign-ins or renewals in the last 30 days.
+            No sign-ins or renewals in the last 30 days.
           </p>
         ) : (
           <AttemptsTable
@@ -276,7 +259,7 @@ export function OverviewTab({
         onClose={() => setParam(ATTEMPT_PARAM, null)}
       />
       <ProblemDetailSheet
-        id={showProblems ? listedProblemId : null}
+        id={searchParams.get(PROBLEM_PARAM)}
         providerId={providerId}
         now={now}
         onClose={() => setParam(PROBLEM_PARAM, null)}
@@ -398,7 +381,7 @@ function KillswitchesInForce({
   return (
     <OverviewSection
       title={`Killswitches in force · ${killswitches.length}${hasMore ? "+" : ""}`}
-      description="Across this organization, not only this provider. They block tool calls right now."
+      description="Across this organization, not only this MCP sign-in. They block tool calls right now."
       action={<ArrowLink to={orgRoutes.killswitch.href()}>View all</ArrowLink>}
     >
       <Table columns={columns} data={killswitches} rowKey={(k) => k.id} />
@@ -510,7 +493,7 @@ function Configuration({
   return (
     <OverviewSection
       title="Configuration"
-      description="How people sign in through this provider."
+      description="How people sign in here."
       action={
         <Link
           to={settingsHref}

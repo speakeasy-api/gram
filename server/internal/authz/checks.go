@@ -76,7 +76,9 @@ func RequiredCheckDimensions(resourceKind string) []string {
 }
 
 // validateCheckDimensions rejects dimension values no concrete request can
-// carry: an empty string, the wildcard and the represented-user marker.
+// carry: an empty string, the wildcard, the represented-user marker and a
+// disposition the registry does not know. A block limited to one disposition
+// would never match an unknown one.
 func validateCheckDimensions(c Check) error {
 	for key, value := range c.Dimensions {
 		switch value {
@@ -84,6 +86,9 @@ func validateCheckDimensions(c Check) error {
 			return invalidCheckReason(c.Scope, c.ResourceID, "dimension "+key+" is empty")
 		case WildcardResource, SelectorValueRepresentedUser:
 			return invalidCheckReason(c.Scope, c.ResourceID, "dimension "+key+" must be concrete")
+		}
+		if key == SelectorKeyDisposition && !validDispositions[value] {
+			return invalidCheckReason(c.Scope, c.ResourceID, "unknown disposition "+value)
 		}
 	}
 	return nil
