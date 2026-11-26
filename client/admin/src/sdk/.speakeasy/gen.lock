@@ -1470,7 +1470,7 @@ examples:
     speakeasy-default-admin-get-secret-backfills:
       responses:
         "200":
-          application/json: {"marketplace_tokens": {"attributed": 577338, "hashed": 349585, "legacy": 897174, "moved": 694709, "needs_organization_key": 280932, "skipped": 636392, "unattributed": 818844}, "organizations": [{"legacy_tokens": 349585, "name": "<value>", "organization_id": "<id>", "pending_runner_keys": 897174, "slug": "<value>", "unattributed_connections": 694709}], "runner_key_organizations": {"filled": 892047, "missing_organization": 60158, "pending": 525491}}
+          application/json: {"marketplace_tokens": {"attributed": 577338, "hashed": 349585, "legacy": 897174, "missing_organization": 577338, "moved": 694709, "needs_organization_key": 280932, "skipped": 636392, "unattributed": 818844}, "organizations": [{"legacy_tokens": 349585, "name": "<value>", "organization_id": "<id>", "pending_runner_keys": 897174, "slug": "<value>", "unattributed_connections": 694709}], "runner_key_organizations": {"filled": 892047, "missing_organization": 60158, "pending": 525491}}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -2073,7 +2073,7 @@ examples:
         application/json: {"platform_key_fingerprint": "<value>"}
       responses:
         "200":
-          application/json: {"attributed": 137126, "hashed": 663633, "legacy": 177938, "moved": 498449, "needs_organization_key": 520734, "skipped": 958932, "unattributed": 16927}
+          application/json: {"attributed": 137126, "hashed": 663633, "legacy": 177938, "missing_organization": 137126, "moved": 498449, "needs_organization_key": 520734, "skipped": 958932, "unattributed": 16927}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

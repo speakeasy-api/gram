@@ -115,8 +115,8 @@ func parseMarketplaceTokensFlags(args []string, getenv func(string) string) (mar
 }
 
 func formatMarketplaceTokensReport(mode, environment string, report marketplacetokenbackfill.Report) string {
-	return fmt.Sprintf("mode=%s environment=%s attributed=%d moved=%d skipped=%d needs_organization_key=%d unattributed=%d legacy=%d hashed=%d\n",
-		mode, environment, report.Attributed, report.Moved, report.Skipped, report.NeedsOrganizationKey, report.Counts.Unattributed, report.Counts.Legacy, report.Counts.Hashed)
+	return fmt.Sprintf("mode=%s environment=%s attributed=%d moved=%d skipped=%d needs_organization_key=%d unattributed=%d legacy=%d hashed=%d missing_organization=%d\n",
+		mode, environment, report.Attributed, report.Moved, report.Skipped, report.NeedsOrganizationKey, report.Counts.Unattributed, report.Counts.Legacy, report.Counts.Hashed, report.Counts.MissingOrganization)
 }
 
 func runMarketplaceTokens(args []string, stdout io.Writer, getenv func(string) string) int {

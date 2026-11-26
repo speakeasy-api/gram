@@ -96,13 +96,20 @@ LIMIT @limit_value;
 -- name: CountMarketplaceTokenBackfill :one
 -- What the backfill has left to do across every organization, or in one
 -- organization when organization_id is set. A connection without an
--- organization_id belongs to its project's organization.
+-- organization_id belongs to its project's organization. A connection whose
+-- project's organization has no metadata row counts only as
+-- missing_organization: the backfill can neither attribute it nor move its
+-- plaintext token. projects.organization_id has no foreign key, so such a
+-- project can exist; a connection with an organization_id always has a
+-- metadata row, through plugin_github_connections_organization_id_fkey.
 SELECT
-    COUNT(*) FILTER (WHERE c.organization_id IS NULL)::bigint AS unattributed,
-    COUNT(*) FILTER (WHERE c.marketplace_token IS NOT NULL)::bigint AS legacy,
-    COUNT(*) FILTER (WHERE c.marketplace_token_hash IS NOT NULL)::bigint AS hashed
+    COUNT(*) FILTER (WHERE c.organization_id IS NULL AND om.id IS NOT NULL)::bigint AS unattributed,
+    COUNT(*) FILTER (WHERE c.marketplace_token IS NOT NULL AND om.id IS NOT NULL)::bigint AS legacy,
+    COUNT(*) FILTER (WHERE c.marketplace_token_hash IS NOT NULL)::bigint AS hashed,
+    COUNT(*) FILTER (WHERE om.id IS NULL)::bigint AS missing_organization
 FROM plugin_github_connections AS c
 LEFT JOIN projects AS p ON p.id = c.project_id
+LEFT JOIN organization_metadata AS om ON om.id = p.organization_id
 WHERE sqlc.narg('organization_id')::text IS NULL
    OR COALESCE(c.organization_id, p.organization_id) = sqlc.narg('organization_id')::text;
 

@@ -214,10 +214,12 @@ export function SecretBackfillsPage(): JSX.Element {
               title="Marketplace tokens"
               description="Gives each GitHub connection its project's organization, then replaces each plaintext marketplace token with its hash and an encrypted copy."
               status={
-                data.marketplaceTokens.legacy === 0 &&
-                data.marketplaceTokens.unattributed === 0
-                  ? "done"
-                  : "todo"
+                data.marketplaceTokens.legacy > 0 ||
+                data.marketplaceTokens.unattributed > 0
+                  ? "todo"
+                  : data.marketplaceTokens.missingOrganization > 0
+                    ? "attention"
+                    : "done"
               }
               counts={[
                 ["Tokens still in plaintext", data.marketplaceTokens.legacy],
@@ -226,6 +228,10 @@ export function SecretBackfillsPage(): JSX.Element {
                   data.marketplaceTokens.unattributed,
                 ],
                 ["Tokens already hashed", data.marketplaceTokens.hashed],
+                [
+                  "Connections that can't get one",
+                  data.marketplaceTokens.missingOrganization,
+                ],
               ]}
               lastRun={lastRun.marketplaceTokens}
               busy={isRunning("marketplaceTokens", undefined)}
@@ -240,6 +246,18 @@ export function SecretBackfillsPage(): JSX.Element {
                 }
               }}
             >
+              {data.marketplaceTokens.missingOrganization > 0 && (
+                <p className="text-destructive text-sm">
+                  {plural(
+                    data.marketplaceTokens.missingOrganization,
+                    "connection belongs",
+                    "connections belong",
+                  )}{" "}
+                  to a project whose organization has no metadata row. Applying
+                  can't give them an organization, and any plaintext token on
+                  them stays. Look into them.
+                </p>
+              )}
               {fingerprint ? (
                 <p className="text-muted-foreground text-sm">
                   Encrypts with platform key{" "}

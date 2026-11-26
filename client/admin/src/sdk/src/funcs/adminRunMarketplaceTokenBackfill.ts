@@ -40,7 +40,7 @@ import { Result } from "../types/fp.js";
  * runMarketplaceTokenBackfill admin
  *
  * @remarks
- * Applies the marketplace token backfill, to one organization or to all: gives each GitHub connection its project's organization, then moves each plaintext marketplace token to its hash and the copies its organization's transition state writes, sealed with this process's platform key. Install URLs do not change. Safe to run again; an interrupted run continues where it stopped. Refused while another run of it is in progress, and when this process's platform key fingerprint is not the one the operator checked.
+ * Applies the marketplace token backfill to one organization or to all: gives each GitHub connection its project's organization, then moves each plaintext marketplace token to its hash and the copies its organization's transition state writes, sealed with this process's platform key. Install URLs do not change. Safe to run again; an interrupted run continues where it stopped. Refused while another run of it is in progress, and when this process's platform key fingerprint is not the one the operator checked.
  */
 export function adminRunMarketplaceTokenBackfill(
   client: GramCore,

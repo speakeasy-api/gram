@@ -38,7 +38,7 @@ func TestSecretBackfillsPreviewThenApplyBoth(t *testing.T) {
 
 	preview, err := svc.GetSecretBackfills(ctx, &gen.GetSecretBackfillsPayload{})
 	require.NoError(t, err)
-	require.Equal(t, &gen.AdminMarketplaceTokenBackfill{Attributed: 0, Moved: 0, Skipped: 0, NeedsOrganizationKey: 0, Unattributed: 1, Legacy: 1, Hashed: 0}, preview.MarketplaceTokens)
+	require.Equal(t, &gen.AdminMarketplaceTokenBackfill{Attributed: 0, Moved: 0, Skipped: 0, NeedsOrganizationKey: 0, Unattributed: 1, Legacy: 1, Hashed: 0, MissingOrganization: 0}, preview.MarketplaceTokens)
 	require.Equal(t, &gen.AdminRunnerKeyOrganizationBackfill{Filled: 0, Pending: 1, MissingOrganization: 0}, preview.RunnerKeyOrganizations)
 	require.Equal(t, []*gen.AdminSecretBackfillOrganization{
 		{OrganizationID: orgID, Name: "secret-backfills", Slug: preview.Organizations[0].Slug, LegacyTokens: 1, UnattributedConnections: 1, PendingRunnerKeys: 1},
@@ -52,7 +52,7 @@ func TestSecretBackfillsPreviewThenApplyBoth(t *testing.T) {
 
 	tokens, err := svc.RunMarketplaceTokenBackfill(ctx, &gen.RunMarketplaceTokenBackfillPayload{PlatformKeyFingerprint: platform.Fingerprint()})
 	require.NoError(t, err)
-	require.Equal(t, &gen.AdminMarketplaceTokenBackfill{Attributed: 1, Moved: 1, Skipped: 0, NeedsOrganizationKey: 0, Unattributed: 0, Legacy: 0, Hashed: 1}, tokens)
+	require.Equal(t, &gen.AdminMarketplaceTokenBackfill{Attributed: 1, Moved: 1, Skipped: 0, NeedsOrganizationKey: 0, Unattributed: 0, Legacy: 0, Hashed: 1, MissingOrganization: 0}, tokens)
 
 	stored, err = pluginsrepo.New(db).GetGitHubConnectionRowFixture(ctx, connectionID)
 	require.NoError(t, err)
@@ -72,7 +72,7 @@ func TestSecretBackfillsPreviewThenApplyBoth(t *testing.T) {
 
 	tokens, err = svc.RunMarketplaceTokenBackfill(ctx, &gen.RunMarketplaceTokenBackfillPayload{PlatformKeyFingerprint: platform.Fingerprint()})
 	require.NoError(t, err)
-	require.Equal(t, &gen.AdminMarketplaceTokenBackfill{Attributed: 0, Moved: 0, Skipped: 0, NeedsOrganizationKey: 0, Unattributed: 0, Legacy: 0, Hashed: 1}, tokens, "running again changes nothing")
+	require.Equal(t, &gen.AdminMarketplaceTokenBackfill{Attributed: 0, Moved: 0, Skipped: 0, NeedsOrganizationKey: 0, Unattributed: 0, Legacy: 0, Hashed: 1, MissingOrganization: 0}, tokens, "running again changes nothing")
 	runnerKeys, err = svc.RunRunnerKeyOrganizationBackfill(ctx, &gen.RunRunnerKeyOrganizationBackfillPayload{})
 	require.NoError(t, err)
 	require.Equal(t, &gen.AdminRunnerKeyOrganizationBackfill{Filled: 0, Pending: 0, MissingOrganization: 0}, runnerKeys, "running again changes nothing")
@@ -102,7 +102,7 @@ func TestSecretBackfillsApplyToOneOrganization(t *testing.T) {
 
 	tokens, err := svc.RunMarketplaceTokenBackfill(ctx, &gen.RunMarketplaceTokenBackfillPayload{OrganizationID: &orgID, PlatformKeyFingerprint: platform.Fingerprint()})
 	require.NoError(t, err)
-	require.Equal(t, &gen.AdminMarketplaceTokenBackfill{Attributed: 1, Moved: 1, Skipped: 0, NeedsOrganizationKey: 0, Unattributed: 0, Legacy: 0, Hashed: 1}, tokens, "the counts cover only that organization")
+	require.Equal(t, &gen.AdminMarketplaceTokenBackfill{Attributed: 1, Moved: 1, Skipped: 0, NeedsOrganizationKey: 0, Unattributed: 0, Legacy: 0, Hashed: 1, MissingOrganization: 0}, tokens, "the counts cover only that organization")
 	runnerKeys, err := svc.RunRunnerKeyOrganizationBackfill(ctx, &gen.RunRunnerKeyOrganizationBackfillPayload{OrganizationID: &orgID})
 	require.NoError(t, err)
 	require.Equal(t, &gen.AdminRunnerKeyOrganizationBackfill{Filled: 1, Pending: 0, MissingOrganization: 0}, runnerKeys, "the counts cover only that organization")
@@ -116,7 +116,7 @@ func TestSecretBackfillsApplyToOneOrganization(t *testing.T) {
 
 	preview, err = svc.GetSecretBackfills(ctx, &gen.GetSecretBackfillsPayload{})
 	require.NoError(t, err)
-	require.Equal(t, &gen.AdminMarketplaceTokenBackfill{Attributed: 0, Moved: 0, Skipped: 0, NeedsOrganizationKey: 0, Unattributed: 1, Legacy: 1, Hashed: 1}, preview.MarketplaceTokens)
+	require.Equal(t, &gen.AdminMarketplaceTokenBackfill{Attributed: 0, Moved: 0, Skipped: 0, NeedsOrganizationKey: 0, Unattributed: 1, Legacy: 1, Hashed: 1, MissingOrganization: 0}, preview.MarketplaceTokens)
 	require.Equal(t, &gen.AdminRunnerKeyOrganizationBackfill{Filled: 0, Pending: 1, MissingOrganization: 0}, preview.RunnerKeyOrganizations)
 	require.Len(t, preview.Organizations, 1)
 	require.Equal(t, otherOrgID, preview.Organizations[0].OrganizationID, "a finished organization leaves the list")

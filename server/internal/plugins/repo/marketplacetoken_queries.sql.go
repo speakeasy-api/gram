@@ -101,28 +101,41 @@ func (q *Queries) ClearMarketplaceTokenPlatformCopies(ctx context.Context, arg C
 
 const countMarketplaceTokenBackfill = `-- name: CountMarketplaceTokenBackfill :one
 SELECT
-    COUNT(*) FILTER (WHERE c.organization_id IS NULL)::bigint AS unattributed,
-    COUNT(*) FILTER (WHERE c.marketplace_token IS NOT NULL)::bigint AS legacy,
-    COUNT(*) FILTER (WHERE c.marketplace_token_hash IS NOT NULL)::bigint AS hashed
+    COUNT(*) FILTER (WHERE c.organization_id IS NULL AND om.id IS NOT NULL)::bigint AS unattributed,
+    COUNT(*) FILTER (WHERE c.marketplace_token IS NOT NULL AND om.id IS NOT NULL)::bigint AS legacy,
+    COUNT(*) FILTER (WHERE c.marketplace_token_hash IS NOT NULL)::bigint AS hashed,
+    COUNT(*) FILTER (WHERE om.id IS NULL)::bigint AS missing_organization
 FROM plugin_github_connections AS c
 LEFT JOIN projects AS p ON p.id = c.project_id
+LEFT JOIN organization_metadata AS om ON om.id = p.organization_id
 WHERE $1::text IS NULL
    OR COALESCE(c.organization_id, p.organization_id) = $1::text
 `
 
 type CountMarketplaceTokenBackfillRow struct {
-	Unattributed int64
-	Legacy       int64
-	Hashed       int64
+	Unattributed        int64
+	Legacy              int64
+	Hashed              int64
+	MissingOrganization int64
 }
 
 // What the backfill has left to do across every organization, or in one
 // organization when organization_id is set. A connection without an
-// organization_id belongs to its project's organization.
+// organization_id belongs to its project's organization. A connection whose
+// project's organization has no metadata row counts only as
+// missing_organization: the backfill can neither attribute it nor move its
+// plaintext token. projects.organization_id has no foreign key, so such a
+// project can exist; a connection with an organization_id always has a
+// metadata row, through plugin_github_connections_organization_id_fkey.
 func (q *Queries) CountMarketplaceTokenBackfill(ctx context.Context, organizationID pgtype.Text) (CountMarketplaceTokenBackfillRow, error) {
 	row := q.db.QueryRow(ctx, countMarketplaceTokenBackfill, organizationID)
 	var i CountMarketplaceTokenBackfillRow
-	err := row.Scan(&i.Unattributed, &i.Legacy, &i.Hashed)
+	err := row.Scan(
+		&i.Unattributed,
+		&i.Legacy,
+		&i.Hashed,
+		&i.MissingOrganization,
+	)
 	return i, err
 }
 

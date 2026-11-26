@@ -379,7 +379,7 @@ type Service interface {
 	// Previews the temporary secret backfills: what applying each would change
 	// now. Writes nothing.
 	GetSecretBackfills(context.Context, *GetSecretBackfillsPayload) (res *AdminSecretBackfills, err error)
-	// Applies the marketplace token backfill, to one organization or to all: gives
+	// Applies the marketplace token backfill to one organization or to all: gives
 	// each GitHub connection its project's organization, then moves each plaintext
 	// marketplace token to its hash and the copies its organization's transition
 	// state writes, sealed with this process's platform key. Install URLs do not
@@ -387,7 +387,7 @@ type Service interface {
 	// Refused while another run of it is in progress, and when this process's
 	// platform key fingerprint is not the one the operator checked.
 	RunMarketplaceTokenBackfill(context.Context, *RunMarketplaceTokenBackfillPayload) (res *AdminMarketplaceTokenBackfill, err error)
-	// Applies the runner key organization backfill, to one organization or to all:
+	// Applies the runner key organization backfill to one organization or to all:
 	// sets functions_access.organization_id from each runner key's project, in
 	// batches that each commit on their own. Runner keys and deployed function
 	// runners do not change. Safe to run again; an interrupted run continues where
@@ -1252,13 +1252,18 @@ type AdminMarketplaceTokenBackfill struct {
 	// Plaintext tokens left in place because their organization's transition state
 	// needs organization encryption this process does not have. Zero in a preview.
 	NeedsOrganizationKey int64
-	// Connections without an organization. After an apply, these are connections
-	// whose project's organization has no metadata row.
+	// Connections without an organization whose project's organization exists. An
+	// apply gives these one.
 	Unattributed int64
-	// Connections that still hold a plaintext token.
+	// Connections that still hold a plaintext token, not counting those in
+	// missing_organization.
 	Legacy int64
 	// Connections whose token is stored as a hash and sealed copies.
 	Hashed int64
+	// Connections whose project's organization has no metadata row. An apply can't
+	// give them an organization or move their plaintext token, so they stay as
+	// they are.
+	MissingOrganization int64
 }
 
 // MCP server surfaced to admin operators. Covers both server models:

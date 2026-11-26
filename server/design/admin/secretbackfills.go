@@ -8,15 +8,16 @@ import (
 
 var AdminMarketplaceTokenBackfill = Type("AdminMarketplaceTokenBackfill", func() {
 	Description("The plugin marketplace token backfill: gives each GitHub connection its project's organization, and moves each plaintext marketplace token to its hash and a sealed copy. The counts cover every organization, or only the one a run covered.")
-	Required("attributed", "moved", "skipped", "needs_organization_key", "unattributed", "legacy", "hashed")
+	Required("attributed", "moved", "skipped", "needs_organization_key", "unattributed", "legacy", "hashed", "missing_organization")
 
 	Attribute("attributed", Int64, "Connections this run gave an organization. Zero in a preview.")
 	Attribute("moved", Int64, "Plaintext tokens this run moved. Zero in a preview.")
 	Attribute("skipped", Int64, "Plaintext tokens that changed between the read and the write, such as when another run moved them first. Zero in a preview.")
 	Attribute("needs_organization_key", Int64, "Plaintext tokens left in place because their organization's transition state needs organization encryption this process does not have. Zero in a preview.")
-	Attribute("unattributed", Int64, "Connections without an organization. After an apply, these are connections whose project's organization has no metadata row.")
-	Attribute("legacy", Int64, "Connections that still hold a plaintext token.")
+	Attribute("unattributed", Int64, "Connections without an organization whose project's organization exists. An apply gives these one.")
+	Attribute("legacy", Int64, "Connections that still hold a plaintext token, not counting those in missing_organization.")
 	Attribute("hashed", Int64, "Connections whose token is stored as a hash and sealed copies.")
+	Attribute("missing_organization", Int64, "Connections whose project's organization has no metadata row. An apply can't give them an organization or move their plaintext token, so they stay as they are.")
 })
 
 var AdminRunnerKeyOrganizationBackfill = Type("AdminRunnerKeyOrganizationBackfill", func() {
@@ -74,7 +75,7 @@ func secretBackfillMethods() {
 	})
 
 	Method("runMarketplaceTokenBackfill", func() {
-		Description("Applies the marketplace token backfill, to one organization or to all: gives each GitHub connection its project's organization, then moves each plaintext marketplace token to its hash and the copies its organization's transition state writes, sealed with this process's platform key. Install URLs do not change. Safe to run again; an interrupted run continues where it stopped. Refused while another run of it is in progress, and when this process's platform key fingerprint is not the one the operator checked.")
+		Description("Applies the marketplace token backfill to one organization or to all: gives each GitHub connection its project's organization, then moves each plaintext marketplace token to its hash and the copies its organization's transition state writes, sealed with this process's platform key. Install URLs do not change. Safe to run again; an interrupted run continues where it stopped. Refused while another run of it is in progress, and when this process's platform key fingerprint is not the one the operator checked.")
 
 		Payload(func() {
 			security.AdminAuthPayload()
@@ -102,7 +103,7 @@ func secretBackfillMethods() {
 	})
 
 	Method("runRunnerKeyOrganizationBackfill", func() {
-		Description("Applies the runner key organization backfill, to one organization or to all: sets functions_access.organization_id from each runner key's project, in batches that each commit on their own. Runner keys and deployed function runners do not change. Safe to run again; an interrupted run continues where it stopped. Refused while another run of it is in progress.")
+		Description("Applies the runner key organization backfill to one organization or to all: sets functions_access.organization_id from each runner key's project, in batches that each commit on their own. Runner keys and deployed function runners do not change. Safe to run again; an interrupted run continues where it stopped. Refused while another run of it is in progress.")
 
 		Payload(func() {
 			security.AdminAuthPayload()

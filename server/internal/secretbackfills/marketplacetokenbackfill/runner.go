@@ -39,17 +39,24 @@ type Mover interface {
 
 // Counts classifies every GitHub connection, without naming organizations.
 type Counts struct {
-	// Unattributed is the number of connections without an organization_id.
-	// After an apply, these are connections whose project's organization has
-	// no metadata row.
+	// Unattributed is the number of connections without an organization_id
+	// whose project's organization has a metadata row. An apply attributes
+	// them.
 	Unattributed int64
 
-	// Legacy is the number of connections that still hold a plaintext token.
+	// Legacy is the number of those connections that still hold a plaintext
+	// token. An apply moves them, unless their organization needs
+	// organization encryption.
 	Legacy int64
 
 	// Hashed is the number of connections whose token is stored as a hash
 	// and sealed copies.
 	Hashed int64
+
+	// MissingOrganization is the number of connections whose project's
+	// organization has no metadata row. An apply can neither attribute them
+	// nor move their plaintext token, so they stay as they are.
+	MissingOrganization int64
 }
 
 // Organization is one organization the backfill has work left in.
@@ -99,7 +106,7 @@ type Report struct {
 func Run(ctx context.Context, db *pgxpool.Pool, tokens Mover, opts Options) (Report, error) {
 	q := repo.New(db)
 	organizationID := conv.ToPGTextEmpty(opts.OrganizationID)
-	report := Report{Attributed: 0, Moved: 0, Skipped: 0, NeedsOrganizationKey: 0, Counts: Counts{Unattributed: 0, Legacy: 0, Hashed: 0}}
+	report := Report{Attributed: 0, Moved: 0, Skipped: 0, NeedsOrganizationKey: 0, Counts: Counts{Unattributed: 0, Legacy: 0, Hashed: 0, MissingOrganization: 0}}
 
 	if opts.Apply {
 		for {
@@ -152,7 +159,7 @@ func Run(ctx context.Context, db *pgxpool.Pool, tokens Mover, opts Options) (Rep
 	if err != nil {
 		return report, fmt.Errorf("count connections: %w", err)
 	}
-	report.Counts = Counts{Unattributed: counts.Unattributed, Legacy: counts.Legacy, Hashed: counts.Hashed}
+	report.Counts = Counts{Unattributed: counts.Unattributed, Legacy: counts.Legacy, Hashed: counts.Hashed, MissingOrganization: counts.MissingOrganization}
 
 	return report, nil
 }

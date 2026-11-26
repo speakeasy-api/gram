@@ -228,6 +228,7 @@ func marketplaceTokenBackfillView(report marketplacetokenbackfill.Report) *gen.A
 		Unattributed:         report.Counts.Unattributed,
 		Legacy:               report.Counts.Legacy,
 		Hashed:               report.Counts.Hashed,
+		MissingOrganization:  report.Counts.MissingOrganization,
 	}
 }
 

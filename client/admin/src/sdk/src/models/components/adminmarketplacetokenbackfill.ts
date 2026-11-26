@@ -21,9 +21,13 @@ export type AdminMarketplaceTokenBackfill = {
    */
   hashed: number;
   /**
-   * Connections that still hold a plaintext token.
+   * Connections that still hold a plaintext token, not counting those in missing_organization.
    */
   legacy: number;
+  /**
+   * Connections whose project's organization has no metadata row. An apply can't give them an organization or move their plaintext token, so they stay as they are.
+   */
+  missingOrganization: number;
   /**
    * Plaintext tokens this run moved. Zero in a preview.
    */
@@ -37,7 +41,7 @@ export type AdminMarketplaceTokenBackfill = {
    */
   skipped: number;
   /**
-   * Connections without an organization. After an apply, these are connections whose project's organization has no metadata row.
+   * Connections without an organization whose project's organization exists. An apply gives these one.
    */
   unattributed: number;
 };
@@ -51,6 +55,7 @@ export const AdminMarketplaceTokenBackfill$inboundSchema: z.ZodMiniType<
     attributed: z.int(),
     hashed: z.int(),
     legacy: z.int(),
+    missing_organization: z.int(),
     moved: z.int(),
     needs_organization_key: z.int(),
     skipped: z.int(),
@@ -58,6 +63,7 @@ export const AdminMarketplaceTokenBackfill$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "missing_organization": "missingOrganization",
       "needs_organization_key": "needsOrganizationKey",
     });
   }),

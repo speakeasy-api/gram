@@ -2279,7 +2279,7 @@ export class Admin extends ClientSDK {
    * runMarketplaceTokenBackfill admin
    *
    * @remarks
-   * Applies the marketplace token backfill, to one organization or to all: gives each GitHub connection its project's organization, then moves each plaintext marketplace token to its hash and the copies its organization's transition state writes, sealed with this process's platform key. Install URLs do not change. Safe to run again; an interrupted run continues where it stopped. Refused while another run of it is in progress, and when this process's platform key fingerprint is not the one the operator checked.
+   * Applies the marketplace token backfill to one organization or to all: gives each GitHub connection its project's organization, then moves each plaintext marketplace token to its hash and the copies its organization's transition state writes, sealed with this process's platform key. Install URLs do not change. Safe to run again; an interrupted run continues where it stopped. Refused while another run of it is in progress, and when this process's platform key fingerprint is not the one the operator checked.
    */
   async runMarketplaceTokenBackfill(
     request: RunMarketplaceTokenBackfillRequestBody,
@@ -2296,7 +2296,7 @@ export class Admin extends ClientSDK {
    * runRunnerKeyOrganizationBackfill admin
    *
    * @remarks
-   * Applies the runner key organization backfill, to one organization or to all: sets functions_access.organization_id from each runner key's project, in batches that each commit on their own. Runner keys and deployed function runners do not change. Safe to run again; an interrupted run continues where it stopped. Refused while another run of it is in progress.
+   * Applies the runner key organization backfill to one organization or to all: sets functions_access.organization_id from each runner key's project, in batches that each commit on their own. Runner keys and deployed function runners do not change. Safe to run again; an interrupted run continues where it stopped. Refused while another run of it is in progress.
    */
   async runRunnerKeyOrganizationBackfill(
     request: RunRunnerKeyOrganizationBackfillRequestBody,

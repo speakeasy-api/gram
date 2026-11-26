@@ -3215,13 +3215,18 @@ type RunMarketplaceTokenBackfillResponseBody struct {
 	// Plaintext tokens left in place because their organization's transition state
 	// needs organization encryption this process does not have. Zero in a preview.
 	NeedsOrganizationKey *int64 `form:"needs_organization_key,omitempty" json:"needs_organization_key,omitempty" xml:"needs_organization_key,omitempty"`
-	// Connections without an organization. After an apply, these are connections
-	// whose project's organization has no metadata row.
+	// Connections without an organization whose project's organization exists. An
+	// apply gives these one.
 	Unattributed *int64 `form:"unattributed,omitempty" json:"unattributed,omitempty" xml:"unattributed,omitempty"`
-	// Connections that still hold a plaintext token.
+	// Connections that still hold a plaintext token, not counting those in
+	// missing_organization.
 	Legacy *int64 `form:"legacy,omitempty" json:"legacy,omitempty" xml:"legacy,omitempty"`
 	// Connections whose token is stored as a hash and sealed copies.
 	Hashed *int64 `form:"hashed,omitempty" json:"hashed,omitempty" xml:"hashed,omitempty"`
+	// Connections whose project's organization has no metadata row. An apply can't
+	// give them an organization or move their plaintext token, so they stay as
+	// they are.
+	MissingOrganization *int64 `form:"missing_organization,omitempty" json:"missing_organization,omitempty" xml:"missing_organization,omitempty"`
 }
 
 // RunRunnerKeyOrganizationBackfillResponseBody is the type of the "admin"
@@ -32444,13 +32449,18 @@ type AdminMarketplaceTokenBackfillResponseBody struct {
 	// Plaintext tokens left in place because their organization's transition state
 	// needs organization encryption this process does not have. Zero in a preview.
 	NeedsOrganizationKey *int64 `form:"needs_organization_key,omitempty" json:"needs_organization_key,omitempty" xml:"needs_organization_key,omitempty"`
-	// Connections without an organization. After an apply, these are connections
-	// whose project's organization has no metadata row.
+	// Connections without an organization whose project's organization exists. An
+	// apply gives these one.
 	Unattributed *int64 `form:"unattributed,omitempty" json:"unattributed,omitempty" xml:"unattributed,omitempty"`
-	// Connections that still hold a plaintext token.
+	// Connections that still hold a plaintext token, not counting those in
+	// missing_organization.
 	Legacy *int64 `form:"legacy,omitempty" json:"legacy,omitempty" xml:"legacy,omitempty"`
 	// Connections whose token is stored as a hash and sealed copies.
 	Hashed *int64 `form:"hashed,omitempty" json:"hashed,omitempty" xml:"hashed,omitempty"`
+	// Connections whose project's organization has no metadata row. An apply can't
+	// give them an organization or move their plaintext token, so they stay as
+	// they are.
+	MissingOrganization *int64 `form:"missing_organization,omitempty" json:"missing_organization,omitempty" xml:"missing_organization,omitempty"`
 }
 
 // AdminRunnerKeyOrganizationBackfillResponseBody is used to define fields on
@@ -52769,6 +52779,7 @@ func NewRunMarketplaceTokenBackfillAdminMarketplaceTokenBackfillOK(body *RunMark
 		Unattributed:         *body.Unattributed,
 		Legacy:               *body.Legacy,
 		Hashed:               *body.Hashed,
+		MissingOrganization:  *body.MissingOrganization,
 	}
 
 	return v
@@ -62264,6 +62275,9 @@ func ValidateRunMarketplaceTokenBackfillResponseBody(body *RunMarketplaceTokenBa
 	}
 	if body.Hashed == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("hashed", "body"))
+	}
+	if body.MissingOrganization == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("missing_organization", "body"))
 	}
 	return
 }
@@ -100848,6 +100862,9 @@ func ValidateAdminMarketplaceTokenBackfillResponseBody(body *AdminMarketplaceTok
 	}
 	if body.Hashed == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("hashed", "body"))
+	}
+	if body.MissingOrganization == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("missing_organization", "body"))
 	}
 	return
 }

@@ -51,7 +51,7 @@ export type AdminRunRunnerKeyOrganizationBackfillMutationError =
  * runRunnerKeyOrganizationBackfill admin
  *
  * @remarks
- * Applies the runner key organization backfill, to one organization or to all: sets functions_access.organization_id from each runner key's project, in batches that each commit on their own. Runner keys and deployed function runners do not change. Safe to run again; an interrupted run continues where it stopped. Refused while another run of it is in progress.
+ * Applies the runner key organization backfill to one organization or to all: sets functions_access.organization_id from each runner key's project, in batches that each commit on their own. Runner keys and deployed function runners do not change. Safe to run again; an interrupted run continues where it stopped. Refused while another run of it is in progress.
  */
 export function useAdminRunRunnerKeyOrganizationBackfillMutation(
   options?: MutationHookOptions<

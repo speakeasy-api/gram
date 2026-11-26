@@ -64,15 +64,16 @@ After applying, run the preview again and confirm `legacy=0`. If it is not 0, se
 
 ## Output
 
-`mode=… environment=… attributed=N moved=N skipped=N needs_organization_key=N unattributed=N legacy=N hashed=N`
+`mode=… environment=… attributed=N moved=N skipped=N needs_organization_key=N unattributed=N legacy=N hashed=N missing_organization=N`
 
 - `attributed`: connections this run gave an `organization_id`. Always 0 in a preview.
 - `moved`: plaintext tokens this run moved. Always 0 in a preview.
 - `skipped`: plaintext tokens that changed between the read and the write, such as when another run moved them first. Run again.
 - `needs_organization_key`: plaintext tokens left in place because their organization's `marketplace-tokens` use case is past `platform_key`. They keep working through the plaintext fallback. Move them before that organization finalizes; finalize refuses while they remain.
-- `unattributed`: connections still without an `organization_id`, counted after the run. After an apply, these are connections whose project's organization has no `organization_metadata` row (`projects.organization_id` has no foreign key). Their token, if any, stays in plaintext. Investigate any nonzero count.
-- `legacy`: connections that still hold a plaintext token, counted after the run.
+- `unattributed`: connections still without an `organization_id` whose project's organization exists, counted after the run. An apply gives these one.
+- `legacy`: connections that still hold a plaintext token, counted after the run, not counting those in `missing_organization`.
 - `hashed`: connections whose token is stored as a hash and a sealed copy.
+- `missing_organization`: connections whose project's organization has no `organization_metadata` row (`projects.organization_id` has no foreign key). The backfill can't give them an organization, and their token, if any, stays in plaintext. Investigate any nonzero count. The admin page shows them as **Connections that can't get one** and marks the card **Needs a look**.
 
 Counts never name organizations or connections. Do not record organization IDs in tickets or pull requests.
 

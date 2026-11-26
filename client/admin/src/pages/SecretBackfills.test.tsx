@@ -64,6 +64,7 @@ function backfills(
       unattributed: total((o) => o.unattributedConnections),
       legacy: total((o) => o.legacyTokens),
       hashed: 0,
+      missingOrganization: 0,
     },
     runnerKeyOrganizations: {
       filled: 0,
@@ -101,6 +102,7 @@ beforeEach(() => {
     unattributed: 0,
     legacy: 0,
     hashed: 2,
+    missingOrganization: 0,
   });
   mocks.runRunnerKeyOrganizationBackfill.mockResolvedValue({
     filled: 3,
@@ -199,10 +201,38 @@ describe("Secret backfills by organization", () => {
     await renderWithApp(<SecretBackfillsPage />);
     await screen.findByRole("link", { name: "Tokens Org" });
 
-    fireEvent.change(screen.getByLabelText("Filter organizations"), {
-      target: { value: "runner-keys" },
-    });
+    const filterBox = screen.getByLabelText("Filter organizations");
+
+    fireEvent.change(filterBox, { target: { value: "tokens org" } });
+    expect(screen.getByRole("link", { name: "Tokens Org" })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Runner Keys Org" })).toBeNull();
+
+    fireEvent.change(filterBox, { target: { value: "runner-keys-org" } });
     expect(screen.queryByRole("link", { name: "Tokens Org" })).toBeNull();
     expect(screen.getByRole("link", { name: "Runner Keys Org" })).toBeTruthy();
+
+    fireEvent.change(filterBox, { target: { value: "org-tokens" } });
+    expect(screen.getByRole("link", { name: "Tokens Org" })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Runner Keys Org" })).toBeNull();
+  });
+
+  it("asks for a look when only connections that can't get an organization are left", async () => {
+    mocks.getSecretBackfills.mockResolvedValue({
+      ...backfills([]),
+      marketplaceTokens: {
+        ...backfills([]).marketplaceTokens,
+        missingOrganization: 2,
+      },
+    });
+    await renderWithApp(<SecretBackfillsPage />);
+
+    expect(await screen.findAllByText("Needs a look")).toHaveLength(1);
+    expect(
+      screen.getByText(/2 connections belong to a project whose organization/),
+    ).toBeTruthy();
+    const [marketplace] = screen.getAllByRole("button", {
+      name: "Nothing to apply",
+    });
+    expect(marketplace).toHaveProperty("disabled", true);
   });
 });

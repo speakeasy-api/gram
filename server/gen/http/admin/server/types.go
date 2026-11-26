@@ -3223,13 +3223,18 @@ type RunMarketplaceTokenBackfillResponseBody struct {
 	// Plaintext tokens left in place because their organization's transition state
 	// needs organization encryption this process does not have. Zero in a preview.
 	NeedsOrganizationKey int64 `form:"needs_organization_key" json:"needs_organization_key" xml:"needs_organization_key"`
-	// Connections without an organization. After an apply, these are connections
-	// whose project's organization has no metadata row.
+	// Connections without an organization whose project's organization exists. An
+	// apply gives these one.
 	Unattributed int64 `form:"unattributed" json:"unattributed" xml:"unattributed"`
-	// Connections that still hold a plaintext token.
+	// Connections that still hold a plaintext token, not counting those in
+	// missing_organization.
 	Legacy int64 `form:"legacy" json:"legacy" xml:"legacy"`
 	// Connections whose token is stored as a hash and sealed copies.
 	Hashed int64 `form:"hashed" json:"hashed" xml:"hashed"`
+	// Connections whose project's organization has no metadata row. An apply can't
+	// give them an organization or move their plaintext token, so they stay as
+	// they are.
+	MissingOrganization int64 `form:"missing_organization" json:"missing_organization" xml:"missing_organization"`
 }
 
 // RunRunnerKeyOrganizationBackfillResponseBody is the type of the "admin"
@@ -32423,13 +32428,18 @@ type AdminMarketplaceTokenBackfillResponseBody struct {
 	// Plaintext tokens left in place because their organization's transition state
 	// needs organization encryption this process does not have. Zero in a preview.
 	NeedsOrganizationKey int64 `form:"needs_organization_key" json:"needs_organization_key" xml:"needs_organization_key"`
-	// Connections without an organization. After an apply, these are connections
-	// whose project's organization has no metadata row.
+	// Connections without an organization whose project's organization exists. An
+	// apply gives these one.
 	Unattributed int64 `form:"unattributed" json:"unattributed" xml:"unattributed"`
-	// Connections that still hold a plaintext token.
+	// Connections that still hold a plaintext token, not counting those in
+	// missing_organization.
 	Legacy int64 `form:"legacy" json:"legacy" xml:"legacy"`
 	// Connections whose token is stored as a hash and sealed copies.
 	Hashed int64 `form:"hashed" json:"hashed" xml:"hashed"`
+	// Connections whose project's organization has no metadata row. An apply can't
+	// give them an organization or move their plaintext token, so they stay as
+	// they are.
+	MissingOrganization int64 `form:"missing_organization" json:"missing_organization" xml:"missing_organization"`
 }
 
 // AdminRunnerKeyOrganizationBackfillResponseBody is used to define fields on
@@ -35715,6 +35725,7 @@ func NewRunMarketplaceTokenBackfillResponseBody(res *admin.AdminMarketplaceToken
 		Unattributed:         res.Unattributed,
 		Legacy:               res.Legacy,
 		Hashed:               res.Hashed,
+		MissingOrganization:  res.MissingOrganization,
 	}
 	return body
 }
