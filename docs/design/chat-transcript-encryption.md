@@ -64,11 +64,10 @@ rate/concurrency bound is implemented. Reusing transaction-loaded keys globally
 is unsafe because those keys or configuration may later roll back.
 
 Freshness does not come from the plaintext. `chat_messages.source_updated_at`
-records when the six body fields last changed. Two triggers stamp it with
-`clock_timestamp()` on every write path: on insert when unset (a restore keeps
-its value), and on an update that changes a body field (an identical rewrite
-does not count). Each copy records the `source_updated_at` it was sealed from,
-and it is current while the two are equal. Compare-and-swap persistence refuses
+records when the six body fields last changed. Its default stamps every insert,
+and every statement that updates a body field sets it to `clock_timestamp()`.
+Each copy records the `source_updated_at` it was sealed from, and it is current
+while the two are equal. Compare-and-swap persistence refuses
 an outdated snapshot by the same comparison.
 
 Copies sealed before `source_updated_at` existed still carry the old unkeyed
