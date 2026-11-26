@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -41,6 +42,10 @@ const (
 	// remembers.
 	configCacheSize = 4096
 
+	// warmMargin is the least life a DEK keeps after Warm returns, so a
+	// transaction opened right after it finds the DEK still cached.
+	warmMargin = 30 * time.Second
+
 	// kmsCallTimeout bounds one unwrap, so a hung KMS call does not hold a
 	// caller past its own deadline budget.
 	kmsCallTimeout = 10 * time.Second
@@ -56,6 +61,19 @@ type Service struct {
 	dataKeys *expirable.LRU[uuid.UUID, cachedDataKey]
 	configs  *expirable.LRU[configCacheKey, cachedConfig]
 	flights  singleflight.Group
+
+	// lastUsed records when each cached DEK of a use case in warmUseCases
+	// last served a caller, so KeepWarm refreshes only DEKs still in use.
+	// warmUseCases counts the running KeepWarm loops per use case. Uses are
+	// recorded only while one runs, and it prunes them.
+	usesMu       sync.Mutex
+	lastUsed     map[uuid.UUID]keyUse
+	warmUseCases map[string]int
+}
+
+type keyUse struct {
+	at      time.Time
+	useCase string
 }
 
 type cachedDataKey struct {
@@ -65,6 +83,10 @@ type cachedDataKey struct {
 	// DEK that belongs to someone else is refused before any decryption.
 	organizationID string
 	useCase        string
+
+	// unwrappedAt is when KMS returned the key. KeepWarm unwraps it again
+	// before DataKeyCacheTTL runs out.
+	unwrappedAt time.Time
 }
 
 type configCacheKey struct {
@@ -87,12 +109,15 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, identity *gcpauth.Identit
 	}
 
 	return &Service{
-		logger:   logger.With(attr.SlogComponent("orgencryption")),
-		db:       db,
-		keys:     &keyResolver{cfg: cfg, identity: identity, clients: clients},
-		dataKeys: expirable.NewLRU[uuid.UUID, cachedDataKey](dataKeyCacheSize, nil, DataKeyCacheTTL),
-		configs:  expirable.NewLRU[configCacheKey, cachedConfig](configCacheSize, nil, configCacheTTL),
-		flights:  singleflight.Group{},
+		logger:       logger.With(attr.SlogComponent("orgencryption")),
+		db:           db,
+		keys:         &keyResolver{cfg: cfg, identity: identity, clients: clients},
+		dataKeys:     expirable.NewLRU[uuid.UUID, cachedDataKey](dataKeyCacheSize, nil, DataKeyCacheTTL),
+		configs:      expirable.NewLRU[configCacheKey, cachedConfig](configCacheSize, nil, configCacheTTL),
+		flights:      singleflight.Group{},
+		usesMu:       sync.Mutex{},
+		lastUsed:     map[uuid.UUID]keyUse{},
+		warmUseCases: map[string]int{},
 	}, nil
 }
 
@@ -166,6 +191,53 @@ func (e *Encryptor) Decrypt(ctx context.Context, column string, ciphertext strin
 	}
 
 	return plaintext, nil
+}
+
+// Warm unwraps the use case's active DEK into the process cache through the
+// pool. It reads the configuration from the database rather than from the
+// configuration cache, so it warms the DEK that a transaction opened right
+// after it will use, even just after a rotation in another process. Call it
+// before opening a transaction for ForIn, which never calls KMS.
+func (s *Service) Warm(ctx context.Context, organizationID string, useCase UseCase) error {
+	if err := useCase.validate(); err != nil {
+		return err
+	}
+	if organizationID == "" {
+		return errors.New("orgencryption: organization id is required")
+	}
+	cfg, err := s.loadConfig(ctx, organizationID, useCase)
+	if err != nil {
+		return err
+	}
+	s.configs.Add(configCacheKey{organizationID: organizationID, useCase: useCase}, cfg)
+	if err := requireUsableState(string(cfg.state)); err != nil {
+		return err
+	}
+	if cfg.activeDataKeyID == uuid.Nil {
+		return ErrNotProvisioned
+	}
+	// A cached DEK about to expire could drop out before the transaction uses
+	// it, so unwrap it again when less than warmMargin of its life is left.
+	if cached, ok := s.dataKeys.Get(cfg.activeDataKeyID); ok && time.Since(cached.unwrappedAt) < DataKeyCacheTTL-warmMargin {
+		s.noteUse(cfg.activeDataKeyID, cached.useCase)
+		return nil
+	}
+	dataKey, err := s.unwrapShared(ctx, organizationID, cfg.activeDataKeyID)
+	if err != nil {
+		// The cached DEK is still within DataKeyCacheTTL, the bound For keeps
+		// too, so a failed early refresh does not refuse it. A canceled
+		// caller still gets its error.
+		if ctx.Err() != nil {
+			return err
+		}
+		if cached, ok := s.dataKeys.Get(cfg.activeDataKeyID); ok {
+			s.noteUse(cfg.activeDataKeyID, cached.useCase)
+			return nil
+		}
+		return err
+	}
+	s.noteUse(cfg.activeDataKeyID, dataKey.useCase)
+	return nil
 }
 
 // RequireUsable checks that the organization can seal values for the use
@@ -248,9 +320,23 @@ func (s *Service) loadConfigIn(ctx context.Context, db repo.DBTX, organizationID
 // process and DataKeyCacheTTL.
 func (s *Service) dataKey(ctx context.Context, organizationID string, dataKeyID uuid.UUID) (cachedDataKey, error) {
 	if cached, ok := s.dataKeys.Get(dataKeyID); ok {
+		s.noteUse(dataKeyID, cached.useCase)
 		return cached, nil
 	}
 
+	dataKey, err := s.unwrapShared(ctx, organizationID, dataKeyID)
+	if err != nil {
+		return cachedDataKey{}, err
+	}
+	s.noteUse(dataKeyID, dataKey.useCase)
+
+	return dataKey, nil
+}
+
+// unwrapShared unwraps a DEK from committed rows through the pool and stores
+// it in the process cache, replacing any cached copy. Concurrent callers for
+// the same DEK share one KMS call.
+func (s *Service) unwrapShared(ctx context.Context, organizationID string, dataKeyID uuid.UUID) (cachedDataKey, error) {
 	flight := s.flights.DoChan(organizationID+"/"+dataKeyID.String(), func() (any, error) {
 		// The flight outlives any one caller's cancellation, so other callers
 		// waiting on it still get the key; kmsCallTimeout bounds it.
@@ -284,15 +370,11 @@ func (s *Service) dataKey(ctx context.Context, organizationID string, dataKeyID 
 // unwrapDataKey unwraps a readable DEK with the configuration's current KEK,
 // falling back to the previous KEK while a switch is in flight.
 func (s *Service) unwrapDataKey(ctx context.Context, organizationID string, dataKeyID uuid.UUID) (cachedDataKey, error) {
-	return s.unwrapDataKeyIn(ctx, s.db, organizationID, dataKeyID, true)
-}
-
-func (s *Service) unwrapDataKeyIn(ctx context.Context, db repo.DBTX, organizationID string, dataKeyID uuid.UUID, recordUnwrap bool) (cachedDataKey, error) {
 	ctx, cancel := context.WithTimeout(ctx, kmsCallTimeout)
 	defer cancel()
 
 	logger := s.logger.With(attr.SlogOrganizationID(organizationID))
-	q := repo.New(db)
+	q := repo.New(s.db)
 
 	dek, err := q.GetReadableDataEncryptionKey(ctx, repo.GetReadableDataEncryptionKeyParams{ID: dataKeyID, OrganizationID: organizationID})
 	switch {
@@ -320,9 +402,9 @@ func (s *Service) unwrapDataKeyIn(ctx context.Context, db repo.DBTX, organizatio
 
 	var errs []error
 	for _, keyID := range candidates {
-		dataKey, err := s.unwrapWith(ctx, logger, q, dek, keyID, recordUnwrap)
+		dataKey, err := s.unwrapWith(ctx, logger, q, dek, keyID)
 		if err == nil {
-			return cachedDataKey{key: dataKey, organizationID: dek.OrganizationID, useCase: dek.UseCase}, nil
+			return cachedDataKey{key: dataKey, organizationID: dek.OrganizationID, useCase: dek.UseCase, unwrappedAt: time.Now()}, nil
 		}
 		errs = append(errs, err)
 	}
@@ -330,7 +412,7 @@ func (s *Service) unwrapDataKeyIn(ctx context.Context, db repo.DBTX, organizatio
 	return cachedDataKey{}, errors.Join(errs...)
 }
 
-func (s *Service) unwrapWith(ctx context.Context, logger *slog.Logger, q *repo.Queries, dek repo.DataEncryptionKey, keyID uuid.UUID, recordUnwrap bool) ([]byte, error) {
+func (s *Service) unwrapWith(ctx context.Context, logger *slog.Logger, q *repo.Queries, dek repo.DataEncryptionKey, keyID uuid.UUID) ([]byte, error) {
 	wrap, err := q.GetDataEncryptionKeyWrap(ctx, repo.GetDataEncryptionKeyWrapParams{
 		OrganizationID:      dek.OrganizationID,
 		DataEncryptionKeyID: dek.ID,
@@ -358,13 +440,10 @@ func (s *Service) unwrapWith(ctx context.Context, logger *slog.Logger, q *repo.Q
 		return nil, fmt.Errorf("%w: unwrapped data encryption key is %d bytes", ErrKeyUnavailable, len(dataKey))
 	}
 
-	// Operational bookkeeping must not lock a shared wrap row for the
-	// lifetime of a caller-owned message transaction: compaction takes a chat
-	// lock first, which would invert the lock order against a normal capture.
-	if recordUnwrap {
-		if err := q.TouchDataEncryptionKeyWrapUnwrapped(ctx, repo.TouchDataEncryptionKeyWrapUnwrappedParams{ID: wrap.ID, OrganizationID: dek.OrganizationID}); err != nil {
-			logger.WarnContext(ctx, "record data encryption key unwrap", attr.SlogError(err))
-		}
+	// Unwraps run on the pool, never in a caller's transaction, so this
+	// bookkeeping holds no wrap-row lock across a message write.
+	if err := q.TouchDataEncryptionKeyWrapUnwrapped(ctx, repo.TouchDataEncryptionKeyWrapUnwrappedParams{ID: wrap.ID, OrganizationID: dek.OrganizationID}); err != nil {
+		logger.WarnContext(ctx, "record data encryption key unwrap", attr.SlogError(err))
 	}
 
 	return dataKey, nil
@@ -383,6 +462,7 @@ func (s *Service) Forget(organizationID string) {
 	for _, id := range s.dataKeys.Keys() {
 		if cached, ok := s.dataKeys.Peek(id); ok && cached.organizationID == organizationID {
 			s.dataKeys.Remove(id)
+			s.forgetUse(id)
 		}
 	}
 }

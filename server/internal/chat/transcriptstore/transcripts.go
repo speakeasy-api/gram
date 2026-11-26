@@ -40,8 +40,22 @@ func (t *Transcripts) Enabled(projectID uuid.UUID) bool {
 	return ok
 }
 
+// Prepare loads the organization's transcript key into the process cache
+// before the caller opens the transaction that Seal will use, so Seal makes no
+// KMS call while the transaction is open. An error means Seal would fail too.
+func (t *Transcripts) Prepare(ctx context.Context, organizationID string, projectID uuid.UUID) error {
+	if !t.Enabled(projectID) {
+		return nil
+	}
+	if err := t.store.Prepare(ctx, organizationID); err != nil {
+		return fmt.Errorf("prepare encrypted chat transcript: %w", err)
+	}
+	return nil
+}
+
 // Seal stores the encrypted copy of messages the caller just wrote, inside the
-// caller's transaction. The caller must roll back on error.
+// caller's transaction. Call Prepare before beginning that transaction. The
+// caller must roll back on error.
 func (t *Transcripts) Seal(ctx context.Context, db repo.DBTX, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID) error {
 	if !t.Enabled(projectID) {
 		return nil

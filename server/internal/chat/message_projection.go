@@ -23,6 +23,9 @@ func (w *ChatMessageWriter) ProjectMessage(ctx context.Context, projectID, messa
 	if guard == nil || build == nil || messageID == uuid.Nil {
 		return false, fmt.Errorf("projection requires admission guard and message ID")
 	}
+	// A projection the guard refuses or build skips seals nothing, so it
+	// must not fail on the key. Keep the error for a change that seals.
+	prepared := w.PrepareTranscripts(ctx, projectID)
 	tx, err := w.db.Begin(ctx)
 	if err != nil {
 		return false, fmt.Errorf("begin message projection: %w", err)
@@ -94,6 +97,9 @@ func (w *ChatMessageWriter) ProjectMessage(ctx context.Context, projectID, messa
 		return false, fmt.Errorf("persist projected message: %w", err)
 	}
 	if changed > 0 && w.transcripts.Enabled(projectID) {
+		if prepared != nil {
+			return false, prepared
+		}
 		if organizationID == "" {
 			organizationID, err = q.GetProjectOrganizationID(ctx, projectID)
 			if err != nil {

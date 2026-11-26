@@ -2958,7 +2958,10 @@ func (s *Service) SummarizeToolCall(ctx context.Context, payload *gen.SummarizeT
 	}
 
 	// The summary is part of the message body, so its encrypted transcript is
-	// resealed in the same transaction.
+	// resealed in the same transaction, with the key loaded before it begins.
+	if err := s.transcripts.Prepare(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "prepare tool call summary transcript").LogError(ctx, s.logger)
+	}
 	tx, err := conn.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin tool call summary transaction").LogError(ctx, s.logger)

@@ -78,7 +78,31 @@ func message(content string, raw, calls []byte, notes pgtype.Text, summaries []b
 	return m
 }
 
-// Capture uses the caller's transaction. The caller must roll back on error;
+// Prepare unwraps the organization's active transcript key into the process's
+// committed key cache through the pool. Call it before opening the transaction
+// that Capture will use: Capture never calls KMS, and fails with
+// orgencryption.ErrKeyNotWarm when the key is not cached. A warm cache needs
+// no KMS call here either. A failed early refresh of a key that is still
+// cached is not an error. Any error it returns means the key is not cached, so
+// Capture would fail too. Capture still reads the configuration in its
+// transaction and fails closed on its own.
+func (s *Store) Prepare(ctx context.Context, organizationID string) error {
+	if organizationID == "" {
+		return ErrInvalid
+	}
+	ctx, span := s.tracer.Start(ctx, "transcriptstore.Prepare", trace.WithAttributes(attr.OrganizationID(organizationID)))
+	defer span.End()
+
+	if err := s.service.Warm(ctx, organizationID, orgencryption.UseCaseChatTranscripts); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, string(classify(err)))
+		return safe(err)
+	}
+	return nil
+}
+
+// Capture uses the caller's transaction and never calls KMS: run Prepare
+// before opening it. The caller must roll back on error;
 // a batch is not an independently committed unit. IDs are deduplicated and sorted.
 func (s *Store) Capture(ctx context.Context, db repo.DBTX, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID) error {
 	if len(messageIDs) == 0 {
@@ -312,6 +336,9 @@ type Page struct {
 func (s *Store) Backfill(ctx context.Context, organizationID string, projectID, after uuid.UUID, limit int32) (Page, error) {
 	if organizationID == "" || projectID == uuid.Nil || limit < 1 || limit > 500 {
 		return Page{}, ErrInvalid
+	}
+	if err := s.Prepare(ctx, organizationID); err != nil {
+		return Page{}, err
 	}
 	tx, err := s.db.Begin(ctx)
 	if err != nil {

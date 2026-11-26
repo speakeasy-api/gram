@@ -21,8 +21,10 @@ import (
 )
 
 // TranscriptSealer reseals the encrypted transcripts of messages whose body
-// was just updated, inside the caller's transaction.
+// was just updated, inside the caller's transaction. PrepareTranscripts loads
+// the key before that transaction begins.
 type TranscriptSealer interface {
+	PrepareTranscripts(ctx context.Context, projectID uuid.UUID) error
 	SealTranscripts(ctx context.Context, db repo.DBTX, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID) error
 }
 
@@ -106,6 +108,11 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 		return fmt.Errorf("failed to analyze segment with LLM: %w", err)
 	}
 
+	// Outcome notes reseal the encrypted transcripts in the transaction below,
+	// so the key loads before it begins. A segment that updates no outcome
+	// seals nothing and must not fail on the key.
+	prepared := a.transcripts.PrepareTranscripts(ctx, args.ProjectID)
+
 	// Use transaction for atomic updates
 	tx, err := a.db.Begin(ctx)
 	if err != nil {
@@ -144,6 +151,9 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 	}
 	// Outcome notes are part of the message body, so the encrypted transcripts
 	// are resealed in the same transaction.
+	if len(updated) > 0 && prepared != nil {
+		return fmt.Errorf("prepare tool call outcome transcripts: %w", prepared)
+	}
 	if err := a.transcripts.SealTranscripts(ctx, tx, args.OrgID, args.ProjectID, updated); err != nil {
 		return fmt.Errorf("reseal tool call outcome transcripts: %w", err)
 	}
