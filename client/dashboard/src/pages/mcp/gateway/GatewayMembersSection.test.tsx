@@ -888,6 +888,15 @@ it.each([
   },
 );
 
+it("keeps the catalog closed for a write grant on the gateway alone", () => {
+  permissions.scopes = new Set(["mcp:write:gateway"]);
+  setup();
+  // Nothing else in the menu is allowed either, so the menu stays shut.
+  expect(
+    (screen.getByRole("button", { name: "Add new" }) as HTMLButtonElement)
+      .disabled,
+  ).toBe(true);
+});
 it.each([
   [true, { toolsetsLoading: true }],
   [true, { toolsetsFailed: true }],

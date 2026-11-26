@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/Button";
 import { Plus, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { AuthRow, ExplainerDialog } from "./AuthRow";
-import * as authz from "@/lib/authz.gen";
+import type * as authz from "@/lib/authz.gen";
 
 /** Anchors the Authorization servers row, where a gateway links a member's sign-in. */
 export const AUTHORIZATION_SERVERS_FIELD_ID = "authorization-servers";
@@ -22,7 +22,7 @@ export function RemoteIdentityProvidersField({
   isLoading,
   isError = false,
   allowAdditionalProviders,
-  projectId,
+  writeCheck,
   onAdd,
   onEdit,
   onDelete,
@@ -38,8 +38,8 @@ export function RemoteIdentityProvidersField({
   /** Gateways bind a provider per member; remote/tunneled servers have one
    * upstream, so only their empty state may offer an attach. */
   allowAdditionalProviders: boolean;
-  /** Scopes the mcp:write gates to the target's own project. */
-  projectId: string;
+  /** What attaching, editing or removing a provider on the target needs. */
+  writeCheck: authz.Check;
   onAdd: () => void;
   onEdit: (
     issuer: RemoteSessionIssuer,
@@ -52,7 +52,7 @@ export function RemoteIdentityProvidersField({
   readOnly?: boolean;
 }): JSX.Element {
   const addButton = (
-    <RequireScope check={authz.mcpServers(projectId).write()} level="component">
+    <RequireScope check={writeCheck} level="component">
       <Button variant="secondary" size="md" onClick={onAdd}>
         <Button.LeftIcon>
           <Plus className="size-4" />
@@ -98,7 +98,7 @@ export function RemoteIdentityProvidersField({
             <RemoteIdentityProviderRow
               key={issuer.id}
               issuer={issuer}
-              projectId={projectId}
+              writeCheck={writeCheck}
               onEdit={() => onEdit(issuer, only)}
               onDelete={() => onDelete(issuer, only)}
               readOnly={readOnly}
@@ -145,13 +145,13 @@ function RemoteIdentityProviderRow({
   issuer,
   onEdit,
   onDelete,
-  projectId,
+  writeCheck,
   readOnly,
   repair,
   onUnlink,
 }: {
   issuer: RemoteSessionIssuer;
-  projectId: string;
+  writeCheck: authz.Check;
   readOnly: boolean;
   onEdit: () => void;
   onDelete: () => void;
@@ -189,10 +189,7 @@ function RemoteIdentityProviderRow({
           </Text>
         </div>
         {!readOnly && !repair ? (
-          <RequireScope
-            check={authz.mcpServers(projectId).write()}
-            level="component"
-          >
+          <RequireScope check={writeCheck} level="component">
             <div className="flex shrink-0 items-center gap-2">
               {canEdit && (
                 <Button size="md" variant="secondary" onClick={onEdit}>
@@ -228,10 +225,7 @@ function RemoteIdentityProviderRow({
                 {association.clientId} · {association.remoteSessionClientId}
               </Text>
               {!readOnly && (
-                <RequireScope
-                  check={authz.mcpServers(projectId).write()}
-                  level="component"
-                >
+                <RequireScope check={writeCheck} level="component">
                   <Button
                     size="md"
                     variant="destructive-secondary"

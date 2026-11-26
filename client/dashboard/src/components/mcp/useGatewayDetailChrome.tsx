@@ -1,4 +1,4 @@
-import { useProject } from "@/contexts/Auth";
+import { useOrganization, useProject } from "@/contexts/Auth";
 import { AUTHORIZATION_SERVERS_FIELD_ID } from "@/pages/mcp/x/tabs/settings/sections/authentication/RemoteIdentityProvidersField";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useSkillsOverMcpEnabled } from "@/pages/skills/use-skills-over-mcp";
@@ -83,11 +83,12 @@ export function useGatewayDetailChrome(): McpDetailChrome | null {
     { checkTools: "fetch" },
   );
   const { can, hasScope } = useRBAC();
+  const organization = useOrganization();
   // Mirrors the mcp_servers sidebar: the tab reads org membership as well as
   // the resource, so hide it rather than render a permission wall.
   const canViewTeamAccess =
     !!metaMcpServer &&
-    hasScope("org:read") &&
+    can(authz.org(organization.id).read()) &&
     can(authz.mcpServer(metaMcpServer.id, metaMcpServer.projectId).read());
   const project = useProject();
   // Same check as the Skills tab route: skill read on this project.

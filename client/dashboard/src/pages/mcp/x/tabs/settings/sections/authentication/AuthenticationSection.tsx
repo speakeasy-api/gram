@@ -203,7 +203,7 @@ export function AuthenticationSectionBody({
       associatedIssuers={associatedIssuers}
       associations={associations.data?.associations}
       allowAdditionalProviders={false}
-      projectId={target.projectId}
+      writeCheck={target.writeCheck}
       isLoading={associations.isLoading || isLoadingAssociatedIssuers}
       isError={associations.isError || isAssociatedIssuersError}
       onAdd={() => setSheetOpen(true)}

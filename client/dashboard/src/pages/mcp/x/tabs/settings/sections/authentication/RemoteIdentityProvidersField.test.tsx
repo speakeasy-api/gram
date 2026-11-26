@@ -4,6 +4,7 @@ import type { RemoteSessionIssuer } from "@gram/client/models/components/remotes
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import * as authz from "@/lib/authz.gen";
 import { RemoteIdentityProvidersField } from "./RemoteIdentityProvidersField";
 
 const { hasAnyScope } = vi.hoisted(() => ({ hasAnyScope: vi.fn() }));
@@ -59,7 +60,7 @@ function renderField(
         isLoading={false}
         isError={handlers.isError}
         allowAdditionalProviders={handlers.allowAdditionalProviders ?? true}
-        projectId="project-1"
+        writeCheck={authz.mcpServer("server-1", "project-1").write()}
         onAdd={vi.fn<() => void>()}
         onEdit={handlers.onEdit ?? vi.fn<() => void>()}
         onDelete={handlers.onDelete ?? vi.fn<() => void>()}

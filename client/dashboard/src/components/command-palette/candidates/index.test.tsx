@@ -327,6 +327,12 @@ vi.mock("@/hooks/useRBAC", () => ({
         mocks.scopes.includes(check.scope) ||
         (check.scope === "mcp:read" && mocks.scopes.includes("mcp:write"));
       if (!held) return false;
+      // Grants in this suite are on the active project only.
+      if (
+        check.dimensions.projectId !== undefined &&
+        check.dimensions.projectId !== "project-default"
+      )
+        return false;
       if (check.scope !== "mcp:write" || !mocks.mcpWriteResourceIds)
         return true;
       return mocks.mcpWriteResourceIds.includes(check.resourceId);

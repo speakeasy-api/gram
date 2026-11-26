@@ -44,7 +44,7 @@ import { useProjectNavRoutes } from "@/hooks/useProjectNavRoutes";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useSidebar } from "@/components/ui/Sidebar/sidebar-context";
 import { useSlugs } from "@/contexts/Sdk";
-import { useOrganization, useProject } from "@/contexts/Auth";
+import { useOrganization } from "@/contexts/Auth";
 import * as authz from "@/lib/authz.gen";
 
 /** A top-level navigation item gated by its required scopes. */
@@ -89,10 +89,9 @@ export function AppSidebar({
   // cache is cleared), show a skeleton so the scope-gated nav doesn't flash empty.
   const { isLoading: rbacLoading, can, hasAnyScope } = useRBAC();
   const organization = useOrganization();
-  const project = useProject();
+  // The organization home page opens for org readers and admins only.
   const homeChecks = [
     authz.org(organization.id).read(),
-    authz.project(project.id).read(),
     authz.org(organization.id).admin(),
   ];
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);

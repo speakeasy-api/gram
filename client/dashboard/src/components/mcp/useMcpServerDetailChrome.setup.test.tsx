@@ -24,6 +24,7 @@ const state = vi.hoisted(() => ({
 }));
 const REMOTE_SERVER = {
   id: "server",
+  projectId: "project",
   slug: "slack",
   remoteMcpServerId: "remote",
 };
@@ -43,8 +44,13 @@ vi.mock("@/contexts/Sdk", () => ({
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
     hasScope: (scope: string) => scope === "mcp:write" && state.canWrite,
-    can: ({ scope }: { scope: string }) =>
-      scope === "mcp:write" && state.canWrite,
+    can: (check: {
+      scope: string;
+      dimensions: Readonly<Record<string, string>>;
+    }) =>
+      check.scope === "mcp:write" &&
+      check.dimensions.projectId === "project" &&
+      state.canWrite,
     hasAnyScope: () => state.canReadPlugins,
   }),
 }));
@@ -233,6 +239,7 @@ function readiness(label: string): string | null {
 // A canonical hosted server whose read omitted the toolset summary.
 const HOSTED_SERVER = {
   id: "toolset-1",
+  projectId: "project",
   slug: "support",
   toolsetId: "toolset-1",
 };

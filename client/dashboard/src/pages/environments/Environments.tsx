@@ -183,9 +183,12 @@ function EnvironmentCard({
 }) {
   const routes = useRoutes();
   const { can } = useRBAC();
-  const canWrite = can(
+  // Cloning writes the source and creates an environment in its project.
+  const cloneChecks = [
     authz.environment(environment.id, environment.projectId).write(),
-  );
+    authz.environments(environment.projectId).write(),
+  ];
+  const canWrite = cloneChecks.every(can);
 
   // Gate the actions by scope so the right-click menu honors the same
   // environment:write guard as the visible ⋯ button (which is wrapped in
@@ -218,12 +221,7 @@ function EnvironmentCard({
             >
               {environment.name}
             </Text>
-            <RequireScope
-              check={authz
-                .environment(environment.id, environment.projectId)
-                .write()}
-              level="component"
-            >
+            <RequireScope check={cloneChecks} all level="component">
               <div onClick={(e) => e.stopPropagation()}>
                 <MoreActions actions={actions} />
               </div>
