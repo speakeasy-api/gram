@@ -85,7 +85,7 @@ func (o Option[T]) Equals(other Option[T]) (bool, error) {
 // newRefCheck is the helper every generated ref method in refs_gen.go builds
 // its check with.
 func newRefCheck(scope Scope, resourceID string, dimensions map[string]string) Check {
-	return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: dimensions, exact: false, representedUser: "", probe: false, anyOf: nil, operation: operationDefault}
+	return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: dimensions, exact: false, representedUser: "", probe: false, group: nil, operation: operationDefault}
 }
 
 // openKeys is one scope's open keys as the registry declares them: the grant

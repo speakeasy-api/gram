@@ -431,5 +431,5 @@ func checkForTest(scope Scope, resourceID string) Check {
 		}
 		dimensions[key] = testProjectID
 	}
-	return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: dimensions, exact: false, representedUser: "", probe: false, anyOf: nil, operation: operationDefault}
+	return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: dimensions, exact: false, representedUser: "", probe: false, group: nil, operation: operationDefault}
 }
