@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/fixture/fixtureauth"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -164,7 +165,7 @@ func (s *seeder) seedFixtureServers(ctx context.Context) error {
 	// expired, so Needs refresh still shows; reconnecting them signs in
 	// against the fixture.
 	clients := []uuid.UUID{mainClient}
-	sessions, err := q.FixtureListLiveSessions(ctx, repo.FixtureListLiveSessionsParams{ClientIds: clients, ProjectID: proj})
+	sessions, err := q.FixtureListLiveSessions(ctx, repo.FixtureListLiveSessionsParams{ClientIds: clients, ProjectID: proj, Now: conv.ToPGTimestamptz(s.now)})
 	if err != nil {
 		return fmt.Errorf("list sessions: %w", err)
 	}
