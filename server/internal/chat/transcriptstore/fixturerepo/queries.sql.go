@@ -252,6 +252,23 @@ func (q *Queries) SetToolCalls(ctx context.Context, toolCalls []byte, iD uuid.UU
 	return result.RowsAffected(), nil
 }
 
+const shadowFreshness = `-- name: ShadowFreshness :one
+SELECT (t.source_hash IS NOT NULL)::boolean AS legacy_hash, t.source_updated_at IS NOT DISTINCT FROM m.source_updated_at AS stamped
+FROM chat_message_transcripts t JOIN chat_messages m ON m.id=t.message_id WHERE t.message_id=$1
+`
+
+type ShadowFreshnessRow struct {
+	LegacyHash bool
+	Stamped    bool
+}
+
+func (q *Queries) ShadowFreshness(ctx context.Context, messageID uuid.UUID) (ShadowFreshnessRow, error) {
+	row := q.db.QueryRow(ctx, shadowFreshness, messageID)
+	var i ShadowFreshnessRow
+	err := row.Scan(&i.LegacyHash, &i.Stamped)
+	return i, err
+}
+
 const shadowMetadata = `-- name: ShadowMetadata :one
 SELECT tool_call_count, content_bytes, content_raw_bytes, tool_calls_bytes FROM chat_messages WHERE id=$1 AND tool_call_count IS NOT NULL
 `

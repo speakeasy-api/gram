@@ -60,7 +60,7 @@ func TestBackfillTranscriptShadowsSealsEveryPageAndResumes(t *testing.T) {
 	require.Equal(t, messages-2, run.Sealed)
 	require.True(t, run.Complete)
 
-	// Coverage counts fingerprints; opening every shadow proves they decrypt.
+	// Coverage compares freshness stamps; opening every shadow proves they decrypt.
 	// Backfill fills the plaintext-free metadata like a live capture.
 	for _, id := range ids {
 		_, err := store.Load(t.Context(), org, projectID, id)

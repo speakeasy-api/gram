@@ -170,9 +170,11 @@ allowlist. `gram transcript-shadow-backfill` seals the messages that already
 exist. Run it from a server pod, which has the organization encryption identity
 and settings. It builds the same `Transcripts` the server builds at startup
 (checking the schema and provisioning keys for the allowlisted projects) and
-seals through `Transcripts.Backfill`, so each backfilled shadow gets the same
-metadata and tool-call ID rows as a live capture. It also recaptures shadows
-sealed before the metadata columns existed. A project off the capture allowlist
+seals through `Transcripts.Backfill`, so each backfilled message gets the same
+`chat_messages` metadata and `chat_message_tool_call_ids` rows as a live
+capture. Every sweep reseals each copy, so copies sealed before
+`source_updated_at` existed lose their `source_hash` and messages written before
+the metadata columns existed get them. A project off the capture allowlist
 (`GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS`) gets `ErrNotEnabled` and the command
 refuses to run: sealing a project that does not capture leaves shadows that go
 stale on its next write.
@@ -198,7 +200,9 @@ outcome (`not_found`, `stale`, `changed`, `invalid`, `error`) fails the read, so
 a zero `plaintext_fallback` count means reads are using shadows only when those
 failure outcomes are zero too.
 
-Coverage counts matching fingerprints; it does not authenticate ciphertext.
+Coverage compares each copy's recorded `source_updated_at` with the live row
+(or the legacy `source_hash` for copies not yet resealed); it does not
+authenticate ciphertext.
 Before relying on shadow reads for a project, confirm both `waiting=0` and
 `unattributed=0`. Unattributed messages carry a project that differs from their
 chat's project. The backfill never seals them, so they need ownership repair
