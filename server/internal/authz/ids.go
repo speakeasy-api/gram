@@ -92,7 +92,6 @@ func newRefCheck(scope Scope, resourceID string, dimensions map[string]string) C
 // keys each kind of check may leave out. scopeOpenKeys holds them and
 // Check.mayOmit reads them.
 type openKeys struct {
-	Probe          []string
-	Connection     []string
-	PolicyAudience []string
+	Probe      []string
+	Connection []string
 }
