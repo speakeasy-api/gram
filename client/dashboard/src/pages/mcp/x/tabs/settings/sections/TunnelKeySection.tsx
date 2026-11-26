@@ -14,6 +14,7 @@ import type { TunneledMcpServer } from "@gram/client/models/components/tunneledm
 import { KeyRound, RotateCcw } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
+import * as authz from "@/lib/authz.gen";
 
 export const MCP_TUNNEL_KEY_SECTION_ID = "tunnel-key";
 
@@ -136,8 +137,7 @@ export function TunnelKeySection({
           </SettingsSection.FooterHint>
           <SettingsSection.FooterActions>
             <RequireScope
-              scope="mcp:write"
-              resourceId={tunneledMcpServer.projectId}
+              check={authz.mcpServers(tunneledMcpServer.projectId).write()}
               level="component"
             >
               <Button

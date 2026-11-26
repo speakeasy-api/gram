@@ -31,6 +31,7 @@ import {
   FooterSaveButton,
   SettingsSection,
 } from "@/components/detail/settings-section";
+import * as authz from "@/lib/authz.gen";
 
 // Radix Select disallows an empty-string value, so the "Disabled" option needs
 // a sentinel that maps back to null (filtering off) when persisted.
@@ -41,6 +42,9 @@ export function ToolFilteringSection({
 }: {
   mcpServer: McpServer;
 }): JSX.Element {
+  const writeCheck = authz
+    .mcpServer(mcpServer.toolsetId ?? mcpServer.id, mcpServer.projectId)
+    .write();
   const queryClient = useQueryClient();
   const groupsQuery = useToolVariationGroups();
   const groups = groupsQuery.data?.groups ?? [];
@@ -136,7 +140,7 @@ export function ToolFilteringSection({
               Tool filtering
             </FieldLabel>
             {hasGroups ? (
-              <RequireScope scope="mcp:write" level="component">
+              <RequireScope check={writeCheck} level="component">
                 <Select
                   value={draft}
                   disabled={!supportsEditing || isSaving}
@@ -159,7 +163,7 @@ export function ToolFilteringSection({
                 </Select>
               </RequireScope>
             ) : (
-              <RequireScope scope="mcp:write" level="component">
+              <RequireScope check={writeCheck} level="component">
                 <Button
                   variant="secondary"
                   size="md"
@@ -201,7 +205,7 @@ export function ToolFilteringSection({
           </SettingsSection.FooterHint>
           {hasGroups && (
             <SettingsSection.FooterActions>
-              <RequireScope scope="mcp:write" level="component">
+              <RequireScope check={writeCheck} level="component">
                 <FooterSaveButton
                   pending={updateMcpServer.isPending}
                   disabled={!supportsEditing || !dirty || isSaving}

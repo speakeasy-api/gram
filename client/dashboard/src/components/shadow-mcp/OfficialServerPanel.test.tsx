@@ -49,7 +49,8 @@ vi.mock("@/contexts/Auth", () => ({
 }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
-    hasScope: (scope: string) => scope === "mcp:write" && mocks.canWriteMcp,
+    can: ({ scope }: { scope: string }) =>
+      scope === "mcp:write" && mocks.canWriteMcp,
     isLoading: false,
   }),
 }));

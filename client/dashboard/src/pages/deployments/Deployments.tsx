@@ -30,6 +30,8 @@ import { DeploymentsEmptyState } from "./DeploymentsEmptyState";
 import { useActiveDeployment } from "./useActiveDeployment";
 import { useRedeployDeployment } from "./useRedeployDeployment";
 import { SkeletonTable } from "@/components/ui/SkeletonTable";
+import { useProject } from "@/contexts/Auth";
+import * as authz from "@/lib/authz.gen";
 
 export default function DeploymentsPage(): JSX.Element {
   return (
@@ -134,6 +136,7 @@ function DeploymentActionsDropdown({
   deployment: DeploymentSummary;
   latest: boolean;
 }) {
+  const project = useProject();
   const [isOpen, setIsOpen] = useState(false);
 
   const actions = useDeploymentActions(deployment, latest, {
@@ -147,7 +150,7 @@ function DeploymentActionsDropdown({
   }
 
   return (
-    <RequireScope scope="project:write" level="section">
+    <RequireScope check={authz.project(project.id).write()} level="section">
       <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
         <DropdownMenuTrigger asChild>
           <Button variant="tertiary" size="sm" className="h-8 w-8 p-0">
@@ -192,8 +195,9 @@ function DeploymentRowContextMenu({
   // RequireScope's component-level wrapper would insert divs around the
   // `<tr>` (invalid table markup) and gray out rows for read-only users,
   // so the row renders unwrapped with an empty menu instead.
-  const { hasAnyScope } = useRBAC();
-  const canWrite = hasAnyScope(["project:write"]);
+  const project = useProject();
+  const { can } = useRBAC();
+  const canWrite = can(authz.project(project.id).write());
 
   return (
     <TableRowContextMenu actions={canWrite ? actions : []}>

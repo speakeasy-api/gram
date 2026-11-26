@@ -2,6 +2,7 @@ import { useFilterState } from "@/components/filters";
 import { InlineEmptyState } from "@/components/inline-empty-state";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
+import { useProject } from "@/contexts/Auth";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
@@ -20,10 +21,12 @@ import {
 import { SignalResults } from "./SignalResults";
 import { SignalAttributes } from "./SignalAttributes";
 import { SignalSessions } from "./SignalSessions";
+import * as authz from "@/lib/authz.gen";
 
 export function SignalExplore(): JSX.Element {
+  const project = useProject();
   return (
-    <RequireScope scope="project:read" level="section">
+    <RequireScope check={authz.project(project.id).read()} level="section">
       <SignalCatalog />
     </RequireScope>
   );

@@ -35,6 +35,7 @@ import {
 import { useShadowMCPServerCandidates } from "./useShadowMCPServerCandidates";
 import { useSkillCandidates } from "./useSkillCandidates";
 import { useSourceCandidates } from "./useSourceCandidates";
+import * as authz from "@/lib/authz.gen";
 
 /**
  * Every launcher candidate, in display order. Each source hook is called
@@ -80,7 +81,7 @@ export function useLauncherCandidates({
 }): LauncherCandidate[] {
   const organization = useOrganization();
   const project = useProject();
-  const { grants, hasAnyScope, hasScope } = useRBAC();
+  const { can, grants, hasAnyScope, hasScope } = useRBAC();
   // Every org-level check names the organization: without a resource id
   // hasScope is existential (a grant on any org passes), so a member who is
   // an admin elsewhere would otherwise fire this tenant's forbidden calls.
@@ -98,11 +99,11 @@ export function useLauncherCandidates({
   // the listing never fires its (forbidden) list calls from the palette.
   // Sources are a tab of that section and their detail page gates on
   // mcp:read, so they share it.
-  const canListMcp = hasAnyScope(["mcp:read", "mcp:write"]);
+  const canListMcp = can(authz.mcpServers(project.id).read().probe());
   // Listing gateways requires mcp:read on the project itself
   // (server/internal/metamcp/impl.go), so a grant in another project must not
   // fire the forbidden list call here or keep its cached names visible.
-  const canListGateways = hasAnyScope(["mcp:read", "mcp:write"], project.id);
+  const canListGateways = can(authz.mcpServers(project.id).read());
   // Plugins list for whoever can edit them (org admins and plugin:write on
   // this project, per usePluginWriteAccess) or read the organization; the
   // same gate the Plugins page renders behind.

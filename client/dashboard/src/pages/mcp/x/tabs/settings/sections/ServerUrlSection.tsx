@@ -48,12 +48,14 @@ import { useMcpEndpointSlugValidation } from "../../../useMcpEndpointSlugValidat
 import { useOrgRoutes } from "@/routes";
 import { usePrivateMcpServerUrls } from "@/hooks/usePrivateMcpServerUrls";
 import { useQueryClient } from "@tanstack/react-query";
+import { useProject } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useUpdateMcpEndpointMutation } from "@gram/client/react-query/updateMcpEndpoint.js";
 import { isCanonicalHostedWrapper } from "../../../MCPServerDetailsRouting";
 import { useFollowRenamedServer } from "../../../useFollowRenamedServer";
 import { useNetworkIngress } from "@gram/client/react-query/networkIngress.js";
 import { useNetworkIngressRollout } from "@/hooks/useNetworkIngressRollout";
+import * as authz from "@/lib/authz.gen";
 
 const ADDRESS_INPUT_GROUP_CLASSNAME = "";
 const ADDRESS_SLUG_INPUT_CLASSNAME = "font-mono pl-0! font-bold";
@@ -104,6 +106,8 @@ export function ServerUrlSection({
   const orgRoutes = useOrgRoutes();
   const { hasScope } = useRBAC();
   const canManageDomains = hasScope("org:admin");
+  const project = useProject();
+  const writeAddresses = authz.mcpServers(project.id).write();
   const privateMode =
     mcpServer?.networkAccessMode === McpServerNetworkAccessMode.Dual ||
     mcpServer?.networkAccessMode === McpServerNetworkAccessMode.PrivateOnly;
@@ -254,7 +258,7 @@ export function ServerUrlSection({
       );
     } else {
       customAddressEmptyState = (
-        <RequireScope scope="mcp:write" level="component">
+        <RequireScope check={writeAddresses} level="component">
           <SettingsInlineEmptyState
             title="No custom address"
             description="Create an MCP URL on your verified custom domain."
@@ -309,7 +313,7 @@ export function ServerUrlSection({
                   ) : (
                     hostedServerId &&
                     canAddAt(undefined) && (
-                      <RequireScope scope="mcp:write" level="component">
+                      <RequireScope check={writeAddresses} level="component">
                         <div>
                           <Button
                             variant="secondary"
@@ -331,7 +335,7 @@ export function ServerUrlSection({
                     onClose={() => setAddingPlatform(false)}
                   />
                 ) : canAddAt(undefined) ? (
-                  <RequireScope scope="mcp:write" level="component">
+                  <RequireScope check={writeAddresses} level="component">
                     <SettingsInlineEmptyState
                       title="No hosted address"
                       description={`Create the default Speakeasy-hosted URL for this ${subject}.`}
@@ -384,7 +388,7 @@ export function ServerUrlSection({
                 {!addingCustom &&
                   customDomainEndpoints.length > 0 &&
                   addableDomains.length > 0 && (
-                    <RequireScope scope="mcp:write" level="component">
+                    <RequireScope check={writeAddresses} level="component">
                       <div>
                         <Button
                           variant="secondary"
@@ -498,6 +502,8 @@ function AddressRow({
   onSaved?: () => Promise<void>;
 }) {
   const { orgSlug } = useSlugs();
+  const project = useProject();
+  const writeAddresses = authz.mcpServers(project.id).write();
   // Platform endpoints carry the `${orgSlug}-` prefix, folded into the
   // read-only URL segment so the field holds just the suffix. Older unprefixed
   // platform slugs and custom-domain endpoints show the whole slug; renaming an
@@ -605,7 +611,7 @@ function AddressRow({
             className={ADDRESS_SLUG_INPUT_CLASSNAME}
           />
         </InputGroup>
-        <RequireScope scope="mcp:write" level="component">
+        <RequireScope check={writeAddresses} level="component">
           <Button
             size="md"
             variant="primary"

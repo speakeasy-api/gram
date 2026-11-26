@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/Button";
 import { Plus, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { AuthRow, ExplainerDialog } from "./AuthRow";
+import * as authz from "@/lib/authz.gen";
 
 /** Anchors the Authorization servers row, where a gateway links a member's sign-in. */
 export const AUTHORIZATION_SERVERS_FIELD_ID = "authorization-servers";
@@ -51,7 +52,7 @@ export function RemoteIdentityProvidersField({
   readOnly?: boolean;
 }): JSX.Element {
   const addButton = (
-    <RequireScope scope="mcp:write" resourceId={projectId} level="component">
+    <RequireScope check={authz.mcpServers(projectId).write()} level="component">
       <Button variant="secondary" size="md" onClick={onAdd}>
         <Button.LeftIcon>
           <Plus className="size-4" />
@@ -189,8 +190,7 @@ function RemoteIdentityProviderRow({
         </div>
         {!readOnly && !repair ? (
           <RequireScope
-            scope="mcp:write"
-            resourceId={projectId}
+            check={authz.mcpServers(projectId).write()}
             level="component"
           >
             <div className="flex shrink-0 items-center gap-2">
@@ -229,8 +229,7 @@ function RemoteIdentityProviderRow({
               </Text>
               {!readOnly && (
                 <RequireScope
-                  scope="mcp:write"
-                  resourceId={projectId}
+                  check={authz.mcpServers(projectId).write()}
                   level="component"
                 >
                   <Button

@@ -7,6 +7,7 @@ import { DangerZoneSection } from "./DangerZoneSection";
 
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
+    can: () => true,
     hasScope: () => true,
     hasAnyScope: () => true,
     hasAllScopes: () => true,

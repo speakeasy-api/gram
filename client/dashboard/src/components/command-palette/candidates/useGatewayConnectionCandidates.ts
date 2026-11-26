@@ -11,6 +11,7 @@ import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router";
 import type { LauncherCandidate } from "./types";
+import * as authz from "@/lib/authz.gen";
 
 const GATEWAY_INVENTORY_STALE_TIME_MS = 30_000;
 
@@ -28,9 +29,10 @@ export function useGatewayConnectionCandidates({
   const sdk = useSdkClient();
   const routes = useRoutes({ projectSlug: gramProject });
   const navigate = useNavigate();
-  const { hasScope } = useRBAC();
+  const { can, hasScope } = useRBAC();
   const canReadProject = inProject && hasScope("project:read", project.id);
-  const canReadGateways = canReadProject && hasScope("mcp:read", project.id);
+  const canReadGateways =
+    canReadProject && can(authz.mcpServers(project.id).read());
   const canReadOrg = hasScope("org:read", organization.id);
   const gatewaysQuery = buildMetaMcpServersQuery(sdk, { gramProject });
   const gateways = useQuery({

@@ -22,6 +22,8 @@ import {
 import { useRoutes } from "@/routes";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { useProject } from "@/contexts/Auth";
+import * as authz from "@/lib/authz.gen";
 
 interface FailedSourcesSectionProps {
   failedSources: FailedSource[];
@@ -65,6 +67,7 @@ export function FailedSourcesSection({
   toolCountsUnknown = false,
 }: FailedSourcesSectionProps): JSX.Element {
   const client = useSdkClient();
+  const project = useProject();
   const routes = useRoutes();
   // Auto-select only sources with no toolset references
   const [selected, setSelected] = useState<Set<string>>(() =>
@@ -296,7 +299,10 @@ export function FailedSourcesSection({
 
         {failedSources.length > 0 && (
           <div className="flex justify-end">
-            <RequireScope scope="project:write" level="component">
+            <RequireScope
+              check={authz.project(project.id).write()}
+              level="component"
+            >
               <Button
                 variant="destructive-primary"
                 onClick={handleRemoveClick}

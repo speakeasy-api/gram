@@ -23,6 +23,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { toast } from "sonner";
 import type { LauncherCandidate, Verb } from "./types";
+import * as authz from "@/lib/authz.gen";
 
 const GROUP = "MCP Servers";
 
@@ -41,7 +42,7 @@ function verbsFor(server: McpServer, canWrite: boolean): Verb[] {
  * MCP server candidates, one per /mcp listing row, each opening its server page; enabling a hosted server opens that page too.
  * Each server with an Inspect tab also gets an "Inspect" action that opens it.
  *
- * Verbs are gated per server (`hasScope("mcp:write", <grant resource>)`),
+ * Verbs are gated per server (`authz.mcpServer(<grant resource>, project).write()`),
  * the same check the server's own pages apply, so a grant scoped to some
  * servers never attaches enable/disable to the others. The grant resource is
  * the toolset id for a hosted server and the mcp_servers row id otherwise.
@@ -54,7 +55,7 @@ export function useMcpServerCandidates({
   const routes = useRoutes();
   const queryClient = useQueryClient();
   const client = useSdkClient();
-  const { hasScope } = useRBAC();
+  const { can } = useRBAC();
   const gramProject = useProjectSlugForRequests();
   // Keyed by project so caches never cross projects; a failed list yields no candidates.
   const { data: mcpServersData } = useMcpServers({ gramProject }, undefined, {
@@ -69,7 +70,11 @@ export function useMcpServerCandidates({
     // (the server resolves the grant the same way: grantResourceID in
     // server/internal/mcpservers/impl.go), so that is the id to check.
     const canWrite = (server: McpServer) =>
-      hasScope("mcp:write", server.toolsetId ?? server.id);
+      can(
+        authz
+          .mcpServer(server.toolsetId ?? server.id, server.projectId)
+          .write(),
+      );
 
     // `offerUndo` is false for the undo itself, so the toasts do not loop.
     const applyVisibility = async (
@@ -175,5 +180,5 @@ export function useMcpServerCandidates({
       };
       return [candidate, inspect];
     });
-  }, [mcpServersData, hasScope, routes, queryClient, client, updateMcpServer]);
+  }, [mcpServersData, can, routes, queryClient, client, updateMcpServer]);
 }

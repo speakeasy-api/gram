@@ -43,6 +43,8 @@ vi.mock("@/contexts/Sdk", () => ({
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
     hasScope: (scope: string) => scope === "mcp:write" && state.canWrite,
+    can: ({ scope }: { scope: string }) =>
+      scope === "mcp:write" && state.canWrite,
     hasAnyScope: () => state.canReadPlugins,
   }),
 }));

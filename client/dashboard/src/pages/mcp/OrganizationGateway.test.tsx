@@ -80,11 +80,13 @@ vi.mock("@/components/page-templates", () => ({
 vi.mock("@/components/require-scope", () => ({
   RequireScope: ({
     children,
-    scope,
+    check,
+    scope = check?.scope,
     level,
   }: {
     children: ReactNode;
-    scope: string;
+    check?: { scope: string };
+    scope?: string;
     level: string;
   }) => {
     if (scope === "project:read") return state.projectRead ? children : null;

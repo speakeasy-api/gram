@@ -41,8 +41,8 @@ const fixture = vi.hoisted(() => ({
 
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
-    hasAnyScope: (scopes: string[]) => {
-      rbac.requested.push(scopes);
+    can: ({ scope, resourceId }: { scope: string; resourceId: string }) => {
+      rbac.requested.push([scope, resourceId]);
       return rbac.canWrite;
     },
   }),
@@ -246,6 +246,7 @@ function renderSheet() {
         issuer={
           {
             id: "issuer-1",
+            projectId: "project-1",
             issuer: "https://idp.example.com",
             slug: "idp",
             clientIdMetadataDocumentSupported: false,
@@ -275,6 +276,7 @@ function renderGrantProfileSheet() {
         issuer={
           {
             id: "issuer-1",
+            projectId: "project-1",
             issuer: "https://idp.example.com",
             slug: "idp",
             authorizationEndpoint: "https://idp.example.com/authorize",
@@ -304,7 +306,7 @@ describe("ModifyRemoteIdentityProviderSheet legacy callback migration", () => {
       }),
     );
     expect(sdk.invalidateClient).toHaveBeenCalledOnce();
-    expect(rbac.requested).toContainEqual(["project:write"]);
+    expect(rbac.requested).toContainEqual(["project:write", "project-1"]);
   });
 
   it("hides Migrate without project:write", () => {
@@ -314,7 +316,7 @@ describe("ModifyRemoteIdentityProviderSheet legacy callback migration", () => {
 
     expect(screen.getByText(/legacy callback warning/)).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Migrate" })).toBeNull();
-    expect(rbac.requested).toContainEqual(["project:write"]);
+    expect(rbac.requested).toContainEqual(["project:write", "project-1"]);
   });
 });
 
@@ -391,6 +393,7 @@ describe("ModifyRemoteIdentityProviderSheet", () => {
           issuer={
             {
               id: "issuer-1",
+              projectId: "project-1",
               issuer: "https://idp.example.com",
               slug: "idp",
               authorizationEndpoint: "https://idp.example.com/authorize",
@@ -492,6 +495,7 @@ describe("ModifyRemoteIdentityProviderSheet", () => {
           issuer={
             {
               id: "issuer-1",
+              projectId: "project-1",
               issuer: "https://idp.example.com",
               slug: "idp",
               authorizationEndpoint: "https://idp.example.com/authorize",

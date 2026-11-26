@@ -56,6 +56,7 @@ import {
   type OfficialServerChoice,
   useSaveShadowMCPOfficialServer,
 } from "./useSaveShadowMCPOfficialServer";
+import * as authz from "@/lib/authz.gen";
 
 /**
  * The event a request for help records. Speakeasy staff are notified from
@@ -566,8 +567,9 @@ function UnlinkedPanel({
   const telemetry = useTelemetry();
   const probe = useProbeRemoteMcpURLMutation({ onError: () => {} });
   const { save, isPending: linking } = useSaveShadowMCPOfficialServer();
-  const { hasScope, isLoading: rbacLoading } = useRBAC();
-  const canCreateServer = !rbacLoading && hasScope("mcp:write", project.id);
+  const { can, isLoading: rbacLoading } = useRBAC();
+  const canCreateServer =
+    !rbacLoading && can(authz.mcpServers(project.id).write());
   const [result, setResult] = useState<ProbeURLResult | null>(null);
   const [checkFailed, setCheckFailed] = useState(false);
   const [checkFailedReason, setCheckFailedReason] = useState("");

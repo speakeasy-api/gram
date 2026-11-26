@@ -14,6 +14,7 @@ import { PromptTemplateCard } from "../prompts/Prompts";
 import { ToolsetsGraphic } from "./ToolsetsEmptyState";
 import { usePrompts } from "../prompts/usePrompts";
 import { PromptSelectPopover } from "../prompts/PromptSelectPopover";
+import * as authz from "@/lib/authz.gen";
 
 export function PromptsTabContent({
   toolset,
@@ -26,6 +27,7 @@ export function PromptsTabContent({
   const toolsetPrompts = toolset.promptTemplates;
   const [promptSelectPopoverOpen, setPromptSelectPopoverOpen] = useState(false);
   const routes = useRoutes();
+  const writeCheck = authz.mcpServer(toolset.id, toolset.projectId).write();
 
   const currentPromptNames = toolsetPrompts?.map((t) => t.name) ?? [];
 
@@ -65,7 +67,7 @@ export function PromptsTabContent({
         heading="No prompts yet"
         description="Prompt templates are ready-made prompts your MCP server offers to connected clients like Claude Desktop or Cursor, so users can start a common task without typing it out themselves."
         nonEmptyProjectCTA={
-          <RequireScope scope="mcp:write" level="component">
+          <RequireScope check={writeCheck} level="component">
             <Stack gap={2} direction="horizontal">
               <routes.prompts.newPrompt.Link>
                 <Button size="sm">Create prompt</Button>
@@ -91,7 +93,7 @@ export function PromptsTabContent({
           />
         ))}
       </Cards>
-      <RequireScope scope="mcp:write" level="section">
+      <RequireScope check={writeCheck} level="section">
         <Stack
           gap={3}
           direction={"horizontal"}

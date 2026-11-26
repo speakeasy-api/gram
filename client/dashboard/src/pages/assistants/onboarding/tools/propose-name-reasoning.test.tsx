@@ -15,7 +15,7 @@ vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({ assistants: { create: mocks.create } }),
 }));
 vi.mock("@/hooks/useRBAC", () => ({
-  useRBAC: () => ({ hasScope: () => true }),
+  useRBAC: () => ({ hasScope: () => true, can: () => true }),
 }));
 vi.mock("@/elements", () => ({
   defineFrontendTool: (definition: unknown) => definition,

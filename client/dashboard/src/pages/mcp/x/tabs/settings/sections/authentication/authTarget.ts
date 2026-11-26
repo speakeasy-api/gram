@@ -16,6 +16,7 @@ import { invalidateAllMetaMcpServers } from "@gram/client/react-query/metaMcpSer
 import { invalidateAllToolset } from "@gram/client/react-query/toolset.js";
 import type { QueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
+import * as authz from "@/lib/authz.gen";
 
 /**
  * Abstracts the resource a user_session_issuer links to. The auth components
@@ -31,6 +32,8 @@ export type AuthTarget = {
   hosted?: boolean;
   /** Resource identifier used by the target's mcp:write check. */
   permissionResourceId: string;
+  /** What changing the target's authentication needs. */
+  writeCheck: authz.Check;
   /** Exact MCP server row id, separate from the permission resource id. */
   mcpServerId?: string;
   /** Whether the target backend accepts organization-owned issuers. */
@@ -75,6 +78,9 @@ export function useMcpServerAuthTarget(
       projectId: mcpServer.projectId,
       hosted: mcpServer.toolsetId !== undefined,
       permissionResourceId: mcpServer.toolsetId ?? mcpServer.id,
+      writeCheck: authz
+        .mcpServer(mcpServer.toolsetId ?? mcpServer.id, mcpServer.projectId)
+        .write(),
       mcpServerId: mcpServer.id,
       supportsOrganizationIssuers: true,
       userSessionIssuerId: mcpServer.userSessionIssuerId ?? null,
@@ -118,6 +124,7 @@ export function useToolsetAuthTarget(toolset: Toolset): AuthTarget {
       projectId: toolset.projectId,
       hosted: true,
       permissionResourceId: toolset.id,
+      writeCheck: authz.mcpServer(toolset.id, toolset.projectId).write(),
       // The canonical hosted server shares the toolset's ID. Other wrappers
       // have their own IDs and use useMcpServerAuthTarget instead.
       mcpServerId: toolset.id,
@@ -158,6 +165,7 @@ export function useMetaMcpAuthTarget(
       slug: slugSeed,
       projectId: metaMcpServer.projectId,
       permissionResourceId: metaMcpServer.projectId,
+      writeCheck: authz.mcpServers(metaMcpServer.projectId).write(),
       supportsOrganizationIssuers: true,
       userSessionIssuerId: metaMcpServer.userSessionIssuerId ?? null,
       attachImpactTarget: { metaMcpServerId: metaMcpServer.id },

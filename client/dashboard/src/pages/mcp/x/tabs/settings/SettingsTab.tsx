@@ -83,6 +83,7 @@ import {
   MCP_TUNNEL_KEY_SECTION_ID,
   TunnelKeySection,
 } from "./sections/TunnelKeySection";
+import * as authz from "@/lib/authz.gen";
 
 // Every section that can be deep-linked from elsewhere in the dashboard
 // (readiness bar, visibility picker, rate-limit hint, connections panel).
@@ -127,10 +128,11 @@ export function SettingsTab({
     !!mcpServer.remoteMcpServerId || !!mcpServer.tunneledMcpServerId;
   const remoteMcpServerId = mcpServer.remoteMcpServerId;
   const { mcpUrl } = useResolvedMcpServerUrl(endpoints, isLoadingEndpoints);
-  const { hasScope } = useRBAC();
+  const { can } = useRBAC();
   const canWritePlugins = usePluginWriteAccess();
   const canWriteToolset =
-    !!hostedToolset && hasScope("mcp:write", hostedToolset.id);
+    !!hostedToolset &&
+    can(authz.mcpServer(hostedToolset.id, hostedToolset.projectId).write());
 
   // The source rows behind this server. Each section edits the source
   // directly, so they are fetched once here rather than per section.
@@ -336,6 +338,7 @@ export function SettingsTab({
                 <ServerInstructionsSection
                   mcpServerId={mcpServer.id}
                   writeResourceId={hostedToolset.id}
+                  projectId={hostedToolset.projectId}
                   name={mcpServer.name || hostedToolset.name}
                   tools={hostedToolset.tools}
                 />
@@ -418,7 +421,14 @@ export function SettingsTab({
           },
           // Finished guided setup moves here from the Setup page.
           guidedSetupStatus(mcpServer, remoteMcpServer?.url) === "done" &&
-            hasScope("mcp:write", mcpServer.id) && {
+            can(
+              authz
+                .mcpServer(
+                  mcpServer.toolsetId ?? mcpServer.id,
+                  mcpServer.projectId,
+                )
+                .write(),
+            ) && {
               ...G.setup,
               content: <RestartSetupSection mcpServer={mcpServer} />,
             },

@@ -9,6 +9,7 @@ import { useUpdateToolsetMutation } from "@gram/client/react-query/updateToolset
 import { useQueryClient } from "@tanstack/react-query";
 import { ExternalLink } from "lucide-react";
 import { toast } from "sonner";
+import * as authz from "@/lib/authz.gen";
 
 /**
  * How agents find this server's tools. Gateways have the same setting under
@@ -19,8 +20,8 @@ export function MCPPerformanceTab({
 }: {
   toolset: Toolset;
 }): JSX.Element {
-  const { hasScope } = useRBAC();
-  const canWrite = hasScope("mcp:write");
+  const { can } = useRBAC();
+  const canWrite = can(authz.mcpServer(toolset.id, toolset.projectId).write());
   const queryClient = useQueryClient();
   const telemetry = useTelemetry();
 

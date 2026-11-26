@@ -55,7 +55,10 @@ vi.mock("./hosted/useHostedVisibilityGuard", () => ({
   }),
 }));
 vi.mock("@/hooks/useRBAC", () => ({
-  useRBAC: () => ({ hasScope: mocks.hasScope }),
+  useRBAC: () => ({
+    can: ({ scope, resourceId }: { scope: string; resourceId: string }) =>
+      mocks.hasScope(scope, resourceId) as boolean,
+  }),
 }));
 vi.mock("@gram/client/react-query/updateMcpServer.js", () => ({
   useUpdateMcpServerMutation: (options: unknown) => {

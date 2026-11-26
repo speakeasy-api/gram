@@ -51,7 +51,7 @@ vi.mock("@/contexts/Sdk", () => ({
   useSlugs: () => ({ orgSlug: "example", projectSlug: "default" }),
 }));
 vi.mock("@/hooks/useRBAC", () => ({
-  useRBAC: () => ({ hasScope: () => true }),
+  useRBAC: () => ({ hasScope: () => true, can: () => true }),
 }));
 vi.mock("@/pages/skills/use-skills-over-mcp", () => ({
   useSkillsOverMcpEnabled: () => false,

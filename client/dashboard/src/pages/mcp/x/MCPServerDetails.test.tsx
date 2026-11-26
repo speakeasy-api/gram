@@ -45,6 +45,8 @@ vi.mock("./setup/ProviderSetupPage", () => ({
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
     hasScope: (scope: string) => scope !== "mcp:write" || mocks.canWrite,
+    can: ({ scope }: { scope: string }) =>
+      scope !== "mcp:write" || mocks.canWrite,
     hasAnyScope: (scopes: string[]) =>
       scopes.some((scope) => scope !== "mcp:write" || mocks.canWrite),
     hasAllScopes: (scopes: string[]) =>

@@ -92,6 +92,7 @@ import {
   buildMcpDetailNavItems,
   type McpDetailTabDef,
 } from "./mcpDetailNavItems";
+import * as authz from "@/lib/authz.gen";
 
 const HOSTED_TABS: McpDetailTabDef<TabValue>[] = [
   { key: "tools", title: "Tools", Icon: Wrench },
@@ -118,7 +119,7 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
   const routes = useRoutes();
   const location = useLocation();
   const { mcpServerSlug } = useParams<{ mcpServerSlug: string }>();
-  const { hasScope, hasAnyScope } = useRBAC();
+  const { can, hasScope, hasAnyScope } = useRBAC();
   const mcpScoped =
     useFeatureFlag(FEATURE_FLAGS.mcpScopedPolicies).status === "enabled";
   const organization = useOrganization();
@@ -289,7 +290,7 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
   const canViewTeamAccess =
     !!mcpServer &&
     hasScope("org:read", organization.id) &&
-    hasScope("mcp:read", grantResourceId);
+    can(authz.mcpServer(grantResourceId, mcpServer.projectId).read());
   // Same check as the Skills tab routes: skill read on this project. Only
   // hosted and remote-backed servers have the tab.
   const canViewSkills =
@@ -304,7 +305,7 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
     !!mcpServer &&
     !isUnproxied &&
     hasScope("org:admin", organization.id) &&
-    hasScope("mcp:read", mcpServer.id);
+    can(authz.mcpServer(grantResourceId, mcpServer.projectId).read());
 
   // Source detail pages are gone; the description still explains the backend,
   // but there is no separate page to send anyone to.
@@ -337,7 +338,7 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
   const showSetup =
     !!mcpServer?.remoteMcpServerId &&
     (!!setupProvider || !!setupGuide) &&
-    hasScope("mcp:write", mcpServer.id);
+    can(authz.mcpServer(grantResourceId, mcpServer.projectId).write());
   // A provider with a guided setup is set up there, not in Settings: until
   // someone completes it (or after Settings restarts it), Overview and the
   // header send the admin to the Setup page.

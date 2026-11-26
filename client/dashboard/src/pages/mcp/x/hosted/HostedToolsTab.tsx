@@ -31,6 +31,7 @@ import { AlertTriangle } from "lucide-react";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
+import * as authz from "@/lib/authz.gen";
 
 /** The toolset's tools: list, add, edit, remove. */
 export function HostedToolsTab({
@@ -41,8 +42,8 @@ export function HostedToolsTab({
   /** This server's Inspect tab, where its tools can be tried in chat. */
   inspectHref: string;
 }): React.JSX.Element {
-  const { hasScope } = useRBAC();
-  const canWrite = hasScope("mcp:write", toolset.id);
+  const { can } = useRBAC();
+  const canWrite = can(authz.mcpServer(toolset.id, toolset.projectId).write());
   const queryClient = useQueryClient();
   const telemetry = useTelemetry();
   const client = useSdkClient();

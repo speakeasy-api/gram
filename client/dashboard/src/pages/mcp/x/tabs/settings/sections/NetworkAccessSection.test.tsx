@@ -43,7 +43,7 @@ const testState = vi.hoisted(() => ({
   domains: [{ id: "domain-1", domain: "mcp.example.com" }],
   ingressQuery: vi.fn(),
   requireScopeProps: undefined as
-    | { scope: string; resourceId?: string; level: string }
+    | { check?: unknown; scope?: string; resourceId?: string; level: string }
     | undefined,
   mutate: vi.fn(),
   mutateGateway: vi.fn(),
@@ -95,7 +95,8 @@ vi.mock("@/components/require-scope", () => ({
     ...props
   }: {
     children: React.ReactNode;
-    scope: string;
+    check?: unknown;
+    scope?: string;
     resourceId?: string;
     level: string;
   }) => {
@@ -946,10 +947,13 @@ describe("NetworkAccessSection", () => {
       { wrapper: MemoryRouter },
     );
 
-    expect(testState.requireScopeProps).toEqual({
+    expect(testState.requireScopeProps?.level).toBe("component");
+    expect(testState.requireScopeProps?.check).toMatchObject({
       scope: "mcp:write",
+      resourceKind: "mcp",
       resourceId: "project-1",
-      level: "component",
+      collection: true,
+      dimensions: { projectId: "project-1" },
     });
   });
 

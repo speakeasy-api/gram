@@ -260,9 +260,14 @@ interface CheckFields {
   readonly invalid: boolean;
 }
 
-/** Mirrors idFromString in authz/ids.go, spaces as Go's unicode.IsSpace. */
+/**
+ * Mirrors idFromString in authz/ids.go, spaces as Go's unicode.IsSpace. The
+ * typeof guard covers a response missing a field its type promises: the
+ * check is denied rather than the page crashing.
+ */
 function namesResource(id: string): boolean {
   return (
+    typeof id === "string" &&
     id !== "" &&
     id.toLowerCase() !== "00000000-0000-0000-0000-000000000000" &&
     id !== "*" &&

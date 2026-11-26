@@ -5,7 +5,7 @@ import { CardContextMenu } from "@/components/card-context-menu";
 import { Card } from "@/components/ui/Card";
 import type { Action } from "@/components/ui/MoreActions";
 import { MoreActions } from "@/components/ui/MoreActions";
-import { useSession } from "@/contexts/Auth";
+import { useProject, useSession } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useRoutes } from "@/routes";
@@ -20,13 +20,21 @@ import { Text } from "@/components/ui/Text";
 import { handleAPIError } from "@/lib/errors";
 import { CloneEnvironmentDialog } from "./CloneEnvironmentDialog";
 import { useEnvironments } from "./useEnvironments";
+import * as authz from "@/lib/authz.gen";
 export function EnvironmentsRoot(): JSX.Element {
   return <Outlet />;
 }
 
 export default function Environments(): JSX.Element {
+  const project = useProject();
   return (
-    <RequireScope scope={["project:read", "project:write"]} level="page">
+    <RequireScope
+      check={[
+        authz.project(project.id).read(),
+        authz.project(project.id).write(),
+      ]}
+      level="page"
+    >
       <EnvironmentsInner />
     </RequireScope>
   );
@@ -34,6 +42,7 @@ export default function Environments(): JSX.Element {
 
 function EnvironmentsInner() {
   const session = useSession();
+  const project = useProject();
   const routes = useRoutes();
   const telemetry = useTelemetry();
   const environments = useEnvironments();
@@ -86,7 +95,10 @@ function EnvironmentsInner() {
   };
 
   const newEnvironmentButton = (
-    <RequireScope scope="environment:write" level="component">
+    <RequireScope
+      check={authz.environments(project.id).write()}
+      level="component"
+    >
       <Button onClick={() => setCreateEnvironmentDialogOpen(true)}>
         <Button.LeftIcon>
           <Plus className="h-4 w-4" />
@@ -170,8 +182,10 @@ function EnvironmentCard({
   onClone: (environment: Environment) => void;
 }) {
   const routes = useRoutes();
-  const { hasScope } = useRBAC();
-  const canWrite = hasScope("environment:write");
+  const { can } = useRBAC();
+  const canWrite = can(
+    authz.environment(environment.id, environment.projectId).write(),
+  );
 
   // Gate the actions by scope so the right-click menu honors the same
   // environment:write guard as the visible ⋯ button (which is wrapped in
@@ -204,7 +218,12 @@ function EnvironmentCard({
             >
               {environment.name}
             </Text>
-            <RequireScope scope="environment:write" level="component">
+            <RequireScope
+              check={authz
+                .environment(environment.id, environment.projectId)
+                .write()}
+              level="component"
+            >
               <div onClick={(e) => e.stopPropagation()}>
                 <MoreActions actions={actions} />
               </div>

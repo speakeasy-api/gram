@@ -11,6 +11,7 @@ const { hasAnyScope } = vi.hoisted(() => ({ hasAnyScope: vi.fn() }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
     hasAnyScope: (scopes: Scope[]) => hasAnyScope(scopes) as boolean,
+    can: ({ scope }: { scope: Scope }) => hasAnyScope([scope]) as boolean,
     hasAllScopes: (scopes: Scope[]) => hasAnyScope(scopes) as boolean,
     isLoading: false,
   }),

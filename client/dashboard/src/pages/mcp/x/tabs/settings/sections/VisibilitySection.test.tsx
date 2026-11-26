@@ -23,6 +23,11 @@ vi.mock("@/hooks/useRBAC", () => ({
       (scope !== "mcp:write" ||
         rbac.writableResource === undefined ||
         resourceId === rbac.writableResource),
+    can: ({ scope, resourceId }: { scope: string; resourceId: string }) =>
+      rbac.canWrite &&
+      (scope !== "mcp:write" ||
+        rbac.writableResource === undefined ||
+        resourceId === rbac.writableResource),
     hasAnyScope: () => rbac.canWrite,
     hasAllScopes: () => rbac.canWrite,
     isLoading: false,

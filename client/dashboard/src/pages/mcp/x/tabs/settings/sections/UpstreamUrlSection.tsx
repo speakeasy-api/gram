@@ -10,6 +10,7 @@ import type { RemoteMcpServer } from "@gram/client/models/components/remotemcpse
 import { toast } from "sonner";
 import { UpstreamUrlField } from "./UpstreamUrlField";
 import { useUpstreamUrlDraft } from "./useUpstreamUrlDraft";
+import * as authz from "@/lib/authz.gen";
 
 export const MCP_UPSTREAM_URL_SECTION_ID = "upstream-url";
 
@@ -23,8 +24,9 @@ export function UpstreamUrlSection({
   remoteMcpServer: RemoteMcpServer;
 }): JSX.Element {
   const upstream = useUpstreamUrlDraft(remoteMcpServer);
-  const { hasScope } = useRBAC();
-  useReportUnsavedChanges(hasScope("mcp:write") && upstream.dirty);
+  const { can } = useRBAC();
+  const writeCheck = authz.mcpServers(remoteMcpServer.projectId).write();
+  useReportUnsavedChanges(can(writeCheck) && upstream.dirty);
 
   const handleSave = async () => {
     try {
@@ -57,7 +59,7 @@ export function UpstreamUrlSection({
               : null}
           </SettingsSection.FooterHint>
           <SettingsSection.FooterActions>
-            <RequireScope scope="mcp:write" level="component">
+            <RequireScope check={writeCheck} level="component">
               <VerifyRemoteMcpUrlButton
                 state={upstream.verify}
                 url={upstream.draft}

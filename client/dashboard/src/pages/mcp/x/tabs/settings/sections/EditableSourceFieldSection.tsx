@@ -8,6 +8,7 @@ import { Field, FieldError, FieldLabel } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { useEffect, useState, type ReactNode } from "react";
 import { toast } from "sonner";
+import * as authz from "@/lib/authz.gen";
 
 // One settings section editing a single text field of the source behind an
 // MCP server. Owns its own draft, error, and pending state so sibling sections
@@ -108,8 +109,7 @@ export function EditableSourceFieldSection({
           <SettingsSection.FooterHint>{footerHint}</SettingsSection.FooterHint>
           <SettingsSection.FooterActions>
             <RequireScope
-              scope="mcp:write"
-              resourceId={projectId}
+              check={authz.mcpServers(projectId).write()}
               level="component"
             >
               <FooterSaveButton
