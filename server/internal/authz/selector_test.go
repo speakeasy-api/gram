@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"maps"
 	"testing"
 
 	"github.com/google/uuid"
@@ -393,14 +394,12 @@ func TestOpenKeys_Golden(t *testing.T) {
 		scope Scope
 		keys  openKeys
 	}{
-		{ScopeOrgHooksIngest, openKeys{Probe: project, Connection: nil, PolicyAudience: nil}},
-		{ScopeRiskPolicyBlock, openKeys{Probe: server, Connection: nil, PolicyAudience: nil}},
-		{ScopeRiskPolicyBypass, openKeys{Probe: server, Connection: nil, PolicyAudience: nil}},
-		{ScopeRiskPolicyEvaluate, openKeys{Probe: server, Connection: nil, PolicyAudience: server}},
+		{ScopeOrgHooksIngest, openKeys{Probe: project, Connection: nil}},
+		{ScopeRiskPolicyBlock, openKeys{Probe: server, Connection: nil}},
+		{ScopeRiskPolicyBypass, openKeys{Probe: server, Connection: nil}},
 		{ScopeMCPConnect, openKeys{
-			Probe:          []string{SelectorKeyTool, SelectorKeyDisposition},
-			Connection:     []string{SelectorKeyTool, SelectorKeyDisposition},
-			PolicyAudience: nil,
+			Probe:      []string{SelectorKeyTool, SelectorKeyDisposition},
+			Connection: []string{SelectorKeyTool, SelectorKeyDisposition},
 		}},
 	}
 	want := make(map[Scope]openKeys, len(entries))
@@ -497,29 +496,27 @@ func TestMatching_MissingKeyNeverMatches(t *testing.T) {
 	}
 }
 
-// Only the connect permission has connections, and only the risk policy
-// audience permission (or its bypass) asks an audience question.
+// Only the connect permission has connections.
 func TestMatching_OmissionStampsBelongToTheirPermission(t *testing.T) {
 	t.Parallel()
 
 	read := MCPServer(MCPServerIDFrom("server-1"), ProjectIDFrom("project-1")).Read()
 	require.NoError(t, validateInput(read))
 	require.ErrorIs(t, validateInput(read.asConnection()), ErrInvalidCheck)
-
-	audience := RiskPolicyEvaluateCheck("policy-1")
-	audience.Scope = ScopeRiskPolicyBlock
-	require.ErrorIs(t, validateInput(audience), ErrInvalidCheck)
 }
 
-// An audience grant limited to one server still places the caller under the
-// policy wherever it is asked: leaving the server out can only apply the
-// policy more widely. A bypass limited to one server exempts nothing the
-// request does not name.
-func TestMatching_RiskPolicyAudienceIgnoresServerLimit(t *testing.T) {
+// A policy's audience is the same on every server, so an evaluate grant
+// cannot name one. A bypass limited to one server exempts only requests to
+// that server.
+func TestMatching_RiskPolicyAudienceHasNoServerLimit(t *testing.T) {
 	t.Parallel()
 
 	audience := NewSelector(ScopeRiskPolicyEvaluate, "policy-1")
-	audience[SelectorKeyServerURL] = "https://one.example.com"
+	for key, value := range map[string]string{SelectorKeyServerURL: "https://one.example.com", SelectorKeyServerIdentity: "one"} {
+		limited := maps.Clone(audience)
+		limited[key] = value
+		require.ErrorContains(t, ValidateSelector(ScopeRiskPolicyEvaluate, limited), "not allowed", key)
+	}
 	bypass := NewSelector(ScopeRiskPolicyBypass, "policy-1")
 	bypass[SelectorKeyServerURL] = "https://one.example.com"
 	grants := []Grant{NewGrantWithSelector(ScopeRiskPolicyEvaluate, audience), NewGrantWithSelector(ScopeRiskPolicyBypass, bypass)}

@@ -1,5 +1,23 @@
 # dashboard
 
+## 0.157.0
+
+### Minor Changes
+
+- eb154bd: Intent-based policies now use six reusable primitive labels and ten composed rules, adding protections against broadcasting personal data and making unreviewed public releases.
+- f69af0d: Members can now ask for time-based access. Requesting access opens a dialog that shows what is being asked for, asks how long it is needed (1 hour, 2 hours, 4 hours or end of day on the member's own clock) and takes an optional note for the administrators. The Access Requests tab shows what each requester asked for in a new "Wants it" column, and the decide dialog suggests the matching window, or offers the requester's own deadline.
+- 1702f18: Behind the `terminal-home` flag, the project homepage puts the Project Assistant in a terminal-style panel beside five widgets: what needs attention, spend against last week, the servers whose usage changed most, live and recent agent sessions, and tool calls by hour. Clicking a row in a widget asks the assistant about it.
+
+### Patch Changes
+
+- 637f8cc: The Agent Feedback tab, the MCP feedback API description and the `mcp_feedback.submitted_v1` webhook payload now say that secrets and personal data in a report are masked on a best-effort basis, so some may remain.
+- b5a6e25: `telemetry.getObservabilityOverview` takes `tool_calls_only`. When set, chat, token, cost and session duration figures come back as 0, and overviews of two hours or more can be read from pre-summed tool call counts instead of raw logs, with periods aligned to 15-minute boundaries.
+- 3570e4d: The MCP server Overview tab, a gateway's activity section and a source's activity panel now ask only for tool-call figures, so the server can answer them faster.
+- 6261b60: An agent's tab and setup step for its MCP servers and how Speakeasy signs in to them is called MCP sign-in again, instead of Server sign-in.
+- 8a39bb4: The Shadow MCP page and server pages show progress and explain failures. Retry buttons spin while they work, gathering evidence and saving a server name show a spinner, and the decision button reads "Approving…" or "Blocking…". Failed loads show the reason under a plain title. Failed actions raise one toast with a plain title, the reason, and Retry where it helps, instead of a generic "Request failed" toast beside a second one with no reason. A successful rename is now confirmed.
+- 7e487f9: Beta and Preview pages in the sidebar now show a small blue or orange dot instead of a boxed section with an "In Beta" or "In Preview" caption. The dot grows into the Beta or Preview tag when that page is open, so the current page is the only row that stands out.
+- 05c984d: The suspected problem sheet says in a plain sentence where the failures came from, names the app only when every person in the problem shows it, and dates times that are not today, including in the chart's tooltips. When there are no suspected problems, the provider Overview and a server's Clients and Sessions tab no longer show an empty panel.
+
 ## 0.156.0
 
 ### Minor Changes
