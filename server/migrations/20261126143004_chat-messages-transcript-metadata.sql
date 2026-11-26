@@ -21,7 +21,7 @@ COMMENT ON COLUMN "chat_message_transcripts"."source_updated_at" IS 'The chat_me
 -- Modify "chat_messages" table
 ALTER TABLE "chat_messages" ADD COLUMN "source_updated_at" timestamptz NULL, ADD COLUMN "tool_call_count" integer NULL, ADD COLUMN "content_bytes" integer NULL, ADD COLUMN "content_raw_bytes" integer NULL, ADD COLUMN "tool_calls_bytes" integer NULL;
 -- Set comment to column: "source_updated_at" on table: "chat_messages"
-COMMENT ON COLUMN "chat_messages"."source_updated_at" IS 'When the message body last changed; set by trigger.
+COMMENT ON COLUMN "chat_messages"."source_updated_at" IS 'When the message body last changed; set on insert and by every body update.
 @access: confidential';
 -- Set comment to column: "tool_call_count" on table: "chat_messages"
 COMMENT ON COLUMN "chat_messages"."tool_call_count" IS 'Number of tool calls in tool_calls, 0 when it has none.
@@ -35,17 +35,6 @@ COMMENT ON COLUMN "chat_messages"."content_raw_bytes" IS 'octet_length of conten
 -- Set comment to column: "tool_calls_bytes" on table: "chat_messages"
 COMMENT ON COLUMN "chat_messages"."tool_calls_bytes" IS 'octet_length of tool_calls as text, 0 when NULL.
 @access: confidential';
--- Create "set_chat_message_source_updated_at" function
-CREATE FUNCTION "set_chat_message_source_updated_at" () RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-  NEW.source_updated_at := clock_timestamp();
-  RETURN NEW;
-END;
-$$;
--- Create trigger "chat_messages_source_updated_at_insert"
-CREATE TRIGGER "chat_messages_source_updated_at_insert" BEFORE INSERT ON "chat_messages" FOR EACH ROW WHEN (new.source_updated_at IS NULL) EXECUTE FUNCTION "set_chat_message_source_updated_at"();
--- Create trigger "chat_messages_source_updated_at_update"
-CREATE TRIGGER "chat_messages_source_updated_at_update" BEFORE UPDATE OF "content", "content_raw", "storage_error", "tool_call_summaries", "tool_calls", "tool_outcome_notes" ON "chat_messages" FOR EACH ROW WHEN ((old.content IS DISTINCT FROM new.content) OR (old.content_raw IS DISTINCT FROM new.content_raw) OR (old.tool_calls IS DISTINCT FROM new.tool_calls) OR (old.tool_outcome_notes IS DISTINCT FROM new.tool_outcome_notes) OR (old.tool_call_summaries IS DISTINCT FROM new.tool_call_summaries) OR (old.storage_error IS DISTINCT FROM new.storage_error)) EXECUTE FUNCTION "set_chat_message_source_updated_at"();
 -- Create "chat_message_tool_call_ids" table
 CREATE TABLE "chat_message_tool_call_ids" (
   "message_id" uuid NOT NULL,

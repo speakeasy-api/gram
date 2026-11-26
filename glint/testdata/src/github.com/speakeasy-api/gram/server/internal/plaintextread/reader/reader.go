@@ -32,6 +32,8 @@ func Leaky(ctx context.Context, q *repo.Queries) {
 	_, _ = q.CountToolCalls(ctx)       // want `do not call "CountToolCalls" here`
 	_, _ = q.FindByNotes(ctx)          // want `do not call "FindByNotes" here`
 	list := q.ListMessages             // want `do not call "ListMessages" here`
+	_ = q.SetNotes(ctx, "id")          // want `do not call "SetNotes" here: it updates the plaintext transcript columns of chat_messages; move the query into transcriptstore`
+	_ = q.UpsertMessage(ctx, "id")     // want `do not call "UpsertMessage" here: it updates`
 	_ = list
 }
 
@@ -39,7 +41,5 @@ func Clean(ctx context.Context, q *repo.Queries) {
 	_, _ = q.ListMessageIDs(ctx, "chat")
 	_, _ = q.ListPartBodies(ctx, "chat")
 	_ = q.CreateMessage(ctx, "chat")
-	_ = q.SetNotes(ctx, "id")
-	_ = q.UpsertMessage(ctx, "id")
 	_, _ = q.KeyInJSON(ctx)
 }

@@ -97,8 +97,8 @@ func configureTranscripts(ctx context.Context, c *cli.Context, db *pgxpool.Pool,
 }
 
 // checkTranscriptSchema checks what the store reads and writes: the sidecar
-// and the source_updated_at it records, the chat_messages columns and triggers
-// that sealing relies on, and the tool-call ID table with the
+// and the source_updated_at it records, the chat_messages columns and the
+// source_updated_at default that sealing relies on, and the tool-call ID table with the
 // (message_id, tool_call_id) conflict target its inserts use.
 // Catalog reads neither touch transcript payloads nor execute trial inserts.
 // Tables are looked up through the connection's search_path, the same way the
@@ -182,15 +182,12 @@ SELECT EXISTS (SELECT 1 FROM sidecar)
   JOIN messages m ON m.oid = a.attrelid
   WHERE a.attname = column_needed.name AND a.atttypid = column_needed.type_oid AND NOT a.attisdropped
  ))
- AND NOT EXISTS (
- -- Without both triggers a body change would not move source_updated_at,
- -- and a stale copy would read as current.
- SELECT 1 FROM (VALUES ('chat_messages_source_updated_at_insert'), ('chat_messages_source_updated_at_update')) AS trigger_needed(name)
- WHERE NOT EXISTS (
-  SELECT 1 FROM pg_catalog.pg_trigger tg
-  JOIN messages m ON m.oid = tg.tgrelid
-  WHERE tg.tgname = trigger_needed.name AND tg.tgenabled <> 'D' AND NOT tg.tgisinternal
- ))
+ AND EXISTS (
+ -- Inserts rely on the column default to stamp source_updated_at.
+ SELECT 1 FROM pg_catalog.pg_attribute a
+ JOIN messages m ON m.oid = a.attrelid
+ WHERE a.attname = 'source_updated_at' AND a.atthasdef AND NOT a.attisdropped
+ )
  AND NOT EXISTS (
  SELECT 1 FROM (VALUES ('message_id', 'uuid'::regtype), ('tool_call_id', 'text'::regtype), ('chat_id', 'uuid'::regtype), ('project_id', 'uuid'::regtype)) AS tool_call(name, type_oid)
  WHERE NOT EXISTS (
