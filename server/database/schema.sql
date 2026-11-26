@@ -7183,14 +7183,9 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   -- version rescans and backfills are coordinated outside this field.
   risk_analyzed_at timestamptz,
 
-  -- When the message body last changed. The default stamps inserts; body
-  -- updates set it, other updates do not. A transcript is current while its
-  -- source_updated_at matches. NULL predates the column.
-  updated_at timestamptz DEFAULT clock_timestamp(),
-
   -- Plaintext-free metadata of the message body, so readers can count, budget
-  -- and filter without reading or decrypting it. Written when the transcript is
-  -- sealed, from the same snapshot. NULL until then.
+  -- and filter without reading or decrypting it. Written in the transaction
+  -- that seals the transcript, from the same body. NULL until then.
   tool_call_count INTEGER,
   content_bytes INTEGER,
   content_raw_bytes INTEGER,
@@ -7261,8 +7256,6 @@ COMMENT ON COLUMN chat_messages.original_message_id IS 'Original source-message 
 COMMENT ON COLUMN chat_messages.replayed IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.created_at IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.risk_analyzed_at IS '@access: confidential';
-COMMENT ON COLUMN chat_messages.updated_at IS 'When the message body last changed; set on insert and by every body update.
-@access: confidential';
 COMMENT ON COLUMN chat_messages.tool_call_count IS 'Number of tool calls in tool_calls, 0 when it has none.
 @access: confidential';
 COMMENT ON COLUMN chat_messages.content_bytes IS 'octet_length of content.
@@ -7282,19 +7275,15 @@ CREATE TABLE IF NOT EXISTS chat_message_transcripts (
   project_id UUID NOT NULL,
   organization_id TEXT NOT NULL,
   ciphertext TEXT NOT NULL,
-  -- Deprecated: replaced by source_updated_at. A legacy unkeyed digest of the
-  -- plaintext. It confirms guessed complete payloads and correlates equal ones
-  -- without a key, even after key destruction, so a row carrying it is
-  -- plaintext-equivalent. New copies leave it NULL; backfill clears the rest,
-  -- then the column is dropped.
+  -- Deprecated: every body update now reseals the transcript in the same
+  -- transaction, so a transcript is always current and needs no freshness
+  -- check. A legacy unkeyed digest of the plaintext: it confirms guessed
+  -- payloads and correlates equal ones without a key, even after key
+  -- destruction, so a row carrying it is plaintext-equivalent. New transcripts
+  -- leave it NULL; backfill reseals the rest, then the column is dropped.
   source_hash BYTEA,
   created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
-
-  -- The parent chat_messages.updated_at this copy was sealed from. The copy is
-  -- current while the two are equal. NULL for copies sealed before the column
-  -- existed, which still carry source_hash.
-  source_updated_at TIMESTAMPTZ,
 
   CONSTRAINT chat_message_transcripts_pkey PRIMARY KEY (message_id),
   CONSTRAINT chat_message_transcripts_project_id_message_id_fkey FOREIGN KEY (project_id, message_id) REFERENCES chat_messages(project_id, id) ON DELETE CASCADE,
@@ -7311,10 +7300,8 @@ COMMENT ON COLUMN chat_message_transcripts.organization_id IS 'Owning organizati
 @access: confidential';
 COMMENT ON COLUMN chat_message_transcripts.ciphertext IS 'Organization-key encrypted transcript payload.
 @access: opaque-restricted';
-COMMENT ON COLUMN chat_message_transcripts.source_hash IS 'Deprecated: replaced by source_updated_at. Legacy unkeyed freshness digest of sensitive transcript fields; NULL for new copies. A row carrying it is plaintext-equivalent until backfill clears it and the column is dropped.
+COMMENT ON COLUMN chat_message_transcripts.source_hash IS 'Deprecated: transcripts are resealed with every body update, so no freshness check is needed. Legacy unkeyed digest of sensitive transcript fields; NULL for new transcripts. A row carrying it is plaintext-equivalent until backfill reseals it and the column is dropped.
 @access: opaque-restricted';
-COMMENT ON COLUMN chat_message_transcripts.source_updated_at IS 'The parent chat_messages.updated_at this copy was sealed from.
-@access: confidential';
 COMMENT ON COLUMN chat_message_transcripts.created_at IS '@access: confidential';
 COMMENT ON COLUMN chat_message_transcripts.updated_at IS '@access: confidential';
 

@@ -1819,9 +1819,6 @@ type ChatMessage struct {
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
 	RiskAnalyzedAt pgtype.Timestamptz
-	// When the message body last changed; set on insert and by every body update.
-	// @access: confidential
-	UpdatedAt pgtype.Timestamptz
 	// Number of tool calls in tool_calls, 0 when it has none.
 	// @access: confidential
 	ToolCallCount pgtype.Int4
@@ -1891,16 +1888,13 @@ type ChatMessageTranscript struct {
 	// Organization-key encrypted transcript payload.
 	// @access: opaque-restricted
 	Ciphertext string
-	// Deprecated: replaced by source_updated_at. Legacy unkeyed freshness digest of sensitive transcript fields; NULL for new copies. A row carrying it is plaintext-equivalent until backfill clears it and the column is dropped.
+	// Deprecated: transcripts are resealed with every body update, so no freshness check is needed. Legacy unkeyed digest of sensitive transcript fields; NULL for new transcripts. A row carrying it is plaintext-equivalent until backfill reseals it and the column is dropped.
 	// @access: opaque-restricted
 	SourceHash []byte
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
 	UpdatedAt pgtype.Timestamptz
-	// The parent chat_messages.updated_at this copy was sealed from.
-	// @access: confidential
-	SourceUpdatedAt pgtype.Timestamptz
 }
 
 type ChatResolution struct {
