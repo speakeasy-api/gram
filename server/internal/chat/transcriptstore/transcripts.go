@@ -11,11 +11,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore/repo"
 )
 
-// Transcripts is the one entry point for the bodies of chat messages in
-// projects that keep encrypted shadows. It owns the decision a caller would
-// otherwise repeat: whether a project captures shadows on write and opens them
-// on read. Every other project keeps plaintext: Capture and Open do nothing for
-// it. A nil *Transcripts means no project keeps shadows.
+// Transcripts is the one entry point for the bodies of chat messages. It owns
+// the decision a caller would otherwise repeat: whether a project has encrypted
+// transcripts, so its messages are sealed on write and opened on read. Today
+// that is the projects on GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS. Every other
+// project reads plaintext: Seal and Open do nothing for it. A nil *Transcripts
+// means no project has encrypted transcripts.
 type Transcripts struct {
 	store    *Store
 	projects map[uuid.UUID]struct{}
@@ -29,7 +30,7 @@ type Transcripts struct {
 	guard *plaintextGuard
 }
 
-// NewTranscripts serves shadows for the listed projects only. An empty list
+// NewTranscripts encrypts transcripts for the listed projects only. An empty list
 // turns every method into a no-op; there is no implicit all-project mode.
 func NewTranscripts(store *Store, projectIDs ...uuid.UUID) *Transcripts {
 	projects := make(map[uuid.UUID]struct{}, len(projectIDs))
@@ -39,7 +40,7 @@ func NewTranscripts(store *Store, projectIDs ...uuid.UUID) *Transcripts {
 	return &Transcripts{store: store, projects: projects, organizations: &sync.Map{}, guard: nil}
 }
 
-// Enabled reports whether the project captures and reads shadows.
+// Enabled reports whether the project has encrypted transcripts.
 func (t *Transcripts) Enabled(projectID uuid.UUID) bool {
 	if t == nil || t.store == nil {
 		return false
@@ -48,20 +49,20 @@ func (t *Transcripts) Enabled(projectID uuid.UUID) bool {
 	return ok
 }
 
-// Capture seals shadows for messages the caller just wrote, inside the
+// Seal stores the encrypted copy of messages the caller just wrote, inside the
 // caller's transaction. The caller must roll back on error.
-func (t *Transcripts) Capture(ctx context.Context, db repo.DBTX, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID) error {
+func (t *Transcripts) Seal(ctx context.Context, db repo.DBTX, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID) error {
 	if !t.Enabled(projectID) {
 		return nil
 	}
 	if err := t.store.Capture(ctx, db, organizationID, projectID, messageIDs); err != nil {
-		return fmt.Errorf("capture encrypted transcript shadow: %w", err)
+		return fmt.Errorf("seal chat transcript: %w", err)
 	}
 	return nil
 }
 
 // Body points at the body fields of one loaded message, so Open can replace
-// them with the opened shadow whatever query loaded the row. A nil field was
+// them with the opened copy whatever query loaded the row. A nil field was
 // not loaded and is left alone.
 type Body struct {
 	MessageID         uuid.UUID
@@ -73,11 +74,12 @@ type Body struct {
 	StorageError      *pgtype.Text
 }
 
-// Open replaces each body with its encrypted shadow when the project keeps
-// shadows, in one LoadMany call. A message with no shadow at all keeps its
-// plaintext and counts as plaintext_fallback, so messages written before
-// capture began still load. A stale or unopenable shadow fails the whole read:
-// it means capture or the data is broken, and plaintext must not hide that.
+// Open replaces each body with its encrypted copy when the project has
+// encrypted transcripts, in one LoadMany call. A message with no encrypted copy
+// yet keeps its plaintext and counts as plaintext_fallback, so messages written
+// before sealing began still load. A stale or unopenable copy fails the whole
+// read: it means sealing or the data is broken, and plaintext must not hide
+// that.
 func (t *Transcripts) Open(ctx context.Context, organizationID string, projectID uuid.UUID, bodies []Body) error {
 	if len(bodies) == 0 {
 		return nil
