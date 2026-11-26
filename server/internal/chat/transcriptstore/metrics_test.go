@@ -135,7 +135,7 @@ func TestLoadManyFailsThePageWhenAShadowIsStale(t *testing.T) {
 	_, err = fixturerepo.New(f.db).ForgeSourceUpdatedAt(t.Context(), id, project(f.project), f.org)
 	require.NoError(t, err)
 	opened, err = f.store.LoadMany(t.Context(), f.org, f.project, []uuid.UUID{id})
-	require.ErrorIs(t, err, ErrStale, "a forged matching hash cannot make an older body current")
+	require.ErrorIs(t, err, ErrStale, "a forged matching source_updated_at cannot make an older body current")
 	require.Nil(t, opened)
 }
 

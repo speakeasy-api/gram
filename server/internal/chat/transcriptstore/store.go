@@ -134,9 +134,9 @@ func (s *Store) capture(ctx context.Context, db repo.DBTX, organizationID string
 		if err != nil {
 			return safe(err)
 		}
-		// The copy records the source_updated_at it was sealed from; the
-		// every body update moves it, so the copy is
-		// current exactly while the two are equal.
+		// The copy records the source_updated_at it was sealed from. Every
+		// body update moves it, so the copy is current exactly while the two
+		// are equal.
 		n, err := q.Capture(ctx, repo.CaptureParams{
 			MessageID:       id,
 			ProjectID:       projectID,
@@ -151,9 +151,10 @@ func (s *Store) capture(ctx context.Context, db repo.DBTX, organizationID string
 		if n != 1 {
 			return ErrChanged
 		}
-		// Metadata and tool-call IDs live on chat_messages, measured from the
-		// same snapshot and written in the same transaction, so they never
-		// describe another version of the message than the sealed one.
+		// The counts and sizes live on chat_messages and the tool-call IDs in
+		// chat_message_tool_call_ids, measured from the same snapshot and
+		// written in the same transaction, so they never describe another
+		// version of the message than the sealed one.
 		meta := metadataOf(row.Content, row.ContentRaw, row.ToolCalls)
 		n, err = q.UpdateMessageMetadata(ctx, repo.UpdateMessageMetadataParams{
 			MessageID:       id,

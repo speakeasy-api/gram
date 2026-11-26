@@ -73,9 +73,11 @@ an outdated snapshot by the same comparison.
 Copies sealed before `source_updated_at` existed still carry the old unkeyed
 `source_hash`, a versioned SHA-256 fingerprint of the sensitive fields. Reads
 check those copies with the fingerprint until a backfill seals them again, which
-clears it. That digest is not a confidentiality boundary: anyone with the row
-can confirm a guessed short payload. Dropping the column after the backfill is a
-prerequisite for any encrypted-only rollout.
+clears it. That digest is not a confidentiality boundary: a reader with access
+only to the encrypted table can confirm guessed complete payloads and correlate
+equal payloads without a key. Treat rows that still carry `source_hash` as
+plaintext-equivalent data, not a ciphertext-only dataset. Backfilling every copy
+and dropping the column is a prerequisite for any encrypted-only rollout.
 `Load` checks tenant/project/chat/message linkage, requires a current copy, opens
 the authenticated payload, and compares it with the live body. It never substitutes
 legacy plaintext after a missing/stale copy or a key failure. `source_updated_at`
