@@ -79,15 +79,15 @@ func TestEvaluateLoadedGrants_doesNotConsultShouldEnforce(t *testing.T) {
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
-func TestEngineRequireAny_mapsDeniedToForbidden(t *testing.T) {
+func TestEngineEither_mapsDeniedToForbidden(t *testing.T) {
 	t.Parallel()
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeMCPConnect, "tool_a")})
 
-	err := engine.RequireAny(ctx,
+	err := engine.Require(ctx, Either(
 		MCPServer(MCPServerIDFrom("tool_b"), ProjectIDFrom(testProjectID)).Connect(),
 		MCPServer(MCPServerIDFrom("tool_c"), ProjectIDFrom(testProjectID)).Connect(),
-	)
+	))
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
@@ -286,7 +286,7 @@ func TestPrincipalCredentialPoliciesConjoinEveryCheck(t *testing.T) {
 	}
 }
 
-func TestPrincipalCredentialPoliciesRequireAnyUsesSameCheck(t *testing.T) {
+func TestPrincipalCredentialPoliciesEitherUsesSameCheck(t *testing.T) {
 	t.Parallel()
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	ctx := principalPolicyTestContext(t,
@@ -295,10 +295,10 @@ func TestPrincipalCredentialPoliciesRequireAnyUsesSameCheck(t *testing.T) {
 		[]Grant{NewGrant(ScopeProjectRead, WildcardResource)},
 	)
 
-	err := engine.RequireAny(ctx,
+	err := engine.Require(ctx, Either(
 		Check{Scope: ScopeProjectRead, ResourceID: "project-one"},
 		Check{Scope: ScopeProjectRead, ResourceID: "project-two"},
-	)
+	))
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
@@ -782,7 +782,7 @@ func TestShouldEnforce_platformMCPSurfaceEnforcesWithoutASession(t *testing.T) {
 	require.True(t, marked)
 }
 
-func TestRequireAnyUnblocked(t *testing.T) {
+func TestEitherRefusesBlockedAlternatives(t *testing.T) {
 	t.Parallel()
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	checks := []Check{
@@ -807,7 +807,7 @@ func TestRequireAnyUnblocked(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			ctx := GrantsToContext(enterpriseSessionCtx(t), tc.grants)
-			err := engine.RequireAnyUnblocked(ctx, checks...)
+			err := engine.Require(ctx, Either(checks...))
 			if tc.allowed {
 				require.NoError(t, err)
 			} else {
@@ -826,7 +826,7 @@ func TestRequireAnyUnblocked(t *testing.T) {
 			policies[i] = deny
 			ctx := principalPolicyTestContext(t, policies[0], policies[1], policies[2])
 			var forbidden *oops.ShareableError
-			require.ErrorAs(t, engine.RequireAnyUnblocked(ctx, checks...), &forbidden)
+			require.ErrorAs(t, engine.Require(ctx, Either(checks...)), &forbidden)
 			require.Equal(t, oops.CodeForbidden, forbidden.Code)
 		}
 	})
@@ -838,7 +838,7 @@ func TestRequireAnyUnblocked(t *testing.T) {
 			[]Grant{NewGrant(ScopeSkillRead, "*")},
 		)
 		var forbidden *oops.ShareableError
-		require.ErrorAs(t, engine.RequireAnyUnblocked(ctx, checks...), &forbidden)
+		require.ErrorAs(t, engine.Require(ctx, Either(checks...)), &forbidden)
 		require.Equal(t, oops.CodeForbidden, forbidden.Code)
 	})
 }

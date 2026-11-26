@@ -51,10 +51,9 @@ func (a grantAuthorization) authorizerRefusesEach(allowed []Check) (*Check, erro
 	return nil, nil
 }
 
-// authorizerRefusesAny reports whether the bounded authorization refuses an
-// allowed RequireAny call, where one alternative that passes on its own is
-// enough. When it does, it returns the first alternative the credential
-// allows.
+// authorizerRefusesAny reports whether the bounded authorization allows no
+// alternative on its own. When it refuses, it returns the first alternative
+// the credential allows.
 func (a grantAuthorization) authorizerRefusesAny(alternatives []Check) (*Check, error) {
 	bounded, ok := a.boundedByAuthorizer()
 	if !ok || len(alternatives) == 0 {
@@ -76,10 +75,10 @@ func (a grantAuthorization) authorizerRefusesAny(alternatives []Check) (*Check, 
 	return &alternatives[0], nil
 }
 
-// authorizerRefusesGroup is authorizerRefusesAny for an AnyOf group, where a
-// block on any alternative refuses the whole group. For example, a delegator
-// with a block on server two refuses AnyOf(two, one) even though nothing
-// blocks server one.
+// authorizerRefusesGroup reports whether the bounded authorization refuses an
+// Either group, where a block on any alternative refuses the whole group. For
+// example, a delegator with a block on server two refuses Either(two, one)
+// even though nothing blocks server one.
 func (a grantAuthorization) authorizerRefusesGroup(alternatives []Check) (*Check, error) {
 	bounded, ok := a.boundedByAuthorizer()
 	if !ok || len(alternatives) == 0 {

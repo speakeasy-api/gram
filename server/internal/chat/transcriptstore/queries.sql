@@ -1,7 +1,7 @@
 -- name: Snapshot :one
 SELECT m.id, m.chat_id, m.content, m.content_raw, m.tool_calls,
        m.tool_outcome_notes, m.tool_call_summaries, m.storage_error,
-       sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8'))::bytea AS source_hash
+       m.source_updated_at
 FROM chat_messages m
 JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
 JOIN projects p ON p.id = c.project_id
@@ -14,18 +14,18 @@ WITH live AS MATERIALIZED (
  JOIN projects p ON p.id = c.project_id
  WHERE m.id = @message_id AND m.project_id = @project_id AND p.organization_id = @organization_id
  AND m.chat_id = @chat_id
- AND sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')) = @source_hash::bytea
+ AND m.source_updated_at IS NOT DISTINCT FROM sqlc.narg('source_updated_at')::timestamptz
  FOR SHARE OF m, c, p
 )
-INSERT INTO chat_message_transcripts (message_id, project_id, organization_id, ciphertext, source_hash, tool_call_count, content_bytes, content_raw_bytes, tool_calls_bytes)
-SELECT live.id, @project_id, @organization_id, @ciphertext, @source_hash::bytea, @tool_call_count::integer, @content_bytes::integer, @content_raw_bytes::integer, @tool_calls_bytes::integer FROM live
-ON CONFLICT (message_id) DO UPDATE SET ciphertext = EXCLUDED.ciphertext, source_hash = EXCLUDED.source_hash, tool_call_count = EXCLUDED.tool_call_count, content_bytes = EXCLUDED.content_bytes, content_raw_bytes = EXCLUDED.content_raw_bytes, tool_calls_bytes = EXCLUDED.tool_calls_bytes, updated_at = clock_timestamp()
+INSERT INTO chat_message_transcripts (message_id, project_id, organization_id, ciphertext, source_updated_at)
+SELECT live.id, @project_id, @organization_id, @ciphertext, sqlc.narg('source_updated_at')::timestamptz FROM live
+ON CONFLICT (message_id) DO UPDATE SET ciphertext = EXCLUDED.ciphertext, source_hash = NULL, source_updated_at = EXCLUDED.source_updated_at, updated_at = clock_timestamp()
 WHERE chat_message_transcripts.project_id = @project_id AND chat_message_transcripts.organization_id = @organization_id;
 
 -- name: Load :one
 SELECT m.id, m.chat_id, m.content, m.content_raw, m.tool_calls,
        m.tool_outcome_notes, m.tool_call_summaries, m.storage_error, t.ciphertext,
-       (t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')))::boolean AS current
+       (CASE WHEN t.source_updated_at IS NULL AND t.source_hash IS NOT NULL THEN t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')) ELSE t.source_updated_at IS NOT DISTINCT FROM m.source_updated_at END)::boolean AS current
 FROM chat_messages m
 JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
 JOIN projects p ON p.id = c.project_id
@@ -40,8 +40,8 @@ WHERE m.project_id = @project_id AND p.organization_id = @organization_id AND m.
 ORDER BY m.id LIMIT @page_limit;
 
 -- name: Progress :one
-SELECT count(*) FILTER (WHERE m.project_id = c.project_id AND t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')))::bigint AS current,
-       count(*) FILTER (WHERE m.project_id = c.project_id AND (t.message_id IS NULL OR t.source_hash <> sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8'))))::bigint AS waiting,
+SELECT count(*) FILTER (WHERE m.project_id = c.project_id AND t.message_id IS NOT NULL AND (CASE WHEN t.source_updated_at IS NULL AND t.source_hash IS NOT NULL THEN t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')) ELSE t.source_updated_at IS NOT DISTINCT FROM m.source_updated_at END))::bigint AS current,
+       count(*) FILTER (WHERE m.project_id = c.project_id AND (t.message_id IS NULL OR NOT (CASE WHEN t.source_updated_at IS NULL AND t.source_hash IS NOT NULL THEN t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')) ELSE t.source_updated_at IS NOT DISTINCT FROM m.source_updated_at END)))::bigint AS waiting,
        count(*) FILTER (WHERE m.project_id IS DISTINCT FROM c.project_id)::bigint AS unattributed
 FROM chats c JOIN projects p ON p.id = c.project_id
 JOIN chat_messages m ON m.chat_id = c.id
@@ -51,25 +51,33 @@ WHERE c.project_id = @project_id AND p.organization_id = @organization_id;
 -- name: LoadMany :many
 SELECT m.id, m.chat_id, m.content, m.content_raw, m.tool_calls,
        m.tool_outcome_notes, m.tool_call_summaries, m.storage_error, t.ciphertext,
-       (t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')))::boolean AS current
+       (CASE WHEN t.source_updated_at IS NULL AND t.source_hash IS NOT NULL THEN t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')) ELSE t.source_updated_at IS NOT DISTINCT FROM m.source_updated_at END)::boolean AS current
 FROM chat_messages m
 JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
 JOIN projects p ON p.id = c.project_id
 JOIN chat_message_transcripts t ON t.message_id = m.id AND t.project_id = m.project_id AND t.organization_id = p.organization_id
 WHERE m.id = ANY(@message_ids::uuid[]) AND m.project_id = @project_id AND p.organization_id = @organization_id;
 
+-- name: UpdateMessageMetadata :execrows
+-- Plaintext-free metadata measured from the snapshot just sealed. It does not
+-- touch a body column, so it leaves source_updated_at alone, and it lands only
+-- while the message is still the version that was sealed.
+UPDATE chat_messages
+SET tool_call_count = @tool_call_count::integer, content_bytes = @content_bytes::integer,
+    content_raw_bytes = @content_raw_bytes::integer, tool_calls_bytes = @tool_calls_bytes::integer
+WHERE id = @message_id AND project_id = @project_id::uuid
+  AND source_updated_at IS NOT DISTINCT FROM sqlc.narg('source_updated_at')::timestamptz;
+
 -- name: DeleteToolCallIDs :exec
-DELETE FROM chat_message_transcript_tool_calls WHERE message_id = @message_id AND project_id = @project_id;
+DELETE FROM chat_message_tool_call_ids WHERE message_id = @message_id AND project_id = @project_id;
 
 -- name: InsertToolCallIDs :exec
--- The chat and project come from the captured shadow and its message, not
--- from the caller, so a row cannot name another chat or project than its
--- message. The tool-call IDs are the caller's, parsed from the snapshot that
--- capture just sealed.
-INSERT INTO chat_message_transcript_tool_calls (message_id, tool_call_id, chat_id, project_id)
-SELECT t.message_id, ids.tool_call_id, m.chat_id, t.project_id
-FROM chat_message_transcripts t
-JOIN chat_messages m ON m.id = t.message_id AND m.project_id = t.project_id
+-- The chat and project come from the message, not from the caller, so a row
+-- cannot name another chat or project than its message. The tool-call IDs are
+-- the caller's, parsed from the snapshot that was just sealed.
+INSERT INTO chat_message_tool_call_ids (message_id, tool_call_id, chat_id, project_id)
+SELECT m.id, ids.tool_call_id, m.chat_id, m.project_id
+FROM chat_messages m
 CROSS JOIN unnest(@tool_call_ids::text[]) AS ids(tool_call_id)
-WHERE t.message_id = @message_id AND t.project_id = @project_id
+WHERE m.id = @message_id AND m.project_id = @project_id::uuid
 ON CONFLICT (message_id, tool_call_id) DO NOTHING;

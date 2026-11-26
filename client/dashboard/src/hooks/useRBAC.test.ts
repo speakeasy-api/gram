@@ -3,8 +3,9 @@ import { ListScopesResult$inboundSchema } from "@gram/client/models/components/l
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import { listUserGrantsResultFromJSON } from "@gram/client/models/components/listusergrantsresult.js";
 import { queryKeyGrants } from "@gram/client/react-query/grants.js";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
+  canInGrants,
   exclusionScopesForScope,
   hasScopeInGrants,
   hasScopeInProject,
@@ -15,6 +16,7 @@ import {
   canWriteProjectMCPServersInGrants,
 } from "./useRBAC";
 import servedCatalogue from "../pages/access/listScopes.fixture.json";
+import * as authz from "@/lib/authz.gen";
 
 describe("Channels effective-grants contract", () => {
   const scopes = ["channels:connect", "channels:admin", "channels:read_all"];
@@ -724,5 +726,86 @@ describe("MCP server write in one of two projects", () => {
   it("allows adding servers only in the project the grant names", () => {
     expect(canWriteProjectMCPServersInGrants(grants, "project-a")).toBe(true);
     expect(canWriteProjectMCPServersInGrants(grants, "project-b")).toBe(false);
+  });
+});
+
+describe("canInGrants", () => {
+  const writeInProjectA = [
+    {
+      scope: "mcp:write",
+      subScopes: ["mcp:read"],
+      selectors: [
+        { resourceKind: "mcp", resourceId: "*", projectId: "project-a" },
+      ],
+    },
+  ];
+
+  it("allows a server only in the project the grant names", () => {
+    expect(
+      canInGrants(
+        writeInProjectA,
+        authz.mcpServer("gateway-a", "project-a").write(),
+      ),
+    ).toBe(true);
+    expect(
+      canInGrants(
+        writeInProjectA,
+        authz.mcpServer("gateway-b", "project-b").write(),
+      ),
+    ).toBe(false);
+    expect(
+      canInGrants(writeInProjectA, authz.mcpServers("project-b").write()),
+    ).toBe(false);
+  });
+
+  it("answers a probe on a collection with any resource a grant reaches", () => {
+    const oneServer = [
+      {
+        scope: "mcp:read",
+        selectors: [
+          {
+            resourceKind: "mcp",
+            resourceId: "server-1",
+            projectId: "project-a",
+          },
+        ],
+      },
+    ];
+    expect(canInGrants(oneServer, authz.mcpServers("project-a").read())).toBe(
+      false,
+    );
+    expect(
+      canInGrants(oneServer, authz.mcpServers("project-a").read().probe()),
+    ).toBe(true);
+    expect(
+      canInGrants(oneServer, authz.mcpServers("project-b").read().probe()),
+    ).toBe(false);
+  });
+
+  it("refuses a check whose id cannot name a resource", () => {
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+    const everything = [{ scope: "mcp:write", subScopes: ["mcp:read"] }];
+    expect(canInGrants(everything, authz.mcpServer("s", "").write())).toBe(
+      false,
+    );
+    expect(canInGrants(everything, authz.mcpServer("*", "p").write())).toBe(
+      false,
+    );
+    expect(
+      canInGrants(everything, authz.mcpServer("$marker", "p").write()),
+    ).toBe(false);
+    expect(
+      canInGrants(everything, authz.mcpServer("has space", "p").write()),
+    ).toBe(false);
+    expect(
+      canInGrants(everything, authz.mcpServer("next\u0085line", "p").write()),
+    ).toBe(false);
+    expect(canInGrants(everything, authz.mcpServer("s", "p").write())).toBe(
+      true,
+    );
+    expect(consoleError).toHaveBeenCalledTimes(5);
+    consoleError.mockRestore();
   });
 });

@@ -544,7 +544,7 @@ func TestService_ListResourceAudience_HonoursProjectScopedGrants(t *testing.T) {
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
-func TestService_ListResourceAudience_OrgAdminReadsBlockedServer(t *testing.T) {
+func TestService_ListResourceAudience_BlockedOrgAdminForbidden(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
@@ -553,9 +553,7 @@ func TestService_ListResourceAudience_OrgAdminReadsBlockedServer(t *testing.T) {
 
 	serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
 
-	// An organization admin whose read of this server is blocked (for example
-	// by a block on everyone) can still read the rules they are allowed to
-	// write.
+	// A block on the server wins over org admin, as it does for everyone else.
 	adminCtx := authz.GrantsToContext(contextvalues.SetAuthContext(ctx, authCtx), []authz.Grant{
 		authz.NewGrant(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
 		authz.NewGrant(authz.ScopeMCPBlockedRead, serverID),
@@ -567,7 +565,9 @@ func TestService_ListResourceAudience_OrgAdminReadsBlockedServer(t *testing.T) {
 		SessionToken: nil,
 		ApikeyToken:  nil,
 	})
-	require.NoError(t, err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
 func TestService_ListResourceAudience_BlockedNonAdminForbidden(t *testing.T) {
@@ -579,8 +579,7 @@ func TestService_ListResourceAudience_BlockedNonAdminForbidden(t *testing.T) {
 
 	serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
 
-	// The org admin exemption must not weaken blocks for everyone else: a
-	// non-admin whose read of this server is blocked still cannot list its rules.
+	// A non-admin whose read of this server is blocked cannot list its rules.
 	blockedCtx := authz.GrantsToContext(contextvalues.SetAuthContext(ctx, authCtx), []authz.Grant{
 		authz.NewGrant(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
 		authz.NewGrant(authz.ScopeMCPRead, serverID),

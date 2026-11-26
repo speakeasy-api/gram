@@ -144,16 +144,15 @@ func configureReadOnlyTranscripts(c *cli.Context, logger *slog.Logger, meterProv
 	return transcripts, nil
 }
 
-// checkTranscriptSchema checks the tables the store writes: the sidecar
-// and its tool-call ID table, including the metadata columns capture fills and
-// the (message_id, tool_call_id) conflict target its inserts use.
+// checkTranscriptSchema checks what the store reads and writes: the sidecar
+// and the source_updated_at it records, the chat_messages columns and triggers
+// that sealing relies on, and the tool-call ID table with the
+// (message_id, tool_call_id) conflict target its inserts use.
 // Catalog reads neither touch transcript payloads nor execute trial inserts.
-// The table is looked up through the connection's search_path, the same way
-// the store's queries resolve it: deployed databases keep it outside public.
+// Tables are looked up through the connection's search_path, the same way the
+// store's queries resolve them: deployed databases keep them outside public.
 // Every omitted NOT NULL column must be supplied by the database. All inferred
 // arbiters must be immediate: PostgreSQL rejects even a redundant deferred one.
-// The metadata columns capture writes, and the tool-call ID table beside the
-// sidecar, must exist too.
 func checkTranscriptSchema(ctx context.Context, db interface {
 	QueryRow(context.Context, string, ...any) pgx.Row
 }) error {
@@ -163,19 +162,26 @@ WITH sidecar AS (
  SELECT oid FROM pg_catalog.pg_class
  WHERE oid = pg_catalog.to_regclass('chat_message_transcripts')
  AND relkind IN ('r', 'p')
+), messages AS (
+ SELECT oid FROM pg_catalog.pg_class
+ WHERE oid = pg_catalog.to_regclass('chat_messages')
+ AND relkind IN ('r', 'p')
+), tool_calls AS (
+ SELECT oid FROM pg_catalog.pg_class
+ WHERE oid = pg_catalog.to_regclass('chat_message_tool_call_ids')
+ AND relkind IN ('r', 'p')
 ), required(name, type_oid) AS (
  VALUES ('message_id', 'uuid'::regtype),
         ('project_id', 'uuid'::regtype),
         ('organization_id', 'text'::regtype),
         ('ciphertext', 'text'::regtype),
-        ('source_hash', 'bytea'::regtype),
         ('updated_at', 'timestamptz'::regtype)
 ), tool_call_arbiters AS (
  -- InsertToolCallIDs resolves conflicts on (message_id, tool_call_id).
  SELECT i.indimmediate, i.indisready
  FROM pg_catalog.pg_index i
- WHERE i.indrelid = pg_catalog.to_regclass('chat_message_transcript_tool_calls')
-   AND i.indisunique AND i.indisvalid
+ JOIN tool_calls tc ON tc.oid = i.indrelid
+ WHERE i.indisunique AND i.indisvalid
    AND i.indpred IS NULL AND i.indexprs IS NULL AND i.indnkeyatts = 2
    AND (SELECT array_agg(a.attname::text ORDER BY a.attname::text)
         FROM pg_catalog.pg_attribute a
@@ -199,36 +205,54 @@ SELECT EXISTS (SELECT 1 FROM sidecar)
     AND a.attnotnull AND NOT a.attisdropped
  ))
  AND NOT EXISTS (
+ -- Capture supplies only these columns; any other NOT NULL column needs a
+ -- database default.
  SELECT 1 FROM pg_catalog.pg_attribute a
  JOIN sidecar s ON s.oid = a.attrelid
  WHERE a.attnum > 0 AND NOT a.attisdropped AND a.attnotnull
    AND NOT a.atthasdef AND a.attgenerated = '' AND a.attidentity = ''
-   AND a.attname NOT IN ('message_id', 'project_id', 'organization_id', 'ciphertext', 'source_hash')
+   AND a.attname NOT IN ('message_id', 'project_id', 'organization_id', 'ciphertext', 'source_updated_at')
  )
  AND EXISTS (SELECT 1 FROM arbiters WHERE indimmediate AND indisready)
  AND NOT EXISTS (SELECT 1 FROM arbiters WHERE NOT indimmediate)
+ AND EXISTS (
+ SELECT 1 FROM pg_catalog.pg_attribute a
+ JOIN sidecar s ON s.oid = a.attrelid
+ WHERE a.attname = 'source_updated_at' AND a.atttypid = 'timestamptz'::regtype AND NOT a.attisdropped
+ )
  AND NOT EXISTS (
- SELECT 1 FROM (VALUES ('tool_call_count'), ('content_bytes'), ('content_raw_bytes'), ('tool_calls_bytes')) AS metadata(name)
+ -- Sealing writes the metadata to chat_messages and compares source_updated_at.
+ SELECT 1 FROM (VALUES ('tool_call_count', 'integer'::regtype), ('content_bytes', 'integer'::regtype),
+   ('content_raw_bytes', 'integer'::regtype), ('tool_calls_bytes', 'integer'::regtype),
+   ('source_updated_at', 'timestamptz'::regtype)) AS column_needed(name, type_oid)
  WHERE NOT EXISTS (
   SELECT 1 FROM pg_catalog.pg_attribute a
-  JOIN sidecar s ON s.oid = a.attrelid
-  WHERE a.attname = metadata.name AND a.atttypid = 'integer'::regtype AND NOT a.attisdropped
+  JOIN messages m ON m.oid = a.attrelid
+  WHERE a.attname = column_needed.name AND a.atttypid = column_needed.type_oid AND NOT a.attisdropped
+ ))
+ AND NOT EXISTS (
+ -- Without both triggers a body change would not move source_updated_at,
+ -- and a stale copy would read as current.
+ SELECT 1 FROM (VALUES ('chat_messages_source_updated_at_insert'), ('chat_messages_source_updated_at_update')) AS trigger_needed(name)
+ WHERE NOT EXISTS (
+  SELECT 1 FROM pg_catalog.pg_trigger tg
+  JOIN messages m ON m.oid = tg.tgrelid
+  WHERE tg.tgname = trigger_needed.name AND tg.tgenabled <> 'D' AND NOT tg.tgisinternal
  ))
  AND NOT EXISTS (
  SELECT 1 FROM (VALUES ('message_id', 'uuid'::regtype), ('tool_call_id', 'text'::regtype), ('chat_id', 'uuid'::regtype), ('project_id', 'uuid'::regtype)) AS tool_call(name, type_oid)
  WHERE NOT EXISTS (
   SELECT 1 FROM pg_catalog.pg_attribute a
-  JOIN pg_catalog.pg_class r ON r.oid = a.attrelid AND r.relkind IN ('r', 'p')
-  WHERE a.attrelid = pg_catalog.to_regclass('chat_message_transcript_tool_calls')
-    AND a.attname = tool_call.name AND a.atttypid = tool_call.type_oid
+  JOIN tool_calls tc ON tc.oid = a.attrelid
+  WHERE a.attname = tool_call.name AND a.atttypid = tool_call.type_oid
     AND a.attnotnull AND NOT a.attisdropped
  ))
  AND NOT EXISTS (
  -- InsertToolCallIDs supplies only these four columns; any other NOT NULL
  -- column needs a database default.
  SELECT 1 FROM pg_catalog.pg_attribute a
- WHERE a.attrelid = pg_catalog.to_regclass('chat_message_transcript_tool_calls')
-   AND a.attnum > 0 AND NOT a.attisdropped AND a.attnotnull
+ JOIN tool_calls tc ON tc.oid = a.attrelid
+ WHERE a.attnum > 0 AND NOT a.attisdropped AND a.attnotnull
    AND NOT a.atthasdef AND a.attgenerated = '' AND a.attidentity = ''
    AND a.attname NOT IN ('message_id', 'tool_call_id', 'chat_id', 'project_id')
  )

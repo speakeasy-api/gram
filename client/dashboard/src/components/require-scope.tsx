@@ -1,4 +1,5 @@
 import { useRBAC } from "@/hooks/useRBAC";
+import type { Check } from "@/lib/authz.gen";
 import { useScopeCatalogue } from "@/hooks/useScopeCatalogue";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import { RequestAccessFormScope } from "@gram/client/models/components/requestaccessform.js";
@@ -45,14 +46,28 @@ import { requestedDurationFields } from "@/pages/access/requestedDuration";
 
 type RenderFn = (props: { disabled: boolean }) => React.ReactNode;
 
-type RequireScopeProps = {
-  scope: Scope | Scope[];
+type RequireScopeProps = (
+  | {
+      /**
+       * The check to pass, built by a constructor in lib/authz.gen.ts:
+       * check={authz.mcpServer(id, projectId).write()}.
+       */
+      check: Check | Check[];
+      scope?: never;
+      resourceId?: never;
+      projectId?: never;
+    }
+  | {
+      check?: never;
+      scope: Scope | Scope[];
+      /** Optional resource ID to check scope against. */
+      resourceId?: string;
+      /** Optional project the resource belongs to, for project-wide grants. */
+      projectId?: string;
+    }
+) & {
   /** When true, ALL scopes must be present. Default: false (any scope suffices). */
   all?: boolean;
-  /** Optional resource ID to check scope against. */
-  resourceId?: string;
-  /** Optional project the resource belongs to, for project-wide grants. */
-  projectId?: string;
   /**
    * Either a React node or a render function receiving `{ disabled }`.
    * Use the render function form when children contain portals (e.g. dropdowns,
@@ -60,38 +75,62 @@ type RequireScopeProps = {
    */
   children: React.ReactNode | RenderFn;
 } & (
-  | {
-      /**
-       * "page" — renders the Unauthorized full-page fallback.
-       * "section" — hides the children entirely.
-       * "component" — disables children with a tooltip (wraps in a div with pointer-events-none and reduced opacity).
-       */
-      level: "page";
-      fallback?: React.ReactNode;
-    }
-  | {
-      level: "section";
-      fallback?: React.ReactNode;
-    }
-  | {
-      level: "component";
-      /** Tooltip text shown on hover when disabled. */
-      reason?: string;
-      /** Extra classes applied to the disabled wrapper div (e.g. "w-full" for block-level children). */
-      className?: string;
-    }
-);
+    | {
+        /**
+         * "page" — renders the Unauthorized full-page fallback.
+         * "section" — hides the children entirely.
+         * "component" — disables children with a tooltip (wraps in a div with pointer-events-none and reduced opacity).
+         */
+        level: "page";
+        fallback?: React.ReactNode;
+      }
+    | {
+        level: "section";
+        fallback?: React.ReactNode;
+      }
+    | {
+        level: "component";
+        /** Tooltip text shown on hover when disabled. */
+        reason?: string;
+        /** Extra classes applied to the disabled wrapper div (e.g. "w-full" for block-level children). */
+        className?: string;
+      }
+  );
 
 export function RequireScope(
   props: RequireScopeProps,
 ): React.JSX.Element | null {
-  const { scope, all = false, resourceId, projectId, children, level } = props;
-  const { hasAllScopes, hasAnyScope, isLoading } = useRBAC();
+  const { all = false, children, level } = props;
+  const { can, hasAllScopes, hasAnyScope, isLoading } = useRBAC();
 
-  const scopes = Array.isArray(scope) ? scope : [scope];
-  const allowed = all
-    ? hasAllScopes(scopes, resourceId, projectId)
-    : hasAnyScope(scopes, resourceId, projectId);
+  let allowed: boolean;
+  let scopes: Scope[];
+  let resourceId: string | undefined;
+  let projectId: string | undefined;
+  if (props.check !== undefined) {
+    const checks = Array.isArray(props.check) ? props.check : [props.check];
+    allowed = all ? checks.every(can) : checks.some(can);
+    // The fallback names what is missing and lets the viewer ask for it. A
+    // probe on a collection, or checks on different resources, ask about no
+    // single resource, so the request covers the project.
+    scopes = checks.map((check) => check.scope);
+    const [first] = checks;
+    const oneResource = checks.every(
+      (check) =>
+        check.resourceId === first?.resourceId &&
+        !(check.collection && check.isProbe),
+    );
+    resourceId = oneResource ? first?.resourceId : undefined;
+    const projects = new Set(checks.map((check) => check.dimensions.projectId));
+    projectId = projects.size === 1 ? first?.dimensions.projectId : undefined;
+  } else {
+    scopes = Array.isArray(props.scope) ? props.scope : [props.scope];
+    resourceId = props.resourceId;
+    projectId = props.projectId;
+    allowed = all
+      ? hasAllScopes(scopes, resourceId, projectId)
+      : hasAnyScope(scopes, resourceId, projectId);
+  }
 
   const resolveChildren = (disabled: boolean): React.ReactNode =>
     typeof children === "function" ? children({ disabled }) : children;
