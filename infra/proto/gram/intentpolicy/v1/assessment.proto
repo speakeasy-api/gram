@@ -12,7 +12,7 @@ option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/intentpolicy/v
 // Analysis and delivery are at-least-once: the same id can carry different
 // answers from different analyses. Storage consumers deduplicate on id and pick
 // the latest evaluated_at, or group by analysis_id to compare runs.
-// Raw tool-call arguments are never published. Join back to the chat message
+// Tool-call arguments are never published, not even as a digest. Join back to the chat message
 // through chat_id and message_id when the arguments are needed.
 message Assessment {
   // Who requested the analysis.
@@ -40,13 +40,10 @@ message Assessment {
     string mcp_server = 7;
     // MCP function parsed from tool_name; empty for native tools.
     string mcp_function = 8;
-    // Lowercase hex SHA-256 of the recorded argument payload, for grouping
-    // identical calls without exporting their content.
-    string arguments_sha256 = 9;
     // Byte length of the recorded argument payload.
-    int64 arguments_bytes = 10;
+    int64 arguments_bytes = 9;
     // UTC RFC3339Nano time the carrying message was recorded.
-    string occurred_at = 11;
+    string occurred_at = 10;
   }
   // The evaluator that inferred labels.
   message Evaluator {
@@ -111,8 +108,8 @@ message Assessment {
     map<string, string> inputs = 4;
   }
 
-  // UUIDv5 of chat_id, generation, tool_call_id, guardrail version and
-  // evaluator model: the logical identity of this call's assessment. Repeated
+  // UUIDv5 of chat_id, generation, message_id, tool_call_id, guardrail version
+  // and evaluator model: the logical identity of this call's assessment. Repeated
   // analyses of the same call with the same guardrail and model share it.
   string id = 1;
   // Fresh UUID per analysis request, shared by every assessment it produced.

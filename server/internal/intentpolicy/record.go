@@ -1,8 +1,6 @@
 package intentpolicy
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -53,30 +51,29 @@ type RecordContext struct {
 }
 
 // AssessmentID is the logical identity of one call's assessment under one
-// guardrail version and evaluator model.
-func AssessmentID(chatID uuid.UUID, generation int32, toolCallID, guardrailVersion, model string) uuid.UUID {
-	key := chatID.String() + "\x00" + strconv.FormatInt(int64(generation), 10) + "\x00" + toolCallID + "\x00" + guardrailVersion + "\x00" + model
+// guardrail version and evaluator model. The carrying message keeps calls
+// distinct when a provider reuses or omits tool-call ids.
+func AssessmentID(chatID uuid.UUID, generation int32, messageID uuid.UUID, toolCallID, guardrailVersion, model string) uuid.UUID {
+	key := chatID.String() + "\x00" + strconv.FormatInt(int64(generation), 10) + "\x00" + messageID.String() + "\x00" + toolCallID + "\x00" + guardrailVersion + "\x00" + model
 	return uuid.NewSHA1(assessmentNamespace, []byte(key))
 }
 
-// Record projects one assessment into its published form. Raw arguments are
-// reduced to a digest and a size.
+// Record projects one assessment into its published form. Arguments are
+// reduced to their size.
 func Record(rc RecordContext, g Guardrail, a Assessment) *intentpolicyv1.Assessment {
 	action := a.Action
-	digest := sha256.Sum256(action.Arguments)
 
 	call := intentpolicyv1.Assessment_ToolCall_builder{
-		ChatId:          new(action.ChatID.String()),
-		Generation:      new(rc.Generation),
-		MessageId:       new(action.MessageID.String()),
-		Sequence:        new(action.Seq),
-		ToolCallId:      new(action.ToolCallID),
-		ToolName:        new(action.Tool.Name),
-		McpServer:       new(action.Tool.MCPServer),
-		McpFunction:     new(action.Tool.MCPFunction),
-		ArgumentsSha256: new(hex.EncodeToString(digest[:])),
-		ArgumentsBytes:  new(int64(len(action.Arguments))),
-		OccurredAt:      new(formatTime(action.OccurredAt)),
+		ChatId:         new(action.ChatID.String()),
+		Generation:     new(rc.Generation),
+		MessageId:      new(action.MessageID.String()),
+		Sequence:       new(action.Seq),
+		ToolCallId:     new(action.ToolCallID),
+		ToolName:       new(action.Tool.Name),
+		McpServer:      new(action.Tool.MCPServer),
+		McpFunction:    new(action.Tool.MCPFunction),
+		ArgumentsBytes: new(int64(len(action.Arguments))),
+		OccurredAt:     new(formatTime(action.OccurredAt)),
 	}.Build()
 
 	actor := intentpolicyv1.Assessment_Actor_builder{UserId: new(rc.UserID)}.Build()
@@ -107,7 +104,7 @@ func Record(rc RecordContext, g Guardrail, a Assessment) *intentpolicyv1.Assessm
 	}
 
 	r := intentpolicyv1.Assessment_builder{
-		Id:             new(AssessmentID(action.ChatID, rc.Generation, action.ToolCallID, g.Version, a.Descriptor.Model).String()),
+		Id:             new(AssessmentID(action.ChatID, rc.Generation, action.MessageID, action.ToolCallID, g.Version, a.Descriptor.Model).String()),
 		AnalysisId:     new(rc.AnalysisID.String()),
 		OrganizationId: new(rc.OrganizationID),
 		ProjectId:      new(rc.ProjectID.String()),

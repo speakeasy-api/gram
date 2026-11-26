@@ -65,18 +65,17 @@ var schemaGramIntentpolicyV1LakePrimary = parquet_go.NewSchema("gram.intentpolic
 	"organization_id": parquet_go.Optional(parquet_go.String()),
 	"project_id":      parquet_go.Optional(parquet_go.String()),
 	"tool_call": parquet_go.Optional(parquet_go.Group{
-		"__present":        parquet_go.Leaf(parquet_go.BooleanType),
-		"arguments_bytes":  parquet_go.Optional(parquet_go.Int(64)),
-		"arguments_sha256": parquet_go.Optional(parquet_go.String()),
-		"chat_id":          parquet_go.Optional(parquet_go.String()),
-		"generation":       parquet_go.Optional(parquet_go.Int(32)),
-		"mcp_function":     parquet_go.Optional(parquet_go.String()),
-		"mcp_server":       parquet_go.Optional(parquet_go.String()),
-		"message_id":       parquet_go.Optional(parquet_go.String()),
-		"occurred_at":      parquet_go.Optional(parquet_go.String()),
-		"sequence":         parquet_go.Optional(parquet_go.Int(64)),
-		"tool_call_id":     parquet_go.Optional(parquet_go.String()),
-		"tool_name":        parquet_go.Optional(parquet_go.String()),
+		"__present":       parquet_go.Leaf(parquet_go.BooleanType),
+		"arguments_bytes": parquet_go.Optional(parquet_go.Int(64)),
+		"chat_id":         parquet_go.Optional(parquet_go.String()),
+		"generation":      parquet_go.Optional(parquet_go.Int(32)),
+		"mcp_function":    parquet_go.Optional(parquet_go.String()),
+		"mcp_server":      parquet_go.Optional(parquet_go.String()),
+		"message_id":      parquet_go.Optional(parquet_go.String()),
+		"occurred_at":     parquet_go.Optional(parquet_go.String()),
+		"sequence":        parquet_go.Optional(parquet_go.Int(64)),
+		"tool_call_id":    parquet_go.Optional(parquet_go.String()),
+		"tool_name":       parquet_go.Optional(parquet_go.String()),
 	}),
 	"trigger_kind": parquet_go.Optional(parquet_go.String()),
 	"usage": parquet_go.Optional(parquet_go.Group{
@@ -94,7 +93,7 @@ func GramIntentpolicyV1LakePrimary() storage.Definition {
 		Marker: &v1.LakePrimary{}, Payload: &v1.Assessment{},
 		ProtoName: "gram.intentpolicy.v1.LakePrimary", SubscriptionID: "gram-intentpolicy-v1-lake-primary", TopicID: "gram-intentpolicy-v1-assessment", Bucket: "lake",
 		Partitioning:       v11.StoragePartitioning_STORAGE_PARTITIONING_HIVE_DAILY,
-		PartitionAttribute: "", PartitionKeys: []string{}, Schema: schemaGramIntentpolicyV1LakePrimary, Fingerprint: "c52474a4aac7dde72b18487d6d0f1a09183c517005bc2bc82d645f85195eeed9",
+		PartitionAttribute: "", PartitionKeys: []string{}, Schema: schemaGramIntentpolicyV1LakePrimary, Fingerprint: "7d994d28c3ddd97f71d4a68e93b43b315a07b3da0fa5c1f23d1202c231ac1374",
 		Decode: func(data []byte, meta storage.Metadata) (parquet_go.Row, error) {
 			m := &v1.Assessment{}
 			if err := proto.Unmarshal(data, m); err != nil {
@@ -107,7 +106,7 @@ func GramIntentpolicyV1LakePrimary() storage.Definition {
 
 // EncodeGramIntentpolicyV1LakePrimary maps typed protobuf accessors to explicit Parquet levels.
 func EncodeGramIntentpolicyV1LakePrimary(m *v1.Assessment, meta storage.Metadata) parquet_go.Row {
-	var columns [58][]parquet_go.Value
+	var columns [57][]parquet_go.Value
 
 	columns[0] = append(columns[0], parquet_go.ByteArrayValue([]byte(meta.MessageID)).Level(0, 0, 0))
 
@@ -407,64 +406,58 @@ func EncodeGramIntentpolicyV1LakePrimary(m *v1.Assessment, meta storage.Metadata
 			columns[41] = append(columns[41], parquet_go.NullValue().Level(0, 1, 41))
 		}
 
-		if m.GetToolCall().HasArgumentsSha256() {
-			columns[42] = append(columns[42], parquet_go.ByteArrayValue([]byte(m.GetToolCall().GetArgumentsSha256())).Level(0, 2, 42))
+		if m.GetToolCall().HasChatId() {
+			columns[42] = append(columns[42], parquet_go.ByteArrayValue([]byte(m.GetToolCall().GetChatId())).Level(0, 2, 42))
 		} else {
 			columns[42] = append(columns[42], parquet_go.NullValue().Level(0, 1, 42))
 		}
 
-		if m.GetToolCall().HasChatId() {
-			columns[43] = append(columns[43], parquet_go.ByteArrayValue([]byte(m.GetToolCall().GetChatId())).Level(0, 2, 43))
+		if m.GetToolCall().HasGeneration() {
+			columns[43] = append(columns[43], parquet_go.Int32Value(int32(m.GetToolCall().GetGeneration())).Level(0, 2, 43))
 		} else {
 			columns[43] = append(columns[43], parquet_go.NullValue().Level(0, 1, 43))
 		}
 
-		if m.GetToolCall().HasGeneration() {
-			columns[44] = append(columns[44], parquet_go.Int32Value(int32(m.GetToolCall().GetGeneration())).Level(0, 2, 44))
+		if m.GetToolCall().HasMcpFunction() {
+			columns[44] = append(columns[44], parquet_go.ByteArrayValue([]byte(m.GetToolCall().GetMcpFunction())).Level(0, 2, 44))
 		} else {
 			columns[44] = append(columns[44], parquet_go.NullValue().Level(0, 1, 44))
 		}
 
-		if m.GetToolCall().HasMcpFunction() {
-			columns[45] = append(columns[45], parquet_go.ByteArrayValue([]byte(m.GetToolCall().GetMcpFunction())).Level(0, 2, 45))
+		if m.GetToolCall().HasMcpServer() {
+			columns[45] = append(columns[45], parquet_go.ByteArrayValue([]byte(m.GetToolCall().GetMcpServer())).Level(0, 2, 45))
 		} else {
 			columns[45] = append(columns[45], parquet_go.NullValue().Level(0, 1, 45))
 		}
 
-		if m.GetToolCall().HasMcpServer() {
-			columns[46] = append(columns[46], parquet_go.ByteArrayValue([]byte(m.GetToolCall().GetMcpServer())).Level(0, 2, 46))
+		if m.GetToolCall().HasMessageId() {
+			columns[46] = append(columns[46], parquet_go.ByteArrayValue([]byte(m.GetToolCall().GetMessageId())).Level(0, 2, 46))
 		} else {
 			columns[46] = append(columns[46], parquet_go.NullValue().Level(0, 1, 46))
 		}
 
-		if m.GetToolCall().HasMessageId() {
-			columns[47] = append(columns[47], parquet_go.ByteArrayValue([]byte(m.GetToolCall().GetMessageId())).Level(0, 2, 47))
+		if m.GetToolCall().HasOccurredAt() {
+			columns[47] = append(columns[47], parquet_go.ByteArrayValue([]byte(m.GetToolCall().GetOccurredAt())).Level(0, 2, 47))
 		} else {
 			columns[47] = append(columns[47], parquet_go.NullValue().Level(0, 1, 47))
 		}
 
-		if m.GetToolCall().HasOccurredAt() {
-			columns[48] = append(columns[48], parquet_go.ByteArrayValue([]byte(m.GetToolCall().GetOccurredAt())).Level(0, 2, 48))
+		if m.GetToolCall().HasSequence() {
+			columns[48] = append(columns[48], parquet_go.Int64Value(int64(m.GetToolCall().GetSequence())).Level(0, 2, 48))
 		} else {
 			columns[48] = append(columns[48], parquet_go.NullValue().Level(0, 1, 48))
 		}
 
-		if m.GetToolCall().HasSequence() {
-			columns[49] = append(columns[49], parquet_go.Int64Value(int64(m.GetToolCall().GetSequence())).Level(0, 2, 49))
+		if m.GetToolCall().HasToolCallId() {
+			columns[49] = append(columns[49], parquet_go.ByteArrayValue([]byte(m.GetToolCall().GetToolCallId())).Level(0, 2, 49))
 		} else {
 			columns[49] = append(columns[49], parquet_go.NullValue().Level(0, 1, 49))
 		}
 
-		if m.GetToolCall().HasToolCallId() {
-			columns[50] = append(columns[50], parquet_go.ByteArrayValue([]byte(m.GetToolCall().GetToolCallId())).Level(0, 2, 50))
+		if m.GetToolCall().HasToolName() {
+			columns[50] = append(columns[50], parquet_go.ByteArrayValue([]byte(m.GetToolCall().GetToolName())).Level(0, 2, 50))
 		} else {
 			columns[50] = append(columns[50], parquet_go.NullValue().Level(0, 1, 50))
-		}
-
-		if m.GetToolCall().HasToolName() {
-			columns[51] = append(columns[51], parquet_go.ByteArrayValue([]byte(m.GetToolCall().GetToolName())).Level(0, 2, 51))
-		} else {
-			columns[51] = append(columns[51], parquet_go.NullValue().Level(0, 1, 51))
 		}
 	} else {
 		columns[40] = append(columns[40], parquet_go.NullValue().Level(0, 0, 40))
@@ -478,47 +471,46 @@ func EncodeGramIntentpolicyV1LakePrimary(m *v1.Assessment, meta storage.Metadata
 		columns[48] = append(columns[48], parquet_go.NullValue().Level(0, 0, 48))
 		columns[49] = append(columns[49], parquet_go.NullValue().Level(0, 0, 49))
 		columns[50] = append(columns[50], parquet_go.NullValue().Level(0, 0, 50))
-		columns[51] = append(columns[51], parquet_go.NullValue().Level(0, 0, 51))
 	}
 
 	if m.HasTriggerKind() {
-		columns[52] = append(columns[52], parquet_go.ByteArrayValue([]byte(m.GetTriggerKind())).Level(0, 1, 52))
+		columns[51] = append(columns[51], parquet_go.ByteArrayValue([]byte(m.GetTriggerKind())).Level(0, 1, 51))
 	} else {
-		columns[52] = append(columns[52], parquet_go.NullValue().Level(0, 0, 52))
+		columns[51] = append(columns[51], parquet_go.NullValue().Level(0, 0, 51))
 	}
 
 	if m.HasUsage() {
-		columns[53] = append(columns[53], parquet_go.BooleanValue(true).Level(0, 1, 53))
+		columns[52] = append(columns[52], parquet_go.BooleanValue(true).Level(0, 1, 52))
 
 		if m.GetUsage().HasCostUsd() {
-			columns[54] = append(columns[54], parquet_go.DoubleValue(m.GetUsage().GetCostUsd()).Level(0, 2, 54))
+			columns[53] = append(columns[53], parquet_go.DoubleValue(m.GetUsage().GetCostUsd()).Level(0, 2, 53))
+		} else {
+			columns[53] = append(columns[53], parquet_go.NullValue().Level(0, 1, 53))
+		}
+
+		if m.GetUsage().HasInputTokens() {
+			columns[54] = append(columns[54], parquet_go.Int64Value(int64(m.GetUsage().GetInputTokens())).Level(0, 2, 54))
 		} else {
 			columns[54] = append(columns[54], parquet_go.NullValue().Level(0, 1, 54))
 		}
 
-		if m.GetUsage().HasInputTokens() {
-			columns[55] = append(columns[55], parquet_go.Int64Value(int64(m.GetUsage().GetInputTokens())).Level(0, 2, 55))
+		if m.GetUsage().HasLatencyMs() {
+			columns[55] = append(columns[55], parquet_go.Int64Value(int64(m.GetUsage().GetLatencyMs())).Level(0, 2, 55))
 		} else {
 			columns[55] = append(columns[55], parquet_go.NullValue().Level(0, 1, 55))
 		}
 
-		if m.GetUsage().HasLatencyMs() {
-			columns[56] = append(columns[56], parquet_go.Int64Value(int64(m.GetUsage().GetLatencyMs())).Level(0, 2, 56))
+		if m.GetUsage().HasOutputTokens() {
+			columns[56] = append(columns[56], parquet_go.Int64Value(int64(m.GetUsage().GetOutputTokens())).Level(0, 2, 56))
 		} else {
 			columns[56] = append(columns[56], parquet_go.NullValue().Level(0, 1, 56))
 		}
-
-		if m.GetUsage().HasOutputTokens() {
-			columns[57] = append(columns[57], parquet_go.Int64Value(int64(m.GetUsage().GetOutputTokens())).Level(0, 2, 57))
-		} else {
-			columns[57] = append(columns[57], parquet_go.NullValue().Level(0, 1, 57))
-		}
 	} else {
+		columns[52] = append(columns[52], parquet_go.NullValue().Level(0, 0, 52))
 		columns[53] = append(columns[53], parquet_go.NullValue().Level(0, 0, 53))
 		columns[54] = append(columns[54], parquet_go.NullValue().Level(0, 0, 54))
 		columns[55] = append(columns[55], parquet_go.NullValue().Level(0, 0, 55))
 		columns[56] = append(columns[56], parquet_go.NullValue().Level(0, 0, 56))
-		columns[57] = append(columns[57], parquet_go.NullValue().Level(0, 0, 57))
 	}
 
 	return parquet_go.MakeRow(columns[:]...)

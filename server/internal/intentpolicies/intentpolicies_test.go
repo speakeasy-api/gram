@@ -125,6 +125,8 @@ func TestAnalyzePublishesAssessments(t *testing.T) {
 		require.Equal(t, authCtx.ActiveOrganizationID, msg.GetOrganizationId())
 		require.Equal(t, authCtx.ProjectID.String(), msg.GetProjectId())
 		require.Equal(t, authCtx.UserID, msg.GetActor().GetUserId())
+		require.NotNil(t, authCtx.Email, "the test session carries an email")
+		require.Equal(t, *authCtx.Email, msg.GetActor().GetUserEmail())
 		require.Equal(t, up.ChatID, msg.GetToolCall().GetChatId())
 		require.Equal(t, res.Assessments[i].ToolCallID, msg.GetToolCall().GetToolCallId())
 		require.Equal(t, res.Assessments[i].Decision, msg.GetDecision())
@@ -133,7 +135,7 @@ func TestAnalyzePublishesAssessments(t *testing.T) {
 		require.Equal(t, intentpolicy.TriggerDashboard, msg.GetTriggerKind())
 		require.Len(t, msg.GetLabels(), 6)
 		require.Len(t, msg.GetContracts(), len(intentpolicy.DefaultGuardrail().Contracts))
-		require.Len(t, msg.GetToolCall().GetArgumentsSha256(), 64)
+		require.Positive(t, msg.GetToolCall().GetArgumentsBytes())
 	}
 	require.Equal(t, []string{"no_remote_destruction"}, published[1].GetDecidedBy())
 

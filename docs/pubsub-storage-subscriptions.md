@@ -246,8 +246,9 @@ choose an `evaluation_attempt_id`, since evaluation and storage are at least onc
 
 `gram.intentpolicy.v1.LakePrimary` stores `gram.intentpolicy.v1.Assessment` in the
 `lake` bucket as daily UTC-partitioned Parquet. The intent policies service
-publishes one event per judged tool call when `intentPolicies.analyzeSession`
-returns; publishing runs after the response and its failures are only logged.
+publishes one event per judged tool call from `intentPolicies.analyzeSession`.
+Publishes are started before the response is sent but not awaited by it; their
+outcomes are collected in the background and failures are only logged.
 `gram streams` starts the consumer alongside the signals reading consumer, with
 the same deployment prerequisites (subscription, bucket mapping and
 object-creator permission).
@@ -255,11 +256,12 @@ object-creator permission).
 Rows carry organization, project and requesting user, the chat, generation,
 message and tool call, guardrail id and version, evaluator kind, provider, model
 and prompt version, labels, contract outcomes, decision, usage and timestamps.
-Raw arguments are not stored: `tool_call.arguments_sha256` and
-`tool_call.arguments_bytes` identify them, and `tool_call.message_id` joins back
-to the chat message. `analysis_id` groups one request's rows. `id` is stable for
-the same call, guardrail version and model, so the latest row per `id` is the
-current result:
+Arguments are not stored, not even as a digest, since an unkeyed hash of
+low-entropy arguments can be reversed by guessing; `tool_call.arguments_bytes`
+gives their size and `tool_call.message_id` joins back to the chat message.
+`analysis_id` groups one request's rows. `id` is stable for the same call
+(chat, generation, message and tool call id), guardrail version and model, so
+the latest row per `id` is the current result:
 
 ```sql
 SELECT *

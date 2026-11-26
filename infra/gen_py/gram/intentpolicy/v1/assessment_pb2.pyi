@@ -18,7 +18,7 @@ class Assessment(_message.Message):
         user_email: str
         def __init__(self, user_id: _Optional[str] = ..., user_email: _Optional[str] = ...) -> None: ...
     class ToolCall(_message.Message):
-        __slots__ = ("chat_id", "generation", "message_id", "sequence", "tool_call_id", "tool_name", "mcp_server", "mcp_function", "arguments_sha256", "arguments_bytes", "occurred_at")
+        __slots__ = ("chat_id", "generation", "message_id", "sequence", "tool_call_id", "tool_name", "mcp_server", "mcp_function", "arguments_bytes", "occurred_at")
         CHAT_ID_FIELD_NUMBER: _ClassVar[int]
         GENERATION_FIELD_NUMBER: _ClassVar[int]
         MESSAGE_ID_FIELD_NUMBER: _ClassVar[int]
@@ -27,7 +27,6 @@ class Assessment(_message.Message):
         TOOL_NAME_FIELD_NUMBER: _ClassVar[int]
         MCP_SERVER_FIELD_NUMBER: _ClassVar[int]
         MCP_FUNCTION_FIELD_NUMBER: _ClassVar[int]
-        ARGUMENTS_SHA256_FIELD_NUMBER: _ClassVar[int]
         ARGUMENTS_BYTES_FIELD_NUMBER: _ClassVar[int]
         OCCURRED_AT_FIELD_NUMBER: _ClassVar[int]
         chat_id: str
@@ -38,10 +37,9 @@ class Assessment(_message.Message):
         tool_name: str
         mcp_server: str
         mcp_function: str
-        arguments_sha256: str
         arguments_bytes: int
         occurred_at: str
-        def __init__(self, chat_id: _Optional[str] = ..., generation: _Optional[int] = ..., message_id: _Optional[str] = ..., sequence: _Optional[int] = ..., tool_call_id: _Optional[str] = ..., tool_name: _Optional[str] = ..., mcp_server: _Optional[str] = ..., mcp_function: _Optional[str] = ..., arguments_sha256: _Optional[str] = ..., arguments_bytes: _Optional[int] = ..., occurred_at: _Optional[str] = ...) -> None: ...
+        def __init__(self, chat_id: _Optional[str] = ..., generation: _Optional[int] = ..., message_id: _Optional[str] = ..., sequence: _Optional[int] = ..., tool_call_id: _Optional[str] = ..., tool_name: _Optional[str] = ..., mcp_server: _Optional[str] = ..., mcp_function: _Optional[str] = ..., arguments_bytes: _Optional[int] = ..., occurred_at: _Optional[str] = ...) -> None: ...
     class Evaluator(_message.Message):
         __slots__ = ("kind", "provider", "model", "prompt_version")
         KIND_FIELD_NUMBER: _ClassVar[int]

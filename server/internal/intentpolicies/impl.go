@@ -260,10 +260,16 @@ func (s *Service) publishResults(ctx context.Context, logger *slog.Logger, authC
 	}
 	go func() {
 		defer cancel()
-		failed := 0
+		failed, unsettled := 0, 0
 		var firstErr error
 		for _, p := range pending {
-			if _, err := p.Get(pubCtx); err != nil {
+			_, err := p.Get(pubCtx)
+			switch {
+			case err == nil:
+			case errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled):
+				// The message may still be delivered; only its outcome is unknown.
+				unsettled++
+			default:
 				failed++
 				if firstErr == nil {
 					firstErr = err
@@ -272,6 +278,9 @@ func (s *Service) publishResults(ctx context.Context, logger *slog.Logger, authC
 		}
 		if failed > 0 {
 			logger.ErrorContext(pubCtx, "publish intent assessments", attr.SlogError(firstErr), attr.SlogValueInt(failed))
+		}
+		if unsettled > 0 {
+			logger.WarnContext(pubCtx, "intent assessment publishes unsettled before timeout", attr.SlogValueInt(unsettled))
 		}
 	}()
 }

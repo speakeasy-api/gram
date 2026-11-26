@@ -77,7 +77,7 @@ func (x Assessment_Label_Kind) Number() protoreflect.EnumNumber {
 // Analysis and delivery are at-least-once: the same id can carry different
 // answers from different analyses. Storage consumers deduplicate on id and pick
 // the latest evaluated_at, or group by analysis_id to compare runs.
-// Raw tool-call arguments are never published. Join back to the chat message
+// Tool-call arguments are never published, not even as a digest. Join back to the chat message
 // through chat_id and message_id when the arguments are needed.
 type Assessment struct {
 	state                          protoimpl.MessageState         `protogen:"opaque.v1"`
@@ -522,8 +522,8 @@ func (x *Assessment) ClearEvaluatedAt() {
 type Assessment_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
-	// UUIDv5 of chat_id, generation, tool_call_id, guardrail version and
-	// evaluator model: the logical identity of this call's assessment. Repeated
+	// UUIDv5 of chat_id, generation, message_id, tool_call_id, guardrail version
+	// and evaluator model: the logical identity of this call's assessment. Repeated
 	// analyses of the same call with the same guardrail and model share it.
 	Id *string
 	// Fresh UUID per analysis request, shared by every assessment it produced.
@@ -722,22 +722,21 @@ func (b0 Assessment_Actor_builder) Build() *Assessment_Actor {
 
 // The recorded tool call that was assessed.
 type Assessment_ToolCall struct {
-	state                      protoimpl.MessageState `protogen:"opaque.v1"`
-	xxx_hidden_ChatId          *string                `protobuf:"bytes,1,opt,name=chat_id,json=chatId"`
-	xxx_hidden_Generation      int32                  `protobuf:"varint,2,opt,name=generation"`
-	xxx_hidden_MessageId       *string                `protobuf:"bytes,3,opt,name=message_id,json=messageId"`
-	xxx_hidden_Sequence        int64                  `protobuf:"varint,4,opt,name=sequence"`
-	xxx_hidden_ToolCallId      *string                `protobuf:"bytes,5,opt,name=tool_call_id,json=toolCallId"`
-	xxx_hidden_ToolName        *string                `protobuf:"bytes,6,opt,name=tool_name,json=toolName"`
-	xxx_hidden_McpServer       *string                `protobuf:"bytes,7,opt,name=mcp_server,json=mcpServer"`
-	xxx_hidden_McpFunction     *string                `protobuf:"bytes,8,opt,name=mcp_function,json=mcpFunction"`
-	xxx_hidden_ArgumentsSha256 *string                `protobuf:"bytes,9,opt,name=arguments_sha256,json=argumentsSha256"`
-	xxx_hidden_ArgumentsBytes  int64                  `protobuf:"varint,10,opt,name=arguments_bytes,json=argumentsBytes"`
-	xxx_hidden_OccurredAt      *string                `protobuf:"bytes,11,opt,name=occurred_at,json=occurredAt"`
-	XXX_raceDetectHookData     protoimpl.RaceDetectHookData
-	XXX_presence               [1]uint32
-	unknownFields              protoimpl.UnknownFields
-	sizeCache                  protoimpl.SizeCache
+	state                     protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_ChatId         *string                `protobuf:"bytes,1,opt,name=chat_id,json=chatId"`
+	xxx_hidden_Generation     int32                  `protobuf:"varint,2,opt,name=generation"`
+	xxx_hidden_MessageId      *string                `protobuf:"bytes,3,opt,name=message_id,json=messageId"`
+	xxx_hidden_Sequence       int64                  `protobuf:"varint,4,opt,name=sequence"`
+	xxx_hidden_ToolCallId     *string                `protobuf:"bytes,5,opt,name=tool_call_id,json=toolCallId"`
+	xxx_hidden_ToolName       *string                `protobuf:"bytes,6,opt,name=tool_name,json=toolName"`
+	xxx_hidden_McpServer      *string                `protobuf:"bytes,7,opt,name=mcp_server,json=mcpServer"`
+	xxx_hidden_McpFunction    *string                `protobuf:"bytes,8,opt,name=mcp_function,json=mcpFunction"`
+	xxx_hidden_ArgumentsBytes int64                  `protobuf:"varint,9,opt,name=arguments_bytes,json=argumentsBytes"`
+	xxx_hidden_OccurredAt     *string                `protobuf:"bytes,10,opt,name=occurred_at,json=occurredAt"`
+	XXX_raceDetectHookData    protoimpl.RaceDetectHookData
+	XXX_presence              [1]uint32
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
 }
 
 func (x *Assessment_ToolCall) Reset() {
@@ -839,16 +838,6 @@ func (x *Assessment_ToolCall) GetMcpFunction() string {
 	return ""
 }
 
-func (x *Assessment_ToolCall) GetArgumentsSha256() string {
-	if x != nil {
-		if x.xxx_hidden_ArgumentsSha256 != nil {
-			return *x.xxx_hidden_ArgumentsSha256
-		}
-		return ""
-	}
-	return ""
-}
-
 func (x *Assessment_ToolCall) GetArgumentsBytes() int64 {
 	if x != nil {
 		return x.xxx_hidden_ArgumentsBytes
@@ -868,57 +857,52 @@ func (x *Assessment_ToolCall) GetOccurredAt() string {
 
 func (x *Assessment_ToolCall) SetChatId(v string) {
 	x.xxx_hidden_ChatId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 10)
 }
 
 func (x *Assessment_ToolCall) SetGeneration(v int32) {
 	x.xxx_hidden_Generation = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 10)
 }
 
 func (x *Assessment_ToolCall) SetMessageId(v string) {
 	x.xxx_hidden_MessageId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 10)
 }
 
 func (x *Assessment_ToolCall) SetSequence(v int64) {
 	x.xxx_hidden_Sequence = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 10)
 }
 
 func (x *Assessment_ToolCall) SetToolCallId(v string) {
 	x.xxx_hidden_ToolCallId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 10)
 }
 
 func (x *Assessment_ToolCall) SetToolName(v string) {
 	x.xxx_hidden_ToolName = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 10)
 }
 
 func (x *Assessment_ToolCall) SetMcpServer(v string) {
 	x.xxx_hidden_McpServer = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 10)
 }
 
 func (x *Assessment_ToolCall) SetMcpFunction(v string) {
 	x.xxx_hidden_McpFunction = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 11)
-}
-
-func (x *Assessment_ToolCall) SetArgumentsSha256(v string) {
-	x.xxx_hidden_ArgumentsSha256 = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 10)
 }
 
 func (x *Assessment_ToolCall) SetArgumentsBytes(v int64) {
 	x.xxx_hidden_ArgumentsBytes = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 9, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 10)
 }
 
 func (x *Assessment_ToolCall) SetOccurredAt(v string) {
 	x.xxx_hidden_OccurredAt = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 10, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 9, 10)
 }
 
 func (x *Assessment_ToolCall) HasChatId() bool {
@@ -977,25 +961,18 @@ func (x *Assessment_ToolCall) HasMcpFunction() bool {
 	return protoimpl.X.Present(&(x.XXX_presence[0]), 7)
 }
 
-func (x *Assessment_ToolCall) HasArgumentsSha256() bool {
+func (x *Assessment_ToolCall) HasArgumentsBytes() bool {
 	if x == nil {
 		return false
 	}
 	return protoimpl.X.Present(&(x.XXX_presence[0]), 8)
 }
 
-func (x *Assessment_ToolCall) HasArgumentsBytes() bool {
-	if x == nil {
-		return false
-	}
-	return protoimpl.X.Present(&(x.XXX_presence[0]), 9)
-}
-
 func (x *Assessment_ToolCall) HasOccurredAt() bool {
 	if x == nil {
 		return false
 	}
-	return protoimpl.X.Present(&(x.XXX_presence[0]), 10)
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 9)
 }
 
 func (x *Assessment_ToolCall) ClearChatId() {
@@ -1038,18 +1015,13 @@ func (x *Assessment_ToolCall) ClearMcpFunction() {
 	x.xxx_hidden_McpFunction = nil
 }
 
-func (x *Assessment_ToolCall) ClearArgumentsSha256() {
-	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 8)
-	x.xxx_hidden_ArgumentsSha256 = nil
-}
-
 func (x *Assessment_ToolCall) ClearArgumentsBytes() {
-	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 9)
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 8)
 	x.xxx_hidden_ArgumentsBytes = 0
 }
 
 func (x *Assessment_ToolCall) ClearOccurredAt() {
-	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 10)
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 9)
 	x.xxx_hidden_OccurredAt = nil
 }
 
@@ -1072,9 +1044,6 @@ type Assessment_ToolCall_builder struct {
 	McpServer *string
 	// MCP function parsed from tool_name; empty for native tools.
 	McpFunction *string
-	// Lowercase hex SHA-256 of the recorded argument payload, for grouping
-	// identical calls without exporting their content.
-	ArgumentsSha256 *string
 	// Byte length of the recorded argument payload.
 	ArgumentsBytes *int64
 	// UTC RFC3339Nano time the carrying message was recorded.
@@ -1086,47 +1055,43 @@ func (b0 Assessment_ToolCall_builder) Build() *Assessment_ToolCall {
 	b, x := &b0, m0
 	_, _ = b, x
 	if b.ChatId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 10)
 		x.xxx_hidden_ChatId = b.ChatId
 	}
 	if b.Generation != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 10)
 		x.xxx_hidden_Generation = *b.Generation
 	}
 	if b.MessageId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 10)
 		x.xxx_hidden_MessageId = b.MessageId
 	}
 	if b.Sequence != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 10)
 		x.xxx_hidden_Sequence = *b.Sequence
 	}
 	if b.ToolCallId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 10)
 		x.xxx_hidden_ToolCallId = b.ToolCallId
 	}
 	if b.ToolName != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 10)
 		x.xxx_hidden_ToolName = b.ToolName
 	}
 	if b.McpServer != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 10)
 		x.xxx_hidden_McpServer = b.McpServer
 	}
 	if b.McpFunction != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 10)
 		x.xxx_hidden_McpFunction = b.McpFunction
 	}
-	if b.ArgumentsSha256 != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 11)
-		x.xxx_hidden_ArgumentsSha256 = b.ArgumentsSha256
-	}
 	if b.ArgumentsBytes != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 9, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 10)
 		x.xxx_hidden_ArgumentsBytes = *b.ArgumentsBytes
 	}
 	if b.OccurredAt != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 10, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 9, 10)
 		x.xxx_hidden_OccurredAt = b.OccurredAt
 	}
 	return m0
@@ -2061,7 +2026,7 @@ var File_gram_intentpolicy_v1_assessment_proto protoreflect.FileDescriptor
 
 const file_gram_intentpolicy_v1_assessment_proto_rawDesc = "" +
 	"\n" +
-	"%gram/intentpolicy/v1/assessment.proto\x12\x14gram.intentpolicy.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xbf\x12\n" +
+	"%gram/intentpolicy/v1/assessment.proto\x12\x14gram.intentpolicy.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\x94\x12\n" +
 	"\n" +
 	"Assessment\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1f\n" +
@@ -2088,7 +2053,7 @@ const file_gram_intentpolicy_v1_assessment_proto_rawDesc = "" +
 	"\x05Actor\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x1d\n" +
 	"\n" +
-	"user_email\x18\x02 \x01(\tR\tuserEmail\x1a\xf4\x02\n" +
+	"user_email\x18\x02 \x01(\tR\tuserEmail\x1a\xc9\x02\n" +
 	"\bToolCall\x12\x17\n" +
 	"\achat_id\x18\x01 \x01(\tR\x06chatId\x12\x1e\n" +
 	"\n" +
@@ -2102,11 +2067,10 @@ const file_gram_intentpolicy_v1_assessment_proto_rawDesc = "" +
 	"\ttool_name\x18\x06 \x01(\tR\btoolName\x12\x1d\n" +
 	"\n" +
 	"mcp_server\x18\a \x01(\tR\tmcpServer\x12!\n" +
-	"\fmcp_function\x18\b \x01(\tR\vmcpFunction\x12)\n" +
-	"\x10arguments_sha256\x18\t \x01(\tR\x0fargumentsSha256\x12'\n" +
-	"\x0farguments_bytes\x18\n" +
-	" \x01(\x03R\x0eargumentsBytes\x12\x1f\n" +
-	"\voccurred_at\x18\v \x01(\tR\n" +
+	"\fmcp_function\x18\b \x01(\tR\vmcpFunction\x12'\n" +
+	"\x0farguments_bytes\x18\t \x01(\x03R\x0eargumentsBytes\x12\x1f\n" +
+	"\voccurred_at\x18\n" +
+	" \x01(\tR\n" +
 	"occurredAt\x1ax\n" +
 	"\tEvaluator\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x1a\n" +

@@ -127,9 +127,8 @@ pubsub:
             string tool_name = 6;
             string mcp_server = 7;
             string mcp_function = 8;
-            string arguments_sha256 = 9;
-            int64 arguments_bytes = 10;
-            string occurred_at = 11;
+            int64 arguments_bytes = 9;
+            string occurred_at = 10;
           }
           message Evaluator {
             string kind = 1;
