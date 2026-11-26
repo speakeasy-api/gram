@@ -140,7 +140,6 @@ export const scopeOpenKeys: Readonly<
 > = {
   "org:hooks_ingest": { probe: ["projectId"], connection: [] },
   "mcp:connect": { probe: ["tool", "disposition"], connection: ["tool", "disposition"] },
-  "risk_policy:evaluate": { probe: ["serverUrl", "serverIdentity"], connection: [] },
   "risk_policy:bypass": { probe: ["serverUrl", "serverIdentity"], connection: [] },
   "risk_policy:block": { probe: ["serverUrl", "serverIdentity"], connection: [] },
 };

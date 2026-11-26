@@ -289,7 +289,6 @@ func renderDashboardChecks(b *strings.Builder, r registry.Registry) {
 					probe = append(probe, strconv.Quote(selectorKeyName(key)))
 				case registry.OpenOnConnection:
 					connection = append(connection, strconv.Quote(selectorKeyName(key)))
-				case registry.OpenOnPolicyAudience:
 				}
 			}
 		}
