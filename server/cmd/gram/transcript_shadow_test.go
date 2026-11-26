@@ -134,6 +134,8 @@ func TestTranscriptShadowSchemaCompatibility(t *testing.T) {
 		{name: "deferrable tool call conflict target", ddl: "ALTER TABLE chat_message_transcript_tool_calls DROP CONSTRAINT chat_message_transcript_tool_calls_pkey; ALTER TABLE chat_message_transcript_tool_calls ADD UNIQUE (message_id, tool_call_id) DEFERRABLE; CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id))"},
 		{name: "unique tool call conflict target", ddl: "ALTER TABLE chat_message_transcript_tool_calls DROP CONSTRAINT chat_message_transcript_tool_calls_pkey; CREATE UNIQUE INDEX ON chat_message_transcript_tool_calls (tool_call_id, message_id); CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id))", ok: true},
 		{name: "missing tool call table", ddl: "DROP TABLE chat_message_transcript_tool_calls; CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id))"},
+		{name: "tool call extra required column without default", ddl: "ALTER TABLE chat_message_transcript_tool_calls ADD COLUMN extra text NOT NULL; CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id))"},
+		{name: "tool call defaulted extra column", ddl: "ALTER TABLE chat_message_transcript_tool_calls ADD COLUMN extra text NOT NULL DEFAULT ''; CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id))", ok: true},
 	}
 	for _, name := range []string{"tool_call_count", "content_bytes", "content_raw_bytes", "tool_calls_bytes"} {
 		tests = append(tests,

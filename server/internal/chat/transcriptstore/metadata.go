@@ -38,10 +38,6 @@ func metadataOf(content string, contentRaw, toolCalls []byte) metadata {
 	}
 }
 
-type toolCall struct {
-	ID string `json:"id"`
-}
-
 // toolCallsOf reads a tool_calls value as its array elements. Some rows hold
 // the array double-encoded as a JSON string; both forms are read. Anything
 // else yields no elements, never an error: metadata must not fail a message
@@ -65,13 +61,18 @@ func toolCallsOf(raw []byte) []json.RawMessage {
 }
 
 // toolCallID returns an element's "id", or "" when it is not an object with
-// a string id.
+// a string id. The key must be exactly "id", as the dashboard and SQL read it;
+// encoding/json would also match "ID" or "Id" when decoding into a struct.
 func toolCallID(element json.RawMessage) string {
-	var call toolCall
-	if err := json.Unmarshal(element, &call); err != nil {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(element, &fields); err != nil {
 		return ""
 	}
-	return call.ID
+	var id string
+	if err := json.Unmarshal(fields["id"], &id); err != nil {
+		return ""
+	}
+	return id
 }
 
 // toolCallCount matches how the dashboard decides a message carries tool
