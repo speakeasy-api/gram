@@ -22,8 +22,9 @@ const (
 	// MaxExportedArgumentsBytes caps one exported tool call's arguments.
 	MaxExportedArgumentsBytes = 1 << 20 // 1 MiB
 
-	// maxExportedArgumentsTotal caps all of one message's exported arguments.
-	maxExportedArgumentsTotal = 4 << 20 // 4 MiB
+	// MaxExportedArgumentsTotalBytes caps all of one message's exported
+	// arguments together; later calls get what remains of it.
+	MaxExportedArgumentsTotalBytes = 4 << 20 // 4 MiB
 )
 
 // transcriptNamespace scopes exported transcript message identities.
@@ -34,9 +35,9 @@ type Redactor interface {
 	Text(ctx context.Context, text string) (string, bool, error)
 }
 
-// TranscriptMessageID is the logical identity of one exported message.
-func TranscriptMessageID(chatID uuid.UUID, generation int32, messageID uuid.UUID) uuid.UUID {
-	key := chatID.String() + "\x00" + strconv.FormatInt(int64(generation), 10) + "\x00" + messageID.String()
+// TranscriptMessageID is the identity of one message as exported by one analysis.
+func TranscriptMessageID(analysisID, chatID uuid.UUID, generation int32, messageID uuid.UUID) uuid.UUID {
+	key := analysisID.String() + "\x00" + chatID.String() + "\x00" + strconv.FormatInt(int64(generation), 10) + "\x00" + messageID.String()
 	return uuid.NewSHA1(transcriptNamespace, []byte(key))
 }
 
@@ -56,7 +57,7 @@ func TranscriptRecords(ctx context.Context, redactor Redactor, rc RecordContext,
 			return nil, fmt.Errorf("export transcript: %w", err)
 		}
 		m := intentpolicyv1.TranscriptMessage_builder{
-			Id:             new(TranscriptMessageID(chatID, rc.Generation, row.ID).String()),
+			Id:             new(TranscriptMessageID(rc.AnalysisID, chatID, rc.Generation, row.ID).String()),
 			AnalysisId:     new(rc.AnalysisID.String()),
 			OrganizationId: new(rc.OrganizationID),
 			ProjectId:      new(rc.ProjectID.String()),
@@ -117,7 +118,7 @@ func fillContent(ctx context.Context, redactor Redactor, m *intentpolicyv1.Trans
 	redacted = changed
 
 	exported := make([]*intentpolicyv1.TranscriptMessage_ToolCall, 0, len(calls))
-	budget := maxExportedArgumentsTotal
+	budget := MaxExportedArgumentsTotalBytes
 	for _, call := range calls {
 		server, function, _ := toolref.AttributeTool(call.Function.Name)
 		tc := intentpolicyv1.TranscriptMessage_ToolCall_builder{

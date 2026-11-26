@@ -55,8 +55,13 @@ func TestTranscriptRecordsMaskAndAttribute(t *testing.T) {
 	require.Len(t, records, 3)
 
 	user, call, result := records[0], records[1], records[2]
-	require.Equal(t, intentpolicy.TranscriptMessageID(chatID, 2, rows[0].ID).String(), user.GetId())
+	require.Equal(t, intentpolicy.TranscriptMessageID(rc.AnalysisID, chatID, 2, rows[0].ID).String(), user.GetId())
 	require.Equal(t, rc.AnalysisID.String(), user.GetAnalysisId())
+	other := rc
+	other.AnalysisID = uuid.New()
+	again, err := intentpolicy.TranscriptRecords(t.Context(), maskRedactor{}, other, chatID, rows[:1])
+	require.NoError(t, err)
+	require.NotEqual(t, user.GetId(), again[0].GetId(), "each analysis exports its own copy")
 	require.Equal(t, "dev@example.com", user.GetActor().GetUserEmail())
 	require.Equal(t, "deploy with my [REDACTED]", user.GetContent())
 	require.Equal(t, int64(len("deploy with my secret")), user.GetContentBytes())

@@ -25,8 +25,9 @@ const (
 // analysis judged, exported so transcripts can be read beside their
 // Assessment rows (join on chat_id and message_id). Unlike Assessment it
 // carries content: secrets detected by the chat redactor are masked before
-// publishing, but other sensitive text is not. Delivery and export are
-// at-least-once; deduplicate on id and keep the latest exported_at.
+// publishing, but other sensitive text is not. Each analysis exports its own
+// snapshot; delivery is at-least-once, so deduplicate redeliveries on id and
+// pick an analysis_id (or the latest exported_at per message_id) for one copy.
 type TranscriptMessage struct {
 	state                       protoimpl.MessageState         `protogen:"opaque.v1"`
 	xxx_hidden_Id               *string                        `protobuf:"bytes,1,opt,name=id"`
@@ -586,7 +587,8 @@ func (x *TranscriptMessage) ClearExportedAt() {
 type TranscriptMessage_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
-	// UUIDv5 of chat_id, generation and message_id.
+	// UUIDv5 of analysis_id, chat_id, generation and message_id: one row per
+	// message per exporting analysis.
 	Id *string
 	// Analysis request that exported the message; matches Assessment.analysis_id.
 	AnalysisId     *string
@@ -613,7 +615,8 @@ type TranscriptMessage_builder struct {
 	ToolCallId *string
 	// Model that produced an assistant message, when recorded.
 	Model *string
-	// Something was masked in content or arguments.
+	// Something was masked in the exported content or arguments. Always false
+	// when withheld, since nothing was exported.
 	Redacted *bool
 	// The redactor failed, so content and arguments were withheld entirely.
 	Withheld *bool

@@ -10,8 +10,9 @@ option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/intentpolicy/v
 // analysis judged, exported so transcripts can be read beside their
 // Assessment rows (join on chat_id and message_id). Unlike Assessment it
 // carries content: secrets detected by the chat redactor are masked before
-// publishing, but other sensitive text is not. Delivery and export are
-// at-least-once; deduplicate on id and keep the latest exported_at.
+// publishing, but other sensitive text is not. Each analysis exports its own
+// snapshot; delivery is at-least-once, so deduplicate redeliveries on id and
+// pick an analysis_id (or the latest exported_at per message_id) for one copy.
 message TranscriptMessage {
   // Who requested the analysis that exported the message.
   message Actor {
@@ -34,7 +35,8 @@ message TranscriptMessage {
     bool arguments_truncated = 7;
   }
 
-  // UUIDv5 of chat_id, generation and message_id.
+  // UUIDv5 of analysis_id, chat_id, generation and message_id: one row per
+  // message per exporting analysis.
   string id = 1;
   // Analysis request that exported the message; matches Assessment.analysis_id.
   string analysis_id = 2;
@@ -61,7 +63,8 @@ message TranscriptMessage {
   string tool_call_id = 15;
   // Model that produced an assistant message, when recorded.
   string model = 16;
-  // Something was masked in content or arguments.
+  // Something was masked in the exported content or arguments. Always false
+  // when withheld, since nothing was exported.
   bool redacted = 17;
   // The redactor failed, so content and arguments were withheld entirely.
   bool withheld = 18;

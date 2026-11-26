@@ -246,7 +246,8 @@ const publishTimeout = 30 * time.Second
 // messages; masking and publishing them happen in the background. Failures
 // are logged and never fail the analysis.
 func (s *Service) publishResults(ctx context.Context, logger *slog.Logger, authCtx *contextvalues.AuthContext, chatID uuid.UUID, generation int32, requestedAt time.Time, analysis intentpolicy.Analysis, messages []intentpolicy.MessageRow, transcript bool) {
-	if s.results == nil || len(analysis.Assessments) == 0 {
+	exportTranscript := transcript && s.transcripts != nil && len(messages) > 0
+	if s.results == nil || (len(analysis.Assessments) == 0 && !exportTranscript) {
 		return
 	}
 	analysisID, err := uuid.NewV7()
@@ -274,7 +275,7 @@ func (s *Service) publishResults(ctx context.Context, logger *slog.Logger, authC
 	go func() {
 		defer cancel()
 		settle(pubCtx, logger, "intent assessments", pending)
-		if !transcript || s.transcripts == nil {
+		if !exportTranscript {
 			return
 		}
 		records, err := intentpolicy.TranscriptRecords(pubCtx, s.redactor, rc, chatID, messages)
