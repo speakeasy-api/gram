@@ -7,8 +7,12 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
+
+	authzv1 "github.com/speakeasy-api/gram/infra/gen/gram/authz/v1"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -97,9 +101,14 @@ func TestXAAReadinessSpeakeasyVendorWithoutOktaConnection(t *testing.T) {
 	require.NotNil(t, output.IdentityChaining.Providers[0].LastAcceptedAt)
 	require.Equal(t, accepted.Format(time.RFC3339), *output.IdentityChaining.Providers[0].LastAcceptedAt, "the readiness view reports when the vendor last accepted a Speakeasy assertion")
 
-	result, _, err = service.read(authz.GrantsToContext(actor, []authz.Grant{admin}), f.organizationID, f.projectID, f.serverID)
+	// The caller named the server, so the refusal is recorded like any gate's
+	// while it still answers as a missing server.
+	recording := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return true, nil }, nil)
+	recorded := NewPostgresReader(testenv.NewLogger(t), conn).WithXAAReadiness(okta, nil, flags).WithXAAIdentityChaining(governor, nil).WithAuthorization(recording).xaaReadiness
+	result, _, err = recorded.read(authz.GrantsToContext(actor, []authz.Grant{admin}), f.organizationID, f.projectID, f.serverID)
 	require.NoError(t, err)
 	requireXAARefusal(t, result, "not_found")
+	require.Equal(t, []string{"deny"}, challengeOutcomes(t, conn))
 
 	result, _, err = service.read(authz.GrantsToContext(actor, []authz.Grant{admin, authz.NewGrant(authz.ScopeMCPRead, f.serverID.String())}), f.organizationID, uuid.New(), f.serverID)
 	require.NoError(t, err)
@@ -109,6 +118,22 @@ func TestXAAReadinessSpeakeasyVendorWithoutOktaConnection(t *testing.T) {
 	result, _, err = service.read(authz.GrantsToContext(actor, []authz.Grant{admin, authz.NewGrant(authz.ScopeMCPRead, f.serverID.String())}), f.organizationID, f.projectID, f.serverID)
 	require.NoError(t, err)
 	requireXAARefusal(t, result, "setup_required")
+}
+
+func challengeOutcomes(t *testing.T, conn *pgxpool.Pool) []string {
+	t.Helper()
+	rows, err := testrepo.New(conn).ListPublishOutboxRows(t.Context())
+	require.NoError(t, err)
+	var outcomes []string
+	for _, row := range rows {
+		if row.Topic != string(proto.MessageName(&authzv1.Challenge{})) {
+			continue
+		}
+		message := &authzv1.Challenge{}
+		require.NoError(t, proto.Unmarshal(row.Message, message))
+		outcomes = append(outcomes, message.GetOutcome())
+	}
+	return outcomes
 }
 
 func requireXAARefusal(t *testing.T, result *mcp.CallToolResult, code string) {
