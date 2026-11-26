@@ -274,6 +274,34 @@ FROM read_parquet(
 QUALIFY row_number() OVER (PARTITION BY id ORDER BY evaluated_at DESC) = 1;
 ```
 
+### Intent-policy transcripts
+
+`gram.intentpolicy.v1.TranscriptLake` stores `gram.intentpolicy.v1.TranscriptMessage`
+in its own logical bucket, `intent-transcripts`, so read access to message
+content can be granted apart from the assessment lake. The first window of an
+analysis (offset 0) exports one row per message of the analyzed chat
+generation; later windows of the same session do not export it again. Content
+and tool-call arguments go through `chatredact`, which masks detected secrets
+but not other sensitive text; a message whose scan fails is exported without
+content or arguments and with `withheld` set. Content is capped at 4 MiB and
+each call's arguments at 1 MiB to stay under the Pub/Sub message limit, with
+`content_truncated` / `arguments_truncated` and the original byte sizes.
+
+Rows join to assessments on `chat_id` and `message_id` (the carrying message),
+and tool calls on `tool_call_id`:
+
+```sql
+WITH a AS (SELECT * FROM read_parquet('local/lake/lake/gram.intentpolicy.v1.LakePrimary/**/*.parquet', hive_partitioning = true, union_by_name = true, hive_types_autocast = false)
+           QUALIFY row_number() OVER (PARTITION BY id ORDER BY evaluated_at DESC) = 1),
+     m AS (SELECT * FROM read_parquet('local/lake/intent-transcripts/gram.intentpolicy.v1.TranscriptLake/**/*.parquet', hive_partitioning = true, union_by_name = true, hive_types_autocast = false)
+           QUALIFY row_number() OVER (PARTITION BY id ORDER BY exported_at DESC) = 1)
+SELECT m.sequence, m.role, m.content, a.tool_call.tool_name, a.decision, a.decided_by
+FROM m
+LEFT JOIN a ON a.tool_call.chat_id = m.chat_id AND a.tool_call.message_id = m.message_id
+WHERE m.chat_id = '<chat-id>'
+ORDER BY m.sequence;
+```
+
 ## Mapping v1
 
 `infra/pkg/storagebindings/storage_gen.go` contains explicit schemas and typed

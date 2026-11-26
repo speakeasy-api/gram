@@ -1,0 +1,76 @@
+edition = "2024";
+
+package gram.intentpolicy.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/intentpolicy/v1;intentpolicyv1";
+
+// TranscriptMessage is one message of a chat generation that an intent-policy
+// analysis judged, exported so transcripts can be read beside their
+// Assessment rows (join on chat_id and message_id). Unlike Assessment it
+// carries content: secrets detected by the chat redactor are masked before
+// publishing, but other sensitive text is not. Delivery and export are
+// at-least-once; deduplicate on id and keep the latest exported_at.
+message TranscriptMessage {
+  // Who requested the analysis that exported the message.
+  message Actor {
+    string user_id = 1;
+    string user_email = 2;
+  }
+  // One tool call carried by an assistant message.
+  message ToolCall {
+    // Provider-assigned call ID; matches Assessment.tool_call.tool_call_id.
+    string tool_call_id = 1;
+    string tool_name = 2;
+    // MCP server parsed from tool_name; empty for native tools.
+    string mcp_server = 3;
+    // MCP function parsed from tool_name; empty for native tools.
+    string mcp_function = 4;
+    // Argument payload with detected secrets masked, possibly truncated.
+    string arguments = 5;
+    // Byte length of the recorded argument payload before masking or truncation.
+    int64 arguments_bytes = 6;
+    bool arguments_truncated = 7;
+  }
+
+  // UUIDv5 of chat_id, generation and message_id.
+  string id = 1;
+  // Analysis request that exported the message; matches Assessment.analysis_id.
+  string analysis_id = 2;
+  string organization_id = 3;
+  string project_id = 4;
+  Actor actor = 5;
+  // Speakeasy chat UUID.
+  string chat_id = 6;
+  int32 generation = 7;
+  // Speakeasy message UUID; matches Assessment.tool_call.message_id.
+  string message_id = 8;
+  // Message sequence number within the chat.
+  int64 sequence = 9;
+  // Stored role, e.g. "user", "assistant", "tool" or "system".
+  string role = 10;
+  // Message text with detected secrets masked, possibly truncated.
+  string content = 11;
+  // Byte length of the stored content before masking or truncation.
+  int64 content_bytes = 12;
+  bool content_truncated = 13;
+  // Tool calls of an assistant message, in call order.
+  repeated ToolCall tool_calls = 14;
+  // For a tool result, the call it answers.
+  string tool_call_id = 15;
+  // Model that produced an assistant message, when recorded.
+  string model = 16;
+  // Something was masked in content or arguments.
+  bool redacted = 17;
+  // The redactor failed, so content and arguments were withheld entirely.
+  bool withheld = 18;
+  // UTC RFC3339Nano time the message was recorded.
+  string created_at = 19;
+  // UTC RFC3339Nano time the message was exported.
+  string exported_at = 20;
+
+  option (gcp.pubsub.v1.topic) = {
+    retention_hint: { seconds: 345600 /* 4 days */ }
+  };
+}

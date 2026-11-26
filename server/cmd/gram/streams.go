@@ -880,6 +880,7 @@ func newStreamsCommand() *cli.Command {
 				if lakeStore != nil {
 					mustStreamToStorage(rg, storagebindings.GramSigintV1LakePrimary())
 					mustStreamToStorage(rg, storagebindings.GramIntentpolicyV1LakePrimary())
+					mustStreamToStorage(rg, storagebindings.GramIntentpolicyV1TranscriptLake())
 				}
 				mustReceiveBatch(rg, &sigintv1.Reading{}, &sigintv1.ReadingCHWriter{}, sigint.NewReadingCHWriter(logger, sigintchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
 				mustReceiveBatch(rg, &sigintv1.Outcome{}, &sigintv1.OutcomeCHWriter{}, sigint.NewOutcomeCHWriter(logger, sigintchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})

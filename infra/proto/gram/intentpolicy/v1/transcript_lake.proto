@@ -1,0 +1,23 @@
+edition = "2024";
+
+package gram.intentpolicy.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/intentpolicy/v1;intentpolicyv1";
+
+// TranscriptLake writes exported transcript messages as daily UTC-partitioned
+// Parquet. They carry message content, so they live in their own bucket and
+// read access can be granted apart from the assessment lake.
+message TranscriptLake {
+  option (gcp.pubsub.v1.storage_subscription) = {
+    topic: "gram.intentpolicy.v1.TranscriptMessage"
+    bucket: "intent-transcripts"
+    retention: { seconds: 345600 /* 4 days */ }
+    ack_deadline: { seconds: 60 }
+    retry_policy: {
+      minimum_backoff: { seconds: 10 }
+      maximum_backoff: { seconds: 600 }
+    }
+  };
+}

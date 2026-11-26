@@ -12,7 +12,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/toolref"
 )
 
-// MessageRow is the subset of a stored chat message needed to extract calls.
+// MessageRow is the subset of a stored chat message needed to extract calls
+// and export the transcript.
 type MessageRow struct {
 	// ID is the message id.
 	ID uuid.UUID
@@ -28,6 +29,15 @@ type MessageRow struct {
 
 	// ToolCalls is the stored tool_calls JSON.
 	ToolCalls []byte
+
+	// Content is the stored message text.
+	Content string
+
+	// ToolCallID is the call a tool result answers.
+	ToolCallID string
+
+	// Model is the model that produced an assistant message, when recorded.
+	Model string
 
 	// CreatedAt is when the message was recorded.
 	CreatedAt time.Time

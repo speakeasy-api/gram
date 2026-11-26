@@ -190,6 +190,49 @@ pubsub:
       type: PROTOCOL_BUFFER
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-intentpolicy-v1-transcript-message
+    name: gram-intentpolicy-v1-transcript-message
+    spec:
+      definition: |
+        edition = "2024";
+        message TranscriptMessage {
+          message Actor {
+            string user_id = 1;
+            string user_email = 2;
+          }
+          message ToolCall {
+            string tool_call_id = 1;
+            string tool_name = 2;
+            string mcp_server = 3;
+            string mcp_function = 4;
+            string arguments = 5;
+            int64 arguments_bytes = 6;
+            bool arguments_truncated = 7;
+          }
+          string id = 1;
+          string analysis_id = 2;
+          string organization_id = 3;
+          string project_id = 4;
+          Actor actor = 5;
+          string chat_id = 6;
+          int32 generation = 7;
+          string message_id = 8;
+          int64 sequence = 9;
+          string role = 10;
+          string content = 11;
+          int64 content_bytes = 12;
+          bool content_truncated = 13;
+          repeated ToolCall tool_calls = 14;
+          string tool_call_id = 15;
+          string model = 16;
+          bool redacted = 17;
+          bool withheld = 18;
+          string created_at = 19;
+          string exported_at = 20;
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-metering-v1-meter-reading
     name: gram-metering-v1-meter-reading
     spec:
@@ -1940,6 +1983,20 @@ pubsub:
         name: gram-intentpolicy-v1-assessment
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-intentpolicy-v1-transcript-lake
+      topic_proto_message: gram-intentpolicy-v1-transcript-message
+    name: gram-intentpolicy-v1-transcript-lake
+    spec:
+      ackDeadlineSeconds: 60
+      messageRetentionDuration: 345600s
+      retainAckedMessages: false
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-intentpolicy-v1-transcript-message
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-metering-v1-meter-reading-ch-writer
       topic_proto_message: gram-metering-v1-meter-reading
     name: gram-metering-v1-meter-reading-ch-writer
@@ -2577,6 +2634,16 @@ pubsub:
           name: gram-intentpolicy-v1-assessment
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-intentpolicy-v1-transcript-message
+    name: gram-intentpolicy-v1-transcript-message
+    spec:
+      messageRetentionDuration: 345600s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-intentpolicy-v1-transcript-message
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-metering-v1-meter-reading
     name: gram-metering-v1-meter-reading
     spec:
@@ -2914,6 +2981,15 @@ storage:
   apis:
   - storage.googleapis.com
   buckets:
+  - annotations:
+      cnrm.cloud.google.com/deletion-policy: abandon
+      cnrm.cloud.google.com/force-destroy: "false"
+    labels:
+      managed_by: proto-pubsub-orchestrator
+    name: intent-transcripts
+    spec:
+      publicAccessPrevention: enforced
+      uniformBucketLevelAccess: true
   - annotations:
       cnrm.cloud.google.com/deletion-policy: abandon
       cnrm.cloud.google.com/force-destroy: "false"

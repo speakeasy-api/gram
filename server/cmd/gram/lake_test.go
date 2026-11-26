@@ -28,7 +28,7 @@ func TestNewLakeStorageLocalDefaultsToFilesystem(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, shutdown(t.Context())) })
 	require.IsType(t, &lake.FilesystemStore{}, store)
-	require.Equal(t, map[string]string{"lake": "lake"}, buckets)
+	require.Equal(t, map[string]string{"lake": "lake", "intent-transcripts": "intent-transcripts"}, buckets)
 
 	err = store.Write(t.Context(), storage.Object{Bucket: buckets["lake"], Name: "example.parquet"}, func(w io.Writer) error {
 		_, err := io.WriteString(w, "local object")
