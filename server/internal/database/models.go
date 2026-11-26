@@ -1891,7 +1891,7 @@ type ChatMessageTranscript struct {
 	// Organization-key encrypted transcript payload.
 	// @access: opaque-restricted
 	Ciphertext string
-	// Legacy unkeyed freshness digest of sensitive transcript fields; NULL for copies sealed with source_updated_at.
+	// Legacy unkeyed freshness digest of sensitive transcript fields; NULL for copies sealed with source_updated_at. A row carrying it is plaintext-equivalent until backfill clears it and the column is dropped.
 	// @access: opaque-restricted
 	SourceHash []byte
 	// @access: confidential

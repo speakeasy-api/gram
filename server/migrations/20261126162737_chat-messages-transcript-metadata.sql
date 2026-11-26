@@ -1,7 +1,7 @@
 -- Modify "chat_message_transcripts" table
 ALTER TABLE "chat_message_transcripts" ALTER COLUMN "source_hash" DROP NOT NULL, ADD COLUMN "source_updated_at" timestamptz NULL;
 -- Set comment to column: "source_hash" on table: "chat_message_transcripts"
-COMMENT ON COLUMN "chat_message_transcripts"."source_hash" IS 'Legacy unkeyed freshness digest of sensitive transcript fields; NULL for copies sealed with source_updated_at.
+COMMENT ON COLUMN "chat_message_transcripts"."source_hash" IS 'Legacy unkeyed freshness digest of sensitive transcript fields; NULL for copies sealed with source_updated_at. A row carrying it is plaintext-equivalent until backfill clears it and the column is dropped.
 @access: opaque-restricted';
 -- Set comment to column: "source_updated_at" on table: "chat_message_transcripts"
 COMMENT ON COLUMN "chat_message_transcripts"."source_updated_at" IS 'The parent chat_messages.updated_at this copy was sealed from.

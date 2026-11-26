@@ -7282,9 +7282,10 @@ CREATE TABLE IF NOT EXISTS chat_message_transcripts (
   project_id UUID NOT NULL,
   organization_id TEXT NOT NULL,
   ciphertext TEXT NOT NULL,
-  -- Legacy: an unkeyed digest of the plaintext, which would let anyone confirm
-  -- guessed messages once plaintext is gone. Copies sealed from now on record
-  -- source_updated_at instead and leave this NULL; backfill clears the rest.
+  -- Legacy unkeyed digest of the plaintext. It confirms guessed complete
+  -- payloads and correlates equal ones without a key, even after key
+  -- destruction, so a row carrying it is plaintext-equivalent until backfill
+  -- clears it and the column is dropped. New copies leave it NULL.
   source_hash BYTEA,
   created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
@@ -7309,7 +7310,7 @@ COMMENT ON COLUMN chat_message_transcripts.organization_id IS 'Owning organizati
 @access: confidential';
 COMMENT ON COLUMN chat_message_transcripts.ciphertext IS 'Organization-key encrypted transcript payload.
 @access: opaque-restricted';
-COMMENT ON COLUMN chat_message_transcripts.source_hash IS 'Legacy unkeyed freshness digest of sensitive transcript fields; NULL for copies sealed with source_updated_at.
+COMMENT ON COLUMN chat_message_transcripts.source_hash IS 'Legacy unkeyed freshness digest of sensitive transcript fields; NULL for copies sealed with source_updated_at. A row carrying it is plaintext-equivalent until backfill clears it and the column is dropped.
 @access: opaque-restricted';
 COMMENT ON COLUMN chat_message_transcripts.source_updated_at IS 'The parent chat_messages.updated_at this copy was sealed from.
 @access: confidential';
