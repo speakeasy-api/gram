@@ -174,8 +174,9 @@ capture. Every sweep reseals each message, so legacy transcripts lose their
 `source_hash` and messages written before the metadata columns existed get them.
 A project off the capture allowlist
 (`GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS`) gets `ErrNotEnabled` and the command
-refuses to run: such a project never seals new messages, and body updates delete
-transcripts, so its coverage would never complete.
+refuses to run: such a project does not seal new messages, and a body update
+deletes the message's transcript without resealing it, so any coverage a
+backfill reached would become incomplete after the next write.
 
 ```sh
 gram transcript-shadow-backfill --project-id <PROJECT_ID>

@@ -59,9 +59,10 @@ func (t *Transcripts) Seal(ctx context.Context, db repo.DBTX, organizationID str
 }
 
 // Backfill seals one page of the project's existing messages after the
-// cursor, with the same metadata as a live Seal. See Store.Backfill for the
-// page and retry contract. It returns ErrNotEnabled for a project that does
-// not have encrypted transcripts.
+// cursor, with the same metadata as a live Seal. The page commits whole or
+// not at all: on error nothing is sealed and the cursor does not advance, so
+// the caller resumes from the same cursor. It returns ErrNotEnabled for a
+// project that does not have encrypted transcripts.
 func (t *Transcripts) Backfill(ctx context.Context, organizationID string, projectID, after uuid.UUID, limit int32) (Page, error) {
 	if !t.Enabled(projectID) {
 		return Page{After: after, Count: 0, More: false}, ErrNotEnabled

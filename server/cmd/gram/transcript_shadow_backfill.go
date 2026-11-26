@@ -83,8 +83,9 @@ func newTranscriptShadowBackfillCommand() *cli.Command {
 				return errors.New("--apply requires --confirm-environment to equal --environment")
 			}
 			// Check the allowlist before connecting or provisioning any keys.
-			// A project that does not capture never seals new messages, and
-			// body updates delete transcripts, so its coverage never completes.
+			// A project that does not capture does not seal new messages, and
+			// body updates delete transcripts without resealing, so coverage
+			// would become incomplete after its next write.
 			if err := requireTranscriptShadowProject(c.StringSlice(chatTranscriptShadowProjectIDsFlag), projectID); err != nil {
 				return err
 			}
