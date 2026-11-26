@@ -74,7 +74,7 @@ func (s *Service) GetSecretBackfills(ctx context.Context, _ *gen.GetSecretBackfi
 	}, nil
 }
 
-func (s *Service) RunMarketplaceTokenBackfill(ctx context.Context, _ *gen.RunMarketplaceTokenBackfillPayload) (*gen.AdminMarketplaceTokenBackfill, error) {
+func (s *Service) RunMarketplaceTokenBackfill(ctx context.Context, payload *gen.RunMarketplaceTokenBackfillPayload) (*gen.AdminMarketplaceTokenBackfill, error) {
 	subject, err := secretBackfillOperator(ctx)
 	if err != nil {
 		return nil, err
@@ -83,6 +83,13 @@ func (s *Service) RunMarketplaceTokenBackfill(ctx context.Context, _ *gen.RunMar
 	key := s.secretBackfillPlatformKey
 	if key == nil {
 		return nil, oops.E(oops.CodeUnavailable, nil, "this admin process has no platform key, so it cannot seal marketplace tokens").LogWarn(ctx, s.logger)
+	}
+
+	// The operator checked a fingerprint the page showed earlier. The process
+	// may have restarted with another key since, and sealing with a key the
+	// servers do not run would leave them unable to show the install URLs.
+	if fingerprint := key.Platform.Fingerprint(); payload.PlatformKeyFingerprint != fingerprint {
+		return nil, oops.E(oops.CodeConflict, nil, "this admin server's platform key fingerprint is now %s, not the one you checked; refresh, check it against the servers' encryption key loaded log, then apply again", fingerprint).LogWarn(ctx, s.logger)
 	}
 
 	var report marketplacetokenbackfill.Report

@@ -47,7 +47,7 @@ func TestSecretBackfillsPreviewThenApplyBoth(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "legacy-marketplace-token", stored.MarketplaceToken.String, "a preview writes nothing")
 
-	tokens, err := svc.RunMarketplaceTokenBackfill(ctx, &gen.RunMarketplaceTokenBackfillPayload{})
+	tokens, err := svc.RunMarketplaceTokenBackfill(ctx, &gen.RunMarketplaceTokenBackfillPayload{PlatformKeyFingerprint: platform.Fingerprint()})
 	require.NoError(t, err)
 	require.Equal(t, &gen.AdminMarketplaceTokenBackfill{Attributed: 1, Moved: 1, Skipped: 0, NeedsOrganizationKey: 0, Unattributed: 0, Legacy: 0, Hashed: 1}, tokens)
 
@@ -67,7 +67,7 @@ func TestSecretBackfillsPreviewThenApplyBoth(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, conv.ToPGText(orgID), runnerKey.OrganizationID)
 
-	tokens, err = svc.RunMarketplaceTokenBackfill(ctx, &gen.RunMarketplaceTokenBackfillPayload{})
+	tokens, err = svc.RunMarketplaceTokenBackfill(ctx, &gen.RunMarketplaceTokenBackfillPayload{PlatformKeyFingerprint: platform.Fingerprint()})
 	require.NoError(t, err)
 	require.Equal(t, &gen.AdminMarketplaceTokenBackfill{Attributed: 0, Moved: 0, Skipped: 0, NeedsOrganizationKey: 0, Unattributed: 0, Legacy: 0, Hashed: 1}, tokens, "running again changes nothing")
 	runnerKeys, err = svc.RunRunnerKeyOrganizationBackfill(ctx, &gen.RunRunnerKeyOrganizationBackfillPayload{})
@@ -85,7 +85,7 @@ func TestMarketplaceTokenBackfillIsUnavailableWithoutAPlatformKey(t *testing.T) 
 	require.NoError(t, err, "previews need no key")
 	require.Nil(t, preview.PlatformKeyFingerprint)
 
-	_, err = svc.RunMarketplaceTokenBackfill(ctx, &gen.RunMarketplaceTokenBackfillPayload{})
+	_, err = svc.RunMarketplaceTokenBackfill(ctx, &gen.RunMarketplaceTokenBackfillPayload{PlatformKeyFingerprint: "any"})
 	requireSecretBackfillCode(t, err, oops.CodeUnavailable)
 
 	_, err = svc.RunRunnerKeyOrganizationBackfill(ctx, &gen.RunRunnerKeyOrganizationBackfillPayload{})
@@ -98,11 +98,33 @@ func TestSecretBackfillsNeedAStaffOperator(t *testing.T) {
 	ctx, svc, db := newTestAdminService(t)
 	withSecretBackfillPlatformKey(t, svc, db)
 
-	_, err := svc.RunMarketplaceTokenBackfill(ctx, &gen.RunMarketplaceTokenBackfillPayload{})
+	_, err := svc.RunMarketplaceTokenBackfill(ctx, &gen.RunMarketplaceTokenBackfillPayload{PlatformKeyFingerprint: "any"})
 	requireSecretBackfillCode(t, err, oops.CodeUnauthorized)
 
 	_, err = svc.RunRunnerKeyOrganizationBackfill(ctx, &gen.RunRunnerKeyOrganizationBackfillPayload{})
 	requireSecretBackfillCode(t, err, oops.CodeUnauthorized)
+}
+
+func TestMarketplaceTokenBackfillRefusesAnotherKeysFingerprint(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, db := newTestAdminService(t)
+	ctx = withSecretBackfillOperator(ctx)
+	withSecretBackfillPlatformKey(t, svc, db)
+	orgID := "org_" + uuid.NewString()
+	seedOrg(t, ctx, db, orgFixture{id: orgID, name: "secret-backfills-fingerprint", slug: "secret-backfills-fingerprint-" + uuid.NewString()[:8], accountType: "enterprise"})
+	projectID := seedSecretBackfillProject(t, ctx, db, orgID)
+	connectionID := seedLegacyMarketplaceToken(t, ctx, db, projectID, "legacy-marketplace-token")
+
+	// The operator checked the fingerprint of the key the process ran with
+	// before it restarted with another one.
+	_, err := svc.RunMarketplaceTokenBackfill(ctx, &gen.RunMarketplaceTokenBackfillPayload{PlatformKeyFingerprint: "fingerprint-of-the-previous-key"})
+	requireSecretBackfillCode(t, err, oops.CodeConflict)
+
+	stored, err := pluginsrepo.New(db).GetGitHubConnectionRowFixture(ctx, connectionID)
+	require.NoError(t, err)
+	require.Equal(t, "legacy-marketplace-token", stored.MarketplaceToken.String, "a refused run writes nothing")
+	require.False(t, stored.MarketplaceTokenEncrypted.Valid, "a refused run seals nothing")
 }
 
 func TestSecretBackfillRefusesAnOverlappingRun(t *testing.T) {

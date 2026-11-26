@@ -3637,14 +3637,30 @@ func BuildGetSecretBackfillsPayload(adminGetSecretBackfillsAdminSessionToken str
 
 // BuildRunMarketplaceTokenBackfillPayload builds the payload for the admin
 // runMarketplaceTokenBackfill endpoint from CLI flags.
-func BuildRunMarketplaceTokenBackfillPayload(adminRunMarketplaceTokenBackfillAdminSessionToken string) (*admin.RunMarketplaceTokenBackfillPayload, error) {
+func BuildRunMarketplaceTokenBackfillPayload(adminRunMarketplaceTokenBackfillBody string, adminRunMarketplaceTokenBackfillAdminSessionToken string) (*admin.RunMarketplaceTokenBackfillPayload, error) {
+	var err error
+	var body RunMarketplaceTokenBackfillRequestBody
+	{
+		err = json.Unmarshal([]byte(adminRunMarketplaceTokenBackfillBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"platform_key_fingerprint\": \"aa\"\n   }'")
+		}
+		if utf8.RuneCountInString(body.PlatformKeyFingerprint) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.platform_key_fingerprint", body.PlatformKeyFingerprint, utf8.RuneCountInString(body.PlatformKeyFingerprint), 1, true))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
 	var adminSessionToken *string
 	{
 		if adminRunMarketplaceTokenBackfillAdminSessionToken != "" {
 			adminSessionToken = &adminRunMarketplaceTokenBackfillAdminSessionToken
 		}
 	}
-	v := &admin.RunMarketplaceTokenBackfillPayload{}
+	v := &admin.RunMarketplaceTokenBackfillPayload{
+		PlatformKeyFingerprint: body.PlatformKeyFingerprint,
+	}
 	v.AdminSessionToken = adminSessionToken
 
 	return v, nil

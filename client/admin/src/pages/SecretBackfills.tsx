@@ -50,16 +50,17 @@ export function SecretBackfillsPage(): JSX.Element {
 
   async function applyMarketplaceTokens(
     preview: AdminMarketplaceTokenBackfill,
+    checkedFingerprint: string,
   ) {
     const ok = await confirm({
       title: "Apply the marketplace token backfill?",
-      description: `Moves ${plural(preview.legacy, "plaintext token", "plaintext tokens")} to a hash and an encrypted copy, and gives ${plural(preview.unattributed, "connection", "connections")} an organization. Install URLs don't change. Only apply if nobody will roll this environment back to an image without #9425: older images read only the plaintext column. Check that the fingerprint ${fingerprint ?? ""} matches the servers' first. Safe to run again.`,
+      description: `Moves ${plural(preview.legacy, "plaintext token", "plaintext tokens")} to a hash and an encrypted copy, and gives ${plural(preview.unattributed, "connection", "connections")} an organization. Install URLs don't change. Only apply if nobody will roll this environment back to an image without #9425: older images read only the plaintext column. Check that the fingerprint ${checkedFingerprint} matches the servers' first. If the admin server's key has changed since, the run is refused. Safe to run again.`,
       confirmLabel: "Apply",
     });
     if (!ok) return;
     setRunning("marketplaceTokens");
     try {
-      const run = await runMarketplaceTokenBackfill();
+      const run = await runMarketplaceTokenBackfill(checkedFingerprint);
       updateCache({ marketplaceTokens: run });
       setLastRun((current) => ({
         ...current,
@@ -156,9 +157,11 @@ export function SecretBackfillsPage(): JSX.Element {
           <BackfillCard
             title="Marketplace tokens"
             description="Gives each GitHub connection its project's organization, then replaces each plaintext marketplace token with its hash and an encrypted copy."
-            done={
+            status={
               data.marketplaceTokens.legacy === 0 &&
               data.marketplaceTokens.unattributed === 0
+                ? "done"
+                : "todo"
             }
             counts={[
               ["Tokens still in plaintext", data.marketplaceTokens.legacy],
@@ -171,7 +174,14 @@ export function SecretBackfillsPage(): JSX.Element {
             lastRun={lastRun.marketplaceTokens}
             busy={running === "marketplaceTokens"}
             disabled={running !== null || !fingerprint}
-            onApply={() => void applyMarketplaceTokens(data.marketplaceTokens)}
+            onApply={() => {
+              if (fingerprint) {
+                void applyMarketplaceTokens(
+                  data.marketplaceTokens,
+                  fingerprint,
+                );
+              }
+            }}
           >
             {fingerprint ? (
               <p className="text-muted-foreground text-sm">
@@ -192,7 +202,13 @@ export function SecretBackfillsPage(): JSX.Element {
           <BackfillCard
             title="Runner key organizations"
             description="Gives each function runner key its project's organization, so it can later move to the organization's own key."
-            done={data.runnerKeyOrganizations.pending === 0}
+            status={
+              data.runnerKeyOrganizations.pending > 0
+                ? "todo"
+                : data.runnerKeyOrganizations.missingOrganization > 0
+                  ? "attention"
+                  : "done"
+            }
             counts={[
               [
                 "Runner keys without an organization",
@@ -230,10 +246,20 @@ export function SecretBackfillsPage(): JSX.Element {
   );
 }
 
+// "attention" means applying has nothing left to do, but some rows still lack
+// what the backfill gives, so it isn't finished.
+type BackfillStatus = "todo" | "attention" | "done";
+
+const statusBadge: Record<BackfillStatus, JSX.Element> = {
+  todo: <Badge variant="secondary">To do</Badge>,
+  attention: <Badge variant="destructive">Needs a look</Badge>,
+  done: <Badge>Done</Badge>,
+};
+
 function BackfillCard({
   title,
   description,
-  done,
+  status,
   counts,
   lastRun,
   busy,
@@ -243,7 +269,7 @@ function BackfillCard({
 }: {
   title: string;
   description: string;
-  done: boolean;
+  status: BackfillStatus;
   counts: Array<[string, number]>;
   lastRun: string | undefined;
   busy: boolean;
@@ -251,6 +277,7 @@ function BackfillCard({
   onApply: () => void;
   children?: ReactNode;
 }): JSX.Element {
+  const nothingToApply = status !== "todo";
   return (
     <section className="flex flex-col gap-4 rounded-lg border p-4">
       <div className="flex items-start justify-between gap-3">
@@ -258,7 +285,7 @@ function BackfillCard({
           <h2 className="text-lg font-semibold">{title}</h2>
           <p className="text-muted-foreground text-sm">{description}</p>
         </div>
-        {done ? <Badge>Done</Badge> : <Badge variant="secondary">To do</Badge>}
+        {statusBadge[status]}
       </div>
 
       <dl className="grid grid-cols-[1fr_auto] gap-x-6 gap-y-1 text-sm">
@@ -275,9 +302,13 @@ function BackfillCard({
       {children}
 
       <div className="mt-auto flex flex-wrap items-center gap-3">
-        <Button size="sm" disabled={disabled || done} onClick={onApply}>
+        <Button
+          size="sm"
+          disabled={disabled || nothingToApply}
+          onClick={onApply}
+        >
           {busy && <Loader2Icon className="size-4 animate-spin" />}
-          {done ? "Nothing to apply" : "Apply"}
+          {nothingToApply ? "Nothing to apply" : "Apply"}
         </Button>
         {lastRun && (
           <span className="text-muted-foreground text-sm">

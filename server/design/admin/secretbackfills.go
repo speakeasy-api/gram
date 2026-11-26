@@ -61,10 +61,14 @@ func secretBackfillMethods() {
 	})
 
 	Method("runMarketplaceTokenBackfill", func() {
-		Description("Applies the marketplace token backfill: gives each GitHub connection its project's organization, then moves each plaintext marketplace token to its hash and the copies its organization's transition state writes, sealed with this process's platform key. Install URLs do not change. Safe to run again; an interrupted run continues where it stopped. Refused while another run of it is in progress.")
+		Description("Applies the marketplace token backfill: gives each GitHub connection its project's organization, then moves each plaintext marketplace token to its hash and the copies its organization's transition state writes, sealed with this process's platform key. Install URLs do not change. Safe to run again; an interrupted run continues where it stopped. Refused while another run of it is in progress, and when this process's platform key fingerprint is not the one the operator checked.")
 
 		Payload(func() {
 			security.AdminAuthPayload()
+			Attribute("platform_key_fingerprint", String, "The platform key fingerprint the operator checked against the servers' \"encryption key loaded\" log. The run is refused when this process's platform key has another fingerprint, such as after a restart with a different key.", func() {
+				MinLength(1)
+			})
+			Required("platform_key_fingerprint")
 		})
 
 		Result(AdminMarketplaceTokenBackfill)

@@ -9747,8 +9747,14 @@ paths:
             x-speakeasy-name-override: getSecretBackfills
     /admin/secretBackfills.runMarketplaceTokens:
         post:
-            description: 'Applies the marketplace token backfill: gives each GitHub connection its project''s organization, then moves each plaintext marketplace token to its hash and the copies its organization''s transition state writes, sealed with this process''s platform key. Install URLs do not change. Safe to run again; an interrupted run continues where it stopped. Refused while another run of it is in progress.'
+            description: 'Applies the marketplace token backfill: gives each GitHub connection its project''s organization, then moves each plaintext marketplace token to its hash and the copies its organization''s transition state writes, sealed with this process''s platform key. Install URLs do not change. Safe to run again; an interrupted run continues where it stopped. Refused while another run of it is in progress, and when this process''s platform key fingerprint is not the one the operator checked.'
             operationId: adminRunMarketplaceTokenBackfill
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RunMarketplaceTokenBackfillRequestBody'
+                required: true
             responses:
                 "200":
                     content:
@@ -135390,6 +135396,15 @@ components:
                 - id
                 - name
                 - key_prefix
+        RunMarketplaceTokenBackfillRequestBody:
+            type: object
+            properties:
+                platform_key_fingerprint:
+                    type: string
+                    description: The platform key fingerprint the operator checked against the servers' "encryption key loaded" log. The run is refused when this process's platform key has another fingerprint, such as after a restart with a different key.
+                    minLength: 1
+            required:
+                - platform_key_fingerprint
         RunOrganizationEncryptionRequestBody:
             type: object
             properties:

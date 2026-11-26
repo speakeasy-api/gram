@@ -12,6 +12,7 @@ import { adminRunMarketplaceTokenBackfill } from "../funcs/adminRunMarketplaceTo
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { AdminMarketplaceTokenBackfill } from "../models/components/adminmarketplacetokenbackfill.js";
+import { RunMarketplaceTokenBackfillRequestBody } from "../models/components/runmarketplacetokenbackfillrequestbody.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -28,6 +29,7 @@ import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type AdminRunMarketplaceTokenBackfillMutationVariables = {
+  request: RunMarketplaceTokenBackfillRequestBody;
   options?: RequestOptions;
 };
 
@@ -49,7 +51,7 @@ export type AdminRunMarketplaceTokenBackfillMutationError =
  * runMarketplaceTokenBackfill admin
  *
  * @remarks
- * Applies the marketplace token backfill: gives each GitHub connection its project's organization, then moves each plaintext marketplace token to its hash and the copies its organization's transition state writes, sealed with this process's platform key. Install URLs do not change. Safe to run again; an interrupted run continues where it stopped. Refused while another run of it is in progress.
+ * Applies the marketplace token backfill: gives each GitHub connection its project's organization, then moves each plaintext marketplace token to its hash and the copies its organization's transition state writes, sealed with this process's platform key. Install URLs do not change. Safe to run again; an interrupted run continues where it stopped. Refused while another run of it is in progress, and when this process's platform key fingerprint is not the one the operator checked.
  */
 export function useAdminRunMarketplaceTokenBackfillMutation(
   options?: MutationHookOptions<
@@ -85,6 +87,7 @@ export function buildAdminRunMarketplaceTokenBackfillMutation(
   return {
     mutationKey: mutationKeyAdminRunMarketplaceTokenBackfill(),
     mutationFn: function adminRunMarketplaceTokenBackfillMutationFn({
+      request,
       options,
     }): Promise<AdminRunMarketplaceTokenBackfillMutationData> {
       const mergedOptions = {
@@ -101,6 +104,7 @@ export function buildAdminRunMarketplaceTokenBackfillMutation(
       };
       return unwrapAsync(adminRunMarketplaceTokenBackfill(
         client$,
+        request,
         mergedOptions,
       ));
     },

@@ -392,6 +392,7 @@ trackedFiles:
   src/models/components/retryregistrypromotiondocsrequestbody.ts: {}
   src/models/components/riskidrequestbody.ts: {}
   src/models/components/rollbackorganizationencryptionrequestbody.ts: {}
+  src/models/components/runmarketplacetokenbackfillrequestbody.ts: {}
   src/models/components/runorganizationencryptionrequestbody.ts: {}
   src/models/components/runtailscaleoauthmigrationsteprequestbody.ts: {}
   src/models/components/runupstreamoauthmigrationrequestbody.ts: {}
@@ -2047,6 +2048,8 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   adminRunMarketplaceTokenBackfill:
     speakeasy-default-admin-run-marketplace-token-backfill:
+      requestBody:
+        application/json: {"platform_key_fingerprint": "<value>"}
       responses:
         "200":
           application/json: {"attributed": 137126, "hashed": 663633, "legacy": 177938, "moved": 498449, "needs_organization_key": 520734, "skipped": 958932, "unattributed": 16927}

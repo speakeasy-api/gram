@@ -651,6 +651,15 @@ type BackfillMcpConnectGrantsRequestBody struct {
 	CreatedBefore *string `form:"created_before,omitempty" json:"created_before,omitempty" xml:"created_before,omitempty"`
 }
 
+// RunMarketplaceTokenBackfillRequestBody is the type of the "admin" service
+// "runMarketplaceTokenBackfill" endpoint HTTP request body.
+type RunMarketplaceTokenBackfillRequestBody struct {
+	// The platform key fingerprint the operator checked against the servers'
+	// "encryption key loaded" log. The run is refused when this process's platform
+	// key has another fingerprint, such as after a restart with a different key.
+	PlatformKeyFingerprint *string `form:"platform_key_fingerprint,omitempty" json:"platform_key_fingerprint,omitempty" xml:"platform_key_fingerprint,omitempty"`
+}
+
 // RedeployProjectRequestBody is the type of the "admin" service
 // "redeployProject" endpoint HTTP request body.
 type RedeployProjectRequestBody struct {
@@ -58575,8 +58584,10 @@ func NewGetSecretBackfillsPayload(adminSessionToken *string) *admin.GetSecretBac
 
 // NewRunMarketplaceTokenBackfillPayload builds a admin service
 // runMarketplaceTokenBackfill endpoint payload.
-func NewRunMarketplaceTokenBackfillPayload(adminSessionToken *string) *admin.RunMarketplaceTokenBackfillPayload {
-	v := &admin.RunMarketplaceTokenBackfillPayload{}
+func NewRunMarketplaceTokenBackfillPayload(body *RunMarketplaceTokenBackfillRequestBody, adminSessionToken *string) *admin.RunMarketplaceTokenBackfillPayload {
+	v := &admin.RunMarketplaceTokenBackfillPayload{
+		PlatformKeyFingerprint: *body.PlatformKeyFingerprint,
+	}
 	v.AdminSessionToken = adminSessionToken
 
 	return v
@@ -59924,6 +59935,20 @@ func ValidateDisableUpstreamAuthEnforcementRequestBody(body *DisableUpstreamAuth
 func ValidateBackfillMcpConnectGrantsRequestBody(body *BackfillMcpConnectGrantsRequestBody) (err error) {
 	if body.CreatedBefore != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_before", *body.CreatedBefore, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateRunMarketplaceTokenBackfillRequestBody runs the validations defined
+// on RunMarketplaceTokenBackfillRequestBody
+func ValidateRunMarketplaceTokenBackfillRequestBody(body *RunMarketplaceTokenBackfillRequestBody) (err error) {
+	if body.PlatformKeyFingerprint == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("platform_key_fingerprint", "body"))
+	}
+	if body.PlatformKeyFingerprint != nil {
+		if utf8.RuneCountInString(*body.PlatformKeyFingerprint) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.platform_key_fingerprint", *body.PlatformKeyFingerprint, utf8.RuneCountInString(*body.PlatformKeyFingerprint), 1, true))
+		}
 	}
 	return
 }

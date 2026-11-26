@@ -1183,9 +1183,15 @@ const generatedRunMarketplaceTokenBackfillMutation =
     retries: { strategy: "none" },
   });
 
-export function runMarketplaceTokenBackfill(): Promise<AdminMarketplaceTokenBackfill> {
+// The server refuses the run when its platform key fingerprint is not the one
+// the operator checked.
+export function runMarketplaceTokenBackfill(
+  platformKeyFingerprint: string,
+): Promise<AdminMarketplaceTokenBackfill> {
   return redirecting(
-    generatedRunMarketplaceTokenBackfillMutation.mutationFn({}),
+    generatedRunMarketplaceTokenBackfillMutation.mutationFn({
+      request: { platformKeyFingerprint },
+    }),
   );
 }
 

@@ -388,7 +388,8 @@ type Service interface {
 	// hash and the copies its organization's transition state writes, sealed with
 	// this process's platform key. Install URLs do not change. Safe to run again;
 	// an interrupted run continues where it stopped. Refused while another run of
-	// it is in progress.
+	// it is in progress, and when this process's platform key fingerprint is not
+	// the one the operator checked.
 	RunMarketplaceTokenBackfill(context.Context, *RunMarketplaceTokenBackfillPayload) (res *AdminMarketplaceTokenBackfill, err error)
 	// Applies the runner key organization backfill: sets
 	// functions_access.organization_id from each runner key's project, in batches
@@ -4274,6 +4275,10 @@ type RollbackOrganizationEncryptionPayload struct {
 // runMarketplaceTokenBackfill method.
 type RunMarketplaceTokenBackfillPayload struct {
 	AdminSessionToken *string
+	// The platform key fingerprint the operator checked against the servers'
+	// "encryption key loaded" log. The run is refused when this process's platform
+	// key has another fingerprint, such as after a restart with a different key.
+	PlatformKeyFingerprint string
 }
 
 // RunOrganizationEncryptionPayload is the payload type of the admin service

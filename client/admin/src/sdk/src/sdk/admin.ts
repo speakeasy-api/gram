@@ -261,6 +261,7 @@ import { ResumeStripeSubscriptionRequestBody } from "../models/components/resume
 import { RetryRegistryPromotionDocsRequestBody } from "../models/components/retryregistrypromotiondocsrequestbody.js";
 import { RiskIDRequestBody } from "../models/components/riskidrequestbody.js";
 import { RollbackOrganizationEncryptionRequestBody } from "../models/components/rollbackorganizationencryptionrequestbody.js";
+import { RunMarketplaceTokenBackfillRequestBody } from "../models/components/runmarketplacetokenbackfillrequestbody.js";
 import { RunOrganizationEncryptionRequestBody } from "../models/components/runorganizationencryptionrequestbody.js";
 import { RunTailscaleOAuthMigrationStepRequestBody } from "../models/components/runtailscaleoauthmigrationsteprequestbody.js";
 import { RunUpstreamOAuthMigrationRequestBody } from "../models/components/runupstreamoauthmigrationrequestbody.js";
@@ -2260,13 +2261,15 @@ export class Admin extends ClientSDK {
    * runMarketplaceTokenBackfill admin
    *
    * @remarks
-   * Applies the marketplace token backfill: gives each GitHub connection its project's organization, then moves each plaintext marketplace token to its hash and the copies its organization's transition state writes, sealed with this process's platform key. Install URLs do not change. Safe to run again; an interrupted run continues where it stopped. Refused while another run of it is in progress.
+   * Applies the marketplace token backfill: gives each GitHub connection its project's organization, then moves each plaintext marketplace token to its hash and the copies its organization's transition state writes, sealed with this process's platform key. Install URLs do not change. Safe to run again; an interrupted run continues where it stopped. Refused while another run of it is in progress, and when this process's platform key fingerprint is not the one the operator checked.
    */
   async runMarketplaceTokenBackfill(
+    request: RunMarketplaceTokenBackfillRequestBody,
     options?: RequestOptions,
   ): Promise<AdminMarketplaceTokenBackfill> {
     return unwrapAsync(adminRunMarketplaceTokenBackfill(
       this,
+      request,
       options,
     ));
   }

@@ -5076,6 +5076,7 @@ func ParseEndpoint(
 		adminGetSecretBackfillsAdminSessionTokenFlag = adminGetSecretBackfillsFlags.String("admin-session-token", "", "")
 
 		adminRunMarketplaceTokenBackfillFlags                 = flag.NewFlagSet("run-marketplace-token-backfill", flag.ExitOnError)
+		adminRunMarketplaceTokenBackfillBodyFlag              = adminRunMarketplaceTokenBackfillFlags.String("body", "REQUIRED", "")
 		adminRunMarketplaceTokenBackfillAdminSessionTokenFlag = adminRunMarketplaceTokenBackfillFlags.String("admin-session-token", "", "")
 
 		adminRunRunnerKeyOrganizationBackfillFlags                 = flag.NewFlagSet("run-runner-key-organization-backfill", flag.ExitOnError)
@@ -13914,7 +13915,7 @@ func ParseEndpoint(
 				data, err = adminc.BuildGetSecretBackfillsPayload(*adminGetSecretBackfillsAdminSessionTokenFlag)
 			case "run-marketplace-token-backfill":
 				endpoint = c.RunMarketplaceTokenBackfill()
-				data, err = adminc.BuildRunMarketplaceTokenBackfillPayload(*adminRunMarketplaceTokenBackfillAdminSessionTokenFlag)
+				data, err = adminc.BuildRunMarketplaceTokenBackfillPayload(*adminRunMarketplaceTokenBackfillBodyFlag, *adminRunMarketplaceTokenBackfillAdminSessionTokenFlag)
 			case "run-runner-key-organization-backfill":
 				endpoint = c.RunRunnerKeyOrganizationBackfill()
 				data, err = adminc.BuildRunRunnerKeyOrganizationBackfillPayload(*adminRunRunnerKeyOrganizationBackfillAdminSessionTokenFlag)
@@ -33985,7 +33986,7 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    backfill-mcp-auth-grants: Grants unrestricted mcp:auth to every principal that holds any mcp:connect grant, in every organization. The connect grant's selectors are ignored. Safe to run more than once.`)
 	fmt.Fprintln(os.Stderr, `    backfill-mcp-connect-grants: Adds an explicit mcp:connect grant, with the same principal, selectors and expiry, for every unexpired mcp:read or mcp:write grant in every organization, ahead of read and write no longer implying connect. Never removes access. Safe to run more than once.`)
 	fmt.Fprintln(os.Stderr, `    get-secret-backfills: Previews the temporary secret backfills: what applying each would change now. Writes nothing.`)
-	fmt.Fprintln(os.Stderr, `    run-marketplace-token-backfill: Applies the marketplace token backfill: gives each GitHub connection its project's organization, then moves each plaintext marketplace token to its hash and the copies its organization's transition state writes, sealed with this process's platform key. Install URLs do not change. Safe to run again; an interrupted run continues where it stopped. Refused while another run of it is in progress.`)
+	fmt.Fprintln(os.Stderr, `    run-marketplace-token-backfill: Applies the marketplace token backfill: gives each GitHub connection its project's organization, then moves each plaintext marketplace token to its hash and the copies its organization's transition state writes, sealed with this process's platform key. Install URLs do not change. Safe to run again; an interrupted run continues where it stopped. Refused while another run of it is in progress, and when this process's platform key fingerprint is not the one the operator checked.`)
 	fmt.Fprintln(os.Stderr, `    run-runner-key-organization-backfill: Applies the runner key organization backfill: sets functions_access.organization_id from each runner key's project, in batches that each commit on their own. Runner keys and deployed function runners do not change. Safe to run again; an interrupted run continues where it stopped. Refused while another run of it is in progress.`)
 	fmt.Fprintln(os.Stderr, `    get-project-redeploy-preview: Returns what redeploying a project would act on, for review before redeployProject.`)
 	fmt.Fprintln(os.Stderr, `    redeploy-project: Clones a project's active deployment and starts processing it. Refuses when the active deployment is no longer the one reviewed. The new deployment becomes active only if processing succeeds.`)
@@ -36221,19 +36222,21 @@ func adminGetSecretBackfillsUsage() {
 func adminRunMarketplaceTokenBackfillUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] admin run-marketplace-token-backfill", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
 	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Applies the marketplace token backfill: gives each GitHub connection its project's organization, then moves each plaintext marketplace token to its hash and the copies its organization's transition state writes, sealed with this process's platform key. Install URLs do not change. Safe to run again; an interrupted run continues where it stopped. Refused while another run of it is in progress.`)
+	fmt.Fprintln(os.Stderr, `Applies the marketplace token backfill: gives each GitHub connection its project's organization, then moves each plaintext marketplace token to its hash and the copies its organization's transition state writes, sealed with this process's platform key. Install URLs do not change. Safe to run again; an interrupted run continues where it stopped. Refused while another run of it is in progress, and when this process's platform key fingerprint is not the one the operator checked.`)
 
 	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
 	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin run-marketplace-token-backfill --admin-session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin run-marketplace-token-backfill --body '{\n      \"platform_key_fingerprint\": \"aa\"\n   }' --admin-session-token \"abc123\"")
 }
 
 func adminRunRunnerKeyOrganizationBackfillUsage() {

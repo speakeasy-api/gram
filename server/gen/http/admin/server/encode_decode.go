@@ -22748,13 +22748,33 @@ func DecodeRunMarketplaceTokenBackfillRequest(mux goahttp.Muxer, decoder func(*h
 	return func(r *http.Request) (*admin.RunMarketplaceTokenBackfillPayload, error) {
 		var payload *admin.RunMarketplaceTokenBackfillPayload
 		var (
+			body RunMarketplaceTokenBackfillRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateRunMarketplaceTokenBackfillRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
 			adminSessionToken *string
 		)
 		adminSessionTokenRaw := r.Header.Get("Authorization")
 		if adminSessionTokenRaw != "" {
 			adminSessionToken = &adminSessionTokenRaw
 		}
-		payload = NewRunMarketplaceTokenBackfillPayload(adminSessionToken)
+		payload = NewRunMarketplaceTokenBackfillPayload(&body, adminSessionToken)
 		if payload.AdminSessionToken != nil {
 			if strings.Contains(*payload.AdminSessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

@@ -25433,6 +25433,10 @@ func EncodeRunMarketplaceTokenBackfillRequest(encoder func(*http.Request) goahtt
 			head := *p.AdminSessionToken
 			req.Header.Set("Authorization", head)
 		}
+		body := NewRunMarketplaceTokenBackfillRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "runMarketplaceTokenBackfill", err)
+		}
 		return nil
 	}
 }

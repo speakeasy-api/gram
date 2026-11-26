@@ -651,6 +651,15 @@ type BackfillMcpConnectGrantsRequestBody struct {
 	CreatedBefore *string `form:"created_before,omitempty" json:"created_before,omitempty" xml:"created_before,omitempty"`
 }
 
+// RunMarketplaceTokenBackfillRequestBody is the type of the "admin" service
+// "runMarketplaceTokenBackfill" endpoint HTTP request body.
+type RunMarketplaceTokenBackfillRequestBody struct {
+	// The platform key fingerprint the operator checked against the servers'
+	// "encryption key loaded" log. The run is refused when this process's platform
+	// key has another fingerprint, such as after a restart with a different key.
+	PlatformKeyFingerprint string `form:"platform_key_fingerprint" json:"platform_key_fingerprint" xml:"platform_key_fingerprint"`
+}
+
 // RedeployProjectRequestBody is the type of the "admin" service
 // "redeployProject" endpoint HTTP request body.
 type RedeployProjectRequestBody struct {
@@ -33368,6 +33377,16 @@ func NewDisableUpstreamAuthEnforcementRequestBody(p *admin.DisableUpstreamAuthEn
 func NewBackfillMcpConnectGrantsRequestBody(p *admin.BackfillMcpConnectGrantsPayload) *BackfillMcpConnectGrantsRequestBody {
 	body := &BackfillMcpConnectGrantsRequestBody{
 		CreatedBefore: p.CreatedBefore,
+	}
+	return body
+}
+
+// NewRunMarketplaceTokenBackfillRequestBody builds the HTTP request body from
+// the payload of the "runMarketplaceTokenBackfill" endpoint of the "admin"
+// service.
+func NewRunMarketplaceTokenBackfillRequestBody(p *admin.RunMarketplaceTokenBackfillPayload) *RunMarketplaceTokenBackfillRequestBody {
+	body := &RunMarketplaceTokenBackfillRequestBody{
+		PlatformKeyFingerprint: p.PlatformKeyFingerprint,
 	}
 	return body
 }
