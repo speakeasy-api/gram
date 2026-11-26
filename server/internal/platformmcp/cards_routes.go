@@ -103,7 +103,6 @@ var cardTools = map[string]cardSpec{
 	"create_risk_policy":                  {kind: cardKindReceipt, route: "P/risk-policies/{policy}", label: "Open policy"},
 	"update_risk_policy":                  {kind: cardKindReceipt, route: "P/risk-policies/{policy}", label: "Open policy"},
 	"change_risk_policy_audience":         {kind: cardKindReceipt, route: "P/risk-policies/{policy}", label: "Open policy"},
-	"remove_self_from_risk_policy":        {kind: cardKindReceipt, route: "P/risk-policies/{policy}", label: "Open policy"},
 	"list_risk_exclusions":                {kind: cardKindList, route: "P/risk-policies", label: "Open risk policies"},
 	"create_risk_exclusion":               {kind: cardKindReceipt, route: "P/risk-policies", label: "Open risk policies"},
 	"update_risk_exclusion":               {kind: cardKindReceipt, route: "P/risk-policies", label: "Open risk policies"},

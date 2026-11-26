@@ -44,25 +44,12 @@ func TestSelfRemovalRiskPolicyTransaction(t *testing.T) {
 		require.NoError(t, err)
 		return created.Policy.ID, updated.Version
 	}
-	arguments := func(id, version string) map[string]any {
-		return map[string]any{"project_slug": project.Slug, "policy_id": id, "expected_version": version, "idempotency_key": uuid.NewString(), "confirmed": true}
-	}
 	read := func(t *testing.T, id string) GetRiskPolicyOutput {
 		t.Helper()
 		result, err := reads.GetPolicy(ctx, principal, GetRiskPolicyInput{ProjectSlug: project.Slug, PolicyID: id})
 		require.NoError(t, err)
 		return result
 	}
-	t.Run("self removal refuses without mutation", func(t *testing.T) {
-		id, version := create(t, "targeted", []string{self.String(), other.String()})
-		args := arguments(id, version)
-		for range 2 {
-			_, output, err := handlers.RemoveSelf(ctx, nil, args)
-			requireRiskMutationRefusal(t, err, unavailableCode)
-			require.Zero(t, output)
-			require.Equal(t, version, read(t, id).Policy.Version)
-		}
-	})
 	t.Run("general update refuses cross project policy", func(t *testing.T) {
 		id, version := create(t, "targeted", []string{self.String(), other.String()})
 		params := projectsrepo.CreateProjectParams{
