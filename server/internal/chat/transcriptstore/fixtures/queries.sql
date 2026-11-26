@@ -60,10 +60,6 @@ UPDATE chat_messages SET storage_error=sqlc.narg(storage_error)::text WHERE id=s
 INSERT INTO chat_message_transcripts(message_id,project_id,organization_id,ciphertext,source_hash)
 VALUES($1,$2,$3,'test ciphertext',decode(repeat('00',32),'hex'));
 
--- name: ShadowFreshness :one
-SELECT (t.source_hash IS NOT NULL)::boolean AS legacy_hash, t.source_updated_at IS NOT DISTINCT FROM m.source_updated_at AS stamped
-FROM chat_message_transcripts t JOIN chat_messages m ON m.id=t.message_id WHERE t.message_id=$1;
-
 -- name: ShadowMetadata :one
 SELECT tool_call_count, content_bytes, content_raw_bytes, tool_calls_bytes FROM chat_messages WHERE id=$1 AND tool_call_count IS NOT NULL;
 

@@ -170,12 +170,12 @@ and settings. It builds the same `Transcripts` the server builds at startup
 (checking the schema and provisioning keys for the allowlisted projects) and
 seals through `Transcripts.Backfill`, so each backfilled message gets the same
 `chat_messages` metadata and `chat_message_tool_call_ids` rows as a live
-capture. Every sweep reseals each copy, so copies sealed before
-`source_updated_at` existed lose their `source_hash` and messages written before
-the metadata columns existed get them. A project off the capture allowlist
+capture. Every sweep reseals each message, so legacy transcripts lose their
+`source_hash` and messages written before the metadata columns existed get them.
+A project off the capture allowlist
 (`GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS`) gets `ErrNotEnabled` and the command
-refuses to run: sealing a project that does not capture leaves shadows that go
-stale on its next write.
+refuses to run: such a project never seals new messages, and body updates delete
+transcripts, so its coverage would never complete.
 
 ```sh
 gram transcript-shadow-backfill --project-id <PROJECT_ID>
@@ -184,8 +184,7 @@ gram transcript-shadow-backfill --project-id <PROJECT_ID> --apply --confirm-envi
 
 Without `--apply` the command only reports coverage (`current`, `waiting`,
 `unattributed`). With `--apply` it seals pages of up to 500 messages (default
-200), one transaction each, retries a page that lost a race with a live write,
-and reports coverage again at the end. When a run stops early (an error or
+200), one transaction each, and reports coverage again at the end. When a run stops early (an error or
 `--max-pages`), it prints a `--after` cursor to resume from. A sweep that
 reaches the end of the project prints no cursor: start the next sweep from the
 zero cursor so it covers messages inserted below the prior one.
@@ -194,13 +193,12 @@ Shadow reads (above) serve the plaintext body of a message that has no shadow
 and count it under the `plaintext_fallback` read outcome. The backfill is what
 drives that count to zero for a project.
 Only `success` and `plaintext_fallback` serve the message. Every other read
-outcome (`not_found`, `stale`, `changed`, `invalid`, `error`) fails the read, so
+outcome (`not_found`, `stale`, `invalid`, `error`) fails the read, so
 a zero `plaintext_fallback` count means reads are using shadows only when those
 failure outcomes are zero too.
 
-Coverage compares each copy's recorded `source_updated_at` with the live row
-(or the legacy `source_hash` for copies not yet resealed); it does not
-authenticate ciphertext.
+Coverage counts a message as `waiting` when it has no transcript or only a
+legacy one with `source_hash`; it does not authenticate ciphertext.
 Before relying on shadow reads for a project, confirm both `waiting=0` and
 `unattributed=0`. Unattributed messages carry a project that differs from their
 chat's project. The backfill never seals them, so they need ownership repair

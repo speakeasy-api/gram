@@ -157,41 +157,6 @@ func TestTranscriptsBackfillGatesByProjectAndFillsMetadata(t *testing.T) {
 	require.Equal(t, Progress{Current: 1, Waiting: 0, Unattributed: 0}, progress)
 }
 
-func TestTranscriptsBackfillRetiresLegacySourceHash(t *testing.T) {
-	t.Parallel()
-	f := setup(t, true)
-	id := uuid.New()
-	f.add(t, id)
-	fixtures := fixturerepo.New(f.db)
-	n, err := fixtures.InsertShadow(t.Context(), id, f.project, f.org)
-	require.NoError(t, err)
-	require.Equal(t, int64(1), n)
-	before, err := fixtures.ShadowFreshness(t.Context(), id)
-	require.NoError(t, err)
-	require.True(t, before.LegacyHash, "a copy sealed before source_updated_at carries source_hash")
-
-	transcripts := NewTranscripts(f.store, f.project)
-	progress, err := transcripts.Progress(t.Context(), f.org, f.project)
-	require.NoError(t, err)
-	require.Equal(t, Progress{Current: 0, Waiting: 1, Unattributed: 0}, progress)
-	content := ""
-	require.Error(t, transcripts.Open(t.Context(), f.org, f.project, []Body{{MessageID: id, Content: &content}}), "the legacy copy is stale")
-
-	_, err = transcripts.Backfill(t.Context(), f.org, f.project, uuid.Nil, 10)
-	require.NoError(t, err)
-	after, err := fixtures.ShadowFreshness(t.Context(), id)
-	require.NoError(t, err)
-	require.False(t, after.LegacyHash, "the sweep reseals the copy without source_hash")
-	require.True(t, after.Stamped, "the copy records the source_updated_at it was sealed from")
-	// Opening proves the sweep wrote new ciphertext, not only new freshness
-	// columns: the fixture's legacy ciphertext cannot be decrypted.
-	require.NoError(t, transcripts.Open(t.Context(), f.org, f.project, []Body{{MessageID: id, Content: &content}}))
-	require.Equal(t, "sensitive example", content, "the body comes from the decrypted copy")
-	progress, err = transcripts.Progress(t.Context(), f.org, f.project)
-	require.NoError(t, err)
-	require.Equal(t, Progress{Current: 1, Waiting: 0, Unattributed: 0}, progress)
-}
-
 type openRow struct {
 	id           uuid.UUID
 	content      string

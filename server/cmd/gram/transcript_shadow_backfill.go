@@ -24,12 +24,6 @@ const (
 	// the primary while still finishing a project of a few hundred thousand
 	// messages in a few thousand pages.
 	transcriptShadowBackfillDefaultPage = 200
-
-	// transcriptShadowBackfillChangedRetries is how many times a page is retried
-	// when a message changes while it is being sealed. Live projects write
-	// constantly, so a page can lose a race; a run that keeps losing stops
-	// instead of spinning.
-	transcriptShadowBackfillChangedRetries = 5
 )
 
 // requireTranscriptShadowProject reports whether projectID is on the capture
@@ -89,8 +83,8 @@ func newTranscriptShadowBackfillCommand() *cli.Command {
 				return errors.New("--apply requires --confirm-environment to equal --environment")
 			}
 			// Check the allowlist before connecting or provisioning any keys.
-			// Sealing copies for a project that does not capture would leave
-			// encrypted copies that go stale on its next write.
+			// A project that does not capture never seals new messages, and
+			// body updates delete transcripts, so its coverage never completes.
 			if err := requireTranscriptShadowProject(c.StringSlice(chatTranscriptShadowProjectIDsFlag), projectID); err != nil {
 				return err
 			}
@@ -191,15 +185,11 @@ func writeTranscriptShadowBackfillResult(out io.Writer, run transcriptShadowBack
 }
 
 func backfillTranscriptShadowPage(ctx context.Context, transcripts *transcriptstore.Transcripts, organizationID string, projectID, after uuid.UUID, pageSize int32) (transcriptstore.Page, error) {
-	for attempt := 1; ; attempt++ {
-		page, err := transcripts.Backfill(ctx, organizationID, projectID, after, pageSize)
-		if err == nil {
-			return page, nil
-		}
-		if !errors.Is(err, transcriptstore.ErrChanged) || attempt >= transcriptShadowBackfillChangedRetries {
-			return transcriptstore.Page{After: after, Count: 0, More: true}, fmt.Errorf("seal encrypted transcript page: %w", err)
-		}
+	page, err := transcripts.Backfill(ctx, organizationID, projectID, after, pageSize)
+	if err != nil {
+		return transcriptstore.Page{After: after, Count: 0, More: true}, fmt.Errorf("seal encrypted transcript page: %w", err)
 	}
+	return page, nil
 }
 
 func writeTranscriptShadowProgress(ctx context.Context, out io.Writer, transcripts *transcriptstore.Transcripts, organizationID string, projectID uuid.UUID, label string) error {
