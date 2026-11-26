@@ -790,12 +790,15 @@ CREATE TABLE IF NOT EXISTS assets (
 COMMENT ON COLUMN assets.id IS '@access: confidential';
 COMMENT ON COLUMN assets.project_id IS '@access: confidential';
 COMMENT ON COLUMN assets.organization_id IS '@access: confidential';
-COMMENT ON COLUMN assets.name IS '@access: confidential';
-COMMENT ON COLUMN assets.url IS '@access: confidential';
+COMMENT ON COLUMN assets.name IS 'Stored asset name, which includes a content digest for chat attachments.
+@access: restricted';
+COMMENT ON COLUMN assets.url IS 'Storage path for the asset, which includes a content digest for chat attachments.
+@access: restricted';
 COMMENT ON COLUMN assets.kind IS '@access: confidential';
 COMMENT ON COLUMN assets.content_type IS '@access: confidential';
 COMMENT ON COLUMN assets.content_length IS '@access: confidential';
-COMMENT ON COLUMN assets.sha256 IS '@access: confidential';
+COMMENT ON COLUMN assets.sha256 IS 'SHA-256 digest of the stored asset content.
+@access: restricted';
 COMMENT ON COLUMN assets.created_at IS '@access: confidential';
 COMMENT ON COLUMN assets.updated_at IS '@access: confidential';
 COMMENT ON COLUMN assets.deleted_at IS '@access: confidential';
@@ -6164,23 +6167,6 @@ CREATE INDEX IF NOT EXISTS workload_identity_admissions_workload_issuer_id_idx
 ON workload_identity_admissions (workload_issuer_id)
 WHERE deleted IS FALSE;
 
-CREATE TABLE IF NOT EXISTS remote_session_client_user_session_issuers (
-  remote_session_client_id uuid NOT NULL,
-  user_session_issuer_id uuid NOT NULL,
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-
-  CONSTRAINT remote_session_client_user_session_issuers_pkey PRIMARY KEY (remote_session_client_id, user_session_issuer_id),
-  CONSTRAINT remote_session_client_user_session_issuers_client_fkey FOREIGN KEY (remote_session_client_id) REFERENCES remote_session_clients (id) ON DELETE CASCADE,
-  CONSTRAINT remote_session_client_user_session_issuers_issuer_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE CASCADE
-);
-
-COMMENT ON COLUMN remote_session_client_user_session_issuers.remote_session_client_id IS '@access: confidential';
-COMMENT ON COLUMN remote_session_client_user_session_issuers.user_session_issuer_id IS '@access: confidential';
-COMMENT ON COLUMN remote_session_client_user_session_issuers.created_at IS '@access: confidential';
-
-CREATE INDEX IF NOT EXISTS remote_session_client_user_session_issuers_issuer_idx
-ON remote_session_client_user_session_issuers (user_session_issuer_id, remote_session_client_id);
-
 -- Human delegation credentials, independent of downstream service sessions.
 -- Consumers require a live session, client and tenant with matching scope.
 -- Writes require an organization and client; project_id remains NULL.
@@ -7200,6 +7186,14 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   -- version rescans and backfills are coordinated outside this field.
   risk_analyzed_at timestamptz,
 
+  -- Plaintext-free metadata of the message body, so readers can count, budget
+  -- and filter without reading or decrypting it. Written in the transaction
+  -- that seals the transcript, from the same body. NULL until then.
+  tool_call_count INTEGER,
+  content_bytes INTEGER,
+  content_raw_bytes INTEGER,
+  tool_calls_bytes INTEGER,
+
   CONSTRAINT chat_messages_pkey PRIMARY KEY (id),
   CONSTRAINT chat_messages_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE,
   CONSTRAINT chat_messages_seq_key UNIQUE (seq)
@@ -7265,6 +7259,14 @@ COMMENT ON COLUMN chat_messages.original_message_id IS 'Original source-message 
 COMMENT ON COLUMN chat_messages.replayed IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.created_at IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.risk_analyzed_at IS '@access: confidential';
+COMMENT ON COLUMN chat_messages.tool_call_count IS 'Number of tool calls in tool_calls, 0 when it has none.
+@access: confidential';
+COMMENT ON COLUMN chat_messages.content_bytes IS 'octet_length of content.
+@access: confidential';
+COMMENT ON COLUMN chat_messages.content_raw_bytes IS 'octet_length of content_raw as text, 0 when NULL.
+@access: confidential';
+COMMENT ON COLUMN chat_messages.tool_calls_bytes IS 'octet_length of tool_calls as text, 0 when NULL.
+@access: confidential';
 
 -- A non-partial unique index supplies the composite message ownership target.
 CREATE UNIQUE INDEX IF NOT EXISTS chat_messages_project_id_id_key
@@ -7276,7 +7278,13 @@ CREATE TABLE IF NOT EXISTS chat_message_transcripts (
   project_id UUID NOT NULL,
   organization_id TEXT NOT NULL,
   ciphertext TEXT NOT NULL,
-  source_hash BYTEA NOT NULL,
+  -- Deprecated: every body update now reseals the transcript in the same
+  -- transaction, so a transcript is always current and needs no freshness
+  -- check. A legacy unkeyed digest of the plaintext: it confirms guessed
+  -- payloads and correlates equal ones without a key, even after key
+  -- destruction, so a row carrying it is plaintext-equivalent. New transcripts
+  -- leave it NULL; backfill reseals the rest, then the column is dropped.
+  source_hash BYTEA,
   created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
 
@@ -7295,13 +7303,41 @@ COMMENT ON COLUMN chat_message_transcripts.organization_id IS 'Owning organizati
 @access: confidential';
 COMMENT ON COLUMN chat_message_transcripts.ciphertext IS 'Organization-key encrypted transcript payload.
 @access: opaque-restricted';
-COMMENT ON COLUMN chat_message_transcripts.source_hash IS 'Unkeyed freshness digest of sensitive transcript fields.
+COMMENT ON COLUMN chat_message_transcripts.source_hash IS 'Deprecated: transcripts are resealed with every body update, so no freshness check is needed. Legacy unkeyed digest of sensitive transcript fields; NULL for new transcripts. A row carrying it is plaintext-equivalent until backfill reseals it and the column is dropped.
 @access: opaque-restricted';
 COMMENT ON COLUMN chat_message_transcripts.created_at IS '@access: confidential';
 COMMENT ON COLUMN chat_message_transcripts.updated_at IS '@access: confidential';
 
 CREATE INDEX IF NOT EXISTS chat_message_transcripts_project_id_idx ON chat_message_transcripts (project_id);
 CREATE INDEX IF NOT EXISTS chat_message_transcripts_organization_id_idx ON chat_message_transcripts (organization_id);
+
+-- Provider tool-call IDs of an assistant message, so a tool result can find
+-- the message that issued its call without reading or decrypting tool_calls.
+-- Rewritten whenever the transcript is sealed, from the same snapshot.
+CREATE TABLE IF NOT EXISTS chat_message_tool_call_ids (
+  message_id UUID NOT NULL,
+  tool_call_id TEXT NOT NULL,
+  chat_id UUID NOT NULL,
+  project_id UUID NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT chat_message_tool_call_ids_pkey PRIMARY KEY (message_id, tool_call_id),
+  -- Binds project_id to the message's own project, so a row cannot name
+  -- another tenant. chat_id is written only from the message.
+  CONSTRAINT chat_message_tool_call_ids_project_id_message_id_fkey FOREIGN KEY (project_id, message_id) REFERENCES chat_messages(project_id, id) ON DELETE CASCADE
+);
+
+COMMENT ON COLUMN chat_message_tool_call_ids.message_id IS 'Assistant message that issued the tool call.
+@access: confidential';
+COMMENT ON COLUMN chat_message_tool_call_ids.tool_call_id IS 'Provider-issued tool call identifier from the message tool_calls.
+@access: opaque-confidential';
+COMMENT ON COLUMN chat_message_tool_call_ids.chat_id IS 'Chat that owns the message.
+@access: confidential';
+COMMENT ON COLUMN chat_message_tool_call_ids.project_id IS 'Project that owns the message.
+@access: confidential';
+COMMENT ON COLUMN chat_message_tool_call_ids.created_at IS '@access: confidential';
+
+CREATE INDEX IF NOT EXISTS chat_message_tool_call_ids_chat_id_tool_call_id_idx ON chat_message_tool_call_ids (chat_id, tool_call_id);
 
 CREATE INDEX IF NOT EXISTS chat_messages_chat_id_generation_seq_idx ON chat_messages (chat_id, generation, seq);
 
@@ -7409,7 +7445,8 @@ COMMENT ON COLUMN chat_content_parts.id IS '@access: confidential';
 COMMENT ON COLUMN chat_content_parts.chat_id IS '@access: confidential';
 COMMENT ON COLUMN chat_content_parts.project_id IS '@access: confidential';
 COMMENT ON COLUMN chat_content_parts.kind IS '@access: confidential';
-COMMENT ON COLUMN chat_content_parts.content_asset_url IS '@access: confidential';
+COMMENT ON COLUMN chat_content_parts.content_asset_url IS 'Storage path for the content part. Its file name is a digest of the content.
+@access: restricted';
 COMMENT ON COLUMN chat_content_parts.external_id IS '@access: confidential';
 COMMENT ON COLUMN chat_content_parts.parent_chat_message_id IS '@access: confidential';
 COMMENT ON COLUMN chat_content_parts.version IS '@access: confidential';
@@ -8562,7 +8599,6 @@ CREATE TABLE IF NOT EXISTS principal_remote_session_bindings (
   CONSTRAINT principal_remote_session_bindings_principal_tenant_fkey FOREIGN KEY (organization_id, principal_id) REFERENCES agents (organization_id, id) ON DELETE CASCADE,
   CONSTRAINT principal_remote_session_bindings_issuer_scope_fkey FOREIGN KEY (user_session_issuer_id, issuer_attachment_scope) REFERENCES user_session_issuers (id, attachment_scope) ON UPDATE CASCADE ON DELETE CASCADE,
   CONSTRAINT principal_remote_session_bindings_client_scope_fkey FOREIGN KEY (remote_session_client_id, client_attachment_scope) REFERENCES remote_session_clients (id, attachment_scope) ON DELETE CASCADE,
-  CONSTRAINT principal_remote_session_bindings_client_issuer_fkey FOREIGN KEY (remote_session_client_id, user_session_issuer_id) REFERENCES remote_session_client_user_session_issuers (remote_session_client_id, user_session_issuer_id) ON DELETE CASCADE,
   -- The attached session shares the binding's client but may have been made
   -- through another issuer bound to that client, such as a team gateway's.
   CONSTRAINT principal_remote_session_bindings_client_session_fkey FOREIGN KEY (remote_session_client_id, remote_session_id) REFERENCES remote_sessions (remote_session_client_id, id) ON UPDATE CASCADE ON DELETE CASCADE,
@@ -12047,6 +12083,49 @@ COMMENT ON COLUMN hooks_rollout_pins.set_by IS 'Email of the staff operator who 
 @access: confidential-pii';
 COMMENT ON COLUMN hooks_rollout_pins.created_at IS '@access: confidential';
 COMMENT ON COLUMN hooks_rollout_pins.updated_at IS '@access: confidential';
+
+-- Staged hooks rollouts. A staged rollout clears a growing share of the
+-- organizations that follow the default pin for a newer hooks generator
+-- version before the default pin itself moves to it. The share is picked by a
+-- stable hash of the organization id, so an organization stays cleared as the
+-- share grows. A scheduled workflow advances the share after each soak period
+-- and pauses the rollout when hook health degrades; staff can pause, resume or
+-- cancel it from the admin dashboard.
+--
+-- The table is append-only like hooks_rollout_pins: the row with the highest
+-- seq is the current state and older rows are its history.
+CREATE TABLE IF NOT EXISTS hooks_rollout_stages (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  seq BIGINT NOT NULL GENERATED BY DEFAULT AS IDENTITY,
+  version integer NOT NULL,
+  percent integer NOT NULL,
+  state TEXT NOT NULL CHECK (state <> ''),
+  reason TEXT,
+  set_by TEXT NOT NULL CHECK (set_by <> ''),
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT hooks_rollout_stages_pkey PRIMARY KEY (id)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS hooks_rollout_stages_seq_key
+  ON hooks_rollout_stages (seq);
+
+COMMENT ON COLUMN hooks_rollout_stages.id IS '@access: confidential';
+COMMENT ON COLUMN hooks_rollout_stages.seq IS '@access: confidential';
+COMMENT ON COLUMN hooks_rollout_stages.version IS 'Hooks generator version being rolled out.
+@access: confidential';
+COMMENT ON COLUMN hooks_rollout_stages.percent IS 'Share of organizations following the default pin, from 0 to 100, cleared for version.
+@access: confidential';
+COMMENT ON COLUMN hooks_rollout_stages.state IS 'running, paused, completed or cancelled.
+@access: confidential';
+COMMENT ON COLUMN hooks_rollout_stages.reason IS 'Why the rollout was paused or cancelled, when it was. Free text from staff or the rollout workflow.
+@access: opaque-restricted';
+COMMENT ON COLUMN hooks_rollout_stages.set_by IS 'Email of the staff operator who made the change, or the rollout workflow.
+@access: confidential-pii';
+COMMENT ON COLUMN hooks_rollout_stages.created_at IS '@access: confidential';
+COMMENT ON COLUMN hooks_rollout_stages.updated_at IS '@access: confidential';
 
 -- Per-project marketplace configuration applied to the marketplace.json
 -- generated for Claude Code, Cursor, and Codex. Designed to be extensible:

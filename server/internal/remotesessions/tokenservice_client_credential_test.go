@@ -181,7 +181,8 @@ func TestResolveAccessTokens_SelfClientRequestsAttachedUpstream(t *testing.T) {
 	source := &fakeClientCredentials{answers: []clientCredentialAnswer{{token: "self-token"}}}
 	mgr := newClientCredentialManager(t, ti.conn, testenv.NewEncryptionClient(t), source)
 	fx := seedSelfClient(t, ctx, ti.conn, "self-upstream")
-	attachRemoteMcpServerToIssuer(t, ctx, ti.conn, fx.projectID, fx.userIssuerID, "self-upstream", "https://upstream.example.com/mcp")
+	serverID := attachRemoteMcpServerToIssuer(t, ctx, ti.conn, fx.projectID, fx.userIssuerID, "self-upstream", "https://upstream.example.com/mcp")
+	associateClient(t, ctx, ti.conn, fx.organizationID, fx.projectID, serverID, fx.clientID)
 
 	tokens, err := mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, fx.projectID, fx.organizationID, fx.userIssuerID, urn.NewUserSubject("self-upstream-user"))
 	require.NoError(t, err)

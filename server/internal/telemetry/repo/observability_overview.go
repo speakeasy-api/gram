@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/Masterminds/squirrel"
 )
@@ -19,7 +20,50 @@ type GetObservabilityOverviewParams struct {
 	IncludeTimeSeries bool
 	// ToolLimit caps each of the two top-tools lists.
 	ToolLimit int
+
+	// ToolCallsOnly zeroes every figure that is not about tool calls.
+	ToolCallsOnly bool
+
+	// ToolCallSummariesEnabled lets an eligible read use mcp_tool_call_summaries.
+	ToolCallSummariesEnabled bool
 }
+
+// toolCallSummaryBucketNanos is the mcp_tool_call_summaries bucket width.
+const toolCallSummaryBucketNanos = int64(15 * time.Minute)
+
+// ToolCallSummariesEligible reports whether mcp_tool_call_summaries can serve the read.
+func (arg GetObservabilityOverviewParams) ToolCallSummariesEligible() bool {
+	previousStart, _, _ := toolCallSummaryPeriods(arg.Scope.TimeStart, arg.Scope.TimeEnd)
+	return arg.ToolCallsOnly &&
+		arg.IntervalSeconds*int64(time.Second) >= toolCallSummaryBucketNanos &&
+		previousStart >= 0 &&
+		arg.Scope.toolCallSummariesCanServe()
+}
+
+// toolCallSummaryPeriods snaps to whole buckets: current [currentStart, currentEnd), previous [previousStart, currentStart) of equal length.
+func toolCallSummaryPeriods(timeStart, timeEnd int64) (previousStart, currentStart, currentEnd int64) {
+	currentStart = floorToolCallSummaryBucket(timeStart)
+	currentEnd = floorToolCallSummaryBucket(timeEnd + toolCallSummaryBucketNanos - 1)
+	return currentStart - (currentEnd - currentStart), currentStart, currentEnd
+}
+
+func floorToolCallSummaryBucket(unixNano int64) int64 {
+	floor := unixNano / toolCallSummaryBucketNanos
+	if unixNano%toolCallSummaryBucketNanos < 0 {
+		floor--
+	}
+	return floor * toolCallSummaryBucketNanos
+}
+
+// OverviewSource names the table that served an overview.
+type OverviewSource string
+
+const (
+	OverviewSourceToolCallSummaries OverviewSource = "tool_call_summaries"
+	OverviewSourceTelemetryLogs     OverviewSource = "telemetry_logs"
+	// OverviewSourceMetricsSummaries serves the summaries; the series and tools still scan telemetry_logs.
+	OverviewSourceMetricsSummaries OverviewSource = "metrics_summaries"
+)
 
 // ObservabilityOverview is everything the overview shows for one scope.
 type ObservabilityOverview struct {
@@ -30,6 +74,7 @@ type ObservabilityOverview struct {
 	TimeSeries            []TimeSeriesBucket
 	TopToolsByCount       []ToolMetric
 	TopToolsByFailureRate []ToolMetric
+	Source                OverviewSource
 }
 
 // overviewRow is one row of the grouped overview query. Which grouping set it
@@ -78,8 +123,24 @@ const (
 // view, which is cheaper than any raw scan; the single pass then covers only
 // the current period for the series and the tools.
 //
-//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+// An eligible read with ToolCallSummariesEnabled reads mcp_tool_call_summaries instead.
 func (q *Queries) GetObservabilityOverview(ctx context.Context, arg GetObservabilityOverviewParams) (*ObservabilityOverview, error) {
+	if arg.ToolCallSummariesEnabled && arg.ToolCallSummariesEligible() {
+		return q.getObservabilityOverviewFromToolCallSummaries(ctx, arg)
+	}
+
+	result, err := q.getObservabilityOverviewFromLogs(ctx, arg)
+	if err != nil {
+		return nil, err
+	}
+	if arg.ToolCallsOnly {
+		result.keepToolCallFiguresOnly()
+	}
+	return result, nil
+}
+
+// getObservabilityOverviewFromLogs reads the overview from telemetry_logs.
+func (q *Queries) getObservabilityOverviewFromLogs(ctx context.Context, arg GetObservabilityOverviewParams) (*ObservabilityOverview, error) {
 	scope := arg.Scope
 	timeStart, timeEnd := scope.TimeStart, scope.TimeEnd
 	previousStart := timeStart - (timeEnd - timeStart)
@@ -91,8 +152,10 @@ func (q *Queries) GetObservabilityOverview(ctx context.Context, arg GetObservabi
 		TimeSeries:            nil,
 		TopToolsByCount:       nil,
 		TopToolsByFailureRate: nil,
+		Source:                OverviewSourceTelemetryLogs,
 	}
 	if summariesFromView {
+		result.Source = OverviewSourceMetricsSummaries
 		summary, err := q.GetOverviewSummary(ctx, scope)
 		if err != nil {
 			return nil, err
@@ -174,9 +237,76 @@ func (q *Queries) GetObservabilityOverview(ctx context.Context, arg GetObservabi
 		return nil, fmt.Errorf("building observability overview query: %w", err)
 	}
 
+	if err := q.readOverviewRows(ctx, query, args, arg, result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func (q *Queries) getObservabilityOverviewFromToolCallSummaries(ctx context.Context, arg GetObservabilityOverviewParams) (*ObservabilityOverview, error) {
+	scope := arg.Scope
+	previousStart, currentStart, currentEnd := toolCallSummaryPeriods(scope.TimeStart, scope.TimeEnd)
+	currentStartSeconds := currentStart / int64(time.Second)
+
+	bucketKey := squirrel.Expr("toInt64(0) AS bucket_key")
+	if arg.IncludeTimeSeries {
+		bucketKey = squirrel.Expr(
+			"if(time_bucket >= toDateTime(?, 'UTC'), toInt64(toStartOfInterval(time_bucket, toIntervalSecond(?))) * 1000000000, -1) AS bucket_key",
+			currentStartSeconds, arg.IntervalSeconds,
+		)
+	}
+
+	sb := sq.Select().
+		Column(squirrel.Expr("if(time_bucket >= toDateTime(?, 'UTC'), 1, 0) AS period", currentStartSeconds)).
+		Column(bucketKey).
+		Column(squirrel.Expr(
+			"if(time_bucket >= toDateTime(?, 'UTC'), gram_urn, '"+overviewOtherTool+"') AS tool_key",
+			currentStartSeconds,
+		)).
+		Columns(
+			"sum(total_calls) AS total_tool_calls",
+			"sum(success_calls) AS success_tool_calls",
+			"sum(failed_calls) AS failed_tool_calls",
+			"if(isNaN(sum(latency_ms_sum) / sum(total_calls)), 0, sum(latency_ms_sum) / sum(total_calls)) AS avg_tool_latency_ms",
+		).
+		From("mcp_tool_call_summaries").
+		Where(squirrel.Eq{"gram_project_id": scope.GramProjectIDs}).
+		Where("time_bucket >= toDateTime(?, 'UTC')", previousStart/int64(time.Second)).
+		Where("time_bucket < toDateTime(?, 'UTC')", currentEnd/int64(time.Second))
+	sb = withOverviewScopeFilters(sb, scope)
+
+	sets := []string{"(period, tool_key)", "(period)"}
+	if arg.IncludeTimeSeries {
+		sets = append(sets, "(period, bucket_key)")
+	}
+	sb = sb.GroupBy("GROUPING SETS (" + strings.Join(sets, ", ") + ")")
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building tool call summaries overview query: %w", err)
+	}
+
+	result := &ObservabilityOverview{
+		Summary:               new(OverviewSummary),
+		Comparison:            new(OverviewSummary),
+		TimeSeries:            nil,
+		TopToolsByCount:       nil,
+		TopToolsByFailureRate: nil,
+		Source:                OverviewSourceToolCallSummaries,
+	}
+	if err := q.readOverviewRows(ctx, query, args, arg, result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// readOverviewRows sorts a grouped overview query's rows into the result.
+//
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) readOverviewRows(ctx context.Context, query string, args []any, arg GetObservabilityOverviewParams, result *ObservabilityOverview) error {
 	rows, err := q.conn.Query(ctx, query, args...)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer rows.Close()
 
@@ -185,7 +315,7 @@ func (q *Queries) GetObservabilityOverview(ctx context.Context, arg GetObservabi
 	for rows.Next() {
 		var row overviewRow
 		if err = rows.ScanStruct(&row); err != nil {
-			return nil, fmt.Errorf("scanning observability overview row: %w", err)
+			return fmt.Errorf("scanning observability overview row: %w", err)
 		}
 		switch {
 		case row.BucketKey != 0:
@@ -203,14 +333,56 @@ func (q *Queries) GetObservabilityOverview(ctx context.Context, arg GetObservabi
 		}
 	}
 	if err = rows.Err(); err != nil {
-		return nil, err
+		return err
 	}
 
 	if arg.IncludeTimeSeries {
-		result.TimeSeries = fillTimeSeries(buckets, timeStart, timeEnd, arg.IntervalSeconds)
+		result.TimeSeries = fillTimeSeries(buckets, arg.Scope.TimeStart, arg.Scope.TimeEnd, arg.IntervalSeconds)
 	}
 	result.TopToolsByCount, result.TopToolsByFailureRate = topTools(tools, arg.ToolLimit)
-	return result, nil
+	return nil
+}
+
+// keepToolCallFiguresOnly zeroes every figure that is not about tool calls.
+func (o *ObservabilityOverview) keepToolCallFiguresOnly() {
+	for _, summary := range []*OverviewSummary{o.Summary, o.Comparison} {
+		*summary = OverviewSummary{
+			TotalChats:               0,
+			ResolvedChats:            0,
+			FailedChats:              0,
+			AvgSessionDurationMs:     0,
+			AvgResolutionTimeMs:      0,
+			TotalInputTokens:         0,
+			TotalOutputTokens:        0,
+			TotalTokens:              0,
+			CacheReadInputTokens:     0,
+			CacheCreationInputTokens: 0,
+			TotalCost:                0,
+			TotalToolCalls:           summary.TotalToolCalls,
+			FailedToolCalls:          summary.FailedToolCalls,
+			AvgLatencyMs:             summary.AvgLatencyMs,
+		}
+	}
+	for i, bucket := range o.TimeSeries {
+		o.TimeSeries[i] = TimeSeriesBucket{
+			BucketTimeUnixNano:       bucket.BucketTimeUnixNano,
+			TotalChats:               0,
+			ResolvedChats:            0,
+			FailedChats:              0,
+			PartialChats:             0,
+			AbandonedChats:           0,
+			TotalInputTokens:         0,
+			TotalOutputTokens:        0,
+			TotalTokens:              0,
+			CacheReadInputTokens:     0,
+			CacheCreationInputTokens: 0,
+			TotalCost:                0,
+			TotalToolCalls:           bucket.TotalToolCalls,
+			FailedToolCalls:          bucket.FailedToolCalls,
+			AvgToolLatencyMs:         bucket.AvgToolLatencyMs,
+			AvgSessionDurationMs:     0,
+		}
+	}
 }
 
 // withOverviewScopeFilters applies the overview's optional filters. It

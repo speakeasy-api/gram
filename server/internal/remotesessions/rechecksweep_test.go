@@ -308,9 +308,6 @@ func TestRecheckSweep_PlatformRegistrationDoesNotTransferGrantsAcrossOrganizatio
 	})
 	require.NoError(t, err)
 	routable := createUserSessionIssuer(t, ctx, ti.conn, slug+"-usi")
-	for _, usi := range []uuid.UUID{routeless, routable} {
-		require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: client.ID, UserSessionIssuerID: usi}))
-	}
 	remoteServer, err := remotemcprepo.New(ti.conn).CreateServer(ctx, remotemcprepo.CreateServerParams{ID: uuid.New(), ProjectID: *authCtx.ProjectID, TransportType: "streamable-http", Url: "https://" + slug + ".example.com/mcp"})
 	require.NoError(t, err)
 	server, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{

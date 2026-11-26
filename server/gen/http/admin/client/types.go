@@ -651,6 +651,26 @@ type BackfillMcpConnectGrantsRequestBody struct {
 	CreatedBefore *string `form:"created_before,omitempty" json:"created_before,omitempty" xml:"created_before,omitempty"`
 }
 
+// RunMarketplaceTokenBackfillRequestBody is the type of the "admin" service
+// "runMarketplaceTokenBackfill" endpoint HTTP request body.
+type RunMarketplaceTokenBackfillRequestBody struct {
+	// Limits the run to this organization's GitHub connections. Omit it to run for
+	// every organization. The result's counts then cover only this organization.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// The platform key fingerprint the operator checked against the servers'
+	// "encryption key loaded" log. The run is refused when this process's platform
+	// key has another fingerprint, such as after a restart with a different key.
+	PlatformKeyFingerprint string `form:"platform_key_fingerprint" json:"platform_key_fingerprint" xml:"platform_key_fingerprint"`
+}
+
+// RunRunnerKeyOrganizationBackfillRequestBody is the type of the "admin"
+// service "runRunnerKeyOrganizationBackfill" endpoint HTTP request body.
+type RunRunnerKeyOrganizationBackfillRequestBody struct {
+	// Limits the run to this organization's runner keys. Omit it to run for every
+	// organization. The result's counts then cover only this organization.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+}
+
 // RedeployProjectRequestBody is the type of the "admin" service
 // "redeployProject" endpoint HTTP request body.
 type RedeployProjectRequestBody struct {
@@ -3148,7 +3168,7 @@ type DisableUpstreamAuthEnforcementResponseBody struct {
 // BackfillMcpAuthGrantsResponseBody is the type of the "admin" service
 // "backfillMcpAuthGrants" endpoint HTTP response body.
 type BackfillMcpAuthGrantsResponseBody struct {
-	// How many principals gained the mcp:auth grant.
+	// Legacy response field; the retired endpoint does not grant access.
 	Granted *int64 `form:"granted,omitempty" json:"granted,omitempty" xml:"granted,omitempty"`
 }
 
@@ -3163,6 +3183,63 @@ type BackfillMcpConnectGrantsResponseBody struct {
 	// How many mcp:connect grants provisioned by the default auth permission
 	// backfill became explicit grants.
 	TakenOver *int64 `form:"taken_over,omitempty" json:"taken_over,omitempty" xml:"taken_over,omitempty"`
+}
+
+// GetSecretBackfillsResponseBody is the type of the "admin" service
+// "getSecretBackfills" endpoint HTTP response body.
+type GetSecretBackfillsResponseBody struct {
+	// A preview of the marketplace token backfill.
+	MarketplaceTokens *AdminMarketplaceTokenBackfillResponseBody `form:"marketplace_tokens,omitempty" json:"marketplace_tokens,omitempty" xml:"marketplace_tokens,omitempty"`
+	// A preview of the runner key organization backfill.
+	RunnerKeyOrganizations *AdminRunnerKeyOrganizationBackfillResponseBody `form:"runner_key_organizations,omitempty" json:"runner_key_organizations,omitempty" xml:"runner_key_organizations,omitempty"`
+	// Every organization either backfill has work left in, by name. Rows whose
+	// project's organization has no metadata row belong to none of them.
+	Organizations []*AdminSecretBackfillOrganizationResponseBody `form:"organizations,omitempty" json:"organizations,omitempty" xml:"organizations,omitempty"`
+	// The fingerprint of the platform key this admin process seals marketplace
+	// tokens with. It must match the fingerprint every server and worker logs at
+	// startup as "encryption key loaded". Absent when this process has no platform
+	// key, so the marketplace token backfill cannot be applied.
+	PlatformKeyFingerprint *string `form:"platform_key_fingerprint,omitempty" json:"platform_key_fingerprint,omitempty" xml:"platform_key_fingerprint,omitempty"`
+}
+
+// RunMarketplaceTokenBackfillResponseBody is the type of the "admin" service
+// "runMarketplaceTokenBackfill" endpoint HTTP response body.
+type RunMarketplaceTokenBackfillResponseBody struct {
+	// Connections this run gave an organization. Zero in a preview.
+	Attributed *int64 `form:"attributed,omitempty" json:"attributed,omitempty" xml:"attributed,omitempty"`
+	// Plaintext tokens this run moved. Zero in a preview.
+	Moved *int64 `form:"moved,omitempty" json:"moved,omitempty" xml:"moved,omitempty"`
+	// Plaintext tokens that changed between the read and the write, such as when
+	// another run moved them first. Zero in a preview.
+	Skipped *int64 `form:"skipped,omitempty" json:"skipped,omitempty" xml:"skipped,omitempty"`
+	// Plaintext tokens left in place because their organization's transition state
+	// needs organization encryption this process does not have. Zero in a preview.
+	NeedsOrganizationKey *int64 `form:"needs_organization_key,omitempty" json:"needs_organization_key,omitempty" xml:"needs_organization_key,omitempty"`
+	// Connections without an organization whose project's organization exists. An
+	// apply gives these one.
+	Unattributed *int64 `form:"unattributed,omitempty" json:"unattributed,omitempty" xml:"unattributed,omitempty"`
+	// Connections that still hold a plaintext token, not counting those in
+	// missing_organization.
+	Legacy *int64 `form:"legacy,omitempty" json:"legacy,omitempty" xml:"legacy,omitempty"`
+	// Connections whose token is stored as a hash and sealed copies.
+	Hashed *int64 `form:"hashed,omitempty" json:"hashed,omitempty" xml:"hashed,omitempty"`
+	// Connections whose project's organization has no metadata row. An apply can't
+	// give them an organization or move their plaintext token, so they stay as
+	// they are.
+	MissingOrganization *int64 `form:"missing_organization,omitempty" json:"missing_organization,omitempty" xml:"missing_organization,omitempty"`
+}
+
+// RunRunnerKeyOrganizationBackfillResponseBody is the type of the "admin"
+// service "runRunnerKeyOrganizationBackfill" endpoint HTTP response body.
+type RunRunnerKeyOrganizationBackfillResponseBody struct {
+	// Runner keys this run gave an organization. Zero in a preview.
+	Filled *int64 `form:"filled,omitempty" json:"filled,omitempty" xml:"filled,omitempty"`
+	// Runner keys without an organization whose project's organization exists. An
+	// apply fills these.
+	Pending *int64 `form:"pending,omitempty" json:"pending,omitempty" xml:"pending,omitempty"`
+	// Runner keys without an organization whose project is gone or whose project's
+	// organization has no metadata row. They stay without one.
+	MissingOrganization *int64 `form:"missing_organization,omitempty" json:"missing_organization,omitempty" xml:"missing_organization,omitempty"`
 }
 
 // GetProjectRedeployPreviewResponseBody is the type of the "admin" service
@@ -3453,6 +3530,33 @@ type GetHooksRolloutResponseBody struct {
 	RecentChanges []*AdminHooksRolloutChangeResponseBody `form:"recent_changes,omitempty" json:"recent_changes,omitempty" xml:"recent_changes,omitempty"`
 }
 
+// GetHooksReleaseProgressResponseBody is the type of the "admin" service
+// "getHooksReleaseProgress" endpoint HTTP response body.
+type GetHooksReleaseProgressResponseBody struct {
+	// The hooks generator version this server build publishes.
+	CurrentVersion *int `form:"current_version,omitempty" json:"current_version,omitempty" xml:"current_version,omitempty"`
+	// The hooks binary version this server build ships. Absent when unknown.
+	CurrentBinaryVersion *string `form:"current_binary_version,omitempty" json:"current_binary_version,omitempty" xml:"current_binary_version,omitempty"`
+	// Organizations with at least one marketplace repository.
+	Organizations *int64 `form:"organizations,omitempty" json:"organizations,omitempty" xml:"organizations,omitempty"`
+	// Of those, organizations whose next publish moves to current_version:
+	// canaries and organizations pinned at or above it.
+	OrganizationsCleared *int64 `form:"organizations_cleared,omitempty" json:"organizations_cleared,omitempty" xml:"organizations_cleared,omitempty"`
+	// Organizations pinned below current_version.
+	OrganizationsHeld *int64 `form:"organizations_held,omitempty" json:"organizations_held,omitempty" xml:"organizations_held,omitempty"`
+	// Organizations with no pin, which follow the legacy hooks-rollout PostHog
+	// flag the admin server cannot read.
+	OrganizationsOnLegacyFlag *int64 `form:"organizations_on_legacy_flag,omitempty" json:"organizations_on_legacy_flag,omitempty" xml:"organizations_on_legacy_flag,omitempty"`
+	// Marketplace repositories.
+	Repos *int64 `form:"repos,omitempty" json:"repos,omitempty" xml:"repos,omitempty"`
+	// Repositories whose last published hooks plugin carries current_version.
+	ReposOnCurrent *int64 `form:"repos_on_current,omitempty" json:"repos_on_current,omitempty" xml:"repos_on_current,omitempty"`
+	// Repositories per published hooks generator version, newest first.
+	RepoVersions []*AdminHooksReleaseRepoVersionResponseBody `form:"repo_versions,omitempty" json:"repo_versions,omitempty" xml:"repo_versions,omitempty"`
+	// Installs running the release. Absent when the hooks fleet is unavailable.
+	Fleet *AdminHooksReleaseFleetResponseBody `form:"fleet,omitempty" json:"fleet,omitempty" xml:"fleet,omitempty"`
+}
+
 // SetHooksRolloutDefaultResponseBody is the type of the "admin" service
 // "setHooksRolloutDefault" endpoint HTTP response body.
 type SetHooksRolloutDefaultResponseBody struct {
@@ -3604,9 +3708,10 @@ type ListOrganizationEncryptionTransitionsResponseBody struct {
 	UseCase *string `form:"use_case,omitempty" json:"use_case,omitempty" xml:"use_case,omitempty"`
 	// Every use case that moves from the platform key to organization keys.
 	UseCases []string `form:"use_cases,omitempty" json:"use_cases,omitempty" xml:"use_cases,omitempty"`
-	// The page of organizations, oldest first.
+	// The page of organizations, in the requested order.
 	Organizations []*AdminOrganizationEncryptionTransitionRowResponseBody `form:"organizations,omitempty" json:"organizations,omitempty" xml:"organizations,omitempty"`
-	// How many organizations are in each state, across every page.
+	// How many organizations the values filter keeps are in each state, across
+	// every page.
 	StateCounts []*AdminOrganizationEncryptionStateCountResponseBody `form:"state_counts,omitempty" json:"state_counts,omitempty" xml:"state_counts,omitempty"`
 	// Whether another page follows.
 	HasMore *bool `form:"has_more,omitempty" json:"has_more,omitempty" xml:"has_more,omitempty"`
@@ -23815,6 +23920,589 @@ type BackfillMcpConnectGrantsGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// GetSecretBackfillsUnauthorizedResponseBody is the type of the "admin"
+// service "getSecretBackfills" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetSecretBackfillsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetSecretBackfillsForbiddenResponseBody is the type of the "admin" service
+// "getSecretBackfills" endpoint HTTP response body for the "forbidden" error.
+type GetSecretBackfillsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetSecretBackfillsBadRequestResponseBody is the type of the "admin" service
+// "getSecretBackfills" endpoint HTTP response body for the "bad_request" error.
+type GetSecretBackfillsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetSecretBackfillsNotFoundResponseBody is the type of the "admin" service
+// "getSecretBackfills" endpoint HTTP response body for the "not_found" error.
+type GetSecretBackfillsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetSecretBackfillsConflictResponseBody is the type of the "admin" service
+// "getSecretBackfills" endpoint HTTP response body for the "conflict" error.
+type GetSecretBackfillsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetSecretBackfillsUnsupportedMediaResponseBody is the type of the "admin"
+// service "getSecretBackfills" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetSecretBackfillsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetSecretBackfillsInvalidResponseBody is the type of the "admin" service
+// "getSecretBackfills" endpoint HTTP response body for the "invalid" error.
+type GetSecretBackfillsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetSecretBackfillsInvariantViolationResponseBody is the type of the "admin"
+// service "getSecretBackfills" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetSecretBackfillsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetSecretBackfillsUnexpectedResponseBody is the type of the "admin" service
+// "getSecretBackfills" endpoint HTTP response body for the "unexpected" error.
+type GetSecretBackfillsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetSecretBackfillsGatewayErrorResponseBody is the type of the "admin"
+// service "getSecretBackfills" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetSecretBackfillsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RunMarketplaceTokenBackfillUnavailableResponseBody is the type of the
+// "admin" service "runMarketplaceTokenBackfill" endpoint HTTP response body
+// for the "unavailable" error.
+type RunMarketplaceTokenBackfillUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RunMarketplaceTokenBackfillUnauthorizedResponseBody is the type of the
+// "admin" service "runMarketplaceTokenBackfill" endpoint HTTP response body
+// for the "unauthorized" error.
+type RunMarketplaceTokenBackfillUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RunMarketplaceTokenBackfillForbiddenResponseBody is the type of the "admin"
+// service "runMarketplaceTokenBackfill" endpoint HTTP response body for the
+// "forbidden" error.
+type RunMarketplaceTokenBackfillForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RunMarketplaceTokenBackfillBadRequestResponseBody is the type of the "admin"
+// service "runMarketplaceTokenBackfill" endpoint HTTP response body for the
+// "bad_request" error.
+type RunMarketplaceTokenBackfillBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RunMarketplaceTokenBackfillNotFoundResponseBody is the type of the "admin"
+// service "runMarketplaceTokenBackfill" endpoint HTTP response body for the
+// "not_found" error.
+type RunMarketplaceTokenBackfillNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RunMarketplaceTokenBackfillConflictResponseBody is the type of the "admin"
+// service "runMarketplaceTokenBackfill" endpoint HTTP response body for the
+// "conflict" error.
+type RunMarketplaceTokenBackfillConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RunMarketplaceTokenBackfillUnsupportedMediaResponseBody is the type of the
+// "admin" service "runMarketplaceTokenBackfill" endpoint HTTP response body
+// for the "unsupported_media" error.
+type RunMarketplaceTokenBackfillUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RunMarketplaceTokenBackfillInvalidResponseBody is the type of the "admin"
+// service "runMarketplaceTokenBackfill" endpoint HTTP response body for the
+// "invalid" error.
+type RunMarketplaceTokenBackfillInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RunMarketplaceTokenBackfillInvariantViolationResponseBody is the type of the
+// "admin" service "runMarketplaceTokenBackfill" endpoint HTTP response body
+// for the "invariant_violation" error.
+type RunMarketplaceTokenBackfillInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RunMarketplaceTokenBackfillUnexpectedResponseBody is the type of the "admin"
+// service "runMarketplaceTokenBackfill" endpoint HTTP response body for the
+// "unexpected" error.
+type RunMarketplaceTokenBackfillUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RunMarketplaceTokenBackfillGatewayErrorResponseBody is the type of the
+// "admin" service "runMarketplaceTokenBackfill" endpoint HTTP response body
+// for the "gateway_error" error.
+type RunMarketplaceTokenBackfillGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RunRunnerKeyOrganizationBackfillUnauthorizedResponseBody is the type of the
+// "admin" service "runRunnerKeyOrganizationBackfill" endpoint HTTP response
+// body for the "unauthorized" error.
+type RunRunnerKeyOrganizationBackfillUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RunRunnerKeyOrganizationBackfillForbiddenResponseBody is the type of the
+// "admin" service "runRunnerKeyOrganizationBackfill" endpoint HTTP response
+// body for the "forbidden" error.
+type RunRunnerKeyOrganizationBackfillForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RunRunnerKeyOrganizationBackfillBadRequestResponseBody is the type of the
+// "admin" service "runRunnerKeyOrganizationBackfill" endpoint HTTP response
+// body for the "bad_request" error.
+type RunRunnerKeyOrganizationBackfillBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RunRunnerKeyOrganizationBackfillNotFoundResponseBody is the type of the
+// "admin" service "runRunnerKeyOrganizationBackfill" endpoint HTTP response
+// body for the "not_found" error.
+type RunRunnerKeyOrganizationBackfillNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RunRunnerKeyOrganizationBackfillConflictResponseBody is the type of the
+// "admin" service "runRunnerKeyOrganizationBackfill" endpoint HTTP response
+// body for the "conflict" error.
+type RunRunnerKeyOrganizationBackfillConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RunRunnerKeyOrganizationBackfillUnsupportedMediaResponseBody is the type of
+// the "admin" service "runRunnerKeyOrganizationBackfill" endpoint HTTP
+// response body for the "unsupported_media" error.
+type RunRunnerKeyOrganizationBackfillUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RunRunnerKeyOrganizationBackfillInvalidResponseBody is the type of the
+// "admin" service "runRunnerKeyOrganizationBackfill" endpoint HTTP response
+// body for the "invalid" error.
+type RunRunnerKeyOrganizationBackfillInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RunRunnerKeyOrganizationBackfillInvariantViolationResponseBody is the type
+// of the "admin" service "runRunnerKeyOrganizationBackfill" endpoint HTTP
+// response body for the "invariant_violation" error.
+type RunRunnerKeyOrganizationBackfillInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RunRunnerKeyOrganizationBackfillUnexpectedResponseBody is the type of the
+// "admin" service "runRunnerKeyOrganizationBackfill" endpoint HTTP response
+// body for the "unexpected" error.
+type RunRunnerKeyOrganizationBackfillUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RunRunnerKeyOrganizationBackfillGatewayErrorResponseBody is the type of the
+// "admin" service "runRunnerKeyOrganizationBackfill" endpoint HTTP response
+// body for the "gateway_error" error.
+type RunRunnerKeyOrganizationBackfillGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // GetProjectRedeployPreviewUnauthorizedResponseBody is the type of the "admin"
 // service "getProjectRedeployPreview" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -27515,6 +28203,196 @@ type GetHooksRolloutUnexpectedResponseBody struct {
 // GetHooksRolloutGatewayErrorResponseBody is the type of the "admin" service
 // "getHooksRollout" endpoint HTTP response body for the "gateway_error" error.
 type GetHooksRolloutGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetHooksReleaseProgressUnauthorizedResponseBody is the type of the "admin"
+// service "getHooksReleaseProgress" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetHooksReleaseProgressUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetHooksReleaseProgressForbiddenResponseBody is the type of the "admin"
+// service "getHooksReleaseProgress" endpoint HTTP response body for the
+// "forbidden" error.
+type GetHooksReleaseProgressForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetHooksReleaseProgressBadRequestResponseBody is the type of the "admin"
+// service "getHooksReleaseProgress" endpoint HTTP response body for the
+// "bad_request" error.
+type GetHooksReleaseProgressBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetHooksReleaseProgressNotFoundResponseBody is the type of the "admin"
+// service "getHooksReleaseProgress" endpoint HTTP response body for the
+// "not_found" error.
+type GetHooksReleaseProgressNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetHooksReleaseProgressConflictResponseBody is the type of the "admin"
+// service "getHooksReleaseProgress" endpoint HTTP response body for the
+// "conflict" error.
+type GetHooksReleaseProgressConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetHooksReleaseProgressUnsupportedMediaResponseBody is the type of the
+// "admin" service "getHooksReleaseProgress" endpoint HTTP response body for
+// the "unsupported_media" error.
+type GetHooksReleaseProgressUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetHooksReleaseProgressInvalidResponseBody is the type of the "admin"
+// service "getHooksReleaseProgress" endpoint HTTP response body for the
+// "invalid" error.
+type GetHooksReleaseProgressInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetHooksReleaseProgressInvariantViolationResponseBody is the type of the
+// "admin" service "getHooksReleaseProgress" endpoint HTTP response body for
+// the "invariant_violation" error.
+type GetHooksReleaseProgressInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetHooksReleaseProgressUnexpectedResponseBody is the type of the "admin"
+// service "getHooksReleaseProgress" endpoint HTTP response body for the
+// "unexpected" error.
+type GetHooksReleaseProgressUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetHooksReleaseProgressGatewayErrorResponseBody is the type of the "admin"
+// service "getHooksReleaseProgress" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetHooksReleaseProgressGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -31558,6 +32436,63 @@ type AdminUpstreamOAuthMigrationStatusResponseBody struct {
 	Enforcement *AdminUpstreamAuthEnforcementResponseBody `form:"enforcement,omitempty" json:"enforcement,omitempty" xml:"enforcement,omitempty"`
 }
 
+// AdminMarketplaceTokenBackfillResponseBody is used to define fields on
+// response body types.
+type AdminMarketplaceTokenBackfillResponseBody struct {
+	// Connections this run gave an organization. Zero in a preview.
+	Attributed *int64 `form:"attributed,omitempty" json:"attributed,omitempty" xml:"attributed,omitempty"`
+	// Plaintext tokens this run moved. Zero in a preview.
+	Moved *int64 `form:"moved,omitempty" json:"moved,omitempty" xml:"moved,omitempty"`
+	// Plaintext tokens that changed between the read and the write, such as when
+	// another run moved them first. Zero in a preview.
+	Skipped *int64 `form:"skipped,omitempty" json:"skipped,omitempty" xml:"skipped,omitempty"`
+	// Plaintext tokens left in place because their organization's transition state
+	// needs organization encryption this process does not have. Zero in a preview.
+	NeedsOrganizationKey *int64 `form:"needs_organization_key,omitempty" json:"needs_organization_key,omitempty" xml:"needs_organization_key,omitempty"`
+	// Connections without an organization whose project's organization exists. An
+	// apply gives these one.
+	Unattributed *int64 `form:"unattributed,omitempty" json:"unattributed,omitempty" xml:"unattributed,omitempty"`
+	// Connections that still hold a plaintext token, not counting those in
+	// missing_organization.
+	Legacy *int64 `form:"legacy,omitempty" json:"legacy,omitempty" xml:"legacy,omitempty"`
+	// Connections whose token is stored as a hash and sealed copies.
+	Hashed *int64 `form:"hashed,omitempty" json:"hashed,omitempty" xml:"hashed,omitempty"`
+	// Connections whose project's organization has no metadata row. An apply can't
+	// give them an organization or move their plaintext token, so they stay as
+	// they are.
+	MissingOrganization *int64 `form:"missing_organization,omitempty" json:"missing_organization,omitempty" xml:"missing_organization,omitempty"`
+}
+
+// AdminRunnerKeyOrganizationBackfillResponseBody is used to define fields on
+// response body types.
+type AdminRunnerKeyOrganizationBackfillResponseBody struct {
+	// Runner keys this run gave an organization. Zero in a preview.
+	Filled *int64 `form:"filled,omitempty" json:"filled,omitempty" xml:"filled,omitempty"`
+	// Runner keys without an organization whose project's organization exists. An
+	// apply fills these.
+	Pending *int64 `form:"pending,omitempty" json:"pending,omitempty" xml:"pending,omitempty"`
+	// Runner keys without an organization whose project is gone or whose project's
+	// organization has no metadata row. They stay without one.
+	MissingOrganization *int64 `form:"missing_organization,omitempty" json:"missing_organization,omitempty" xml:"missing_organization,omitempty"`
+}
+
+// AdminSecretBackfillOrganizationResponseBody is used to define fields on
+// response body types.
+type AdminSecretBackfillOrganizationResponseBody struct {
+	// The organization ID.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// The organization's name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The organization's slug.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// Its GitHub connections that still hold a plaintext marketplace token.
+	LegacyTokens *int64 `form:"legacy_tokens,omitempty" json:"legacy_tokens,omitempty" xml:"legacy_tokens,omitempty"`
+	// Its GitHub connections without an organization.
+	UnattributedConnections *int64 `form:"unattributed_connections,omitempty" json:"unattributed_connections,omitempty" xml:"unattributed_connections,omitempty"`
+	// Its runner keys without an organization.
+	PendingRunnerKeys *int64 `form:"pending_runner_keys,omitempty" json:"pending_runner_keys,omitempty" xml:"pending_runner_keys,omitempty"`
+}
+
 // AdminCustomDomainResponseBody is used to define fields on response body
 // types.
 type AdminCustomDomainResponseBody struct {
@@ -31800,6 +32735,43 @@ type AdminHooksRolloutChangeResponseBody struct {
 	SetAt *string `form:"set_at,omitempty" json:"set_at,omitempty" xml:"set_at,omitempty"`
 }
 
+// AdminHooksReleaseRepoVersionResponseBody is used to define fields on
+// response body types.
+type AdminHooksReleaseRepoVersionResponseBody struct {
+	// The hooks generator version last published, or empty for repositories that
+	// have never published the hooks plugin.
+	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
+	// Repositories on this version.
+	Repos *int64 `form:"repos,omitempty" json:"repos,omitempty" xml:"repos,omitempty"`
+}
+
+// AdminHooksReleaseFleetResponseBody is used to define fields on response body
+// types.
+type AdminHooksReleaseFleetResponseBody struct {
+	// Installs count when they sent a hook in this many full UTC days.
+	WindowDays *int `form:"window_days,omitempty" json:"window_days,omitempty" xml:"window_days,omitempty"`
+	// Installs seen in the window.
+	Installs *int64 `form:"installs,omitempty" json:"installs,omitempty" xml:"installs,omitempty"`
+	// Installs reporting exactly the binary version this build ships, on any
+	// endpoint.
+	InstallsOnCurrent *int64 `form:"installs_on_current,omitempty" json:"installs_on_current,omitempty" xml:"installs_on_current,omitempty"`
+	// Installs per binary version and status, newest first. A version can appear
+	// once per status, for example current and unsupported when some installs
+	// still send to a legacy endpoint.
+	Versions []*AdminHooksReleaseInstallVersionResponseBody `form:"versions,omitempty" json:"versions,omitempty" xml:"versions,omitempty"`
+}
+
+// AdminHooksReleaseInstallVersionResponseBody is used to define fields on
+// response body types.
+type AdminHooksReleaseInstallVersionResponseBody struct {
+	// The hooks binary version, or empty for installs that sent no version.
+	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
+	// How the version compares to the release Speakeasy ships.
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	// Installs whose latest version is this one.
+	Installs *int64 `form:"installs,omitempty" json:"installs,omitempty" xml:"installs,omitempty"`
+}
+
 // AdminTailscaleOAuthMigrationOrganizationResponseBody is used to define
 // fields on response body types.
 type AdminTailscaleOAuthMigrationOrganizationResponseBody struct {
@@ -31935,6 +32907,16 @@ type AdminOrganizationEncryptionTransitionRowResponseBody struct {
 	LastBackfillError *string `form:"last_backfill_error,omitempty" json:"last_backfill_error,omitempty" xml:"last_backfill_error,omitempty"`
 	// When the last clean verification pass started.
 	LastVerifiedAt *string `form:"last_verified_at,omitempty" json:"last_verified_at,omitempty" xml:"last_verified_at,omitempty"`
+	// How many values the organization stores for the use case under either key,
+	// soft-deleted rows included. A row storing values in two columns counts once
+	// in each.
+	ValueCount *int64 `form:"value_count,omitempty" json:"value_count,omitempty" xml:"value_count,omitempty"`
+	// The latest updated_at of a row storing one of the organization's values. A
+	// change that updates the row's updated_at moves it, such as a session's token
+	// refresh or an OpenRouter key's limit change; a write that leaves updated_at
+	// alone, such as a backfill seal, does not. Absent when the organization has
+	// none.
+	LastWrittenAt *string `form:"last_written_at,omitempty" json:"last_written_at,omitempty" xml:"last_written_at,omitempty"`
 }
 
 // AdminOrganizationEncryptionStateCountResponseBody is used to define fields
@@ -32701,6 +33683,27 @@ func NewDisableUpstreamAuthEnforcementRequestBody(p *admin.DisableUpstreamAuthEn
 func NewBackfillMcpConnectGrantsRequestBody(p *admin.BackfillMcpConnectGrantsPayload) *BackfillMcpConnectGrantsRequestBody {
 	body := &BackfillMcpConnectGrantsRequestBody{
 		CreatedBefore: p.CreatedBefore,
+	}
+	return body
+}
+
+// NewRunMarketplaceTokenBackfillRequestBody builds the HTTP request body from
+// the payload of the "runMarketplaceTokenBackfill" endpoint of the "admin"
+// service.
+func NewRunMarketplaceTokenBackfillRequestBody(p *admin.RunMarketplaceTokenBackfillPayload) *RunMarketplaceTokenBackfillRequestBody {
+	body := &RunMarketplaceTokenBackfillRequestBody{
+		OrganizationID:         p.OrganizationID,
+		PlatformKeyFingerprint: p.PlatformKeyFingerprint,
+	}
+	return body
+}
+
+// NewRunRunnerKeyOrganizationBackfillRequestBody builds the HTTP request body
+// from the payload of the "runRunnerKeyOrganizationBackfill" endpoint of the
+// "admin" service.
+func NewRunRunnerKeyOrganizationBackfillRequestBody(p *admin.RunRunnerKeyOrganizationBackfillPayload) *RunRunnerKeyOrganizationBackfillRequestBody {
+	body := &RunRunnerKeyOrganizationBackfillRequestBody{
+		OrganizationID: p.OrganizationID,
 	}
 	return body
 }
@@ -51594,6 +52597,522 @@ func NewBackfillMcpConnectGrantsGatewayError(body *BackfillMcpConnectGrantsGatew
 	return v
 }
 
+// NewGetSecretBackfillsAdminSecretBackfillsOK builds a "admin" service
+// "getSecretBackfills" endpoint result from a HTTP "OK" response.
+func NewGetSecretBackfillsAdminSecretBackfillsOK(body *GetSecretBackfillsResponseBody) *admin.AdminSecretBackfills {
+	v := &admin.AdminSecretBackfills{
+		PlatformKeyFingerprint: body.PlatformKeyFingerprint,
+	}
+	v.MarketplaceTokens = unmarshalAdminMarketplaceTokenBackfillResponseBodyToAdminAdminMarketplaceTokenBackfill(body.MarketplaceTokens)
+	v.RunnerKeyOrganizations = unmarshalAdminRunnerKeyOrganizationBackfillResponseBodyToAdminAdminRunnerKeyOrganizationBackfill(body.RunnerKeyOrganizations)
+	v.Organizations = make([]*admin.AdminSecretBackfillOrganization, len(body.Organizations))
+	for i, val := range body.Organizations {
+		if val == nil {
+			v.Organizations[i] = nil
+			continue
+		}
+		v.Organizations[i] = unmarshalAdminSecretBackfillOrganizationResponseBodyToAdminAdminSecretBackfillOrganization(val)
+	}
+
+	return v
+}
+
+// NewGetSecretBackfillsUnauthorized builds a admin service getSecretBackfills
+// endpoint unauthorized error.
+func NewGetSecretBackfillsUnauthorized(body *GetSecretBackfillsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetSecretBackfillsForbidden builds a admin service getSecretBackfills
+// endpoint forbidden error.
+func NewGetSecretBackfillsForbidden(body *GetSecretBackfillsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetSecretBackfillsBadRequest builds a admin service getSecretBackfills
+// endpoint bad_request error.
+func NewGetSecretBackfillsBadRequest(body *GetSecretBackfillsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetSecretBackfillsNotFound builds a admin service getSecretBackfills
+// endpoint not_found error.
+func NewGetSecretBackfillsNotFound(body *GetSecretBackfillsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetSecretBackfillsConflict builds a admin service getSecretBackfills
+// endpoint conflict error.
+func NewGetSecretBackfillsConflict(body *GetSecretBackfillsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetSecretBackfillsUnsupportedMedia builds a admin service
+// getSecretBackfills endpoint unsupported_media error.
+func NewGetSecretBackfillsUnsupportedMedia(body *GetSecretBackfillsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetSecretBackfillsInvalid builds a admin service getSecretBackfills
+// endpoint invalid error.
+func NewGetSecretBackfillsInvalid(body *GetSecretBackfillsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetSecretBackfillsInvariantViolation builds a admin service
+// getSecretBackfills endpoint invariant_violation error.
+func NewGetSecretBackfillsInvariantViolation(body *GetSecretBackfillsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetSecretBackfillsUnexpected builds a admin service getSecretBackfills
+// endpoint unexpected error.
+func NewGetSecretBackfillsUnexpected(body *GetSecretBackfillsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetSecretBackfillsGatewayError builds a admin service getSecretBackfills
+// endpoint gateway_error error.
+func NewGetSecretBackfillsGatewayError(body *GetSecretBackfillsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRunMarketplaceTokenBackfillAdminMarketplaceTokenBackfillOK builds a
+// "admin" service "runMarketplaceTokenBackfill" endpoint result from a HTTP
+// "OK" response.
+func NewRunMarketplaceTokenBackfillAdminMarketplaceTokenBackfillOK(body *RunMarketplaceTokenBackfillResponseBody) *admin.AdminMarketplaceTokenBackfill {
+	v := &admin.AdminMarketplaceTokenBackfill{
+		Attributed:           *body.Attributed,
+		Moved:                *body.Moved,
+		Skipped:              *body.Skipped,
+		NeedsOrganizationKey: *body.NeedsOrganizationKey,
+		Unattributed:         *body.Unattributed,
+		Legacy:               *body.Legacy,
+		Hashed:               *body.Hashed,
+		MissingOrganization:  *body.MissingOrganization,
+	}
+
+	return v
+}
+
+// NewRunMarketplaceTokenBackfillUnavailable builds a admin service
+// runMarketplaceTokenBackfill endpoint unavailable error.
+func NewRunMarketplaceTokenBackfillUnavailable(body *RunMarketplaceTokenBackfillUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRunMarketplaceTokenBackfillUnauthorized builds a admin service
+// runMarketplaceTokenBackfill endpoint unauthorized error.
+func NewRunMarketplaceTokenBackfillUnauthorized(body *RunMarketplaceTokenBackfillUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRunMarketplaceTokenBackfillForbidden builds a admin service
+// runMarketplaceTokenBackfill endpoint forbidden error.
+func NewRunMarketplaceTokenBackfillForbidden(body *RunMarketplaceTokenBackfillForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRunMarketplaceTokenBackfillBadRequest builds a admin service
+// runMarketplaceTokenBackfill endpoint bad_request error.
+func NewRunMarketplaceTokenBackfillBadRequest(body *RunMarketplaceTokenBackfillBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRunMarketplaceTokenBackfillNotFound builds a admin service
+// runMarketplaceTokenBackfill endpoint not_found error.
+func NewRunMarketplaceTokenBackfillNotFound(body *RunMarketplaceTokenBackfillNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRunMarketplaceTokenBackfillConflict builds a admin service
+// runMarketplaceTokenBackfill endpoint conflict error.
+func NewRunMarketplaceTokenBackfillConflict(body *RunMarketplaceTokenBackfillConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRunMarketplaceTokenBackfillUnsupportedMedia builds a admin service
+// runMarketplaceTokenBackfill endpoint unsupported_media error.
+func NewRunMarketplaceTokenBackfillUnsupportedMedia(body *RunMarketplaceTokenBackfillUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRunMarketplaceTokenBackfillInvalid builds a admin service
+// runMarketplaceTokenBackfill endpoint invalid error.
+func NewRunMarketplaceTokenBackfillInvalid(body *RunMarketplaceTokenBackfillInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRunMarketplaceTokenBackfillInvariantViolation builds a admin service
+// runMarketplaceTokenBackfill endpoint invariant_violation error.
+func NewRunMarketplaceTokenBackfillInvariantViolation(body *RunMarketplaceTokenBackfillInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRunMarketplaceTokenBackfillUnexpected builds a admin service
+// runMarketplaceTokenBackfill endpoint unexpected error.
+func NewRunMarketplaceTokenBackfillUnexpected(body *RunMarketplaceTokenBackfillUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRunMarketplaceTokenBackfillGatewayError builds a admin service
+// runMarketplaceTokenBackfill endpoint gateway_error error.
+func NewRunMarketplaceTokenBackfillGatewayError(body *RunMarketplaceTokenBackfillGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRunRunnerKeyOrganizationBackfillAdminRunnerKeyOrganizationBackfillOK
+// builds a "admin" service "runRunnerKeyOrganizationBackfill" endpoint result
+// from a HTTP "OK" response.
+func NewRunRunnerKeyOrganizationBackfillAdminRunnerKeyOrganizationBackfillOK(body *RunRunnerKeyOrganizationBackfillResponseBody) *admin.AdminRunnerKeyOrganizationBackfill {
+	v := &admin.AdminRunnerKeyOrganizationBackfill{
+		Filled:              *body.Filled,
+		Pending:             *body.Pending,
+		MissingOrganization: *body.MissingOrganization,
+	}
+
+	return v
+}
+
+// NewRunRunnerKeyOrganizationBackfillUnauthorized builds a admin service
+// runRunnerKeyOrganizationBackfill endpoint unauthorized error.
+func NewRunRunnerKeyOrganizationBackfillUnauthorized(body *RunRunnerKeyOrganizationBackfillUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRunRunnerKeyOrganizationBackfillForbidden builds a admin service
+// runRunnerKeyOrganizationBackfill endpoint forbidden error.
+func NewRunRunnerKeyOrganizationBackfillForbidden(body *RunRunnerKeyOrganizationBackfillForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRunRunnerKeyOrganizationBackfillBadRequest builds a admin service
+// runRunnerKeyOrganizationBackfill endpoint bad_request error.
+func NewRunRunnerKeyOrganizationBackfillBadRequest(body *RunRunnerKeyOrganizationBackfillBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRunRunnerKeyOrganizationBackfillNotFound builds a admin service
+// runRunnerKeyOrganizationBackfill endpoint not_found error.
+func NewRunRunnerKeyOrganizationBackfillNotFound(body *RunRunnerKeyOrganizationBackfillNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRunRunnerKeyOrganizationBackfillConflict builds a admin service
+// runRunnerKeyOrganizationBackfill endpoint conflict error.
+func NewRunRunnerKeyOrganizationBackfillConflict(body *RunRunnerKeyOrganizationBackfillConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRunRunnerKeyOrganizationBackfillUnsupportedMedia builds a admin service
+// runRunnerKeyOrganizationBackfill endpoint unsupported_media error.
+func NewRunRunnerKeyOrganizationBackfillUnsupportedMedia(body *RunRunnerKeyOrganizationBackfillUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRunRunnerKeyOrganizationBackfillInvalid builds a admin service
+// runRunnerKeyOrganizationBackfill endpoint invalid error.
+func NewRunRunnerKeyOrganizationBackfillInvalid(body *RunRunnerKeyOrganizationBackfillInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRunRunnerKeyOrganizationBackfillInvariantViolation builds a admin service
+// runRunnerKeyOrganizationBackfill endpoint invariant_violation error.
+func NewRunRunnerKeyOrganizationBackfillInvariantViolation(body *RunRunnerKeyOrganizationBackfillInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRunRunnerKeyOrganizationBackfillUnexpected builds a admin service
+// runRunnerKeyOrganizationBackfill endpoint unexpected error.
+func NewRunRunnerKeyOrganizationBackfillUnexpected(body *RunRunnerKeyOrganizationBackfillUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRunRunnerKeyOrganizationBackfillGatewayError builds a admin service
+// runRunnerKeyOrganizationBackfill endpoint gateway_error error.
+func NewRunRunnerKeyOrganizationBackfillGatewayError(body *RunRunnerKeyOrganizationBackfillGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewGetProjectRedeployPreviewAdminProjectRedeployPreviewOK builds a "admin"
 // service "getProjectRedeployPreview" endpoint result from a HTTP "OK"
 // response.
@@ -54901,6 +56420,184 @@ func NewGetHooksRolloutUnexpected(body *GetHooksRolloutUnexpectedResponseBody) *
 // NewGetHooksRolloutGatewayError builds a admin service getHooksRollout
 // endpoint gateway_error error.
 func NewGetHooksRolloutGatewayError(body *GetHooksRolloutGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetHooksReleaseProgressAdminHooksReleaseProgressOK builds a "admin"
+// service "getHooksReleaseProgress" endpoint result from a HTTP "OK" response.
+func NewGetHooksReleaseProgressAdminHooksReleaseProgressOK(body *GetHooksReleaseProgressResponseBody) *admin.AdminHooksReleaseProgress {
+	v := &admin.AdminHooksReleaseProgress{
+		CurrentVersion:            *body.CurrentVersion,
+		CurrentBinaryVersion:      body.CurrentBinaryVersion,
+		Organizations:             *body.Organizations,
+		OrganizationsCleared:      *body.OrganizationsCleared,
+		OrganizationsHeld:         *body.OrganizationsHeld,
+		OrganizationsOnLegacyFlag: *body.OrganizationsOnLegacyFlag,
+		Repos:                     *body.Repos,
+		ReposOnCurrent:            *body.ReposOnCurrent,
+	}
+	v.RepoVersions = make([]*admin.AdminHooksReleaseRepoVersion, len(body.RepoVersions))
+	for i, val := range body.RepoVersions {
+		if val == nil {
+			v.RepoVersions[i] = nil
+			continue
+		}
+		v.RepoVersions[i] = unmarshalAdminHooksReleaseRepoVersionResponseBodyToAdminAdminHooksReleaseRepoVersion(val)
+	}
+	if body.Fleet != nil {
+		v.Fleet = unmarshalAdminHooksReleaseFleetResponseBodyToAdminAdminHooksReleaseFleet(body.Fleet)
+	}
+
+	return v
+}
+
+// NewGetHooksReleaseProgressUnauthorized builds a admin service
+// getHooksReleaseProgress endpoint unauthorized error.
+func NewGetHooksReleaseProgressUnauthorized(body *GetHooksReleaseProgressUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetHooksReleaseProgressForbidden builds a admin service
+// getHooksReleaseProgress endpoint forbidden error.
+func NewGetHooksReleaseProgressForbidden(body *GetHooksReleaseProgressForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetHooksReleaseProgressBadRequest builds a admin service
+// getHooksReleaseProgress endpoint bad_request error.
+func NewGetHooksReleaseProgressBadRequest(body *GetHooksReleaseProgressBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetHooksReleaseProgressNotFound builds a admin service
+// getHooksReleaseProgress endpoint not_found error.
+func NewGetHooksReleaseProgressNotFound(body *GetHooksReleaseProgressNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetHooksReleaseProgressConflict builds a admin service
+// getHooksReleaseProgress endpoint conflict error.
+func NewGetHooksReleaseProgressConflict(body *GetHooksReleaseProgressConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetHooksReleaseProgressUnsupportedMedia builds a admin service
+// getHooksReleaseProgress endpoint unsupported_media error.
+func NewGetHooksReleaseProgressUnsupportedMedia(body *GetHooksReleaseProgressUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetHooksReleaseProgressInvalid builds a admin service
+// getHooksReleaseProgress endpoint invalid error.
+func NewGetHooksReleaseProgressInvalid(body *GetHooksReleaseProgressInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetHooksReleaseProgressInvariantViolation builds a admin service
+// getHooksReleaseProgress endpoint invariant_violation error.
+func NewGetHooksReleaseProgressInvariantViolation(body *GetHooksReleaseProgressInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetHooksReleaseProgressUnexpected builds a admin service
+// getHooksReleaseProgress endpoint unexpected error.
+func NewGetHooksReleaseProgressUnexpected(body *GetHooksReleaseProgressUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetHooksReleaseProgressGatewayError builds a admin service
+// getHooksReleaseProgress endpoint gateway_error error.
+func NewGetHooksReleaseProgressGatewayError(body *GetHooksReleaseProgressGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -60523,6 +62220,83 @@ func ValidateBackfillMcpConnectGrantsResponseBody(body *BackfillMcpConnectGrants
 	return
 }
 
+// ValidateGetSecretBackfillsResponseBody runs the validations defined on
+// GetSecretBackfillsResponseBody
+func ValidateGetSecretBackfillsResponseBody(body *GetSecretBackfillsResponseBody) (err error) {
+	if body.MarketplaceTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("marketplace_tokens", "body"))
+	}
+	if body.RunnerKeyOrganizations == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("runner_key_organizations", "body"))
+	}
+	if body.Organizations == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organizations", "body"))
+	}
+	if body.MarketplaceTokens != nil {
+		if err2 := ValidateAdminMarketplaceTokenBackfillResponseBody(body.MarketplaceTokens); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.RunnerKeyOrganizations != nil {
+		if err2 := ValidateAdminRunnerKeyOrganizationBackfillResponseBody(body.RunnerKeyOrganizations); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	for _, e := range body.Organizations {
+		if e != nil {
+			if err2 := ValidateAdminSecretBackfillOrganizationResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateRunMarketplaceTokenBackfillResponseBody runs the validations defined
+// on RunMarketplaceTokenBackfillResponseBody
+func ValidateRunMarketplaceTokenBackfillResponseBody(body *RunMarketplaceTokenBackfillResponseBody) (err error) {
+	if body.Attributed == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("attributed", "body"))
+	}
+	if body.Moved == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("moved", "body"))
+	}
+	if body.Skipped == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("skipped", "body"))
+	}
+	if body.NeedsOrganizationKey == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("needs_organization_key", "body"))
+	}
+	if body.Unattributed == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("unattributed", "body"))
+	}
+	if body.Legacy == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("legacy", "body"))
+	}
+	if body.Hashed == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("hashed", "body"))
+	}
+	if body.MissingOrganization == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("missing_organization", "body"))
+	}
+	return
+}
+
+// ValidateRunRunnerKeyOrganizationBackfillResponseBody runs the validations
+// defined on RunRunnerKeyOrganizationBackfillResponseBody
+func ValidateRunRunnerKeyOrganizationBackfillResponseBody(body *RunRunnerKeyOrganizationBackfillResponseBody) (err error) {
+	if body.Filled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("filled", "body"))
+	}
+	if body.Pending == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("pending", "body"))
+	}
+	if body.MissingOrganization == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("missing_organization", "body"))
+	}
+	return
+}
+
 // ValidateGetProjectRedeployPreviewResponseBody runs the validations defined
 // on GetProjectRedeployPreviewResponseBody
 func ValidateGetProjectRedeployPreviewResponseBody(body *GetProjectRedeployPreviewResponseBody) (err error) {
@@ -61013,6 +62787,48 @@ func ValidateGetHooksRolloutResponseBody(body *GetHooksRolloutResponseBody) (err
 			if err2 := ValidateAdminHooksRolloutChangeResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
+		}
+	}
+	return
+}
+
+// ValidateGetHooksReleaseProgressResponseBody runs the validations defined on
+// GetHooksReleaseProgressResponseBody
+func ValidateGetHooksReleaseProgressResponseBody(body *GetHooksReleaseProgressResponseBody) (err error) {
+	if body.CurrentVersion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("current_version", "body"))
+	}
+	if body.Organizations == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organizations", "body"))
+	}
+	if body.OrganizationsCleared == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organizations_cleared", "body"))
+	}
+	if body.OrganizationsHeld == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organizations_held", "body"))
+	}
+	if body.OrganizationsOnLegacyFlag == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organizations_on_legacy_flag", "body"))
+	}
+	if body.Repos == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("repos", "body"))
+	}
+	if body.ReposOnCurrent == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("repos_on_current", "body"))
+	}
+	if body.RepoVersions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("repo_versions", "body"))
+	}
+	for _, e := range body.RepoVersions {
+		if e != nil {
+			if err2 := ValidateAdminHooksReleaseRepoVersionResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	if body.Fleet != nil {
+		if err2 := ValidateAdminHooksReleaseFleetResponseBody(body.Fleet); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	return
@@ -87454,6 +89270,762 @@ func ValidateBackfillMcpConnectGrantsGatewayErrorResponseBody(body *BackfillMcpC
 	return
 }
 
+// ValidateGetSecretBackfillsUnauthorizedResponseBody runs the validations
+// defined on getSecretBackfills_unauthorized_response_body
+func ValidateGetSecretBackfillsUnauthorizedResponseBody(body *GetSecretBackfillsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetSecretBackfillsForbiddenResponseBody runs the validations defined
+// on getSecretBackfills_forbidden_response_body
+func ValidateGetSecretBackfillsForbiddenResponseBody(body *GetSecretBackfillsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetSecretBackfillsBadRequestResponseBody runs the validations
+// defined on getSecretBackfills_bad_request_response_body
+func ValidateGetSecretBackfillsBadRequestResponseBody(body *GetSecretBackfillsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetSecretBackfillsNotFoundResponseBody runs the validations defined
+// on getSecretBackfills_not_found_response_body
+func ValidateGetSecretBackfillsNotFoundResponseBody(body *GetSecretBackfillsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetSecretBackfillsConflictResponseBody runs the validations defined
+// on getSecretBackfills_conflict_response_body
+func ValidateGetSecretBackfillsConflictResponseBody(body *GetSecretBackfillsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetSecretBackfillsUnsupportedMediaResponseBody runs the validations
+// defined on getSecretBackfills_unsupported_media_response_body
+func ValidateGetSecretBackfillsUnsupportedMediaResponseBody(body *GetSecretBackfillsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetSecretBackfillsInvalidResponseBody runs the validations defined
+// on getSecretBackfills_invalid_response_body
+func ValidateGetSecretBackfillsInvalidResponseBody(body *GetSecretBackfillsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetSecretBackfillsInvariantViolationResponseBody runs the
+// validations defined on getSecretBackfills_invariant_violation_response_body
+func ValidateGetSecretBackfillsInvariantViolationResponseBody(body *GetSecretBackfillsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetSecretBackfillsUnexpectedResponseBody runs the validations
+// defined on getSecretBackfills_unexpected_response_body
+func ValidateGetSecretBackfillsUnexpectedResponseBody(body *GetSecretBackfillsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetSecretBackfillsGatewayErrorResponseBody runs the validations
+// defined on getSecretBackfills_gateway_error_response_body
+func ValidateGetSecretBackfillsGatewayErrorResponseBody(body *GetSecretBackfillsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRunMarketplaceTokenBackfillUnavailableResponseBody runs the
+// validations defined on runMarketplaceTokenBackfill_unavailable_response_body
+func ValidateRunMarketplaceTokenBackfillUnavailableResponseBody(body *RunMarketplaceTokenBackfillUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRunMarketplaceTokenBackfillUnauthorizedResponseBody runs the
+// validations defined on runMarketplaceTokenBackfill_unauthorized_response_body
+func ValidateRunMarketplaceTokenBackfillUnauthorizedResponseBody(body *RunMarketplaceTokenBackfillUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRunMarketplaceTokenBackfillForbiddenResponseBody runs the
+// validations defined on runMarketplaceTokenBackfill_forbidden_response_body
+func ValidateRunMarketplaceTokenBackfillForbiddenResponseBody(body *RunMarketplaceTokenBackfillForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRunMarketplaceTokenBackfillBadRequestResponseBody runs the
+// validations defined on runMarketplaceTokenBackfill_bad_request_response_body
+func ValidateRunMarketplaceTokenBackfillBadRequestResponseBody(body *RunMarketplaceTokenBackfillBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRunMarketplaceTokenBackfillNotFoundResponseBody runs the validations
+// defined on runMarketplaceTokenBackfill_not_found_response_body
+func ValidateRunMarketplaceTokenBackfillNotFoundResponseBody(body *RunMarketplaceTokenBackfillNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRunMarketplaceTokenBackfillConflictResponseBody runs the validations
+// defined on runMarketplaceTokenBackfill_conflict_response_body
+func ValidateRunMarketplaceTokenBackfillConflictResponseBody(body *RunMarketplaceTokenBackfillConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRunMarketplaceTokenBackfillUnsupportedMediaResponseBody runs the
+// validations defined on
+// runMarketplaceTokenBackfill_unsupported_media_response_body
+func ValidateRunMarketplaceTokenBackfillUnsupportedMediaResponseBody(body *RunMarketplaceTokenBackfillUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRunMarketplaceTokenBackfillInvalidResponseBody runs the validations
+// defined on runMarketplaceTokenBackfill_invalid_response_body
+func ValidateRunMarketplaceTokenBackfillInvalidResponseBody(body *RunMarketplaceTokenBackfillInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRunMarketplaceTokenBackfillInvariantViolationResponseBody runs the
+// validations defined on
+// runMarketplaceTokenBackfill_invariant_violation_response_body
+func ValidateRunMarketplaceTokenBackfillInvariantViolationResponseBody(body *RunMarketplaceTokenBackfillInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRunMarketplaceTokenBackfillUnexpectedResponseBody runs the
+// validations defined on runMarketplaceTokenBackfill_unexpected_response_body
+func ValidateRunMarketplaceTokenBackfillUnexpectedResponseBody(body *RunMarketplaceTokenBackfillUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRunMarketplaceTokenBackfillGatewayErrorResponseBody runs the
+// validations defined on
+// runMarketplaceTokenBackfill_gateway_error_response_body
+func ValidateRunMarketplaceTokenBackfillGatewayErrorResponseBody(body *RunMarketplaceTokenBackfillGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRunRunnerKeyOrganizationBackfillUnauthorizedResponseBody runs the
+// validations defined on
+// runRunnerKeyOrganizationBackfill_unauthorized_response_body
+func ValidateRunRunnerKeyOrganizationBackfillUnauthorizedResponseBody(body *RunRunnerKeyOrganizationBackfillUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRunRunnerKeyOrganizationBackfillForbiddenResponseBody runs the
+// validations defined on
+// runRunnerKeyOrganizationBackfill_forbidden_response_body
+func ValidateRunRunnerKeyOrganizationBackfillForbiddenResponseBody(body *RunRunnerKeyOrganizationBackfillForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRunRunnerKeyOrganizationBackfillBadRequestResponseBody runs the
+// validations defined on
+// runRunnerKeyOrganizationBackfill_bad_request_response_body
+func ValidateRunRunnerKeyOrganizationBackfillBadRequestResponseBody(body *RunRunnerKeyOrganizationBackfillBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRunRunnerKeyOrganizationBackfillNotFoundResponseBody runs the
+// validations defined on
+// runRunnerKeyOrganizationBackfill_not_found_response_body
+func ValidateRunRunnerKeyOrganizationBackfillNotFoundResponseBody(body *RunRunnerKeyOrganizationBackfillNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRunRunnerKeyOrganizationBackfillConflictResponseBody runs the
+// validations defined on
+// runRunnerKeyOrganizationBackfill_conflict_response_body
+func ValidateRunRunnerKeyOrganizationBackfillConflictResponseBody(body *RunRunnerKeyOrganizationBackfillConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRunRunnerKeyOrganizationBackfillUnsupportedMediaResponseBody runs
+// the validations defined on
+// runRunnerKeyOrganizationBackfill_unsupported_media_response_body
+func ValidateRunRunnerKeyOrganizationBackfillUnsupportedMediaResponseBody(body *RunRunnerKeyOrganizationBackfillUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRunRunnerKeyOrganizationBackfillInvalidResponseBody runs the
+// validations defined on runRunnerKeyOrganizationBackfill_invalid_response_body
+func ValidateRunRunnerKeyOrganizationBackfillInvalidResponseBody(body *RunRunnerKeyOrganizationBackfillInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRunRunnerKeyOrganizationBackfillInvariantViolationResponseBody runs
+// the validations defined on
+// runRunnerKeyOrganizationBackfill_invariant_violation_response_body
+func ValidateRunRunnerKeyOrganizationBackfillInvariantViolationResponseBody(body *RunRunnerKeyOrganizationBackfillInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRunRunnerKeyOrganizationBackfillUnexpectedResponseBody runs the
+// validations defined on
+// runRunnerKeyOrganizationBackfill_unexpected_response_body
+func ValidateRunRunnerKeyOrganizationBackfillUnexpectedResponseBody(body *RunRunnerKeyOrganizationBackfillUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRunRunnerKeyOrganizationBackfillGatewayErrorResponseBody runs the
+// validations defined on
+// runRunnerKeyOrganizationBackfill_gateway_error_response_body
+func ValidateRunRunnerKeyOrganizationBackfillGatewayErrorResponseBody(body *RunRunnerKeyOrganizationBackfillGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateGetProjectRedeployPreviewUnauthorizedResponseBody runs the
 // validations defined on getProjectRedeployPreview_unauthorized_response_body
 func ValidateGetProjectRedeployPreviewUnauthorizedResponseBody(body *GetProjectRedeployPreviewUnauthorizedResponseBody) (err error) {
@@ -92262,6 +94834,248 @@ func ValidateGetHooksRolloutUnexpectedResponseBody(body *GetHooksRolloutUnexpect
 // ValidateGetHooksRolloutGatewayErrorResponseBody runs the validations defined
 // on getHooksRollout_gateway_error_response_body
 func ValidateGetHooksRolloutGatewayErrorResponseBody(body *GetHooksRolloutGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetHooksReleaseProgressUnauthorizedResponseBody runs the validations
+// defined on getHooksReleaseProgress_unauthorized_response_body
+func ValidateGetHooksReleaseProgressUnauthorizedResponseBody(body *GetHooksReleaseProgressUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetHooksReleaseProgressForbiddenResponseBody runs the validations
+// defined on getHooksReleaseProgress_forbidden_response_body
+func ValidateGetHooksReleaseProgressForbiddenResponseBody(body *GetHooksReleaseProgressForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetHooksReleaseProgressBadRequestResponseBody runs the validations
+// defined on getHooksReleaseProgress_bad_request_response_body
+func ValidateGetHooksReleaseProgressBadRequestResponseBody(body *GetHooksReleaseProgressBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetHooksReleaseProgressNotFoundResponseBody runs the validations
+// defined on getHooksReleaseProgress_not_found_response_body
+func ValidateGetHooksReleaseProgressNotFoundResponseBody(body *GetHooksReleaseProgressNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetHooksReleaseProgressConflictResponseBody runs the validations
+// defined on getHooksReleaseProgress_conflict_response_body
+func ValidateGetHooksReleaseProgressConflictResponseBody(body *GetHooksReleaseProgressConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetHooksReleaseProgressUnsupportedMediaResponseBody runs the
+// validations defined on
+// getHooksReleaseProgress_unsupported_media_response_body
+func ValidateGetHooksReleaseProgressUnsupportedMediaResponseBody(body *GetHooksReleaseProgressUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetHooksReleaseProgressInvalidResponseBody runs the validations
+// defined on getHooksReleaseProgress_invalid_response_body
+func ValidateGetHooksReleaseProgressInvalidResponseBody(body *GetHooksReleaseProgressInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetHooksReleaseProgressInvariantViolationResponseBody runs the
+// validations defined on
+// getHooksReleaseProgress_invariant_violation_response_body
+func ValidateGetHooksReleaseProgressInvariantViolationResponseBody(body *GetHooksReleaseProgressInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetHooksReleaseProgressUnexpectedResponseBody runs the validations
+// defined on getHooksReleaseProgress_unexpected_response_body
+func ValidateGetHooksReleaseProgressUnexpectedResponseBody(body *GetHooksReleaseProgressUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetHooksReleaseProgressGatewayErrorResponseBody runs the validations
+// defined on getHooksReleaseProgress_gateway_error_response_body
+func ValidateGetHooksReleaseProgressGatewayErrorResponseBody(body *GetHooksReleaseProgressGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -98025,6 +100839,75 @@ func ValidateAdminUpstreamOAuthMigrationStatusResponseBody(body *AdminUpstreamOA
 	return
 }
 
+// ValidateAdminMarketplaceTokenBackfillResponseBody runs the validations
+// defined on AdminMarketplaceTokenBackfillResponseBody
+func ValidateAdminMarketplaceTokenBackfillResponseBody(body *AdminMarketplaceTokenBackfillResponseBody) (err error) {
+	if body.Attributed == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("attributed", "body"))
+	}
+	if body.Moved == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("moved", "body"))
+	}
+	if body.Skipped == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("skipped", "body"))
+	}
+	if body.NeedsOrganizationKey == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("needs_organization_key", "body"))
+	}
+	if body.Unattributed == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("unattributed", "body"))
+	}
+	if body.Legacy == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("legacy", "body"))
+	}
+	if body.Hashed == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("hashed", "body"))
+	}
+	if body.MissingOrganization == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("missing_organization", "body"))
+	}
+	return
+}
+
+// ValidateAdminRunnerKeyOrganizationBackfillResponseBody runs the validations
+// defined on AdminRunnerKeyOrganizationBackfillResponseBody
+func ValidateAdminRunnerKeyOrganizationBackfillResponseBody(body *AdminRunnerKeyOrganizationBackfillResponseBody) (err error) {
+	if body.Filled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("filled", "body"))
+	}
+	if body.Pending == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("pending", "body"))
+	}
+	if body.MissingOrganization == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("missing_organization", "body"))
+	}
+	return
+}
+
+// ValidateAdminSecretBackfillOrganizationResponseBody runs the validations
+// defined on AdminSecretBackfillOrganizationResponseBody
+func ValidateAdminSecretBackfillOrganizationResponseBody(body *AdminSecretBackfillOrganizationResponseBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.LegacyTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("legacy_tokens", "body"))
+	}
+	if body.UnattributedConnections == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("unattributed_connections", "body"))
+	}
+	if body.PendingRunnerKeys == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("pending_runner_keys", "body"))
+	}
+	return
+}
+
 // ValidateAdminCustomDomainResponseBody runs the validations defined on
 // AdminCustomDomainResponseBody
 func ValidateAdminCustomDomainResponseBody(body *AdminCustomDomainResponseBody) (err error) {
@@ -98422,6 +101305,63 @@ func ValidateAdminHooksRolloutChangeResponseBody(body *AdminHooksRolloutChangeRe
 	return
 }
 
+// ValidateAdminHooksReleaseRepoVersionResponseBody runs the validations
+// defined on AdminHooksReleaseRepoVersionResponseBody
+func ValidateAdminHooksReleaseRepoVersionResponseBody(body *AdminHooksReleaseRepoVersionResponseBody) (err error) {
+	if body.Version == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
+	}
+	if body.Repos == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("repos", "body"))
+	}
+	return
+}
+
+// ValidateAdminHooksReleaseFleetResponseBody runs the validations defined on
+// AdminHooksReleaseFleetResponseBody
+func ValidateAdminHooksReleaseFleetResponseBody(body *AdminHooksReleaseFleetResponseBody) (err error) {
+	if body.WindowDays == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("window_days", "body"))
+	}
+	if body.Installs == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("installs", "body"))
+	}
+	if body.InstallsOnCurrent == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("installs_on_current", "body"))
+	}
+	if body.Versions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("versions", "body"))
+	}
+	for _, e := range body.Versions {
+		if e != nil {
+			if err2 := ValidateAdminHooksReleaseInstallVersionResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateAdminHooksReleaseInstallVersionResponseBody runs the validations
+// defined on AdminHooksReleaseInstallVersionResponseBody
+func ValidateAdminHooksReleaseInstallVersionResponseBody(body *AdminHooksReleaseInstallVersionResponseBody) (err error) {
+	if body.Version == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
+	}
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.Installs == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("installs", "body"))
+	}
+	if body.Status != nil {
+		if !(*body.Status == "current" || *body.Status == "behind" || *body.Status == "unsupported" || *body.Status == "unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"current", "behind", "unsupported", "unknown"}))
+		}
+	}
+	return
+}
+
 // ValidateAdminTailscaleOAuthMigrationOrganizationResponseBody runs the
 // validations defined on AdminTailscaleOAuthMigrationOrganizationResponseBody
 func ValidateAdminTailscaleOAuthMigrationOrganizationResponseBody(body *AdminTailscaleOAuthMigrationOrganizationResponseBody) (err error) {
@@ -98571,6 +101511,9 @@ func ValidateAdminOrganizationEncryptionTransitionRowResponseBody(body *AdminOrg
 	if body.State == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("state", "body"))
 	}
+	if body.ValueCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("value_count", "body"))
+	}
 	if body.State != nil {
 		if !(*body.State == "platform_key" || *body.State == "dual_write" || *body.State == "org_kms") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.state", *body.State, []any{"platform_key", "dual_write", "org_kms"}))
@@ -98590,6 +101533,9 @@ func ValidateAdminOrganizationEncryptionTransitionRowResponseBody(body *AdminOrg
 	}
 	if body.LastVerifiedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_verified_at", *body.LastVerifiedAt, goa.FormatDateTime))
+	}
+	if body.LastWrittenAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_written_at", *body.LastWrittenAt, goa.FormatDateTime))
 	}
 	return
 }

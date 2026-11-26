@@ -122,6 +122,9 @@ type Endpoints struct {
 	DisableUpstreamAuthEnforcement          goa.Endpoint
 	BackfillMcpAuthGrants                   goa.Endpoint
 	BackfillMcpConnectGrants                goa.Endpoint
+	GetSecretBackfills                      goa.Endpoint
+	RunMarketplaceTokenBackfill             goa.Endpoint
+	RunRunnerKeyOrganizationBackfill        goa.Endpoint
 	GetProjectRedeployPreview               goa.Endpoint
 	RedeployProject                         goa.Endpoint
 	ListCustomDomains                       goa.Endpoint
@@ -141,6 +144,7 @@ type Endpoints struct {
 	MigrateOrganizationAssistantIdentities  goa.Endpoint
 	MigrateOrganizationAssistantsToKit      goa.Endpoint
 	GetHooksRollout                         goa.Endpoint
+	GetHooksReleaseProgress                 goa.Endpoint
 	SetHooksRolloutDefault                  goa.Endpoint
 	GetOrganizationHooksRollout             goa.Endpoint
 	SetOrganizationHooksRollout             goa.Endpoint
@@ -283,6 +287,9 @@ func NewEndpoints(s Service) *Endpoints {
 		DisableUpstreamAuthEnforcement:          NewDisableUpstreamAuthEnforcementEndpoint(s, a.APIKeyAuth),
 		BackfillMcpAuthGrants:                   NewBackfillMcpAuthGrantsEndpoint(s, a.APIKeyAuth),
 		BackfillMcpConnectGrants:                NewBackfillMcpConnectGrantsEndpoint(s, a.APIKeyAuth),
+		GetSecretBackfills:                      NewGetSecretBackfillsEndpoint(s, a.APIKeyAuth),
+		RunMarketplaceTokenBackfill:             NewRunMarketplaceTokenBackfillEndpoint(s, a.APIKeyAuth),
+		RunRunnerKeyOrganizationBackfill:        NewRunRunnerKeyOrganizationBackfillEndpoint(s, a.APIKeyAuth),
 		GetProjectRedeployPreview:               NewGetProjectRedeployPreviewEndpoint(s, a.APIKeyAuth),
 		RedeployProject:                         NewRedeployProjectEndpoint(s, a.APIKeyAuth),
 		ListCustomDomains:                       NewListCustomDomainsEndpoint(s, a.APIKeyAuth),
@@ -302,6 +309,7 @@ func NewEndpoints(s Service) *Endpoints {
 		MigrateOrganizationAssistantIdentities:  NewMigrateOrganizationAssistantIdentitiesEndpoint(s, a.APIKeyAuth),
 		MigrateOrganizationAssistantsToKit:      NewMigrateOrganizationAssistantsToKitEndpoint(s, a.APIKeyAuth),
 		GetHooksRollout:                         NewGetHooksRolloutEndpoint(s, a.APIKeyAuth),
+		GetHooksReleaseProgress:                 NewGetHooksReleaseProgressEndpoint(s, a.APIKeyAuth),
 		SetHooksRolloutDefault:                  NewSetHooksRolloutDefaultEndpoint(s, a.APIKeyAuth),
 		GetOrganizationHooksRollout:             NewGetOrganizationHooksRolloutEndpoint(s, a.APIKeyAuth),
 		SetOrganizationHooksRollout:             NewSetOrganizationHooksRolloutEndpoint(s, a.APIKeyAuth),
@@ -424,6 +432,9 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.DisableUpstreamAuthEnforcement = m(e.DisableUpstreamAuthEnforcement)
 	e.BackfillMcpAuthGrants = m(e.BackfillMcpAuthGrants)
 	e.BackfillMcpConnectGrants = m(e.BackfillMcpConnectGrants)
+	e.GetSecretBackfills = m(e.GetSecretBackfills)
+	e.RunMarketplaceTokenBackfill = m(e.RunMarketplaceTokenBackfill)
+	e.RunRunnerKeyOrganizationBackfill = m(e.RunRunnerKeyOrganizationBackfill)
 	e.GetProjectRedeployPreview = m(e.GetProjectRedeployPreview)
 	e.RedeployProject = m(e.RedeployProject)
 	e.ListCustomDomains = m(e.ListCustomDomains)
@@ -443,6 +454,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.MigrateOrganizationAssistantIdentities = m(e.MigrateOrganizationAssistantIdentities)
 	e.MigrateOrganizationAssistantsToKit = m(e.MigrateOrganizationAssistantsToKit)
 	e.GetHooksRollout = m(e.GetHooksRollout)
+	e.GetHooksReleaseProgress = m(e.GetHooksReleaseProgress)
 	e.SetHooksRolloutDefault = m(e.SetHooksRolloutDefault)
 	e.GetOrganizationHooksRollout = m(e.GetOrganizationHooksRollout)
 	e.SetOrganizationHooksRollout = m(e.SetOrganizationHooksRollout)
@@ -2835,6 +2847,75 @@ func NewBackfillMcpConnectGrantsEndpoint(s Service, authAPIKeyFn security.AuthAP
 	}
 }
 
+// NewGetSecretBackfillsEndpoint returns an endpoint function that calls the
+// method "getSecretBackfills" of service "admin".
+func NewGetSecretBackfillsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetSecretBackfillsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetSecretBackfills(ctx, p)
+	}
+}
+
+// NewRunMarketplaceTokenBackfillEndpoint returns an endpoint function that
+// calls the method "runMarketplaceTokenBackfill" of service "admin".
+func NewRunMarketplaceTokenBackfillEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RunMarketplaceTokenBackfillPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.RunMarketplaceTokenBackfill(ctx, p)
+	}
+}
+
+// NewRunRunnerKeyOrganizationBackfillEndpoint returns an endpoint function
+// that calls the method "runRunnerKeyOrganizationBackfill" of service "admin".
+func NewRunRunnerKeyOrganizationBackfillEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RunRunnerKeyOrganizationBackfillPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.RunRunnerKeyOrganizationBackfill(ctx, p)
+	}
+}
+
 // NewGetProjectRedeployPreviewEndpoint returns an endpoint function that calls
 // the method "getProjectRedeployPreview" of service "admin".
 func NewGetProjectRedeployPreviewEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
@@ -3272,6 +3353,29 @@ func NewGetHooksRolloutEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 			return nil, err
 		}
 		return s.GetHooksRollout(ctx, p)
+	}
+}
+
+// NewGetHooksReleaseProgressEndpoint returns an endpoint function that calls
+// the method "getHooksReleaseProgress" of service "admin".
+func NewGetHooksReleaseProgressEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetHooksReleaseProgressPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetHooksReleaseProgress(ctx, p)
 	}
 }
 

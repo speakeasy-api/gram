@@ -49,7 +49,7 @@ export type AdminBackfillMcpAuthGrantsMutationError =
  * backfillMcpAuthGrants admin
  *
  * @remarks
- * Grants unrestricted mcp:auth to every principal that holds any mcp:connect grant, in every organization. The connect grant's selectors are ignored. Safe to run more than once.
+ * Retired. Rejects authenticated calls and does not modify grants.
  */
 export function useAdminBackfillMcpAuthGrantsMutation(
   options?: MutationHookOptions<

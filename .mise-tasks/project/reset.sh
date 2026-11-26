@@ -175,8 +175,10 @@ WHERE id IN (SELECT id FROM journey_unproxied_sources)
   AND deleted IS FALSE;
 
 \echo 'Removing orphaned journey session state...'
-DELETE FROM remote_session_client_user_session_issuers
-WHERE user_session_issuer_id IN (SELECT id FROM journey_default_issuers);
+UPDATE principal_remote_session_bindings
+SET revoked_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE user_session_issuer_id IN (SELECT id FROM journey_default_issuers)
+  AND revoked_at IS NULL;
 
 UPDATE user_session_consents
 SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()

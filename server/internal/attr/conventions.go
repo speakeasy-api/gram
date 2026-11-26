@@ -1215,6 +1215,10 @@ const (
 	TelemetryCHRowCountKey         = attribute.Key("gram.telemetry.ch.row_count")
 	InferenceInputCountKey         = attribute.Key("gram.inference.input_count")
 	InferenceAcceptedMessagesKey   = attribute.Key("gram.inference.accepted_messages")
+
+	// TelemetryOverviewSourceKey names the table that served an observability overview.
+	TelemetryOverviewSourceKey = attribute.Key("gram.telemetry.overview.source")
+
 	// InferenceConversationOutcomeKey records how an Anthropic inference frame
 	// was mapped to a stored conversation: "session" (the frame's session id
 	// named an existing chat), "adopted_prefix" (the chat already holding the
@@ -1767,6 +1771,10 @@ func SlogCodexCloudTimestampFallbacks(v int) slog.Attr {
 }
 
 func TelemetryCHOperation(v string) attribute.KeyValue { return TelemetryCHOperationKey.String(v) }
+
+func TelemetryOverviewSource(v string) attribute.KeyValue {
+	return TelemetryOverviewSourceKey.String(v)
+}
 
 func TelemetryCHRowCount(v int) attribute.KeyValue { return TelemetryCHRowCountKey.Int(v) }
 func SlogTelemetryCHRowCount(v int) slog.Attr {

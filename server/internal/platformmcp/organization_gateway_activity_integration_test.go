@@ -50,12 +50,18 @@ type stubGatewayActivityAuthorizer struct {
 	readableProjects map[string]bool
 }
 
-func (s *stubGatewayActivityAuthorizer) FindMatched(_ context.Context, checks []authz.Check) ([]bool, error) {
-	matched := make([]bool, len(checks))
+func (s *stubGatewayActivityAuthorizer) Decide(_ context.Context, checks ...authz.Check) (authz.Decisions, error) {
+	decisions := authz.Decisions{AllAllowed: len(checks) > 0, Each: make([]authz.Decision, len(checks))}
 	for i, check := range checks {
-		matched[i] = check.Scope == authz.ScopeProjectRead && s.readableProjects[check.ResourceID]
+		allowed := check.Scope == authz.ScopeProjectRead && s.readableProjects[check.ResourceID]
+		reason := authz.ReasonNone
+		if !allowed {
+			reason = authz.ReasonNotGranted
+		}
+		decisions.Each[i] = authz.Decision{Allowed: allowed, Enforced: true, Reason: reason}
+		decisions.AllAllowed = decisions.AllAllowed && allowed
 	}
-	return matched, nil
+	return decisions, nil
 }
 
 func seedGatewayActivityServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, name string) uuid.UUID {

@@ -16,9 +16,11 @@ type Asset struct {
 	ProjectID uuid.NullUUID
 	// @access: confidential
 	OrganizationID pgtype.Text
-	// @access: confidential
+	// Stored asset name, which includes a content digest for chat attachments.
+	// @access: restricted
 	Name string
-	// @access: confidential
+	// Storage path for the asset, which includes a content digest for chat attachments.
+	// @access: restricted
 	Url string
 	// @access: confidential
 	Kind string
@@ -26,7 +28,8 @@ type Asset struct {
 	ContentType string
 	// @access: confidential
 	ContentLength int64
-	// @access: confidential
+	// SHA-256 digest of the stored asset content.
+	// @access: restricted
 	Sha256 string
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz

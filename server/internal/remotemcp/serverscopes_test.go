@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -78,7 +79,7 @@ func seedNamedScopeIssuer(t *testing.T, ctx context.Context, ti *testInstance, n
 	return issuer
 }
 
-// seedScopeClient registers a client with its own scope on issuer and binds it to each user session issuer.
+// seedScopeClient registers a client with its own scope and offers it on each issuer's sole server.
 func seedScopeClient(t *testing.T, ctx context.Context, ti *testInstance, issuer remotesessionsrepo.RemoteSessionIssuer, scope []string, userSessionIssuerIDs ...uuid.UUID) uuid.UUID {
 	t.Helper()
 	q := remotesessionsrepo.New(ti.conn)
@@ -91,12 +92,7 @@ func seedScopeClient(t *testing.T, ctx context.Context, ti *testInstance, issuer
 		Scope:                 scope,
 	})
 	require.NoError(t, err)
-	for _, id := range userSessionIssuerIDs {
-		require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
-			RemoteSessionClientID: client.ID,
-			UserSessionIssuerID:   id,
-		}))
-	}
+	require.NoError(t, upstreamclients.CaptureSoleConsumers(ctx, ti.conn, issuer.OrganizationID.String, issuer.ProjectID.UUID, userSessionIssuerIDs, []uuid.UUID{client.ID}))
 	return client.ID
 }
 
@@ -292,7 +288,7 @@ func TestGetServerScopes_ReportsResourceAndPerClientResolution(t *testing.T) {
 
 	own := seedScopeClient(t, ctx, ti, issuer, []string{"own:read"}, srv.userSessionIssuerID)
 	owner := seedScopeClient(t, ctx, ti, issuer, nil, srv.userSessionIssuerID)
-	// Bound to two servers' issuers, its grant is not qualified to this resource while owner serves it.
+	// Offered on two servers, its grant is not qualified to this resource while owner serves it.
 	shared := seedScopeClient(t, ctx, ti, issuer, nil, srv.userSessionIssuerID, other.userSessionIssuerID)
 
 	recordResource(t, ctx, ti, srv.url, []string{"read", "write"}, time.Now())

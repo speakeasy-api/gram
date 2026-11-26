@@ -29,18 +29,20 @@ import type { GetRegistryPromotionCandidateRequestBody } from "@gram/admin-clien
 import type { AdminInferenceKey } from "@gram/admin-client/models/components/admininferencekey";
 import { buildAdminGetUpstreamOAuthMigrationStatusQuery } from "@gram/admin-client/react-query/adminGetUpstreamOAuthMigrationStatus.core";
 import { buildAdminListUpstreamOAuthMigrationOrganizationsQuery } from "@gram/admin-client/react-query/adminListUpstreamOAuthMigrationOrganizations.core";
-import { buildAdminRunUpstreamOAuthMigrationMutation } from "@gram/admin-client/react-query/adminRunUpstreamOAuthMigration";
 import { buildAdminEnableUpstreamAuthEnforcementMutation } from "@gram/admin-client/react-query/adminEnableUpstreamAuthEnforcement";
-import { buildAdminBackfillMcpAuthGrantsMutation } from "@gram/admin-client/react-query/adminBackfillMcpAuthGrants";
-import type { AdminBackfillMCPAuthGrantsResult } from "@gram/admin-client/models/components/adminbackfillmcpauthgrantsresult";
 import type { AdminUpstreamOAuthMigrationOrganizations } from "@gram/admin-client/models/components/adminupstreamoauthmigrationorganizations";
-import type { AdminUpstreamOAuthMigrationRun } from "@gram/admin-client/models/components/adminupstreamoauthmigrationrun";
 import type { AdminUpstreamOAuthMigrationStatus } from "@gram/admin-client/models/components/adminupstreamoauthmigrationstatus";
 import { buildAdminListTailscaleOAuthMigrationQuery } from "@gram/admin-client/react-query/adminListTailscaleOAuthMigration.core";
 import { buildAdminRunTailscaleOAuthMigrationStepMutation } from "@gram/admin-client/react-query/adminRunTailscaleOAuthMigrationStep";
 import type { AdminTailscaleOAuthMigrationOrganization } from "@gram/admin-client/models/components/admintailscaleoauthmigrationorganization";
 import type { AdminTailscaleOAuthMigrationOrganizations } from "@gram/admin-client/models/components/admintailscaleoauthmigrationorganizations";
 import type { Step as TailscaleOAuthMigrationStep } from "@gram/admin-client/models/components/runtailscaleoauthmigrationsteprequestbody";
+import { buildAdminGetSecretBackfillsQuery } from "@gram/admin-client/react-query/adminGetSecretBackfills.core";
+import { buildAdminRunMarketplaceTokenBackfillMutation } from "@gram/admin-client/react-query/adminRunMarketplaceTokenBackfill";
+import { buildAdminRunRunnerKeyOrganizationBackfillMutation } from "@gram/admin-client/react-query/adminRunRunnerKeyOrganizationBackfill";
+import type { AdminMarketplaceTokenBackfill } from "@gram/admin-client/models/components/adminmarketplacetokenbackfill";
+import type { AdminRunnerKeyOrganizationBackfill } from "@gram/admin-client/models/components/adminrunnerkeyorganizationbackfill";
+import type { AdminSecretBackfills } from "@gram/admin-client/models/components/adminsecretbackfills";
 import { buildAdminGetOrganizationEncryptionQuery } from "@gram/admin-client/react-query/adminGetOrganizationEncryption.core";
 import { buildAdminListOrganizationEncryptionTransitionsQuery } from "@gram/admin-client/react-query/adminListOrganizationEncryptionTransitions.core";
 import { buildAdminEnrollOrganizationEncryptionMutation } from "@gram/admin-client/react-query/adminEnrollOrganizationEncryption";
@@ -1161,17 +1163,48 @@ export function runTailscaleOAuthMigrationStep(
   );
 }
 
-const generatedRunUpstreamOAuthMigrationMutation =
-  buildAdminRunUpstreamOAuthMigrationMutation(redirectingClient, {
+export function secretBackfillsQuery(): UseQueryOptions<AdminSecretBackfills> {
+  const generated = buildAdminGetSecretBackfillsQuery(redirectingClient, {
+    retries: { strategy: "none" },
+  });
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+    retry: false,
+  });
+}
+
+const generatedRunMarketplaceTokenBackfillMutation =
+  buildAdminRunMarketplaceTokenBackfillMutation(redirectingClient, {
     retries: { strategy: "none" },
   });
 
-export function runUpstreamOAuthMigration(
-  organizationID: string,
-): Promise<AdminUpstreamOAuthMigrationRun> {
+// The server refuses the run when its platform key fingerprint is not the one
+// the operator checked. Without an organization ID, the run covers every
+// organization.
+export function runMarketplaceTokenBackfill(
+  platformKeyFingerprint: string,
+  organizationId?: string,
+): Promise<AdminMarketplaceTokenBackfill> {
   return redirecting(
-    generatedRunUpstreamOAuthMigrationMutation.mutationFn({
-      request: { organizationId: organizationID },
+    generatedRunMarketplaceTokenBackfillMutation.mutationFn({
+      request: { platformKeyFingerprint, organizationId },
+    }),
+  );
+}
+
+const generatedRunRunnerKeyOrganizationBackfillMutation =
+  buildAdminRunRunnerKeyOrganizationBackfillMutation(redirectingClient, {
+    retries: { strategy: "none" },
+  });
+
+// Without an organization ID, the run covers every organization.
+export function runRunnerKeyOrganizationBackfill(
+  organizationId?: string,
+): Promise<AdminRunnerKeyOrganizationBackfill> {
+  return redirecting(
+    generatedRunRunnerKeyOrganizationBackfillMutation.mutationFn({
+      request: { organizationId },
     }),
   );
 }
@@ -1280,16 +1313,6 @@ export function useCurateRegistryPromotionCandidateMutation(): UseMutationResult
     retry: false,
   });
 }
-
-const generatedBackfillMcpAuthGrantsMutation =
-  buildAdminBackfillMcpAuthGrantsMutation(redirectingClient, {
-    retries: { strategy: "none" },
-  });
-
-export function backfillMcpAuthGrants(): Promise<AdminBackfillMCPAuthGrantsResult> {
-  return redirecting(generatedBackfillMcpAuthGrantsMutation.mutationFn({}));
-}
-
 export function organizationEncryptionQuery(
   organizationID: string,
 ): UseQueryOptions<AdminOrganizationEncryption> {

@@ -174,27 +174,6 @@ func (op *bindingOperation) lockAttachmentRegistration(ctx context.Context, clie
 	return nil
 }
 
-func (op *bindingOperation) ensureAttachmentParent(ctx context.Context, clientID uuid.UUID) error {
-	if err := op.queries.EnsurePrincipalAttachmentParents(ctx, repo.EnsurePrincipalAttachmentParentsParams{ClientIds: []uuid.UUID{clientID}, UserSessionIssuerID: op.issuerID, OrganizationID: op.organizationID, ProjectID: conv.ToNullUUID(op.projectID)}); err != nil {
-		return fmt.Errorf("ensure compatibility link for attachment: %w", err)
-	}
-	return nil
-}
-
-// lockAttachmentParentForUnlink protects active attachments while the legacy
-// link mutation API coexists with the composite FK. The caller must hold this
-// lock through the delete and commit in the same transaction.
-func lockAttachmentParentForUnlink(ctx context.Context, q *repo.Queries, orgID string, clientID, issuerID uuid.UUID) (bool, error) {
-	if err := q.LockRemoteSessionClientUserSessionIssuerLink(ctx, repo.LockRemoteSessionClientUserSessionIssuerLinkParams{RemoteSessionClientID: clientID, UserSessionIssuerID: issuerID, OrganizationID: orgID}); err != nil {
-		return false, fmt.Errorf("lock attachment parent: %w", err)
-	}
-	attached, err := q.HasLivePrincipalRemoteSessionBindingsForClientBinding(ctx, repo.HasLivePrincipalRemoteSessionBindingsForClientBindingParams{OrganizationID: orgID, RemoteSessionClientID: clientID, UserSessionIssuerID: issuerID})
-	if err != nil {
-		return false, fmt.Errorf("find active attachments for parent: %w", err)
-	}
-	return attached, nil
-}
-
 func (s *Service) AttachBinding(ctx context.Context, payload *gen.AttachBindingPayload) (*gen.PrincipalRemoteSessionBinding, error) {
 	op, err := s.beginBindingOperation(ctx, payload.PrincipalID, payload.UserSessionIssuerID, true)
 	if err != nil {
@@ -230,9 +209,6 @@ func (s *Service) AttachBinding(ctx context.Context, payload *gen.AttachBindingP
 	}
 	if err := op.lockAttachmentRegistration(ctx, clientID); err != nil {
 		return nil, err
-	}
-	if err := op.ensureAttachmentParent(ctx, clientID); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "ensure attachment parent")
 	}
 	row, err := op.queries.AttachPrincipalRemoteSessionBinding(ctx, repo.AttachPrincipalRemoteSessionBindingParams{
 		ProjectID: op.projectID, OrganizationID: op.organizationID, PrincipalID: op.principalID, UserSessionIssuerID: op.issuerID, SubjectUrn: op.subject.String(), RemoteSessionID: sessionID,

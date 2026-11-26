@@ -363,8 +363,8 @@ func TestReplaceGrantAudiencePreservesUnrelatedSelectorAndResource(t *testing.T)
 	policyID := "policy_123"
 	otherPolicyID := "policy_456"
 	userPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, "user_123")
-	selector := NewSelector(ScopeRiskPolicyEvaluate, policyID)
-	otherSelector := NewSelector(ScopeRiskPolicyEvaluate, otherPolicyID)
+	selector := NewSelector(ScopeRiskPolicyBypass, policyID)
+	otherSelector := NewSelector(ScopeRiskPolicyBypass, otherPolicyID)
 	serverSelector := Selector{
 		"resource_kind": ResourceKindRiskPolicy,
 		"resource_id":   policyID,
@@ -373,32 +373,32 @@ func TestReplaceGrantAudiencePreservesUnrelatedSelectorAndResource(t *testing.T)
 
 	seedOrganization(t, ctx, conn, organizationID)
 	require.NoError(t, ReplaceGrantAudience(ctx, conn, ResourceGrant{
-		Resource:   testResource(organizationID, ScopeRiskPolicyEvaluate, policyID),
+		Resource:   testResource(organizationID, ScopeRiskPolicyBypass, policyID),
 		Selector:   selector,
 		Principals: []urn.Principal{AllUsersPrincipal()},
 	}))
 	require.NoError(t, ReplaceGrantAudience(ctx, conn, ResourceGrant{
-		Resource:   testResource(organizationID, ScopeRiskPolicyEvaluate, otherPolicyID),
+		Resource:   testResource(organizationID, ScopeRiskPolicyBypass, otherPolicyID),
 		Selector:   otherSelector,
 		Principals: []urn.Principal{AllUsersPrincipal()},
 	}))
 	require.NoError(t, ReplaceGrantAudience(ctx, conn, ResourceGrant{
-		Resource:   testResource(organizationID, ScopeRiskPolicyEvaluate, policyID),
+		Resource:   testResource(organizationID, ScopeRiskPolicyBypass, policyID),
 		Selector:   serverSelector,
 		Principals: []urn.Principal{AllUsersPrincipal()},
 	}))
 	require.NoError(t, ReplaceGrantAudience(ctx, conn, ResourceGrant{
-		Resource:   testResource(organizationID, ScopeRiskPolicyEvaluate, policyID),
+		Resource:   testResource(organizationID, ScopeRiskPolicyBypass, policyID),
 		Selector:   selector,
 		Principals: []urn.Principal{userPrincipal},
 	}))
 
-	grants, err := ListGrantsForResource(ctx, conn, testResource(organizationID, ScopeRiskPolicyEvaluate, policyID))
+	grants, err := ListGrantsForResource(ctx, conn, testResource(organizationID, ScopeRiskPolicyBypass, policyID))
 	require.NoError(t, err)
 	require.Len(t, grants, 2)
 	require.ElementsMatch(t, []string{userPrincipal.String(), AllUsersPrincipal().String()}, []string{grants[0].PrincipalUrn, grants[1].PrincipalUrn})
 
-	otherGrants, err := ListGrantsForResource(ctx, conn, testResource(organizationID, ScopeRiskPolicyEvaluate, otherPolicyID))
+	otherGrants, err := ListGrantsForResource(ctx, conn, testResource(organizationID, ScopeRiskPolicyBypass, otherPolicyID))
 	require.NoError(t, err)
 	require.Len(t, otherGrants, 1)
 	require.Equal(t, AllUsersPrincipal().String(), otherGrants[0].PrincipalUrn)

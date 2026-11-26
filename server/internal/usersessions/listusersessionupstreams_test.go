@@ -237,11 +237,6 @@ func seedUpstream(t *testing.T, ctx context.Context, conn *pgxpool.Pool, clientP
 	})
 	require.NoError(t, err)
 
-	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessions_repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: client.ID,
-		UserSessionIssuerID:   userSessionIssuerID,
-	}))
-
 	_, err = q.UpsertRemoteSessionFixture(ctx, remotesessions_repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:             subject,
 		UserSessionIssuerID:    userSessionIssuerID,
@@ -260,8 +255,7 @@ func seedUpstream(t *testing.T, ctx context.Context, conn *pgxpool.Pool, clientP
 	return client.ID
 }
 
-// A sibling issuer can reuse the same user grant via a live typed offer,
-// but an issuer-client compatibility link alone is not reachability.
+// A sibling issuer can reuse the same user grant via a live typed offer.
 func TestListUserSessionsAttributesSiblingGrantOnlyThroughTypedReach(t *testing.T) {
 	t.Parallel()
 
@@ -300,10 +294,6 @@ func TestListUserSessionsAttributesSiblingGrantOnlyThroughTypedReach(t *testing.
 	require.NotNil(t, authCtx.ProjectID)
 
 	clientID := seedUpstream(t, ctx, ti.conn, conv.ToNullUUID(*authCtx.ProjectID), provenanceID, subject, "mcp.shared.example")
-	require.NoError(t, remotesessions_repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessions_repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: clientID,
-		UserSessionIssuerID:   siblingID,
-	}))
 
 	res, err := ti.service.ListUserSessions(ctx, &gen.ListUserSessionsPayload{
 		SessionToken:        nil,
@@ -318,7 +308,7 @@ func TestListUserSessionsAttributesSiblingGrantOnlyThroughTypedReach(t *testing.
 	})
 	require.NoError(t, err)
 	require.Len(t, res.Items, 1)
-	require.Empty(t, res.Items[0].Upstreams, "a stale sibling link is not session provenance")
+	require.Empty(t, res.Items[0].Upstreams, "the sibling sign-in did not mint this grant")
 
 	projectID := *authCtx.ProjectID
 	source, err := remotemcprepo.New(ti.conn).CreateServer(ctx, remotemcprepo.CreateServerParams{
@@ -332,12 +322,6 @@ func TestListUserSessionsAttributesSiblingGrantOnlyThroughTypedReach(t *testing.
 	})
 	require.NoError(t, err)
 	offerClientID := seedInventoryOAuthOffer(t, ctx, ti, authCtx.ActiveOrganizationID, projectID, server.ID, clientID)
-	// Neither the grant's source issuer nor the target issuer needs a legacy
-	// link. The recorded consent is tenant-scoped, and the offer proves reach.
-	for _, issuerID := range []uuid.UUID{provenanceID, siblingID} {
-		_, err := testrepo.New(ti.conn).UnlinkAttachmentClientFixture(ctx, testrepo.UnlinkAttachmentClientFixtureParams{RemoteSessionClientID: clientID, UserSessionIssuerID: issuerID})
-		require.NoError(t, err)
-	}
 
 	res, err = ti.service.ListUserSessions(ctx, &gen.ListUserSessionsPayload{})
 	require.NoError(t, err)
@@ -393,13 +377,7 @@ func TestListUserSessionsReturnsUpstreamsOnDetachedClient(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	clientID := seedUpstream(t, ctx, ti.conn, conv.ToNullUUID(*authCtx.ProjectID), issuerID, subject, "mcp.detached.example")
-	detached, err := testrepo.New(ti.conn).DetachRemoteSessionClientFromUserSessionIssuer(ctx, testrepo.DetachRemoteSessionClientFromUserSessionIssuerParams{
-		RemoteSessionClientID: clientID,
-		UserSessionIssuerID:   issuerID,
-	})
-	require.NoError(t, err)
-	require.Equal(t, int64(1), detached)
+	_ = seedUpstream(t, ctx, ti.conn, conv.ToNullUUID(*authCtx.ProjectID), issuerID, subject, "mcp.detached.example")
 
 	res, err := ti.service.ListUserSessions(ctx, &gen.ListUserSessionsPayload{
 		SessionToken:        nil,
@@ -509,13 +487,6 @@ func TestListUserSessionsAgentAttachmentUpstreams(t *testing.T) {
 			}
 			return rows, nil
 		}, humanRemains: true},
-		{name: "client detached from requesting issuer", mutation: func(ctx context.Context, q *testrepo.Queries, args attachmentFixtureArgs) (int64, error) {
-			rows, err := q.MutateAttachmentClientDetachedFromRequestingIssuerFixture(ctx, testrepo.MutateAttachmentClientDetachedFromRequestingIssuerFixtureParams{Client: args.Client, Requesting: args.Requesting})
-			if err != nil {
-				return rows, fmt.Errorf("mutate attachment fixture: %w", err)
-			}
-			return rows, nil
-		}},
 		{name: "deleted client", mutation: func(ctx context.Context, q *testrepo.Queries, args attachmentFixtureArgs) (int64, error) {
 			rows, err := q.MutateAttachmentDeletedClientFixture(ctx, testrepo.MutateAttachmentDeletedClientFixtureParams{Client: args.Client, Project: uuid.NullUUID{UUID: args.Project, Valid: true}})
 			if err != nil {
@@ -647,18 +618,11 @@ func TestListUserSessionsAgentAttachmentUpstreams(t *testing.T) {
 				require.NoError(t, err)
 			}
 			clientID := seedUpstream(t, ctx, ti.conn, conv.ToNullUUID(projectID), provenance, owner, "attachment.example.com")
-			q := remotesessions_repo.New(ti.conn)
-			require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessions_repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-				RemoteSessionClientID: clientID, UserSessionIssuerID: otherIssuer,
-			}))
 			var sourceID uuid.UUID
 			sourceID, err = testrepo.New(ti.conn).GetAttachmentSourceIDFixture(ctx, testrepo.GetAttachmentSourceIDFixtureParams{RemoteSessionClientID: clientID, SubjectUrn: owner})
 			require.NoError(t, err)
 			// Bind both clients so mismatches exercise the exact source-client guard.
 			otherClient := seedUpstream(t, ctx, ti.conn, conv.ToNullUUID(projectID), provenance, urn.NewUserSubject("other-source"), "other-attachment.example.com")
-			require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessions_repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-				RemoteSessionClientID: otherClient, UserSessionIssuerID: otherIssuer,
-			}))
 			foreignProject := uuid.New()
 			_, err = testrepo.New(ti.conn).CreateAttachmentForeignProjectFixture(ctx, testrepo.CreateAttachmentForeignProjectFixtureParams{ID: foreignProject, OrganizationID: auth.ActiveOrganizationID})
 			require.NoError(t, err)

@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	"github.com/stretchr/testify/require"
 
@@ -212,11 +213,17 @@ func TestHandleToken_RefreshFollowsTheChainingDecision(t *testing.T) {
 			// Only the remote server signs in through the issuer.
 			testenv.SetHostedMCP(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, testenv.HostedMCP{UserSessionIssuerID: &uuid.NullUUID{UUID: uuid.Nil, Valid: false}})
 			remoteClient := attachTestRemoteSessionClient(t, ctx, ti, authCtx, issuer.ID)
-			if tc.sibling {
-				attachTestRemoteSessionClient(t, ctx, ti, authCtx, issuer.ID)
-			}
 			slug := "chained-refresh-" + uuid.NewString()[:8]
 			serverID := attachConsentRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID, issuer.ID, slug, upstream)
+			associateServerRegistration(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, serverID, remoteClient.ID)
+			offer := seedTypedSessionClient(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, serverID, remoteClient.ID, authz.AuthClientTypeRemoteSession, urn.NewUserSubject("refresh-replay-user"))
+			if tc.sibling {
+				sibling := attachTestRemoteSessionClient(t, ctx, ti, authCtx, issuer.ID)
+				associateServerRegistration(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, serverID, sibling.ID)
+				seedTypedSessionClient(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, serverID, sibling.ID, authz.AuthClientTypeRemoteSession, urn.NewUserSubject("refresh-replay-user"))
+			} else {
+				seedTypedSessionChoice(t, ctx, ti, authCtx.ActiveOrganizationID, issuer.ID, oldJTI, serverID, offer)
+			}
 			_, err := mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 				ProjectID:       *authCtx.ProjectID,
 				CustomDomainID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
@@ -269,12 +276,17 @@ func TestHandleToken_RefreshIgnoresSiblingClientsOfTheIssuer(t *testing.T) {
 	const upstreamB = "https://sibling-refresh-b.example.com/mcp"
 	ctx, ti := newTestMCPService(t)
 	authCtx := requireProjectAuthContext(t, ctx)
-	_, issuer, client, refreshToken, _ := seedRefreshReplaySessionDetails(t, ctx, ti, time.Now().Add(time.Hour))
+	_, issuer, client, refreshToken, jti := seedRefreshReplaySessionDetails(t, ctx, ti, time.Now().Add(time.Hour))
 	clientA := attachTestRemoteSessionClient(t, ctx, ti, authCtx, issuer.ID)
-	attachTestRemoteSessionClient(t, ctx, ti, authCtx, issuer.ID)
+	clientB := attachTestRemoteSessionClient(t, ctx, ti, authCtx, issuer.ID)
 	slug := "sibling-refresh-" + uuid.NewString()[:8]
 	serverA := attachConsentRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID, issuer.ID, slug, upstreamA)
-	attachConsentRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID, issuer.ID, slug+"-b", upstreamB)
+	serverB := attachConsentRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID, issuer.ID, slug+"-b", upstreamB)
+	associateServerRegistration(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, serverA, clientA.ID)
+	associateServerRegistration(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, serverB, clientB.ID)
+	offer := seedTypedSessionClient(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, serverA, clientA.ID, authz.AuthClientTypeRemoteSession, urn.NewUserSubject("refresh-replay-user"))
+	seedTypedSessionClient(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, serverB, clientB.ID, authz.AuthClientTypeRemoteSession, urn.NewUserSubject("refresh-replay-user"))
+	seedTypedSessionChoice(t, ctx, ti, authCtx.ActiveOrganizationID, issuer.ID, jti, serverA, offer)
 	_, err := mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID:       *authCtx.ProjectID,
 		CustomDomainID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
@@ -511,16 +523,22 @@ func TestServePublic_IssuerGate_ChainingProviderRefusalChallengesTheChosenClient
 // Give the fixture's user access to this client, not to other credentials.
 func seedTypedSessionClient(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, projectID, serverID, registrationID uuid.UUID, clientType string, subject urn.SessionSubject) uuid.UUID {
 	t.Helper()
-	q := authclientbackfill.New(ti.conn)
-	registration := uuid.NullUUID{UUID: registrationID, Valid: registrationID != uuid.Nil}
-	clientID, err := q.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{OrganizationID: organizationID, ProjectID: conv.ToNullUUID(projectID), ClientType: clientType, Source: "admin", RemoteSessionClientID: registration})
-	require.NoError(t, err)
-	require.NoError(t, q.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{ProjectID: projectID, OrganizationID: organizationID, McpServerID: serverID, AuthClientID: clientID, Source: "admin"}))
+	clientID := seedServerAuthOffer(t, ctx, ti.conn, organizationID, projectID, serverID, registrationID, clientType)
 	if subject.Kind == urn.SessionSubjectKindUser {
 		_, err := organizationsrepo.New(ti.conn).UpsertOrganizationUserRelationship(ctx, organizationsrepo.UpsertOrganizationUserRelationshipParams{OrganizationID: organizationID, UserID: conv.ToPGText(subject.ID)})
 		require.NoError(t, err)
 		seedPrincipalGrant(t, ctx, ti, organizationID, urn.NewPrincipal(urn.PrincipalTypeUser, subject.ID), authz.ScopeMCPAuth, clientID.String())
 	}
+	return clientID
+}
+
+func seedServerAuthOffer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, projectID, serverID, registrationID uuid.UUID, clientType string) uuid.UUID {
+	t.Helper()
+	q := authclientbackfill.New(conn)
+	registration := uuid.NullUUID{UUID: registrationID, Valid: registrationID != uuid.Nil}
+	clientID, err := q.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{OrganizationID: organizationID, ProjectID: conv.ToNullUUID(projectID), ClientType: clientType, Source: "admin", RemoteSessionClientID: registration})
+	require.NoError(t, err)
+	require.NoError(t, q.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{ProjectID: projectID, OrganizationID: organizationID, McpServerID: serverID, AuthClientID: clientID, Source: "admin"}))
 	return clientID
 }
 
@@ -562,8 +580,8 @@ func attachHostedRemoteSessionClient(t *testing.T, ctx context.Context, ti *test
 	return client
 }
 
-// attachTestRemoteSessionClient binds a new remote_session_client to the user
-// session issuer, giving its sessions an upstream remote session requirement.
+// attachTestRemoteSessionClient creates an unplaced upstream registration.
+// The caller sets up any runtime association or typed offer separately.
 func attachTestRemoteSessionClient(t *testing.T, ctx context.Context, ti *testInstance, authCtx *contextvalues.AuthContext, userSessionIssuerID uuid.UUID) remotesessions_repo.RemoteSessionClient {
 	t.Helper()
 
@@ -590,10 +608,6 @@ func attachTestRemoteSessionClient(t *testing.T, ctx context.Context, ti *testIn
 	})
 	require.NoError(t, err)
 
-	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessions_repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: remoteClient.ID,
-		UserSessionIssuerID:   userSessionIssuerID,
-	}))
 	return remoteClient
 }
 

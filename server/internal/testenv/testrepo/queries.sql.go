@@ -92,31 +92,6 @@ func (q *Queries) AssociateAuthClientFixture(ctx context.Context, arg AssociateA
 	return err
 }
 
-const attachPreparationFixtureInteractiveClient = `-- name: AttachPreparationFixtureInteractiveClient :execrows
-INSERT INTO remote_session_client_user_session_issuers (remote_session_client_id,user_session_issuer_id)
-SELECT c.id, u.id FROM remote_session_clients c
-JOIN user_session_issuers u ON u.id = $1
-  AND u.project_id = c.project_id
-JOIN projects p ON p.id = c.project_id
-  AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)
-  AND (u.organization_id IS NULL OR u.organization_id = p.organization_id)
-WHERE c.id = $2 AND c.project_id = $3
-`
-
-type AttachPreparationFixtureInteractiveClientParams struct {
-	UserID    uuid.UUID
-	ID        uuid.UUID
-	ProjectID uuid.NullUUID
-}
-
-func (q *Queries) AttachPreparationFixtureInteractiveClient(ctx context.Context, arg AttachPreparationFixtureInteractiveClientParams) (int64, error) {
-	result, err := q.db.Exec(ctx, attachPreparationFixtureInteractiveClient, arg.UserID, arg.ID, arg.ProjectID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const attachmentSourceWasUsedFixture = `-- name: AttachmentSourceWasUsedFixture :one
 SELECT (last_used_at IS NOT NULL)::boolean AS used FROM remote_sessions WHERE id = $1
 `
@@ -644,23 +619,6 @@ func (q *Queries) CountPlatformMCPSetupMilestoneFixture(ctx context.Context, arg
 	return count, err
 }
 
-const countPreparationFixtureAttachments = `-- name: CountPreparationFixtureAttachments :one
-SELECT count(*) FROM remote_session_client_user_session_issuers l JOIN remote_session_clients c ON c.id=l.remote_session_client_id WHERE c.project_id = $1 AND l.remote_session_client_id = $2 AND l.user_session_issuer_id = $3
-`
-
-type CountPreparationFixtureAttachmentsParams struct {
-	ProjectID uuid.NullUUID
-	ID        uuid.UUID
-	UserID    uuid.UUID
-}
-
-func (q *Queries) CountPreparationFixtureAttachments(ctx context.Context, arg CountPreparationFixtureAttachmentsParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countPreparationFixtureAttachments, arg.ProjectID, arg.ID, arg.UserID)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
 const countPreparationFixtureBindingByID = `-- name: CountPreparationFixtureBindingByID :one
 SELECT count(*) FROM remote_session_ema_bindings WHERE id = $1 AND project_id = $2
 `
@@ -758,21 +716,6 @@ type CountPublishOutboxRowsByTopicParams struct {
 
 func (q *Queries) CountPublishOutboxRowsByTopic(ctx context.Context, arg CountPublishOutboxRowsByTopicParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countPublishOutboxRowsByTopic, arg.OrganizationID, arg.Topic)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
-const countRemoteSessionClientBindingsFixture = `-- name: CountRemoteSessionClientBindingsFixture :one
-SELECT count(*)
-FROM remote_session_client_user_session_issuers
-WHERE remote_session_client_id = $1
-`
-
-// Counts a client's user session issuer bindings, whether or not the client is
-// deleted.
-func (q *Queries) CountRemoteSessionClientBindingsFixture(ctx context.Context, remoteSessionClientID uuid.UUID) (int64, error) {
-	row := q.db.QueryRow(ctx, countRemoteSessionClientBindingsFixture, remoteSessionClientID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -1570,24 +1513,6 @@ func (q *Queries) DeleteOrganizationUserRelationshipFixture(ctx context.Context,
 	return err
 }
 
-const deleteRegistrationJunctionFixture = `-- name: DeleteRegistrationJunctionFixture :exec
-DELETE FROM remote_session_client_user_session_issuers AS link
-USING remote_session_clients AS c
-WHERE link.remote_session_client_id = c.id
-  AND c.id = $1
-  AND c.project_id IS NOT DISTINCT FROM $2::uuid
-`
-
-type DeleteRegistrationJunctionFixtureParams struct {
-	RemoteSessionClientID uuid.UUID
-	ProjectID             uuid.NullUUID
-}
-
-func (q *Queries) DeleteRegistrationJunctionFixture(ctx context.Context, arg DeleteRegistrationJunctionFixtureParams) error {
-	_, err := q.db.Exec(ctx, deleteRegistrationJunctionFixture, arg.RemoteSessionClientID, arg.ProjectID)
-	return err
-}
-
 const deleteRetainedCatalogSourcesFixture = `-- name: DeleteRetainedCatalogSourcesFixture :exec
 DELETE FROM mcp_registries
 `
@@ -1607,27 +1532,6 @@ func (q *Queries) DeletedRemoteSessionIdentityClearedFixture(ctx context.Context
 	var identity_cleared bool
 	err := row.Scan(&identity_cleared)
 	return identity_cleared, err
-}
-
-const detachRemoteSessionClientFromUserSessionIssuer = `-- name: DetachRemoteSessionClientFromUserSessionIssuer :execrows
-DELETE FROM remote_session_client_user_session_issuers
-WHERE remote_session_client_id = $1
-  AND user_session_issuer_id = $2
-`
-
-type DetachRemoteSessionClientFromUserSessionIssuerParams struct {
-	RemoteSessionClientID uuid.UUID
-	UserSessionIssuerID   uuid.UUID
-}
-
-// Test fixture: remove a client binding to exercise detached shared grants.
-// Returns the number of bindings removed.
-func (q *Queries) DetachRemoteSessionClientFromUserSessionIssuer(ctx context.Context, arg DetachRemoteSessionClientFromUserSessionIssuerParams) (int64, error) {
-	result, err := q.db.Exec(ctx, detachRemoteSessionClientFromUserSessionIssuer, arg.RemoteSessionClientID, arg.UserSessionIssuerID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
 }
 
 const directoryReviewAttributeOptedOutFixture = `-- name: DirectoryReviewAttributeOptedOutFixture :one
@@ -2224,8 +2128,6 @@ type ForceRemoteSessionIssuerTokenEndpointFixtureParams struct {
 	OrganizationID        string
 }
 
-// TEST FIXTURE ONLY. Redirects the issuer behind a tenant-owned client to a
-// local token endpoint so refresh behavior can be exercised without raw SQL.
 func (q *Queries) ForceRemoteSessionIssuerTokenEndpointFixture(ctx context.Context, arg ForceRemoteSessionIssuerTokenEndpointFixtureParams) (int64, error) {
 	result, err := q.db.Exec(ctx, forceRemoteSessionIssuerTokenEndpointFixture,
 		arg.TokenEndpoint,
@@ -5461,23 +5363,6 @@ func (q *Queries) MovePreparationFixtureUserIssuerProject(ctx context.Context, a
 	return result.RowsAffected(), nil
 }
 
-const mutateAttachmentClientDetachedFromRequestingIssuerFixture = `-- name: MutateAttachmentClientDetachedFromRequestingIssuerFixture :execrows
-DELETE FROM remote_session_client_user_session_issuers WHERE remote_session_client_id = $1 AND user_session_issuer_id = $2
-`
-
-type MutateAttachmentClientDetachedFromRequestingIssuerFixtureParams struct {
-	Client     uuid.UUID
-	Requesting uuid.UUID
-}
-
-func (q *Queries) MutateAttachmentClientDetachedFromRequestingIssuerFixture(ctx context.Context, arg MutateAttachmentClientDetachedFromRequestingIssuerFixtureParams) (int64, error) {
-	result, err := q.db.Exec(ctx, mutateAttachmentClientDetachedFromRequestingIssuerFixture, arg.Client, arg.Requesting)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const mutateAttachmentDeletedAgentFixture = `-- name: MutateAttachmentDeletedAgentFixture :execrows
 UPDATE agents SET deleted_at = clock_timestamp() WHERE id = $1 AND organization_id = $2
 `
@@ -5917,25 +5802,6 @@ WHERE s.device_integration_schedule_id = sch.id
 func (q *Queries) PauseDeviceIntegrationSyncsFixture(ctx context.Context, deviceIntegrationConfigID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, pauseDeviceIntegrationSyncsFixture, deviceIntegrationConfigID)
 	return err
-}
-
-const probeAttachmentParentLockFixture = `-- name: ProbeAttachmentParentLockFixture :one
-SELECT remote_session_client_id FROM remote_session_client_user_session_issuers
-WHERE remote_session_client_id = $1::uuid
-  AND user_session_issuer_id = $2::uuid
-FOR UPDATE NOWAIT
-`
-
-type ProbeAttachmentParentLockFixtureParams struct {
-	RemoteSessionClientID uuid.UUID
-	UserSessionIssuerID   uuid.UUID
-}
-
-func (q *Queries) ProbeAttachmentParentLockFixture(ctx context.Context, arg ProbeAttachmentParentLockFixtureParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, probeAttachmentParentLockFixture, arg.RemoteSessionClientID, arg.UserSessionIssuerID)
-	var remote_session_client_id uuid.UUID
-	err := row.Scan(&remote_session_client_id)
-	return remote_session_client_id, err
 }
 
 const recreateTrialGenerationFixture = `-- name: RecreateTrialGenerationFixture :exec
@@ -9102,23 +8968,6 @@ func (q *Queries) TryAcquireOpenRouterKeyBillingLockFixture(ctx context.Context,
 	var pg_try_advisory_lock bool
 	err := row.Scan(&pg_try_advisory_lock)
 	return pg_try_advisory_lock, err
-}
-
-const unlinkAttachmentClientFixture = `-- name: UnlinkAttachmentClientFixture :execrows
-DELETE FROM remote_session_client_user_session_issuers WHERE remote_session_client_id = $1 AND user_session_issuer_id = $2
-`
-
-type UnlinkAttachmentClientFixtureParams struct {
-	RemoteSessionClientID uuid.UUID
-	UserSessionIssuerID   uuid.UUID
-}
-
-func (q *Queries) UnlinkAttachmentClientFixture(ctx context.Context, arg UnlinkAttachmentClientFixtureParams) (int64, error) {
-	result, err := q.db.Exec(ctx, unlinkAttachmentClientFixture, arg.RemoteSessionClientID, arg.UserSessionIssuerID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
 }
 
 const updateChatMessageCreatedAt = `-- name: UpdateChatMessageCreatedAt :exec

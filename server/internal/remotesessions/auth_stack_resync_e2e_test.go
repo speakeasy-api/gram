@@ -14,7 +14,6 @@ import (
 	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
@@ -23,7 +22,7 @@ import (
 // capture must reject and roll back the binding, permitting a caller retry.
 func TestAuthStackE2E_PostCommitBindingResync(t *testing.T) {
 	t.Parallel()
-	for _, operation := range []string{"create", "attach"} {
+	for _, operation := range []string{"create"} {
 		for _, injectFailure := range []bool{false, true} {
 			name := "normal"
 			if injectFailure {
@@ -51,46 +50,25 @@ func TestAuthStackE2E_PostCommitBindingResync(t *testing.T) {
 					RemoteSessionIssuerID: issuerID,
 					ClientID:              externalID,
 				}
-				var clientID string
-				if operation == "attach" {
-					created, err := ti.service.CreateRemoteSessionClient(ctx, payload)
-					require.NoError(t, err)
-					require.NotNil(t, created)
-					clientID = created.ID
-				}
-
 				var failureObserved func() bool
 				var removeFailure func()
 				if injectFailure {
 					failureObserved, removeFailure = rejectAuthStackAssociation(t, ctx, ti.conn, projectID, auth.ActiveOrganizationID, serverID, externalID)
 				}
 				write := func() (*types.RemoteSessionClient, error) {
-					if operation == "create" {
-						payload.UserSessionIssuerIds = []string{userIssuerID.String()}
-						return ti.service.CreateRemoteSessionClient(ctx, payload)
-					}
-					return ti.service.AttachLegacyIssuerForTest(ctx, &remotesessions.LegacyIssuerBindingForTest{
-						ID: clientID, UserSessionIssuerID: userIssuerID.String(),
-					})
+					payload.UserSessionIssuerIds = []string{userIssuerID.String()}
+					return ti.service.CreateRemoteSessionClient(ctx, payload)
 				}
 				if injectFailure {
 					result, err := write()
 					require.Error(t, err, "capture failure must not acknowledge a binding commit")
 					require.Nil(t, result)
 					require.True(t, failureObserved(), "the targeted capture fault must execute")
-					var registrations, bindings, associations, typed int
+					var registrations, associations, typed int
 					fixtureValue2, err := repo.New(ti.conn).LockingFixtureCountRegistrations(ctx, repo.LockingFixtureCountRegistrationsParams{ProjectID: projectID, ExternalID: externalID})
 					require.NoError(t, err)
 					registrations = int(fixtureValue2)
-					wantRegistrations := 0
-					if operation == "attach" {
-						wantRegistrations = 1
-					}
-					require.Equal(t, wantRegistrations, registrations, "failed create must not persist a registration")
-					fixtureValue3, err := repo.New(ti.conn).LockingFixtureCountExternalBindings(ctx, repo.LockingFixtureCountExternalBindingsParams{ProjectID: projectID, ExternalID: externalID, UserIssuerID: userIssuerID})
-					require.NoError(t, err)
-					bindings = int(fixtureValue3)
-					require.Zero(t, bindings, "failed capture must roll back the binding")
+					require.Equal(t, 0, registrations, "failed create must not persist a registration")
 					fixtureValue4, err := repo.New(ti.conn).LockingFixtureCountServerLegacyChoices(ctx, repo.LockingFixtureCountServerLegacyChoicesParams{ProjectID: projectID, OrganizationID: auth.ActiveOrganizationID, ServerID: serverID})
 					require.NoError(t, err)
 					associations = int(fixtureValue4)
@@ -104,10 +82,13 @@ func TestAuthStackE2E_PostCommitBindingResync(t *testing.T) {
 				result, err := write()
 				require.NoError(t, err)
 				require.NotNil(t, result)
-				clientID = result.ID
-				require.Contains(t, result.UserSessionIssuerIds, userIssuerID.String())
+				clientID := result.ID
+				// Read committed reachability, not the fixture's attach response built before capture.
+				stored, err := ti.service.GetRemoteSessionClient(ctx, &clientsgen.GetRemoteSessionClientPayload{ID: clientID})
+				require.NoError(t, err)
+				require.Equal(t, []string{userIssuerID.String()}, stored.UserSessionIssuerIds)
 				registrationID := uuid.MustParse(clientID)
-				require.Equal(t, 1, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, registrationID, userIssuerID), "successful publication must persist exactly one binding")
+
 				if injectFailure {
 					require.True(t, failureObserved(), "must exercise the scoped database rejection, not an unrelated setup failure")
 				}
@@ -119,7 +100,7 @@ func TestAuthStackE2E_PostCommitBindingResync(t *testing.T) {
 				fixtureValue7, err := repo.New(ti.conn).LockingFixtureCountEnabledOAuthChoices(ctx, repo.LockingFixtureCountEnabledOAuthChoicesParams{ProjectID: projectID, OrganizationID: auth.ActiveOrganizationID, ServerID: serverID, ClientID: registrationID})
 				require.NoError(t, err)
 				typed = int(fixtureValue7)
-				t.Logf("successful %s: binding=1 legacy_associations=%d typed_associations=%d injected_failure=%t", operation, legacy, typed, injectFailure)
+				t.Logf("successful %s: legacy_associations=%d typed_associations=%d injected_failure=%t", operation, legacy, typed, injectFailure)
 				// This is configuration readiness only. The caller retries the failed
 				// database operation, never a separate reconciliation or migration.
 				require.Equal(t, 1, typed, "successful binding must leave one enabled typed OAuth association without manual reconciliation")

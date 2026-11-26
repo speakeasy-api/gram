@@ -112,6 +112,9 @@ func configureTranscriptShadow(ctx context.Context, c *cli.Context, db *pgxpool.
 		}
 	}
 	writer.WithTranscriptShadow(store, projectIDs...).WithSealedAssets(assetStore)
+	// Captures run inside write transactions: keep the transcript key warm so
+	// a request does not wait for KMS each time the cached key expires.
+	go orgEncryption.Service.KeepWarm(ctx, orgencryption.UseCaseChatTranscripts)
 	return transcriptShadow{Store: store, Assets: assetStore, ProjectIDs: projectIDs}, nil
 }
 

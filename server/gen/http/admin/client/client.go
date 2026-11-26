@@ -436,6 +436,18 @@ type Client struct {
 	// the backfillMcpConnectGrants endpoint.
 	BackfillMcpConnectGrantsDoer goahttp.Doer
 
+	// GetSecretBackfills Doer is the HTTP client used to make requests to the
+	// getSecretBackfills endpoint.
+	GetSecretBackfillsDoer goahttp.Doer
+
+	// RunMarketplaceTokenBackfill Doer is the HTTP client used to make requests to
+	// the runMarketplaceTokenBackfill endpoint.
+	RunMarketplaceTokenBackfillDoer goahttp.Doer
+
+	// RunRunnerKeyOrganizationBackfill Doer is the HTTP client used to make
+	// requests to the runRunnerKeyOrganizationBackfill endpoint.
+	RunRunnerKeyOrganizationBackfillDoer goahttp.Doer
+
 	// GetProjectRedeployPreview Doer is the HTTP client used to make requests to
 	// the getProjectRedeployPreview endpoint.
 	GetProjectRedeployPreviewDoer goahttp.Doer
@@ -511,6 +523,10 @@ type Client struct {
 	// GetHooksRollout Doer is the HTTP client used to make requests to the
 	// getHooksRollout endpoint.
 	GetHooksRolloutDoer goahttp.Doer
+
+	// GetHooksReleaseProgress Doer is the HTTP client used to make requests to the
+	// getHooksReleaseProgress endpoint.
+	GetHooksReleaseProgressDoer goahttp.Doer
 
 	// SetHooksRolloutDefault Doer is the HTTP client used to make requests to the
 	// setHooksRolloutDefault endpoint.
@@ -685,6 +701,9 @@ func NewClient(
 		DisableUpstreamAuthEnforcementDoer:          doer,
 		BackfillMcpAuthGrantsDoer:                   doer,
 		BackfillMcpConnectGrantsDoer:                doer,
+		GetSecretBackfillsDoer:                      doer,
+		RunMarketplaceTokenBackfillDoer:             doer,
+		RunRunnerKeyOrganizationBackfillDoer:        doer,
 		GetProjectRedeployPreviewDoer:               doer,
 		RedeployProjectDoer:                         doer,
 		ListCustomDomainsDoer:                       doer,
@@ -704,6 +723,7 @@ func NewClient(
 		MigrateOrganizationAssistantIdentitiesDoer:  doer,
 		MigrateOrganizationAssistantsToKitDoer:      doer,
 		GetHooksRolloutDoer:                         doer,
+		GetHooksReleaseProgressDoer:                 doer,
 		SetHooksRolloutDefaultDoer:                  doer,
 		GetOrganizationHooksRolloutDoer:             doer,
 		SetOrganizationHooksRolloutDoer:             doer,
@@ -3249,6 +3269,78 @@ func (c *Client) BackfillMcpConnectGrants() goa.Endpoint {
 	}
 }
 
+// GetSecretBackfills returns an endpoint that makes HTTP requests to the admin
+// service getSecretBackfills server.
+func (c *Client) GetSecretBackfills() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetSecretBackfillsRequest(c.encoder)
+		decodeResponse = DecodeGetSecretBackfillsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetSecretBackfillsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetSecretBackfillsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getSecretBackfills", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RunMarketplaceTokenBackfill returns an endpoint that makes HTTP requests to
+// the admin service runMarketplaceTokenBackfill server.
+func (c *Client) RunMarketplaceTokenBackfill() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRunMarketplaceTokenBackfillRequest(c.encoder)
+		decodeResponse = DecodeRunMarketplaceTokenBackfillResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRunMarketplaceTokenBackfillRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RunMarketplaceTokenBackfillDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "runMarketplaceTokenBackfill", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RunRunnerKeyOrganizationBackfill returns an endpoint that makes HTTP
+// requests to the admin service runRunnerKeyOrganizationBackfill server.
+func (c *Client) RunRunnerKeyOrganizationBackfill() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRunRunnerKeyOrganizationBackfillRequest(c.encoder)
+		decodeResponse = DecodeRunRunnerKeyOrganizationBackfillResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRunRunnerKeyOrganizationBackfillRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RunRunnerKeyOrganizationBackfillDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "runRunnerKeyOrganizationBackfill", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
 // GetProjectRedeployPreview returns an endpoint that makes HTTP requests to
 // the admin service getProjectRedeployPreview server.
 func (c *Client) GetProjectRedeployPreview() goa.Endpoint {
@@ -3700,6 +3792,30 @@ func (c *Client) GetHooksRollout() goa.Endpoint {
 		resp, err := c.GetHooksRolloutDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "getHooksRollout", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetHooksReleaseProgress returns an endpoint that makes HTTP requests to the
+// admin service getHooksReleaseProgress server.
+func (c *Client) GetHooksReleaseProgress() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetHooksReleaseProgressRequest(c.encoder)
+		decodeResponse = DecodeGetHooksReleaseProgressResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetHooksReleaseProgressRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetHooksReleaseProgressDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getHooksReleaseProgress", err)
 		}
 		return decodeResponse(resp)
 	}

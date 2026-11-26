@@ -126,6 +126,9 @@ type Server struct {
 	DisableUpstreamAuthEnforcement          http.Handler
 	BackfillMcpAuthGrants                   http.Handler
 	BackfillMcpConnectGrants                http.Handler
+	GetSecretBackfills                      http.Handler
+	RunMarketplaceTokenBackfill             http.Handler
+	RunRunnerKeyOrganizationBackfill        http.Handler
 	GetProjectRedeployPreview               http.Handler
 	RedeployProject                         http.Handler
 	ListCustomDomains                       http.Handler
@@ -145,6 +148,7 @@ type Server struct {
 	MigrateOrganizationAssistantIdentities  http.Handler
 	MigrateOrganizationAssistantsToKit      http.Handler
 	GetHooksRollout                         http.Handler
+	GetHooksReleaseProgress                 http.Handler
 	SetHooksRolloutDefault                  http.Handler
 	GetOrganizationHooksRollout             http.Handler
 	SetOrganizationHooksRollout             http.Handler
@@ -291,6 +295,9 @@ func New(
 			{"DisableUpstreamAuthEnforcement", "POST", "/admin/upstreamOAuthMigration.disableEnforcement"},
 			{"BackfillMcpAuthGrants", "POST", "/admin/mcpAuthGrants.backfill"},
 			{"BackfillMcpConnectGrants", "POST", "/admin/mcpConnectGrants.backfill"},
+			{"GetSecretBackfills", "GET", "/admin/secretBackfills.get"},
+			{"RunMarketplaceTokenBackfill", "POST", "/admin/secretBackfills.runMarketplaceTokens"},
+			{"RunRunnerKeyOrganizationBackfill", "POST", "/admin/secretBackfills.runRunnerKeyOrganizations"},
 			{"GetProjectRedeployPreview", "GET", "/admin/project.redeployPreview"},
 			{"RedeployProject", "POST", "/admin/project.redeploy"},
 			{"ListCustomDomains", "GET", "/admin/customDomains.list"},
@@ -310,6 +317,7 @@ func New(
 			{"MigrateOrganizationAssistantIdentities", "POST", "/admin/organization.migrateAssistantIdentities"},
 			{"MigrateOrganizationAssistantsToKit", "POST", "/admin/organization.migrateAssistantsToKit"},
 			{"GetHooksRollout", "GET", "/admin/hooksRollout.get"},
+			{"GetHooksReleaseProgress", "GET", "/admin/hooksRollout.progress"},
 			{"SetHooksRolloutDefault", "POST", "/admin/hooksRollout.setDefault"},
 			{"GetOrganizationHooksRollout", "GET", "/admin/organization.hooksRollout"},
 			{"SetOrganizationHooksRollout", "POST", "/admin/organization.setHooksRollout"},
@@ -428,6 +436,9 @@ func New(
 		DisableUpstreamAuthEnforcement:          NewDisableUpstreamAuthEnforcementHandler(e.DisableUpstreamAuthEnforcement, mux, decoder, encoder, errhandler, formatter),
 		BackfillMcpAuthGrants:                   NewBackfillMcpAuthGrantsHandler(e.BackfillMcpAuthGrants, mux, decoder, encoder, errhandler, formatter),
 		BackfillMcpConnectGrants:                NewBackfillMcpConnectGrantsHandler(e.BackfillMcpConnectGrants, mux, decoder, encoder, errhandler, formatter),
+		GetSecretBackfills:                      NewGetSecretBackfillsHandler(e.GetSecretBackfills, mux, decoder, encoder, errhandler, formatter),
+		RunMarketplaceTokenBackfill:             NewRunMarketplaceTokenBackfillHandler(e.RunMarketplaceTokenBackfill, mux, decoder, encoder, errhandler, formatter),
+		RunRunnerKeyOrganizationBackfill:        NewRunRunnerKeyOrganizationBackfillHandler(e.RunRunnerKeyOrganizationBackfill, mux, decoder, encoder, errhandler, formatter),
 		GetProjectRedeployPreview:               NewGetProjectRedeployPreviewHandler(e.GetProjectRedeployPreview, mux, decoder, encoder, errhandler, formatter),
 		RedeployProject:                         NewRedeployProjectHandler(e.RedeployProject, mux, decoder, encoder, errhandler, formatter),
 		ListCustomDomains:                       NewListCustomDomainsHandler(e.ListCustomDomains, mux, decoder, encoder, errhandler, formatter),
@@ -447,6 +458,7 @@ func New(
 		MigrateOrganizationAssistantIdentities:  NewMigrateOrganizationAssistantIdentitiesHandler(e.MigrateOrganizationAssistantIdentities, mux, decoder, encoder, errhandler, formatter),
 		MigrateOrganizationAssistantsToKit:      NewMigrateOrganizationAssistantsToKitHandler(e.MigrateOrganizationAssistantsToKit, mux, decoder, encoder, errhandler, formatter),
 		GetHooksRollout:                         NewGetHooksRolloutHandler(e.GetHooksRollout, mux, decoder, encoder, errhandler, formatter),
+		GetHooksReleaseProgress:                 NewGetHooksReleaseProgressHandler(e.GetHooksReleaseProgress, mux, decoder, encoder, errhandler, formatter),
 		SetHooksRolloutDefault:                  NewSetHooksRolloutDefaultHandler(e.SetHooksRolloutDefault, mux, decoder, encoder, errhandler, formatter),
 		GetOrganizationHooksRollout:             NewGetOrganizationHooksRolloutHandler(e.GetOrganizationHooksRollout, mux, decoder, encoder, errhandler, formatter),
 		SetOrganizationHooksRollout:             NewSetOrganizationHooksRolloutHandler(e.SetOrganizationHooksRollout, mux, decoder, encoder, errhandler, formatter),
@@ -572,6 +584,9 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.DisableUpstreamAuthEnforcement = m(s.DisableUpstreamAuthEnforcement)
 	s.BackfillMcpAuthGrants = m(s.BackfillMcpAuthGrants)
 	s.BackfillMcpConnectGrants = m(s.BackfillMcpConnectGrants)
+	s.GetSecretBackfills = m(s.GetSecretBackfills)
+	s.RunMarketplaceTokenBackfill = m(s.RunMarketplaceTokenBackfill)
+	s.RunRunnerKeyOrganizationBackfill = m(s.RunRunnerKeyOrganizationBackfill)
 	s.GetProjectRedeployPreview = m(s.GetProjectRedeployPreview)
 	s.RedeployProject = m(s.RedeployProject)
 	s.ListCustomDomains = m(s.ListCustomDomains)
@@ -591,6 +606,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.MigrateOrganizationAssistantIdentities = m(s.MigrateOrganizationAssistantIdentities)
 	s.MigrateOrganizationAssistantsToKit = m(s.MigrateOrganizationAssistantsToKit)
 	s.GetHooksRollout = m(s.GetHooksRollout)
+	s.GetHooksReleaseProgress = m(s.GetHooksReleaseProgress)
 	s.SetHooksRolloutDefault = m(s.SetHooksRolloutDefault)
 	s.GetOrganizationHooksRollout = m(s.GetOrganizationHooksRollout)
 	s.SetOrganizationHooksRollout = m(s.SetOrganizationHooksRollout)
@@ -715,6 +731,9 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountDisableUpstreamAuthEnforcementHandler(mux, h.DisableUpstreamAuthEnforcement)
 	MountBackfillMcpAuthGrantsHandler(mux, h.BackfillMcpAuthGrants)
 	MountBackfillMcpConnectGrantsHandler(mux, h.BackfillMcpConnectGrants)
+	MountGetSecretBackfillsHandler(mux, h.GetSecretBackfills)
+	MountRunMarketplaceTokenBackfillHandler(mux, h.RunMarketplaceTokenBackfill)
+	MountRunRunnerKeyOrganizationBackfillHandler(mux, h.RunRunnerKeyOrganizationBackfill)
 	MountGetProjectRedeployPreviewHandler(mux, h.GetProjectRedeployPreview)
 	MountRedeployProjectHandler(mux, h.RedeployProject)
 	MountListCustomDomainsHandler(mux, h.ListCustomDomains)
@@ -734,6 +753,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountMigrateOrganizationAssistantIdentitiesHandler(mux, h.MigrateOrganizationAssistantIdentities)
 	MountMigrateOrganizationAssistantsToKitHandler(mux, h.MigrateOrganizationAssistantsToKit)
 	MountGetHooksRolloutHandler(mux, h.GetHooksRollout)
+	MountGetHooksReleaseProgressHandler(mux, h.GetHooksReleaseProgress)
 	MountSetHooksRolloutDefaultHandler(mux, h.SetHooksRolloutDefault)
 	MountGetOrganizationHooksRolloutHandler(mux, h.GetOrganizationHooksRollout)
 	MountSetOrganizationHooksRolloutHandler(mux, h.SetOrganizationHooksRollout)
@@ -6404,6 +6424,167 @@ func NewBackfillMcpConnectGrantsHandler(
 	})
 }
 
+// MountGetSecretBackfillsHandler configures the mux to serve the "admin"
+// service "getSecretBackfills" endpoint.
+func MountGetSecretBackfillsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/secretBackfills.get", f)
+}
+
+// NewGetSecretBackfillsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "getSecretBackfills" endpoint.
+func NewGetSecretBackfillsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetSecretBackfillsRequest(mux, decoder)
+		encodeResponse = EncodeGetSecretBackfillsResponse(encoder)
+		encodeError    = EncodeGetSecretBackfillsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getSecretBackfills")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountRunMarketplaceTokenBackfillHandler configures the mux to serve the
+// "admin" service "runMarketplaceTokenBackfill" endpoint.
+func MountRunMarketplaceTokenBackfillHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/secretBackfills.runMarketplaceTokens", f)
+}
+
+// NewRunMarketplaceTokenBackfillHandler creates a HTTP handler which loads the
+// HTTP request and calls the "admin" service "runMarketplaceTokenBackfill"
+// endpoint.
+func NewRunMarketplaceTokenBackfillHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeRunMarketplaceTokenBackfillRequest(mux, decoder)
+		encodeResponse = EncodeRunMarketplaceTokenBackfillResponse(encoder)
+		encodeError    = EncodeRunMarketplaceTokenBackfillError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "runMarketplaceTokenBackfill")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountRunRunnerKeyOrganizationBackfillHandler configures the mux to serve the
+// "admin" service "runRunnerKeyOrganizationBackfill" endpoint.
+func MountRunRunnerKeyOrganizationBackfillHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/secretBackfills.runRunnerKeyOrganizations", f)
+}
+
+// NewRunRunnerKeyOrganizationBackfillHandler creates a HTTP handler which
+// loads the HTTP request and calls the "admin" service
+// "runRunnerKeyOrganizationBackfill" endpoint.
+func NewRunRunnerKeyOrganizationBackfillHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeRunRunnerKeyOrganizationBackfillRequest(mux, decoder)
+		encodeResponse = EncodeRunRunnerKeyOrganizationBackfillResponse(encoder)
+		encodeError    = EncodeRunRunnerKeyOrganizationBackfillError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "runRunnerKeyOrganizationBackfill")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
 // MountGetProjectRedeployPreviewHandler configures the mux to serve the
 // "admin" service "getProjectRedeployPreview" endpoint.
 func MountGetProjectRedeployPreviewHandler(mux goahttp.Muxer, h http.Handler) {
@@ -7400,6 +7581,60 @@ func NewGetHooksRolloutHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "getHooksRollout")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetHooksReleaseProgressHandler configures the mux to serve the "admin"
+// service "getHooksReleaseProgress" endpoint.
+func MountGetHooksReleaseProgressHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/hooksRollout.progress", f)
+}
+
+// NewGetHooksReleaseProgressHandler creates a HTTP handler which loads the
+// HTTP request and calls the "admin" service "getHooksReleaseProgress"
+// endpoint.
+func NewGetHooksReleaseProgressHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetHooksReleaseProgressRequest(mux, decoder)
+		encodeResponse = EncodeGetHooksReleaseProgressResponse(encoder)
+		encodeError    = EncodeGetHooksReleaseProgressError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getHooksReleaseProgress")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
 		payload, err := decodeRequest(r)
 		if err != nil {

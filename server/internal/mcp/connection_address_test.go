@@ -48,7 +48,7 @@ func callMemberAt(t *testing.T, memberURL string, guardianOpts ...func(*guardian
 	issuerID := createUserSessionIssuer(t, ctx, ti.conn, projectID)
 	metaSlug := "meta-address-" + uuid.NewString()[:8]
 	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, metaSlug, issuerID)
-	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-address", "", []uuid.UUID{issuerID})
+	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-address", "")
 	member := createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", memberURL, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)), 0)
 	subject := createTestUser(t, ctx, ti, "meta-address-user-"+uuid.NewString())
 	typed := seedTypedSessionClient(t, ctx, ti, orgID, projectID, member.mcpServerID, clientID, "remote_session", subject)

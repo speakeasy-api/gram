@@ -21,14 +21,13 @@ func TestHostedCallbackAuthorizesExactPlacement(t *testing.T) {
 	for _, tt := range []struct {
 		name                 string
 		stamp                bool
-		detachIssuer         bool
 		reattach             bool
 		detachBeforeExchange bool
 		detachBeforeGrant    bool
 		wantExchanges        int64
 		wantGrant            bool
 	}{
-		{name: "exact-placement-no-issuer-binding", stamp: true, detachIssuer: true, wantExchanges: 1, wantGrant: true},
+		{name: "exact-placement", stamp: true, wantExchanges: 1, wantGrant: true},
 		{name: "old-issuer-only-state", stamp: false},
 		{name: "placement-removed-before-exchange", stamp: true, detachBeforeExchange: true},
 		{name: "placement-replaced-before-exchange", stamp: true, detachBeforeExchange: true, reattach: true},
@@ -73,13 +72,6 @@ func TestHostedCallbackAuthorizesExactPlacement(t *testing.T) {
 					return fmt.Errorf("detach hosted assignment: %w", err)
 				}
 				return nil
-			}
-			if tt.detachIssuer {
-				removed, err := repo.New(fx.ti.conn).DetachProjectRemoteSessionClientFromUserSessionIssuer(ctx, repo.DetachProjectRemoteSessionClientFromUserSessionIssuerParams{
-					OrganizationID: fx.organizationID, ProjectID: fx.projectID, RemoteSessionClientID: fx.clientID, UserSessionIssuerID: fx.userIssuer,
-				})
-				require.NoError(t, err)
-				require.EqualValues(t, 1, removed)
 			}
 			if tt.detachBeforeExchange {
 				require.NoError(t, detach(ctx))

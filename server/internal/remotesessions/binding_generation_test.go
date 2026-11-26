@@ -2,7 +2,6 @@ package remotesessions_test
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"sync"
@@ -10,9 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	gen "github.com/speakeasy-api/gram/server/gen/remote_sessions"
 	"github.com/speakeasy-api/gram/server/internal/agentmanagement"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
@@ -134,11 +131,7 @@ func TestBindingsAttachWaitsOnConcurrentRevocation(t *testing.T) {
 		done <- err
 	}()
 	q := repo.New(ti.conn)
-	require.Eventually(t, func() bool {
-		_, err := testrepo.New(ti.conn).ProbeAttachmentParentLockFixture(ctx, testrepo.ProbeAttachmentParentLockFixtureParams{RemoteSessionClientID: source.RemoteSessionClientID, UserSessionIssuerID: config})
-		var pgErr *pgconn.PgError
-		return errors.As(err, &pgErr) && pgErr.Code == pgerrcode.LockNotAvailable
-	}, 10*time.Second, 20*time.Millisecond, "attachment must reach parent persistence while the revoke is uncommitted")
+	testenv.WaitForQueryBlockedBy(t, ctx, ti.conn, testenv.BackendPID(tx), "%AttachPrincipalRemoteSessionBinding :one%")
 	require.NoError(t, tx.Commit(ctx))
 	select {
 	case err := <-done:

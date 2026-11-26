@@ -15,9 +15,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -263,7 +264,7 @@ func TestCreateMcpServer_AttachesOrganizationUserSessionIssuer(t *testing.T) {
 	require.Equal(t, issuerID, *created.UserSessionIssuerID)
 }
 
-func TestCreateMcpServer_DoesNotInheritRemoteIssuerFromOrganizationIssuer(t *testing.T) {
+func TestCreateMcpServer_DoesNotInheritOffersForSelectedOrganizationIssuer(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -279,34 +280,21 @@ func TestCreateMcpServer_DoesNotInheritRemoteIssuerFromOrganizationIssuer(t *tes
 	})
 	require.NoError(t, err)
 
-	remoteSessions := remotesessionsrepo.New(ti.conn)
-	remoteIssuer, err := remoteSessions.CreateRemoteSessionIssuer(ctx, remotesessionsrepo.CreateRemoteSessionIssuerParams{
-		ProjectID:                         conv.ToNullUUID(*authCtx.ProjectID),
-		OrganizationID:                    conv.ToPGText(authCtx.ActiveOrganizationID),
-		Slug:                              "upstream-identity",
-		Issuer:                            "https://identity.example.com",
-		AuthorizationEndpoint:             conv.ToPGText("https://identity.example.com/authorize"),
-		TokenEndpoint:                     conv.ToPGText("https://identity.example.com/token"),
-		ScopesSupported:                   []string{"openid"},
-		GrantTypesSupported:               []string{"authorization_code"},
-		ResponseTypesSupported:            []string{"code"},
-		TokenEndpointAuthMethodsSupported: []string{"client_secret_basic"},
+	_, registration := seedRemoteRegistration(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID)
+	userIssuerID := userIssuer.ID.String()
+	siblingSourceID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+	sibling, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+		Name: "configured sibling", RemoteMcpServerID: &siblingSourceID, UserSessionIssuerID: &userIssuerID,
+		Visibility: types.McpServerVisibility("disabled"),
 	})
 	require.NoError(t, err)
-	client, err := remoteSessions.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
-		ProjectID:             conv.ToNullUUID(*authCtx.ProjectID),
-		OrganizationID:        conv.ToPGText(authCtx.ActiveOrganizationID),
-		RemoteSessionIssuerID: remoteIssuer.ID,
-		ClientID:              "selected-org-issuer-client",
-	})
+	require.NoError(t, upstreamclients.CaptureSoleConsumers(ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, []uuid.UUID{userIssuer.ID}, []uuid.UUID{registration}))
+	fixtures := authclientbackfill.New(ti.conn)
+	offers, err := fixtures.ListServerAuthClientsFixture(ctx, uuid.MustParse(sibling.ID))
 	require.NoError(t, err)
-	require.NoError(t, remoteSessions.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: client.ID,
-		UserSessionIssuerID:   userIssuer.ID,
-	}))
+	require.Equal(t, []uuid.UUID{authclientbackfill.OAuthClientID(authCtx.ActiveOrganizationID, registration, authclientbackfill.TypeRemoteSession)}, offers)
 
 	remoteID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
-	userIssuerID := userIssuer.ID.String()
 	created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
 		Name:                "organization authenticated server",
 		RemoteMcpServerID:   &remoteID,
@@ -320,7 +308,10 @@ func TestCreateMcpServer_DoesNotInheritRemoteIssuerFromOrganizationIssuer(t *tes
 	})
 	require.NoError(t, err)
 	require.Equal(t, conv.ToNullUUID(userIssuer.ID), stored.UserSessionIssuerID)
-	require.False(t, stored.RemoteSessionIssuerID.Valid, "selecting an organization sign-in issuer does not inherit its legacy registration link")
+	require.False(t, stored.RemoteSessionIssuerID.Valid)
+	offers, err = fixtures.ListServerAuthClientsFixture(ctx, stored.ID)
+	require.NoError(t, err)
+	require.Empty(t, offers, "the new server cannot inherit the sibling's offer")
 }
 
 func TestCreateMcpServer_RejectsForeignOrganizationUserSessionIssuer(t *testing.T) {

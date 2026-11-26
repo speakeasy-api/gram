@@ -146,7 +146,8 @@ func TestTranscriptShadowSchemaCompatibility(t *testing.T) {
 			t.Parallel()
 			db, err := infra.CloneTestDatabase(t, "transcript_shadow_preflight")
 			require.NoError(t, err)
-			_, err = db.Exec(t.Context(), "DROP TABLE IF EXISTS chat_message_transcripts") //nolint:glint // notestingrawsql: isolated DDL fixture for catalog compatibility checks.
+			// CASCADE drops only the tool-call table's foreign key.
+			_, err = db.Exec(t.Context(), "DROP TABLE IF EXISTS chat_message_transcripts CASCADE") //nolint:glint // notestingrawsql: isolated DDL fixture for catalog compatibility checks.
 			require.NoError(t, err)
 			if tc.ddl != "" {
 				_, err = db.Exec(t.Context(), tc.ddl) //nolint:glint // notestingrawsql: isolated incompatible schema fixture.
@@ -201,7 +202,7 @@ func TestTranscriptShadowSchemaFollowsSearchPath(t *testing.T) {
 	require.NoError(t, err)
 
 	//nolint:glint // notestingrawsql: isolated DDL fixture that moves the table into another schema.
-	_, err = db.Exec(t.Context(), `DROP TABLE IF EXISTS chat_message_transcripts;
+	_, err = db.Exec(t.Context(), `DROP TABLE IF EXISTS chat_message_transcripts CASCADE;
 CREATE SCHEMA app;
 CREATE TABLE app.chat_message_transcripts (message_id uuid NOT NULL PRIMARY KEY, project_id uuid NOT NULL,
  organization_id text NOT NULL, ciphertext text NOT NULL, source_hash bytea NOT NULL,

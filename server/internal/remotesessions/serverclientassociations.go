@@ -480,30 +480,8 @@ func (s *Service) DetachServerClientAssociation(ctx context.Context, payload *ge
 	if !found {
 		return oops.E(oops.CodeNotFound, nil, "MCP server is not associated with this client").LogWarn(ctx, logger)
 	}
-	// In the typed serving path, preserve the explicit detach of the derived
-	// offer and audit it. Outside that path the association's tombstone is
-	// sufficient, so an independent typed administrator detach stays distinct.
-	enforced, err := authenforcement.ReadEnforced(ctx, dbtx, authCtx.ActiveOrganizationID)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "read upstream auth enforcement").LogError(ctx, logger)
-	}
-	if enforced {
-		// Retire only the typed links derived from this association. Keep an
-		// administrator's independent links and record a durable explicit detach.
-		offered, err := authclientsrepo.New(dbtx).ListServerBackfillAuthClients(ctx, authclientsrepo.ListServerBackfillAuthClientsParams{
-			McpServerID: serverID, ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID,
-		})
-		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "list MCP server auth clients").LogError(ctx, logger)
-		}
-		for _, client := range offered {
-			if client.RemoteSessionClientID.UUID != clientID {
-				continue
-			}
-			if err := authclients.DetachMcpServer(ctx, dbtx, s.auditLogger, authCtx, client, serverID); err != nil && !errors.Is(err, pgx.ErrNoRows) {
-				return oops.E(oops.CodeUnexpected, err, "detach MCP server auth client").LogError(ctx, logger)
-			}
-		}
+	if err := s.detachDerivedServerOffers(ctx, dbtx, authCtx, *authCtx.ProjectID, serverID, clientID); err != nil {
+		return err.LogError(ctx, logger)
 	}
 
 	if _, err := q.DetachMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.DetachMCPServerRemoteSessionClientParams{
@@ -560,5 +538,37 @@ func (s *Service) DetachServerClientAssociation(ctx context.Context, payload *ge
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
+	return nil
+}
+
+// detachDerivedServerOffers preserves independent administrator links while
+// recording an explicit detach of the offers derived from the registration.
+func (s *Service) detachDerivedServerOffers(ctx context.Context, dbtx pgx.Tx, authCtx *contextvalues.AuthContext, projectID, serverID, clientID uuid.UUID) *oops.ShareableError {
+	// In the typed serving path, preserve the explicit detach of the derived
+	// offer and audit it. Outside that path the association's tombstone is
+	// sufficient, so an independent typed administrator detach stays distinct.
+	enforced, err := authenforcement.ReadEnforced(ctx, dbtx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "read upstream auth enforcement")
+	}
+	if enforced {
+		// Retire only the typed links derived from this association. Keep an
+		// administrator's independent links and record a durable explicit detach.
+		offered, err := authclientsrepo.New(dbtx).ListServerBackfillAuthClients(ctx, authclientsrepo.ListServerBackfillAuthClientsParams{
+			McpServerID: serverID, ProjectID: projectID, OrganizationID: authCtx.ActiveOrganizationID,
+		})
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "list MCP server auth clients")
+		}
+		for _, client := range offered {
+			if client.RemoteSessionClientID.UUID != clientID {
+				continue
+			}
+			if err := authclients.DetachMcpServer(ctx, dbtx, s.auditLogger, authCtx, client, serverID); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+				return oops.E(oops.CodeUnexpected, err, "detach MCP server auth client")
+			}
+		}
+	}
+
 	return nil
 }

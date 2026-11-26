@@ -106,6 +106,7 @@ export function SourceActivityPanel({
               from,
               to,
               includeTimeSeries: false,
+              toolCallsOnly: true,
             },
           }),
         ),
