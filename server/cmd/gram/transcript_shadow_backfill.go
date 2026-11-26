@@ -31,18 +31,18 @@ const (
 	transcriptShadowBackfillChangedRetries = 5
 )
 
-// newTranscriptShadowBackfillCommand seals encrypted shadows for a project's
-// existing chat messages, so its chat reads can open shadows. Run it in a
+// newTranscriptShadowBackfillCommand seals encrypted transcripts for a
+// project's existing chat messages, so its chat reads can open them. Run it in a
 // server pod, which has the organization encryption identity and settings.
 func newTranscriptShadowBackfillCommand() *cli.Command {
 	flags := []cli.Flag{
 		&cli.StringFlag{Name: "environment", EnvVars: []string{"GRAM_ENVIRONMENT"}, Required: true},
 		&cli.StringFlag{Name: "database-url", EnvVars: []string{"GRAM_DATABASE_URL"}, Required: true},
-		&cli.StringFlag{Name: "project-id", Required: true, Usage: "Project whose messages to seal; it must already capture shadows"},
+		&cli.StringFlag{Name: "project-id", Required: true, Usage: "Project whose messages to seal; it must already have encrypted transcripts"},
 		&cli.StringFlag{Name: "after", Value: uuid.Nil.String(), Usage: "Resume after this message ID from a previous run"},
 		&cli.IntFlag{Name: "page-size", Value: transcriptShadowBackfillDefaultPage, Usage: "Messages sealed per transaction, at most 500"},
 		&cli.IntFlag{Name: "max-pages", Value: 0, Usage: "Stop after this many pages; 0 runs until the project is covered"},
-		&cli.BoolFlag{Name: "apply", Usage: "Seal shadows. Without it the command only reports coverage"},
+		&cli.BoolFlag{Name: "apply", Usage: "Seal messages. Without it the command only reports coverage"},
 		&cli.StringFlag{Name: "confirm-environment", Usage: "Must equal --environment when --apply is set"},
 		transcriptShadowFlag(),
 	}
@@ -50,7 +50,7 @@ func newTranscriptShadowBackfillCommand() *cli.Command {
 
 	return &cli.Command{
 		Name:  "transcript-shadow-backfill",
-		Usage: "Seal encrypted chat transcript shadows for a project's existing messages (dry run by default)",
+		Usage: "Seal encrypted chat transcripts for a project's existing messages (dry run by default)",
 		Flags: flags,
 		Action: func(c *cli.Context) error {
 			ctx := c.Context
@@ -93,8 +93,8 @@ func newTranscriptShadowBackfillCommand() *cli.Command {
 			// The same Transcripts the server builds at startup: it checks the
 			// schema and provisions keys for the projects on the capture
 			// allowlist. Sealing copies for a project that does not capture
-			// would leave shadows that go stale on its next write.
-			transcripts, err := newTranscriptShadow(ctx, c, db, orgEncryption, otel.GetTracerProvider(), otel.GetMeterProvider())
+			// would leave encrypted copies that go stale on its next write.
+			transcripts, err := newTranscripts(ctx, c, db, orgEncryption, otel.GetTracerProvider(), otel.GetMeterProvider())
 			if err != nil {
 				return err
 			}
@@ -107,7 +107,7 @@ func newTranscriptShadowBackfillCommand() *cli.Command {
 				return err
 			}
 			if !apply {
-				if _, err := fmt.Fprintln(out, "Dry run: nothing sealed. Rerun with --apply --confirm-environment to seal shadows."); err != nil {
+				if _, err := fmt.Fprintln(out, "Dry run: nothing sealed. Rerun with --apply --confirm-environment to seal messages."); err != nil {
 					return fmt.Errorf("write dry run result: %w", err)
 				}
 				return nil
@@ -181,7 +181,7 @@ func backfillTranscriptShadowPage(ctx context.Context, transcripts *transcriptst
 			return page, nil
 		}
 		if !errors.Is(err, transcriptstore.ErrChanged) || attempt >= transcriptShadowBackfillChangedRetries {
-			return transcriptstore.Page{After: after, Count: 0, More: true}, fmt.Errorf("seal transcript shadow page: %w", err)
+			return transcriptstore.Page{After: after, Count: 0, More: true}, fmt.Errorf("seal encrypted transcript page: %w", err)
 		}
 	}
 }
@@ -189,10 +189,10 @@ func backfillTranscriptShadowPage(ctx context.Context, transcripts *transcriptst
 func writeTranscriptShadowProgress(ctx context.Context, out io.Writer, transcripts *transcriptstore.Transcripts, organizationID string, projectID uuid.UUID, label string) error {
 	progress, err := transcripts.Progress(ctx, organizationID, projectID)
 	if err != nil {
-		return fmt.Errorf("read transcript shadow coverage: %w", err)
+		return fmt.Errorf("read encrypted transcript coverage: %w", err)
 	}
 	if _, err := fmt.Fprintf(out, "Coverage %s: current=%d waiting=%d unattributed=%d\n", label, progress.Current, progress.Waiting, progress.Unattributed); err != nil {
-		return fmt.Errorf("write transcript shadow coverage: %w", err)
+		return fmt.Errorf("write encrypted transcript coverage: %w", err)
 	}
 	return nil
 }

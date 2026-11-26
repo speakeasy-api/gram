@@ -36,17 +36,17 @@ func parseTranscriptShadowProjectIDs(values []string) ([]uuid.UUID, error) {
 	return ids, nil
 }
 
-// configureTranscriptShadow only opts explicit projects into encrypted shadow
-// writes and reads, and wires the writer to capture for them. Plaintext remains
-// authoritative for every other project; startup never backfills old
-// messages. It returns nil when no project keeps shadows.
-func configureTranscriptShadow(ctx context.Context, c *cli.Context, db *pgxpool.Pool, writer *chat.ChatMessageWriter, orgEncryption orgEncryptionDeps, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider) (*transcriptstore.Transcripts, error) {
+// configureTranscripts only opts explicit projects into encrypted transcripts,
+// and wires the writer to seal them. Plaintext remains authoritative for every
+// other project; startup never backfills old messages. It returns nil when no
+// project has encrypted transcripts.
+func configureTranscripts(ctx context.Context, c *cli.Context, db *pgxpool.Pool, writer *chat.ChatMessageWriter, orgEncryption orgEncryptionDeps, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider) (*transcriptstore.Transcripts, error) {
 	var none *transcriptstore.Transcripts
-	// Check the writer before newTranscriptShadow provisions any key.
+	// Check the writer before newTranscripts provisions any key.
 	if writer == nil && len(c.StringSlice(chatTranscriptShadowProjectIDsFlag)) > 0 {
-		return none, fmt.Errorf("chat transcript shadow requires a writer")
+		return none, fmt.Errorf("encrypted chat transcripts require a writer")
 	}
-	transcripts, err := newTranscriptShadow(ctx, c, db, orgEncryption, tracerProvider, meterProvider)
+	transcripts, err := newTranscripts(ctx, c, db, orgEncryption, tracerProvider, meterProvider)
 	if err != nil || transcripts == nil {
 		return none, err
 	}
@@ -54,10 +54,11 @@ func configureTranscriptShadow(ctx context.Context, c *cli.Context, db *pgxpool.
 	return transcripts, nil
 }
 
-// newTranscriptShadow builds Transcripts for the projects on the capture
-// allowlist: it checks the schema, then provisions each of their
-// organizations' keys. It returns nil when no project keeps shadows.
-func newTranscriptShadow(ctx context.Context, c *cli.Context, db *pgxpool.Pool, orgEncryption orgEncryptionDeps, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider) (*transcriptstore.Transcripts, error) {
+// newTranscripts builds Transcripts for the projects with encrypted
+// transcripts: it checks the schema, then provisions each of their
+// organizations' keys. It returns nil when no project has encrypted
+// transcripts.
+func newTranscripts(ctx context.Context, c *cli.Context, db *pgxpool.Pool, orgEncryption orgEncryptionDeps, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider) (*transcriptstore.Transcripts, error) {
 	var none *transcriptstore.Transcripts
 	values := c.StringSlice(chatTranscriptShadowProjectIDsFlag)
 	if len(values) == 0 {
@@ -75,10 +76,10 @@ func newTranscriptShadow(ctx context.Context, c *cli.Context, db *pgxpool.Pool, 
 		return none, fmt.Errorf("chat transcript shadow requires organization encryption service and provisioner")
 	}
 	if db == nil {
-		return none, fmt.Errorf("chat transcript shadow requires database")
+		return none, fmt.Errorf("encrypted chat transcripts require a database")
 	}
 	// Check compatibility before resolving projects, provisioning keys or enabling writes.
-	if err := checkTranscriptShadowSchema(ctx, db); err != nil {
+	if err := checkTranscriptSchema(ctx, db); err != nil {
 		return none, err
 	}
 	queries := chatrepo.New(db)
@@ -111,7 +112,7 @@ func newTranscriptShadow(ctx context.Context, c *cli.Context, db *pgxpool.Pool, 
 	return transcriptstore.NewTranscripts(store, projectIDs...), nil
 }
 
-// checkTranscriptShadowSchema checks the tables the store writes: the sidecar
+// checkTranscriptSchema checks the tables the store writes: the sidecar
 // and its tool-call ID table, including the metadata columns capture fills and
 // the (message_id, tool_call_id) conflict target its inserts use.
 // Catalog reads neither touch transcript payloads nor execute trial inserts.
@@ -121,7 +122,7 @@ func newTranscriptShadow(ctx context.Context, c *cli.Context, db *pgxpool.Pool, 
 // arbiters must be immediate: PostgreSQL rejects even a redundant deferred one.
 // The metadata columns capture writes, and the tool-call ID table beside the
 // sidecar, must exist too.
-func checkTranscriptShadowSchema(ctx context.Context, db interface {
+func checkTranscriptSchema(ctx context.Context, db interface {
 	QueryRow(context.Context, string, ...any) pgx.Row
 }) error {
 	var compatible bool

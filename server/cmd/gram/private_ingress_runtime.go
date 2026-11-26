@@ -324,7 +324,7 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	}
 	clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
 	clientAssertionSigner.PinManagedSigner(c.String(identityProviderSigningServiceAccount))
-	if _, err := configureTranscriptShadow(ctx, c, db, chatWriter, orgEncryption, tracerProvider, meterProvider); err != nil {
+	if _, err := configureTranscripts(ctx, c, db, chatWriter, orgEncryption, tracerProvider, meterProvider); err != nil {
 		return nil, err
 	}
 	issuerGate := newInternalSessionIssuerGate(c, db, featureFlags, false)
