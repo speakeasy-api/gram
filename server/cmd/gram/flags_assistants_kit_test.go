@@ -221,3 +221,18 @@ func TestKitGKEIdentityEnvironment(t *testing.T) {
 	require.Equal(t, "us-central1", got.ClusterLocation)
 	require.Equal(t, "assistants", got.ClusterName)
 }
+
+func TestKitDisabledToolsTrimsAndRefusesEmptyNames(t *testing.T) {
+	t.Parallel()
+	got, err := kitDisabledTools([]string{" shell", "edit ", "shell"})
+	require.NoError(t, err)
+	require.Equal(t, []string{"edit", "shell"}, got)
+
+	for name, raw := range map[string][]string{"empty": {""}, "blank": {"shell", "  "}} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			_, err := kitDisabledTools(raw)
+			require.Error(t, err)
+		})
+	}
+}

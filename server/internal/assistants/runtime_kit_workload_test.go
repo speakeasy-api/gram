@@ -629,6 +629,23 @@ func TestKitConfiguredTurnRemovalWithdrawsWorkload(t *testing.T) {
 	require.Zero(t, count)
 }
 
+func TestKitConfiguredTurnReplacesRuntimeWhenDisabledToolsChange(t *testing.T) {
+	t.Parallel()
+	core, db, r, identity, c, _ := kitWorkloadDBFixture(t)
+	binding, err := core.provisionKitWorkload(t.Context(), r, c, identity, "disabled-tools")
+	require.NoError(t, err)
+	servers := []runtimeMCPServer{{ID: "attached", URL: "https://mcp.example/mcp/attached"}}
+	binding.MCPDesiredSetHash = kitMCPDesiredSetHash(servers)
+	binding.DisabledTools = []string{"shell"}
+	r = kitWorkloadMetadata(t, r, binding)
+	protocol := &kitConfiguredRuntimeProtocol{core: core, disabledTools: []string{"edit", "shell"}}
+	err = protocol.RunTurn(t.Context(), r, runTurnRequest{MCPServers: servers})
+	require.ErrorIs(t, err, ErrKitMCPDesiredSetUnsupported, "a runtime started with other disabled tools is replaced, not reused")
+	count, err := workloadrepo.New(db).CountLiveAdmissionsForSubject(t.Context(), workloadrepo.CountLiveAdmissionsForSubjectParams{OrganizationID: identity.OrganizationID, WorkloadIssuerID: binding.IssuerID, Subject: binding.Subject, MatchKind: "exact"})
+	require.NoError(t, err)
+	require.Zero(t, count)
+}
+
 func TestKitAttachmentEditRequiresRetirement(t *testing.T) {
 	t.Parallel()
 	_, db, key, _ := kitSessionFixture(t)

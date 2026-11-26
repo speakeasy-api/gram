@@ -2,7 +2,9 @@ package principalcredential_test
 
 import (
 	"testing"
+	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
@@ -44,16 +46,38 @@ func TestDelegationNeverAuthenticatesAsACredential(t *testing.T) {
 
 func TestDelegationRequiresAnAgentForAUserAndAWorkloadActor(t *testing.T) {
 	t.Parallel()
-	issuer := principalcredential.New(newSigner(t), nil)
 	workload := urn.NewWorkloadPrincipal(uuid.New(), "kit-runtime")
+	workloadCredential := agentCredential()
+	workloadCredential.Principal = urn.NewWorkloadPrincipal(uuid.New(), "trigger")
 
-	_, _, err := issuer.MintDelegation(principalcredential.Credential{
-		OrganizationID: "org-test", ProjectID: uuid.New(), AuthorizerUserID: "",
-		Principal: urn.NewWorkloadPrincipal(uuid.New(), "trigger"),
-	}, workload)
-	require.ErrorIs(t, err, principalcredential.ErrInvalid)
+	for name, tc := range map[string]struct {
+		credential principalcredential.Credential
+		actor      urn.Principal
+	}{
+		"principal is not an agent": {credential: workloadCredential, actor: workload},
+		"actor is not a workload":   {credential: agentCredential(), actor: urn.NewPrincipal(urn.PrincipalTypeAgent, uuid.NewString())},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			_, _, err := principalcredential.New(newSigner(t), nil).MintDelegation(tc.credential, tc.actor)
+			require.ErrorIs(t, err, principalcredential.ErrInvalid)
+		})
+	}
+}
 
-	_, _, err = issuer.MintDelegation(agentCredential(), urn.NewPrincipal(urn.PrincipalTypeAgent, uuid.NewString()))
+func TestExpiredDelegationIsRejected(t *testing.T) {
+	t.Parallel()
+	signer := newSigner(t)
+	c := agentCredential()
+	past := time.Now().Add(-time.Hour)
+	raw, err := signer.SignRS256(jwt.MapClaims{
+		"org_id": c.OrganizationID, "project_id": c.ProjectID.String(), "authorizer_user_id": c.AuthorizerUserID,
+		"iss": signer.URL(), "sub": c.Principal.String(), "aud": []string{principalcredential.DelegationAudience},
+		"iat": past.Add(-principalcredential.Lifetime).Unix(), "exp": past.Unix(), "jti": uuid.NewString(),
+		"may_act": map[string]string{"sub": urn.NewWorkloadPrincipal(uuid.New(), "kit-runtime").String()},
+	}, principalcredential.DelegationTokenType)
+	require.NoError(t, err)
+	_, _, err = principalcredential.New(signer, nil).ValidateDelegation(raw)
 	require.ErrorIs(t, err, principalcredential.ErrInvalid)
 }
 

@@ -67,13 +67,33 @@ delegation is the `subject_token` and its workload assertion is the
 `actor_token`. The endpoint admits the actor as the workload grant does, checks
 `may_act` and the workload's assigned agent, then returns a fresh turn
 credential bound to the same thread. Admission still intersects the agent,
-its owner and the person. A delegation never authenticates a request itself,
-and Kit never holds the turn credential directly.
+its owner and the person. A delegation never authenticates a request itself.
+Kit receives the exchanged access token from the token endpoint and uses it for
+its MCP calls, but the adapter never stores or passes a bearer as session
+state. A stopped turn never installs its person.
 
-A runtime built without delegation is replaced on its next turn when the flag
-changes. `--assistant-kit-disabled-tools` removes Kit built-ins (for example
-`shell,edit`) from every session through `_meta["kit/disabledTools"]`. Both
-need a Kit build with session delegation and disabled tools.
+Kit fails closed: a delegated workload server refuses to authenticate in a
+session that has not yet received `_kit/session/update_delegation`, including
+a fork that did not inherit one and a subagent run. Kit passes the owning
+session's delegation and disabled tools to its subagent runs.
+
+Known limitations, so keep the flag off for shared threads until they are
+closed:
+
+- The delegation is per session, not per turn or job. A Kit background job
+  still running from an earlier turn uses the newest person's delegation.
+- A delegation can be exchanged more than once within its 60-minute lifetime,
+  including after its turn ends. Kit needs this to re-exchange after a 401.
+- The exchanged credential is not bound to the MCP resource Kit requested.
+
+A runtime built with another delegation setting or disabled-tools list is
+replaced on its next turn. `--assistant-kit-disabled-tools` removes Kit
+built-ins (for example `shell,edit`) from every session through
+`_meta["kit/disabledTools"]`; Kit rejects a name it does not know.
+
+Each flag has its own Kit requirement: user delegation needs a Kit build that
+advertises session delegation (`kit/delegation`), and disabled tools need a Kit
+build that supports `kit/disabledTools`. Either can be used without the other.
 
 ## MCP configuration lifecycle
 

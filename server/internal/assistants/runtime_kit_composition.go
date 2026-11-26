@@ -203,7 +203,7 @@ func (s *ServiceCore) kitProtocolFactory(c KitLocalCompositionConfig, cidrs []st
 		if err != nil {
 			return nil, err
 		}
-		return &kitConfiguredRuntimeProtocol{KitRuntimeProtocol: protocol, core: s, userDelegation: c.UserDelegation}, nil
+		return &kitConfiguredRuntimeProtocol{KitRuntimeProtocol: protocol, core: s, userDelegation: c.UserDelegation, disabledTools: c.DisabledTools}, nil
 	}
 }
 
@@ -216,6 +216,7 @@ type kitConfiguredRuntimeProtocol struct {
 	*KitRuntimeProtocol
 	core           *ServiceCore
 	userDelegation bool
+	disabledTools  []string
 }
 
 func (p *kitConfiguredRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeRecord, turn runTurnRequest) error {
@@ -235,7 +236,7 @@ func (p *kitConfiguredRuntimeProtocol) RunTurn(ctx context.Context, r assistantR
 		// Refuse dispatch until verified without destroying live admission.
 		return errKitMCPDiscoveryUnavailable
 	}
-	if metadata.Workload.MCPDesiredSetHash != kitMCPDesiredSetHash(turn.MCPServers) || metadata.Workload.UserDelegation != p.userDelegation {
+	if metadata.Workload.MCPDesiredSetHash != kitMCPDesiredSetHash(turn.MCPServers) || metadata.Workload.UserDelegation != p.userDelegation || !slices.Equal(metadata.Workload.DisabledTools, p.disabledTools) {
 		// Disconnecting Kit's additive overlay cannot remove filesystem-owned
 		// connections. Withdraw the exact runtime workload; the turn worker then
 		// replaces the runtime with one configured for the new set.
@@ -333,6 +334,7 @@ func (s *ServiceCore) kitCompositionBootstrap(ctx context.Context, r assistantRu
 	}
 	workload.MCPDesiredSetHash = kitMCPDesiredSetHash(resolveAssistantMCPServers(ctx, s.logger, s.serverURL, assistant.MCPServers, slugs))
 	workload.UserDelegation = c.UserDelegation
+	workload.DisabledTools = c.DisabledTools
 	mcpJSON, err := kitCompositionMCP(c, workload)
 	if err != nil {
 		return zero, err

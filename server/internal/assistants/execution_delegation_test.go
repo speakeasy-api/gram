@@ -66,4 +66,10 @@ func TestTurnDelegationExchangesOnlyForItsActorAndKeepsTheUser(t *testing.T) {
 	unattended, err := manager.DelegateTurnCredential(ctx, turn(sourceKindCron, `{}`), actor)
 	require.NoError(t, err)
 	require.Empty(t, unattended, "a turn with no person behind it delegates nothing")
+
+	legacy, err := core.MintThreadScopedRuntimeToken(assistant, thread, "user-1")
+	require.NoError(t, err)
+	scoped, err := manager.DelegateTurnCredential(ctx, legacy, actor)
+	require.NoError(t, err, "a thread-scoped runtime token is not a principal credential")
+	require.Empty(t, scoped, "a turn without a principal credential delegates nothing")
 }

@@ -2,10 +2,13 @@ package gram
 
 import (
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
 	"net/url"
+	"slices"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -111,6 +114,10 @@ func installKitLocalRuntimeFromCLI(logger *slog.Logger, c *cli.Context, core *as
 	if issuerBaseURL == "" {
 		issuerBaseURL = (&url.URL{Scheme: serverURL.Scheme, Host: serverURL.Host}).String()
 	}
+	disabledTools, err := kitDisabledTools(c.StringSlice("assistant-kit-disabled-tools"))
+	if err != nil {
+		return err
+	}
 	config := assistants.KitLocalCompositionConfig{
 		PersistedMCP: base.Provider != assistants.RuntimeProviderLocal,
 		Environment:  c.String("environment"), Image: c.String("assistant-kit-image"), ExtraCACertFile: c.String("assistant-runtime-local-ca-file"),
@@ -123,7 +130,7 @@ func installKitLocalRuntimeFromCLI(logger *slog.Logger, c *cli.Context, core *as
 		WorkloadNamespace:     base.GKE.Namespace,
 		WorkloadIssuerBaseURL: issuerBaseURL,
 		UserDelegation:        c.Bool("assistant-kit-user-delegation"),
-		DisabledTools:         c.StringSlice("assistant-kit-disabled-tools"),
+		DisabledTools:         disabledTools,
 	}
 
 	if base.Provider == assistants.RuntimeProviderLocal {
@@ -195,4 +202,20 @@ func kitGKEIdentityFromCLI(c *cli.Context) (assistants.KitGKEIdentityConfig, err
 		return identity, fmt.Errorf("invalid assistant-kit-gke identity flags: %w", err)
 	}
 	return identity, nil
+}
+
+// kitDisabledTools trims each configured name and refuses an empty one, so a
+// stray separator cannot leave the intended tool enabled. Kit rejects names it
+// does not know when the session starts. The result is sorted and unique.
+func kitDisabledTools(raw []string) ([]string, error) {
+	tools := make([]string, 0, len(raw))
+	for _, name := range raw {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			return nil, errors.New("assistant-kit-disabled-tools must not contain an empty name")
+		}
+		tools = append(tools, name)
+	}
+	slices.Sort(tools)
+	return slices.Compact(tools), nil
 }

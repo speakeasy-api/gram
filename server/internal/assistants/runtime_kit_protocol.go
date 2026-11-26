@@ -295,8 +295,14 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 			return fmt.Errorf("kit protocol operation: %w", err)
 		}
 	}
+	// A processing event owns cancellation even before session/new returns.
+	// Startup replay is flushed, and no prompt has yet been submitted.
+	if stopped, err := p.cancelKitTurnBeforePrompt(work, r, req); err != nil || stopped {
+		return err
+	}
 	if req.KitDelegation != nil {
-		// Set before the prompt: this turn's MCP calls act for its person.
+		// Set after the stop check and before the prompt: a stopped turn never
+		// installs its person, and this turn's MCP calls act for that person.
 		var subject any
 		if *req.KitDelegation != "" {
 			subject = *req.KitDelegation
@@ -304,11 +310,6 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 		if _, err := c.Call(work, "_kit/session/update_delegation", map[string]any{"sessionId": session.SessionID, "subjectToken": subject}, session.SessionID); err != nil {
 			return fmt.Errorf("kit session delegation: %w", err)
 		}
-	}
-	// A processing event owns cancellation even before session/new returns.
-	// Startup replay is flushed, and no prompt has yet been submitted.
-	if stopped, err := p.cancelKitTurnBeforePrompt(work, r, req); err != nil || stopped {
-		return err
 	}
 	echoMu.Lock()
 	awaitingEcho = req.CanonicalUserMessageID != uuid.Nil

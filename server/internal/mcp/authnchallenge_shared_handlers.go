@@ -123,6 +123,11 @@ func (s *Service) HandleSharedAuthorizationServerMetadata(w http.ResponseWriter,
 			grantTypes = append(grantTypes, oauthwire.GrantTypeJWTBearer)
 		}
 	}
+	if s.assistantTokens != nil && s.workloadGrant != nil {
+		// An assistant runtime exchanges a turn's delegation, with its workload
+		// assertion as the actor token.
+		grantTypes = append(grantTypes, oauthwire.GrantTypeTokenExchange)
+	}
 	return writeJSONMetadata(ctx, w, r, issuer.logger, s.authorizationServerMetadata(ctx, urls, issuer.cimdAdmissionModeRaw, grantTypes, grantProfiles))
 }
 
@@ -356,6 +361,9 @@ func (s *Service) HandleSharedToken(w http.ResponseWriter, r *http.Request) erro
 	case oauthwire.GrantTypeTokenExchange:
 		// Only a workload acting for a delegated subject exchanges tokens here.
 		if !isDelegatedWorkloadExchange(r) {
+			creds := extractClientCredentials(r)
+			clientID, _ := resolvePresentedClientID(creds)
+			logOAuthClientCredentialEvent(ctx, logger, r, "oauth token request rejected", clientID, creds.method, grantType, oautherr.CodeUnsupportedGrantType)
 			return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeUnsupportedGrantType, "unsupported grant_type")
 		}
 		return s.handleDelegatedWorkloadExchange(ctx, w, r, issuer)

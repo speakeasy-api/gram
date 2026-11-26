@@ -35,7 +35,10 @@ type KitWorkloadBinding struct {
 	MCPDesiredSetHash string `json:"mcp_desired_set_hash,omitempty"`
 	// UserDelegation records whether the runtime's MCP configuration exchanges
 	// per-turn delegations. A runtime built otherwise is replaced, not reused.
-	UserDelegation bool                              `json:"user_delegation,omitempty"`
+	UserDelegation bool `json:"user_delegation,omitempty"`
+	// DisabledTools records the built-in tools the runtime's sessions were
+	// started without. A runtime built with another list is replaced.
+	DisabledTools  []string                          `json:"disabled_tools,omitempty"`
 	IssuerID       uuid.UUID                         `json:"issuer_id"`
 	Subject        string                            `json:"subject"`
 	Identity       assistantidentity.RuntimeIdentity `json:"identity"`
@@ -248,7 +251,7 @@ func (s *ServiceCore) provisionKitWorkload(ctx context.Context, r assistantRunti
 	if err != nil {
 		return nil, fmt.Errorf("provision kit workload: %w", err)
 	}
-	return &KitWorkloadBinding{MCPDesiredSetHash: "", UserDelegation: false, IssuerID: issuer.ID, Subject: subject, Identity: identity, ServiceAccount: sa, Audience: audience, Generation: generation}, nil
+	return &KitWorkloadBinding{MCPDesiredSetHash: "", UserDelegation: false, DisabledTools: nil, IssuerID: issuer.ID, Subject: subject, Identity: identity, ServiceAccount: sa, Audience: audience, Generation: generation}, nil
 }
 
 // revokeKitWorkload withdraws only this runtime's exact admission and assignment.

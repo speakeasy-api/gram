@@ -156,3 +156,39 @@ func TestDelegatedWorkloadExchange_RejectsWrongSubjectTokenType(t *testing.T) {
 	form.Set(oauthwire.ParamSubjectTokenType, delegatedTokenTypeAccessToken)
 	requireTokenError(t, f.post(t, form), "invalid_request", "subject_token_type must be "+delegatedTokenTypeJWT)
 }
+
+func TestDelegatedWorkloadExchange_RefusesDelegationFromAnotherOrganization(t *testing.T) {
+	t.Parallel()
+
+	f := newDelegatedWorkloadFixture(t)
+	raw, _, err := f.ti.principalCredentials.MintDelegation(principalcredential.Credential{
+		OrganizationID:            "another-org",
+		ProjectID:                 f.fx.target.ProjectID,
+		Principal:                 urn.NewPrincipal(urn.PrincipalTypeAgent, f.agentID.String()),
+		AuthorizerUserID:          f.fx.userID,
+		SelectionProfileVersionID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	}, f.actor())
+	require.NoError(t, err)
+	requireTokenError(t, f.post(t, f.exchangeForm(t, raw)), "invalid_grant", "subject_token is outside this authorization server")
+}
+
+func TestDelegatedWorkloadExchange_RefusesDelegationNotBoundToAThread(t *testing.T) {
+	t.Parallel()
+
+	// Signed for the right actor and agent, but never recorded against an
+	// assistant thread, as when its binding expired or it was not platform-issued.
+	f := newDelegatedWorkloadFixture(t)
+	raw, _, err := f.ti.principalCredentials.MintDelegation(principalcredential.Credential{
+		OrganizationID:            f.authCtx.ActiveOrganizationID,
+		ProjectID:                 f.fx.target.ProjectID,
+		Principal:                 urn.NewPrincipal(urn.PrincipalTypeAgent, f.agentID.String()),
+		AuthorizerUserID:          f.fx.userID,
+		SelectionProfileVersionID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	}, f.actor())
+	require.NoError(t, err)
+	_, _, err = f.ti.principalCredentials.ValidateDelegation(raw)
+	require.NoError(t, err, "the delegation itself is valid; only its thread binding is missing")
+	_, err = f.ti.assistantTokens.ExchangeDelegation(t.Context(), raw, f.actor())
+	require.ErrorIs(t, err, principalcredential.ErrInvalid)
+	requireTokenError(t, f.post(t, f.exchangeForm(t, raw)), "invalid_grant", "subject_token is invalid")
+}
