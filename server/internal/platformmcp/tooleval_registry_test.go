@@ -85,6 +85,7 @@ func composeToolEvalRegistry(t *testing.T, logger *slog.Logger, pool *pgxpool.Po
 		WithRiskFindings(NewRiskFindingsService(pool, findings, key), budget).
 		WithRiskFindingList(NewRiskFindingListService(pool, nil, key), budget).
 		WithChatMetadata(NewChatMetadataService(pool, engine, chatfindings.New(pool, findings), budget, key)).
+		WithMCPFeedback(NewMCPFeedbackReadService(&stubMCPFeedbackLister{}, budget)).
 		WithOrganizationGateway(NewOrganizationGatewayService(pool, dashboardURL)).
 		WithToolExposure(toolExposure).
 		WithProjectLifecycle(projectLifecycle).
