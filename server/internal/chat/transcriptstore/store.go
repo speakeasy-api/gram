@@ -83,8 +83,9 @@ func message(content string, raw, calls []byte, notes pgtype.Text, summaries []b
 // committed key cache through the pool. Call it before opening the transaction
 // that Capture will use: Capture then reuses the cached key and makes no KMS
 // call while the transaction holds its locks. A warm cache needs no KMS call
-// here either. Prepare decides nothing: Capture still reads the configuration
-// in its transaction and fails closed on its own.
+// here either. An error means Capture would fail too, so callers fail before
+// opening the transaction. Capture still reads the configuration in its
+// transaction and fails closed on its own.
 func (s *Store) Prepare(ctx context.Context, organizationID string) error {
 	if organizationID == "" {
 		return ErrInvalid
@@ -306,8 +307,9 @@ func (s *Store) Backfill(ctx context.Context, organizationID string, projectID, 
 	if organizationID == "" || projectID == uuid.Nil || limit < 1 || limit > 500 {
 		return Page{}, ErrInvalid
 	}
-	// Best effort: Capture checks the key again in the transaction.
-	_ = s.Prepare(ctx, organizationID)
+	if err := s.Prepare(ctx, organizationID); err != nil {
+		return Page{}, err
+	}
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return Page{}, safe(err)

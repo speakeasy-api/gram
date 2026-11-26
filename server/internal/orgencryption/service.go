@@ -58,10 +58,12 @@ type Service struct {
 	configs  *expirable.LRU[configCacheKey, cachedConfig]
 	flights  singleflight.Group
 
-	// lastUsed records when each cached DEK last served a caller, so
-	// KeepWarm refreshes only DEKs still in use.
-	usesMu   sync.Mutex
-	lastUsed map[uuid.UUID]time.Time
+	// lastUsed records when each cached DEK of a use case in warmUseCases
+	// last served a caller, so KeepWarm refreshes only DEKs still in use.
+	// Nothing is recorded until KeepWarm starts, and KeepWarm prunes it.
+	usesMu       sync.Mutex
+	lastUsed     map[uuid.UUID]time.Time
+	warmUseCases map[string]struct{}
 }
 
 type cachedDataKey struct {
@@ -97,14 +99,15 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, identity *gcpauth.Identit
 	}
 
 	return &Service{
-		logger:   logger.With(attr.SlogComponent("orgencryption")),
-		db:       db,
-		keys:     &keyResolver{cfg: cfg, identity: identity, clients: clients},
-		dataKeys: expirable.NewLRU[uuid.UUID, cachedDataKey](dataKeyCacheSize, nil, DataKeyCacheTTL),
-		configs:  expirable.NewLRU[configCacheKey, cachedConfig](configCacheSize, nil, configCacheTTL),
-		flights:  singleflight.Group{},
-		usesMu:   sync.Mutex{},
-		lastUsed: map[uuid.UUID]time.Time{},
+		logger:       logger.With(attr.SlogComponent("orgencryption")),
+		db:           db,
+		keys:         &keyResolver{cfg: cfg, identity: identity, clients: clients},
+		dataKeys:     expirable.NewLRU[uuid.UUID, cachedDataKey](dataKeyCacheSize, nil, DataKeyCacheTTL),
+		configs:      expirable.NewLRU[configCacheKey, cachedConfig](configCacheSize, nil, configCacheTTL),
+		flights:      singleflight.Group{},
+		usesMu:       sync.Mutex{},
+		lastUsed:     map[uuid.UUID]time.Time{},
+		warmUseCases: map[string]struct{}{},
 	}, nil
 }
 
@@ -260,7 +263,7 @@ func (s *Service) loadConfigIn(ctx context.Context, db repo.DBTX, organizationID
 // process and DataKeyCacheTTL.
 func (s *Service) dataKey(ctx context.Context, organizationID string, dataKeyID uuid.UUID) (cachedDataKey, error) {
 	if cached, ok := s.dataKeys.Get(dataKeyID); ok {
-		s.noteUse(dataKeyID)
+		s.noteUse(dataKeyID, cached.useCase)
 		return cached, nil
 	}
 
@@ -268,7 +271,7 @@ func (s *Service) dataKey(ctx context.Context, organizationID string, dataKeyID 
 	if err != nil {
 		return cachedDataKey{}, err
 	}
-	s.noteUse(dataKeyID)
+	s.noteUse(dataKeyID, dataKey.useCase)
 
 	return dataKey, nil
 }

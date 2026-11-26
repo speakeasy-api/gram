@@ -631,7 +631,9 @@ func (s *Service) insertUncorrelatedAgentPrompt(
 		AccountType:       metadata.AccountType,
 		BillingMode:       metadata.BillingMode,
 	}}
-	s.writer.PrepareTranscriptShadow(ctx, metadata.GramOrgID, projectID)
+	if err := s.writer.PrepareTranscriptShadow(ctx, projectID); err != nil {
+		return false, fmt.Errorf("prepare uncorrelated agent prompt: %w", err)
+	}
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return false, fmt.Errorf("begin prompt correlation transaction: %w", err)

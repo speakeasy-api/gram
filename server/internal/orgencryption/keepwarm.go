@@ -34,10 +34,7 @@ const (
 // DataKeyCacheTTL. Each warm DEK costs one KMS call per process about every
 // DataKeyCacheTTL minus refreshAhead.
 func (s *Service) KeepWarm(ctx context.Context, useCases ...UseCase) {
-	warm := make(map[string]struct{}, len(useCases))
-	for _, useCase := range useCases {
-		warm[string(useCase)] = struct{}{}
-	}
+	warm := s.enableKeepWarm(useCases)
 	if len(warm) == 0 {
 		return
 	}
@@ -52,6 +49,19 @@ func (s *Service) KeepWarm(ctx context.Context, useCases ...UseCase) {
 			s.refreshDue(ctx, warm, time.Now())
 		}
 	}
+}
+
+// enableKeepWarm starts recording uses of the given use cases' DEKs and
+// returns them as a set.
+func (s *Service) enableKeepWarm(useCases []UseCase) map[string]struct{} {
+	warm := make(map[string]struct{}, len(useCases))
+	s.usesMu.Lock()
+	defer s.usesMu.Unlock()
+	for _, useCase := range useCases {
+		warm[string(useCase)] = struct{}{}
+		s.warmUseCases[string(useCase)] = struct{}{}
+	}
+	return warm
 }
 
 // refreshDue unwraps again every cached DEK of a warm use case that is due for
@@ -84,9 +94,14 @@ func (s *Service) refreshDue(ctx context.Context, warm map[string]struct{}, now 
 	return refreshed
 }
 
-func (s *Service) noteUse(id uuid.UUID) {
+// noteUse records a use of a DEK whose use case KeepWarm keeps warm. Other
+// uses are not recorded, so a process without KeepWarm keeps no map at all.
+func (s *Service) noteUse(id uuid.UUID, useCase string) {
 	s.usesMu.Lock()
 	defer s.usesMu.Unlock()
+	if _, ok := s.warmUseCases[useCase]; !ok {
+		return
+	}
 	s.lastUsed[id] = time.Now()
 }
 

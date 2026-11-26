@@ -160,19 +160,39 @@ func (w *ChatMessageWriter) WithTranscriptShadow(store *transcriptstore.Store, p
 	return w
 }
 
-// PrepareTranscriptShadow warms the organization's transcript key before a
-// write transaction opens, so the capture inside it makes no KMS call while it
-// holds the transaction. Callers of WriteInTx call it before they begin their
-// transaction. It is best effort: the capture checks the key again in the
-// transaction and fails the write closed on its own.
-func (w *ChatMessageWriter) PrepareTranscriptShadow(ctx context.Context, organizationID string, projectID uuid.UUID) {
+// PrepareTranscriptShadow unwraps the project's transcript key before a write
+// transaction opens, so the capture inside it makes no KMS call while it holds
+// the transaction. Every caller of WriteInTx calls it before it begins the
+// transaction. A project that does not capture shadows needs no query. An
+// error means the capture would fail too, so the caller fails the write before
+// opening the transaction.
+func (w *ChatMessageWriter) PrepareTranscriptShadow(ctx context.Context, projectID uuid.UUID) error {
+	if !w.capturesTranscriptShadow(projectID) {
+		return nil
+	}
+	organizationID, err := repo.New(w.db).GetProjectOrganizationID(ctx, projectID)
+	if err != nil {
+		return fmt.Errorf("get project organization id: %w", err)
+	}
+	return w.prepareTranscriptShadow(ctx, organizationID, projectID)
+}
+
+func (w *ChatMessageWriter) capturesTranscriptShadow(projectID uuid.UUID) bool {
 	if w.transcriptShadow == nil {
-		return
+		return false
 	}
-	if _, enabled := w.transcriptShadowProjects[projectID]; !enabled {
-		return
+	_, enabled := w.transcriptShadowProjects[projectID]
+	return enabled
+}
+
+func (w *ChatMessageWriter) prepareTranscriptShadow(ctx context.Context, organizationID string, projectID uuid.UUID) error {
+	if !w.capturesTranscriptShadow(projectID) {
+		return nil
 	}
-	_ = w.transcriptShadow.Prepare(ctx, organizationID)
+	if err := w.transcriptShadow.Prepare(ctx, organizationID); err != nil {
+		return fmt.Errorf("prepare encrypted transcript shadow: %w", err)
+	}
+	return nil
 }
 
 func (w *ChatMessageWriter) captureTranscriptShadow(ctx context.Context, db repo.DBTX, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID) error {
@@ -556,7 +576,9 @@ func (w *ChatMessageWriter) writeMessages(ctx context.Context, projectID uuid.UU
 	}
 	params := messageWriteParams(writes)
 
-	w.PrepareTranscriptShadow(ctx, organizationID, projectID)
+	if err := w.prepareTranscriptShadow(ctx, organizationID, projectID); err != nil {
+		return 0, nil, err
+	}
 	tx, err := w.db.Begin(ctx)
 	if err != nil {
 		return 0, nil, fmt.Errorf("begin chat message transaction: %w", err)
@@ -617,7 +639,9 @@ func (w *ChatMessageWriter) WriteCorrelated(ctx context.Context, projectID uuid.
 		return 0, fmt.Errorf("get project organization id: %w", err)
 	}
 
-	w.PrepareTranscriptShadow(ctx, organizationID, projectID)
+	if err := w.prepareTranscriptShadow(ctx, organizationID, projectID); err != nil {
+		return 0, err
+	}
 	tx, err := w.db.Begin(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("begin correlated chat message transaction: %w", err)
@@ -786,7 +810,9 @@ func (w *ChatMessageWriter) WriteExternalWithContentParts(ctx context.Context, p
 
 		publicationWrites := []MessageWrite{externalPublication(*write)}
 		inserted, err := func() (bool, error) {
-			w.PrepareTranscriptShadow(ctx, organizationID, projectID)
+			if err := w.prepareTranscriptShadow(ctx, organizationID, projectID); err != nil {
+				return false, err
+			}
 			tx, err := w.db.Begin(ctx)
 			if err != nil {
 				return false, fmt.Errorf("begin external chat message transaction: %w", err)
@@ -941,7 +967,9 @@ func (w *ChatMessageWriter) WriteTurn(ctx context.Context, projectID uuid.UUID, 
 	writes := pendingWrites
 	writes = append(writes, assistants...)
 
-	w.PrepareTranscriptShadow(ctx, organizationID, projectID)
+	if err := w.prepareTranscriptShadow(ctx, organizationID, projectID); err != nil {
+		return err
+	}
 	tx, err := w.db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)

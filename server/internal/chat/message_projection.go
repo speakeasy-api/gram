@@ -23,6 +23,9 @@ func (w *ChatMessageWriter) ProjectMessage(ctx context.Context, projectID, messa
 	if guard == nil || build == nil || messageID == uuid.Nil {
 		return false, fmt.Errorf("projection requires admission guard and message ID")
 	}
+	if err := w.PrepareTranscriptShadow(ctx, projectID); err != nil {
+		return false, err
+	}
 	tx, err := w.db.Begin(ctx)
 	if err != nil {
 		return false, fmt.Errorf("begin message projection: %w", err)

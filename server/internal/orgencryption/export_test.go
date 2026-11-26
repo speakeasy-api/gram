@@ -16,6 +16,12 @@ func (m *Migrator) SetCandidatePageSize(n int32) {
 	m.candidatePageSize = n
 }
 
+// EnableKeepWarm records uses of the given use cases' DEKs, as KeepWarm does
+// when it starts, without starting its loop.
+func (s *Service) EnableKeepWarm(useCases ...UseCase) {
+	s.enableKeepWarm(useCases)
+}
+
 // RefreshDue runs one KeepWarm pass as if the clock read now.
 func (s *Service) RefreshDue(ctx context.Context, now time.Time, useCases ...UseCase) int {
 	warm := make(map[string]struct{}, len(useCases))

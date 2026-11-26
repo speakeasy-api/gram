@@ -21,6 +21,7 @@ func warmKey(t *testing.T, ti *testInstance) (*orgencryption.Service, int) {
 	t.Helper()
 	ti.provision(t)
 	service, _ := transactionService(t, ti)
+	service.EnableKeepWarm(useCase)
 	encryptor, err := service.For(ti.orgID, useCase)
 	require.NoError(t, err)
 	require.NoError(t, encryptor.RequireUsable(t.Context()))
@@ -73,4 +74,43 @@ func TestKeepWarmDoesNotRefreshASuspendedOrganization(t *testing.T) {
 
 	require.Zero(t, service.RefreshDue(t.Context(), dueAt(), useCase))
 	require.Equal(t, before, ti.fixture.KMS.Decrypts())
+}
+
+// Without KeepWarm a process records no uses, so nothing grows unbounded and
+// nothing is refreshed.
+func TestKeepWarmRecordsNothingUntilEnabled(t *testing.T) {
+	t.Parallel()
+	ti := newTestInstance(t)
+	ti.provision(t)
+	service, _ := transactionService(t, ti)
+	encryptor, err := service.For(ti.orgID, useCase)
+	require.NoError(t, err)
+	require.NoError(t, encryptor.RequireUsable(t.Context()))
+
+	require.Zero(t, service.RefreshDue(t.Context(), dueAt(), useCase))
+}
+
+// A transaction that reuses the shared key counts as a use, so a process whose
+// writes all run in transactions still keeps the key warm.
+func TestKeepWarmCountsTransactionUse(t *testing.T) {
+	t.Parallel()
+	ti := newTestInstance(t)
+	ti.provision(t)
+	service, pool := transactionService(t, ti)
+	committed, err := service.For(ti.orgID, useCase)
+	require.NoError(t, err)
+	require.NoError(t, committed.RequireUsable(t.Context()))
+	service.EnableKeepWarm(useCase)
+	require.Zero(t, service.RefreshDue(t.Context(), dueAt(), useCase), "the pool use came before KeepWarm started")
+
+	tx, err := pool.Begin(t.Context()) //nolint:glint // notestingrawsql: explicit transaction protocol under test
+	require.NoError(t, err)
+	defer rollbackTransaction(t, tx)
+	encryptor, err := service.ForIn(tx, ti.orgID, useCase)
+	require.NoError(t, err)
+	_, err = encryptor.Encrypt(t.Context(), column, []byte("transaction secret"))
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit(t.Context()))
+
+	require.Equal(t, 1, service.RefreshDue(t.Context(), dueAt(), useCase))
 }

@@ -117,6 +117,7 @@ func TestTransactionReusesWarmSharedDataKey(t *testing.T) {
 	for range 3 {
 		tx, err := pool.Begin(ctx) //nolint:glint // notestingrawsql: explicit transaction protocol under test
 		require.NoError(t, err)
+		defer rollbackTransaction(t, tx)
 		encryptor, err := service.ForIn(tx, ti.orgID, useCase)
 		require.NoError(t, err)
 		ciphertext, err := encryptor.Encrypt(ctx, column, []byte("transaction secret"))
