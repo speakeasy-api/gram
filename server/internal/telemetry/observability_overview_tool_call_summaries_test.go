@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"maps"
 	"testing"
 	"time"
 
@@ -41,7 +40,9 @@ func insertOverviewLogs(t *testing.T, ctx context.Context, conn clickhouse.Conn,
 		id, err := uuid.NewV7()
 		require.NoError(t, err)
 		attrs := map[string]any{}
-		maps.Copy(attrs, l.attributes)
+		for k, v := range l.attributes {
+			attrs[k] = v
+		}
 		if l.gramURN != "" {
 			attrs["gram.tool.urn"] = l.gramURN
 		}

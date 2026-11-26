@@ -305,7 +305,7 @@ func impliesCycle(t ResourceType) string {
 // PluginWrite), for spotting a dimension set that would reuse it.
 func camelAction(action Action) string {
 	var b strings.Builder
-	for word := range strings.SplitSeq(string(action), "_") {
+	for _, word := range strings.Split(string(action), "_") {
 		if word != "" {
 			b.WriteString(strings.ToUpper(word[:1]) + word[1:])
 		}
