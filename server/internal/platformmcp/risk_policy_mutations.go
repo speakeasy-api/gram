@@ -147,7 +147,6 @@ func newRiskMutationHandlers(db *pgxpool.Pool, controls *RiskMutationControls, p
 		Controls:                    controls,
 		CreatePolicy:                policyService.createPolicyTool,
 		UpdatePolicy:                policyService.updatePolicyTool,
-		RemoveSelf:                  policyService.removeSelfFromPolicyTool,
 		ChangeAudience:              policyService.changePolicyAudienceTool,
 		CreateExclusion:             nil,
 		UpdateExclusion:             nil,
@@ -248,10 +247,6 @@ func (s *riskPolicyMutationService) updatePolicyTool(ctx context.Context, _ *mcp
 }
 
 func (s *riskPolicyMutationService) mutatePolicyTool(ctx context.Context, raw map[string]any, operation string) (*mcp.CallToolResult, UpdateRiskPolicyToolOutput, error) {
-	// Fail closed before admission, transactions, and even historical receipt replay.
-	if operation == operationRemoveSelfFromRiskPolicy {
-		return riskMutationToolRefusal[UpdateRiskPolicyToolOutput](selfRemovalUnavailable())
-	}
 	var zero UpdateRiskPolicyToolOutput
 	principal, err := principalFromToolContext(ctx)
 	if err != nil {
