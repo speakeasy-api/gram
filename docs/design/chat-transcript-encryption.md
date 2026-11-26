@@ -63,15 +63,18 @@ a committed-state-safe cross-transaction unwrap cache or an explicit unwrap
 rate/concurrency bound is implemented. Reusing transaction-loaded keys globally
 is unsafe because those keys or configuration may later roll back.
 
-A transcript is current by construction. Sealing locks the message row,
-reads the body, encrypts it and upserts the transcript in the caller's
-transaction, so no body update can land in between. Every statement that
-updates a body field deletes the message's transcript in the same statement,
-and its caller seals the new body in the same transaction: the chat message
-writer, kit projection patches, tool-call summaries and tool-call outcome
-notes. A caller that does not reseal leaves the message without a transcript,
-so it reads plaintext until a backfill seals it, never a stale transcript.
-There is no freshness marker to compare.
+A transcript is current by construction. Writers load the key before they
+begin a transaction. A new message is sealed from the row it inserts:
+sealing locks the message row, reads the body, encrypts it and upserts the
+transcript in the caller's transaction, so no body update can land in
+between. A body update (kit projection patches, tool-call summaries and
+tool-call outcome notes) changes the plaintext in SQL, then `Update` makes the
+same change to the transcript in the same transaction: it decrypts the
+transcript, or starts from the plaintext row when there is none yet, applies
+the change in Go and re-encrypts. This is the path the update keeps once the
+plaintext is gone. The changed body must equal the updated plaintext row, or
+the update fails and rolls back. A failure at any step rolls back the body
+update with it, so there is no freshness marker to compare.
 
 Transcripts sealed before resealing began still carry the old unkeyed
 `source_hash`, a versioned SHA-256 fingerprint of the sensitive fields, and may
@@ -141,9 +144,9 @@ hide that. Its codec uses the process's committed data key cache, so a warm page
 makes no KMS call, and a page with no shadows makes no key lookup at all.
 
 Removing a project from the allowlist stops both sealing and shadow reads.
-Body updates still delete a message's transcript while the project is off, so
-none goes stale: an edited message reads plaintext once the project is back on
-the allowlist, until a backfill seals it.
+Body updates made while the project is off leave its transcripts behind, so run
+a backfill before adding the project back. Until then, each such message fails
+its page with `ErrStale`: a stale transcript is never served.
 
 Any other read error, such as a failed key unwrap or a database error, also
 fails the page. Plaintext is never served in place of an existing shadow.
@@ -175,8 +178,8 @@ capture. Every sweep reseals each message, so legacy transcripts lose their
 A project off the capture allowlist
 (`GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS`) gets `ErrNotEnabled` and the command
 refuses to run: such a project does not seal new messages, and a body update
-deletes the message's transcript without resealing it, so any coverage a
-backfill reached would become incomplete after the next write.
+changes only the plaintext and leaves the message's transcript stale, so any
+coverage a backfill reached would break after the next write.
 
 ```sh
 gram transcript-shadow-backfill --project-id <PROJECT_ID>

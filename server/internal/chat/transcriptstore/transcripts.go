@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptcrypto"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore/repo"
 )
 
@@ -100,6 +101,22 @@ func (t *Transcripts) Progress(ctx context.Context, organizationID string, proje
 		return progress, fmt.Errorf("read encrypted transcript coverage: %w", err)
 	}
 	return progress, nil
+}
+
+// Update changes the encrypted transcript of a message whose body the caller
+// just updated in plaintext, in the caller's transaction: it decrypts the
+// transcript, or starts from the plaintext row when there is none yet, applies
+// the same change in Go and re-encrypts. Call Prepare before beginning the
+// transaction, and run the plaintext update first. A project without encrypted
+// transcripts updates only its plaintext.
+func (t *Transcripts) Update(ctx context.Context, db repo.DBTX, organizationID string, projectID, messageID uuid.UUID, apply func(*transcriptcrypto.Message) error) error {
+	if !t.Enabled(projectID) {
+		return nil
+	}
+	if err := t.store.Update(ctx, db, organizationID, projectID, messageID, apply); err != nil {
+		return fmt.Errorf("update chat transcript: %w", err)
+	}
+	return nil
 }
 
 // Body points at the body fields of one loaded message, so Open can replace

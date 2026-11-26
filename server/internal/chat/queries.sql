@@ -1812,13 +1812,8 @@ RETURNING id;
 
 -- name: StoreToolCallSummary :one
 -- Preserve summaries for sibling calls carried by the same assistant message.
--- A body update deletes the encrypted transcript of the old body; the caller
--- seals the new body in the same transaction.
-WITH stale_transcript AS (
-  DELETE FROM chat_message_transcripts t
-  WHERE t.message_id = @message_id AND t.project_id = @project_id::uuid
-    AND EXISTS (SELECT 1 FROM chat_messages cm WHERE cm.id = @message_id AND cm.chat_id = @chat_id AND cm.project_id = @project_id::uuid)
-)
+-- The summary is part of the body: the caller applies the same change to the
+-- encrypted transcript in the same transaction.
 UPDATE chat_messages AS m
 SET tool_call_summaries = jsonb_set(
   COALESCE(m.tool_call_summaries, '{}'::jsonb),
@@ -1831,14 +1826,8 @@ WHERE m.id = @message_id
 RETURNING (m.tool_call_summaries -> @tool_call_id::text)::text AS summary;
 
 -- name: UpdateToolCallOutcome :exec
--- tool_outcome_notes is a body field: changing it deletes the encrypted
--- transcript of the old body; the caller seals the new body in the same
--- transaction.
-WITH stale_transcript AS (
-  DELETE FROM chat_message_transcripts t
-  WHERE t.message_id = @id AND t.project_id = @project_id::uuid
-    AND EXISTS (SELECT 1 FROM chat_messages cm WHERE cm.id = @id AND cm.project_id = @project_id::uuid AND cm.tool_outcome_notes IS DISTINCT FROM @tool_outcome_notes)
-)
+-- tool_outcome_notes is part of the body: the caller applies the same change
+-- to the encrypted transcript in the same transaction.
 UPDATE chat_messages AS m
 SET tool_outcome = @tool_outcome,
     tool_outcome_notes = @tool_outcome_notes
@@ -2390,9 +2379,9 @@ SELECT id FROM chats WHERE id = @id AND project_id = @project_id FOR NO KEY UPDA
 SELECT * FROM chat_messages WHERE project_id = @project_id AND id = @id;
 
 -- name: PatchKitProjectionMessage :execrows
--- A body change deletes the encrypted transcript of the old body and drops
--- the metadata and tool-call IDs measured from it; the caller seals the new
--- body in the same transaction.
+-- A body change drops the metadata and tool-call IDs measured from the old
+-- body; the caller applies the same change to the encrypted transcript in the
+-- same transaction, which measures them again.
 WITH body_changed AS (
   SELECT cm.id FROM chat_messages cm
   WHERE cm.project_id = @project_id AND cm.chat_id = @chat_id AND cm.id = @id AND cm.source = 'kit'
@@ -2400,9 +2389,6 @@ WITH body_changed AS (
 ), stale_tool_call_ids AS (
   DELETE FROM chat_message_tool_call_ids tc
   WHERE tc.project_id = @project_id AND tc.message_id IN (SELECT bc.id FROM body_changed bc)
-), stale_transcript AS (
-  DELETE FROM chat_message_transcripts t
-  WHERE t.project_id = @project_id AND t.message_id IN (SELECT bc.id FROM body_changed bc)
 )
 UPDATE chat_messages AS m SET content = @content, content_raw = @content_raw,
  tool_calls = @tool_calls, content_hash = @content_hash, finish_reason = @finish_reason,
