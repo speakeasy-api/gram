@@ -254,7 +254,7 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	r.cleanup = append(r.cleanup, stop)
 	turnStream := chat.NewTurnStream(redisClient)
 	chatWriter = chatWriter.WithTurnStream(turnStream)
-	transcripts, err := configureTranscriptShadow(ctx, c, db, chatWriter, orgEncryption, tracerProvider, meterProvider)
+	transcripts, err := configureTranscripts(ctx, c, db, chatWriter, orgEncryption, tracerProvider, meterProvider)
 	if err != nil {
 		return nil, err
 	}

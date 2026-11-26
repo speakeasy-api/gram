@@ -350,7 +350,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	// the Temporal-backed observers `gram start` attaches.
 	chatWriter, stop := chat.NewChatMessageWriter(logger, db, assetStorage)
 	shutdown.funcs = append(shutdown.funcs, stop)
-	transcripts, err := configureTranscriptShadow(ctx, c, db, chatWriter, orgEncryption, tracerProvider, meterProvider)
+	transcripts, err := configureTranscripts(ctx, c, db, chatWriter, orgEncryption, tracerProvider, meterProvider)
 	if err != nil {
 		return err
 	}
