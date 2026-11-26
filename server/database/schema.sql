@@ -7183,13 +7183,9 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   -- version rescans and backfills are coordinated outside this field.
   risk_analyzed_at timestamptz,
 
-  -- When the message body (content, content_raw, tool_calls, tool_outcome_notes,
-  -- tool_call_summaries or storage_error) last changed. Every statement that
-  -- updates a body field sets it; other updates, such as risk_analyzed_at, do
-  -- not. An encrypted transcript is current while its source_updated_at equals
-  -- this. NULL for messages last written before the column existed. The
-  -- default stamps every insert; it is set in its own migration so adding the
-  -- column does not rewrite the table.
+  -- When the message body last changed. The default stamps inserts; body
+  -- updates set it, other updates do not. A transcript is current while its
+  -- source_updated_at matches. NULL predates the column.
   updated_at timestamptz DEFAULT clock_timestamp(),
 
   -- Plaintext-free metadata of the message body, so readers can count, budget
