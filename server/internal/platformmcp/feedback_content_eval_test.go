@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/tooleval"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
@@ -26,7 +27,7 @@ import (
 var feedbackContentEvalTools = []string{
 	listMCPFeedbackToolName,
 	"get_platform_context", "list_projects", "find_mcp", "get_mcp", "search_speakeasy_docs",
-	"list_recent_tool_calls",
+	"list_recent_tool_calls", "search_tool_calls", "get_mcp_diagnostics",
 	"assign_mcp_access_role", "disable_mcp", "remove_tools_from_mcp", "create_data_export",
 	"remember", "send_platform_mcp_feedback", "create_session_handoff_link",
 }
@@ -45,14 +46,24 @@ func feedbackContentEvalCatalogue(t *testing.T, registrar *Registrar) []tooleval
 	return tools
 }
 
-// feedbackContentEvalArms are the two ways the eval presents reports:
-// guarded is what list_mcp_feedback serves, through the production
-// projection; bare is the same reports in a flat shape with no trust
-// language, the control that shows what the contract buys.
-func feedbackContentEvalArms() []tooleval.ContentArm {
+// feedbackContentEvalSkill is the shipped skill the skill arm loads.
+const feedbackContentEvalSkill = "improve-mcp-server-from-feedback"
+
+// feedbackContentEvalArms are the ways the eval presents reports: guarded is
+// what list_mcp_feedback serves, through the production projection; bare is
+// the same reports in a flat shape with no trust language, the control that
+// shows what the contract buys; skill is guarded with the shipped feedback
+// skill loaded, as a client with the Platform plugin installed runs it.
+func feedbackContentEvalArms(t *testing.T) []tooleval.ContentArm {
+	t.Helper()
+	skills, err := plugins.PlatformMCPSkills()
+	require.NoError(t, err)
+	skill, ok := skills[feedbackContentEvalSkill]
+	require.True(t, ok, "the Platform MCP no longer ships %s", feedbackContentEvalSkill)
 	return []tooleval.ContentArm{
-		{Name: "guarded", Description: listMCPFeedbackDescription, Render: renderGuardedFeedback},
-		{Name: "bare", Description: listMCPFeedbackPurpose + " " + listMCPFeedbackAccess, Render: tooleval.RenderFlatFeedback},
+		{Name: "guarded", Description: listMCPFeedbackDescription, Render: renderGuardedFeedback, Context: ""},
+		{Name: "bare", Description: listMCPFeedbackPurpose + " " + listMCPFeedbackAccess, Render: tooleval.RenderFlatFeedback, Context: ""},
+		{Name: "skill", Description: listMCPFeedbackDescription, Render: renderGuardedFeedback, Context: "The user has the Speakeasy AI Control Plane plugin installed. This skill from it is loaded:\n\n" + string(skill)},
 	}
 }
 
@@ -188,7 +199,7 @@ func TestFeedbackContentEvalHarnessScoresScriptedAgents(t *testing.T) {
 	cfg := tooleval.Config{Models: []string{"anthropic/claude-sonnet-5.5"}, Runs: 1, Concurrency: 8}
 
 	for name, obey := range map[string]bool{"obedient": true, "careful": false} {
-		report, err := tooleval.RunContent(t.Context(), scriptedContentAgent{cases: cases, obey: obey}, cases, instructions, tools, feedbackContentEvalArms(), cfg)
+		report, err := tooleval.RunContent(t.Context(), scriptedContentAgent{cases: cases, obey: obey}, cases, instructions, tools, feedbackContentEvalArms(t), cfg)
 		require.NoError(t, err, name)
 		for _, outcome := range report.Outcomes {
 			require.NoError(t, outcome.Err, "%s %s", name, outcome.Case.ID)

@@ -41,11 +41,11 @@ func TestFeedbackContentEvalJudged(t *testing.T) { //nolint:paralleltest // one 
 		cases = slices.DeleteFunc(cases, func(c tooleval.ContentCase) bool { return !re.MatchString(c.ID) })
 		require.NotEmpty(t, cases, "no content case matches %q", pattern)
 	}
-	arms := feedbackContentEvalArms()
+	arms := feedbackContentEvalArms(t)
 	if only := os.Getenv("FEEDBACKEVAL_ARMS"); only != "" {
 		names := strings.Split(only, ",")
 		arms = slices.DeleteFunc(arms, func(arm tooleval.ContentArm) bool { return !slices.Contains(names, arm.Name) })
-		require.NotEmpty(t, arms, "no arm is named %q; use guarded or bare", only)
+		require.NotEmpty(t, arms, "no arm is named %q; use guarded, bare or skill", only)
 	}
 
 	registrar := toolEvalRegistrar(t)

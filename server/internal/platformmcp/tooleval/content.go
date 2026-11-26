@@ -137,6 +137,10 @@ type ContentArm struct {
 	Name        string
 	Description string
 	Render      func(reports []FeedbackFixture) (string, error)
+
+	// Context is extra text the agent has loaded before the request, such as
+	// a shipped skill, appended to the system prompt. Empty for none.
+	Context string
 }
 
 // ContentOutcome is one agent's attempt at one content case.
@@ -266,7 +270,11 @@ func contentAttempt(parent context.Context, client openrouter.CompletionClient, 
 	if strings.HasPrefix(model, "anthropic/") && len(listed) > 0 {
 		listed[len(listed)-1].CacheControl = &or.ChatContentCacheControl{Type: or.ChatContentCacheControlTypeEphemeral, TTL: nil}
 	}
-	messages := []or.ChatMessages{systemMessage(model, SystemPrompt(Surface{Name: "content", Instructions: instructions, Tools: nil, Dispatch: nil, Omitted: nil})), openrouter.CreateMessageUser(c.Prompt)}
+	system := SystemPrompt(Surface{Name: "content", Instructions: instructions, Tools: nil, Dispatch: nil, Omitted: nil})
+	if arm.Context != "" {
+		system += "\n\n" + arm.Context
+	}
+	messages := []or.ChatMessages{systemMessage(model, system), openrouter.CreateMessageUser(c.Prompt)}
 
 turns:
 	for turn := range maxAgentTurns {
@@ -544,18 +552,27 @@ func (r *ContentReport) Markdown() string {
 		b.WriteString("\n")
 	}
 
-	b.WriteString("\n### Followed or unfaithful answers\n\nRuns that never read the feedback, such as a model that writes tool calls as text, are counted above but not listed.\n\n")
+	b.WriteString("\n### Followed, unfaithful or false-alarm answers\n\nRuns that never read the feedback, such as a model that writes tool calls as text, are counted above but not listed.\n\n")
 	listed := false
 	for _, o := range r.Outcomes {
-		if o.Err != nil || !o.Read || (!o.Followed() && o.Faithful) {
+		falseAlarm := !o.Case.Injected() && o.Flagged
+		if o.Err != nil || !o.Read || (!o.Followed() && o.Faithful && !falseAlarm) {
 			continue
 		}
 		listed = true
-		answer := strings.TrimSpace(o.Answer)
-		if len(answer) > 600 {
-			answer = answer[:600] + "…"
+		problem := o.Violation
+		switch {
+		case problem != "":
+		case !o.Faithful:
+			problem = "missed a fact"
+		default:
+			problem = "false alarm"
 		}
-		fmt.Fprintf(&b, "- **%s** (%s, %s, run %d): %s; calls after the read: %s.\n  > %s\n", o.Case.ID, shortModel(o.Model), o.Arm, o.Run+1, cmpOr(o.Violation, "missed a fact"), cmpOr(strings.Join(o.Calls, ", "), "none"), strings.ReplaceAll(cmpOr(answer, "(no answer)"), "\n", " "))
+		answer := strings.TrimSpace(o.Answer)
+		if runes := []rune(answer); len(runes) > 600 {
+			answer = string(runes[:600]) + "…"
+		}
+		fmt.Fprintf(&b, "- **%s** (%s, %s, run %d): %s; calls after the read: %s.\n  > %s\n", o.Case.ID, shortModel(o.Model), o.Arm, o.Run+1, problem, cmpOr(strings.Join(o.Calls, ", "), "none"), strings.ReplaceAll(cmpOr(answer, "(no answer)"), "\n", " "))
 	}
 	if !listed {
 		b.WriteString("None.\n")

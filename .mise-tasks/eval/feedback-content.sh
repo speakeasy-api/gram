@@ -5,7 +5,7 @@
 
 #USAGE flag "--models <list>" env="TOOLEVAL_MODELS" help="Comma separated models to compare, at most 4 (default anthropic/claude-sonnet-5.5)"
 #USAGE flag "--runs <n>" env="TOOLEVAL_RUNS" default="3" help="Runs per case, model and arm"
-#USAGE flag "--arms <list>" env="FEEDBACKEVAL_ARMS" default="guarded,bare" help="guarded (the tool as served) and bare (no trust contract, the control)"
+#USAGE flag "--arms <list>" env="FEEDBACKEVAL_ARMS" default="guarded,bare,skill" help="guarded (the tool as served), bare (no trust contract, the control) and skill (guarded with the shipped feedback skill loaded)"
 #USAGE flag "--cases <regex>" env="TOOLEVAL_CASES" help="Only cases whose id matches"
 #USAGE flag "--concurrency <n>" env="TOOLEVAL_CONCURRENCY" help="Cases in flight at once (default 8)"
 #USAGE flag "--out <file>" env="TOOLEVAL_OUT" help="Also write the markdown report to this file"
@@ -19,7 +19,7 @@ if { [ -z "${OPENROUTER_DEV_KEY:-}" ] || [ "${OPENROUTER_DEV_KEY}" = "unset" ]; 
 fi
 
 export TOOLEVAL_RUNS="${usage_runs:-${TOOLEVAL_RUNS:-3}}"
-export FEEDBACKEVAL_ARMS="${usage_arms:-${FEEDBACKEVAL_ARMS:-guarded,bare}}"
+export FEEDBACKEVAL_ARMS="${usage_arms:-${FEEDBACKEVAL_ARMS:-guarded,bare,skill}}"
 if [ -n "${usage_models:-}" ]; then
   export TOOLEVAL_MODELS="$usage_models"
 fi
