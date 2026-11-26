@@ -49,6 +49,9 @@ func TestDelegationRequiresAnAgentForAUserAndAWorkloadActor(t *testing.T) {
 	workload := urn.NewWorkloadPrincipal(uuid.New(), "kit-runtime")
 	workloadCredential := agentCredential()
 	workloadCredential.Principal = urn.NewWorkloadPrincipal(uuid.New(), "trigger")
+	// Well-shaped on its own: a workload acts for no user. Only the agent
+	// guard refuses it.
+	workloadCredential.AuthorizerUserID = ""
 
 	for name, tc := range map[string]struct {
 		credential principalcredential.Credential

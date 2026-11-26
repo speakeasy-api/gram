@@ -105,11 +105,9 @@ func (s *Service) HandleSharedAuthorizationServerMetadata(w http.ResponseWriter,
 			return oops.E(oops.CodeUnexpected, err, "load shared authorization server capabilities").LogError(ctx, issuer.logger)
 		}
 	}
-	if idJAGAdvertised {
-		grantTypes = append(grantTypes, oauthwire.GrantTypeJWTBearer)
-		grantProfiles = []string{oauthwire.GrantProfileIDJAG}
-	} else if s.workloadGrant != nil {
-		available, err := usersessions_repo.New(s.db).HasWorkloadGrantResourceForIssuer(ctx, usersessions_repo.HasWorkloadGrantResourceForIssuerParams{
+	workloadAvailable := false
+	if s.workloadGrant != nil {
+		workloadAvailable, err = usersessions_repo.New(s.db).HasWorkloadGrantResourceForIssuer(ctx, usersessions_repo.HasWorkloadGrantResourceForIssuerParams{
 			UserSessionIssuerID: uuid.NullUUID{UUID: issuer.authorizationServer.issuerID, Valid: true},
 			OrganizationID:      issuer.organizationID,
 		})
@@ -119,13 +117,16 @@ func (s *Service) HandleSharedAuthorizationServerMetadata(w http.ResponseWriter,
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "load shared authorization server capabilities").LogError(ctx, issuer.logger)
 		}
-		if available {
-			grantTypes = append(grantTypes, oauthwire.GrantTypeJWTBearer)
-		}
 	}
-	if s.assistantTokens != nil && s.workloadGrant != nil {
-		// An assistant runtime exchanges a turn's delegation, with its workload
-		// assertion as the actor token.
+	if idJAGAdvertised {
+		grantTypes = append(grantTypes, oauthwire.GrantTypeJWTBearer)
+		grantProfiles = []string{oauthwire.GrantProfileIDJAG}
+	} else if workloadAvailable {
+		grantTypes = append(grantTypes, oauthwire.GrantTypeJWTBearer)
+	}
+	if workloadAvailable && s.assistantTokens != nil {
+		// An assistant runtime admitted by this issuer's workload grant
+		// exchanges a turn's delegation, with its assertion as the actor token.
 		grantTypes = append(grantTypes, oauthwire.GrantTypeTokenExchange)
 	}
 	return writeJSONMetadata(ctx, w, r, issuer.logger, s.authorizationServerMetadata(ctx, urls, issuer.cimdAdmissionModeRaw, grantTypes, grantProfiles))
