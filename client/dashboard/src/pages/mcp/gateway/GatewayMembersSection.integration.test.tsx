@@ -84,6 +84,15 @@ vi.mock("@/hooks/useRBAC", () => {
         scopes.some((scope) => hasScope(scope, resource)),
       hasAllScopes: (scopes: string[], resource?: string) =>
         scopes.every((scope) => hasScope(scope, resource)),
+      canWriteMCPServer: ({
+        serverId,
+        projectId,
+      }: {
+        serverId: string;
+        projectId: string;
+      }) => projectId === "project" && hasScope("mcp:write", serverId),
+      canWriteProjectMCPServers: (projectId: string) =>
+        hasScope("mcp:write", projectId),
       isLoading: false,
     }),
   };

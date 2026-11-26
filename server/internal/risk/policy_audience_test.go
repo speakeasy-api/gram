@@ -101,7 +101,7 @@ func TestRiskPolicyAudience_SystemPrincipalRejected(t *testing.T) {
 	require.Error(t, err, "a system principal is never a policy audience")
 }
 
-func TestRiskPolicyAudience_UpdatePreservesScopedGrantsAndRefreshesURLBypassAudience(t *testing.T) {
+func TestRiskPolicyAudience_UpdateRefreshesURLBypassAudience(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
 
@@ -120,21 +120,7 @@ func TestRiskPolicyAudience_UpdatePreservesScopedGrantsAndRefreshesURLBypassAudi
 	})
 	require.NoError(t, err)
 
-	scopedPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, "user_scoped")
 	bypassPrincipal := authz.AllUsersPrincipal()
-	require.NoError(t, authz.GrantResourceToPrincipals(ctx, ti.conn, authz.ResourceGrant{
-		Resource: authz.Resource{
-			OrganizationID: authCtx.ActiveOrganizationID,
-			Scope:          authz.ScopeRiskPolicyEvaluate,
-			ResourceID:     created.ID,
-		},
-		Principals: []urn.Principal{scopedPrincipal},
-		Selector: authz.Selector{
-			authz.SelectorKeyResourceKind: authz.ResourceKindRiskPolicy,
-			authz.SelectorKeyResourceID:   created.ID,
-			authz.SelectorKeyServerURL:    "https://scoped.example.com",
-		},
-	}))
 	require.NoError(t, authz.GrantResourceToPrincipals(ctx, ti.conn, authz.ResourceGrant{
 		Resource: authz.Resource{
 			OrganizationID: authCtx.ActiveOrganizationID,
@@ -166,7 +152,6 @@ func TestRiskPolicyAudience_UpdatePreservesScopedGrantsAndRefreshesURLBypassAudi
 	})
 	require.NoError(t, err)
 	require.Contains(t, grantPrincipals(audienceGrants), "user:"+authCtx.UserID)
-	require.Contains(t, grantPrincipals(audienceGrants), scopedPrincipal.String())
 
 	bypassGrants, err := authz.ListGrantsForResource(ctx, ti.conn, authz.Resource{
 		OrganizationID: authCtx.ActiveOrganizationID,

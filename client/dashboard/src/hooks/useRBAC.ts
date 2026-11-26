@@ -215,6 +215,32 @@ export function hasScopeInProject(
   return hasScopeInGrants(grants, scope, "*", projectId);
 }
 
+/** One MCP server, such as a gateway, in the project it belongs to. */
+export interface MCPServerTarget {
+  serverId: string;
+  projectId: string;
+}
+
+/** Mirrors authz.MCPServer(id, project).Write() on the server. */
+export function canWriteMCPServerInGrants(
+  grants: EffectiveGrant[],
+  { serverId, projectId }: MCPServerTarget,
+): boolean {
+  return hasScopeInGrants(grants, "mcp:write", serverId, projectId);
+}
+
+/**
+ * Mirrors authz.MCPServers(project).Write() on the server, which names the
+ * project as the resource: write access to the project's MCP servers as a
+ * whole, such as adding one.
+ */
+export function canWriteProjectMCPServersInGrants(
+  grants: EffectiveGrant[],
+  projectId: string,
+): boolean {
+  return hasScopeInGrants(grants, "mcp:write", projectId, projectId);
+}
+
 /**
  * Core RBAC hook. Fetches the current user's effective grants and provides
  * helpers to check whether the user holds a particular scope.
@@ -300,12 +326,26 @@ function useRBACImpl() {
     [grants],
   );
 
+  const canWriteMCPServer = useCallback(
+    (target: MCPServerTarget): boolean =>
+      !!grants && canWriteMCPServerInGrants(grants, target),
+    [grants],
+  );
+
+  const canWriteProjectMCPServers = useCallback(
+    (projectId: string): boolean =>
+      !!grants && canWriteProjectMCPServersInGrants(grants, projectId),
+    [grants],
+  );
+
   return useMemo(
     () => ({
       hasScope,
       hasAllScopes,
       hasAnyScope,
       hasAnyScopeInProject,
+      canWriteMCPServer,
+      canWriteProjectMCPServers,
       isLoading,
       grants: grants ?? [],
       /** Non-null when the grants query failed (e.g. missing org membership). */
@@ -316,6 +356,8 @@ function useRBACImpl() {
       hasAllScopes,
       hasAnyScope,
       hasAnyScopeInProject,
+      canWriteMCPServer,
+      canWriteProjectMCPServers,
       isLoading,
       grants,
       error,

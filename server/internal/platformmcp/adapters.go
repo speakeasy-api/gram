@@ -921,7 +921,7 @@ func (r *PostgresReader) GetMCP(ctx context.Context, principal Principal, input 
 	}
 	mcpID, err := uuid.Parse(input.MCPID)
 	if err != nil {
-		return MCP{}, fmt.Errorf("parse mcp id: %w", err)
+		return MCP{}, fmt.Errorf("parse mcp id: %w: %w", ErrMCPIDInvalid, err)
 	}
 	if err := r.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDOf(mcpID), authz.ProjectIDOf(projectID)).Read()); err != nil {
 		if isAuthorizationDenied(err) {
@@ -956,7 +956,7 @@ func (r *PostgresReader) GetMCPForDiagnostics(ctx context.Context, principal Pri
 	}
 	mcpID, err := uuid.Parse(input.MCPID)
 	if err != nil {
-		return MCP{}, fmt.Errorf("parse mcp id: %w", err)
+		return MCP{}, fmt.Errorf("parse mcp id: %w: %w", ErrMCPIDInvalid, err)
 	}
 	return r.getMCPInventory(ctx, principal, project.ID, mcpID, false, "")
 }
