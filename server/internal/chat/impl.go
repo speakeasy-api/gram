@@ -711,11 +711,11 @@ func (s *Service) GetWorkUnitsTrend(ctx context.Context, payload *gen.GetWorkUni
 	if enforce, err := s.authz.ShouldEnforce(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to authorize work units trend").LogError(ctx, s.logger)
 	} else if enforce {
-		allowed, err := s.authz.Decide(authz.WithoutChallenges(ctx), authz.Chats(authz.ProjectIDFrom(projectID)).Read())
+		decision, err := s.authz.Decide(authz.WithoutChallenges(ctx), authz.Chats(authz.ProjectIDFrom(projectID)).Read())
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to authorize work units trend").LogError(ctx, s.logger)
 		}
-		if !allowed.AllAllowed {
+		if !decision.AllAllowed {
 			return nil, oops.C(oops.CodeForbidden)
 		}
 	}
@@ -1113,14 +1113,14 @@ func (s *Service) chatVisibilityScope(ctx context.Context, authCtx *contextvalue
 	if enforce, err := s.authz.ShouldEnforce(ctx); err != nil {
 		s.logger.WarnContext(ctx, "could not determine RBAC enforcement for chat visibility; showing own sessions", attr.SlogError(err))
 	} else if enforce {
-		allowed, err := s.authz.Decide(authz.WithoutChallenges(ctx), authz.Chats(authz.ProjectIDOf(*authCtx.ProjectID)).Read())
+		decision, err := s.authz.Decide(authz.WithoutChallenges(ctx), authz.Chats(authz.ProjectIDOf(*authCtx.ProjectID)).Read())
 		if err != nil {
 			// An unsatisfied grant yields (false, nil); a non-nil error is
 			// unexpected. Log it but still serve own sessions rather than
 			// failing the listing.
 			s.logger.WarnContext(ctx, "chat:read visibility check failed for chat listing; showing own sessions", attr.SlogError(err))
 		} else {
-			canReadAllSessions = allowed.AllAllowed
+			canReadAllSessions = decision.AllAllowed
 		}
 	}
 

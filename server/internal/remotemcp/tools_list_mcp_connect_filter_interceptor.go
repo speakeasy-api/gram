@@ -125,14 +125,14 @@ func (i *ToolsListMCPConnectFilterInterceptor) InterceptToolsListResponse(ctx co
 		checks[idx] = authz.MCPServer(authz.MCPServerIDFrom(i.mcpServerID), authz.ProjectIDFrom(i.projectID)).ToolCall(strings.TrimSpace(t.Name), dispositions[strings.TrimSpace(t.Name)])
 	}
 
-	matched, err := i.authz.Decide(ctx, checks...)
+	decisions, err := i.authz.Decide(ctx, checks...)
 	if err != nil {
 		return fmt.Errorf("filter mcp:connect tools: %w", err)
 	}
 
 	inspection := toolsListInspection{authz: i.authz, mcpServerID: i.mcpServerID, projectID: i.projectID}
 	inspecting := false
-	if !matched.AllAllowed && inspection.requested(list) {
+	if !decisions.AllAllowed && inspection.requested(list) {
 		inspecting, err = inspection.allowed(ctx)
 		if err != nil {
 			return err
@@ -143,10 +143,10 @@ func (i *ToolsListMCPConnectFilterInterceptor) InterceptToolsListResponse(ctx co
 	unchanged := true
 	for idx, t := range tools {
 		switch {
-		case matched.Each[idx].Allowed:
+		case decisions.Each[idx].Allowed:
 			allowed = append(allowed, t)
 		case inspecting:
-			allowed = append(allowed, markToolUnavailable(t, toolUnavailableReason(matched.Each[idx].Reason)))
+			allowed = append(allowed, markToolUnavailable(t, toolUnavailableReason(decisions.Each[idx].Reason)))
 			unchanged = false
 		default:
 			unchanged = false

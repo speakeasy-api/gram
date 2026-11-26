@@ -275,12 +275,12 @@ func (s *OrganizationGatewayActivityService) nameReadableProjects(ctx context.Co
 	for _, server := range top {
 		checks = append(checks, authz.Project(authz.ProjectIDFrom(server.ProjectID)).Read())
 	}
-	allowed, err := s.authorizer.Decide(ctx, checks...)
+	decisions, err := s.authorizer.Decide(ctx, checks...)
 	if err != nil {
 		return fmt.Errorf("filter organization gateway server projects: %w", err)
 	}
 	for i := range top {
-		if i >= len(allowed.Each) || !allowed.Each[i].Allowed {
+		if i >= len(decisions.Each) || !decisions.Each[i].Allowed {
 			continue
 		}
 		projectID, err := uuid.Parse(top[i].ProjectID)

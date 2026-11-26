@@ -461,13 +461,13 @@ func (s *Service) describeCachedMember(ctx context.Context, gate *metaGateContex
 		}
 	}
 	if len(checks) > 0 {
-		matched, err := s.authz.Decide(ctx, checks...)
+		decisions, err := s.authz.Decide(ctx, checks...)
 		if err != nil {
 			return nil, fmt.Errorf("authorize cached member tools: %w", err)
 		}
 		kept := catalog.entries[:0]
 		for i, entry := range catalog.entries {
-			if matched.Each[i].Allowed {
+			if decisions.Each[i].Allowed {
 				kept = append(kept, entry)
 			}
 		}

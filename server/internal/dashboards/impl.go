@@ -187,7 +187,7 @@ func (s *Service) builtInReadable(ctx context.Context, authCtx *contextvalues.Au
 	if len(checks) == 0 {
 		return true, nil
 	}
-	allowed, err := s.authz.Decide(authz.WithoutChallenges(ctx), checks...)
+	decisions, err := s.authz.Decide(authz.WithoutChallenges(ctx), checks...)
 	if _, mapped := errors.AsType[*oops.ShareableError](err); mapped {
 		// The engine has already mapped and logged it.
 		return false, fmt.Errorf("check built-in dashboard access: %w", err)
@@ -195,7 +195,7 @@ func (s *Service) builtInReadable(ctx context.Context, authCtx *contextvalues.Au
 	if err != nil {
 		return false, oops.E(oops.CodeUnexpected, err, "check built-in dashboard access").LogError(ctx, s.logger)
 	}
-	return allowed.AllAllowed, nil
+	return decisions.AllAllowed, nil
 }
 
 // ReadBuiltInDashboard returns the built-in dashboard with this slug, if the

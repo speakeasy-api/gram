@@ -523,11 +523,11 @@ func (s *Service) requireAttachmentAccess(ctx context.Context, projectID uuid.UU
 	if err := s.authz.Require(ctx, connectChecks...); err != nil {
 		return nil, err
 	}
-	writable, err := s.authz.Decide(ctx, writeChecks...)
+	decisions, err := s.authz.Decide(ctx, writeChecks...)
 	if err != nil {
 		return nil, err
 	}
-	return allowedResources(writeChecks, writable), nil
+	return allowedResources(writeChecks, decisions), nil
 }
 
 // requireRuntimeAvailable rejects requests that need an assistant runtime

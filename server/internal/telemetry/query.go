@@ -598,11 +598,11 @@ func (s *Service) ListSessions(ctx context.Context, payload *telem_gen.ListSessi
 // expected case, not a denial to record, and RBAC off keeps every project.
 func (s *Service) chatReadableProjects(ctx context.Context, orgID string, projectIDs []string) ([]string, error) {
 	// An organization-wide grant reads every project at once.
-	allowed, err := s.authz.Decide(authz.WithoutChallenges(ctx), authz.OrgChats(authz.OrgIDFrom(orgID)).Read())
+	orgDecision, err := s.authz.Decide(authz.WithoutChallenges(ctx), authz.OrgChats(authz.OrgIDFrom(orgID)).Read())
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "evaluate chat read access")
 	}
-	if allowed.AllAllowed {
+	if orgDecision.AllAllowed {
 		return projectIDs, nil
 	}
 

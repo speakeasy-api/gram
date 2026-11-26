@@ -131,7 +131,7 @@ func (s *ChannelsAccessService) Get(ctx context.Context, principal Principal, in
 		return channelsAccessNotEnabled(), nil
 	}
 	ref := authz.Project(authz.ProjectIDOf(project.ID))
-	permissions, err := s.engine.Decide(authz.WithoutChallenges(ctx), ref.ChannelsConnect(), ref.ChannelsAdmin(), ref.ChannelsReadAll())
+	decisions, err := s.engine.Decide(authz.WithoutChallenges(ctx), ref.ChannelsConnect(), ref.ChannelsAdmin(), ref.ChannelsReadAll())
 	if err != nil {
 		return GetMyChannelsAccessOutput{}, fmt.Errorf("evaluate channels permissions: %w", err)
 	}
@@ -143,9 +143,9 @@ func (s *ChannelsAccessService) Get(ctx context.Context, principal Principal, in
 		ProjectID:      project.ID.String(),
 		SubjectID:      principal.UserID,
 		SubjectName:    "",
-		CanConnect:     permissions.Each[0].Allowed,
-		CanAdmin:       permissions.Each[1].Allowed,
-		CanReadAll:     permissions.Each[2].Allowed,
+		CanConnect:     decisions.Each[0].Allowed,
+		CanAdmin:       decisions.Each[1].Allowed,
+		CanReadAll:     decisions.Each[2].Allowed,
 	})
 	if err != nil {
 		return GetMyChannelsAccessOutput{}, fmt.Errorf("resolve channels access: %w", err)

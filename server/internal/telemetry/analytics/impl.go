@@ -121,11 +121,11 @@ func (s *Service) readableDatasets(ctx context.Context, authCtx *contextvalues.A
 	for _, ds := range datasets {
 		check, needsCheck := ds.AccessCheck(authCtx.ActiveOrganizationID)
 		if needsCheck {
-			allowed, err := s.authz.Decide(authz.WithoutChallenges(ctx), check)
+			decision, err := s.authz.Decide(authz.WithoutChallenges(ctx), check)
 			if err != nil {
 				return nil, nil, fmt.Errorf("evaluate dataset %s access: %w", ds.Name, err)
 			}
-			if !allowed.AllAllowed {
+			if !decision.AllAllowed {
 				restricted = append(restricted, ds.Name)
 				continue
 			}

@@ -971,11 +971,11 @@ func (s *Service) recheckWorkloadGrantAuthorization(ctx context.Context, grant w
 	if len(checks) == 0 {
 		return nil
 	}
-	allowed, err := s.authz.Decide(authz.WithoutChallenges(ctx), checks...)
+	decisions, err := s.authz.Decide(authz.WithoutChallenges(ctx), checks...)
 	if err != nil {
 		return fmt.Errorf("recheck workload grant authority: %w", err)
 	}
-	if !allowed.AllAllowed {
+	if !decisions.AllAllowed {
 		return errCredentialRejected
 	}
 	return nil

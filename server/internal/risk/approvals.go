@@ -117,11 +117,11 @@ func (s *Service) enforcedOrgAdmin(ctx context.Context, organizationID string) (
 	if !enforced {
 		return false, nil
 	}
-	isAdmin, err := s.authz.Decide(authz.WithoutChallenges(ctx), authz.Org(authz.OrgIDFrom(organizationID)).Admin())
+	decision, err := s.authz.Decide(authz.WithoutChallenges(ctx), authz.Org(authz.OrgIDFrom(organizationID)).Admin())
 	if err != nil {
 		return false, oops.E(oops.CodeUnexpected, err, "check admin access").LogError(ctx, s.logger)
 	}
-	return isAdmin.AllAllowed, nil
+	return decision.AllAllowed, nil
 }
 
 func (s *Service) requireApprovalsReader(ctx context.Context) (*contextvalues.AuthContext, error) {
