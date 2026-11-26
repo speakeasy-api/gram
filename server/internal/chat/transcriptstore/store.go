@@ -135,7 +135,7 @@ func (s *Store) capture(ctx context.Context, db repo.DBTX, organizationID string
 			return safe(err)
 		}
 		// The copy records the source_updated_at it was sealed from; the
-		// chat_messages triggers move it on every body change, so the copy is
+		// every body update moves it, so the copy is
 		// current exactly while the two are equal.
 		n, err := q.Capture(ctx, repo.CaptureParams{
 			MessageID:       id,

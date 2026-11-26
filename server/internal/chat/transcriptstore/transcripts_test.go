@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore/fixturerepo"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -171,4 +172,66 @@ func TestToolCallIDsStayWithTheirProject(t *testing.T) {
 	ids, err := fixturerepo.New(f.db).ShadowToolCallIDs(t.Context(), id)
 	require.NoError(t, err)
 	require.Equal(t, []string{"example"}, ids)
+}
+
+// Every body update moves source_updated_at, so a copy sealed from the old body
+// reads as stale in SQL, and a kit patch that changes content or tool calls also
+// drops the metadata and tool-call IDs measured from it.
+func TestBodyUpdatesStampSourceUpdatedAt(t *testing.T) {
+	t.Parallel()
+	f := setup(t, true)
+	ctx := t.Context()
+	id := uuid.New()
+	f.add(t, id)
+	fixtures := fixturerepo.New(f.db)
+	messages := chatrepo.New(f.db)
+	stamp := func() pgtype.Timestamptz {
+		t.Helper()
+		row, err := fixtures.MessageFreshness(ctx, id)
+		require.NoError(t, err)
+		return row.SourceUpdatedAt
+	}
+	progress := func() Progress {
+		t.Helper()
+		p, err := f.store.Progress(ctx, f.org, f.project)
+		require.NoError(t, err)
+		return p
+	}
+	text := func(v string) pgtype.Text { return pgtype.Text{String: v, Valid: true} }
+
+	inserted := stamp()
+	require.True(t, inserted.Valid, "the column default stamps an insert")
+	f.capture(t, id)
+	require.Equal(t, Progress{Current: 1, Waiting: 0, Unattributed: 0}, progress())
+
+	require.NoError(t, messages.UpdateToolCallOutcome(ctx, chatrepo.UpdateToolCallOutcomeParams{ToolOutcome: text("success"), ToolOutcomeNotes: text("example note"), ID: id, ProjectID: f.project}))
+	require.Equal(t, inserted, stamp(), "unchanged notes keep the stamp")
+	require.NoError(t, messages.UpdateToolCallOutcome(ctx, chatrepo.UpdateToolCallOutcomeParams{ToolOutcome: text("success"), ToolOutcomeNotes: text("changed note"), ID: id, ProjectID: f.project}))
+	afterNotes := stamp()
+	require.True(t, afterNotes.Time.After(inserted.Time), "changed notes move the stamp")
+	require.Equal(t, Progress{Current: 0, Waiting: 1, Unattributed: 0}, progress())
+
+	f.capture(t, id)
+	_, err := messages.StoreToolCallSummary(ctx, chatrepo.StoreToolCallSummaryParams{ToolCallID: "example", Summary: []byte(`"done"`), MessageID: id, ChatID: f.chat, ProjectID: f.project})
+	require.NoError(t, err)
+	require.True(t, stamp().Time.After(afterNotes.Time), "a stored summary moves the stamp")
+	require.Equal(t, Progress{Current: 0, Waiting: 1, Unattributed: 0}, progress())
+
+	f.capture(t, id)
+	_, err = fixtures.SetSource(ctx, pgtype.Text{String: "kit", Valid: true}, id)
+	require.NoError(t, err)
+	_, err = fixtures.ShadowMetadata(ctx, id)
+	require.NoError(t, err, "sealing measured the message")
+	n, err := messages.PatchKitProjectionMessage(ctx, chatrepo.PatchKitProjectionMessageParams{
+		Content: "patched", ContentRaw: nil, ToolCalls: []byte(`[]`), ContentHash: nil, FinishReason: text("stop"),
+		ProjectID: uuid.NullUUID{UUID: f.project, Valid: true}, ChatID: f.chat, ID: id,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, n)
+	_, err = fixtures.ShadowMetadata(ctx, id)
+	require.Error(t, err, "a body change drops the metadata measured from the old body")
+	ids, err := fixtures.ShadowToolCallIDs(ctx, id)
+	require.NoError(t, err)
+	require.Empty(t, ids, "and its tool-call IDs")
+	require.Equal(t, Progress{Current: 0, Waiting: 1, Unattributed: 0}, progress())
 }
