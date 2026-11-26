@@ -334,3 +334,11 @@ func TestUpdateBuildsOnTheTranscript(t *testing.T) {
 		require.ErrorIs(t, err, ErrStale)
 	})
 }
+
+// Listed projects without a store would silently skip encryption, so building
+// one fails fast. No projects and no store is a valid way to turn it off.
+func TestNewTranscriptsNeedsAStoreForListedProjects(t *testing.T) {
+	t.Parallel()
+	require.Panics(t, func() { NewTranscripts(nil, uuid.New()) })
+	require.NotPanics(t, func() { require.False(t, NewTranscripts(nil).Enabled(uuid.New())) })
+}

@@ -111,9 +111,17 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 	}
 
 	// Outcome notes change the encrypted transcripts in the transaction below,
-	// so the key loads before it begins. A segment that updates no outcome
-	// seals nothing and must not fail on the key.
-	prepared := a.transcripts.PrepareTranscripts(ctx, args.ProjectID)
+	// so the key loads before it begins, but only when some outcome will be
+	// written. A segment that writes none must not fail on the key.
+	var prepared error
+	for _, tc := range result.ToolCalls {
+		absoluteIndex := args.StartIndex + tc.MessageIndex
+		if absoluteIndex < 0 || absoluteIndex >= len(allMessages) {
+			continue
+		}
+		prepared = a.transcripts.PrepareTranscripts(ctx, args.ProjectID)
+		break
+	}
 
 	// Use transaction for atomic updates
 	tx, err := a.db.Begin(ctx)

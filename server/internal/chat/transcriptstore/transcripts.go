@@ -23,8 +23,13 @@ type Transcripts struct {
 }
 
 // NewTranscripts encrypts transcripts for the listed projects only. An empty list
-// turns every method into a no-op; there is no implicit all-project mode.
+// turns every method into a no-op; there is no implicit all-project mode. Listed
+// projects without a store are a wiring mistake that would silently skip
+// encryption, so it panics.
 func NewTranscripts(store *Store, projectIDs ...uuid.UUID) *Transcripts {
+	if store == nil && len(projectIDs) > 0 {
+		panic("transcriptstore: NewTranscripts needs a store when projects are listed")
+	}
 	projects := make(map[uuid.UUID]struct{}, len(projectIDs))
 	for _, projectID := range projectIDs {
 		projects[projectID] = struct{}{}
