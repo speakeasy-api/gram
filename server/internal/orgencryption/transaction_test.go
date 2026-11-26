@@ -221,6 +221,10 @@ func TestWarmKeepsAValidKeyWhenTheRefreshFails(t *testing.T) {
 	kms.fail.Store(true)
 	require.NoError(t, service.Warm(t.Context(), ti.orgID, useCase), "the cached key is still valid")
 
+	canceled, cancel := context.WithCancel(t.Context())
+	cancel()
+	require.ErrorIs(t, service.Warm(canceled, ti.orgID, useCase), context.Canceled, "a canceled caller is not told the key is ready")
+
 	service.Forget(ti.orgID)
 	require.ErrorIs(t, service.Warm(t.Context(), ti.orgID, useCase), orgencryption.ErrKeyUnavailable, "with nothing cached the outage fails")
 }
