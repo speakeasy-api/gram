@@ -623,8 +623,14 @@ func TestRecordGatewayAdmission(t *testing.T) {
 				attr.McpGatewayType("project"),
 				attr.Outcome(tc.wantOutcome),
 			)
-			_, hasRefusalReason := sum.DataPoints[0].Attributes.Value(attr.McpGatewayRefusalReason("").Key)
-			require.Equal(t, !tc.admitted, hasRefusalReason)
+			if tc.admitted {
+				_, hasRefusalReason := sum.DataPoints[0].Attributes.Value(attr.McpGatewayRefusalReason("").Key)
+				require.False(t, hasRefusalReason)
+			} else {
+				metricdatatest.AssertHasAttributes(t, got,
+					attr.McpGatewayRefusalReason(tc.refusalReason),
+				)
+			}
 		})
 	}
 }
