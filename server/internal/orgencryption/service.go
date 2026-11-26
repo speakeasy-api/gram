@@ -60,10 +60,16 @@ type Service struct {
 
 	// lastUsed records when each cached DEK of a use case in warmUseCases
 	// last served a caller, so KeepWarm refreshes only DEKs still in use.
-	// Nothing is recorded until KeepWarm starts, and KeepWarm prunes it.
+	// warmUseCases counts the running KeepWarm loops per use case. Uses are
+	// recorded only while one runs, and it prunes them.
 	usesMu       sync.Mutex
-	lastUsed     map[uuid.UUID]time.Time
-	warmUseCases map[string]struct{}
+	lastUsed     map[uuid.UUID]keyUse
+	warmUseCases map[string]int
+}
+
+type keyUse struct {
+	at      time.Time
+	useCase string
 }
 
 type cachedDataKey struct {
@@ -106,8 +112,8 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, identity *gcpauth.Identit
 		configs:      expirable.NewLRU[configCacheKey, cachedConfig](configCacheSize, nil, configCacheTTL),
 		flights:      singleflight.Group{},
 		usesMu:       sync.Mutex{},
-		lastUsed:     map[uuid.UUID]time.Time{},
-		warmUseCases: map[string]struct{}{},
+		lastUsed:     map[uuid.UUID]keyUse{},
+		warmUseCases: map[string]int{},
 	}, nil
 }
 

@@ -17,9 +17,18 @@ func (m *Migrator) SetCandidatePageSize(n int32) {
 }
 
 // EnableKeepWarm records uses of the given use cases' DEKs, as KeepWarm does
-// when it starts, without starting its loop.
-func (s *Service) EnableKeepWarm(useCases ...UseCase) {
-	s.enableKeepWarm(useCases)
+// when it starts, without starting its loop. The returned func stops
+// recording, as KeepWarm does when it stops.
+func (s *Service) EnableKeepWarm(useCases ...UseCase) func() {
+	warm := s.enableKeepWarm(useCases)
+	return func() { s.disableKeepWarm(warm) }
+}
+
+// RecordedUses counts the DEK uses KeepWarm tracks.
+func (s *Service) RecordedUses() int {
+	s.usesMu.Lock()
+	defer s.usesMu.Unlock()
+	return len(s.lastUsed)
 }
 
 // RefreshDue runs one KeepWarm pass as if the clock read now.

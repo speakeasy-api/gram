@@ -810,9 +810,9 @@ func (w *ChatMessageWriter) WriteExternalWithContentParts(ctx context.Context, p
 
 		publicationWrites := []MessageWrite{externalPublication(*write)}
 		inserted, err := func() (bool, error) {
-			if err := w.prepareTranscriptShadow(ctx, organizationID, projectID); err != nil {
-				return false, err
-			}
+			// A retry that conflicts captures nothing, so it must not fail on
+			// the key. Keep the error for the insert that does capture.
+			prepared := w.prepareTranscriptShadow(ctx, organizationID, projectID)
 			tx, err := w.db.Begin(ctx)
 			if err != nil {
 				return false, fmt.Errorf("begin external chat message transaction: %w", err)
@@ -836,6 +836,9 @@ func (w *ChatMessageWriter) WriteExternalWithContentParts(ctx context.Context, p
 				if _, err := repo.New(tx).CreateChatContentPart(ctx, attached); err != nil {
 					return false, fmt.Errorf("create external message content parts: %w", err)
 				}
+			}
+			if prepared != nil {
+				return false, prepared
 			}
 			if err := w.captureTranscriptShadow(ctx, tx, organizationID, projectID, []uuid.UUID{param.ID}); err != nil {
 				return false, err

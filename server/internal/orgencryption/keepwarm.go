@@ -38,6 +38,7 @@ func (s *Service) KeepWarm(ctx context.Context, useCases ...UseCase) {
 	if len(warm) == 0 {
 		return
 	}
+	defer s.disableKeepWarm(warm)
 
 	ticker := time.NewTicker(keepWarmInterval)
 	defer ticker.Stop()
@@ -58,10 +59,32 @@ func (s *Service) enableKeepWarm(useCases []UseCase) map[string]struct{} {
 	s.usesMu.Lock()
 	defer s.usesMu.Unlock()
 	for _, useCase := range useCases {
+		if _, ok := warm[string(useCase)]; ok {
+			continue
+		}
 		warm[string(useCase)] = struct{}{}
-		s.warmUseCases[string(useCase)] = struct{}{}
+		s.warmUseCases[string(useCase)]++
 	}
 	return warm
+}
+
+// disableKeepWarm undoes enableKeepWarm when a KeepWarm loop stops. Once no
+// loop keeps a use case warm, its uses are dropped and no longer recorded.
+func (s *Service) disableKeepWarm(warm map[string]struct{}) {
+	s.usesMu.Lock()
+	defer s.usesMu.Unlock()
+	for useCase := range warm {
+		s.warmUseCases[useCase]--
+		if s.warmUseCases[useCase] > 0 {
+			continue
+		}
+		delete(s.warmUseCases, useCase)
+		for id, use := range s.lastUsed {
+			if use.useCase == useCase {
+				delete(s.lastUsed, id)
+			}
+		}
+	}
 }
 
 // refreshDue unwraps again every cached DEK of a warm use case that is due for
@@ -99,17 +122,17 @@ func (s *Service) refreshDue(ctx context.Context, warm map[string]struct{}, now 
 func (s *Service) noteUse(id uuid.UUID, useCase string) {
 	s.usesMu.Lock()
 	defer s.usesMu.Unlock()
-	if _, ok := s.warmUseCases[useCase]; !ok {
+	if s.warmUseCases[useCase] == 0 {
 		return
 	}
-	s.lastUsed[id] = time.Now()
+	s.lastUsed[id] = keyUse{at: time.Now(), useCase: useCase}
 }
 
 func (s *Service) usedSince(id uuid.UUID, since time.Time) bool {
 	s.usesMu.Lock()
 	defer s.usesMu.Unlock()
-	last, ok := s.lastUsed[id]
-	return ok && !last.Before(since)
+	use, ok := s.lastUsed[id]
+	return ok && !use.at.Before(since)
 }
 
 func (s *Service) forgetUse(id uuid.UUID) {
@@ -123,8 +146,8 @@ func (s *Service) forgetUse(id uuid.UUID) {
 func (s *Service) pruneUses(before time.Time) {
 	s.usesMu.Lock()
 	defer s.usesMu.Unlock()
-	for id, last := range s.lastUsed {
-		if last.Before(before) || !s.dataKeys.Contains(id) {
+	for id, use := range s.lastUsed {
+		if use.at.Before(before) || !s.dataKeys.Contains(id) {
 			delete(s.lastUsed, id)
 		}
 	}

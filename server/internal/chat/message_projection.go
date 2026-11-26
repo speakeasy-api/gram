@@ -23,9 +23,9 @@ func (w *ChatMessageWriter) ProjectMessage(ctx context.Context, projectID, messa
 	if guard == nil || build == nil || messageID == uuid.Nil {
 		return false, fmt.Errorf("projection requires admission guard and message ID")
 	}
-	if err := w.PrepareTranscriptShadow(ctx, projectID); err != nil {
-		return false, err
-	}
+	// A projection the guard refuses or build skips captures nothing, so it
+	// must not fail on the key. Keep the error for a change that captures.
+	prepared := w.PrepareTranscriptShadow(ctx, projectID)
 	tx, err := w.db.Begin(ctx)
 	if err != nil {
 		return false, fmt.Errorf("begin message projection: %w", err)
@@ -98,6 +98,9 @@ func (w *ChatMessageWriter) ProjectMessage(ctx context.Context, projectID, messa
 	}
 	_, captureEnabled := w.transcriptShadowProjects[projectID]
 	if changed > 0 && w.transcriptShadow != nil && captureEnabled {
+		if prepared != nil {
+			return false, prepared
+		}
 		if organizationID == "" {
 			organizationID, err = q.GetProjectOrganizationID(ctx, projectID)
 			if err != nil {

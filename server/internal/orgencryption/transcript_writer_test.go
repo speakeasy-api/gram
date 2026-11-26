@@ -258,6 +258,42 @@ func TestTranscriptWriterOptOutWithoutStorageOrKeys(t *testing.T) {
 	require.EqualValues(t, 1, n)
 }
 
+// A write that captures nothing (an external retry or a skipped projection)
+// still succeeds while the key cannot load. A write that captures fails closed.
+func TestTranscriptWriterNoopsSucceedWithoutKey(t *testing.T) {
+	t.Parallel()
+	f := newTranscriptWriterFixture(t, true, true)
+	m := chat.ExternalMessageWrite{Params: chatrepo.CreateExternalChatMessageParams{ID: uuid.New(), ChatID: f.chatID, ProjectID: f.projectID, Role: "assistant", Content: "EXAMPLE imported content", ExternalMessageID: conv.ToPGText("example-import-id")}}
+	_, err := f.writer.WriteExternalWithContentParts(t.Context(), f.projectID, []chat.ExternalMessageWrite{m}, nil)
+	require.NoError(t, err)
+	require.NoError(t, f.fixture.Provisioner.Suspend(t.Context(), f.orgID, "EXAMPLE suspended test key", orgencryption.SystemActor()))
+	before := f.counts(t)
+
+	m.Params.ID = uuid.New()
+	n, err := f.writer.WriteExternalWithContentParts(t.Context(), f.projectID, []chat.ExternalMessageWrite{m}, nil)
+	require.NoError(t, err, "a retry captures nothing")
+	require.Zero(t, n)
+
+	projected := f.message("EXAMPLE projected body")
+	projected.Params.Source = conv.ToPGText("kit")
+	guard := func(context.Context, pgx.Tx) error { return nil }
+	skip := func(*chatrepo.ChatMessage) (chat.MessageWrite, bool, error) { return projected, false, nil }
+	changed, err := f.writer.ProjectMessage(t.Context(), f.projectID, projected.Params.ID, guard, skip)
+	require.NoError(t, err, "a skipped projection captures nothing")
+	require.False(t, changed)
+	require.Equal(t, before, f.counts(t))
+
+	fresh := m
+	fresh.Params.ID = uuid.New()
+	fresh.Params.ExternalMessageID = conv.ToPGText("example-new-import-id")
+	_, err = f.writer.WriteExternalWithContentParts(t.Context(), f.projectID, []chat.ExternalMessageWrite{fresh}, nil)
+	require.ErrorIs(t, err, orgencryption.ErrSuspended)
+	apply := func(*chatrepo.ChatMessage) (chat.MessageWrite, bool, error) { return projected, true, nil }
+	_, err = f.writer.ProjectMessage(t.Context(), f.projectID, projected.Params.ID, guard, apply)
+	require.ErrorIs(t, err, orgencryption.ErrSuspended)
+	require.Equal(t, before, f.counts(t))
+}
+
 func TestTranscriptWriterProjection(t *testing.T) {
 	t.Parallel()
 	for _, provision := range []bool{true, false} {

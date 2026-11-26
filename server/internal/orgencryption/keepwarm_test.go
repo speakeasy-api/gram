@@ -21,7 +21,7 @@ func warmKey(t *testing.T, ti *testInstance) (*orgencryption.Service, int) {
 	t.Helper()
 	ti.provision(t)
 	service, _ := transactionService(t, ti)
-	service.EnableKeepWarm(useCase)
+	t.Cleanup(service.EnableKeepWarm(useCase))
 	encryptor, err := service.For(ti.orgID, useCase)
 	require.NoError(t, err)
 	require.NoError(t, encryptor.RequireUsable(t.Context()))
@@ -100,7 +100,7 @@ func TestKeepWarmCountsTransactionUse(t *testing.T) {
 	committed, err := service.For(ti.orgID, useCase)
 	require.NoError(t, err)
 	require.NoError(t, committed.RequireUsable(t.Context()))
-	service.EnableKeepWarm(useCase)
+	t.Cleanup(service.EnableKeepWarm(useCase))
 	require.Zero(t, service.RefreshDue(t.Context(), dueAt(), useCase), "the pool use came before KeepWarm started")
 
 	tx, err := pool.Begin(t.Context()) //nolint:glint // notestingrawsql: explicit transaction protocol under test
@@ -113,4 +113,23 @@ func TestKeepWarmCountsTransactionUse(t *testing.T) {
 	require.NoError(t, tx.Commit(t.Context()))
 
 	require.Equal(t, 1, service.RefreshDue(t.Context(), dueAt(), useCase))
+}
+
+// Once KeepWarm stops, the uses it tracked are dropped and new ones are not
+// recorded, so nothing grows without its pruner.
+func TestKeepWarmDropsUsesWhenItStops(t *testing.T) {
+	t.Parallel()
+	ti := newTestInstance(t)
+	ti.provision(t)
+	service, _ := transactionService(t, ti)
+	stop := service.EnableKeepWarm(useCase)
+	encryptor, err := service.For(ti.orgID, useCase)
+	require.NoError(t, err)
+	require.NoError(t, encryptor.RequireUsable(t.Context()))
+	require.Equal(t, 1, service.RecordedUses())
+
+	stop()
+	require.Zero(t, service.RecordedUses())
+	require.NoError(t, encryptor.RequireUsable(t.Context()))
+	require.Zero(t, service.RecordedUses())
 }
