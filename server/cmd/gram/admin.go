@@ -51,6 +51,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/plugins/marketplacetokens"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -592,6 +593,13 @@ func newAdminCommand() *cli.Command {
 			}
 			if applicationEncryption != nil {
 				adminService.SetRemoteSessionService(remotesessions.NewGlobalService(logger, tracerProvider, meterProvider, db, applicationEncryption, orgEncryption.ClientSecrets(logger, applicationEncryption), guardianPolicy))
+				// The temporary marketplace token backfill seals with the
+				// same cipher and platform key the servers build their
+				// marketplace tokens over.
+				adminService.SetSecretBackfillPlatformKey(&admin.SecretBackfillPlatformKey{
+					Platform: applicationEncryption,
+					Tokens:   marketplacetokens.New(logger, orgEncryption.Cipher(logger, applicationEncryption), applicationEncryption),
+				})
 				if orgEncryption.Provisioner != nil {
 					adminService.SetTailscaleOAuthMigration(&admin.TailscaleOAuthMigration{
 						Transitions: orgEncryption.Transitions,

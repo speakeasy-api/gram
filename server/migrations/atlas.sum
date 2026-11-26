@@ -1,4 +1,4 @@
-h1:vPGPhfCdV7CVyZahRXExdZlxlL/vHpjVm6K0d0kfh0Q=
+h1:4oulr4lXZjeXHf5kHh+FAt5gLL0nUlnmLT8FZqQgyjE=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -567,5 +567,6 @@ h1:vPGPhfCdV7CVyZahRXExdZlxlL/vHpjVm6K0d0kfh0Q=
 20261125195614_hooks-rollout-stages.sql h1:/wzA8ax1tWEuGThx2d7A/hXhfejMP3rT/N3fNLITrYs=
 20261125202742_drop-retired-usi-rsc-junction.sql h1:nftcvZxvG4+omcDXi2NENpOhwjV5KcciWcgea4rwg7Q=
 20261125221844_chat-transcripts-add-metadata.sql h1:REvy7fIO05Zj/W5m71UPwLRaiUIngZlInmXz+4+RTs4=
-20261126143004_chat-messages-transcript-metadata.sql h1:gXv3LnHlJtppec5TbldI113A7+vI26PL89YNO6kBc84=
-20261126143024_chat-messages-source-updated-at-default.sql h1:0irgQxDksWsHl6kTbtbylt5LWNhxP7g25oZBnuUgvN0=
+20261126174645_restrict_asset_content_digests.sql h1:PE7vhw1+SWZSuqPH1YcI3u586xTJLcQiG8txcOgCCiI=
+20261126183517_chat-messages-transcript-metadata.sql h1:wP9HZsXsFg40GQ9v1cE0aUlhhfYv59vELCN1MG8XEcs=
+20261126183541_drop-chat-transcript-shadow-metadata.sql h1:fndAzwNdMpe2bHWQHoJHo4ddbYexs++N/WQDvpEmFxg=

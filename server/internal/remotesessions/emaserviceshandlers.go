@@ -220,14 +220,14 @@ func (s *Service) ListEMAServices(ctx context.Context, _ *orgissuersgen.ListEMAS
 			checks = append(checks, serverChecks[server.ID])
 		}
 	}
-	readable, err := s.authz.FindMatched(ctx, checks)
+	decisions, err := s.authz.Decide(ctx, checks...)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "check MCP server read access").LogError(ctx, logger)
 	}
 	listed := map[string][]*orgissuersgen.EMAServiceServer{}
 	hidden := map[string]int{}
 	for i, c := range candidates {
-		if !readable[i] {
+		if !decisions.Each[i].Allowed {
 			hidden[c.vendor]++
 			continue
 		}

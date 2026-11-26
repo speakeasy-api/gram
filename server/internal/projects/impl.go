@@ -270,28 +270,18 @@ func (s *Service) ListProjects(ctx context.Context, payload *gen.ListProjectsPay
 		return nil, fmt.Errorf("list projects by organization %s: %w", payload.OrganizationID, err)
 	}
 
-	projectIDs := make([]string, 0, len(projects))
-	for _, project := range projects {
-		projectIDs = append(projectIDs, project.ID.String())
+	checks := make([]authz.Check, len(projects))
+	for i, project := range projects {
+		checks[i] = authz.Project(authz.ProjectIDOf(project.ID)).Read()
 	}
-
-	checks := make([]authz.Check, len(projectIDs))
-	for i, id := range projectIDs {
-		checks[i] = authz.Project(authz.ProjectIDFrom(id)).Read()
-	}
-	allowedProjectIDs, err := s.authz.Filter(ctx, checks)
+	decisions, err := s.authz.Decide(ctx, checks...)
 	if err != nil {
 		return nil, err
 	}
 
-	allowedProjects := make(map[string]struct{}, len(allowedProjectIDs))
-	for _, projectID := range allowedProjectIDs {
-		allowedProjects[projectID] = struct{}{}
-	}
-
 	entries := make([]*gen.ProjectEntry, 0, len(projects))
-	for _, project := range projects {
-		if _, ok := allowedProjects[project.ID.String()]; !ok {
+	for i, project := range projects {
+		if !decisions.Each[i].Allowed {
 			continue
 		}
 

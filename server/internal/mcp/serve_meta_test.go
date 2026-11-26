@@ -665,7 +665,8 @@ func TestWellKnown_MetaEndpoint_IssuerGated_ServesMetadata(t *testing.T) {
 	createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, issuerID)
 
 	logger := ti.logger
-	mcpEndpoint, mcpServer, metaServer, err := ti.service.ResolveMCPEndpointAndServer(ctx, logger, slug)
+	resolved, err := ti.service.ResolveMCPEndpointAndServer(ctx, logger, slug)
+	mcpEndpoint, mcpServer, metaServer := resolved.Endpoint, resolved.Server, resolved.MetaServer
 	require.NoError(t, err)
 	require.Nil(t, mcpServer)
 	require.NotNil(t, metaServer)
@@ -698,7 +699,8 @@ func TestWellKnown_MetaEndpoint_NoIssuer_NotFound(t *testing.T) {
 	createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
 
 	logger := ti.logger
-	mcpEndpoint, _, metaServer, err := ti.service.ResolveMCPEndpointAndServer(ctx, logger, slug)
+	resolved, err := ti.service.ResolveMCPEndpointAndServer(ctx, logger, slug)
+	mcpEndpoint, metaServer := resolved.Endpoint, resolved.MetaServer
 	require.NoError(t, err)
 	require.NotNil(t, metaServer)
 

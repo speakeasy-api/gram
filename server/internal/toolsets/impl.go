@@ -367,19 +367,14 @@ func (s *Service) ListToolsets(ctx context.Context, payload *gen.ListToolsetsPay
 	for i, id := range toolsetIDs {
 		checks[i] = authz.MCPServer(authz.MCPServerIDFrom(id), authz.ProjectIDOf(*authCtx.ProjectID)).Read()
 	}
-	allowedIDs, err := s.authz.Filter(ctx, checks)
+	decisions, err := s.authz.Decide(ctx, checks...)
 	if err != nil {
 		return nil, err
 	}
 
-	allowedSet := make(map[string]struct{}, len(allowedIDs))
-	for _, id := range allowedIDs {
-		allowedSet[id] = struct{}{}
-	}
-
-	allowedToolsets := make([]repo.Toolset, 0, len(allowedIDs))
-	for _, toolset := range toolsets {
-		if _, ok := allowedSet[toolset.ID.String()]; ok {
+	allowedToolsets := make([]repo.Toolset, 0, len(toolsets))
+	for i, toolset := range toolsets {
+		if decisions.Each[i].Allowed {
 			allowedToolsets = append(allowedToolsets, toolset)
 		}
 	}

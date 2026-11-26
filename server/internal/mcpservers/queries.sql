@@ -39,6 +39,22 @@ SELECT *
 FROM mcp_servers
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
 
+-- name: GetServableMCPServerByIDAndProjectID :one
+-- GetMCPServerByIDAndProjectID for an endpoint being served, plus whether the
+-- server offers the feedback tool, so the gateway reads the tool's settings
+-- only for servers that do.
+SELECT
+    sqlc.embed(s),
+    EXISTS (
+        SELECT 1
+        FROM mcp_server_feedback_configs AS feedback
+        WHERE feedback.mcp_server_id = s.id
+          AND feedback.project_id = s.project_id
+          AND feedback.enabled
+    ) AS feedback_tool_enabled
+FROM mcp_servers AS s
+WHERE s.id = @id AND s.project_id = @project_id AND s.deleted IS FALSE;
+
 -- name: GetMCPServerByToolsetID :one
 -- Enabled first, then the canonical wrapper (id = toolset id), then oldest.
 SELECT *
@@ -754,6 +770,13 @@ SELECT
     s.environment_id AS mcp_server_environment_id,
     s.tool_variations_group_id AS mcp_server_tool_variations_group_id,
     s.remote_session_issuer_id AS mcp_server_remote_session_issuer_id,
+    EXISTS (
+        SELECT 1
+        FROM mcp_server_feedback_configs AS feedback
+        WHERE feedback.mcp_server_id = s.id
+          AND feedback.project_id = s.project_id
+          AND feedback.enabled
+    ) AS mcp_server_feedback_tool_enabled,
     ARRAY(
         SELECT DISTINCT c.remote_session_issuer_id
         FROM mcp_server_remote_session_clients AS a

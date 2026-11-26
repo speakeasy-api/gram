@@ -153,7 +153,6 @@ type UpdateRiskExclusionToolOutput struct {
 // keeps its tool in the catalogue as a stable "not enabled" stub.
 type RiskMutationHandlers struct {
 	ChangeAudience              mcp.ToolHandlerFor[map[string]any, UpdateRiskPolicyToolOutput]
-	RemoveSelf                  mcp.ToolHandlerFor[map[string]any, UpdateRiskPolicyToolOutput]
 	Controls                    *RiskMutationControls
 	CreatePolicy                mcp.ToolHandlerFor[map[string]any, CreateRiskPolicyToolOutput]
 	UpdatePolicy                mcp.ToolHandlerFor[map[string]any, UpdateRiskPolicyToolOutput]
@@ -164,7 +163,6 @@ type RiskMutationHandlers struct {
 }
 
 func registerRiskMutationHandlers(reg *Registrar, catalog policycatalog.Catalog, catalogAvailable bool, handlers *RiskMutationHandlers) {
-	registerRemoveSelfFromRiskPolicy(reg, catalogAvailable, handlers)
 	registerChangeRiskPolicyAudience(reg, catalogAvailable, handlers)
 	createPolicySchema := fallbackCreateRiskPolicySchema()
 	updatePolicySchema := fallbackUpdateRiskPolicySchema()
