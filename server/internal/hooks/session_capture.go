@@ -631,6 +631,9 @@ func (s *Service) insertUncorrelatedAgentPrompt(
 		AccountType:       metadata.AccountType,
 		BillingMode:       metadata.BillingMode,
 	}}
+	// A prompt the native fallback skips writes nothing, so it must not fail on
+	// the transcript key. Keep the error for the write below.
+	prepared := s.writer.PrepareTranscriptShadow(ctx, projectID)
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return false, fmt.Errorf("begin prompt correlation transaction: %w", err)
@@ -661,6 +664,9 @@ func (s *Service) insertUncorrelatedAgentPrompt(
 
 	if err := s.ensureHookChat(ctx, repo.New(tx), metadata, msgParams.ChatID, projectID, defaultTitle); err != nil {
 		return false, err
+	}
+	if prepared != nil {
+		return false, fmt.Errorf("prepare uncorrelated agent prompt: %w", prepared)
 	}
 	n, err := s.writer.WriteInTx(ctx, tx, writes)
 	if err != nil {

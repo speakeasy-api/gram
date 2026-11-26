@@ -71,6 +71,11 @@ var (
 	// the customer disabled it or removed Speakeasy's access.
 	ErrSuspended = errors.New("orgencryption: organization encryption is suspended")
 
+	// ErrKeyNotWarm means a transaction-bound Encryptor needed a DEK that the
+	// process cache does not hold. Such an Encryptor never calls KMS while
+	// its transaction is open: call Service.Warm before opening it.
+	ErrKeyNotWarm = errors.New("orgencryption: data encryption key is not warm; warm it before opening the transaction")
+
 	// ErrKeyUnavailable means a KEK could not unwrap or wrap a DEK. It wraps
 	// the provider error, which carries the gRPC status.
 	ErrKeyUnavailable = errors.New("orgencryption: key encryption key unavailable")
@@ -149,8 +154,9 @@ var (
 
 // keyProblems are the errors that mean an organization key could not be used:
 // an unreachable, revoked, suspended, disabled or misconfigured key, a process
-// without organization encryption serving an enrolled organization, or
-// transition state that kept moving under a write.
+// without organization encryption serving an enrolled organization, a
+// transaction whose key was not warmed first, or transition state that kept
+// moving under a write.
 var keyProblems = []error{
 	ErrKeyUnavailable,
 	ErrSuspended,
@@ -162,6 +168,7 @@ var keyProblems = []error{
 	ErrConcurrentChange,
 	ErrFenced,
 	ErrDecisionExpired,
+	ErrKeyNotWarm,
 }
 
 // IsUnreadable reports whether err from opening a value means the stored
