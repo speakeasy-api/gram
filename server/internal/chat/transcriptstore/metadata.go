@@ -7,10 +7,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
-// metadata is the plaintext-free description of a message that capture stores
-// next to its shadow, so readers can count, budget and look up tool calls
-// without decrypting. It is derived from the same snapshot that is sealed, and
-// the capture compare-and-set on source_hash keeps the two in step.
+// metadata is the plaintext-free description of a message that sealing writes
+// to chat_messages, so readers can count, budget and look up tool calls
+// without reading or decrypting the body. It is derived from the same snapshot
+// that is sealed, and the compare-and-set on source_updated_at keeps the two in
+// step.
 type metadata struct {
 	toolCallCount   int32
 	contentBytes    int32

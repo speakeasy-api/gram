@@ -63,24 +63,23 @@ a committed-state-safe cross-transaction unwrap cache or an explicit unwrap
 rate/concurrency bound is implemented. Reusing transaction-loaded keys globally
 is unsafe because those keys or configuration may later roll back.
 
-The unkeyed `source_hash` is not a confidentiality boundary: a reader with access
-only to shadow rows can confirm guessed complete payloads and correlate equal
-payloads without a DEK. Retaining plaintext elsewhere and default-off capture do
-not remove that leakage. Shadow rows must therefore be treated as sensitive
-plaintext-equivalent data, not exposed as a ciphertext-only dataset. Replacing or
-removing deterministic digests (including existing rows) is a prerequisite for
-any encrypted-only rollout, not an optional hardening improvement.
+Freshness does not come from the plaintext. `chat_messages.source_updated_at`
+records when the six body fields last changed. Two triggers stamp it with
+`clock_timestamp()` on every write path: on insert when unset (a restore keeps
+its value), and on an update that changes a body field (an identical rewrite
+does not count). Each copy records the `source_updated_at` it was sealed from,
+and it is current while the two are equal. Compare-and-swap persistence refuses
+an outdated snapshot by the same comparison.
 
-Each copy has a versioned SHA-256 fingerprint of the current sensitive fields,
-including JSONB SQL-null flags and nullable `storage_error`. The source fingerprint
-version is now `chat-transcript-source/v2`; v1 shadows are stale and must be
-recaptured/backfilled even when the current storage error is SQL NULL. The payload
-format remains v1: older payloads open with an absent storage error as nil, but
-verified reads reject their old source fingerprint. Compare-and-swap persistence
-refuses an outdated snapshot.
+Copies sealed before `source_updated_at` existed still carry the old unkeyed
+`source_hash`, a versioned SHA-256 fingerprint of the sensitive fields. Reads
+check those copies with the fingerprint until a backfill seals them again, which
+clears it. That digest is not a confidentiality boundary: anyone with the row
+can confirm a guessed short payload. Dropping the column after the backfill is a
+prerequisite for any encrypted-only rollout.
 `Load` checks tenant/project/chat/message linkage, requires a current copy, opens
 the authenticated payload, and compares it with the live body. It never substitutes
-legacy plaintext after a missing/stale copy or a key failure. The source fingerprint
+legacy plaintext after a missing/stale copy or a key failure. `source_updated_at`
 alone is not proof of authenticity: it is outside the encrypted payload.
 
 `Backfill` processes at most 500 rows per project-scoped page, in message-ID order,
@@ -90,13 +89,13 @@ inserts below a prior cursor. `Progress` distinguishes current copies, waiting/s
 copies, and unattributed legacy rows. **Current shadow counts do not prove plaintext
 has been removed or that encrypted-only storage can be finalized.**
 
-Backfill recaptures every scoped source row on each sweep, including hash-current
-rows, so forged matching fingerprints or corrupt ciphertext do not prevent repair.
-Page counts report rows recaptured, not only missing/stale rows. Progress counts
-are fingerprint hints, not ciphertext-authentication or cutover evidence.
+Backfill recaptures every scoped source row on each sweep, including current
+rows, so a forged `source_updated_at` or corrupt ciphertext does not prevent
+repair. Page counts report rows recaptured, not only missing/stale rows. Progress
+counts are freshness hints, not ciphertext-authentication or cutover evidence.
 
-Direct SQL updates outside the shared writer can make a shadow stale. Verified
-reads reject it, and a subsequent backfill refreshes it. Before encrypted-only
+Direct SQL updates outside the shared writer still move `source_updated_at`, so
+verified reads reject the stale copy, and a subsequent backfill refreshes it. Before encrypted-only
 rollout, migrate those writes too and establish a fenced plaintext-removal protocol.
 
 ## One entry point: `transcriptstore.Transcripts`
@@ -109,13 +108,15 @@ read opens one. `Seal` and `Open` do nothing for a project off the list, and a n
 `transcriptstore.OpenRows`, which maps each row to a `Body` of pointers at its
 body fields. Readers no longer keep their own allowlist.
 
-Capture also stores plaintext-free metadata next to each shadow, measured from
+Sealing also writes plaintext-free metadata to `chat_messages`, measured from
 the same snapshot it seals: `tool_call_count` and the byte lengths of
 `content`, `content_raw` and `tool_calls` (as `octet_length` of their text
-form, with a NULL value recorded as 0), plus one
-`chat_message_transcript_tool_calls` row per provider tool-call ID. They are current exactly when the shadow is, so readers can
-count, budget and look up tool calls without decrypting. Shadows captured
-before these columns existed hold NULL until a backfill recaptures them.
+form, with a NULL value recorded as 0), plus one `chat_message_tool_call_ids`
+row per provider tool-call ID. They live on the message, not the encrypted
+table, so plaintext-free readers never read `chat_message_transcripts`, and
+they are written in the same transaction under the same `source_updated_at`
+check, so they describe the sealed version. Messages sealed before these
+columns existed hold NULL until a backfill seals them again.
 
 ## Shadow reads
 
@@ -165,15 +166,15 @@ outcome) and `transcriptstore.Capture` / `transcriptstore.LoadMany` spans.
 
 Encrypting a message body is not equivalent to encrypting every transcript copy:
 
-| Surface            | Required integration                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Message writes     | Shared `chat.MessageWrite` paths, transactional inserts, upserts, hook captures, assistant updates, compaction, and direct SQL writers must seal before committing.                                                                                                                                                                                                                                                                             |
-| Message reads      | Chat loads, hook reconciliation, assistant history/read-modify-write, background analysis, title generation, and risk evaluation must open before consuming content.                                                                                                                                                                                                                                                                            |
-| Raw content assets | Chat capture uploads JSON independently of the inline message fields. Encrypt blob contents and migrate existing objects, including obsolete copies and applicable retention policies.                                                                                                                                                                                                                                                          |
-| Attachments        | `chat_content_parts` and the asset service's authenticated/signed attachment downloads need their own encrypted-storage contract.                                                                                                                                                                                                                                                                                                               |
-| Derived text       | Chat titles/summaries, resolution/analysis results, risk evidence, and memory digests can contain transcript text. Explicitly include or exclude each store.                                                                                                                                                                                                                                                                                    |
-| Metadata           | `origin`, asset URLs, user identifiers, IP addresses, and user agents remain outside this body payload. `storage_error` is sensitive and is included in the encrypted payload, not treated as safe metadata.                                                                                                                                                                                                                                    |
-| Hashes             | `content_hash` and the shadow `source_hash` are unkeyed deterministic digests. Equality/guess-confirmation leakage is a known, temporary risk that this shadow-only change does not mitigate. Default-off capture and retained plaintext do not remove it. Before any encrypted-only rollout, remove these digests or replace them with organization-keyed fingerprints, and migrate existing rows; clearing plaintext alone is not sufficient. |
+| Surface            | Required integration                                                                                                                                                                                                                                                                                                                     |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Message writes     | Shared `chat.MessageWrite` paths, transactional inserts, upserts, hook captures, assistant updates, compaction, and direct SQL writers must seal before committing.                                                                                                                                                                      |
+| Message reads      | Chat loads, hook reconciliation, assistant history/read-modify-write, background analysis, title generation, and risk evaluation must open before consuming content.                                                                                                                                                                     |
+| Raw content assets | Chat capture uploads JSON independently of the inline message fields. Encrypt blob contents and migrate existing objects, including obsolete copies and applicable retention policies.                                                                                                                                                   |
+| Attachments        | `chat_content_parts` and the asset service's authenticated/signed attachment downloads need their own encrypted-storage contract.                                                                                                                                                                                                        |
+| Derived text       | Chat titles/summaries, resolution/analysis results, risk evidence, and memory digests can contain transcript text. Explicitly include or exclude each store.                                                                                                                                                                             |
+| Metadata           | `origin`, asset URLs, user identifiers, IP addresses, and user agents remain outside this body payload. `storage_error` is sensitive and is included in the encrypted payload, not treated as safe metadata.                                                                                                                             |
+| Hashes             | `content_hash` and the legacy shadow `source_hash` are unkeyed deterministic digests. New copies no longer write `source_hash`; freshness uses `source_updated_at`. Before any encrypted-only rollout, backfill so no copy carries `source_hash`, drop it, and remove or key `content_hash`; clearing plaintext alone is not sufficient. |
 
 Concrete integration points include:
 
@@ -232,8 +233,8 @@ the canary; canonical generation/integration tests on the application branch alo
 remain dependent on that prerequisite.
 
 Storage-error coverage includes null/empty/value round trips, error-only changes
-invalidating freshness, backfill refresh, and rejection of a forged public source
-fingerprint when the authenticated storage error differs from the live row.
+invalidating freshness, backfill refresh, and rejection of a forged
+`source_updated_at` when the authenticated storage error differs from the live row.
 
 Startup preflight checks required column types/nullability, defaults for omitted
 required columns, and a usable unique `message_id` conflict target before key

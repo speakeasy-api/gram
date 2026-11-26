@@ -142,8 +142,8 @@ func TestCaptureLoadOwnershipAndStaleness(t *testing.T) {
 	opened, err = f.store.Load(t.Context(), f.org, f.project, id)
 	require.ErrorIs(t, err, ErrStale)
 	require.Equal(t, transcriptcrypto.Message{}, opened)
-	// Even a forged matching hash cannot make an authenticated older body current.
-	_, err = fixturerepo.New(f.db).ForgeSourceHash(t.Context(), id, project(f.project), f.org)
+	// Even a forged matching source_updated_at cannot make an authenticated older body current.
+	_, err = fixturerepo.New(f.db).ForgeSourceUpdatedAt(t.Context(), id, project(f.project), f.org)
 	require.NoError(t, err)
 	opened, err = f.store.Load(t.Context(), f.org, f.project, id)
 	require.ErrorIs(t, err, ErrStale)
@@ -171,7 +171,7 @@ func TestCASRejectsChangedSnapshotAndLocksLiveSource(t *testing.T) {
 	require.NoError(t, err)
 	_, err = fixturerepo.New(f.db).ChangeNotes(t.Context(), id, project(f.project))
 	require.NoError(t, err)
-	n, err := q.Capture(t.Context(), repo.CaptureParams{ProjectID: f.project, OrganizationID: f.org, MessageID: id, ChatID: f.chat, Ciphertext: "not-used", SourceHash: snapshot.SourceHash})
+	n, err := q.Capture(t.Context(), repo.CaptureParams{ProjectID: f.project, OrganizationID: f.org, MessageID: id, ChatID: f.chat, Ciphertext: "not-used", SourceUpdatedAt: snapshot.SourceUpdatedAt})
 	require.NoError(t, err)
 	require.Zero(t, n)
 	// Capture's shared source lock lasts until the caller commits. A concurrent
@@ -502,7 +502,7 @@ func TestStorageErrorFingerprintBackfill(t *testing.T) {
 	// A forged public fingerprint cannot authenticate changed error text.
 	_, err := fixturerepo.New(f.db).SetStorageError(t.Context(), pgtype.Text{String: "sensitive forged error", Valid: true}, id, project(f.project))
 	require.NoError(t, err)
-	_, err = fixturerepo.New(f.db).ForgeSourceHash(t.Context(), id, project(f.project), f.org)
+	_, err = fixturerepo.New(f.db).ForgeSourceUpdatedAt(t.Context(), id, project(f.project), f.org)
 	require.NoError(t, err)
 	opened, err := f.store.Load(t.Context(), f.org, f.project, id)
 	require.ErrorIs(t, err, ErrStale)
@@ -547,13 +547,14 @@ func TestShadowOwnershipForeignKeys(t *testing.T) {
 	require.EqualValues(t, 1, n)
 }
 
-// Keep every production and fixture fingerprint expression identical. A source
-// field/version change must not silently diverge between capture and coverage.
+// Copies sealed before source_updated_at existed still carry source_hash, and
+// the reads check them with this fingerprint until they are sealed again. Keep
+// every copy of the expression identical.
 func TestSourceFingerprintExpressionsAgree(t *testing.T) {
 	t.Parallel()
 	expression := regexp.MustCompile(`sha256\(convert_to\(jsonb_build_array\([^\n]*?\)::text,'UTF8'\)\)`)
 	var canonical string
-	for path, count := range map[string]int{"queries.sql": 6, "fixtures/queries.sql": 1} {
+	for path, count := range map[string]int{"queries.sql": 4} {
 		source, err := os.ReadFile(path)
 		require.NoError(t, err)
 		matches := expression.FindAllString(string(source), -1)

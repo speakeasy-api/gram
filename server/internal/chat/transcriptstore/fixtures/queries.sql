@@ -13,8 +13,8 @@ INSERT INTO chat_messages(id,chat_id,project_id,role,content,content_raw,tool_ca
 -- name: ChangeContent :execrows
 UPDATE chat_messages SET content='changed' WHERE id=$1 AND project_id=$2;
 
--- name: ForgeSourceHash :execrows
-UPDATE chat_message_transcripts t SET source_hash=sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')) FROM chat_messages m WHERE m.id=t.message_id AND m.id=$1 AND m.project_id=$2 AND t.project_id=$2 AND t.organization_id=$3;
+-- name: ForgeSourceUpdatedAt :execrows
+UPDATE chat_message_transcripts t SET source_updated_at=m.source_updated_at, source_hash=NULL FROM chat_messages m WHERE m.id=t.message_id AND m.id=$1 AND m.project_id=$2 AND t.project_id=$2 AND t.organization_id=$3;
 
 -- name: ReplaceCiphertext :execrows
 UPDATE chat_message_transcripts SET ciphertext=$1 WHERE message_id=$2 AND project_id=$3 AND organization_id=$4;
@@ -38,7 +38,9 @@ INSERT INTO projects(id,name,slug,organization_id) VALUES($1,'Other','other',$2)
 UPDATE chat_messages SET project_id=$1 WHERE id=$2 AND project_id=$3;
 
 -- name: MessageSnapshot :one
-SELECT row_to_json(m)::text FROM chat_messages m WHERE id=$1 AND project_id=$2;
+-- The message as sealing must leave it: the metadata columns are the only ones
+-- it writes.
+SELECT (to_jsonb(m) - 'tool_call_count' - 'content_bytes' - 'content_raw_bytes' - 'tool_calls_bytes')::text FROM chat_messages m WHERE id=$1 AND project_id=$2;
 
 -- name: Ciphertext :one
 SELECT ciphertext FROM chat_message_transcripts WHERE message_id=$1 AND project_id=$2 AND organization_id=$3;
@@ -61,10 +63,10 @@ INSERT INTO chat_message_transcripts(message_id,project_id,organization_id,ciphe
 VALUES($1,$2,$3,'test ciphertext',decode(repeat('00',32),'hex'));
 
 -- name: ShadowMetadata :one
-SELECT tool_call_count, content_bytes, content_raw_bytes, tool_calls_bytes FROM chat_message_transcripts WHERE message_id=$1;
+SELECT tool_call_count, content_bytes, content_raw_bytes, tool_calls_bytes FROM chat_messages WHERE id=$1 AND tool_call_count IS NOT NULL;
 
 -- name: ShadowToolCallIDs :many
-SELECT tool_call_id FROM chat_message_transcript_tool_calls WHERE message_id=$1 ORDER BY tool_call_id;
+SELECT tool_call_id FROM chat_message_tool_call_ids WHERE message_id=$1 ORDER BY tool_call_id;
 
 -- name: SetToolCalls :execrows
 UPDATE chat_messages SET tool_calls=$1 WHERE id=$2 AND project_id=$3;
