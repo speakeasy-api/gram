@@ -11,6 +11,8 @@ import {
   resourceKindForScope,
   selectorMatches,
   selectorMatchesStrict,
+  canWriteMCPServerInGrants,
+  canWriteProjectMCPServersInGrants,
 } from "./useRBAC";
 import servedCatalogue from "../pages/access/listScopes.fixture.json";
 
@@ -691,5 +693,36 @@ describe("plugin scope isolation", () => {
     const grants = [{ scope: "plugin:write" }];
     expect(hasScopeInGrants(grants, "skill:write", "project-a")).toBe(false);
     expect(hasScopeInGrants(grants, "mcp:write", "project-a")).toBe(false);
+  });
+});
+
+describe("MCP server write in one of two projects", () => {
+  const grants = [
+    {
+      scope: "mcp:write",
+      selectors: [
+        { resourceKind: "mcp", resourceId: "*", projectId: "project-a" },
+      ],
+    },
+  ];
+
+  it("allows editing a gateway only in the project the grant names", () => {
+    expect(
+      canWriteMCPServerInGrants(grants, {
+        serverId: "gateway-a",
+        projectId: "project-a",
+      }),
+    ).toBe(true);
+    expect(
+      canWriteMCPServerInGrants(grants, {
+        serverId: "gateway-b",
+        projectId: "project-b",
+      }),
+    ).toBe(false);
+  });
+
+  it("allows adding servers only in the project the grant names", () => {
+    expect(canWriteProjectMCPServersInGrants(grants, "project-a")).toBe(true);
+    expect(canWriteProjectMCPServersInGrants(grants, "project-b")).toBe(false);
   });
 });
