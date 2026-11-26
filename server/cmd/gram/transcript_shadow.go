@@ -175,6 +175,15 @@ SELECT EXISTS (SELECT 1 FROM sidecar)
     AND a.attname = tool_call.name AND a.atttypid = tool_call.type_oid
     AND a.attnotnull AND NOT a.attisdropped
  ))
+ AND NOT EXISTS (
+ -- InsertToolCallIDs supplies only these four columns; any other NOT NULL
+ -- column needs a database default.
+ SELECT 1 FROM pg_catalog.pg_attribute a
+ WHERE a.attrelid = pg_catalog.to_regclass('chat_message_transcript_tool_calls')
+   AND a.attnum > 0 AND NOT a.attisdropped AND a.attnotnull
+   AND NOT a.atthasdef AND a.attgenerated = '' AND a.attidentity = ''
+   AND a.attname NOT IN ('message_id', 'tool_call_id', 'chat_id', 'project_id')
+ )
  AND EXISTS (SELECT 1 FROM tool_call_arbiters WHERE indimmediate AND indisready)
  AND NOT EXISTS (SELECT 1 FROM tool_call_arbiters WHERE NOT indimmediate)`).Scan(&compatible)
 	if err != nil {
