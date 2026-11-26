@@ -98,7 +98,7 @@ func (id serverIdentity) activeCountsParams(projectID string, start, end int64) 
 func (s *DiagnosticsService) serverIdentity(ctx context.Context, organizationID, projectID, mcpID string) (serverIdentity, error) {
 	parsedMCP, err := uuid.Parse(mcpID)
 	if err != nil {
-		return serverIdentity{}, fmt.Errorf("parse mcp id: %w", err)
+		return serverIdentity{}, fmt.Errorf("parse mcp id: %w: %w", ErrMCPIDInvalid, err)
 	}
 	id := parsedMCP.String()
 	rows, err := s.listServerIdentityRows(ctx, organizationID, projectID)

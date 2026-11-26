@@ -120,7 +120,7 @@ type QueryMCPEventsInput struct {
 	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
 	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
 	ProjectID string `json:"-"`
-	MCPID     string `json:"mcp_id" jsonschema:"configured MCP ID as returned by find_mcp or get_mcp"`
+	MCPID     string `json:"mcp_id" jsonschema:"configured MCP server ID as returned by find_mcp, get_mcp, or get_project_overview, with no prefix. Never a gateway ID: a gateway is not an MCP server"`
 	Window    string `json:"window,omitempty" jsonschema:"observation window: 1h or 24h (default); this tool looks back at most 24h"`
 }
 
@@ -222,7 +222,7 @@ type ListMCPUsageUsersInput struct {
 	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
 	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
 	ProjectID string `json:"-"`
-	MCPID     string `json:"mcp_id" jsonschema:"configured MCP ID as returned by find_mcp or get_mcp"`
+	MCPID     string `json:"mcp_id" jsonschema:"configured MCP server ID as returned by find_mcp, get_mcp, or get_project_overview, with no prefix. Never a gateway ID: a gateway is not an MCP server"`
 	Window    string `json:"window,omitempty" jsonschema:"observation window: 1h or 24h (default); this tool looks back at most 24h"`
 }
 
@@ -296,7 +296,7 @@ type QueryMCPTracesInput struct {
 	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
 	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
 	ProjectID string `json:"-"`
-	MCPID     string `json:"mcp_id" jsonschema:"configured MCP ID as returned by find_mcp or get_mcp"`
+	MCPID     string `json:"mcp_id" jsonschema:"configured MCP server ID as returned by find_mcp, get_mcp, or get_project_overview, with no prefix. Never a gateway ID: a gateway is not an MCP server"`
 	Window    string `json:"window,omitempty" jsonschema:"observation window: 1h or 24h (default); this tool looks back at most 24h"`
 	Outcome   string `json:"outcome,omitempty" jsonschema:"optional outcome class to narrow to: success, blocked, unauthorized, client_error, server_error, failed, or unknown"`
 	Cursor    string `json:"cursor,omitempty" jsonschema:"opaque cursor returned by a previous query_mcp_traces result"`
@@ -471,7 +471,7 @@ type QueryMCPMetricsInput struct {
 	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
 	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
 	ProjectID string `json:"-"`
-	MCPID     string `json:"mcp_id" jsonschema:"configured MCP ID as returned by find_mcp or get_mcp"`
+	MCPID     string `json:"mcp_id" jsonschema:"configured MCP server ID as returned by find_mcp, get_mcp, or get_project_overview, with no prefix. Never a gateway ID: a gateway is not an MCP server"`
 	Window    string `json:"window,omitempty" jsonschema:"observation window: 1h, 24h (default), or 7d"`
 }
 
@@ -556,7 +556,7 @@ type GetUserMCPStatusInput struct {
 	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
 	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
 	ProjectID string `json:"-"`
-	MCPID     string `json:"mcp_id" jsonschema:"configured MCP ID as returned by find_mcp or get_mcp"`
+	MCPID     string `json:"mcp_id" jsonschema:"configured MCP server ID as returned by find_mcp, get_mcp, or get_project_overview, with no prefix. Never a gateway ID: a gateway is not an MCP server"`
 	// SubjectReference is an expiring, session-bound handle returned in the
 	// optional rows of a summary tool. It cannot be searched, joined,
 	// refreshed, or constructed.
