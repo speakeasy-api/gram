@@ -3,7 +3,6 @@ package orgencryption_test
 import (
 	"context"
 	"errors"
-	"fmt"
 	"testing"
 	"time"
 
@@ -11,9 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/orgencryption/repo"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpkms"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/oauth2"
 
 	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -32,7 +29,9 @@ func transactionService(t *testing.T, ti *testInstance) (*orgencryption.Service,
 	return service, pool
 }
 
-func TestTransactionColdCachesSingleConnection(t *testing.T) {
+// A transaction-bound Encryptor never calls KMS: with a cold process cache it
+// fails, and nothing it reads enters the shared cache.
+func TestTransactionNeverUnwrapsInsideTheTransaction(t *testing.T) {
 	t.Parallel()
 	ti := newTestInstance(t)
 	ti.provision(t)
@@ -45,21 +44,22 @@ func TestTransactionColdCachesSingleConnection(t *testing.T) {
 	encryptor, err := service.ForIn(tx, ti.orgID, useCase)
 	require.NoError(t, err)
 	before := ti.fixture.KMS.Decrypts()
-	for range 3 {
-		require.NoError(t, encryptor.RequireUsable(ctx))
-		ciphertext, err := encryptor.Encrypt(ctx, column, []byte("transaction secret"))
-		require.NoError(t, err)
-		plaintext, err := encryptor.Decrypt(ctx, column, ciphertext)
-		require.NoError(t, err)
-		require.Equal(t, "transaction secret", string(plaintext))
-	}
-	require.Equal(t, before+1, ti.fixture.KMS.Decrypts())
+	require.ErrorIs(t, encryptor.RequireUsable(ctx), orgencryption.ErrKeyNotWarm)
+	_, err = encryptor.Encrypt(ctx, column, []byte("transaction secret"))
+	require.ErrorIs(t, err, orgencryption.ErrKeyNotWarm)
+	require.Equal(t, before, ti.fixture.KMS.Decrypts())
 	require.NoError(t, tx.Rollback(t.Context()))
-	// Transaction-local key material must not populate even a cold shared cache.
-	committed, err := service.For(ti.orgID, useCase)
+
+	require.NoError(t, service.Warm(ctx, ti.orgID, useCase))
+	require.Equal(t, before+1, ti.fixture.KMS.Decrypts(), "Warm unwraps on the pool")
+	warmTx, err := pool.Begin(ctx) //nolint:glint // notestingrawsql: explicit transaction protocol under test
 	require.NoError(t, err)
-	require.NoError(t, committed.RequireUsable(ctx))
-	require.Equal(t, before+2, ti.fixture.KMS.Decrypts())
+	defer rollbackTransaction(t, warmTx)
+	warm, err := service.ForIn(warmTx, ti.orgID, useCase)
+	require.NoError(t, err)
+	_, err = warm.Encrypt(ctx, column, []byte("transaction secret"))
+	require.NoError(t, err)
+	require.Equal(t, before+1, ti.fixture.KMS.Decrypts())
 }
 
 func TestTransactionRollbackDoesNotPublishSuspension(t *testing.T) {
@@ -157,47 +157,6 @@ func TestTransactionForInValidation(t *testing.T) {
 			}
 		})
 	}
-}
-
-// canceledUnwrap waits for the caller's cancellation, rather than the service's
-// detached shared-cache flight timeout.
-type canceledUnwrap struct {
-	gcpkms.EncryptionClient
-	finished chan struct{}
-}
-
-func (k *canceledUnwrap) Decrypt(ctx context.Context, _ string, _, _ []byte) ([]byte, error) {
-	<-ctx.Done()
-	close(k.finished)
-	return nil, fmt.Errorf("canceled test unwrap: %w", ctx.Err())
-}
-
-func TestTransactionCancellationWaitsForUnwrapToExit(t *testing.T) {
-	t.Parallel()
-	ti := newTestInstance(t)
-	ti.provision(t)
-	_, pool := transactionService(t, ti)
-	kms := &canceledUnwrap{EncryptionClient: ti.fixture.KMS, finished: make(chan struct{})}
-	service, err := orgencryption.NewService(testenv.NewLogger(t), pool, newIdentity(), func(context.Context, oauth2.TokenSource) (gcpkms.EncryptionClient, error) { return kms, nil }, ti.fixture.Keys)
-	require.NoError(t, err)
-	tx, err := pool.Begin(t.Context()) //nolint:glint // notestingrawsql: explicit transaction protocol under test
-	require.NoError(t, err)
-	defer rollbackTransaction(t, tx)
-	encryptor, err := service.ForIn(tx, ti.orgID, useCase)
-	require.NoError(t, err)
-	ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
-	defer cancel()
-	started := time.Now()
-	require.ErrorIs(t, encryptor.RequireUsable(ctx), context.DeadlineExceeded)
-	require.Less(t, time.Since(started), 3*time.Second)
-	// The unwrap must already have exited when the operation returns: nothing
-	// may keep using the transaction asynchronously after rollback.
-	select {
-	case <-kms.finished:
-	default:
-		t.Fatal("transaction unwrap still running after cancellation")
-	}
-	require.NoError(t, tx.Rollback(t.Context()))
 }
 
 func rollbackTransaction(t *testing.T, tx pgx.Tx) {

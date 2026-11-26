@@ -130,6 +130,7 @@ func TestTranscriptWriterCallerTransaction(t *testing.T) {
 			t.Parallel()
 			f := newTranscriptWriterFixture(t, true, true)
 			before := f.counts(t)
+			require.NoError(t, f.writer.PrepareTranscriptShadow(t.Context(), f.projectID))
 			tx := testenv.BeginTx(t, t.Context(), f.conn)
 			m := f.message("EXAMPLE transactional content")
 			n, err := f.writer.WriteInTx(t.Context(), tx, []chat.MessageWrite{m})

@@ -32,12 +32,10 @@ type transactionScope struct {
 // Uncommitted state never enters the Service's shared caches.
 //
 // Each returned Encryptor reads its configuration through db and keeps it in
-// a private cache. For key material it first reads the Service's committed DEK
-// cache, which only holds DEKs unwrapped through the pool, and unwraps through
-// db only on a miss. That private unwrap never enters the shared cache. A
-// caller that warms the shared cache before it opens the transaction (with a
-// pool-backed RequireUsable, Encrypt or Decrypt) therefore makes no KMS call
-// while the transaction is open.
+// a private cache. It never calls KMS: key material comes only from the
+// Service's committed DEK cache, which holds DEKs unwrapped through the pool.
+// A DEK the cache does not hold fails with ErrKeyNotWarm, so call Warm before
+// opening the transaction.
 func (s *Service) ForIn(db repo.DBTX, organizationID string, useCase UseCase) (*Encryptor, error) {
 	if db == nil {
 		return nil, errors.New("orgencryption: database is required")
@@ -107,12 +105,6 @@ func (e *Encryptor) dataKey(ctx context.Context, id uuid.UUID) (cachedDataKey, e
 		tx.dataKeyExpires = shared.unwrappedAt.Add(DataKeyCacheTTL)
 		return shared, nil
 	}
-	key, err := e.service.unwrapDataKeyIn(ctx, tx.db, e.organizationID, id, false)
-	if err != nil {
-		return cachedDataKey{}, err
-	}
-	tx.dataKey = key
-	tx.dataKeyID = id
-	tx.dataKeyExpires = time.Now().Add(DataKeyCacheTTL)
-	return key, nil
+	// Never call KMS while the caller's transaction holds its locks.
+	return cachedDataKey{}, ErrKeyNotWarm
 }

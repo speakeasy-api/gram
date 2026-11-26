@@ -189,6 +189,35 @@ func (e *Encryptor) Decrypt(ctx context.Context, column string, ciphertext strin
 	return plaintext, nil
 }
 
+// Warm unwraps the use case's active DEK into the process cache through the
+// pool. It reads the configuration from the database rather than from the
+// configuration cache, so it warms the DEK that a transaction opened right
+// after it will use, even just after a rotation in another process. Call it
+// before opening a transaction for ForIn, which never calls KMS.
+func (s *Service) Warm(ctx context.Context, organizationID string, useCase UseCase) error {
+	if err := useCase.validate(); err != nil {
+		return err
+	}
+	if organizationID == "" {
+		return errors.New("orgencryption: organization id is required")
+	}
+	cfg, err := s.loadConfig(ctx, organizationID, useCase)
+	if err != nil {
+		return err
+	}
+	s.configs.Add(configCacheKey{organizationID: organizationID, useCase: useCase}, cfg)
+	if err := requireUsableState(string(cfg.state)); err != nil {
+		return err
+	}
+	if cfg.activeDataKeyID == uuid.Nil {
+		return ErrNotProvisioned
+	}
+	if _, err := s.dataKey(ctx, organizationID, cfg.activeDataKeyID); err != nil {
+		return err
+	}
+	return nil
+}
+
 // RequireUsable checks that the organization can seal values for the use
 // case: its configuration is usable, the use case has an active DEK, and that
 // DEK unwraps. Callers run it before an irreversible call, such as a token
@@ -319,15 +348,11 @@ func (s *Service) unwrapShared(ctx context.Context, organizationID string, dataK
 // unwrapDataKey unwraps a readable DEK with the configuration's current KEK,
 // falling back to the previous KEK while a switch is in flight.
 func (s *Service) unwrapDataKey(ctx context.Context, organizationID string, dataKeyID uuid.UUID) (cachedDataKey, error) {
-	return s.unwrapDataKeyIn(ctx, s.db, organizationID, dataKeyID, true)
-}
-
-func (s *Service) unwrapDataKeyIn(ctx context.Context, db repo.DBTX, organizationID string, dataKeyID uuid.UUID, recordUnwrap bool) (cachedDataKey, error) {
 	ctx, cancel := context.WithTimeout(ctx, kmsCallTimeout)
 	defer cancel()
 
 	logger := s.logger.With(attr.SlogOrganizationID(organizationID))
-	q := repo.New(db)
+	q := repo.New(s.db)
 
 	dek, err := q.GetReadableDataEncryptionKey(ctx, repo.GetReadableDataEncryptionKeyParams{ID: dataKeyID, OrganizationID: organizationID})
 	switch {
@@ -355,7 +380,7 @@ func (s *Service) unwrapDataKeyIn(ctx context.Context, db repo.DBTX, organizatio
 
 	var errs []error
 	for _, keyID := range candidates {
-		dataKey, err := s.unwrapWith(ctx, logger, q, dek, keyID, recordUnwrap)
+		dataKey, err := s.unwrapWith(ctx, logger, q, dek, keyID)
 		if err == nil {
 			return cachedDataKey{key: dataKey, organizationID: dek.OrganizationID, useCase: dek.UseCase, unwrappedAt: time.Now()}, nil
 		}
@@ -365,7 +390,7 @@ func (s *Service) unwrapDataKeyIn(ctx context.Context, db repo.DBTX, organizatio
 	return cachedDataKey{}, errors.Join(errs...)
 }
 
-func (s *Service) unwrapWith(ctx context.Context, logger *slog.Logger, q *repo.Queries, dek repo.DataEncryptionKey, keyID uuid.UUID, recordUnwrap bool) ([]byte, error) {
+func (s *Service) unwrapWith(ctx context.Context, logger *slog.Logger, q *repo.Queries, dek repo.DataEncryptionKey, keyID uuid.UUID) ([]byte, error) {
 	wrap, err := q.GetDataEncryptionKeyWrap(ctx, repo.GetDataEncryptionKeyWrapParams{
 		OrganizationID:      dek.OrganizationID,
 		DataEncryptionKeyID: dek.ID,
@@ -393,13 +418,10 @@ func (s *Service) unwrapWith(ctx context.Context, logger *slog.Logger, q *repo.Q
 		return nil, fmt.Errorf("%w: unwrapped data encryption key is %d bytes", ErrKeyUnavailable, len(dataKey))
 	}
 
-	// Operational bookkeeping must not lock a shared wrap row for the
-	// lifetime of a caller-owned message transaction: compaction takes a chat
-	// lock first, which would invert the lock order against a normal capture.
-	if recordUnwrap {
-		if err := q.TouchDataEncryptionKeyWrapUnwrapped(ctx, repo.TouchDataEncryptionKeyWrapUnwrappedParams{ID: wrap.ID, OrganizationID: dek.OrganizationID}); err != nil {
-			logger.WarnContext(ctx, "record data encryption key unwrap", attr.SlogError(err))
-		}
+	// Unwraps run on the pool, never in a caller's transaction, so this
+	// bookkeeping holds no wrap-row lock across a message write.
+	if err := q.TouchDataEncryptionKeyWrapUnwrapped(ctx, repo.TouchDataEncryptionKeyWrapUnwrappedParams{ID: wrap.ID, OrganizationID: dek.OrganizationID}); err != nil {
+		logger.WarnContext(ctx, "record data encryption key unwrap", attr.SlogError(err))
 	}
 
 	return dataKey, nil

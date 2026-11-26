@@ -11,10 +11,9 @@
 //
 // ForIn uses a caller-owned writable READ COMMITTED transaction instead of
 // acquiring another pooled connection. It reads configuration through that
-// transaction and reuses a DEK the process cache already holds. What it reads
-// or unwraps through the transaction stays private to that Encryptor, so
-// uncommitted state never enters the process cache. Warm the process cache
-// before opening the transaction to keep KMS calls out of it.
+// transaction, privately, so uncommitted state never enters the process cache.
+// It never calls KMS while the transaction is open: it takes DEKs only from
+// the process cache, and Warm fills that cache before the transaction opens.
 //
 // KeepWarm unwraps recently used DEKs again shortly before DataKeyCacheTTL runs
 // out, so a request on a quiet process does not wait for KMS. Each refresh is
