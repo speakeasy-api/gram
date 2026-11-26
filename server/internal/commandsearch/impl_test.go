@@ -123,9 +123,13 @@ type fakeAuthz struct {
 	denied   authz.Scope
 	allow    func(authz.Check) bool
 	allowCtx func(context.Context, authz.Check) (bool, error)
+	batches  *[][]authz.Check
 }
 
 func (f fakeAuthz) Decide(ctx context.Context, checks ...authz.Check) (authz.Decisions, error) {
+	if f.batches != nil {
+		*f.batches = append(*f.batches, checks)
+	}
 	decisions := authz.Decisions{AllAllowed: len(checks) > 0, Each: make([]authz.Decision, len(checks))}
 	for i, check := range checks {
 		allowed := check.Scope != f.denied
@@ -402,19 +406,25 @@ func TestSearchFiltersAssistantRowsBeforeApplyingResultLimit(t *testing.T) {
 	hidden, visible := uuid.New(), uuid.New()
 	store := storeWithAllKinds()
 	store.assistants = []repo.ListCommandIndexAssistantsRow{{ID: hidden, Name: "Assistant hidden"}, {ID: visible, Name: "Assistant visible"}}
-	var assistantChecks int
-	authorizer := fakeAuthz{allow: func(check authz.Check) bool {
+	var batches [][]authz.Check
+	authorizer := fakeAuthz{batches: &batches, allow: func(check authz.Check) bool {
 		if check.Scope != authz.ScopeAssistantRead {
 			return true
 		}
-		assistantChecks++
 		require.Equal(t, map[string]string{authz.SelectorKeyProjectID: projectID.String()}, check.Dimensions)
 		return check.ResourceID == visible.String()
 	}}
 	result, err := service(t, store, authorizer).Search(ctxFor(projectID), &gen.SearchPayload{Q: "as"})
 	require.NoError(t, err)
 	require.Equal(t, []string{visible.String()}, itemIDs(result.Items, "assistant"))
-	require.Equal(t, 2, assistantChecks)
+	var assistantBatches [][]authz.Check
+	for _, batch := range batches {
+		if batch[0].Scope == authz.ScopeAssistantRead {
+			assistantBatches = append(assistantBatches, batch)
+		}
+	}
+	require.Len(t, assistantBatches, 1, "both assistant rows are decided in one call")
+	require.Len(t, assistantBatches[0], 2)
 }
 
 func TestSearchGatesGatewayCollectionAndFiltersMCPRows(t *testing.T) {

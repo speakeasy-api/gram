@@ -1327,7 +1327,7 @@ project_a
 project_c
 ```
 
-`Decide` allows the checks for those projects and refuses `project_b`. The handler then rebuilds the response from the allowed rows.
+`Decide` marks the checks for `project_a` and `project_c` allowed and `project_b` not allowed. The handler then rebuilds the response from the allowed rows.
 
 ## Practical Rules
 

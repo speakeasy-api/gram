@@ -107,7 +107,7 @@ func (s *Service) approvalViewer(ctx context.Context, authCtx *contextvalues.Aut
 }
 
 // enforcedOrgAdmin reports whether RBAC checked the caller's org admin grant.
-// Evaluate answers true when RBAC is not enforced at all, as for a legacy API
+// Decide answers true when RBAC is not enforced at all, as for a legacy API
 // key, and that must not widen what the caller sees.
 func (s *Service) enforcedOrgAdmin(ctx context.Context, organizationID string) (bool, error) {
 	enforced, err := s.authz.ShouldEnforce(ctx)

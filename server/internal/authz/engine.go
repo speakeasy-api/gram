@@ -293,7 +293,7 @@ func (e *Engine) ShouldEnforce(ctx context.Context) (bool, error) {
 // act for a real user anyway: assistant-token auth, the OAuth-authenticated
 // Platform MCP endpoint, and the Channels endpoint. Leaving any of them out
 // would silently turn every scope check they make into a no-op — Decide
-// allows for every check when enforcement is off, so omitting a surface
+// allows every check except an auth-client check when enforcement is off, so omitting a surface
 // here grants it everything rather than nothing.
 func enforcedWithoutSession(ctx context.Context) bool {
 	if _, isAssistant := contextvalues.GetAssistantPrincipal(ctx); isAssistant {

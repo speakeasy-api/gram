@@ -51,19 +51,28 @@ if err := s.authz.Require(ctx, authz.Either(authz.MCPServer(id, p).Write(), auth
 }
 // a branch, not a denial (no challenge logged)
 canRead, err := s.authz.Decide(authz.WithoutChallenges(ctx), authz.Chat(id).Read())
+if err != nil {
+	return err
+}
+if canRead.AllAllowed {
+	// show the chat
+}
 // discovery: "could they act on any matching resource?"
 canConnect, err := s.authz.Decide(authz.WithoutChallenges(ctx), authz.MCPServer(id, p).Connect().Probe())
+if err == nil && canConnect.AllAllowed {
+	// offer the connect button
+}
 // a list: one decision per row, in order, and one challenge row for the call
 decisions, err := s.authz.Decide(ctx, checks...)
 ```
 
-| Need                      | Use                                                                                                                                                       |
-| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Refuse unless allowed     | `Require(ctx, checks...)` (all must pass)                                                                                                                 |
-| Any one of several grants | `Require(ctx, authz.Either(...))`: one alternative is enough, but a block on any alternative refuses the group                                            |
-| Branch on the answer      | `Decide(authz.WithoutChallenges(ctx), ...)` and read `AllAllowed`. Accepts `Either` groups and probes. Returns an error, not false, for an invalid check. |
-| Narrow a list             | `Decide(ctx, checks...)` and keep the rows whose `Each[i].Allowed` is true. A refused tool call's `Each[i].Reason` names the disposition that would pass. |
-| MCP tool call             | `authz.MCPServer(id, p).ToolCall(tool, disposition)`, with `authz.DispositionFromHints`. A tool with no annotations is `unannotated`.                     |
+| Need                      | Use                                                                                                                                                                                     |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Refuse unless allowed     | `Require(ctx, checks...)` (all must pass)                                                                                                                                               |
+| Any one of several grants | `Require(ctx, authz.Either(...))`: one alternative is enough, but a block on any alternative refuses the group                                                                          |
+| Branch on the answer      | `Decide(authz.WithoutChallenges(ctx), ...)` and read `AllAllowed`. Accepts `Either` groups and probes. Returns an error, not false, for an invalid check.                               |
+| Narrow a list             | `Decide(ctx, checks...)` and keep the rows whose `Each[i].Allowed` is true. A refused tool call's `Each[i].Reason` is `read_only` or `disposition` when another disposition would pass. |
+| MCP tool call             | `authz.MCPServer(id, p).ToolCall(tool, disposition)`, with `authz.DispositionFromHints`. A tool with no annotations is `unannotated`.                                                   |
 
 Ref constructors take typed ids, never a raw string or `uuid.UUID`: `authz.Environment(authz.EnvironmentIDOf(env.ID), authz.ProjectIDOf(projectID))`. Each kind that has a ref has an id type generated in `ids_gen.go` with two constructors, `<Kind>IDOf(uuid.UUID)` and `<Kind>IDFrom(string)`, so ids of different kinds cannot be swapped. The hand-written `mcp_auth_client`, `risk_policy` and `inference` checks keep their own constructors, listed below. An id that cannot name a resource (the nil uuid, an empty string, `*`, a `$` marker, a string containing whitespace) is kept as absent, and every check built from it is refused with `ErrInvalidCheck`: an absent id never grants. In the examples here `id`, `envID`, `p` and `project` are such typed ids, already built with `IDOf` or `IDFrom`. The argument order is always the resource, then its project. A project collection (`authz.Environments(p)`, `authz.MCPServers(p)`, `authz.Assistants(p)`) builds a check on the resource type whose resource id is the project id, so project-wide grants match it and `Decide` answers it with project-wide grants.
 

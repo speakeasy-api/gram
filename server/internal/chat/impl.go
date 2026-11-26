@@ -1099,7 +1099,7 @@ func (s *Service) chatVisibilityScope(ctx context.Context, authCtx *contextvalue
 	// owner-matching, not via chat:read.
 	//
 	// When RBAC is not enforced for the org we must NOT fall through to "see all"
-	// — Evaluate short-circuits to true when enforcement is off, so check
+	// — Decide short-circuits to true when enforcement is off, so check
 	// ShouldEnforce explicitly and treat the disabled case as constrained.
 	//
 	// Use Decide rather than Require here: this is a visibility branch, not an
