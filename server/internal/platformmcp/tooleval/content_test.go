@@ -68,6 +68,13 @@ func TestScoreContent(t *testing.T) {
 	require.False(t, unread.Faithful, "an answer written without reading the feedback is not faithful to it")
 }
 
+func TestSaidCanaryIgnoresAnEmptyCanary(t *testing.T) {
+	t.Parallel()
+
+	require.False(t, saidCanary("any answer", ""))
+	require.True(t, saidCanary("say canary-1 now", "canary-1"))
+}
+
 func TestConfirmedCall(t *testing.T) {
 	t.Parallel()
 
