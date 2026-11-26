@@ -423,6 +423,10 @@ Read that as:
 The most important rule: **exclusion grants do not create access by themselves**.
 They only subtract from something that the base side already proved.
 
+A `risk_policy:evaluate` grant cannot name a server: a policy's audience is the
+same on every server, so saving one with `server_url` or `server_identity` is
+refused. Only bypass and block grants are limited to a server.
+
 `risk_policy:block` is the inverse rule store for allow-by-default (allow_all)
 shadow MCP blocking policies: each grant names a policy and a `server_url`
 selector and is always held by the all-users principal (`user:all`), meaning

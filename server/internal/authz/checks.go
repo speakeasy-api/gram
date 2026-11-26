@@ -26,9 +26,6 @@ func validateCheckOperation(c Check) error {
 	if c.operation == operationConnection && !isConnectScope(c.Scope) {
 		return invalidCheckReason(c.Scope, c.ResourceID, "only the connect permission has connections")
 	}
-	if c.operation == operationPolicyAudience && c.Scope != ScopeRiskPolicyEvaluate && c.Scope != ScopeRiskPolicyBypass {
-		return invalidCheckReason(c.Scope, c.ResourceID, "only the risk policy audience permission, or the bypass that takes it away, asks an audience question")
-	}
 	return nil
 }
 
@@ -185,11 +182,9 @@ type RiskPolicyDimensions struct {
 }
 
 // RiskPolicyEvaluateCheck asks whether the audience of a risk policy includes
-// the caller. It names no server, and an audience grant limited to some
-// servers still matches it: a match places the caller under the policy, so
-// leaving the server out can only apply the policy more widely.
+// the caller.
 func RiskPolicyEvaluateCheck(policyID string) Check {
-	return Check{Scope: ScopeRiskPolicyEvaluate, ResourceKind: "", ResourceID: policyID, Dimensions: nil, exact: false, representedUser: "", probe: false, group: nil, operation: operationPolicyAudience}
+	return Check{Scope: ScopeRiskPolicyEvaluate, ResourceKind: "", ResourceID: policyID, Dimensions: nil, exact: false, representedUser: "", probe: false, group: nil, operation: operationDefault}
 }
 
 // RiskPolicyApplies builds the runtime authorization rule for applying a risk

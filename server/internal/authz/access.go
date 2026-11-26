@@ -49,10 +49,6 @@ const (
 	// called. It names no tool, so a grant limited to some tools still lets
 	// the caller connect.
 	operationConnection
-	// operationPolicyAudience asks whether a risk policy's audience includes
-	// the caller. It names no server, so an audience grant limited to some
-	// servers still places the caller under the policy.
-	operationPolicyAudience
 )
 
 // asToolCall marks c as a tool call. Only the tool-call constructors use it.
@@ -157,12 +153,10 @@ func (c Check) blockCoversMissingValue(key string) bool {
 
 // mayOmit reports whether the check may leave out a key that a grant of its
 // scope names and still match the grant. The registry declares these open
-// keys per permission (scopeOpenKeys), for three kinds of check only:
+// keys per permission (scopeOpenKeys), for two kinds of check only:
 //
 //   - a probe, which asks about some resource and not a concrete one;
-//   - a connection, which names no tool, against a tool or disposition limit;
-//   - a risk policy audience question, which names no server, against a
-//     server limit. Matching there places the caller under the policy.
+//   - a connection, which names no tool, against a tool or disposition limit.
 //
 // An exact check may omit nothing, and neither may any check of another
 // kind.
@@ -177,8 +171,6 @@ func (c Check) mayOmit(key string) bool {
 	switch c.operation {
 	case operationConnection:
 		return slices.Contains(open.Connection, key)
-	case operationPolicyAudience:
-		return slices.Contains(open.PolicyAudience, key)
 	case operationDefault, operationToolCall:
 		return false
 	}
