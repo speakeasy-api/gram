@@ -17,18 +17,18 @@ func RolePluginsForResource(ctx context.Context, db repo.DBTX, engine *authz.Eng
 	if _, ok := authz.GrantsFromContext(ctx); !ok {
 		return nil, nil
 	}
-	admin, err := engine.Evaluate(ctx, authz.Org(authz.OrgIDFrom(organizationID)).Admin())
+	adminDecision, err := engine.Decide(authz.WithoutChallenges(ctx), authz.Org(authz.OrgIDFrom(organizationID)).Admin())
 	if err != nil {
 		return nil, fmt.Errorf("evaluate plugin assignment disclosure: %w", err)
 	}
-	if !admin {
+	if !adminDecision.AllAllowed {
 		return nil, nil
 	}
-	reader, err := engine.Evaluate(ctx, authz.Org(authz.OrgIDFrom(organizationID)).Read())
+	readDecision, err := engine.Decide(authz.WithoutChallenges(ctx), authz.Org(authz.OrgIDFrom(organizationID)).Read())
 	if err != nil {
 		return nil, fmt.Errorf("evaluate plugin read: %w", err)
 	}
-	if !reader && engine.RequirePluginWrite(ctx, organizationID, projectID.String()) != nil {
+	if !readDecision.AllAllowed && engine.RequirePluginWrite(ctx, organizationID, projectID.String()) != nil {
 		return nil, nil
 	}
 	roles := make([]string, 0, len(principals))

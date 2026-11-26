@@ -1,7 +1,9 @@
 // Package intentpolicy assesses recorded tool calls against a fixed intent
 // guardrail. An evaluator infers labels about one call, then CEL contracts over
 // those labels decide permit, clarify, or block. Each call is assessed on its
-// own: no state carries between calls and nothing is enforced or persisted.
+// own: no state carries between calls and nothing is enforced. Record projects
+// an assessment into the gram.intentpolicy.v1.Assessment event that the lake
+// stores as Parquet.
 package intentpolicy
 
 import (

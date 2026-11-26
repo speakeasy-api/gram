@@ -570,6 +570,11 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		teamMemory = postgresReader.teamMemory
 	}
 	registerTeamMemoryTools(reg, teamMemory)
+	var mcpFeedback *MCPFeedbackReadService
+	if postgresReader, ok := reader.(*PostgresReader); ok {
+		mcpFeedback = postgresReader.mcpFeedback
+	}
+	registerMCPFeedbackTool(reg, mcpFeedback)
 	var organizationGateway *OrganizationGatewayService
 	if postgresReader, ok := reader.(*PostgresReader); ok {
 		organizationGateway = postgresReader.organizationGateway

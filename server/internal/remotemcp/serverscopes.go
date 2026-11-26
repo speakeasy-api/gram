@@ -272,12 +272,12 @@ func (s *Service) canPin(ctx context.Context, logger *slog.Logger, authCtx *cont
 		}
 		checks = append(checks, authz.MCPServer(authz.MCPServerIDOf(id), authz.ProjectIDOf(*authCtx.ProjectID)).Write())
 	}
-	ok, err := s.authz.Evaluate(ctx, checks...)
+	decisions, err := s.authz.Decide(authz.WithoutChallenges(ctx), checks...)
 	if err != nil {
 		logger.WarnContext(ctx, "evaluate scope pin access", attr.SlogError(err))
 		return false
 	}
-	return ok
+	return decisions.AllAllowed
 }
 
 func sharedServerCount(sharing []uuid.UUID, target pinnableServer) int {

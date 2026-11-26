@@ -51,11 +51,11 @@ func TestCheckOrganization_AnotherOrganizationIsRefused(t *testing.T) {
 		requireForbidden(t, engine.Require(ctx, Either(other)))
 		requireForbidden(t, engine.Require(ctx, Either(other)))
 
-		allowed, err := engine.Can(ctx, other)
+		allowed, err := allAllowed(ctx, engine, other)
 		require.NoError(t, err, name)
 		require.False(t, allowed, name)
 
-		allowed, err = engine.Can(ctx, Either(other))
+		allowed, err = allAllowed(ctx, engine, Either(other))
 		require.NoError(t, err, name)
 		require.False(t, allowed, name)
 
@@ -63,11 +63,11 @@ func TestCheckOrganization_AnotherOrganizationIsRefused(t *testing.T) {
 		require.NoError(t, engine.Require(ctx, Either(other, own)), name)
 		require.NoError(t, engine.Require(ctx, Either(other, own)), name)
 
-		ids, err := engine.Filter(ctx, []Check{other, own})
+		ids, err := allowedIDs(ctx, engine, []Check{other, own})
 		require.NoError(t, err, name)
 		require.Equal(t, []string{"org-one"}, ids, name)
 
-		matched, err := engine.FindMatched(ctx, []Check{other, own, other})
+		matched, err := allowedEach(ctx, engine, []Check{other, own, other})
 		require.NoError(t, err, name)
 		require.Equal(t, []bool{false, true, false}, matched, name)
 	}

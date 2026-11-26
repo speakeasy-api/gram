@@ -28,7 +28,7 @@ type grantMatch struct {
 }
 
 // challengeLogger captures the data describing a single authz decision. The
-// engine constructs one of these inline at each Require/RequireAny/Filter
+// engine constructs one of these inline at each Require/Decide
 // call site, then invokes Log to persist it.
 type challengeLogger struct {
 	Operation authzrepo.Operation
@@ -333,7 +333,6 @@ func WithOneChallengePerResource(ctx context.Context) context.Context {
 // WithoutChallenges returns a context under which the engine records no
 // checks. Use it where a request filters or lists resources it did not name,
 // so a caller is not shown a denial for every resource it simply cannot see.
-// Evaluate is the single-check form of the same rule.
 func WithoutChallenges(ctx context.Context) context.Context {
 	return context.WithValue(ctx, challengeScopeKey{}, &challengeScope{silent: true, recorded: nil})
 }
@@ -356,7 +355,7 @@ func claimChallenge(ctx context.Context, l challengeLogger) bool {
 		return false
 	}
 
-	// A batch (Filter, FindMatched) names no one resource. It never takes a
+	// A batch Decide names no one resource. It never takes a
 	// resource's slot, so a later decision about that resource still records,
 	// but it is skipped once that resource has a recorded decision.
 	batch := l.Focus == nil
