@@ -7184,11 +7184,13 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   risk_analyzed_at timestamptz,
 
   -- When content, content_raw, tool_calls, tool_outcome_notes,
-  -- tool_call_summaries or storage_error last changed. The
-  -- chat_messages_source_updated_at triggers set it on every write path, so an
+  -- tool_call_summaries or storage_error last changed. Every statement that
+  -- updates one of them lives in transcriptstore and sets this column too, so an
   -- encrypted transcript is current exactly when it recorded the same value.
-  -- NULL for messages last written before the column existed.
-  source_updated_at timestamptz,
+  -- NULL for messages last written before the column existed. The default
+  -- stamps every insert; it is set in its own migration so adding the column
+  -- does not rewrite the table.
+  source_updated_at timestamptz DEFAULT clock_timestamp(),
 
   -- Plaintext-free metadata of the message body, so readers can count, budget
   -- and filter without reading or decrypting it. Written when the transcript is
@@ -7263,7 +7265,7 @@ COMMENT ON COLUMN chat_messages.original_message_id IS 'Original source-message 
 COMMENT ON COLUMN chat_messages.replayed IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.created_at IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.risk_analyzed_at IS '@access: confidential';
-COMMENT ON COLUMN chat_messages.source_updated_at IS 'When the message body last changed; set by trigger.
+COMMENT ON COLUMN chat_messages.source_updated_at IS 'When the message body last changed; set on insert and by every body update.
 @access: confidential';
 COMMENT ON COLUMN chat_messages.tool_call_count IS 'Number of tool calls in tool_calls, 0 when it has none.
 @access: confidential';
@@ -7277,41 +7279,6 @@ COMMENT ON COLUMN chat_messages.tool_calls_bytes IS 'octet_length of tool_calls 
 -- A non-partial unique index supplies the composite message ownership target.
 CREATE UNIQUE INDEX IF NOT EXISTS chat_messages_project_id_id_key
 ON chat_messages (project_id, id);
-
--- Stamps source_updated_at whenever the message body changes, whatever SQL
--- writes it, so an encrypted transcript can tell it is stale without hashing
--- plaintext. An insert keeps a value it already carries (a restore or copy);
--- an update that rewrites a body column to the same value leaves it alone.
-CREATE OR REPLACE FUNCTION set_chat_message_source_updated_at()
-RETURNS trigger
-LANGUAGE plpgsql
-AS $$
-BEGIN
-  NEW.source_updated_at := clock_timestamp();
-  RETURN NEW;
-END;
-$$;
-
-CREATE TRIGGER chat_messages_source_updated_at_insert
-BEFORE INSERT ON chat_messages
-FOR EACH ROW
-WHEN (NEW.source_updated_at IS NULL)
-EXECUTE FUNCTION set_chat_message_source_updated_at();
-
--- UPDATE OF fires only when a body column is in the SET list, so frequent
--- updates such as risk_analyzed_at never evaluate the comparisons below.
-CREATE TRIGGER chat_messages_source_updated_at_update
-BEFORE UPDATE OF content, content_raw, tool_calls, tool_outcome_notes, tool_call_summaries, storage_error ON chat_messages
-FOR EACH ROW
-WHEN (
-  OLD.content IS DISTINCT FROM NEW.content
-  OR OLD.content_raw IS DISTINCT FROM NEW.content_raw
-  OR OLD.tool_calls IS DISTINCT FROM NEW.tool_calls
-  OR OLD.tool_outcome_notes IS DISTINCT FROM NEW.tool_outcome_notes
-  OR OLD.tool_call_summaries IS DISTINCT FROM NEW.tool_call_summaries
-  OR OLD.storage_error IS DISTINCT FROM NEW.storage_error
-)
-EXECUTE FUNCTION set_chat_message_source_updated_at();
 
 -- Encrypted transcript shadows retain the lifecycle of their source message.
 CREATE TABLE IF NOT EXISTS chat_message_transcripts (
