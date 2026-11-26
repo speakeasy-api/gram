@@ -359,7 +359,7 @@ func (e *Engine) evaluateRequired(ctx context.Context, authorization grantAuthor
 		}
 		matches = append(matches, grantMatch{Grant: *evaluation.Grant, ViaCheck: *evaluation.Check})
 	}
-	e.reportAuthorizerRefusals(ctx, authorization, checks, false)
+	e.reportAuthorizerRefusals(ctx, authorization, checks)
 
 	challengeLogger{
 		Operation:            authzrepo.OperationRequire,
@@ -438,7 +438,8 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 		return e.mapError(ctx, err)
 	}
 	if decision.allowed() {
-		e.reportAuthorizerRefusals(ctx, authorization, authorization.allowedAlternatives(checks), true)
+		refused, err := authorization.authorizerRefusesAny(checks)
+		reportAuthorizerRefusal(ctx, e.logger, authorization, refused, err)
 		challengeLogger{
 			Operation:            authzrepo.OperationRequireAny,
 			Outcome:              authzrepo.OutcomeAllow,
@@ -603,7 +604,7 @@ func (e *Engine) Evaluate(ctx context.Context, checks ...Check) (bool, error) {
 			return false, nil
 		}
 	}
-	e.reportAuthorizerRefusals(ctx, authorization, checks, false)
+	e.reportAuthorizerRefusals(ctx, authorization, checks)
 
 	return true, nil
 }
@@ -660,7 +661,8 @@ func (e *Engine) canAnyOf(ctx context.Context, alternatives []Check) (bool, erro
 		return false, e.mapError(ctx, err)
 	}
 	if decision.allowed() {
-		e.reportAuthorizerRefusals(ctx, authorization, authorization.allowedAlternatives(alternatives), true)
+		refused, err := authorization.authorizerRefusesGroup(alternatives)
+		reportAuthorizerRefusal(ctx, e.logger, authorization, refused, err)
 	}
 	return decision.allowed(), nil
 }
@@ -779,7 +781,7 @@ func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
 			matches = append(matches, grantMatch{Grant: *evaluation.Grant, ViaCheck: *evaluation.Check})
 		}
 	}
-	e.reportAuthorizerRefusals(ctx, authorization, allowedChecks, false)
+	e.reportAuthorizerRefusals(ctx, authorization, allowedChecks)
 
 	if len(checks) > 0 {
 		outcome := authzrepo.OutcomeDeny
@@ -913,7 +915,7 @@ func (e *Engine) FindMatched(ctx context.Context, checks []Check) ([]bool, error
 			allowedCount++
 		}
 	}
-	e.reportAuthorizerRefusals(ctx, authorization, allowedChecks, false)
+	e.reportAuthorizerRefusals(ctx, authorization, allowedChecks)
 
 	if len(checks) > 0 {
 		outcome := authzrepo.OutcomeDeny
