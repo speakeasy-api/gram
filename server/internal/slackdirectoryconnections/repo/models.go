@@ -18,6 +18,7 @@ type SlackDirectoryConnection struct {
 	SlackTeamID string
 	// @access: confidential
 	SlackTeamName pgtype.Text
+	// Versioned Slack token bundle, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it.
 	// @access: secret-restricted
 	CredentialsEncrypted pgtype.Text
 	// @access: opaque-restricted

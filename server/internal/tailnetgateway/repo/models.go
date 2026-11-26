@@ -20,6 +20,7 @@ type NetworkIngressNode struct {
 	Slot int32
 	// @access: confidential
 	PodName pgtype.Text
+	// Tailscale auth key for the gateway node, encrypted with the organization's data encryption key (DEK) for the 'tailscale-gateway-state' use case. SQL cannot read it.
 	// @access: secret-restricted
 	AuthKeyEncrypted pgtype.Text
 	// @access: confidential

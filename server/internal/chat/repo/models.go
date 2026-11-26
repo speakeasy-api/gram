@@ -21,8 +21,10 @@ type ChatMessage struct {
 	ProjectID uuid.NullUUID
 	// @access: confidential
 	Role string
+	// Projects on the transcript shadow allowlist also get an organization-key encrypted copy in chat_message_transcripts.ciphertext; during shadow mode this plaintext column stays the source.
 	// @access: opaque-restricted
 	Content string
+	// Projects on the transcript shadow allowlist also get an organization-key encrypted copy in chat_message_transcripts.ciphertext; during shadow mode this plaintext column stays the source.
 	// @access: opaque-restricted
 	ContentRaw []byte
 	// Asset path of the stored message content; its file name is a digest of that content.
@@ -34,6 +36,7 @@ type ChatMessage struct {
 	MessageID pgtype.Text
 	// @access: confidential
 	FinishReason pgtype.Text
+	// Projects on the transcript shadow allowlist also get an organization-key encrypted copy in chat_message_transcripts.ciphertext; during shadow mode this plaintext column stays the source.
 	// @access: opaque-restricted
 	ToolCalls []byte
 	// @access: confidential
@@ -42,6 +45,7 @@ type ChatMessage struct {
 	CompletionTokens int64
 	// @access: confidential
 	TotalTokens int64
+	// Projects on the transcript shadow allowlist also get an organization-key encrypted copy in chat_message_transcripts.ciphertext; during shadow mode this plaintext column stays the source.
 	// @access: opaque-restricted
 	StorageError pgtype.Text
 	// @access: confidential
@@ -64,8 +68,10 @@ type ChatMessage struct {
 	ToolUrn urn.Tool
 	// @access: confidential
 	ToolOutcome pgtype.Text
+	// Projects on the transcript shadow allowlist also get an organization-key encrypted copy in chat_message_transcripts.ciphertext; during shadow mode this plaintext column stays the source.
 	// @access: opaque-restricted
 	ToolOutcomeNotes pgtype.Text
+	// Projects on the transcript shadow allowlist also get an organization-key encrypted copy in chat_message_transcripts.ciphertext; during shadow mode this plaintext column stays the source.
 	// @access: opaque-restricted
 	ToolCallSummaries []byte
 	// SHA-256 digest of the message content. Reveals when two messages have equal content.

@@ -43,6 +43,7 @@ type OtelDestination struct {
 	Name string
 	// @access: restricted
 	EndpointUrl string
+	// Destination request headers as JSON, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it.
 	// @access: secret-restricted
 	HeadersEncrypted pgtype.Text
 	// @access: confidential

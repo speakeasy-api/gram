@@ -16,6 +16,7 @@ type AdminMcpConnection struct {
 	SubjectUrn string
 	// @access: confidential
 	OauthClientID uuid.UUID
+	// Linked admin browser session ID, encrypted with the admin app key (GRAM_ADMIN_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it.
 	// @access: secret-restricted
 	AdminSessionIDEnc string
 	// @access: confidential

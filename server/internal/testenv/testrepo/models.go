@@ -174,8 +174,10 @@ type FunctionsAccess struct {
 	FunctionID uuid.UUID
 	// @access: confidential
 	OrganizationID pgtype.Text
+	// Function runner key, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it. The organization-key copy is encryption_key_org_encrypted.
 	// @access: secret-restricted
 	EncryptionKey conv.Secret
+	// Function runner key, encrypted with the organization's data encryption key (DEK) for the 'function-runner-keys' use case. SQL cannot read it. The platform-key copy is encryption_key.
 	// @access: secret-restricted
 	EncryptionKeyOrgEncrypted pgtype.Text
 	// @access: confidential

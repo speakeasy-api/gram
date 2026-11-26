@@ -20,8 +20,10 @@ type ModelProviderKey struct {
 	Slot string
 	// @access: confidential
 	Provider string
+	// Model provider API key, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it. The organization-key copy is api_key_org_encrypted.
 	// @access: secret-restricted
 	ApiKeyEncrypted pgtype.Text
+	// Model provider API key, encrypted with the organization's data encryption key (DEK) for the 'ai-provider-keys' use case. SQL cannot read it. The platform-key copy is api_key_encrypted.
 	// @access: secret-restricted
 	ApiKeyOrgEncrypted pgtype.Text
 	// @access: confidential

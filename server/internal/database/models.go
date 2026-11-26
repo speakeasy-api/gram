@@ -141,6 +141,7 @@ type AdminMcpConnection struct {
 	SubjectUrn string
 	// @access: confidential
 	OauthClientID uuid.UUID
+	// Linked admin browser session ID, encrypted with the admin app key (GRAM_ADMIN_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it.
 	// @access: secret-restricted
 	AdminSessionIDEnc string
 	// @access: confidential
@@ -421,8 +422,10 @@ type AiIntegrationConfig struct {
 	ProjectID uuid.UUID
 	// @access: restricted
 	ExternalOrganizationID pgtype.Text
+	// AI provider API key or webhook signing-secret JSON, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it. The organization-key copy is api_key_org_encrypted.
 	// @access: secret-restricted
 	ApiKeyEncrypted pgtype.Text
+	// AI provider API key or webhook signing-secret JSON, encrypted with the organization's data encryption key (DEK) for the 'ai-provider-keys' use case. SQL cannot read it. The platform-key copy is api_key_encrypted.
 	// @access: secret-restricted
 	ApiKeyOrgEncrypted pgtype.Text
 	// @access: confidential
@@ -801,6 +804,7 @@ type AssistantKitGatewayCredential struct {
 	AssistantID uuid.NullUUID
 	// @access: confidential
 	RuntimeID uuid.NullUUID
+	// Kit gateway credential, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it.
 	// @access: secret-restricted
 	TokenCiphertext string
 	// @access: confidential
@@ -862,6 +866,7 @@ type AssistantMcpOauthClient struct {
 	RedirectUri string
 	// @access: restricted
 	ClientID pgtype.Text
+	// Client secret from MCP OAuth dynamic client registration, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it.
 	// @access: secret-restricted
 	ClientSecretEncrypted pgtype.Text
 	// @access: confidential
@@ -1755,8 +1760,10 @@ type ChatMessage struct {
 	ProjectID uuid.NullUUID
 	// @access: confidential
 	Role string
+	// Projects on the transcript shadow allowlist also get an organization-key encrypted copy in chat_message_transcripts.ciphertext; during shadow mode this plaintext column stays the source.
 	// @access: opaque-restricted
 	Content string
+	// Projects on the transcript shadow allowlist also get an organization-key encrypted copy in chat_message_transcripts.ciphertext; during shadow mode this plaintext column stays the source.
 	// @access: opaque-restricted
 	ContentRaw []byte
 	// Asset path of the stored message content; its file name is a digest of that content.
@@ -1768,6 +1775,7 @@ type ChatMessage struct {
 	MessageID pgtype.Text
 	// @access: confidential
 	FinishReason pgtype.Text
+	// Projects on the transcript shadow allowlist also get an organization-key encrypted copy in chat_message_transcripts.ciphertext; during shadow mode this plaintext column stays the source.
 	// @access: opaque-restricted
 	ToolCalls []byte
 	// @access: confidential
@@ -1776,6 +1784,7 @@ type ChatMessage struct {
 	CompletionTokens int64
 	// @access: confidential
 	TotalTokens int64
+	// Projects on the transcript shadow allowlist also get an organization-key encrypted copy in chat_message_transcripts.ciphertext; during shadow mode this plaintext column stays the source.
 	// @access: opaque-restricted
 	StorageError pgtype.Text
 	// @access: confidential
@@ -1798,8 +1807,10 @@ type ChatMessage struct {
 	ToolUrn urn.Tool
 	// @access: confidential
 	ToolOutcome pgtype.Text
+	// Projects on the transcript shadow allowlist also get an organization-key encrypted copy in chat_message_transcripts.ciphertext; during shadow mode this plaintext column stays the source.
 	// @access: opaque-restricted
 	ToolOutcomeNotes pgtype.Text
+	// Projects on the transcript shadow allowlist also get an organization-key encrypted copy in chat_message_transcripts.ciphertext; during shadow mode this plaintext column stays the source.
 	// @access: opaque-restricted
 	ToolCallSummaries []byte
 	// SHA-256 digest of the message content. Reveals when two messages have equal content.
@@ -1856,10 +1867,10 @@ type ChatMessageTranscript struct {
 	// Owning organization identity.
 	// @access: confidential
 	OrganizationID string
-	// Organization-key encrypted transcript payload.
+	// Encrypted copy of one chat_messages row: content, content_raw, tool_calls, tool_outcome_notes, tool_call_summaries and storage_error, encrypted with the organization's data encryption key (DEK) for the 'chat-transcripts' use case and bound to the project, chat and message ids. SQL cannot read it; during shadow mode the plaintext chat_messages columns stay the source.
 	// @access: opaque-restricted
 	Ciphertext string
-	// Unkeyed freshness digest of sensitive transcript fields.
+	// Unkeyed SHA-256 digest of the mirrored chat_messages fields, used to detect a stale copy. Not ciphertext: anyone with the plaintext can recompute it.
 	// @access: opaque-restricted
 	SourceHash []byte
 	// @access: confidential
@@ -2093,6 +2104,7 @@ type DataEncryptionKeyWrap struct {
 	ExternalKeyID uuid.UUID
 	// @access: restricted
 	ExternalKeyVersion pgtype.Text
+	// The organization's data encryption key (DEK), wrapped by the KMS key encryption key (KEK) named in external_key_id. Only that KMS key can unwrap it; SQL cannot read it.
 	// @access: secret-restricted
 	WrappedKey []byte
 	// @access: confidential
@@ -2428,6 +2440,7 @@ type DeviceIntegrationConfig struct {
 	OrganizationID string
 	// @access: confidential
 	Provider string
+	// Provider-specific credential JSON document, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it.
 	// @access: secret-restricted
 	CredentialsEncrypted string
 	// @access: opaque-restricted
@@ -2726,6 +2739,7 @@ type Environment struct {
 type EnvironmentEntry struct {
 	// @access: confidential
 	Name string
+	// Environment entry value. When is_secret is true, a non-empty value is encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM) and SQL cannot read it. Otherwise it is plaintext.
 	// @access: secret-restricted
 	Value string
 	// @access: confidential
@@ -3063,8 +3077,10 @@ type FunctionsAccess struct {
 	FunctionID uuid.UUID
 	// @access: confidential
 	OrganizationID pgtype.Text
+	// Function runner key, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it. The organization-key copy is encryption_key_org_encrypted.
 	// @access: secret-restricted
 	EncryptionKey conv.Secret
+	// Function runner key, encrypted with the organization's data encryption key (DEK) for the 'function-runner-keys' use case. SQL cannot read it. The platform-key copy is encryption_key.
 	// @access: secret-restricted
 	EncryptionKeyOrgEncrypted pgtype.Text
 	// @access: confidential
@@ -3779,6 +3795,7 @@ type McpAuthClientGithubApp struct {
 	AppID int64
 	// @access: confidential
 	InstallationID int64
+	// Named for an encrypted GitHub App private key, but no Speakeasy code writes this table yet. Treat any value as unreadable secret material.
 	// @access: secret-restricted
 	PrivateKeyEncrypted string
 	// @access: restricted
@@ -3806,6 +3823,7 @@ type McpAuthClientHeader struct {
 	IsRequired bool
 	// @access: confidential
 	IsSecret bool
+	// Static header value. When is_secret is true, a non-empty value is encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM) and SQL cannot read it. Otherwise it is plaintext.
 	// @access: secret-restricted
 	Value pgtype.Text
 	// @access: confidential
@@ -4421,8 +4439,10 @@ type ModelProviderKey struct {
 	Slot string
 	// @access: confidential
 	Provider string
+	// Model provider API key, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it. The organization-key copy is api_key_org_encrypted.
 	// @access: secret-restricted
 	ApiKeyEncrypted pgtype.Text
+	// Model provider API key, encrypted with the organization's data encryption key (DEK) for the 'ai-provider-keys' use case. SQL cannot read it. The platform-key copy is api_key_encrypted.
 	// @access: secret-restricted
 	ApiKeyOrgEncrypted pgtype.Text
 	// @access: confidential
@@ -4454,8 +4474,10 @@ type NetworkIngress struct {
 	Enabled bool
 	// @access: confidential
 	IdentityRequired bool
+	// Tailscale OAuth client credential document, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it. The organization-key copy is credentials_org_encrypted.
 	// @access: secret-restricted
 	CredentialsEncrypted pgtype.Text
+	// Tailscale OAuth client credential document, encrypted with the organization's data encryption key (DEK) for the 'tailscale-oauth-clients' use case. SQL cannot read it. The platform-key copy is credentials_encrypted.
 	// @access: secret-restricted
 	CredentialsOrgEncrypted pgtype.Text
 	// @access: confidential
@@ -4504,7 +4526,7 @@ type NetworkIngressCertificateState struct {
 	// tsnet certificate state key: "<domain>.crt", "<domain>.key" or the ACME account key name.
 	// @access: confidential
 	StateKey string
-	// Certificate, private key or ACME account key, encrypted under the organization's key.
+	// Certificate, private key or ACME account key, encrypted with the organization's data encryption key (DEK) for the 'tailscale-gateway-state' use case. SQL cannot read it.
 	// @access: secret-restricted
 	ValueEncrypted string
 	// @access: confidential
@@ -4524,6 +4546,7 @@ type NetworkIngressNode struct {
 	Slot int32
 	// @access: confidential
 	PodName pgtype.Text
+	// Tailscale auth key for the gateway node, encrypted with the organization's data encryption key (DEK) for the 'tailscale-gateway-state' use case. SQL cannot read it.
 	// @access: secret-restricted
 	AuthKeyEncrypted pgtype.Text
 	// @access: confidential
@@ -4559,6 +4582,7 @@ type NetworkIngressNodeState struct {
 	Slot int32
 	// @access: confidential
 	StateKey string
+	// Tailscale node state value, encrypted with the organization's data encryption key (DEK) for the 'tailscale-gateway-state' use case. SQL cannot read it.
 	// @access: secret-restricted
 	ValueEncrypted string
 	// @access: confidential
@@ -4851,8 +4875,10 @@ type OpenrouterApiKey struct {
 	OrganizationID string
 	// @access: confidential
 	KeyType string
+	// Upstream OpenRouter API key, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it. The organization-key copy is key_org_encrypted.
 	// @access: secret-restricted
 	KeyEncrypted pgtype.Text
+	// Upstream OpenRouter API key, encrypted with the organization's data encryption key (DEK) for the 'ai-provider-keys' use case. SQL cannot read it. The platform-key copy is key_encrypted.
 	// @access: secret-restricted
 	KeyOrgEncrypted pgtype.Text
 	// @access: secret-restricted
@@ -5244,6 +5270,7 @@ type OtelDestination struct {
 	Name string
 	// @access: restricted
 	EndpointUrl string
+	// Destination request headers as JSON, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it.
 	// @access: secret-restricted
 	HeadersEncrypted pgtype.Text
 	// @access: confidential
@@ -5267,6 +5294,7 @@ type OtelForwardingConfig struct {
 	UpdatedAt pgtype.Timestamptz
 	// @access: restricted
 	EndpointUrl string
+	// Named for encrypted headers, but no Speakeasy code reads or writes this table. Treat any value as unreadable secret material.
 	// @access: secret-restricted
 	HeadersEncrypted pgtype.Text
 	// @access: confidential
@@ -5900,8 +5928,10 @@ type PluginGithubConnection struct {
 	OrganizationID pgtype.Text
 	// @access: secret-restricted
 	MarketplaceTokenHash pgtype.Text
+	// Plugin marketplace token, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it. The organization-key copy is marketplace_token_org_encrypted.
 	// @access: secret-restricted
 	MarketplaceTokenEncrypted pgtype.Text
+	// Plugin marketplace token, encrypted with the organization's data encryption key (DEK) for the 'marketplace-tokens' use case. SQL cannot read it. The platform-key copy is marketplace_token_encrypted.
 	// @access: secret-restricted
 	MarketplaceTokenOrgEncrypted pgtype.Text
 	// @access: confidential
@@ -6319,6 +6349,7 @@ type RemoteMcpServerHeader struct {
 	IsRequired bool
 	// @access: confidential
 	IsSecret bool
+	// Static header value. When is_secret is true, a non-empty value is encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM) and SQL cannot read it. Otherwise it is plaintext.
 	// @access: secret-restricted
 	Value pgtype.Text
 	// @access: confidential
@@ -6401,14 +6432,18 @@ type RemoteSession struct {
 	RemoteSessionClientID uuid.UUID
 	// @access: confidential
 	OrganizationID pgtype.Text
+	// Upstream OAuth access token, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it. The organization-key copy is access_token_org_encrypted.
 	// @access: secret-restricted
 	AccessTokenEncrypted pgtype.Text
+	// Upstream OAuth access token, encrypted with the organization's data encryption key (DEK) for the 'oauth-session-tokens' use case. SQL cannot read it. The platform-key copy is access_token_encrypted.
 	// @access: secret-restricted
 	AccessTokenOrgEncrypted pgtype.Text
 	// @access: confidential
 	AccessExpiresAt pgtype.Timestamptz
+	// Upstream OAuth refresh token, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it. The organization-key copy is refresh_token_org_encrypted.
 	// @access: secret-restricted
 	RefreshTokenEncrypted pgtype.Text
+	// Upstream OAuth refresh token, encrypted with the organization's data encryption key (DEK) for the 'oauth-session-tokens' use case. SQL cannot read it. The platform-key copy is refresh_token_encrypted.
 	// @access: secret-restricted
 	RefreshTokenOrgEncrypted pgtype.Text
 	// @access: confidential
@@ -6464,8 +6499,10 @@ type RemoteSessionClient struct {
 	RemoteSessionIssuerID uuid.UUID
 	// @access: restricted
 	ClientID string
+	// Upstream OAuth client secret, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it. The organization-key copy is client_secret_org_encrypted.
 	// @access: secret-restricted
 	ClientSecretEncrypted pgtype.Text
+	// Upstream OAuth client secret, encrypted with the organization's data encryption key (DEK) for the 'oauth-client-secrets' use case. SQL cannot read it. The platform-key copy is client_secret_encrypted.
 	// @access: secret-restricted
 	ClientSecretOrgEncrypted pgtype.Text
 	// @access: confidential
@@ -6600,8 +6637,10 @@ type RemoteSessionEmaCredential struct {
 	RequestedScopes []string
 	// @access: opaque-restricted
 	GrantedScopes []string
+	// Upstream access token, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it. The organization-key copy is access_token_org_encrypted.
 	// @access: secret-restricted
 	AccessTokenEncrypted pgtype.Text
+	// Upstream access token, encrypted with the organization's data encryption key (DEK) for the 'oauth-session-tokens' use case. SQL cannot read it. The platform-key copy is access_token_encrypted.
 	// @access: secret-restricted
 	AccessTokenOrgEncrypted pgtype.Text
 	// @access: confidential
@@ -6819,6 +6858,7 @@ type RiskExecutionEvidence struct {
 	ExecutionID string
 	// @access: confidential
 	Phase string
+	// MCP execution payload, truncated, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it.
 	// @access: secret-restricted
 	PayloadEncrypted string
 	// @access: confidential
@@ -6836,6 +6876,7 @@ type RiskFindingEvidence struct {
 	OrganizationID string
 	// @access: confidential
 	ProjectID uuid.UUID
+	// Matched text of an MCP risk finding, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it.
 	// @access: secret-restricted
 	MatchEncrypted string
 	// @access: confidential
@@ -7884,6 +7925,7 @@ type SlackDirectoryConnection struct {
 	SlackTeamID string
 	// @access: confidential
 	SlackTeamName pgtype.Text
+	// Versioned Slack token bundle, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it.
 	// @access: secret-restricted
 	CredentialsEncrypted pgtype.Text
 	// @access: opaque-restricted
@@ -8751,14 +8793,18 @@ type TrustedIssuerSession struct {
 	ProjectID uuid.NullUUID
 	// @access: confidential
 	SubjectUrn string
+	// Upstream identity assertion, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it. The organization-key copy is identity_assertion_org_encrypted.
 	// @access: secret-restricted
 	IdentityAssertionEncrypted pgtype.Text
+	// Upstream identity assertion, encrypted with the organization's data encryption key (DEK) for the 'oauth-session-tokens' use case. SQL cannot read it. The platform-key copy is identity_assertion_encrypted.
 	// @access: secret-restricted
 	IdentityAssertionOrgEncrypted pgtype.Text
 	// @access: confidential
 	IdentityAssertionExpiresAt pgtype.Timestamptz
+	// Upstream refresh token, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it. The organization-key copy is refresh_token_org_encrypted.
 	// @access: secret-restricted
 	RefreshTokenEncrypted pgtype.Text
+	// Upstream refresh token, encrypted with the organization's data encryption key (DEK) for the 'oauth-session-tokens' use case. SQL cannot read it. The platform-key copy is refresh_token_encrypted.
 	// @access: secret-restricted
 	RefreshTokenOrgEncrypted pgtype.Text
 	// @access: confidential
@@ -8773,12 +8819,16 @@ type TrustedIssuerSession struct {
 	CredentialGeneration pgtype.Int8
 	// @access: confidential
 	RefreshClaimID uuid.NullUUID
+	// Upstream subject, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it. The organization-key copy is upstream_subject_org_encrypted.
 	// @access: secret-restricted
 	UpstreamSubjectEncrypted pgtype.Text
+	// Upstream subject, encrypted with the organization's data encryption key (DEK) for the 'oauth-session-tokens' use case. SQL cannot read it. The platform-key copy is upstream_subject_encrypted.
 	// @access: secret-restricted
 	UpstreamSubjectOrgEncrypted pgtype.Text
+	// Original login nonce, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it. The organization-key copy is nonce_org_encrypted.
 	// @access: secret-restricted
 	NonceEncrypted pgtype.Text
+	// Original login nonce, encrypted with the organization's data encryption key (DEK) for the 'oauth-session-tokens' use case. SQL cannot read it. The platform-key copy is nonce_encrypted.
 	// @access: secret-restricted
 	NonceOrgEncrypted pgtype.Text
 	// @access: secret-restricted
