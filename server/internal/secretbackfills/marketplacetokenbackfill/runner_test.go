@@ -199,3 +199,52 @@ func TestApplyCountsTokensWhoseOrganizationMovedPastThePlatformKey(t *testing.T)
 	require.Zero(t, report.Moved)
 	require.Equal(t, "enrolled-token", f.stored(t, id).MarketplaceToken.String, "nothing falls back to the platform key")
 }
+
+func TestApplyForOneOrganizationLeavesTheOthers(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	otherOrgID := "org_" + uuid.NewString()
+	_, err := orgrepo.New(f.db).UpsertOrganizationMetadata(t.Context(), orgrepo.UpsertOrganizationMetadataParams{
+		ID:          otherOrgID,
+		Name:        "Another Backfill Org",
+		Slug:        "another-backfill-" + uuid.NewString(),
+		WorkosID:    conv.ToPGText(otherOrgID),
+		Whitelisted: pgtype.Bool{Bool: false, Valid: false},
+	})
+	require.NoError(t, err)
+	mine := f.legacyConnection(t, f.orgID, "my-token")
+	other := f.legacyConnection(t, otherOrgID, "other-token")
+	f.legacyConnection(t, "org_without_metadata_"+uuid.NewString(), "orphan-token")
+
+	organizations, err := marketplacetokenbackfill.Organizations(t.Context(), f.db)
+	require.NoError(t, err)
+	require.Equal(t, []marketplacetokenbackfill.Organization{
+		{ID: otherOrgID, Name: "Another Backfill Org", Slug: organizations[0].Slug, Unattributed: 1, Legacy: 1},
+		{ID: f.orgID, Name: "Marketplace Token Backfill Org", Slug: organizations[1].Slug, Unattributed: 1, Legacy: 1},
+	}, organizations, "organizations come by name, and one without a metadata row is left out")
+
+	preview, err := marketplacetokenbackfill.Run(t.Context(), f.db, nil, marketplacetokenbackfill.Options{OrganizationID: f.orgID, Apply: false, BatchSize: 10})
+	require.NoError(t, err)
+	require.Equal(t, marketplacetokenbackfill.Counts{Unattributed: 1, Legacy: 1, Hashed: 0}, preview.Counts, "a connection without an organization_id counts under its project's organization")
+
+	report, err := marketplacetokenbackfill.Run(t.Context(), f.db, f.tokens(t), marketplacetokenbackfill.Options{OrganizationID: f.orgID, Apply: true, BatchSize: 10})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), report.Attributed)
+	require.Equal(t, int64(1), report.Moved)
+	require.Equal(t, marketplacetokenbackfill.Counts{Unattributed: 0, Legacy: 0, Hashed: 1}, report.Counts, "the counts cover only that organization")
+
+	require.False(t, f.stored(t, mine).MarketplaceToken.Valid)
+	untouched := f.stored(t, other)
+	require.Equal(t, "other-token", untouched.MarketplaceToken.String, "another organization's token stays in place")
+	require.False(t, untouched.OrganizationID.Valid, "another organization's connection is not attributed")
+
+	organizations, err = marketplacetokenbackfill.Organizations(t.Context(), f.db)
+	require.NoError(t, err)
+	require.Len(t, organizations, 1)
+	require.Equal(t, otherOrgID, organizations[0].ID)
+
+	all, err := marketplacetokenbackfill.Run(t.Context(), f.db, nil, marketplacetokenbackfill.Options{OrganizationID: "", Apply: false, BatchSize: 10})
+	require.NoError(t, err)
+	require.Equal(t, marketplacetokenbackfill.Counts{Unattributed: 2, Legacy: 2, Hashed: 1}, all.Counts, "without an organization the counts cover all of them")
+}

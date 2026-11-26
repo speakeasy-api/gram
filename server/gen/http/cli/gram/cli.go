@@ -5075,6 +5075,7 @@ func ParseEndpoint(
 		adminRunMarketplaceTokenBackfillAdminSessionTokenFlag = adminRunMarketplaceTokenBackfillFlags.String("admin-session-token", "", "")
 
 		adminRunRunnerKeyOrganizationBackfillFlags                 = flag.NewFlagSet("run-runner-key-organization-backfill", flag.ExitOnError)
+		adminRunRunnerKeyOrganizationBackfillBodyFlag              = adminRunRunnerKeyOrganizationBackfillFlags.String("body", "REQUIRED", "")
 		adminRunRunnerKeyOrganizationBackfillAdminSessionTokenFlag = adminRunRunnerKeyOrganizationBackfillFlags.String("admin-session-token", "", "")
 
 		adminGetProjectRedeployPreviewFlags                 = flag.NewFlagSet("get-project-redeploy-preview", flag.ExitOnError)
@@ -13914,7 +13915,7 @@ func ParseEndpoint(
 				data, err = adminc.BuildRunMarketplaceTokenBackfillPayload(*adminRunMarketplaceTokenBackfillBodyFlag, *adminRunMarketplaceTokenBackfillAdminSessionTokenFlag)
 			case "run-runner-key-organization-backfill":
 				endpoint = c.RunRunnerKeyOrganizationBackfill()
-				data, err = adminc.BuildRunRunnerKeyOrganizationBackfillPayload(*adminRunRunnerKeyOrganizationBackfillAdminSessionTokenFlag)
+				data, err = adminc.BuildRunRunnerKeyOrganizationBackfillPayload(*adminRunRunnerKeyOrganizationBackfillBodyFlag, *adminRunRunnerKeyOrganizationBackfillAdminSessionTokenFlag)
 			case "get-project-redeploy-preview":
 				endpoint = c.GetProjectRedeployPreview()
 				data, err = adminc.BuildGetProjectRedeployPreviewPayload(*adminGetProjectRedeployPreviewOrganizationIDFlag, *adminGetProjectRedeployPreviewProjectIDFlag, *adminGetProjectRedeployPreviewAdminSessionTokenFlag)
@@ -33972,8 +33973,8 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    backfill-mcp-auth-grants: Retired. Rejects authenticated calls and does not modify grants.`)
 	fmt.Fprintln(os.Stderr, `    backfill-mcp-connect-grants: Adds an explicit mcp:connect grant, with the same principal, selectors and expiry, for every unexpired mcp:read or mcp:write grant in every organization, ahead of read and write no longer implying connect. Never removes access. Safe to run more than once.`)
 	fmt.Fprintln(os.Stderr, `    get-secret-backfills: Previews the temporary secret backfills: what applying each would change now. Writes nothing.`)
-	fmt.Fprintln(os.Stderr, `    run-marketplace-token-backfill: Applies the marketplace token backfill: gives each GitHub connection its project's organization, then moves each plaintext marketplace token to its hash and the copies its organization's transition state writes, sealed with this process's platform key. Install URLs do not change. Safe to run again; an interrupted run continues where it stopped. Refused while another run of it is in progress, and when this process's platform key fingerprint is not the one the operator checked.`)
-	fmt.Fprintln(os.Stderr, `    run-runner-key-organization-backfill: Applies the runner key organization backfill: sets functions_access.organization_id from each runner key's project, in batches that each commit on their own. Runner keys and deployed function runners do not change. Safe to run again; an interrupted run continues where it stopped. Refused while another run of it is in progress.`)
+	fmt.Fprintln(os.Stderr, `    run-marketplace-token-backfill: Applies the marketplace token backfill, to one organization or to all: gives each GitHub connection its project's organization, then moves each plaintext marketplace token to its hash and the copies its organization's transition state writes, sealed with this process's platform key. Install URLs do not change. Safe to run again; an interrupted run continues where it stopped. Refused while another run of it is in progress, and when this process's platform key fingerprint is not the one the operator checked.`)
+	fmt.Fprintln(os.Stderr, `    run-runner-key-organization-backfill: Applies the runner key organization backfill, to one organization or to all: sets functions_access.organization_id from each runner key's project, in batches that each commit on their own. Runner keys and deployed function runners do not change. Safe to run again; an interrupted run continues where it stopped. Refused while another run of it is in progress.`)
 	fmt.Fprintln(os.Stderr, `    get-project-redeploy-preview: Returns what redeploying a project would act on, for review before redeployProject.`)
 	fmt.Fprintln(os.Stderr, `    redeploy-project: Clones a project's active deployment and starts processing it. Refuses when the active deployment is no longer the one reviewed. The new deployment becomes active only if processing succeeds.`)
 	fmt.Fprintln(os.Stderr, `    list-custom-domains: Lists live custom domains across organizations with their designated CNAME targets and observed DNS routing methods.`)
@@ -36215,7 +36216,7 @@ func adminRunMarketplaceTokenBackfillUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Applies the marketplace token backfill: gives each GitHub connection its project's organization, then moves each plaintext marketplace token to its hash and the copies its organization's transition state writes, sealed with this process's platform key. Install URLs do not change. Safe to run again; an interrupted run continues where it stopped. Refused while another run of it is in progress, and when this process's platform key fingerprint is not the one the operator checked.`)
+	fmt.Fprintln(os.Stderr, `Applies the marketplace token backfill, to one organization or to all: gives each GitHub connection its project's organization, then moves each plaintext marketplace token to its hash and the copies its organization's transition state writes, sealed with this process's platform key. Install URLs do not change. Safe to run again; an interrupted run continues where it stopped. Refused while another run of it is in progress, and when this process's platform key fingerprint is not the one the operator checked.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -36223,25 +36224,27 @@ func adminRunMarketplaceTokenBackfillUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin run-marketplace-token-backfill --body '{\n      \"platform_key_fingerprint\": \"aa\"\n   }' --admin-session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin run-marketplace-token-backfill --body '{\n      \"organization_id\": \"aa\",\n      \"platform_key_fingerprint\": \"aa\"\n   }' --admin-session-token \"abc123\"")
 }
 
 func adminRunRunnerKeyOrganizationBackfillUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] admin run-runner-key-organization-backfill", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
 	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Applies the runner key organization backfill: sets functions_access.organization_id from each runner key's project, in batches that each commit on their own. Runner keys and deployed function runners do not change. Safe to run again; an interrupted run continues where it stopped. Refused while another run of it is in progress.`)
+	fmt.Fprintln(os.Stderr, `Applies the runner key organization backfill, to one organization or to all: sets functions_access.organization_id from each runner key's project, in batches that each commit on their own. Runner keys and deployed function runners do not change. Safe to run again; an interrupted run continues where it stopped. Refused while another run of it is in progress.`)
 
 	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
 	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin run-runner-key-organization-backfill --admin-session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin run-runner-key-organization-backfill --body '{\n      \"organization_id\": \"aa\"\n   }' --admin-session-token \"abc123\"")
 }
 
 func adminGetProjectRedeployPreviewUsage() {

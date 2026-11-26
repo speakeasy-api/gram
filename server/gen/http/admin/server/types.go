@@ -654,10 +654,21 @@ type BackfillMcpConnectGrantsRequestBody struct {
 // RunMarketplaceTokenBackfillRequestBody is the type of the "admin" service
 // "runMarketplaceTokenBackfill" endpoint HTTP request body.
 type RunMarketplaceTokenBackfillRequestBody struct {
+	// Limits the run to this organization's GitHub connections. Omit it to run for
+	// every organization. The result's counts then cover only this organization.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
 	// The platform key fingerprint the operator checked against the servers'
 	// "encryption key loaded" log. The run is refused when this process's platform
 	// key has another fingerprint, such as after a restart with a different key.
 	PlatformKeyFingerprint *string `form:"platform_key_fingerprint,omitempty" json:"platform_key_fingerprint,omitempty" xml:"platform_key_fingerprint,omitempty"`
+}
+
+// RunRunnerKeyOrganizationBackfillRequestBody is the type of the "admin"
+// service "runRunnerKeyOrganizationBackfill" endpoint HTTP request body.
+type RunRunnerKeyOrganizationBackfillRequestBody struct {
+	// Limits the run to this organization's runner keys. Omit it to run for every
+	// organization. The result's counts then cover only this organization.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
 }
 
 // RedeployProjectRequestBody is the type of the "admin" service
@@ -3189,6 +3200,9 @@ type GetSecretBackfillsResponseBody struct {
 	MarketplaceTokens *AdminMarketplaceTokenBackfillResponseBody `form:"marketplace_tokens" json:"marketplace_tokens" xml:"marketplace_tokens"`
 	// A preview of the runner key organization backfill.
 	RunnerKeyOrganizations *AdminRunnerKeyOrganizationBackfillResponseBody `form:"runner_key_organizations" json:"runner_key_organizations" xml:"runner_key_organizations"`
+	// Every organization either backfill has work left in, by name. Rows whose
+	// project's organization has no metadata row belong to none of them.
+	Organizations []*AdminSecretBackfillOrganizationResponseBody `form:"organizations" json:"organizations" xml:"organizations"`
 	// The fingerprint of the platform key this admin process seals marketplace
 	// tokens with. It must match the fingerprint every server and worker logs at
 	// startup as "encryption key loaded". Absent when this process has no platform
@@ -32431,6 +32445,23 @@ type AdminRunnerKeyOrganizationBackfillResponseBody struct {
 	MissingOrganization int64 `form:"missing_organization" json:"missing_organization" xml:"missing_organization"`
 }
 
+// AdminSecretBackfillOrganizationResponseBody is used to define fields on
+// response body types.
+type AdminSecretBackfillOrganizationResponseBody struct {
+	// The organization ID.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// The organization's name.
+	Name string `form:"name" json:"name" xml:"name"`
+	// The organization's slug.
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// Its GitHub connections that still hold a plaintext marketplace token.
+	LegacyTokens int64 `form:"legacy_tokens" json:"legacy_tokens" xml:"legacy_tokens"`
+	// Its GitHub connections without an organization.
+	UnattributedConnections int64 `form:"unattributed_connections" json:"unattributed_connections" xml:"unattributed_connections"`
+	// Its runner keys without an organization.
+	PendingRunnerKeys int64 `form:"pending_runner_keys" json:"pending_runner_keys" xml:"pending_runner_keys"`
+}
+
 // AdminCustomDomainResponseBody is used to define fields on response body
 // types.
 type AdminCustomDomainResponseBody struct {
@@ -35656,6 +35687,18 @@ func NewGetSecretBackfillsResponseBody(res *admin.AdminSecretBackfills) *GetSecr
 	}
 	if res.RunnerKeyOrganizations != nil {
 		body.RunnerKeyOrganizations = marshalAdminAdminRunnerKeyOrganizationBackfillToAdminRunnerKeyOrganizationBackfillResponseBody(res.RunnerKeyOrganizations)
+	}
+	if res.Organizations != nil {
+		body.Organizations = make([]*AdminSecretBackfillOrganizationResponseBody, len(res.Organizations))
+		for i, val := range res.Organizations {
+			if val == nil {
+				body.Organizations[i] = nil
+				continue
+			}
+			body.Organizations[i] = marshalAdminAdminSecretBackfillOrganizationToAdminSecretBackfillOrganizationResponseBody(val)
+		}
+	} else {
+		body.Organizations = []*AdminSecretBackfillOrganizationResponseBody{}
 	}
 	return body
 }
@@ -59032,6 +59075,7 @@ func NewGetSecretBackfillsPayload(adminSessionToken *string) *admin.GetSecretBac
 // runMarketplaceTokenBackfill endpoint payload.
 func NewRunMarketplaceTokenBackfillPayload(body *RunMarketplaceTokenBackfillRequestBody, adminSessionToken *string) *admin.RunMarketplaceTokenBackfillPayload {
 	v := &admin.RunMarketplaceTokenBackfillPayload{
+		OrganizationID:         body.OrganizationID,
 		PlatformKeyFingerprint: *body.PlatformKeyFingerprint,
 	}
 	v.AdminSessionToken = adminSessionToken
@@ -59041,8 +59085,10 @@ func NewRunMarketplaceTokenBackfillPayload(body *RunMarketplaceTokenBackfillRequ
 
 // NewRunRunnerKeyOrganizationBackfillPayload builds a admin service
 // runRunnerKeyOrganizationBackfill endpoint payload.
-func NewRunRunnerKeyOrganizationBackfillPayload(adminSessionToken *string) *admin.RunRunnerKeyOrganizationBackfillPayload {
-	v := &admin.RunRunnerKeyOrganizationBackfillPayload{}
+func NewRunRunnerKeyOrganizationBackfillPayload(body *RunRunnerKeyOrganizationBackfillRequestBody, adminSessionToken *string) *admin.RunRunnerKeyOrganizationBackfillPayload {
+	v := &admin.RunRunnerKeyOrganizationBackfillPayload{
+		OrganizationID: body.OrganizationID,
+	}
 	v.AdminSessionToken = adminSessionToken
 
 	return v
@@ -60402,9 +60448,25 @@ func ValidateRunMarketplaceTokenBackfillRequestBody(body *RunMarketplaceTokenBac
 	if body.PlatformKeyFingerprint == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("platform_key_fingerprint", "body"))
 	}
+	if body.OrganizationID != nil {
+		if utf8.RuneCountInString(*body.OrganizationID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.organization_id", *body.OrganizationID, utf8.RuneCountInString(*body.OrganizationID), 1, true))
+		}
+	}
 	if body.PlatformKeyFingerprint != nil {
 		if utf8.RuneCountInString(*body.PlatformKeyFingerprint) < 1 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.platform_key_fingerprint", *body.PlatformKeyFingerprint, utf8.RuneCountInString(*body.PlatformKeyFingerprint), 1, true))
+		}
+	}
+	return
+}
+
+// ValidateRunRunnerKeyOrganizationBackfillRequestBody runs the validations
+// defined on RunRunnerKeyOrganizationBackfillRequestBody
+func ValidateRunRunnerKeyOrganizationBackfillRequestBody(body *RunRunnerKeyOrganizationBackfillRequestBody) (err error) {
+	if body.OrganizationID != nil {
+		if utf8.RuneCountInString(*body.OrganizationID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.organization_id", *body.OrganizationID, utf8.RuneCountInString(*body.OrganizationID), 1, true))
 		}
 	}
 	return

@@ -581,7 +581,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.MigrateOrganizationAssistantsToKit = service.strictAdminJSON(server.MigrateOrganizationAssistantsToKit, func() any { return new(adminserver.MigrateOrganizationAssistantsToKitRequestBody) })
 	server.GetSecretBackfills = service.preauthorizeAdmin(server.GetSecretBackfills)
 	server.RunMarketplaceTokenBackfill = service.strictAdminJSON(server.RunMarketplaceTokenBackfill, func() any { return new(adminserver.RunMarketplaceTokenBackfillRequestBody) })
-	server.RunRunnerKeyOrganizationBackfill = service.preauthorizeAdmin(server.RunRunnerKeyOrganizationBackfill)
+	server.RunRunnerKeyOrganizationBackfill = service.strictAdminJSON(server.RunRunnerKeyOrganizationBackfill, func() any { return new(adminserver.RunRunnerKeyOrganizationBackfillRequestBody) })
 	server.GetOrganizationEncryption = service.preauthorizeAdmin(server.GetOrganizationEncryption)
 	server.ListOrganizationEncryptionTransitions = service.preauthorizeAdmin(server.ListOrganizationEncryptionTransitions)
 	server.EnrollOrganizationEncryption = service.strictAdminJSON(server.EnrollOrganizationEncryption, func() any { return new(adminserver.EnrollOrganizationEncryptionRequestBody) })

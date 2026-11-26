@@ -22975,13 +22975,33 @@ func DecodeRunRunnerKeyOrganizationBackfillRequest(mux goahttp.Muxer, decoder fu
 	return func(r *http.Request) (*admin.RunRunnerKeyOrganizationBackfillPayload, error) {
 		var payload *admin.RunRunnerKeyOrganizationBackfillPayload
 		var (
+			body RunRunnerKeyOrganizationBackfillRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateRunRunnerKeyOrganizationBackfillRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
 			adminSessionToken *string
 		)
 		adminSessionTokenRaw := r.Header.Get("Authorization")
 		if adminSessionTokenRaw != "" {
 			adminSessionToken = &adminSessionTokenRaw
 		}
-		payload = NewRunRunnerKeyOrganizationBackfillPayload(adminSessionToken)
+		payload = NewRunRunnerKeyOrganizationBackfillPayload(&body, adminSessionToken)
 		if payload.AdminSessionToken != nil {
 			if strings.Contains(*payload.AdminSessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -32221,6 +32241,22 @@ func marshalAdminAdminRunnerKeyOrganizationBackfillToAdminRunnerKeyOrganizationB
 		Filled:              v.Filled,
 		Pending:             v.Pending,
 		MissingOrganization: v.MissingOrganization,
+	}
+
+	return res
+}
+
+// marshalAdminAdminSecretBackfillOrganizationToAdminSecretBackfillOrganizationResponseBody
+// builds a value of type *AdminSecretBackfillOrganizationResponseBody from a
+// value of type *admin.AdminSecretBackfillOrganization.
+func marshalAdminAdminSecretBackfillOrganizationToAdminSecretBackfillOrganizationResponseBody(v *admin.AdminSecretBackfillOrganization) *AdminSecretBackfillOrganizationResponseBody {
+	res := &AdminSecretBackfillOrganizationResponseBody{
+		OrganizationID:          v.OrganizationID,
+		Name:                    v.Name,
+		Slug:                    v.Slug,
+		LegacyTokens:            v.LegacyTokens,
+		UnattributedConnections: v.UnattributedConnections,
+		PendingRunnerKeys:       v.PendingRunnerKeys,
 	}
 
 	return res

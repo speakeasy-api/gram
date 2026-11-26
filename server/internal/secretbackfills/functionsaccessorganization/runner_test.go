@@ -156,3 +156,39 @@ func runnerKeyOrganization(t *testing.T, ctx context.Context, pool *pgxpool.Pool
 	require.NoError(t, err)
 	return row
 }
+
+func TestRunForOneOrganizationLeavesTheOthers(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	pool := newTestDB(t)
+	org := seedOrganization(t, ctx, pool)
+	otherOrg := seedOrganization(t, ctx, pool)
+	mine := seedRunnerKey(t, ctx, pool, org, seedProject(t, ctx, pool, org))
+	other := seedRunnerKey(t, ctx, pool, otherOrg, seedProject(t, ctx, pool, otherOrg))
+	seedRunnerKey(t, ctx, pool, org, seedProject(t, ctx, pool, "org_"+uuid.NewString()))
+	for _, id := range []uuid.UUID{mine, other} {
+		require.NoError(t, testrepo.New(pool).ClearFunctionsAccessOrganizationFixture(ctx, id))
+	}
+
+	organizations, err := functionsaccessorganization.Organizations(ctx, pool)
+	require.NoError(t, err)
+	require.ElementsMatch(t, []functionsaccessorganization.Organization{
+		{ID: org, Name: "Test Org", Slug: org, Pending: 1},
+		{ID: otherOrg, Name: "Test Org", Slug: otherOrg, Pending: 1},
+	}, organizations, "a runner key whose organization has no metadata row belongs to none")
+
+	report, err := functionsaccessorganization.Run(ctx, pool, functionsaccessorganization.Options{OrganizationID: org, Apply: true, BatchSize: 1})
+	require.NoError(t, err)
+	require.Equal(t, functionsaccessorganization.Report{Filled: 1, Counts: functionsaccessorganization.Counts{}}, report, "the counts cover only that organization")
+	require.Equal(t, conv.ToPGText(org), runnerKeyOrganization(t, ctx, pool, mine).OrganizationID)
+	require.False(t, runnerKeyOrganization(t, ctx, pool, other).OrganizationID.Valid, "another organization's runner key stays without one")
+
+	organizations, err = functionsaccessorganization.Organizations(ctx, pool)
+	require.NoError(t, err)
+	require.Equal(t, []functionsaccessorganization.Organization{{ID: otherOrg, Name: "Test Org", Slug: otherOrg, Pending: 1}}, organizations)
+
+	report, err = functionsaccessorganization.Run(ctx, pool, functionsaccessorganization.Options{OrganizationID: "", Apply: false, BatchSize: 1})
+	require.NoError(t, err)
+	require.Equal(t, functionsaccessorganization.Counts{Pending: 1, MissingOrganization: 1}, report.Counts, "without an organization the counts cover all of them")
+}

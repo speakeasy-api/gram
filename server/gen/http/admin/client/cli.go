@@ -3643,7 +3643,12 @@ func BuildRunMarketplaceTokenBackfillPayload(adminRunMarketplaceTokenBackfillBod
 	{
 		err = json.Unmarshal([]byte(adminRunMarketplaceTokenBackfillBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"platform_key_fingerprint\": \"aa\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"organization_id\": \"aa\",\n      \"platform_key_fingerprint\": \"aa\"\n   }'")
+		}
+		if body.OrganizationID != nil {
+			if utf8.RuneCountInString(*body.OrganizationID) < 1 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.organization_id", *body.OrganizationID, utf8.RuneCountInString(*body.OrganizationID), 1, true))
+			}
 		}
 		if utf8.RuneCountInString(body.PlatformKeyFingerprint) < 1 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.platform_key_fingerprint", body.PlatformKeyFingerprint, utf8.RuneCountInString(body.PlatformKeyFingerprint), 1, true))
@@ -3659,6 +3664,7 @@ func BuildRunMarketplaceTokenBackfillPayload(adminRunMarketplaceTokenBackfillBod
 		}
 	}
 	v := &admin.RunMarketplaceTokenBackfillPayload{
+		OrganizationID:         body.OrganizationID,
 		PlatformKeyFingerprint: body.PlatformKeyFingerprint,
 	}
 	v.AdminSessionToken = adminSessionToken
@@ -3668,14 +3674,24 @@ func BuildRunMarketplaceTokenBackfillPayload(adminRunMarketplaceTokenBackfillBod
 
 // BuildRunRunnerKeyOrganizationBackfillPayload builds the payload for the
 // admin runRunnerKeyOrganizationBackfill endpoint from CLI flags.
-func BuildRunRunnerKeyOrganizationBackfillPayload(adminRunRunnerKeyOrganizationBackfillAdminSessionToken string) (*admin.RunRunnerKeyOrganizationBackfillPayload, error) {
+func BuildRunRunnerKeyOrganizationBackfillPayload(adminRunRunnerKeyOrganizationBackfillBody string, adminRunRunnerKeyOrganizationBackfillAdminSessionToken string) (*admin.RunRunnerKeyOrganizationBackfillPayload, error) {
+	var err error
+	var body RunRunnerKeyOrganizationBackfillRequestBody
+	{
+		err = json.Unmarshal([]byte(adminRunRunnerKeyOrganizationBackfillBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"organization_id\": \"aa\"\n   }'")
+		}
+	}
 	var adminSessionToken *string
 	{
 		if adminRunRunnerKeyOrganizationBackfillAdminSessionToken != "" {
 			adminSessionToken = &adminRunRunnerKeyOrganizationBackfillAdminSessionToken
 		}
 	}
-	v := &admin.RunRunnerKeyOrganizationBackfillPayload{}
+	v := &admin.RunRunnerKeyOrganizationBackfillPayload{
+		OrganizationID: body.OrganizationID,
+	}
 	v.AdminSessionToken = adminSessionToken
 
 	return v, nil

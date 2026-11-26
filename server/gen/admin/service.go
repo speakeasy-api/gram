@@ -379,19 +379,19 @@ type Service interface {
 	// Previews the temporary secret backfills: what applying each would change
 	// now. Writes nothing.
 	GetSecretBackfills(context.Context, *GetSecretBackfillsPayload) (res *AdminSecretBackfills, err error)
-	// Applies the marketplace token backfill: gives each GitHub connection its
-	// project's organization, then moves each plaintext marketplace token to its
-	// hash and the copies its organization's transition state writes, sealed with
-	// this process's platform key. Install URLs do not change. Safe to run again;
-	// an interrupted run continues where it stopped. Refused while another run of
-	// it is in progress, and when this process's platform key fingerprint is not
-	// the one the operator checked.
+	// Applies the marketplace token backfill, to one organization or to all: gives
+	// each GitHub connection its project's organization, then moves each plaintext
+	// marketplace token to its hash and the copies its organization's transition
+	// state writes, sealed with this process's platform key. Install URLs do not
+	// change. Safe to run again; an interrupted run continues where it stopped.
+	// Refused while another run of it is in progress, and when this process's
+	// platform key fingerprint is not the one the operator checked.
 	RunMarketplaceTokenBackfill(context.Context, *RunMarketplaceTokenBackfillPayload) (res *AdminMarketplaceTokenBackfill, err error)
-	// Applies the runner key organization backfill: sets
-	// functions_access.organization_id from each runner key's project, in batches
-	// that each commit on their own. Runner keys and deployed function runners do
-	// not change. Safe to run again; an interrupted run continues where it
-	// stopped. Refused while another run of it is in progress.
+	// Applies the runner key organization backfill, to one organization or to all:
+	// sets functions_access.organization_id from each runner key's project, in
+	// batches that each commit on their own. Runner keys and deployed function
+	// runners do not change. Safe to run again; an interrupted run continues where
+	// it stopped. Refused while another run of it is in progress.
 	RunRunnerKeyOrganizationBackfill(context.Context, *RunRunnerKeyOrganizationBackfillPayload) (res *AdminRunnerKeyOrganizationBackfill, err error)
 	// Returns what redeploying a project would act on, for review before
 	// redeployProject.
@@ -2412,6 +2412,23 @@ type AdminRunnerKeyOrganizationBackfill struct {
 	MissingOrganization int64
 }
 
+// One organization with secret backfill work left. A GitHub connection or
+// runner key without an organization belongs to its project's organization.
+type AdminSecretBackfillOrganization struct {
+	// The organization ID.
+	OrganizationID string
+	// The organization's name.
+	Name string
+	// The organization's slug.
+	Slug string
+	// Its GitHub connections that still hold a plaintext marketplace token.
+	LegacyTokens int64
+	// Its GitHub connections without an organization.
+	UnattributedConnections int64
+	// Its runner keys without an organization.
+	PendingRunnerKeys int64
+}
+
 // AdminSecretBackfills is the result type of the admin service
 // getSecretBackfills method.
 type AdminSecretBackfills struct {
@@ -2419,6 +2436,9 @@ type AdminSecretBackfills struct {
 	MarketplaceTokens *AdminMarketplaceTokenBackfill
 	// A preview of the runner key organization backfill.
 	RunnerKeyOrganizations *AdminRunnerKeyOrganizationBackfill
+	// Every organization either backfill has work left in, by name. Rows whose
+	// project's organization has no metadata row belong to none of them.
+	Organizations []*AdminSecretBackfillOrganization
 	// The fingerprint of the platform key this admin process seals marketplace
 	// tokens with. It must match the fingerprint every server and worker logs at
 	// startup as "encryption key loaded". Absent when this process has no platform
@@ -4363,6 +4383,9 @@ type RollbackOrganizationEncryptionPayload struct {
 // runMarketplaceTokenBackfill method.
 type RunMarketplaceTokenBackfillPayload struct {
 	AdminSessionToken *string
+	// Limits the run to this organization's GitHub connections. Omit it to run for
+	// every organization. The result's counts then cover only this organization.
+	OrganizationID *string
 	// The platform key fingerprint the operator checked against the servers'
 	// "encryption key loaded" log. The run is refused when this process's platform
 	// key has another fingerprint, such as after a restart with a different key.
@@ -4383,6 +4406,9 @@ type RunOrganizationEncryptionPayload struct {
 // service runRunnerKeyOrganizationBackfill method.
 type RunRunnerKeyOrganizationBackfillPayload struct {
 	AdminSessionToken *string
+	// Limits the run to this organization's runner keys. Omit it to run for every
+	// organization. The result's counts then cover only this organization.
+	OrganizationID *string
 }
 
 // RunTailscaleOAuthMigrationStepPayload is the payload type of the admin

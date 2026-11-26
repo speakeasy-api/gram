@@ -10,6 +10,8 @@ The run covers soft-deleted runner keys. It changes only `organization_id`. It n
 
 Apply it from the admin dashboard's temporary **Secret backfills** page, under Platform Management. The page previews the counts below and runs the same backfill inside the admin server, with the default batch size. Nobody needs database write access on their machine. The checks under "Before running" still apply.
 
+The page lists every organization with runner keys left to fill. Apply one organization at a time from that list, and check each before going on. The card's **Apply to all organizations** runs the whole backfill at once.
+
 The commands below run the same backfill from a terminal, for local development.
 
 Run from `server/`. `GRAM_DATABASE_URL` must point directly at the intended PostgreSQL database.

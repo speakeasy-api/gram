@@ -7,6 +7,10 @@ import { remap as remap$ } from "../../lib/primitives.js";
 
 export type RunMarketplaceTokenBackfillRequestBody = {
   /**
+   * Limits the run to this organization's GitHub connections. Omit it to run for every organization. The result's counts then cover only this organization.
+   */
+  organizationId?: string | undefined;
+  /**
    * The platform key fingerprint the operator checked against the servers' "encryption key loaded" log. The run is refused when this process's platform key has another fingerprint, such as after a restart with a different key.
    */
   platformKeyFingerprint: string;
@@ -14,6 +18,7 @@ export type RunMarketplaceTokenBackfillRequestBody = {
 
 /** @internal */
 export type RunMarketplaceTokenBackfillRequestBody$Outbound = {
+  organization_id?: string | undefined;
   platform_key_fingerprint: string;
 };
 
@@ -24,10 +29,12 @@ export const RunMarketplaceTokenBackfillRequestBody$outboundSchema:
     RunMarketplaceTokenBackfillRequestBody
   > = z.pipe(
     z.object({
+      organizationId: z.optional(z.string()),
       platformKeyFingerprint: z.string(),
     }),
     z.transform((v) => {
       return remap$(v, {
+        organizationId: "organization_id",
         platformKeyFingerprint: "platform_key_fingerprint",
       });
     }),

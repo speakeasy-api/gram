@@ -9,7 +9,7 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * The function runner key organization backfill: sets functions_access.organization_id from each runner key's project. Counts include soft-deleted runner keys and never name organizations.
+ * The function runner key organization backfill: sets functions_access.organization_id from each runner key's project. Counts include soft-deleted runner keys, and cover every organization or only the one a run covered.
  */
 export type AdminRunnerKeyOrganizationBackfill = {
   /**

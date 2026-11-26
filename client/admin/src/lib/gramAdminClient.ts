@@ -1180,13 +1180,15 @@ const generatedRunMarketplaceTokenBackfillMutation =
   });
 
 // The server refuses the run when its platform key fingerprint is not the one
-// the operator checked.
+// the operator checked. Without an organization ID, the run covers every
+// organization.
 export function runMarketplaceTokenBackfill(
   platformKeyFingerprint: string,
+  organizationId?: string,
 ): Promise<AdminMarketplaceTokenBackfill> {
   return redirecting(
     generatedRunMarketplaceTokenBackfillMutation.mutationFn({
-      request: { platformKeyFingerprint },
+      request: { platformKeyFingerprint, organizationId },
     }),
   );
 }
@@ -1196,9 +1198,14 @@ const generatedRunRunnerKeyOrganizationBackfillMutation =
     retries: { strategy: "none" },
   });
 
-export function runRunnerKeyOrganizationBackfill(): Promise<AdminRunnerKeyOrganizationBackfill> {
+// Without an organization ID, the run covers every organization.
+export function runRunnerKeyOrganizationBackfill(
+  organizationId?: string,
+): Promise<AdminRunnerKeyOrganizationBackfill> {
   return redirecting(
-    generatedRunRunnerKeyOrganizationBackfillMutation.mutationFn({}),
+    generatedRunRunnerKeyOrganizationBackfillMutation.mutationFn({
+      request: { organizationId },
+    }),
   );
 }
 

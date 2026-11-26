@@ -1,15 +1,20 @@
 package admin
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
+	"strings"
 	"time"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	"github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -52,12 +57,22 @@ func (s *Service) SetSecretBackfillPlatformKey(key *SecretBackfillPlatformKey) {
 }
 
 func (s *Service) GetSecretBackfills(ctx context.Context, _ *gen.GetSecretBackfillsPayload) (*gen.AdminSecretBackfills, error) {
-	tokens, err := marketplacetokenbackfill.Run(ctx, s.db, nil, marketplacetokenbackfill.Options{Apply: false, BatchSize: secretBackfillBatchSize})
+	tokens, err := marketplacetokenbackfill.Run(ctx, s.db, nil, marketplacetokenbackfill.Options{OrganizationID: "", Apply: false, BatchSize: secretBackfillBatchSize})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "preview the marketplace token backfill").LogError(ctx, s.logger)
 	}
 
-	runnerKeys, err := functionsaccessorganization.Run(ctx, s.db, functionsaccessorganization.Options{Apply: false, BatchSize: secretBackfillBatchSize})
+	tokenOrganizations, err := marketplacetokenbackfill.Organizations(ctx, s.db)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "preview the marketplace token backfill").LogError(ctx, s.logger)
+	}
+
+	runnerKeys, err := functionsaccessorganization.Run(ctx, s.db, functionsaccessorganization.Options{OrganizationID: "", Apply: false, BatchSize: secretBackfillBatchSize})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "preview the runner key organization backfill").LogError(ctx, s.logger)
+	}
+
+	runnerKeyOrganizations, err := functionsaccessorganization.Organizations(ctx, s.db)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "preview the runner key organization backfill").LogError(ctx, s.logger)
 	}
@@ -70,6 +85,7 @@ func (s *Service) GetSecretBackfills(ctx context.Context, _ *gen.GetSecretBackfi
 	return &gen.AdminSecretBackfills{
 		MarketplaceTokens:      marketplaceTokenBackfillView(tokens),
 		RunnerKeyOrganizations: runnerKeyOrganizationBackfillView(runnerKeys),
+		Organizations:          secretBackfillOrganizationsView(tokenOrganizations, runnerKeyOrganizations),
 		PlatformKeyFingerprint: fingerprint,
 	}, nil
 }
@@ -92,10 +108,11 @@ func (s *Service) RunMarketplaceTokenBackfill(ctx context.Context, payload *gen.
 		return nil, oops.E(oops.CodeConflict, nil, "this admin server's platform key fingerprint is now %s, not the one you checked; refresh, check it against the servers' encryption key loaded log, then apply again", fingerprint).LogWarn(ctx, s.logger)
 	}
 
+	organizationID := conv.PtrValOrEmpty(payload.OrganizationID, "")
 	var report marketplacetokenbackfill.Report
 	err = s.runSecretBackfill(ctx, secretBackfillMarketplaceTokens, func(runCtx context.Context) error {
 		var runErr error
-		report, runErr = marketplacetokenbackfill.Run(runCtx, s.db, key.Tokens, marketplacetokenbackfill.Options{Apply: true, BatchSize: secretBackfillBatchSize})
+		report, runErr = marketplacetokenbackfill.Run(runCtx, s.db, key.Tokens, marketplacetokenbackfill.Options{OrganizationID: organizationID, Apply: true, BatchSize: secretBackfillBatchSize})
 		if runErr != nil {
 			return fmt.Errorf("apply the marketplace token backfill: %w", runErr)
 		}
@@ -108,25 +125,24 @@ func (s *Service) RunMarketplaceTokenBackfill(ctx context.Context, payload *gen.
 		return nil, s.secretBackfillError(ctx, err, "the backfill stopped after moving %d tokens; run it again to continue", report.Moved)
 	}
 
-	s.logger.InfoContext(ctx, "marketplace token backfill applied",
-		attr.SlogAuditAction("secret_backfill:"+secretBackfillMarketplaceTokens),
-		attr.SlogAdminOIDCSubject(subject),
+	s.logger.InfoContext(ctx, "marketplace token backfill applied", secretBackfillAuditAttrs(secretBackfillMarketplaceTokens, subject, organizationID,
 		attr.SlogEncryptionKeyFingerprint(key.Platform.Fingerprint()),
-	)
+	)...)
 
 	return marketplaceTokenBackfillView(report), nil
 }
 
-func (s *Service) RunRunnerKeyOrganizationBackfill(ctx context.Context, _ *gen.RunRunnerKeyOrganizationBackfillPayload) (*gen.AdminRunnerKeyOrganizationBackfill, error) {
+func (s *Service) RunRunnerKeyOrganizationBackfill(ctx context.Context, payload *gen.RunRunnerKeyOrganizationBackfillPayload) (*gen.AdminRunnerKeyOrganizationBackfill, error) {
 	subject, err := secretBackfillOperator(ctx)
 	if err != nil {
 		return nil, err
 	}
 
+	organizationID := conv.PtrValOrEmpty(payload.OrganizationID, "")
 	var report functionsaccessorganization.Report
 	err = s.runSecretBackfill(ctx, secretBackfillRunnerKeyOrganizations, func(runCtx context.Context) error {
 		var runErr error
-		report, runErr = functionsaccessorganization.Run(runCtx, s.db, functionsaccessorganization.Options{Apply: true, BatchSize: secretBackfillBatchSize})
+		report, runErr = functionsaccessorganization.Run(runCtx, s.db, functionsaccessorganization.Options{OrganizationID: organizationID, Apply: true, BatchSize: secretBackfillBatchSize})
 		if runErr != nil {
 			return fmt.Errorf("apply the runner key organization backfill: %w", runErr)
 		}
@@ -136,10 +152,7 @@ func (s *Service) RunRunnerKeyOrganizationBackfill(ctx context.Context, _ *gen.R
 		return nil, s.secretBackfillError(ctx, err, "the backfill stopped after filling %d runner keys; run it again to continue", report.Filled)
 	}
 
-	s.logger.InfoContext(ctx, "runner key organization backfill applied",
-		attr.SlogAuditAction("secret_backfill:"+secretBackfillRunnerKeyOrganizations),
-		attr.SlogAdminOIDCSubject(subject),
-	)
+	s.logger.InfoContext(ctx, "runner key organization backfill applied", secretBackfillAuditAttrs(secretBackfillRunnerKeyOrganizations, subject, organizationID)...)
 
 	return runnerKeyOrganizationBackfillView(report), nil
 }
@@ -183,6 +196,19 @@ func secretBackfillOperator(ctx context.Context) (string, error) {
 	return auth.OIDCSubject, nil
 }
 
+// secretBackfillAuditAttrs are the attributes of the log line that records an
+// applied run. A run for every organization has no organization attribute.
+func secretBackfillAuditAttrs(backfill string, subject string, organizationID string, extra ...any) []any {
+	attrs := []any{
+		attr.SlogAuditAction("secret_backfill:" + backfill),
+		attr.SlogAdminOIDCSubject(subject),
+	}
+	if organizationID != "" {
+		attrs = append(attrs, attr.SlogOrganizationID(organizationID))
+	}
+	return append(attrs, extra...)
+}
+
 // secretBackfillError maps a failed run. Both backfills are safe to run again,
 // so the message says how far the run got.
 func (s *Service) secretBackfillError(ctx context.Context, err error, format string, done int64) error {
@@ -203,6 +229,35 @@ func marketplaceTokenBackfillView(report marketplacetokenbackfill.Report) *gen.A
 		Legacy:               report.Counts.Legacy,
 		Hashed:               report.Counts.Hashed,
 	}
+}
+
+// secretBackfillOrganizationsView merges both backfills' organizations into
+// one row per organization, by name.
+func secretBackfillOrganizationsView(tokens []marketplacetokenbackfill.Organization, runnerKeys []functionsaccessorganization.Organization) []*gen.AdminSecretBackfillOrganization {
+	byID := make(map[string]*gen.AdminSecretBackfillOrganization, len(tokens)+len(runnerKeys))
+	row := func(id string, name string, slug string) *gen.AdminSecretBackfillOrganization {
+		if existing, ok := byID[id]; ok {
+			return existing
+		}
+		created := &gen.AdminSecretBackfillOrganization{OrganizationID: id, Name: name, Slug: slug, LegacyTokens: 0, UnattributedConnections: 0, PendingRunnerKeys: 0}
+		byID[id] = created
+		return created
+	}
+	for _, organization := range tokens {
+		r := row(organization.ID, organization.Name, organization.Slug)
+		r.LegacyTokens = organization.Legacy
+		r.UnattributedConnections = organization.Unattributed
+	}
+	for _, organization := range runnerKeys {
+		row(organization.ID, organization.Name, organization.Slug).PendingRunnerKeys = organization.Pending
+	}
+
+	return slices.SortedFunc(maps.Values(byID), func(a, b *gen.AdminSecretBackfillOrganization) int {
+		return cmp.Or(
+			cmp.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name)),
+			cmp.Compare(a.OrganizationID, b.OrganizationID),
+		)
+	})
 }
 
 func runnerKeyOrganizationBackfillView(report functionsaccessorganization.Report) *gen.AdminRunnerKeyOrganizationBackfill {

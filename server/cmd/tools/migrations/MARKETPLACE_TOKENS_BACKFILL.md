@@ -21,6 +21,8 @@ Apply it from the admin dashboard's temporary **Secret backfills** page, under P
 
 The page shows the admin server's platform key fingerprint. Check it matches the servers' `encryption key loaded` log before you apply. Applying sends that fingerprint back, and the admin server refuses the run if its key's fingerprint has changed since.
 
+The page lists every organization with tokens left to move or connections left to attribute. Apply one organization at a time from that list, and check each before going on. The card's **Apply to all organizations** runs the whole backfill at once.
+
 Checks 1 and 2 under "Before running" apply to the page too. Check 3 applies to the page only when the admin server has no organization encryption. When it has organization encryption, the page also seals the tokens of organizations past `platform_key` instead of leaving them in place.
 
 The commands below run the same backfill from a terminal, for local development.

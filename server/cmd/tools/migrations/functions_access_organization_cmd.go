@@ -110,7 +110,7 @@ func runFunctionsAccessOrganization(args []string, stdout io.Writer, getenv func
 		return 1
 	}
 	defer pool.Close()
-	report, err := functionsaccessorganization.Run(ctx, pool, functionsaccessorganization.Options{Apply: cfg.apply, BatchSize: cfg.batchSize})
+	report, err := functionsaccessorganization.Run(ctx, pool, functionsaccessorganization.Options{OrganizationID: "", Apply: cfg.apply, BatchSize: cfg.batchSize})
 	if err != nil {
 		_, _ = fmt.Fprintf(stdout, "migration failed after %d rows: %v\n", report.Filled, err)
 		return 1

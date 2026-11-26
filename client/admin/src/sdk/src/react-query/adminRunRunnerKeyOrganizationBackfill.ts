@@ -12,6 +12,7 @@ import { adminRunRunnerKeyOrganizationBackfill } from "../funcs/adminRunRunnerKe
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { AdminRunnerKeyOrganizationBackfill } from "../models/components/adminrunnerkeyorganizationbackfill.js";
+import { RunRunnerKeyOrganizationBackfillRequestBody } from "../models/components/runrunnerkeyorganizationbackfillrequestbody.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -28,6 +29,7 @@ import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type AdminRunRunnerKeyOrganizationBackfillMutationVariables = {
+  request: RunRunnerKeyOrganizationBackfillRequestBody;
   options?: RequestOptions;
 };
 
@@ -49,7 +51,7 @@ export type AdminRunRunnerKeyOrganizationBackfillMutationError =
  * runRunnerKeyOrganizationBackfill admin
  *
  * @remarks
- * Applies the runner key organization backfill: sets functions_access.organization_id from each runner key's project, in batches that each commit on their own. Runner keys and deployed function runners do not change. Safe to run again; an interrupted run continues where it stopped. Refused while another run of it is in progress.
+ * Applies the runner key organization backfill, to one organization or to all: sets functions_access.organization_id from each runner key's project, in batches that each commit on their own. Runner keys and deployed function runners do not change. Safe to run again; an interrupted run continues where it stopped. Refused while another run of it is in progress.
  */
 export function useAdminRunRunnerKeyOrganizationBackfillMutation(
   options?: MutationHookOptions<
@@ -85,6 +87,7 @@ export function buildAdminRunRunnerKeyOrganizationBackfillMutation(
   return {
     mutationKey: mutationKeyAdminRunRunnerKeyOrganizationBackfill(),
     mutationFn: function adminRunRunnerKeyOrganizationBackfillMutationFn({
+      request,
       options,
     }): Promise<AdminRunRunnerKeyOrganizationBackfillMutationData> {
       const mergedOptions = {
@@ -101,6 +104,7 @@ export function buildAdminRunRunnerKeyOrganizationBackfillMutation(
       };
       return unwrapAsync(adminRunRunnerKeyOrganizationBackfill(
         client$,
+        request,
         mergedOptions,
       ));
     },

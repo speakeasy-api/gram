@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const countRunnerKeys = `-- name: CountRunnerKeys :one
@@ -23,6 +24,8 @@ SELECT
 FROM functions_access AS fa
 LEFT JOIN projects AS p ON p.id = fa.project_id
 LEFT JOIN organization_metadata AS om ON om.id = p.organization_id
+WHERE $1::text IS NULL
+   OR p.organization_id = $1::text
 `
 
 type CountRunnerKeysRow struct {
@@ -34,11 +37,12 @@ type CountRunnerKeysRow struct {
 // organizations with an organization_metadata row count, because
 // functions_access.organization_id references that table.
 // Counts runner keys, soft-deleted ones included, by what the backfill can do
-// with them. Only pending rows are written; the rest are reported. A row
-// whose organization_id is set always matches its project's organization:
-// functions_access_project_tenant_fkey enforces it.
-func (q *Queries) CountRunnerKeys(ctx context.Context) (CountRunnerKeysRow, error) {
-	row := q.db.QueryRow(ctx, countRunnerKeys)
+// with them, across every organization or in one organization when
+// organization_id is set. Only pending rows are written; the rest are
+// reported. A row whose organization_id is set always matches its project's
+// organization: functions_access_project_tenant_fkey enforces it.
+func (q *Queries) CountRunnerKeys(ctx context.Context, organizationID pgtype.Text) (CountRunnerKeysRow, error) {
+	row := q.db.QueryRow(ctx, countRunnerKeys, organizationID)
 	var i CountRunnerKeysRow
 	err := row.Scan(&i.Pending, &i.MissingOrganization)
 	return i, err
@@ -50,8 +54,15 @@ WITH batch AS (
   FROM functions_access AS fa
   WHERE fa.organization_id IS NULL
     AND ($1::uuid IS NULL OR fa.id > $1::uuid)
+    AND (
+      $2::text IS NULL
+      OR fa.project_id IN (
+        SELECT op.id FROM projects AS op
+        WHERE op.organization_id = $2::text
+      )
+    )
   ORDER BY fa.id
-  LIMIT $2::int
+  LIMIT $3::int
 ),
 filled AS (
   UPDATE functions_access AS fa
@@ -69,8 +80,9 @@ SELECT
 `
 
 type FillBatchParams struct {
-	After     uuid.NullUUID
-	BatchSize int32
+	After          uuid.NullUUID
+	OrganizationID pgtype.Text
+	BatchSize      int32
 }
 
 type FillBatchRow struct {
@@ -80,14 +92,62 @@ type FillBatchRow struct {
 
 // Looks at the next batch_size runner keys without an organization_id, in id
 // order after the given id, and sets each one's organization_id to its
-// project's organization. Rows whose project's organization has no metadata
-// row are skipped and stay NULL. It returns the last id it looked at, so the
-// next batch continues after it, and how many rows it filled. Paging by the
-// primary key keeps each batch to one short index range scan. updated_at is
-// left alone.
+// project's organization. With organization_id set, it looks only at runner
+// keys of that organization's projects. Rows whose project's organization has
+// no metadata row are skipped and stay NULL. It returns the last id it looked
+// at, so the next batch continues after it, and how many rows it filled.
+// Paging by the primary key keeps each batch to one short index range scan.
+// updated_at is left alone.
 func (q *Queries) FillBatch(ctx context.Context, arg FillBatchParams) (FillBatchRow, error) {
-	row := q.db.QueryRow(ctx, fillBatch, arg.After, arg.BatchSize)
+	row := q.db.QueryRow(ctx, fillBatch, arg.After, arg.OrganizationID, arg.BatchSize)
 	var i FillBatchRow
 	err := row.Scan(&i.LastID, &i.Filled)
 	return i, err
+}
+
+const listPendingOrganizations = `-- name: ListPendingOrganizations :many
+SELECT
+  om.id AS organization_id,
+  om.name AS organization_name,
+  om.slug AS organization_slug,
+  COUNT(*)::bigint AS pending
+FROM functions_access AS fa
+JOIN projects AS p ON p.id = fa.project_id
+JOIN organization_metadata AS om ON om.id = p.organization_id
+WHERE fa.organization_id IS NULL
+GROUP BY om.id, om.name, om.slug
+ORDER BY om.name, om.id
+`
+
+type ListPendingOrganizationsRow struct {
+	OrganizationID   string
+	OrganizationName string
+	OrganizationSlug string
+	Pending          int64
+}
+
+// The organizations with runner keys the backfill fills, with how many.
+func (q *Queries) ListPendingOrganizations(ctx context.Context) ([]ListPendingOrganizationsRow, error) {
+	rows, err := q.db.Query(ctx, listPendingOrganizations)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPendingOrganizationsRow
+	for rows.Next() {
+		var i ListPendingOrganizationsRow
+		if err := rows.Scan(
+			&i.OrganizationID,
+			&i.OrganizationName,
+			&i.OrganizationSlug,
+			&i.Pending,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

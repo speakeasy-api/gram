@@ -15,21 +15,29 @@ import {
   AdminRunnerKeyOrganizationBackfill,
   AdminRunnerKeyOrganizationBackfill$inboundSchema,
 } from "./adminrunnerkeyorganizationbackfill.js";
+import {
+  AdminSecretBackfillOrganization,
+  AdminSecretBackfillOrganization$inboundSchema,
+} from "./adminsecretbackfillorganization.js";
 
 /**
  * What each secret backfill would do if applied now.
  */
 export type AdminSecretBackfills = {
   /**
-   * The plugin marketplace token backfill: gives each GitHub connection its project's organization, and moves each plaintext marketplace token to its hash and a sealed copy. Counts never name organizations.
+   * The plugin marketplace token backfill: gives each GitHub connection its project's organization, and moves each plaintext marketplace token to its hash and a sealed copy. The counts cover every organization, or only the one a run covered.
    */
   marketplaceTokens: AdminMarketplaceTokenBackfill;
+  /**
+   * Every organization either backfill has work left in, by name. Rows whose project's organization has no metadata row belong to none of them.
+   */
+  organizations: Array<AdminSecretBackfillOrganization>;
   /**
    * The fingerprint of the platform key this admin process seals marketplace tokens with. It must match the fingerprint every server and worker logs at startup as "encryption key loaded". Absent when this process has no platform key, so the marketplace token backfill cannot be applied.
    */
   platformKeyFingerprint?: string | undefined;
   /**
-   * The function runner key organization backfill: sets functions_access.organization_id from each runner key's project. Counts include soft-deleted runner keys and never name organizations.
+   * The function runner key organization backfill: sets functions_access.organization_id from each runner key's project. Counts include soft-deleted runner keys, and cover every organization or only the one a run covered.
    */
   runnerKeyOrganizations: AdminRunnerKeyOrganizationBackfill;
 };
@@ -41,6 +49,7 @@ export const AdminSecretBackfills$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     marketplace_tokens: AdminMarketplaceTokenBackfill$inboundSchema,
+    organizations: z.array(AdminSecretBackfillOrganization$inboundSchema),
     platform_key_fingerprint: z.optional(z.string()),
     runner_key_organizations: AdminRunnerKeyOrganizationBackfill$inboundSchema,
   }),

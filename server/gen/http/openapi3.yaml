@@ -9839,7 +9839,7 @@ paths:
             x-speakeasy-name-override: getSecretBackfills
     /admin/secretBackfills.runMarketplaceTokens:
         post:
-            description: 'Applies the marketplace token backfill: gives each GitHub connection its project''s organization, then moves each plaintext marketplace token to its hash and the copies its organization''s transition state writes, sealed with this process''s platform key. Install URLs do not change. Safe to run again; an interrupted run continues where it stopped. Refused while another run of it is in progress, and when this process''s platform key fingerprint is not the one the operator checked.'
+            description: 'Applies the marketplace token backfill, to one organization or to all: gives each GitHub connection its project''s organization, then moves each plaintext marketplace token to its hash and the copies its organization''s transition state writes, sealed with this process''s platform key. Install URLs do not change. Safe to run again; an interrupted run continues where it stopped. Refused while another run of it is in progress, and when this process''s platform key fingerprint is not the one the operator checked.'
             operationId: adminRunMarketplaceTokenBackfill
             requestBody:
                 content:
@@ -9924,8 +9924,14 @@ paths:
                 name: AdminRunMarketplaceTokenBackfill
     /admin/secretBackfills.runRunnerKeyOrganizations:
         post:
-            description: 'Applies the runner key organization backfill: sets functions_access.organization_id from each runner key''s project, in batches that each commit on their own. Runner keys and deployed function runners do not change. Safe to run again; an interrupted run continues where it stopped. Refused while another run of it is in progress.'
+            description: 'Applies the runner key organization backfill, to one organization or to all: sets functions_access.organization_id from each runner key''s project, in batches that each commit on their own. Runner keys and deployed function runners do not change. Safe to run again; an interrupted run continues where it stopped. Refused while another run of it is in progress.'
             operationId: adminRunRunnerKeyOrganizationBackfill
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RunRunnerKeyOrganizationBackfillRequestBody'
+                required: true
             responses:
                 "200":
                     content:
@@ -103782,7 +103788,7 @@ components:
                     type: integer
                     description: Connections without an organization. After an apply, these are connections whose project's organization has no metadata row.
                     format: int64
-            description: 'The plugin marketplace token backfill: gives each GitHub connection its project''s organization, and moves each plaintext marketplace token to its hash and a sealed copy. Counts never name organizations.'
+            description: 'The plugin marketplace token backfill: gives each GitHub connection its project''s organization, and moves each plaintext marketplace token to its hash and a sealed copy. The counts cover every organization, or only the one a run covered.'
             required:
                 - attributed
                 - moved
@@ -106067,16 +106073,53 @@ components:
                     type: integer
                     description: Runner keys without an organization whose project's organization exists. An apply fills these.
                     format: int64
-            description: 'The function runner key organization backfill: sets functions_access.organization_id from each runner key''s project. Counts include soft-deleted runner keys and never name organizations.'
+            description: 'The function runner key organization backfill: sets functions_access.organization_id from each runner key''s project. Counts include soft-deleted runner keys, and cover every organization or only the one a run covered.'
             required:
                 - filled
                 - pending
                 - missing_organization
+        AdminSecretBackfillOrganization:
+            type: object
+            properties:
+                legacy_tokens:
+                    type: integer
+                    description: Its GitHub connections that still hold a plaintext marketplace token.
+                    format: int64
+                name:
+                    type: string
+                    description: The organization's name.
+                organization_id:
+                    type: string
+                    description: The organization ID.
+                pending_runner_keys:
+                    type: integer
+                    description: Its runner keys without an organization.
+                    format: int64
+                slug:
+                    type: string
+                    description: The organization's slug.
+                unattributed_connections:
+                    type: integer
+                    description: Its GitHub connections without an organization.
+                    format: int64
+            description: One organization with secret backfill work left. A GitHub connection or runner key without an organization belongs to its project's organization.
+            required:
+                - organization_id
+                - name
+                - slug
+                - legacy_tokens
+                - unattributed_connections
+                - pending_runner_keys
         AdminSecretBackfills:
             type: object
             properties:
                 marketplace_tokens:
                     $ref: '#/components/schemas/AdminMarketplaceTokenBackfill'
+                organizations:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminSecretBackfillOrganization'
+                    description: Every organization either backfill has work left in, by name. Rows whose project's organization has no metadata row belong to none of them.
                 platform_key_fingerprint:
                     type: string
                     description: The fingerprint of the platform key this admin process seals marketplace tokens with. It must match the fingerprint every server and worker logs at startup as "encryption key loaded". Absent when this process has no platform key, so the marketplace token backfill cannot be applied.
@@ -106086,6 +106129,7 @@ components:
             required:
                 - marketplace_tokens
                 - runner_key_organizations
+                - organizations
         AdminSession:
             type: object
             properties:
@@ -135604,6 +135648,10 @@ components:
         RunMarketplaceTokenBackfillRequestBody:
             type: object
             properties:
+                organization_id:
+                    type: string
+                    description: Limits the run to this organization's GitHub connections. Omit it to run for every organization. The result's counts then cover only this organization.
+                    minLength: 1
                 platform_key_fingerprint:
                     type: string
                     description: The platform key fingerprint the operator checked against the servers' "encryption key loaded" log. The run is refused when this process's platform key has another fingerprint, such as after a restart with a different key.
@@ -135622,6 +135670,13 @@ components:
             required:
                 - organization_id
                 - use_case
+        RunRunnerKeyOrganizationBackfillRequestBody:
+            type: object
+            properties:
+                organization_id:
+                    type: string
+                    description: Limits the run to this organization's runner keys. Omit it to run for every organization. The result's counts then cover only this organization.
+                    minLength: 1
         RunTailscaleOAuthMigrationStepRequestBody:
             type: object
             properties:

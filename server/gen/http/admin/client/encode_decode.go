@@ -25683,6 +25683,10 @@ func EncodeRunRunnerKeyOrganizationBackfillRequest(encoder func(*http.Request) g
 			head := *p.AdminSessionToken
 			req.Header.Set("Authorization", head)
 		}
+		body := NewRunRunnerKeyOrganizationBackfillRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "runRunnerKeyOrganizationBackfill", err)
+		}
 		return nil
 	}
 }
@@ -35672,6 +35676,22 @@ func unmarshalAdminRunnerKeyOrganizationBackfillResponseBodyToAdminAdminRunnerKe
 		Filled:              *v.Filled,
 		Pending:             *v.Pending,
 		MissingOrganization: *v.MissingOrganization,
+	}
+
+	return res
+}
+
+// unmarshalAdminSecretBackfillOrganizationResponseBodyToAdminAdminSecretBackfillOrganization
+// builds a value of type *admin.AdminSecretBackfillOrganization from a value
+// of type *AdminSecretBackfillOrganizationResponseBody.
+func unmarshalAdminSecretBackfillOrganizationResponseBodyToAdminAdminSecretBackfillOrganization(v *AdminSecretBackfillOrganizationResponseBody) *admin.AdminSecretBackfillOrganization {
+	res := &admin.AdminSecretBackfillOrganization{
+		OrganizationID:          *v.OrganizationID,
+		Name:                    *v.Name,
+		Slug:                    *v.Slug,
+		LegacyTokens:            *v.LegacyTokens,
+		UnattributedConnections: *v.UnattributedConnections,
+		PendingRunnerKeys:       *v.PendingRunnerKeys,
 	}
 
 	return res

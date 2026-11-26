@@ -9,7 +9,7 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * The plugin marketplace token backfill: gives each GitHub connection its project's organization, and moves each plaintext marketplace token to its hash and a sealed copy. Counts never name organizations.
+ * The plugin marketplace token backfill: gives each GitHub connection its project's organization, and moves each plaintext marketplace token to its hash and a sealed copy. The counts cover every organization, or only the one a run covered.
  */
 export type AdminMarketplaceTokenBackfill = {
   /**

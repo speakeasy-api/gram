@@ -148,7 +148,7 @@ func runMarketplaceTokens(args []string, stdout io.Writer, getenv func(string) s
 		tokens = marketplacetokens.WithoutOrganizationEncryption(slog.New(slog.DiscardHandler), pool, platform)
 	}
 
-	report, err := marketplacetokenbackfill.Run(ctx, pool, tokens, marketplacetokenbackfill.Options{Apply: cfg.apply, BatchSize: cfg.batchSize})
+	report, err := marketplacetokenbackfill.Run(ctx, pool, tokens, marketplacetokenbackfill.Options{OrganizationID: "", Apply: cfg.apply, BatchSize: cfg.batchSize})
 	if err != nil {
 		_, _ = fmt.Fprintf(stdout, "migration failed after attributing %d and moving %d connections: %v\n", report.Attributed, report.Moved, err)
 		return 1
