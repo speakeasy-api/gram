@@ -469,7 +469,7 @@ Verified with the Custom domain diagnostics check in `verify.md`: two local/demo
 seed runs, both organizations at desktop and narrow widths, DNS records, no
 recheck action for the inactive fixture, and the seed safety suite.
 
-## Agent MCP sign-in tab servers
+## Agent sign-in tab servers
 
 Linear (`<org>-linear`, `https://mcp.linear.app/mcp`) and Notion
 (`<org>-notion`, `https://mcp.notion.com/mcp`, scope `default`) each have
