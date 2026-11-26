@@ -164,8 +164,8 @@ func (w *ChatMessageWriter) WithTranscriptShadow(store *transcriptstore.Store, p
 // transaction opens, so the capture inside it makes no KMS call while it holds
 // the transaction. Every caller of WriteInTx calls it before it begins the
 // transaction. A project that does not capture shadows needs no query. An
-// error means the capture would fail too, so the caller fails the write before
-// opening the transaction.
+// error means the capture would fail too: the caller returns it in place of
+// capturing, and a write that turns out to capture nothing still succeeds.
 func (w *ChatMessageWriter) PrepareTranscriptShadow(ctx context.Context, projectID uuid.UUID) error {
 	if !w.capturesTranscriptShadow(projectID) {
 		return nil
@@ -639,9 +639,9 @@ func (w *ChatMessageWriter) WriteCorrelated(ctx context.Context, projectID uuid.
 		return 0, fmt.Errorf("get project organization id: %w", err)
 	}
 
-	if err := w.prepareTranscriptShadow(ctx, organizationID, projectID); err != nil {
-		return 0, err
-	}
+	// An upsert that matches no row captures nothing, so it must not fail on
+	// the key. Keep the error for the write that does capture.
+	prepared := w.prepareTranscriptShadow(ctx, organizationID, projectID)
 	tx, err := w.db.Begin(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("begin correlated chat message transaction: %w", err)
@@ -713,6 +713,9 @@ func (w *ChatMessageWriter) WriteCorrelated(ctx context.Context, projectID uuid.
 		if err := w.enqueueMessageEvents(ctx, tx, organizationID, projectID, writes, occurredAt); err != nil {
 			return 0, err
 		}
+	}
+	if prepared != nil {
+		return 0, prepared
 	}
 	if err := w.captureTranscriptShadow(ctx, tx, organizationID, projectID, []uuid.UUID{stored.ID}); err != nil {
 		return 0, err
