@@ -882,7 +882,7 @@ func decodeMCPResult(t *testing.T, body []byte) map[string]any {
 // non-issuer-gated path. For issuer-gated callers the proxy still attached
 // the tools/list mcp:connect filter and the tools/call authz interceptor;
 // with a session principal + RBAC enabled, those ran
-// FindMatched / Require against a context with no prepared grants, returned
+// Decide / Require against a context with no prepared grants, returned
 // ErrMissingGrants (mapped to CodeUnexpected), and the proxy substituted a
 // JSON-RPC error event — yielding zero tools and a broken tools/call even
 // though HTTP stayed 200.
@@ -940,7 +940,7 @@ func TestServePublic_McpEndpoint_IssuerGatedPrivateRemote_RBACEnforced_ResolvesG
 	require.Equal(t, http.StatusOK, listResp.Code, "tools/list: %s", listResp.Body.String())
 
 	// Regression assertion: before the fix the mcp:connect filter ran
-	// FindMatched against a context with no prepared grants, returned
+	// Decide against a context with no prepared grants, returned
 	// ErrMissingGrants -> CodeUnexpected, and the proxy substituted a
 	// JSON-RPC error event yielding zero tools. After the fix grants are
 	// prepared and the granted tool survives the filter.

@@ -1156,7 +1156,7 @@ func (s *Service) prepareProxyBackendContext(
 // non-issuer-gated paths: the proxy attaches the private-visibility
 // mcp:connect interceptors (tools/list filter, tools/call authz) regardless
 // of how the caller authenticated, and for RBAC-enforced callers those run
-// FindMatched / Require, which fail with ErrMissingGrants unless grants are
+// Decide / Require, which fail with ErrMissingGrants unless grants are
 // in context. Issuer-gated callers were authenticated by ApplyIssuerGate,
 // which stamps the principal but does not load grants, so without this they
 // hit that failure (AGE-2672). PrepareContext runs after identity auth has

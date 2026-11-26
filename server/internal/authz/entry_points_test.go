@@ -246,3 +246,50 @@ func entryPointEngine(t *testing.T, enforced bool) (context.Context, *Engine, *p
 	seedOrganization(t, ctx, conn, orgID)
 	return ctx, NewEngine(testenv.NewLogger(t), conn, staticChallengeLogging(true), workos.NewStubClient()), conn
 }
+
+// allAllowed answers checks the way a quiet branch does: without a challenge
+// row.
+func allAllowed(ctx context.Context, engine *Engine, checks ...Check) (bool, error) {
+	decisions, err := engine.Decide(WithoutChallenges(ctx), checks...)
+	return decisions.AllAllowed, err
+}
+
+// allowedEach answers each check the way a list page does.
+func allowedEach(ctx context.Context, engine *Engine, checks []Check) ([]bool, error) {
+	decisions, err := engine.Decide(ctx, checks...)
+	if err != nil {
+		return nil, err
+	}
+	allowed := make([]bool, len(decisions.Each))
+	for i, decision := range decisions.Each {
+		allowed[i] = decision.Allowed
+	}
+	return allowed, nil
+}
+
+// allowedIDs keeps the resource IDs of the allowed checks.
+func allowedIDs(ctx context.Context, engine *Engine, checks []Check) ([]string, error) {
+	allowed, err := allowedEach(ctx, engine, checks)
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]string, 0, len(checks))
+	for i, ok := range allowed {
+		if ok {
+			ids = append(ids, checks[i].ResourceID)
+		}
+	}
+	return ids, nil
+}
+
+func decisionReasons(ctx context.Context, engine *Engine, checks []Check) ([]Reason, error) {
+	decisions, err := engine.Decide(WithoutChallenges(ctx), checks...)
+	if err != nil {
+		return nil, err
+	}
+	reasons := make([]Reason, len(decisions.Each))
+	for i, decision := range decisions.Each {
+		reasons[i] = decision.Reason
+	}
+	return reasons, nil
+}
