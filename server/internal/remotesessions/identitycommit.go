@@ -420,8 +420,8 @@ type IdentityResult struct {
 	// Client is the client offered by the target server.
 	Client repo.RemoteSessionClient
 
-	// Bindings lists the client's existing user session issuer links visible
-	// in the plan scope, sorted by ID. The commit does not create these links.
+	// Bindings lists the sign-in configurations of the client's live placements
+	// visible in the plan scope, sorted by ID.
 	Bindings []uuid.UUID
 
 	// Method is how the client was obtained.
@@ -1082,10 +1082,10 @@ func (c *IdentityCommit) Bind(ctx context.Context, tx *IdentityTx, reg Registrat
 	}
 
 	if reused {
-		// Reuse selects an offer, which does not carry the compatibility
-		// links included in the scoped client view.
+		// Reuse selects an exact offer. Read its visible server placements
+		// without consulting the attachment compatibility table.
 		var err error
-		bindings, err = tx.q.ListVisibleUserSessionIssuerIDsForRemoteSessionClient(ctx, repo.ListVisibleUserSessionIssuerIDsForRemoteSessionClientParams{
+		bindings, err = tx.q.ListVisibleRemoteSessionClientPlacementIssuers(ctx, repo.ListVisibleRemoteSessionClientPlacementIssuersParams{
 			ProjectID:             c.plan.Scope.ProjectID,
 			OrganizationID:        c.plan.Scope.OrganizationID,
 			RemoteSessionClientID: client.ID,

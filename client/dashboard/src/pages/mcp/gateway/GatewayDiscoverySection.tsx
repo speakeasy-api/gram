@@ -25,8 +25,8 @@ export function GatewayDiscoverySection({
 }: {
   metaMcpServer: MetaMcpServer;
 }): JSX.Element {
-  const { hasScope } = useRBAC();
-  const canWrite = hasScope("mcp:write", metaMcpServer.projectId);
+  const { canWriteProjectMCPServers } = useRBAC();
+  const canWrite = canWriteProjectMCPServers(metaMcpServer.projectId);
   const [mode, setMode] = useState(metaMcpServer.discoveryMode);
   const organization = useOrganization();
   const features = useProductFeatures(
@@ -155,6 +155,7 @@ export function GatewayDiscoverySection({
             <RequireScope
               scope="mcp:write"
               resourceId={metaMcpServer.projectId}
+              projectId={metaMcpServer.projectId}
               level="component"
             >
               <FooterSaveButton

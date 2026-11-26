@@ -192,9 +192,7 @@ func createOrganizationIssuer(t *testing.T, ctx context.Context, ti *testInstanc
 	return issuer.ID.String()
 }
 
-// linkRemoteClient configures an upstream OAuth client on a user session issuer and resyncs, so servers carrying the
-// issuer get a derived remote issuer.
-func linkRemoteClientWithID(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, projectID uuid.UUID, issuerID string) (uuid.UUID, uuid.UUID) {
+func seedRemoteRegistration(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, projectID uuid.UUID) (uuid.UUID, uuid.UUID) {
 	t.Helper()
 
 	q := remoterepo.New(ti.conn)
@@ -211,10 +209,6 @@ func linkRemoteClientWithID(t *testing.T, ctx context.Context, ti *testInstance,
 		ClientID: slug + "-client", ClientIDIssuedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
 	})
 	require.NoError(t, err)
-	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remoterepo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: client.ID, UserSessionIssuerID: uuid.MustParse(issuerID),
-	}))
-	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, organizationID, projectID, []uuid.UUID{uuid.MustParse(issuerID)}))
 	return remoteIssuer.ID, client.ID
 }
 
@@ -244,7 +238,7 @@ func TestUpdateMcpServer_ClearSharedOrganizationIssuerKeepsOtherServer(t *testin
 		servers = append(servers, created.ID)
 		backends = append(backends, remoteID)
 	}
-	remoteIssuerID, registration := linkRemoteClientWithID(t, ctx, ti, authCtx.ActiveOrganizationID, projectID, issuer)
+	remoteIssuerID, registration := seedRemoteRegistration(t, ctx, ti, authCtx.ActiveOrganizationID, projectID)
 	fixtures := authclientbackfill.New(ti.conn)
 	typed, err := fixtures.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: conv.ToNullUUID(projectID), ClientType: "remote_session", Source: "admin", RemoteSessionClientID: conv.ToNullUUID(registration)})
 	require.NoError(t, err)

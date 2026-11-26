@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
@@ -19,9 +20,13 @@ import (
 // offers through no typed auth client.
 var errTypedLoginNotOffered = fmt.Errorf("%w: server does not offer this connection", remotesessions.ErrTypedAuthorizationDenied)
 
-// ValidateRemoteLoginTypedAuthorization rechecks the exact binding and subject
-// that authorized a typed login, not another client that happens to be usable.
+// ValidateRemoteLoginTypedAuthorization rechecks the exact server and subject
+// that authorized a placed login. For a typed login it also checks the exact
+// auth client, not another client that happens to be usable.
 func (s *Service) ValidateRemoteLoginTypedAuthorization(ctx context.Context, state remotesessions.RemoteLoginState) error {
+	if state.HostedPlacement != nil {
+		return s.validateHostedLoginSubject(ctx, state)
+	}
 	a := state.TypedAuthorization
 	if a == nil || state.Subject == nil || a.Subject.IsZero() ||
 		a.Subject.String() != state.Subject.String() || a.OrganizationID == "" ||
@@ -43,32 +48,21 @@ func (s *Service) ValidateRemoteLoginTypedAuthorization(ctx context.Context, sta
 		}
 		return fmt.Errorf("load typed login server: %w", err)
 	}
+	// Typed OAuth offers are for proxied servers. A hosted server must prove
+	// its own registration placement; an offer (including one captured in
+	// an older recovery link) is not a substitute.
+	if !server.RemoteMcpServerID.Valid && !server.TunneledMcpServerID.Valid {
+		return fmt.Errorf("%w: typed login requires a proxied server", remotesessions.ErrTypedAuthorizationChanged)
+	}
 	if server.ProjectID != a.ProjectID {
 		return fmt.Errorf("%w: typed login project changed", remotesessions.ErrTypedAuthorizationChanged)
 	}
 	if server.Visibility != mcpservers.VisibilityPublic && server.Visibility != mcpservers.VisibilityPrivate {
 		return fmt.Errorf("%w: typed login server is no longer available", remotesessions.ErrTypedAuthorizationChanged)
 	}
-	// Only fields consumed by subject admission are needed here.
-	//nolint:exhaustruct_v5 // Callback subject admission does not resolve an endpoint.
-	endpoint := &ResolvedMcpEndpoint{OrganizationID: a.OrganizationID, ProjectID: a.ProjectID, McpServerID: uuid.NullUUID{UUID: a.ServerID, Valid: true}, UserSessionIssuerID: state.UserSessionIssuerID}
-	ctx, err = s.contextForSessionSubject(ctx, endpoint, a.Subject, "remote-login:"+state.ParentChallengeID, "")
+	ctx, err = s.authorizeRemoteLoginServer(ctx, state, server, a.Subject, "")
 	if err != nil {
-		return fmt.Errorf("admit typed login subject: %w", err)
-	}
-	if s.authz == nil {
-		return fmt.Errorf("typed login requires authorization engine")
-	}
-	authorization, err := s.authz.PrepareMandatory(ctx)
-	if err != nil {
-		return fmt.Errorf("load typed login permissions: %w", err)
-	}
-	decision, err := authorization.DecideServerAdmission(a.OrganizationID, mandatoryVisibility(server.Visibility == mcpservers.VisibilityPublic), authz.MCPServer(authz.MCPServerIDOf(a.ServerID), authz.ProjectIDOf(a.ProjectID)).Connect())
-	if err != nil {
-		return fmt.Errorf("authorize typed login server: %w", err)
-	}
-	if !decision.Allowed {
-		return fmt.Errorf("%w: typed login server access is no longer authorized", remotesessions.ErrTypedAuthorizationDenied)
+		return err
 	}
 	res, err := s.resolveAuthClientChoiceForConsent(withTypedConsentAuth(ctx), a.OrganizationID, a.ServerID, a.ProjectID, a.AuthClientID, a.Subject)
 	if err != nil {
@@ -79,6 +73,68 @@ func (s *Service) ValidateRemoteLoginTypedAuthorization(ctx context.Context, sta
 		return fmt.Errorf("%w: typed login binding is no longer authorized", remotesessions.ErrTypedAuthorizationChanged)
 	}
 	return nil
+}
+
+func (s *Service) authorizeRemoteLoginServer(ctx context.Context, state remotesessions.RemoteLoginState, server mcpserversrepo.McpServer, subject urn.SessionSubject, oauthClientID string) (context.Context, error) {
+	// Only fields consumed by subject admission are needed here.
+	//nolint:exhaustruct_v5 // Callback subject admission does not resolve an endpoint.
+	endpoint := &ResolvedMcpEndpoint{OrganizationID: state.OrganizationID, ProjectID: server.ProjectID, McpServerID: uuid.NullUUID{UUID: server.ID, Valid: true}, UserSessionIssuerID: state.UserSessionIssuerID}
+	ctx, err := s.contextForSessionSubject(ctx, endpoint, subject, "remote-login:"+state.ParentChallengeID, oauthClientID)
+	if err != nil {
+		return ctx, fmt.Errorf("admit remote login subject: %w", err)
+	}
+	if s.authz == nil {
+		return ctx, fmt.Errorf("remote login requires authorization engine")
+	}
+	authorization, err := s.authz.PrepareMandatory(ctx)
+	if err != nil {
+		return ctx, fmt.Errorf("load remote login permissions: %w", err)
+	}
+	decision, err := authorization.DecideServerAdmission(state.OrganizationID, mandatoryVisibility(server.Visibility == mcpservers.VisibilityPublic), authz.MCPServer(authz.MCPServerIDOf(server.ID), authz.ProjectIDOf(server.ProjectID)).Connect())
+	if err != nil {
+		return ctx, fmt.Errorf("authorize remote login server: %w", err)
+	}
+	if !decision.Allowed {
+		return ctx, fmt.Errorf("%w: remote login server access is no longer authorized", remotesessions.ErrTypedAuthorizationDenied)
+	}
+	return ctx, nil
+}
+
+// validateHostedLoginSubject checks the exact live gateway member or direct
+// server against the same subject admission as consent. The challenge manager
+// separately checks and locks the registration placement for the grant write.
+func (s *Service) validateHostedLoginSubject(ctx context.Context, state remotesessions.RemoteLoginState) error {
+	a := state.HostedPlacement
+	if state.Subject == nil || state.Subject.IsZero() {
+		return remotesessions.ErrTypedAuthorizationInvalid
+	}
+	if state.MetaMcpServerID.Valid || state.RouteBase == mcproute.OrganizationGateway {
+		//nolint:exhaustruct_v5 // Only member resolution and admission fields are needed.
+		endpoint := &ResolvedMcpEndpoint{OrganizationID: a.OrganizationID, ProjectID: a.GatewayProjectID, UserSessionIssuerID: state.UserSessionIssuerID, RouteBase: state.RouteBase, MetaMcpServerID: state.MetaMcpServerID}
+		//nolint:exhaustruct_v5 // The challenge is only used to stamp the represented subject.
+		members, err := s.consentSubjectMembers(ctx, endpoint, AuthnChallengeState{ID: state.ParentChallengeID, Subject: state.Subject, ClientID: a.OAuthClientID})
+		if err != nil {
+			return err
+		}
+		for _, member := range members {
+			if member.backend == metaMemberBackendHosted && member.serverID == a.ServerID && member.projectID == a.ProjectID {
+				return nil
+			}
+		}
+		return remotesessions.ErrTypedAuthorizationChanged
+	}
+	server, err := mcpserversrepo.New(s.db).GetMCPServerByIDAndOrganizationID(ctx, mcpserversrepo.GetMCPServerByIDAndOrganizationIDParams{ID: a.ServerID, OrganizationID: a.OrganizationID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return remotesessions.ErrTypedAuthorizationChanged
+	}
+	if err != nil {
+		return fmt.Errorf("load hosted login server: %w", err)
+	}
+	if server.ProjectID != a.ProjectID || !server.ToolsetID.Valid || (server.Visibility != mcpservers.VisibilityPublic && server.Visibility != mcpservers.VisibilityPrivate) {
+		return remotesessions.ErrTypedAuthorizationChanged
+	}
+	_, err = s.authorizeRemoteLoginServer(ctx, state, server, *state.Subject, a.OAuthClientID)
+	return err
 }
 
 // typedLoginResource reads the target of the exact authorized server rather
@@ -94,7 +150,14 @@ func (s *Service) typedLoginResource(ctx context.Context, authorization *remotes
 	if server.ProjectID != authorization.ProjectID || (!server.RemoteMcpServerID.Valid && !server.TunneledMcpServerID.Valid) {
 		return "", remotesessions.ErrTypedAuthorizationChanged
 	}
-	return s.resolveUpstreamResource(ctx, s.logger, authorization.ProjectID, &server)
+	resource, err := s.resolveUpstreamResource(ctx, s.logger, authorization.ProjectID, &server)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", remotesessions.ErrTypedAuthorizationChanged
+	}
+	if err != nil {
+		return "", fmt.Errorf("resolve typed login upstream resource: %w", err)
+	}
+	return resource, nil
 }
 
 func (s *Service) remoteLoginTypedAuthorization(ctx context.Context, endpoint *ResolvedMcpEndpoint, challenge AuthnChallengeState, client remotesessions.Client, member chosenMetaMember) (*remotesessions.TypedAuthorization, error) {
@@ -104,19 +167,16 @@ func (s *Service) remoteLoginTypedAuthorization(ctx context.Context, endpoint *R
 	}
 	if !serverID.Valid && (endpoint.MetaMcpServerID.Valid || endpoint.IsOrganizationGateway()) {
 		// Without a resource-qualified member, require exactly one authorized
-		// typed member rather than choosing arbitrary server provenance. Only
-		// proxied members offer typed registrations; hosted members retain their
-		// existing issuer-bound flow.
+		// typed member rather than choosing arbitrary server provenance.
+		// Hosted members are authorized separately by their exact placement.
 		members, err := s.consentSubjectMembers(ctx, endpoint, challenge)
 		if err != nil {
 			return nil, fmt.Errorf("load typed login members: %w", err)
 		}
 		var selected *remotesessions.TypedAuthorization
 		var denied error
-		hosted := false
 		for _, candidate := range members {
 			if candidate.backend != metaMemberBackendProxied {
-				hosted = hosted || memberUsesClient(candidate, client.ID, client.RemoteSessionIssuerID, client.ProjectID)
 				continue
 			}
 			a, err := s.remoteLoginTypedAuthorization(ctx, endpoint, challenge, client, chosenMetaMember{serverID: uuid.NullUUID{UUID: candidate.serverID, Valid: true}, projectID: candidate.projectID})
@@ -140,9 +200,7 @@ func (s *Service) remoteLoginTypedAuthorization(ctx context.Context, endpoint *R
 		if selected != nil {
 			return selected, nil
 		}
-		if denied == nil && !hosted {
-			// No member offers the registration, and no hosted member signs
-			// in through it.
+		if denied == nil {
 			return nil, errTypedLoginNotOffered
 		}
 		return nil, denied

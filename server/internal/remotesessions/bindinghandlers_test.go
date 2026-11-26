@@ -27,7 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
-	upstreamrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
+	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
@@ -124,19 +124,12 @@ func TestBindingsOwnershipReachabilityAndExactSession(t *testing.T) {
 	foreignOrg := createOrganization(t, ctx, ti.conn, "binding-foreign-org")
 	foreignProvider := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, foreignOrg, "binding-foreign-provider")
 	foreignSignIn := createTrustedOrganizationTierUserSessionIssuerForOrganization(t, ctx, ti.conn, foreignOrg, "binding-foreign-config", foreignProvider)
-	foreignClient := seedOrgLevelRemoteClient(t, ctx, ti.conn, foreignOrg, foreignProvider, "binding-foreign-client", foreignSignIn)
+	foreignClient := seedOrgLevelRemoteClient(t, ctx, ti.conn, foreignOrg, foreignProvider, "binding-foreign-client")
 	foreignSession := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject(auth.UserID), foreignSignIn.String(), foreignClient.String())
 	_, err = ti.service.AttachBinding(ctx, &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String(), RemoteSessionID: foreignSession.ID.String()})
 	requireOopsCode(t, err, oops.CodeNotFound)
 
-	clientID := uuid.MustParse(client)
-	_, err = testrepo.New(ti.conn).UnlinkAttachmentClientFixture(ctx, testrepo.UnlinkAttachmentClientFixtureParams{RemoteSessionClientID: clientID, UserSessionIssuerID: config})
-	require.NoError(t, err)
-	q := repo.New(ti.conn)
-	parent := repo.CountRemoteSessionClientUserSessionIssuerBindingsParams{RemoteSessionClientID: clientID, UserSessionIssuerID: config}
-	parents, err := q.CountRemoteSessionClientUserSessionIssuerBindings(ctx, parent)
-	require.NoError(t, err)
-	require.Zero(t, parents, "creation must work without a legacy link")
+	uuid.MustParse(client)
 	candidates, err := ti.service.ListRemoteSessions(ctx, &gen.ListRemoteSessionsPayload{PrincipalID: conv.PtrEmpty(agent.ID.String()), UserSessionIssuerID: conv.PtrEmpty(config.String())})
 	require.NoError(t, err)
 	require.Len(t, candidates.Items, 1)
@@ -212,11 +205,6 @@ func TestBindingsOwnershipReachabilityAndExactSession(t *testing.T) {
 	require.NoError(t, err)
 	binding, err := ti.service.AttachBinding(ctx, attach)
 	require.NoError(t, err)
-	parents, err = q.CountRemoteSessionClientUserSessionIssuerBindings(ctx, parent)
-	require.NoError(t, err)
-	require.EqualValues(t, 1, parents, "only the FK compatibility row is needed")
-	_, err = ti.service.DetachUserSessionIssuer(ctx, &clientsgen.DetachUserSessionIssuerPayload{ID: client, UserSessionIssuerID: config.String()})
-	requireOopsCode(t, err, oops.CodeConflict)
 	again, err := ti.service.AttachBinding(ctx, attach)
 	require.NoError(t, err)
 	require.Equal(t, binding.ID, again.ID)
@@ -321,6 +309,7 @@ func TestBindingsOwnershipReachabilityAndExactSession(t *testing.T) {
 		require.NoError(t, err)
 		_, err = testrepo.New(ti.conn).MakeAttachmentIssuerGlobalFixture(ctx, uuid.MustParse(issuer))
 		require.NoError(t, err)
+		placeClientForSignIn(t, ctx, ti.conn, uuid.MustParse(client), config)
 		candidates, err := ti.service.ListRemoteSessions(ctx, &gen.ListRemoteSessionsPayload{PrincipalID: conv.PtrEmpty(agent.ID.String()), UserSessionIssuerID: conv.PtrEmpty(config.String()), RemoteSessionClientID: conv.PtrEmpty(client)})
 		require.NoError(t, err)
 		require.Len(t, candidates.Items, 1, "only the caller's exact registration is an attachment candidate")
@@ -404,6 +393,8 @@ func TestBindingsAttachConnectionMadeThroughGatewayIssuer(t *testing.T) {
 		ProjectSlugInput:      nil,
 	})
 	require.NoError(t, err)
+	placeClientForSignIn(t, ctx, ti.conn, uuid.MustParse(created.ID), member)
+	gatewayServer := placeClientForSignIn(t, ctx, ti.conn, uuid.MustParse(created.ID), gateway)
 	viaGateway := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject(auth.UserID), gateway.String(), created.ID)
 
 	// The member's own issuer lists and attaches the gateway-made connection.
@@ -423,9 +414,9 @@ func TestBindingsAttachConnectionMadeThroughGatewayIssuer(t *testing.T) {
 
 	// The gateway stops binding the client. Its login is untouched, so the
 	// attachment keeps resolving and the login stays attachable.
-	unlinked, err := repo.New(ti.conn).DetachProjectRemoteSessionClientFromUserSessionIssuer(ctx, repo.DetachProjectRemoteSessionClientFromUserSessionIssuerParams{
-		RemoteSessionClientID: viaGateway.RemoteSessionClientID, UserSessionIssuerID: gateway,
-		ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID,
+	unlinked, err := upstreamclientsrepo.New(ti.conn).DetachMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.DetachMCPServerRemoteSessionClientParams{
+		RemoteSessionClientID: viaGateway.RemoteSessionClientID, McpServerID: gatewayServer,
+		ProjectID: *auth.ProjectID,
 	})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), unlinked)
@@ -469,17 +460,10 @@ func TestBindingsCompatibilityParentDoesNotConfigureServerOAuth(t *testing.T) {
 	provider := createRemoteIssuer(t, ctx, ti, "fk-only-provider", "")
 	client := createRemoteClient(t, ctx, ti, provider, provenance.String(), "fk-only-registration")
 	session := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject(auth.UserID), provenance.String(), client)
-	parent := repo.CountRemoteSessionClientUserSessionIssuerBindingsParams{RemoteSessionClientID: session.RemoteSessionClientID, UserSessionIssuerID: signIn}
 	q := repo.New(ti.conn)
-	parents, err := q.CountRemoteSessionClientUserSessionIssuerBindings(ctx, parent)
-	require.NoError(t, err)
-	require.Zero(t, parents)
 
 	_, err = ti.service.AttachBinding(ctx, &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: signIn.String(), RemoteSessionID: session.ID.String()})
 	require.NoError(t, err)
-	parents, err = q.CountRemoteSessionClientUserSessionIssuerBindings(ctx, parent)
-	require.NoError(t, err)
-	require.EqualValues(t, 1, parents, "the attachment must create its FK parent")
 
 	backend := uuid.New()
 	fixtures := authclientbackfill.New(ti.conn)
@@ -493,21 +477,12 @@ func TestBindingsCompatibilityParentDoesNotConfigureServerOAuth(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit(ctx))
 
-	associations, err := upstreamrepo.New(ti.conn).ListMCPServerRemoteSessionClients(ctx, upstreamrepo.ListMCPServerRemoteSessionClientsParams{McpServerID: server.ID, ProjectID: *auth.ProjectID})
+	associations, err := upstreamclientsrepo.New(ti.conn).ListMCPServerRemoteSessionClients(ctx, upstreamclientsrepo.ListMCPServerRemoteSessionClientsParams{McpServerID: server.ID, ProjectID: *auth.ProjectID})
 	require.NoError(t, err)
 	require.Empty(t, associations, "the physical parent is not a server association")
 	offers, err := fixtures.ListServerAuthClientsFixture(ctx, server.ID)
 	require.NoError(t, err)
 	require.Empty(t, offers, "the physical parent is not a typed upstream offer")
-
-	// The existing FK parent is not routing intent, but it also must not
-	// prevent an explicit configuration operation from creating the offer.
-	_, err = ti.service.AttachUserSessionIssuer(ctx, &clientsgen.AttachUserSessionIssuerPayload{ID: client, UserSessionIssuerID: signIn.String()})
-	require.NoError(t, err)
-	offers, err = fixtures.ListServerAuthClientsFixture(ctx, server.ID)
-	require.NoError(t, err)
-	require.Equal(t, []uuid.UUID{authclientbackfill.OAuthClientID(auth.ActiveOrganizationID, session.RemoteSessionClientID, authclientbackfill.TypeRemoteSession)}, offers)
-
 	pinned, err := q.GetPrincipalRemoteSessionBinding(ctx, repo.GetPrincipalRemoteSessionBindingParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, PrincipalID: agent.ID, UserSessionIssuerID: signIn, RemoteSessionClientID: session.RemoteSessionClientID})
 	require.NoError(t, err)
 	require.Equal(t, session.ID, pinned.ID)

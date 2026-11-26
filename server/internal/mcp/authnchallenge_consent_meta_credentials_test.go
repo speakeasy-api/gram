@@ -85,11 +85,12 @@ func connectMeta(t *testing.T, prefix string, count int) (context.Context, conne
 		accessToken := "token-" + name
 		as := newConsentExchangeAS(t, &captured[i], accessToken)
 
-		clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, name, as.URL, []uuid.UUID{fx.shared})
+		clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, name, as.URL)
 		issuerID := conv.ToNullUUID(clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID))
 
 		upstream := fmt.Sprintf("https://%s.example.com/mcp", name)
 		seeded := createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, name+"-member", upstream, issuerID, int32(i))
+		associateServerRegistration(t, ctx, fx.ti.conn, fx.orgID, fx.projectID, seeded.mcpServerID, clientID)
 		seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, seeded.mcpServerID, clientID, "remote_session")
 		seedMetaMemberConnectGrant(t, ctx, fx.ti.conn, fx.orgID, seeded.mcpServerID)
 		members = append(members, connectedMetaMember{
@@ -111,16 +112,20 @@ func connectMeta(t *testing.T, prefix string, count int) (context.Context, conne
 	return ctx, connectedMeta{fx: fx, metaServerID: metaServerID, mgr: mgr, members: members}
 }
 
-// activeResource reads the RFC 8707 resource persisted on a subject's
-// credential straight from the database.
-func activeResource(t *testing.T, ctx context.Context, gw connectedMeta, clientID uuid.UUID) string {
+// activeGrant reads the subject's exact stored credential.
+func activeGrant(t *testing.T, ctx context.Context, gw connectedMeta, clientID uuid.UUID) remotesessions_repo.RemoteSession {
 	t.Helper()
 	sess, err := remotesessions_repo.New(gw.fx.ti.conn).GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{
 		SubjectUrn:            gw.fx.subject,
 		RemoteSessionClientID: clientID,
 	})
 	require.NoError(t, err)
-	return sess.Resource.String
+	return sess
+}
+
+func activeResource(t *testing.T, ctx context.Context, gw connectedMeta, clientID uuid.UUID) string {
+	t.Helper()
+	return activeGrant(t, ctx, gw, clientID).Resource.String
 }
 
 // The resolved member must survive the whole chain — consent form, login
@@ -175,7 +180,7 @@ func TestMetaMCPCredentials_UnstampedMembersOfferNoClient(t *testing.T) {
 	ctx, fx, metaServerID := seedMetaConsentEndpoint(t, "aim87-unstamped-gw")
 	for i := range 2 {
 		name := fmt.Sprintf("aim87-unstamped-%d", i)
-		clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, name, "", []uuid.UUID{fx.shared})
+		clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, name, "")
 		createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, name+"-member", fmt.Sprintf("https://%s.example.com/mcp", name), uuid.NullUUID{}, int32(i))
 		requireConnectRefused(t, fx, clientID, "an unstamped member's client must not be offered")
 	}
@@ -190,6 +195,7 @@ func TestMetaMCPCredentials_StaleGrantStaysBoundToItsOwnMember(t *testing.T) {
 	ctx, gw := connectMeta(t, "aim87-stale", 2)
 
 	removed := gw.members[0]
+	before := activeGrant(t, ctx, gw, removed.clientID)
 	_, err := metamcp_repo.New(gw.fx.ti.conn).DeleteMetaMCPMember(ctx, metamcp_repo.DeleteMetaMCPMemberParams{
 		ID:        removed.seeded.memberID,
 		ProjectID: gw.fx.projectID,
@@ -203,14 +209,15 @@ func TestMetaMCPCredentials_StaleGrantStaysBoundToItsOwnMember(t *testing.T) {
 	require.Equal(t, survivor.upstreamURL, postConnectAction(t, gw.fx, survivor.clientID).Query().Get("resource"),
 		"and the surviving member must still qualify its own")
 
-	// The credentials minted before the detach are untouched by it: each
-	// stays qualified to the member it was minted for, so the exact-match
-	// selection rule keeps them bound rather than drifting.
+	// The detached credential still exists at its original resource, but the
+	// gateway may no longer resolve it. The surviving member keeps its own token.
+	after := activeGrant(t, ctx, gw, removed.clientID)
+	require.Equal(t, removed.upstreamURL, after.Resource.String)
+	require.Equal(t, before.ID, after.ID)
+	require.Equal(t, before.GrantGeneration, after.GrantGeneration, "detach must not replace the stored credential")
 	tokens := gw.resolveTokens(t, ctx)
-	removedToken := tokenFor(t, tokens, removed.clientID)
-	require.Equal(t, removed.accessToken, removedToken.Token, "the stale credential stays bound to the member it was minted for")
-	require.Equal(t, removed.upstreamURL, removedToken.Resource)
+	require.Len(t, tokens, 1, "the detached member's credential is no longer reachable through this gateway")
 	survivorToken := tokenFor(t, tokens, survivor.clientID)
-	require.Equal(t, survivor.accessToken, survivorToken.Token, "and the surviving member keeps its own")
+	require.Equal(t, survivor.accessToken, survivorToken.Token, "the surviving member keeps its own credential")
 	require.Equal(t, survivor.upstreamURL, survivorToken.Resource)
 }

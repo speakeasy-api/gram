@@ -101,6 +101,7 @@ type testMemberMCPConnectionReader struct {
 	statuses     map[uuid.UUID]remotesessions.RemoteSessionState
 	authClients  []remotesessions.Client
 	authStatuses map[uuid.UUID]remotesessions.RemoteSessionState
+	hostedReady  uuid.UUID
 }
 
 func (r testMemberMCPConnectionReader) ListClients(context.Context, uuid.UUID, string, uuid.UUID) ([]remotesessions.Client, error) {
@@ -113,6 +114,10 @@ func (r testMemberMCPConnectionReader) RemoteSessionStatuses(context.Context, ur
 
 func (r testMemberMCPConnectionReader) ListAuthClientRegistrations(_ context.Context, _ uuid.UUID, _ string, ids []uuid.UUID) ([]remotesessions.Client, error) {
 	return slices.DeleteFunc(slices.Clone(r.authClients), func(client remotesessions.Client) bool { return !slices.Contains(ids, client.ID) }), nil
+}
+
+func (r testMemberMCPConnectionReader) HostedRegistrationNeedsReconnect(_ context.Context, request remotesessions.AuthClientTokenRequest) (bool, error) {
+	return request.RegistrationID != r.hostedReady, nil
 }
 
 func (r testMemberMCPConnectionReader) AuthClientRemoteSessionStatuses(context.Context, urn.SessionSubject, uuid.UUID, string, []uuid.UUID) (map[uuid.UUID]remotesessions.RemoteSessionState, error) {
@@ -441,4 +446,35 @@ func offerMemberMCPClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool,
 	id, err := q.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{OrganizationID: organizationID, ProjectID: conv.ToNullUUID(projectID), ClientType: authz.AuthClientTypeRemoteSession, Source: "admin", RemoteSessionClientID: conv.ToNullUUID(clientID)})
 	require.NoError(t, err)
 	require.NoError(t, q.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{ProjectID: projectID, OrganizationID: organizationID, McpServerID: serverID, AuthClientID: id, Source: "admin"}))
+}
+
+func TestHostedMemberStatusUsesOnlyAssignedRegistration(t *testing.T) {
+	t.Parallel()
+	serverURL, err := url.Parse("https://mcp.example.test")
+	require.NoError(t, err)
+	assigned, sibling := uuid.New(), uuid.New()
+	principal := Principal{OrganizationID: "test-org", UserID: "test-user", ConnectionID: "", Generation: "", ClientID: "", Surface: SurfacePlatformMCP}
+	target := memberMCPStatusTarget{
+		projectID: uuid.New(), mcpID: uuid.New(), name: "Hosted", endpointSlug: "hosted", canRead: true, canConnect: true,
+		userSessionIssuerID: uuid.New(), remoteSessionIssuerID: uuid.Nil, remoteMCPServerID: uuid.NullUUID{}, tunneledMCPServerID: uuid.NullUUID{},
+		associatedClients: map[uuid.UUID]bool{assigned: true}, typed: false, sharedCredential: false, upstreamAuthPending: false, hosted: true,
+	}
+	reader := testMemberMCPConnectionReader{authClients: []remotesessions.Client{{ID: assigned}, {ID: sibling}}, hostedReady: sibling}
+	service := NewPluginsService(nil, allowBudget(), "hosted-status-key").withMemberMCPConnectionReader(reader).WithInstallLinks(serverURL, serverURL)
+	status, err := service.memberConnectionStatus(t.Context(), principal, target)
+	require.NoError(t, err)
+	require.Equal(t, MCPConnectionStateNotConnected, status.State)
+	reader.hostedReady = assigned
+	service.withMemberMCPConnectionReader(reader)
+	status, err = service.memberConnectionStatus(t.Context(), principal, target)
+	require.NoError(t, err)
+	require.Equal(t, MCPConnectionStateActive, status.State)
+
+	reader.authStatuses = map[uuid.UUID]remotesessions.RemoteSessionState{assigned: {SignInUnreadable: true}}
+	service.withMemberMCPConnectionReader(reader)
+	status, err = service.memberConnectionStatus(t.Context(), principal, target)
+	require.NoError(t, err)
+	require.Equal(t, MCPConnectionStateReauthorizationRequired, status.State)
+	require.Equal(t, "sign_in_unreadable", status.Reason)
+	require.Equal(t, "reconnect", status.NextAction)
 }

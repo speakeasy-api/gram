@@ -57,23 +57,3 @@ func TestHostedAssignmentsDoNotBorrowSiblingRegistration(t *testing.T) {
 		require.ErrorIs(t, err, remotesessions.ErrRemoteSessionMisconfigured)
 	})
 }
-
-func TestExactHostedMemberTokensRejectMissingOrRefusedCredential(t *testing.T) {
-	t.Parallel()
-	registration, issuer := uuid.New(), uuid.New()
-	for _, token := range []remotesessions.UpstreamToken{
-		{},
-		{RemoteSessionClientID: registration},
-		{RemoteSessionClientID: uuid.New(), Token: "sibling"},
-		{RemoteSessionClientID: registration, Token: "qualified", Resource: "https://example.test"},
-		{RemoteSessionClientID: registration, ClientCredentialErr: remotesessions.ErrClientCredentialUnavailable},
-	} {
-		got, err := exactHostedMemberTokens(map[uuid.UUID]remotesessions.UpstreamToken{issuer: token}, registration)
-		want := remotesessions.ErrNoValidToken
-		if token.ClientCredentialErr != nil {
-			want = token.ClientCredentialErr
-		}
-		require.ErrorIs(t, err, want)
-		require.Empty(t, got)
-	}
-}

@@ -808,3 +808,63 @@ func BuildListPendingAccessRequestsPayload(agentListPendingAccessRequestsApikeyT
 
 	return v, nil
 }
+
+// BuildListRequestableAccessPayload builds the payload for the agent
+// listRequestableAccess endpoint from CLI flags.
+func BuildListRequestableAccessPayload(agentListRequestableAccessApikeyToken string) (*agent.ListRequestableAccessPayload, error) {
+	var apikeyToken *string
+	{
+		if agentListRequestableAccessApikeyToken != "" {
+			apikeyToken = &agentListRequestableAccessApikeyToken
+		}
+	}
+	v := &agent.ListRequestableAccessPayload{}
+	v.ApikeyToken = apikeyToken
+
+	return v, nil
+}
+
+// BuildRequestAccessPayload builds the payload for the agent requestAccess
+// endpoint from CLI flags.
+func BuildRequestAccessPayload(agentRequestAccessBody string, agentRequestAccessApikeyToken string) (*agent.RequestAccessPayload, error) {
+	var err error
+	var body RequestAccessRequestBody
+	{
+		err = json.Unmarshal([]byte(agentRequestAccessBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"duration\": \"2h\",\n      \"message\": \"aaa\",\n      \"requested_until\": \"1970-01-01T00:00:01Z\",\n      \"resource_id\": \"abc123\",\n      \"scope\": \"abc123\"\n   }'")
+		}
+		if body.Message != nil {
+			if utf8.RuneCountInString(*body.Message) > 1000 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.message", *body.Message, utf8.RuneCountInString(*body.Message), 1000, false))
+			}
+		}
+		if body.Duration != nil {
+			if !(*body.Duration == "1h" || *body.Duration == "2h" || *body.Duration == "4h") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.duration", *body.Duration, []any{"1h", "2h", "4h"}))
+			}
+		}
+		if body.RequestedUntil != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.requested_until", *body.RequestedUntil, goa.FormatDateTime))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if agentRequestAccessApikeyToken != "" {
+			apikeyToken = &agentRequestAccessApikeyToken
+		}
+	}
+	v := &agent.RequestAccessPayload{
+		Scope:          body.Scope,
+		ResourceID:     body.ResourceID,
+		Message:        body.Message,
+		Duration:       body.Duration,
+		RequestedUntil: body.RequestedUntil,
+	}
+	v.ApikeyToken = apikeyToken
+
+	return v, nil
+}

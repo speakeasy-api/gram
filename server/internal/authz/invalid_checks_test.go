@@ -77,23 +77,16 @@ func TestDeclaredDimensionsStayValid(t *testing.T) {
 	}
 }
 
-// A caller whose enforcement is skipped still gets through with an invalid
-// check for now, but the check is reported so it can be fixed before such
-// checks are refused for every caller.
-func TestInvalidCheckOnUnenforcedPathIsLoggedNotRefused(t *testing.T) {
+// In production a caller whose enforcement is skipped, such as a legacy API
+// key, still gets through with an invalid check, and the check is logged so
+// the handler can be fixed.
+func TestInvalidCheckOnUnenforcedPathIsLoggedInProduction(t *testing.T) {
 	t.Parallel()
 
 	var logs bytes.Buffer
 	engine := NewEngine(slog.New(slog.NewTextHandler(&logs, nil)), nil, staticChallengeLogging(false), workos.NewStubClient())
-	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
-		ActiveOrganizationID: "org-one",
-		UserID:               "user-one",
-		SessionID:            nil,
-	})
-
-	enforce, err := engine.ShouldEnforce(ctx)
-	require.NoError(t, err)
-	require.False(t, enforce)
+	engine.refuseInvalidChecks = false
+	ctx := unenforcedContext(t)
 
 	require.NoError(t, engine.Require(ctx, Check{Scope: Scope("project:reed"), ResourceID: "project-one"}))
 	require.Contains(t, logs.String(), "invalid authz check on a path that skips enforcement")
@@ -101,6 +94,50 @@ func TestInvalidCheckOnUnenforcedPathIsLoggedNotRefused(t *testing.T) {
 	logs.Reset()
 	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeProjectRead, ResourceID: "project-one"}))
 	require.Empty(t, logs.String())
+}
+
+// In tests the same invalid check fails, through every entry point, so the
+// handler bug is caught before it ships. Local dev turns on the same flag
+// through EngineOpts.DevMode; a test binary cannot show that path on its own,
+// because testing.Testing() is always true here.
+func TestInvalidCheckOnUnenforcedPathFailsInTests(t *testing.T) {
+	t.Parallel()
+
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	ctx := unenforcedContext(t)
+	typo := Check{Scope: Scope("project:reed"), ResourceID: "project-one"}
+
+	require.ErrorIs(t, engine.Require(ctx, typo), ErrInvalidCheck)
+	require.ErrorIs(t, engine.Require(ctx, Either(typo, typo)), ErrInvalidCheck)
+	_, err := engine.Decide(ctx, typo)
+	require.ErrorIs(t, err, ErrInvalidCheck)
+	_, err = engine.Evaluate(ctx, typo)
+	require.ErrorIs(t, err, ErrInvalidCheck)
+	_, err = engine.Can(ctx, Either(typo, typo))
+	require.ErrorIs(t, err, ErrInvalidCheck)
+	_, err = engine.Filter(ctx, []Check{typo})
+	require.ErrorIs(t, err, ErrInvalidCheck)
+	_, err = engine.FindMatched(ctx, []Check{typo})
+	require.ErrorIs(t, err, ErrInvalidCheck)
+
+	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeProjectRead, ResourceID: "project-one"}))
+}
+
+// unenforcedContext is a caller without a dashboard session, which the
+// engine does not enforce.
+func unenforcedContext(t *testing.T) context.Context {
+	t.Helper()
+
+	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
+		ActiveOrganizationID: "org-one",
+		UserID:               "user-one",
+		SessionID:            nil,
+	})
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	enforce, err := engine.ShouldEnforce(ctx)
+	require.NoError(t, err)
+	require.False(t, enforce)
+	return ctx
 }
 
 // A check that names a tool or a disposition has to be built as a tool call.

@@ -77,7 +77,7 @@ func TestDemoSeedSafety(t *testing.T) {
 	// server dependents that the demo cleanup must not touch.
 	otherSeed, err := seedPostgres(ctx, logger, db, blob, testenv.NewEncryptionClient(t), testAssistantIssuerURL, testServerURL, otherTenantSpec, aivendors.CompiledSnapshot())
 	require.NoError(t, err)
-	require.NoError(t, migrateUpstreamAuth(ctx, logger, db, otherTenantSpec.OrgID))
+	require.NoError(t, upstreamAuthReadiness(ctx, logger, db, otherTenantSpec.OrgID))
 	planted, err := repo.New(db).OrgPlantCustomDomainDependents(ctx, repo.OrgPlantCustomDomainDependentsParams{
 		OrgID: otherTenantSpec.OrgID, ProjectID: uuid.MustParse(otherTenantSpec.ProjectID()),
 	})

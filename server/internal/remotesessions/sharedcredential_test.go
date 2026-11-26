@@ -45,11 +45,7 @@ func bindSiblingIssuer(t *testing.T, ctx context.Context, ti *testInstance, clie
 	t.Helper()
 
 	sibling := createUserSessionIssuer(t, ctx, ti.conn, slug)
-	err := repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: clientID,
-		UserSessionIssuerID:   sibling,
-	})
-	require.NoError(t, err)
+	placeClientForSignIn(t, ctx, ti.conn, clientID, sibling)
 	return sibling
 }
 
@@ -216,10 +212,7 @@ func TestRefreshRemoteSession_SiblingIssuerRefreshesSharedCredential(t *testing.
 		"shared-refresh-sibling-issuer", upstream.URL)
 	provenance := createUserSessionIssuer(t, ctx, ti.conn, "usi-shared-refresh-sibling-a")
 	clientID := seedProjectRemoteClientNoOrg(t, ctx, ti.conn, *authCtx.ProjectID, issuerID, "shared-refresh-sibling-cid")
-	require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: clientID,
-		UserSessionIssuerID:   provenance,
-	}))
+	placeClientForSignIn(t, ctx, ti.conn, clientID, provenance)
 	subject := seedRefreshableSharedSession(t, ctx, ti, provenance, clientID, "shared-refresh-sibling")
 	sibling := bindSiblingIssuer(t, ctx, ti, clientID, "usi-shared-refresh-sibling-b")
 
@@ -325,7 +318,6 @@ func TestSoftDeleteSubjectSessions_RequiresPersistedTypedChoiceOnSiblingIssuer(t
 	ctx, ti := newTestService(t)
 	fx := seedRevocableSession(t, ctx, ti, "shared-revoke-cascade", "", "s3cret", true)
 	sibling := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "usi-shared-revoke-sibling")
-	require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: fx.clientID, UserSessionIssuerID: sibling}))
 
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
@@ -505,7 +497,7 @@ func TestRefreshSweep_SiblingIssuerKeepsCredentialEligible(t *testing.T) {
 	require.Equal(t, session.ID, candidate.RemoteSession.ID)
 }
 
-func TestRefreshSweep_CrossTenantBindingNotEligible(t *testing.T) {
+func TestRefreshSweep_ForeignProjectSignInWithoutOfferNotEligible(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -513,12 +505,8 @@ func TestRefreshSweep_CrossTenantBindingNotEligible(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	// The client is owned by the fixture project. A binding row attached
-	// directly (bypassing the attach handlers' tenancy validation, as a
-	// corrupted or maliciously inserted row would) links it to an issuer in a
-	// DIFFERENT project. That issuer holds the only live Speakeasy session for the
-	// subject, so without the client-tenancy predicate the sweep would claim
-	// the credential through the foreign project's binding.
+	// A sign-in in another project must not make an unoffered registration
+	// eligible for background refresh.
 	issuerID := createRemoteIssuer(t, ctx, ti, "shared-sweep-xten-issuer", "")
 	provenance := createUserSessionIssuer(t, ctx, ti.conn, "shared-sweep-xten-usi-a")
 	clientID := createRemoteClient(t, ctx, ti, issuerID, provenance.String(), "shared-sweep-xten-client")
@@ -545,17 +533,13 @@ func TestRefreshSweep_CrossTenantBindingNotEligible(t *testing.T) {
 
 	otherProject := createProject(t, ctx, ti.conn, "shared-sweep-xten-other")
 	foreign := createUserSessionIssuerInProject(t, ctx, ti.conn, otherProject, "shared-sweep-xten-usi-b")
-	require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: clientUUID,
-		UserSessionIssuerID:   foreign,
-	}))
 	seedGramSession(t, ctx, ti, subject, foreign, "shared-sweep-xten-b", 24*time.Hour)
 	enableOrgAutoRefreshFeature(t, ctx, ti, authCtx.ActiveOrganizationID, productfeatures.FeatureRemoteSessionAutoRefresh)
 
 	window := newSweepWindow()
 	rows, err := repo.New(ti.conn).ClaimDueRemoteSessionRefreshCandidates(ctx, window.claimParams())
 	require.NoError(t, err)
-	require.Empty(t, rows, "a binding to an issuer outside the client's own project must not make the credential keepalive-eligible")
+	require.Empty(t, rows, "a foreign sign-in without a scoped offer cannot renew the grant")
 
 	_, err = repo.New(ti.conn).GetDueRemoteSessionRefreshCandidate(ctx, window.candidateParams(session.ID, authCtx.ActiveOrganizationID))
 	require.ErrorIs(t, err, pgx.ErrNoRows)

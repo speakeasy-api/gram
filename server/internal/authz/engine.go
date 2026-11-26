@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -53,7 +54,11 @@ type Engine struct {
 	db                               *pgxpool.Pool
 	challengeLoggingEnabled          ChallengeLoggingEnabled
 	isDev                            bool
-	membership                       MembershipFetcher
+	// refuseInvalidChecks is on in tests and local dev, so a handler bug such
+	// as the typo "project:reed" fails there even on a path only legacy API
+	// keys reach.
+	refuseInvalidChecks bool
+	membership          MembershipFetcher
 }
 
 func NewEngine(
@@ -90,6 +95,7 @@ func NewEngine(
 		db:                               db,
 		challengeLoggingEnabled:          challengeLogging,
 		isDev:                            devMode,
+		refuseInvalidChecks:              devMode || testing.Testing(),
 		membership:                       membership,
 	}
 }
@@ -329,19 +335,22 @@ func validateInput(c Check) error {
 	}
 }
 
-// logInvalidUnenforced reports checks that would be refused as invalid if the
-// caller were enforced. Enforcement is skipped for this caller, so the request
-// still goes through: this is the logging window before such checks are
-// refused for every caller.
-func (e *Engine) logInvalidUnenforced(ctx context.Context, checks []Check) {
+// validateUnenforced only logs in production: the skip allows any valid check
+// anyway, so refusing would only let a handler bug break the caller.
+func (e *Engine) validateUnenforced(ctx context.Context, checks []Check) error {
 	for _, check := range checks {
 		if isGroup(check) {
-			e.logInvalidUnenforced(ctx, check.group)
+			if err := e.validateUnenforced(ctx, check.group); err != nil {
+				return err
+			}
 			continue
 		}
 		err := validateInput(check)
 		if err == nil {
 			continue
+		}
+		if e.refuseInvalidChecks {
+			return err
 		}
 		e.logger.ErrorContext(
 			ctx,
@@ -350,6 +359,7 @@ func (e *Engine) logInvalidUnenforced(ctx context.Context, checks []Check) {
 			attr.SlogError(err),
 		)
 	}
+	return nil
 }
 
 // logMissingKeys logs an error for each refused check that a grant would have

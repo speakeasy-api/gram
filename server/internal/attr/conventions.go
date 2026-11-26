@@ -1215,6 +1215,10 @@ const (
 	TelemetryCHRowCountKey         = attribute.Key("gram.telemetry.ch.row_count")
 	InferenceInputCountKey         = attribute.Key("gram.inference.input_count")
 	InferenceAcceptedMessagesKey   = attribute.Key("gram.inference.accepted_messages")
+
+	// TelemetryOverviewSourceKey names the table that served an observability overview.
+	TelemetryOverviewSourceKey = attribute.Key("gram.telemetry.overview.source")
+
 	// InferenceConversationOutcomeKey records how an Anthropic inference frame
 	// was mapped to a stored conversation: "session" (the frame's session id
 	// named an existing chat), "adopted_prefix" (the chat already holding the
@@ -1234,6 +1238,10 @@ const (
 	// TranscriptShadowMessageCountKey is the number of chat messages in one
 	// encrypted transcript shadow capture batch.
 	TranscriptShadowMessageCountKey = attribute.Key("gram.transcript_shadow.message_count")
+	// TranscriptShadowPlaintextFallbackCountKey is the number of messages in
+	// one encrypted transcript read that had no shadow and were served from
+	// plaintext.
+	TranscriptShadowPlaintextFallbackCountKey = attribute.Key("gram.transcript_shadow.plaintext_fallback_count")
 	// TelemetryLogIDKey carries the telemetry_logs row id on records relayed
 	// to a customer OTLP destination. Delivery is at-least-once, so this is
 	// the key a destination dedupes redeliveries on.
@@ -1760,6 +1768,10 @@ func SlogCodexCloudTimestampFallbacks(v int) slog.Attr {
 }
 
 func TelemetryCHOperation(v string) attribute.KeyValue { return TelemetryCHOperationKey.String(v) }
+
+func TelemetryOverviewSource(v string) attribute.KeyValue {
+	return TelemetryOverviewSourceKey.String(v)
+}
 
 func TelemetryCHRowCount(v int) attribute.KeyValue { return TelemetryCHRowCountKey.Int(v) }
 func SlogTelemetryCHRowCount(v int) slog.Attr {
@@ -4713,6 +4725,10 @@ func SlogInferenceMessageCount(v int) slog.Attr {
 
 func TranscriptShadowMessageCount(v int) attribute.KeyValue {
 	return TranscriptShadowMessageCountKey.Int(v)
+}
+
+func TranscriptShadowPlaintextFallbackCount(v int) attribute.KeyValue {
+	return TranscriptShadowPlaintextFallbackCountKey.Int(v)
 }
 
 func SlogRegistryEntryID(v string) slog.Attr   { return slog.String(string(RegistryEntryIDKey), v) }

@@ -39,6 +39,8 @@ type Server struct {
 	ReportCrash                  http.Handler
 	CreateSessionHandoff         http.Handler
 	ListPendingAccessRequests    http.Handler
+	ListRequestableAccess        http.Handler
+	RequestAccess                http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -86,6 +88,8 @@ func New(
 			{"ReportCrash", "POST", "/rpc/agent.reportCrash"},
 			{"CreateSessionHandoff", "POST", "/rpc/agent.createSessionHandoff"},
 			{"ListPendingAccessRequests", "GET", "/rpc/agent.listPendingAccessRequests"},
+			{"ListRequestableAccess", "GET", "/rpc/agent.listRequestableAccess"},
+			{"RequestAccess", "POST", "/rpc/agent.requestAccess"},
 		},
 		GetPlugins:                   NewGetPluginsHandler(e.GetPlugins, mux, decoder, encoder, errhandler, formatter),
 		GetMyConnections:             NewGetMyConnectionsHandler(e.GetMyConnections, mux, decoder, encoder, errhandler, formatter),
@@ -105,6 +109,8 @@ func New(
 		ReportCrash:                  NewReportCrashHandler(e.ReportCrash, mux, decoder, encoder, errhandler, formatter),
 		CreateSessionHandoff:         NewCreateSessionHandoffHandler(e.CreateSessionHandoff, mux, decoder, encoder, errhandler, formatter),
 		ListPendingAccessRequests:    NewListPendingAccessRequestsHandler(e.ListPendingAccessRequests, mux, decoder, encoder, errhandler, formatter),
+		ListRequestableAccess:        NewListRequestableAccessHandler(e.ListRequestableAccess, mux, decoder, encoder, errhandler, formatter),
+		RequestAccess:                NewRequestAccessHandler(e.RequestAccess, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -131,6 +137,8 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ReportCrash = m(s.ReportCrash)
 	s.CreateSessionHandoff = m(s.CreateSessionHandoff)
 	s.ListPendingAccessRequests = m(s.ListPendingAccessRequests)
+	s.ListRequestableAccess = m(s.ListRequestableAccess)
+	s.RequestAccess = m(s.RequestAccess)
 }
 
 // MethodNames returns the methods served.
@@ -156,6 +164,8 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountReportCrashHandler(mux, h.ReportCrash)
 	MountCreateSessionHandoffHandler(mux, h.CreateSessionHandoff)
 	MountListPendingAccessRequestsHandler(mux, h.ListPendingAccessRequests)
+	MountListRequestableAccessHandler(mux, h.ListRequestableAccess)
+	MountRequestAccessHandler(mux, h.RequestAccess)
 }
 
 // Mount configures the mux to serve the agent endpoints.
@@ -1131,6 +1141,112 @@ func NewListPendingAccessRequestsHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "listPendingAccessRequests")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "agent")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListRequestableAccessHandler configures the mux to serve the "agent"
+// service "listRequestableAccess" endpoint.
+func MountListRequestableAccessHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/agent.listRequestableAccess", f)
+}
+
+// NewListRequestableAccessHandler creates a HTTP handler which loads the HTTP
+// request and calls the "agent" service "listRequestableAccess" endpoint.
+func NewListRequestableAccessHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListRequestableAccessRequest(mux, decoder)
+		encodeResponse = EncodeListRequestableAccessResponse(encoder)
+		encodeError    = EncodeListRequestableAccessError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listRequestableAccess")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "agent")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountRequestAccessHandler configures the mux to serve the "agent" service
+// "requestAccess" endpoint.
+func MountRequestAccessHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/agent.requestAccess", f)
+}
+
+// NewRequestAccessHandler creates a HTTP handler which loads the HTTP request
+// and calls the "agent" service "requestAccess" endpoint.
+func NewRequestAccessHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeRequestAccessRequest(mux, decoder)
+		encodeResponse = EncodeRequestAccessResponse(encoder)
+		encodeError    = EncodeRequestAccessError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "requestAccess")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "agent")
 		payload, err := decodeRequest(r)
 		if err != nil {

@@ -153,9 +153,8 @@ func TestConnectionCatalogPersistsTypedAuthClientWithoutBackfill(t *testing.T) {
 	}{
 		{"remote_session", toolfilter.CatalogModeCached, "", "backfill"}, {"static_credential", toolfilter.CatalogModeCached, "", "backfill"},
 		{"remote_session", toolfilter.CatalogModeLive, "", "backfill"}, {"static_credential", toolfilter.CatalogModeLive, "", "backfill"},
-		{"static_credential", toolfilter.CatalogModeCached, "bound", "backfill"}, {"static_credential", toolfilter.CatalogModeCached, "unbound", "backfill"},
 		{"remote_session", toolfilter.CatalogModeCached, "", "admin"}, {"static_credential", toolfilter.CatalogModeCached, "", "admin"},
-		{"remote_session", toolfilter.CatalogModeCached, "", "admin-unlinked"},
+		{"static_credential", toolfilter.CatalogModeCached, "association-without-offer", "backfill"},
 	} {
 		t.Run(tc.kind+"/"+string(tc.mode)+"/"+tc.oauth+"/"+tc.source, func(t *testing.T) {
 			kind := tc.kind
@@ -172,11 +171,7 @@ func TestConnectionCatalogPersistsTypedAuthClientWithoutBackfill(t *testing.T) {
 				// An administrator's client is offered without the association
 				// a backfilled one mirrors, and need not be linked to the
 				// gateway's sign-in.
-				linked := []uuid.UUID{issuer.ID}
-				if tc.source == "admin-unlinked" {
-					linked = nil
-				}
-				registration = uuid.NullUUID{UUID: createConsentRemoteClient(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "typed-"+uuid.NewString()[:8], "", linked), Valid: true}
+				registration = uuid.NullUUID{UUID: createConsentRemoteClient(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "typed-"+uuid.NewString()[:8], ""), Valid: true}
 				if tc.source == "backfill" {
 					_, err := upstreamclientsrepo.New(ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: *auth.ProjectID, McpServerID: serverID, RemoteSessionClientID: registration.UUID})
 					require.NoError(t, err)
@@ -184,16 +179,12 @@ func TestConnectionCatalogPersistsTypedAuthClientWithoutBackfill(t *testing.T) {
 				insertQualifiedRemoteSessionToken(t, ctx, ti, issuer.ID, registration.UUID, urn.NewUserSubject(mockidp.MockUserID), "fixture-token", upstream.url)
 			}
 			if tc.oauth != "" {
-				var bound []uuid.UUID
-				if tc.oauth == "bound" {
-					bound = []uuid.UUID{issuer.ID}
-				}
-				extra := createConsentRemoteClient(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "other-"+uuid.NewString()[:8], "", bound)
+				extra := createConsentRemoteClient(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "other-"+uuid.NewString()[:8], "")
 				_, err := upstreamclientsrepo.New(ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: *auth.ProjectID, McpServerID: serverID, RemoteSessionClientID: extra})
 				require.NoError(t, err)
 			}
 			fixtures := authclientfixtures.New(ti.conn)
-			source := strings.TrimSuffix(tc.source, "-unlinked")
+			source := tc.source
 			authClientID, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: uuid.NullUUID{UUID: *auth.ProjectID, Valid: true}, ClientType: kind, Source: source, RemoteSessionClientID: registration})
 			require.NoError(t, err)
 			if kind == "static_credential" {
@@ -254,7 +245,7 @@ func TestConnectionCatalogDirectProgressiveRechecksTypedExecution(t *testing.T) 
 				gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, issuer.ID)
 				upstream := newCatalogUpstream(t, 1)
 				serverID := seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Source", "source", 1, upstream.url)
-				registration := createConsentRemoteClient(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "typed-"+uuid.NewString()[:8], "", []uuid.UUID{issuer.ID})
+				registration := createConsentRemoteClient(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "typed-"+uuid.NewString()[:8], "")
 				_, err := upstreamclientsrepo.New(ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: *auth.ProjectID, McpServerID: serverID, RemoteSessionClientID: registration})
 				require.NoError(t, err)
 				insertQualifiedRemoteSessionToken(t, ctx, ti, issuer.ID, registration, urn.NewUserSubject(mockidp.MockUserID), "fixture-token", upstream.url)
@@ -323,7 +314,7 @@ func TestGatewayConsentRequiresAPickForTypedOffersOnOneRegistration(t *testing.T
 	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, issuer.ID)
 	upstream := newCatalogUpstream(t, 1)
 	serverID := seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Source", "source", 1, upstream.url)
-	registration := createConsentRemoteClient(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "ambiguous-"+uuid.NewString()[:8], "", []uuid.UUID{issuer.ID})
+	registration := createConsentRemoteClient(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "ambiguous-"+uuid.NewString()[:8], "")
 	_, err := upstreamclientsrepo.New(ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: *auth.ProjectID, McpServerID: serverID, RemoteSessionClientID: registration})
 	require.NoError(t, err)
 	insertQualifiedRemoteSessionToken(t, ctx, ti, issuer.ID, registration, urn.NewUserSubject(mockidp.MockUserID), "fixture-token", upstream.url)
@@ -864,7 +855,7 @@ func seedExpiredCatalogCredential(t *testing.T, ctx context.Context, ti *testIns
 		_, _ = w.Write([]byte(`{"access_token":"refreshed","token_type":"Bearer","expires_in":3600}`))
 	}))
 	t.Cleanup(tokenServer.Close)
-	remoteClient := createConsentRemoteClient(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "refresh-fixture", tokenServer.URL, []uuid.UUID{issuerID})
+	remoteClient := createConsentRemoteClient(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "refresh-fixture", tokenServer.URL)
 	access, err := ti.enc.Encrypt([]byte("expired"))
 	require.NoError(t, err)
 	refresh, err := ti.enc.Encrypt([]byte("refresh-fixture"))

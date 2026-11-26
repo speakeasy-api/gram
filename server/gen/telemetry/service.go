@@ -435,6 +435,10 @@ type GetObservabilityOverviewPayload struct {
 	ExternalOrgID *string
 	// Whether to include time series data (default: true)
 	IncludeTimeSeries bool
+	// Whether only tool call figures are needed (default: false). When true, chat,
+	// token, cost and session duration fields are returned as 0, and figures may
+	// be aligned to 15-minute boundaries.
+	ToolCallsOnly bool
 }
 
 // GetObservabilityOverviewResult is the result type of the telemetry service

@@ -553,7 +553,7 @@ func TestSourceFingerprintExpressionsAgree(t *testing.T) {
 	t.Parallel()
 	expression := regexp.MustCompile(`sha256\(convert_to\(jsonb_build_array\([^\n]*?\)::text,'UTF8'\)\)`)
 	var canonical string
-	for path, count := range map[string]int{"queries.sql": 5, "fixtures/queries.sql": 1} {
+	for path, count := range map[string]int{"queries.sql": 6, "fixtures/queries.sql": 1} {
 		source, err := os.ReadFile(path)
 		require.NoError(t, err)
 		matches := expression.FindAllString(string(source), -1)

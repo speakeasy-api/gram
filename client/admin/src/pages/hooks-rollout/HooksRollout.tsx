@@ -27,6 +27,8 @@ import {
 } from "@/lib/hooksRollout";
 import { fmtDateShort } from "@/lib/utils";
 
+import { ReleaseProgress } from "@/pages/hooks-rollout/ReleaseProgress";
+
 /**
  * The hooks version rollout: which hooks generator version every customer
  * organization is cleared to receive. A new hooks release ships with the
@@ -69,6 +71,7 @@ export function HooksRollout(): JSX.Element {
           </Button>
         </div>
       )}
+      <ReleaseProgress />
       <DefaultPin
         key={`${rollout.current_version}-${rollout.default_pin?.version ?? "none"}`}
         rollout={rollout}

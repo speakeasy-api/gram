@@ -168,12 +168,13 @@ func seedReadOnlyProxiedGateway(t *testing.T, ctx context.Context, ti *testInsta
 	upstream := newRecordingUpstream(t, "ping")
 	serverID := seedMetaMemberWithUpstream(t, ctx, ti.conn, projectID, meta.ID, "Member A", "member-a", 0, upstream.url)
 
-	client := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-read-only-a", "", []uuid.UUID{issuerID})
+	client := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-read-only-a", "")
 	subject := createTestUser(t, ctx, ti, "meta-read-only-user-"+uuid.NewString())
 	insertQualifiedRemoteSessionToken(t, ctx, ti, issuerID, client, subject, "token-member-a", upstream.url)
 
 	typed := seedTypedSessionClient(t, ctx, ti, orgID, projectID, serverID, client, "remote_session", subject)
-	return metaSlug, serverID, upstream, mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject, metaServingChoice{organizationID: orgID, serverID: serverID, clientID: typed})
+	bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject, metaServingChoice{organizationID: orgID, serverID: serverID, clientID: typed})
+	return metaSlug, serverID, upstream, bearer
 }
 
 // executeReadOnlyMetaTool drives execute_read_only_tool through the public

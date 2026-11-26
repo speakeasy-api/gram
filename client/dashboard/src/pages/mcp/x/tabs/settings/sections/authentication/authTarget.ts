@@ -28,9 +28,10 @@ export type AuthTarget = {
   slug: string;
   /** Project owning the target. */
   projectId: string;
+  hosted?: boolean;
   /** Resource identifier used by the target's mcp:write check. */
   permissionResourceId: string;
-  /** The MCP server row id, when the target is one; differs from permissionResourceId for toolset-backed servers. */
+  /** Exact MCP server row id, separate from the permission resource id. */
   mcpServerId?: string;
   /** Whether the target backend accepts organization-owned issuers. */
   supportsOrganizationIssuers: boolean;
@@ -72,6 +73,7 @@ export function useMcpServerAuthTarget(
     () => ({
       slug: mcpServer.slug ?? "mcp",
       projectId: mcpServer.projectId,
+      hosted: mcpServer.toolsetId !== undefined,
       permissionResourceId: mcpServer.toolsetId ?? mcpServer.id,
       mcpServerId: mcpServer.id,
       supportsOrganizationIssuers: true,
@@ -114,7 +116,11 @@ export function useToolsetAuthTarget(toolset: Toolset): AuthTarget {
     () => ({
       slug: toolset.slug,
       projectId: toolset.projectId,
+      hosted: true,
       permissionResourceId: toolset.id,
+      // The canonical hosted server shares the toolset's ID. Other wrappers
+      // have their own IDs and use useMcpServerAuthTarget instead.
+      mcpServerId: toolset.id,
       supportsOrganizationIssuers: true,
       userSessionIssuerId: toolset.userSessionIssuerId ?? null,
       attachImpactTarget: { toolsetId: toolset.id },

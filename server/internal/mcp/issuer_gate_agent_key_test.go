@@ -110,9 +110,7 @@ func TestApplyIssuerGate_AgentAPIKey(t *testing.T) {
 		RemoteSessionIssuerID: remoteIssuer.ID, ClientID: "agent-key-client",
 	})
 	require.NoError(t, err)
-	require.NoError(t, remoteRepo.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: remoteClient.ID, UserSessionIssuerID: endpoint.UserSessionIssuerID,
-	}))
+	assignHostedOAuth(t, ctx, ti.conn, fx.orgID, endpoint.ProjectID, fx.toolset.ID, remoteClient.ID)
 	insertRemoteSessionAccessToken(t, ctx, ti, endpoint.UserSessionIssuerID, remoteClient.ID, session.SubjectUrn, "must-not-use-direct-agent-token", time.Now().Add(time.Hour))
 	w = httptest.NewRecorder()
 	_, tokens, _, err := ti.service.ApplyIssuerGate(t.Context(), w, token, ti.serverURL.String(), &endpoint)

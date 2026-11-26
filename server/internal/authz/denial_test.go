@@ -176,7 +176,7 @@ func TestRecordedDenial_WithoutARecorder(t *testing.T) {
 	require.False(t, ok)
 }
 
-func TestDenialReasons_SkipsValidationWhenRBACIsNotEnforced(t *testing.T) {
+func TestDenialReasons_WhenRBACIsNotEnforced(t *testing.T) {
 	t.Parallel()
 
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
@@ -189,9 +189,12 @@ func TestDenialReasons_SkipsValidationWhenRBACIsNotEnforced(t *testing.T) {
 	invalid := Check{Scope: ScopeMCPConnect, ResourceKind: "", ResourceID: "", Dimensions: nil}
 	authClient := MCPAuthClientCheck("ac_1", MCPAuthClientDimensions{ClientType: AuthClientTypeServiceAccount, ProjectID: authProjectP, ConnectionOwner: "", UpstreamClient: ""})
 
-	reasons, err := engine.DenialReasons(ctx, []Check{valid, invalid, authClient})
+	reasons, err := engine.DenialReasons(ctx, []Check{valid, authClient})
 	require.NoError(t, err, "unenforced callers get the unenforced result, like FindMatched")
-	require.Equal(t, []Reason{ReasonNone, ReasonNone, ReasonNotGranted}, reasons)
+	require.Equal(t, []Reason{ReasonNone, ReasonNotGranted}, reasons)
+
+	_, err = engine.DenialReasons(ctx, []Check{valid, invalid})
+	require.ErrorIs(t, err, ErrInvalidCheck, "in tests an invalid check fails even when RBAC is skipped")
 }
 
 // A call refused only because the caller's grant names another disposition

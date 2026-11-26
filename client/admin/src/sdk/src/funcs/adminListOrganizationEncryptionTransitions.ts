@@ -40,7 +40,7 @@ import { Result } from "../types/fp.js";
  * listOrganizationEncryptionTransitions admin
  *
  * @remarks
- * Lists organizations by transition state for one use case, oldest first. Organizations never enrolled are in platform_key.
+ * Lists organizations by transition state for one use case. Organizations never enrolled are in platform_key. By default it lists only organizations with values for the use case, most recently written first.
  */
 export function adminListOrganizationEncryptionTransitions(
   client: GramCore,
@@ -110,8 +110,10 @@ async function $do(
   const query = encodeFormQuery({
     "limit": payload?.limit,
     "offset": payload?.offset,
+    "sort": payload?.sort,
     "state": payload?.state,
     "use_case": payload?.use_case,
+    "values": payload?.values,
   });
 
   const headers = new Headers(compactMap({

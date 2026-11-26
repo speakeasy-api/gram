@@ -166,6 +166,37 @@ func TestRead_GroupsAnAppVersionFromServedRows(t *testing.T) {
 	require.True(t, got[0].OtherAppsWorked)
 }
 
+// tokenAs writes p's app's token step on scope with what, ago before now.
+func (f *readFixture) tokenAs(p urn.SessionSubject, scope mcpconnectionattempts.Scope, ago time.Duration, what mcpconnectionattempts.Happened) {
+	f.t.Helper()
+	at := f.now.Add(-ago)
+	row, err := mcpconnectionattempts.RowAt(mcpconnectionattempts.AttemptAt(uuid.New(), at, scope), mcpconnectionattempts.StepInboundToken, what, true, at, mcpconnectionattempts.Subject(&p))
+	require.NoError(f.t, err)
+	require.NoError(f.t, mcpconnectionattempts.AppendRows(f.t.Context(), f.ch, []mcpconnectionattempts.Row{row}))
+}
+
+// A person whose unnamed app signed in again under another registration is not listed as unable to sign in.
+func TestRead_DropsAnUnnamedAppThatSignedInAgainUnderAnotherRegistration(t *testing.T) {
+	t.Parallel()
+	f := newReadFixture(t)
+	org, project, server := "org-"+uuid.NewString(), uuid.New(), uuid.New()
+	expired := mcpconnectionattempts.ServerScope(org, project, server, mcpconnectionattempts.AppDCR)
+	p := urn.NewUserSubject("user-" + uuid.NewString())
+	f.tokenAs(p, expired, 96*time.Hour, mcpconnectionattempts.ResultRefreshed)
+	f.tokenAs(p, expired, 26*time.Hour, mcpconnectionattempts.CodeRefreshTokenExpired)
+	f.tokenAs(p, expired, 30*time.Minute, mcpconnectionattempts.CodeRefreshTokenExpired)
+	f.servedOn(org, project, server, urn.NewUserSubject("user-"+uuid.NewString()), mcpconnectionattempts.FamilyCodexCLI, 20*time.Minute)
+
+	got := f.read(org, uuid.Nil, time.Time{})
+	require.Len(t, got, 1)
+	require.Equal(t, RuleOnePerson, got[0].Rule)
+	require.Equal(t, mcpconnectionattempts.PartAppSignIn, got[0].Part)
+	require.True(t, got[0].OtherAppsWorked, "another person's named app worked there")
+
+	f.tokenAs(p, mcpconnectionattempts.ServerScope(org, project, server, mcpconnectionattempts.AppOtherMetadataURL), 10*time.Minute, mcpconnectionattempts.ResultCodeIssued)
+	require.Empty(t, f.read(org, uuid.Nil, time.Time{}))
+}
+
 func TestRead_StartsWhereRecordingStarted(t *testing.T) {
 	t.Parallel()
 	f := newReadFixture(t)

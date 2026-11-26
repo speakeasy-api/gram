@@ -690,12 +690,11 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 	})
 	require.NoError(t, err)
 
-	// The join table is the sole read path for client↔issuer bindings, so the
-	// row's user_session_issuer_id alone is not enough for ListClients to find it.
-	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: client.ID,
-		UserSessionIssuerID:   userIssuer,
-	}))
+	if mcpServerID.Valid {
+		associateClient(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, mcpServerID.UUID, client.ID)
+	} else {
+		placeClientForSignIn(t, ctx, ti.conn, client.ID, userIssuer)
+	}
 
 	clients, err := mgr.ListClients(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuer)
 	require.NoError(t, err)

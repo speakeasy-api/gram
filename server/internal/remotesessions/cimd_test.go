@@ -354,6 +354,7 @@ func TestHandleClientMetadataDocument_NotFoundOnCustomDomain(t *testing.T) {
 	userIssuer := createUserSessionIssuer(t, ctx, ti.conn, "cimd-domain-usi")
 
 	created := createCimdClient(t, ctx, ti, issuerID.String(), userIssuer.String(), nil)
+	placeClientForSignIn(t, ctx, ti.conn, uuid.MustParse(created.ID), userIssuer)
 
 	mgr := newCIMDChallengeManager(t, ti, cimdServerURL)
 	// Reached via a verified custom domain: the document is pinned to the
@@ -420,6 +421,7 @@ func TestCIMD_BuildAuthorizationUrlUsesMetadataURLAsClientID(t *testing.T) {
 	userIssuer := createUserSessionIssuer(t, ctx, ti.conn, "cimd-authz-usi")
 
 	created := createCimdClient(t, ctx, ti, issuerID.String(), userIssuer.String(), nil)
+	placeClientForSignIn(t, ctx, ti.conn, uuid.MustParse(created.ID), userIssuer)
 
 	mgr := newCIMDChallengeManager(t, ti, cimdServerURL)
 	clients, err := mgr.ListClients(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuer)
@@ -515,7 +517,8 @@ func newCIMDCallbackFailureFixture(t *testing.T) (*remotesessions.ChallengeManag
 	require.NotNil(t, authCtx.ProjectID)
 	issuerID := createCIMDIssuer(t, ctx, ti, "cimd-callback-failure-"+uuid.NewString(), "https://idp.example.com/authorize", "https://idp.example.com/token")
 	userIssuer := createUserSessionIssuer(t, ctx, ti.conn, "cimd-callback-failure-usi-"+uuid.NewString())
-	createCimdClient(t, ctx, ti, issuerID.String(), userIssuer.String(), nil)
+	created := createCimdClient(t, ctx, ti, issuerID.String(), userIssuer.String(), nil)
+	placeClientForSignIn(t, ctx, ti.conn, uuid.MustParse(created.ID), userIssuer)
 
 	reader := sdkmetric.NewManualReader()
 	meterProvider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))

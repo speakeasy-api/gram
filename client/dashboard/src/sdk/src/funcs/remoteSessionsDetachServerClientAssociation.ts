@@ -38,7 +38,7 @@ import { Result } from "../types/fp.js";
  * detachServerClientAssociation remoteSessions
  *
  * @remarks
- * Remove one MCP server's association with an upstream OAuth client and retire its backfill-derived auth client link. The client, issuer-client bindings, associations with other servers, and independent administrator-owned typed links are unchanged. Returns not found (404) if the association does not exist. Requires mcp:write on the server.
+ * Remove one MCP server's association with an upstream OAuth client. The client, its issuer bindings, and its associations with other servers are untouched. Derived auth client links are synchronized; administrator-owned typed links are untouched. A hosted server that requires upstream authentication remains configured to require it and needs a replacement registration before it can use upstream OAuth. Requires mcp:write on the server.
  */
 export function remoteSessionsDetachServerClientAssociation(
   client: GramCore,

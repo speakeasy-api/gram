@@ -380,7 +380,9 @@ func (e *Engine) prepare(ctx context.Context, checks []Check, forRequire bool) (
 	var noGrants grantAuthorization
 	q := question{enforced: enforced, grants: noGrants, aboutOtherOrganization: e.aboutOtherOrganization(ctx)}
 	if !enforced {
-		e.logInvalidUnenforced(ctx, checks)
+		if err := e.validateUnenforced(ctx, checks); err != nil {
+			return question{}, err
+		}
 		return q, nil
 	}
 	grants, ok := grantAuthorizationFromContext(ctx)
