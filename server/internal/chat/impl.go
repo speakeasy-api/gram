@@ -2957,12 +2957,25 @@ func (s *Service) SummarizeToolCall(ctx context.Context, payload *gen.SummarizeT
 		return nil, oops.E(oops.CodeUnexpected, err, "encode tool summary response").LogError(ctx, s.logger)
 	}
 
-	stored, err := queries.StoreToolCallSummary(ctx, repo.StoreToolCallSummaryParams{
+	// The summary is part of the message body, so its encrypted transcript is
+	// resealed in the same transaction.
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin tool call summary transaction").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	stored, err := repo.New(tx).StoreToolCallSummary(ctx, repo.StoreToolCallSummaryParams{
 		ToolCallID: payload.ToolCallID, Summary: encodedRecord, MessageID: messageID,
 		ChatID: chatID, ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "persist tool call summary").LogError(ctx, s.logger)
+	}
+	if err := s.transcripts.Seal(ctx, tx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, []uuid.UUID{messageID}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "seal tool call summary").LogError(ctx, s.logger)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit tool call summary").LogError(ctx, s.logger)
 	}
 	if err := json.Unmarshal([]byte(stored), &record); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "decode stored tool summary").LogError(ctx, s.logger)

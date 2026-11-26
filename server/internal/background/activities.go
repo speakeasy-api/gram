@@ -479,7 +479,7 @@ func NewActivities(
 		markTriggerFired:                 activities.NewMarkTriggerFired(triggerApp),
 		segmentChat:                      resolution_activities.NewSegmentChat(logger, db, chatClient),
 		deleteChatResolutions:            resolution_activities.NewDeleteChatResolutions(db),
-		analyzeSegment:                   resolution_activities.NewAnalyzeSegment(logger, db, chatClient, telemetryLogger),
+		analyzeSegment:                   resolution_activities.NewAnalyzeSegment(logger, db, chatClient, telemetryLogger, chatWriter),
 		getUserFeedbackForChat:           resolution_activities.NewGetUserFeedbackForChat(logger, db),
 		fetchUnanalyzedMessages:          risk_analysis.NewFetchUnanalyzed(logger, tracerProvider, db),
 		analyzeBatch:                     analyzeBatch,

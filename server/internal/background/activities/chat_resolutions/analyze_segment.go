@@ -20,21 +20,29 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
+// TranscriptSealer reseals the encrypted transcripts of messages whose body
+// was just updated, inside the caller's transaction.
+type TranscriptSealer interface {
+	SealTranscripts(ctx context.Context, db repo.DBTX, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID) error
+}
+
 type AnalyzeSegment struct {
 	logger          *slog.Logger
 	repo            *repo.Queries
 	chatClient      openrouter.CompletionClient
 	db              *pgxpool.Pool
 	telemetryLogger *telemetry.Logger
+	transcripts     TranscriptSealer
 }
 
-func NewAnalyzeSegment(logger *slog.Logger, db *pgxpool.Pool, chatClient openrouter.CompletionClient, telemetryLogger *telemetry.Logger) *AnalyzeSegment {
+func NewAnalyzeSegment(logger *slog.Logger, db *pgxpool.Pool, chatClient openrouter.CompletionClient, telemetryLogger *telemetry.Logger, transcripts TranscriptSealer) *AnalyzeSegment {
 	return &AnalyzeSegment{
 		logger:          logger,
 		repo:            repo.New(db),
 		chatClient:      chatClient,
 		db:              db,
 		telemetryLogger: telemetryLogger,
+		transcripts:     transcripts,
 	}
 }
 
@@ -112,6 +120,7 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 	txRepo := a.repo.WithTx(tx)
 
 	// Update tool call outcomes
+	var updated []uuid.UUID
 	for _, tc := range result.ToolCalls {
 		// Convert relative index to absolute
 		absoluteIndex := args.StartIndex + tc.MessageIndex
@@ -128,8 +137,15 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 					attr.SlogMessageID(msgID.String()),
 				)
 				// Continue with other updates
+				continue
 			}
+			updated = append(updated, msgID)
 		}
+	}
+	// Outcome notes are part of the message body, so the encrypted transcripts
+	// are resealed in the same transaction.
+	if err := a.transcripts.SealTranscripts(ctx, tx, args.OrgID, args.ProjectID, updated); err != nil {
+		return fmt.Errorf("reseal tool call outcome transcripts: %w", err)
 	}
 
 	// Insert resolution

@@ -28,7 +28,6 @@ import (
 
 var (
 	ErrNotFound = errors.New("transcript source or shadow not found")
-	ErrChanged  = errors.New("transcript source changed during capture")
 	ErrStale    = errors.New("transcript shadow is stale")
 	ErrInvalid  = errors.New("invalid transcript store arguments")
 )
@@ -134,22 +133,20 @@ func (s *Store) capture(ctx context.Context, db repo.DBTX, organizationID string
 		if err != nil {
 			return safe(err)
 		}
-		// The copy records the source_updated_at it was sealed from. Every
-		// body update moves it, so the copy is current exactly while the two
-		// are equal.
+		// Snapshot locked the message, so the body cannot change before the
+		// transaction commits: the transcript is current from now on, and every
+		// body update replaces it in its own transaction.
 		n, err := q.Capture(ctx, repo.CaptureParams{
-			MessageID:       id,
-			ProjectID:       projectID,
-			OrganizationID:  organizationID,
-			ChatID:          row.ChatID,
-			SourceUpdatedAt: row.SourceUpdatedAt,
-			Ciphertext:      ciphertext,
+			MessageID:      id,
+			ProjectID:      projectID,
+			OrganizationID: organizationID,
+			Ciphertext:     ciphertext,
 		})
 		if err != nil {
 			return safe(err)
 		}
 		if n != 1 {
-			return ErrChanged
+			return ErrNotFound
 		}
 		// The counts and sizes live on chat_messages and the tool-call IDs in
 		// chat_message_tool_call_ids, measured from the same snapshot and
@@ -159,7 +156,6 @@ func (s *Store) capture(ctx context.Context, db repo.DBTX, organizationID string
 		n, err = q.UpdateMessageMetadata(ctx, repo.UpdateMessageMetadataParams{
 			MessageID:       id,
 			ProjectID:       projectID,
-			SourceUpdatedAt: row.SourceUpdatedAt,
 			ToolCallCount:   meta.toolCallCount,
 			ContentBytes:    meta.contentBytes,
 			ContentRawBytes: meta.contentRawBytes,
@@ -169,7 +165,7 @@ func (s *Store) capture(ctx context.Context, db repo.DBTX, organizationID string
 			return safe(err)
 		}
 		if n != 1 {
-			return ErrChanged
+			return ErrNotFound
 		}
 		if err := q.DeleteToolCallIDs(ctx, repo.DeleteToolCallIDsParams{MessageID: id, ProjectID: projectID}); err != nil {
 			return safe(err)
@@ -184,8 +180,9 @@ func (s *Store) capture(ctx context.Context, db repo.DBTX, organizationID string
 	return nil
 }
 
-// Load refuses missing/stale shadows, including authenticated older payloads
-// whose unencrypted source_updated_at was forged to match the current source.
+// Load refuses missing and legacy transcripts, and stale ones: a transcript
+// that decrypts to anything but the current body, which only a write that
+// bypassed the application can leave behind.
 func (s *Store) Load(ctx context.Context, organizationID string, projectID, messageID uuid.UUID) (transcriptcrypto.Message, error) {
 	var zero transcriptcrypto.Message
 	if organizationID == "" || projectID == uuid.Nil || messageID == uuid.Nil {
@@ -197,9 +194,6 @@ func (s *Store) Load(ctx context.Context, organizationID string, projectID, mess
 	}
 	if err != nil {
 		return zero, safe(err)
-	}
-	if !row.Current {
-		return zero, ErrStale
 	}
 	codec, err := transcriptcrypto.New(s.service, organizationID)
 	if err != nil {
@@ -219,7 +213,8 @@ func (s *Store) Load(ctx context.Context, organizationID string, projectID, mess
 // LoadMany opens the shadows of a page of messages with one codec backed by the
 // process's committed data key cache: a warm cache needs no KMS call, and a
 // cold one unwraps the organization's key once for the page. A message with no
-// shadow at all is left out of the result, and the caller serves its plaintext.
+// transcript, or only a legacy one with source_hash, is left out of the result,
+// and the caller serves its plaintext.
 // Every shadow that does exist gets Load's checks, and one that is stale or not
 // authentic fails the whole page: an existing shadow is never skipped in favour
 // of plaintext. Duplicate IDs are opened once.
@@ -290,9 +285,6 @@ func (s *Store) loadMany(ctx context.Context, organizationID string, projectID u
 	}
 	opened := make(map[uuid.UUID]transcriptcrypto.Message, len(rows))
 	for _, row := range rows {
-		if !row.Current {
-			return nil, ErrStale
-		}
 		msg, err := codec.Decrypt(ctx, transcriptcrypto.Identity{ProjectID: projectID, ChatID: row.ChatID, MessageID: row.ID}, row.Ciphertext)
 		if err != nil {
 			return nil, safe(err)
@@ -312,10 +304,10 @@ type Page struct {
 	More  bool
 }
 
-// Backfill commits a whole bounded page or returns no progress. Retry ErrChanged
-// with the same cursor. Every source row is recaptured, even when its
-// source_updated_at matches: a timestamp cannot authenticate a shadow, and
-// resealing clears a legacy source_hash. Reset the cursor
+// Backfill commits a whole bounded page or returns no progress. Every message is
+// resealed, even one with a current transcript: that clears a legacy
+// source_hash and repairs a transcript left stale by a write that bypassed the
+// application, such as one from a pod that predates resealing. Reset the cursor
 // to zero on the next sweep to catch messages inserted below the preceding sweep's cursor.
 func (s *Store) Backfill(ctx context.Context, organizationID string, projectID, after uuid.UUID, limit int32) (Page, error) {
 	if organizationID == "" || projectID == uuid.Nil || limit < 1 || limit > 500 {
@@ -347,8 +339,8 @@ func (s *Store) Backfill(ctx context.Context, organizationID string, projectID, 
 	return page, nil
 }
 
-// Progress describes source_updated_at coverage, not authenticated ciphertext
-// or plaintext removal. Only Load authenticates shadows. Unattributed rows
+// Progress counts messages with a transcript sealed since body updates began
+// resealing, not authenticated ciphertext or plaintext removal. Only Load authenticates shadows. Unattributed rows
 // belong to a scoped chat but cannot safely be captured without ownership repair.
 type Progress struct{ Current, Waiting, Unattributed int64 }
 

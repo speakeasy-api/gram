@@ -53,42 +53,26 @@ func (q *Queries) Backfill(ctx context.Context, arg BackfillParams) ([]uuid.UUID
 }
 
 const capture = `-- name: Capture :execrows
-WITH live AS MATERIALIZED (
- SELECT m.id FROM chat_messages m
- JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
- JOIN projects p ON p.id = c.project_id
- WHERE m.id = $5 AND m.project_id = $1 AND p.organization_id = $2
- AND m.chat_id = $6
- AND m.source_updated_at IS NOT DISTINCT FROM $4::timestamptz
- -- NO KEY UPDATE on the message, because UpdateMessageMetadata then updates it
- -- in the same transaction: two captures holding SHARE would deadlock on the
- -- upgrade. It still lets readers and key-share locks through.
- FOR NO KEY UPDATE OF m
- FOR SHARE OF c, p
-)
-INSERT INTO chat_message_transcripts (message_id, project_id, organization_id, ciphertext, source_updated_at)
-SELECT live.id, $1, $2, $3, $4::timestamptz FROM live
-ON CONFLICT (message_id) DO UPDATE SET ciphertext = EXCLUDED.ciphertext, source_hash = NULL, source_updated_at = EXCLUDED.source_updated_at, updated_at = clock_timestamp()
-WHERE chat_message_transcripts.project_id = $1 AND chat_message_transcripts.organization_id = $2
+INSERT INTO chat_message_transcripts (message_id, project_id, organization_id, ciphertext)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (message_id) DO UPDATE SET ciphertext = EXCLUDED.ciphertext, source_hash = NULL, updated_at = clock_timestamp()
+WHERE chat_message_transcripts.project_id = $2 AND chat_message_transcripts.organization_id = $3
 `
 
 type CaptureParams struct {
-	ProjectID       uuid.UUID
-	OrganizationID  string
-	Ciphertext      string
-	SourceUpdatedAt pgtype.Timestamptz
-	MessageID       uuid.UUID
-	ChatID          uuid.UUID
+	MessageID      uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	Ciphertext     string
 }
 
+// A resealed transcript drops the legacy source_hash.
 func (q *Queries) Capture(ctx context.Context, arg CaptureParams) (int64, error) {
 	result, err := q.db.Exec(ctx, capture,
+		arg.MessageID,
 		arg.ProjectID,
 		arg.OrganizationID,
 		arg.Ciphertext,
-		arg.SourceUpdatedAt,
-		arg.MessageID,
-		arg.ChatID,
 	)
 	if err != nil {
 		return 0, err
@@ -135,13 +119,13 @@ func (q *Queries) InsertToolCallIDs(ctx context.Context, arg InsertToolCallIDsPa
 
 const load = `-- name: Load :one
 SELECT m.id, m.chat_id, m.content, m.content_raw, m.tool_calls,
-       m.tool_outcome_notes, m.tool_call_summaries, m.storage_error, t.ciphertext,
-       (CASE WHEN t.source_updated_at IS NULL AND t.source_hash IS NOT NULL THEN t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')) ELSE t.source_updated_at IS NOT DISTINCT FROM m.source_updated_at END)::boolean AS current
+       m.tool_outcome_notes, m.tool_call_summaries, m.storage_error, t.ciphertext
 FROM chat_messages m
 JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
 JOIN projects p ON p.id = c.project_id
 JOIN chat_message_transcripts t ON t.message_id = m.id AND t.project_id = m.project_id AND t.organization_id = p.organization_id
 WHERE m.id = $1 AND m.project_id = $2 AND p.organization_id = $3
+  AND t.source_hash IS NULL
 `
 
 type LoadParams struct {
@@ -160,9 +144,11 @@ type LoadRow struct {
 	ToolCallSummaries []byte
 	StorageError      pgtype.Text
 	Ciphertext        string
-	Current           bool
 }
 
+// A transcript that still carries the legacy source_hash was sealed before body
+// updates resealed it, so it may be stale: it reads as missing until backfill
+// reseals it.
 func (q *Queries) Load(ctx context.Context, arg LoadParams) (LoadRow, error) {
 	row := q.db.QueryRow(ctx, load, arg.MessageID, arg.ProjectID, arg.OrganizationID)
 	var i LoadRow
@@ -176,20 +162,19 @@ func (q *Queries) Load(ctx context.Context, arg LoadParams) (LoadRow, error) {
 		&i.ToolCallSummaries,
 		&i.StorageError,
 		&i.Ciphertext,
-		&i.Current,
 	)
 	return i, err
 }
 
 const loadMany = `-- name: LoadMany :many
 SELECT m.id, m.chat_id, m.content, m.content_raw, m.tool_calls,
-       m.tool_outcome_notes, m.tool_call_summaries, m.storage_error, t.ciphertext,
-       (CASE WHEN t.source_updated_at IS NULL AND t.source_hash IS NOT NULL THEN t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')) ELSE t.source_updated_at IS NOT DISTINCT FROM m.source_updated_at END)::boolean AS current
+       m.tool_outcome_notes, m.tool_call_summaries, m.storage_error, t.ciphertext
 FROM chat_messages m
 JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
 JOIN projects p ON p.id = c.project_id
 JOIN chat_message_transcripts t ON t.message_id = m.id AND t.project_id = m.project_id AND t.organization_id = p.organization_id
 WHERE m.id = ANY($1::uuid[]) AND m.project_id = $2 AND p.organization_id = $3
+  AND t.source_hash IS NULL
 `
 
 type LoadManyParams struct {
@@ -208,9 +193,9 @@ type LoadManyRow struct {
 	ToolCallSummaries []byte
 	StorageError      pgtype.Text
 	Ciphertext        string
-	Current           bool
 }
 
+// Legacy transcripts that still carry source_hash read as missing, as in Load.
 func (q *Queries) LoadMany(ctx context.Context, arg LoadManyParams) ([]LoadManyRow, error) {
 	rows, err := q.db.Query(ctx, loadMany, arg.MessageIds, arg.ProjectID, arg.OrganizationID)
 	if err != nil {
@@ -230,7 +215,6 @@ func (q *Queries) LoadMany(ctx context.Context, arg LoadManyParams) ([]LoadManyR
 			&i.ToolCallSummaries,
 			&i.StorageError,
 			&i.Ciphertext,
-			&i.Current,
 		); err != nil {
 			return nil, err
 		}
@@ -243,8 +227,8 @@ func (q *Queries) LoadMany(ctx context.Context, arg LoadManyParams) ([]LoadManyR
 }
 
 const progress = `-- name: Progress :one
-SELECT count(*) FILTER (WHERE m.project_id = c.project_id AND t.message_id IS NOT NULL AND (CASE WHEN t.source_updated_at IS NULL AND t.source_hash IS NOT NULL THEN t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')) ELSE t.source_updated_at IS NOT DISTINCT FROM m.source_updated_at END))::bigint AS current,
-       count(*) FILTER (WHERE m.project_id = c.project_id AND (t.message_id IS NULL OR NOT (CASE WHEN t.source_updated_at IS NULL AND t.source_hash IS NOT NULL THEN t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')) ELSE t.source_updated_at IS NOT DISTINCT FROM m.source_updated_at END)))::bigint AS waiting,
+SELECT count(*) FILTER (WHERE m.project_id = c.project_id AND t.message_id IS NOT NULL AND t.source_hash IS NULL)::bigint AS current,
+       count(*) FILTER (WHERE m.project_id = c.project_id AND (t.message_id IS NULL OR t.source_hash IS NOT NULL))::bigint AS waiting,
        count(*) FILTER (WHERE m.project_id IS DISTINCT FROM c.project_id)::bigint AS unattributed
 FROM chats c JOIN projects p ON p.id = c.project_id
 JOIN chat_messages m ON m.chat_id = c.id
@@ -272,12 +256,13 @@ func (q *Queries) Progress(ctx context.Context, arg ProgressParams) (ProgressRow
 
 const snapshot = `-- name: Snapshot :one
 SELECT m.id, m.chat_id, m.content, m.content_raw, m.tool_calls,
-       m.tool_outcome_notes, m.tool_call_summaries, m.storage_error,
-       m.source_updated_at
+       m.tool_outcome_notes, m.tool_call_summaries, m.storage_error
 FROM chat_messages m
 JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
 JOIN projects p ON p.id = c.project_id
 WHERE m.id = $1 AND m.project_id = $2 AND p.organization_id = $3
+FOR NO KEY UPDATE OF m
+FOR SHARE OF c, p
 `
 
 type SnapshotParams struct {
@@ -295,9 +280,10 @@ type SnapshotRow struct {
 	ToolOutcomeNotes  pgtype.Text
 	ToolCallSummaries []byte
 	StorageError      pgtype.Text
-	SourceUpdatedAt   pgtype.Timestamptz
 }
 
+// Locks the message for the rest of the caller's transaction, so no body update
+// can land between this read and the transcript written from it.
 func (q *Queries) Snapshot(ctx context.Context, arg SnapshotParams) (SnapshotRow, error) {
 	row := q.db.QueryRow(ctx, snapshot, arg.MessageID, arg.ProjectID, arg.OrganizationID)
 	var i SnapshotRow
@@ -310,7 +296,6 @@ func (q *Queries) Snapshot(ctx context.Context, arg SnapshotParams) (SnapshotRow
 		&i.ToolOutcomeNotes,
 		&i.ToolCallSummaries,
 		&i.StorageError,
-		&i.SourceUpdatedAt,
 	)
 	return i, err
 }
@@ -320,7 +305,6 @@ UPDATE chat_messages
 SET tool_call_count = $1::integer, content_bytes = $2::integer,
     content_raw_bytes = $3::integer, tool_calls_bytes = $4::integer
 WHERE id = $5 AND project_id = $6::uuid
-  AND source_updated_at IS NOT DISTINCT FROM $7::timestamptz
 `
 
 type UpdateMessageMetadataParams struct {
@@ -330,12 +314,10 @@ type UpdateMessageMetadataParams struct {
 	ToolCallsBytes  int32
 	MessageID       uuid.UUID
 	ProjectID       uuid.UUID
-	SourceUpdatedAt pgtype.Timestamptz
 }
 
-// Plaintext-free metadata measured from the snapshot just sealed. It does not
-// touch a body column, so it leaves source_updated_at alone, and it lands only
-// while the message is still the version that was sealed.
+// Plaintext-free metadata measured from the snapshot just sealed, in the same
+// transaction, while Snapshot's lock keeps the body unchanged.
 func (q *Queries) UpdateMessageMetadata(ctx context.Context, arg UpdateMessageMetadataParams) (int64, error) {
 	result, err := q.db.Exec(ctx, updateMessageMetadata,
 		arg.ToolCallCount,
@@ -344,7 +326,6 @@ func (q *Queries) UpdateMessageMetadata(ctx context.Context, arg UpdateMessageMe
 		arg.ToolCallsBytes,
 		arg.MessageID,
 		arg.ProjectID,
-		arg.SourceUpdatedAt,
 	)
 	if err != nil {
 		return 0, err

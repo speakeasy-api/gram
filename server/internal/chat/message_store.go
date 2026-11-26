@@ -147,8 +147,8 @@ func NewChatMessageWriter(logger *slog.Logger, db *pgxpool.Pool, assetStorage as
 // WithTranscripts seals an encrypted copy of each message in the same
 // transaction as the write, for projects with encrypted transcripts. Configure it before
 // serving requests, after the schema migration and organization key
-// provisioning. It does not encrypt assets or remove plaintext; direct SQL
-// updates still need backfill to refresh the encrypted copies.
+// provisioning. It does not encrypt assets or remove plaintext. Body updates
+// outside the writer reseal through SealTranscripts.
 func (w *ChatMessageWriter) WithTranscripts(transcripts *transcriptstore.Transcripts) *ChatMessageWriter {
 	w.transcripts = transcripts
 	return w
@@ -157,6 +157,18 @@ func (w *ChatMessageWriter) WithTranscripts(transcripts *transcriptstore.Transcr
 func (w *ChatMessageWriter) sealTranscripts(ctx context.Context, db repo.DBTX, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID) error {
 	//nolint:wrapcheck // Seal already wraps with the transcript context.
 	return w.transcripts.Seal(ctx, db, organizationID, projectID, messageIDs)
+}
+
+// SealTranscripts reseals the encrypted transcripts of messages whose body the
+// caller just updated, inside the caller's transaction, for projects with
+// encrypted transcripts. Body updates delete the old transcript, so a caller
+// that skips this leaves the message on plaintext until backfill. A nil writer
+// seals nothing.
+func (w *ChatMessageWriter) SealTranscripts(ctx context.Context, db repo.DBTX, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID) error {
+	if w == nil {
+		return nil
+	}
+	return w.sealTranscripts(ctx, db, organizationID, projectID, messageIDs)
 }
 
 func messageWriteIDs(writes []MessageWrite) []uuid.UUID {

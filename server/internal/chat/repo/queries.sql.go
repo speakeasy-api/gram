@@ -4324,11 +4324,13 @@ WITH body_changed AS (
 ), stale_tool_call_ids AS (
   DELETE FROM chat_message_tool_call_ids tc
   WHERE tc.project_id = $6 AND tc.message_id IN (SELECT bc.id FROM body_changed bc)
+), stale_transcript AS (
+  DELETE FROM chat_message_transcripts t
+  WHERE t.project_id = $6 AND t.message_id IN (SELECT bc.id FROM body_changed bc)
 )
 UPDATE chat_messages AS m SET content = $1, content_raw = $2,
  tool_calls = $3, content_hash = $4, finish_reason = $5,
  risk_analyzed_at = CASE WHEN m.id IN (SELECT bc.id FROM body_changed bc) THEN NULL ELSE m.risk_analyzed_at END,
- source_updated_at = CASE WHEN m.id IN (SELECT bc.id FROM body_changed bc) THEN clock_timestamp() ELSE m.source_updated_at END,
  tool_call_count = CASE WHEN m.id IN (SELECT bc.id FROM body_changed bc) THEN NULL ELSE m.tool_call_count END,
  content_bytes = CASE WHEN m.id IN (SELECT bc.id FROM body_changed bc) THEN NULL ELSE m.content_bytes END,
  content_raw_bytes = CASE WHEN m.id IN (SELECT bc.id FROM body_changed bc) THEN NULL ELSE m.content_raw_bytes END,
@@ -4348,9 +4350,9 @@ type PatchKitProjectionMessageParams struct {
 	ID           uuid.UUID
 }
 
-// A body change stamps source_updated_at, so an encrypted copy of the old body
-// reads as stale, and drops the metadata and tool-call IDs measured from it
-// until the message is sealed again.
+// A body change deletes the encrypted transcript of the old body and drops
+// the metadata and tool-call IDs measured from it; the caller seals the new
+// body in the same transaction.
 func (q *Queries) PatchKitProjectionMessage(ctx context.Context, arg PatchKitProjectionMessageParams) (int64, error) {
 	result, err := q.db.Exec(ctx, patchKitProjectionMessage,
 		arg.Content,
@@ -4943,17 +4945,21 @@ func (q *Queries) SoftDeleteChat(ctx context.Context, arg SoftDeleteChatParams) 
 }
 
 const storeToolCallSummary = `-- name: StoreToolCallSummary :one
-UPDATE chat_messages
+WITH stale_transcript AS (
+  DELETE FROM chat_message_transcripts t
+  WHERE t.message_id = $3 AND t.project_id = $5::uuid
+    AND EXISTS (SELECT 1 FROM chat_messages cm WHERE cm.id = $3 AND cm.chat_id = $4 AND cm.project_id = $5::uuid)
+)
+UPDATE chat_messages AS m
 SET tool_call_summaries = jsonb_set(
-  COALESCE(tool_call_summaries, '{}'::jsonb),
+  COALESCE(m.tool_call_summaries, '{}'::jsonb),
   ARRAY[$1::text],
   $2::jsonb
-),
-    source_updated_at = clock_timestamp()
-WHERE id = $3
-  AND chat_id = $4
-  AND project_id = $5::uuid
-RETURNING (tool_call_summaries -> $1::text)::text AS summary
+)
+WHERE m.id = $3
+  AND m.chat_id = $4
+  AND m.project_id = $5::uuid
+RETURNING (m.tool_call_summaries -> $1::text)::text AS summary
 `
 
 type StoreToolCallSummaryParams struct {
@@ -4965,8 +4971,8 @@ type StoreToolCallSummaryParams struct {
 }
 
 // Preserve summaries for sibling calls carried by the same assistant message.
-// A body update stamps source_updated_at so an encrypted copy of the old body
-// reads as stale.
+// A body update deletes the encrypted transcript of the old body; the caller
+// seals the new body in the same transaction.
 func (q *Queries) StoreToolCallSummary(ctx context.Context, arg StoreToolCallSummaryParams) (string, error) {
 	row := q.db.QueryRow(ctx, storeToolCallSummary,
 		arg.ToolCallID,
@@ -5181,11 +5187,15 @@ func (q *Queries) UpdateInferenceMessageAttribution(ctx context.Context, arg Upd
 }
 
 const updateToolCallOutcome = `-- name: UpdateToolCallOutcome :exec
-UPDATE chat_messages
+WITH stale_transcript AS (
+  DELETE FROM chat_message_transcripts t
+  WHERE t.message_id = $3 AND t.project_id = $4::uuid
+    AND EXISTS (SELECT 1 FROM chat_messages cm WHERE cm.id = $3 AND cm.project_id = $4::uuid AND cm.tool_outcome_notes IS DISTINCT FROM $2)
+)
+UPDATE chat_messages AS m
 SET tool_outcome = $1,
-    tool_outcome_notes = $2,
-    source_updated_at = CASE WHEN tool_outcome_notes IS DISTINCT FROM $2 THEN clock_timestamp() ELSE source_updated_at END
-WHERE id = $3 AND project_id = $4::uuid
+    tool_outcome_notes = $2
+WHERE m.id = $3 AND m.project_id = $4::uuid
 `
 
 type UpdateToolCallOutcomeParams struct {
@@ -5195,7 +5205,9 @@ type UpdateToolCallOutcomeParams struct {
 	ProjectID        uuid.UUID
 }
 
-// tool_outcome_notes is a body field: changing it stamps source_updated_at.
+// tool_outcome_notes is a body field: changing it deletes the encrypted
+// transcript of the old body; the caller seals the new body in the same
+// transaction.
 func (q *Queries) UpdateToolCallOutcome(ctx context.Context, arg UpdateToolCallOutcomeParams) error {
 	_, err := q.db.Exec(ctx, updateToolCallOutcome,
 		arg.ToolOutcome,

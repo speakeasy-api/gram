@@ -103,7 +103,7 @@ func TestTranscriptShadowSchemaCompatibility(t *testing.T) {
 	t.Cleanup(func() { require.NoError(t, cleanup()) })
 	const columns = `message_id uuid NOT NULL, project_id uuid NOT NULL,
  organization_id text NOT NULL, ciphertext text NOT NULL, source_hash bytea,
- updated_at timestamptz NOT NULL DEFAULT clock_timestamp(), source_updated_at timestamptz`
+ updated_at timestamptz NOT NULL DEFAULT clock_timestamp()`
 	type schemaCase struct {
 		name, ddl string
 		ok        bool
@@ -133,10 +133,8 @@ func TestTranscriptShadowSchemaCompatibility(t *testing.T) {
 		{name: "deferrable tool call conflict target", ddl: "ALTER TABLE chat_message_tool_call_ids DROP CONSTRAINT chat_message_tool_call_ids_pkey; ALTER TABLE chat_message_tool_call_ids ADD UNIQUE (message_id, tool_call_id) DEFERRABLE; CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id))"},
 		{name: "unique tool call conflict target", ddl: "ALTER TABLE chat_message_tool_call_ids DROP CONSTRAINT chat_message_tool_call_ids_pkey; CREATE UNIQUE INDEX ON chat_message_tool_call_ids (tool_call_id, message_id); CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id))", ok: true},
 		{name: "missing tool call table", ddl: "DROP TABLE chat_message_tool_call_ids; CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id))"},
-		{name: "sidecar without source_updated_at", ddl: "CREATE TABLE chat_message_transcripts (" + strings.Replace(columns, ", source_updated_at timestamptz", "", 1) + ", PRIMARY KEY (message_id))"},
 		{name: "source_hash still required", ddl: "CREATE TABLE chat_message_transcripts (" + strings.Replace(columns, "source_hash bytea", "source_hash bytea NOT NULL", 1) + ", PRIMARY KEY (message_id))"},
-		{name: "source_updated_at without default", ddl: "ALTER TABLE chat_messages ALTER COLUMN source_updated_at DROP DEFAULT; CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id))"},
-		{name: "source_updated_at default NULL", ddl: "ALTER TABLE chat_messages ALTER COLUMN source_updated_at SET DEFAULT NULL; CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id))"},
+		{name: "wrong type source_hash", ddl: "CREATE TABLE chat_message_transcripts (" + strings.Replace(columns, "source_hash bytea", "source_hash text", 1) + ", PRIMARY KEY (message_id))"},
 		{name: "sidecar without source_hash", ddl: "CREATE TABLE chat_message_transcripts (" + strings.Replace(columns, " source_hash bytea,", "", 1) + ", PRIMARY KEY (message_id))"},
 		{name: "tool call extra required column without default", ddl: "ALTER TABLE chat_message_tool_call_ids ADD COLUMN extra text NOT NULL; CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id))"},
 		{name: "tool call defaulted extra column", ddl: "ALTER TABLE chat_message_tool_call_ids ADD COLUMN extra text NOT NULL DEFAULT ''; CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id))", ok: true},
@@ -148,10 +146,6 @@ func TestTranscriptShadowSchemaCompatibility(t *testing.T) {
 			schemaCase{name: "chat_messages wrong type " + name, ddl: base + "ALTER TABLE chat_messages ALTER COLUMN " + name + " TYPE text"},
 		)
 	}
-	tests = append(tests,
-		schemaCase{name: "chat_messages missing source_updated_at", ddl: base + "ALTER TABLE chat_messages DROP COLUMN source_updated_at"},
-		schemaCase{name: "chat_messages wrong type source_updated_at", ddl: base + "ALTER TABLE chat_messages ALTER COLUMN source_updated_at DROP DEFAULT, ALTER COLUMN source_updated_at TYPE text"},
-	)
 	for _, column := range []struct{ name, typ string }{
 		{"message_id", "uuid"}, {"project_id", "uuid"}, {"organization_id", "text"},
 		{"ciphertext", "text"}, {"updated_at", "timestamptz"},
@@ -229,7 +223,7 @@ CREATE SCHEMA app;
 ALTER TABLE chat_message_tool_call_ids SET SCHEMA app;
 CREATE TABLE app.chat_message_transcripts (message_id uuid NOT NULL PRIMARY KEY, project_id uuid NOT NULL,
  organization_id text NOT NULL, ciphertext text NOT NULL, source_hash bytea,
- updated_at timestamptz NOT NULL DEFAULT clock_timestamp(), source_updated_at timestamptz)`)
+ updated_at timestamptz NOT NULL DEFAULT clock_timestamp())`)
 	require.NoError(t, err)
 
 	tx, err := db.BeginTx(t.Context(), pgx.TxOptions{AccessMode: pgx.ReadOnly}) //nolint:glint // notestingrawsql: proves preflight is read-only.
