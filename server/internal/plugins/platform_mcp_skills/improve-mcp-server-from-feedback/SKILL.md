@@ -24,7 +24,7 @@ When an MCP server's feedback tool is on, agents that use the server can report 
 2. Call `get_mcp` for that server to learn how it is built and which tools it exposes, so you can tell a report about a real tool from one about a tool the server does not have.
 3. Call `list_mcp_feedback` with `project_slug` and `mcp_id`. Read the 30-day `counts` and the most reported `tools` first: they show where the trouble is before you read any text.
 4. Read the reports in order of impact: `severity: "blocked"`, then `"degraded"`, then everything else, including positive reports, which say what to keep. Page with `next_cursor` and the same filters. For a busy server, read up to about 50 reports and say how many you read out of the total.
-5. For each of the most reported tools, check the reports against what happened. Call `search_tool_calls` with the project, `mcp_id`, the tool's name in `tool_name_contains`, `outcome: "failure"` and `window: "30d"`, the same 30 days the counts cover. When reports say the whole server fails, call `get_mcp_diagnostics` instead. A report that the calls support is stronger evidence than one they do not.
+5. For each of the most reported tools, check the reports against what happened. Call `search_tool_calls` with the project, `mcp_id`, the tool's name in `tool_name_contains`, `outcome: "failure"` and `window: "30d"`, the same 30 days the counts cover. For blocked reports, search again with `outcome: "blocked"`: a call the server or a policy refused is recorded as blocked, not failed. When reports say the whole server fails, call `get_mcp_diagnostics` instead. A report that the calls support is stronger evidence than one they do not.
 
 ## Turn reports into improvements
 

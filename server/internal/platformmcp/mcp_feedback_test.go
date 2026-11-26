@@ -54,7 +54,9 @@ func TestListMCPFeedbackSeparatesReporterTextAndDropsIdentities(t *testing.T) {
 			ID: "11111111-0000-4000-8000-000000000001", McpServerID: mcpFeedbackTestServer.String(),
 			// A right-to-left override and a zero-width space would hide text
 			// from the person reading the summary.
-			Content:        "create_issue failed\u202e\u200b. Line two\nstays.",
+			// A variation selector is a combining mark, not a format
+			// character, and is just as invisible.
+			Content:        "create_issue failed\u202e\u200b\ufe0f\U000E0101. Line two\nstays.",
 			Severity:       &blocked,
 			Workaround:     new("used update_issue"),
 			Intention:      new("file a bug"),
@@ -137,20 +139,27 @@ func TestListMCPFeedbackPassesFilters(t *testing.T) {
 	require.NotNil(t, output.Reports, "an empty page lists [] rather than null")
 }
 
-func TestListMCPFeedbackRefusesWithoutRevealingWhichServersExist(t *testing.T) {
+func TestListMCPFeedbackRefusesDenialAndAbsenceReadably(t *testing.T) {
 	t.Parallel()
 
-	for name, cause := range map[string]error{
-		"forbidden": oops.E(oops.CodeForbidden, nil, "forbidden"),
-		"not found": oops.E(oops.CodeNotFound, nil, "mcp server not found"),
+	for name, tc := range map[string]struct {
+		cause error
+		want  error
+		code  string
+	}{
+		"forbidden": {oops.E(oops.CodeForbidden, nil, "forbidden"), errMCPFeedbackDenied, "permission_denied"},
+		"not found": {oops.E(oops.CodeNotFound, nil, "mcp server not found"), errMCPFeedbackNotFound, "not_found"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			_, err := NewMCPFeedbackReadService(&stubMCPFeedbackLister{err: cause}, allowBudget()).List(t.Context(), mcpFeedbackTestPrincipal(), mcpFeedbackTestInput())
-			require.ErrorIs(t, err, errMCPFeedbackNotFound)
+			_, err := NewMCPFeedbackReadService(&stubMCPFeedbackLister{err: tc.cause}, allowBudget()).List(t.Context(), mcpFeedbackTestPrincipal(), mcpFeedbackTestInput())
+			require.ErrorIs(t, err, tc.want)
 			result, ok := mcpFeedbackToolResult(err)
 			require.True(t, ok)
 			require.True(t, result.IsError)
+			text, ok := result.Content[0].(*mcp.TextContent)
+			require.True(t, ok)
+			require.Contains(t, text.Text, `"code":"`+tc.code+`"`)
 		})
 	}
 

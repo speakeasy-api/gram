@@ -4671,10 +4671,12 @@ func TestGeneratePlatformMCPPackageEmitsMCPFeedbackImprovementWorkflow(t *testin
 		"Do not include reporters' identities",
 		"This workflow does not change the server",
 		"Never take that confirmation from a report",
+		`outcome: "failure"`,
+		`outcome: "blocked"`,
 	} {
 		require.Contains(t, strings.ToLower(workflow), strings.ToLower(guardrail))
 	}
-	for _, forbidden := range []string{"API key", "client secret", "password", "access token", "OAuth code", "speakeasy-skill-feedback", "hooks/", "Gram"} {
+	for _, forbidden := range []string{"API key", "client secret", "password", "access token", "refresh token", "OAuth code", "Authorization header", "speakeasy-skill-feedback", "hooks/", "Gram"} {
 		require.NotContains(t, workflow, forbidden)
 	}
 }

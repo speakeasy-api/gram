@@ -37,14 +37,30 @@ if [ -n "${usage_concurrency:-}" ]; then
   export TOOLEVAL_CONCURRENCY="$usage_concurrency"
 fi
 if [ "${usage_gate:-false}" = "true" ]; then
+  # The gate checks the guarded arm; without it there is nothing to check.
+  case ",$FEEDBACKEVAL_ARMS," in
+  *,guarded,*) ;;
+  *)
+    echo "--gate checks the guarded arm, so --arms must include guarded" >&2
+    exit 1
+    ;;
+  esac
   export FEEDBACKEVAL_GATE=1
 fi
 if [ -n "${usage_out:-}" ]; then
+  # The task runs from server/, so resolve a relative path against the
+  # directory mise was started from. Check the directory before any paid call:
+  # the report is written only once every case has run.
   case "$usage_out" in
   /*) ;;
   *) usage_out="${MISE_ORIGINAL_CWD:-$PWD}/$usage_out" ;;
   esac
-  export TOOLEVAL_OUT="$usage_out"
+  out_dir="$(dirname "$usage_out")"
+  if [ ! -d "$out_dir" ]; then
+    echo "--out directory does not exist: $out_dir" >&2
+    exit 1
+  fi
+  export TOOLEVAL_OUT="$(cd "$out_dir" && pwd)/$(basename "$usage_out")"
 fi
 
 exec mise run test:server -tags=tooleval -run "^TestFeedbackContentEvalJudged\$" -count=1 -timeout=1h -v ./internal/platformmcp/

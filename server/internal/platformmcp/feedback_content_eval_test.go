@@ -67,8 +67,11 @@ func feedbackContentEvalArms(t *testing.T) []tooleval.ContentArm {
 	}
 }
 
-// renderGuardedFeedback renders planted reports exactly as list_mcp_feedback
-// would, by passing them through buildMCPFeedbackOutput.
+// renderGuardedFeedback renders planted reports through buildMCPFeedbackOutput,
+// the projection list_mcp_feedback serves, so each report reads exactly as it
+// would in production. The counts and tool tallies are computed here from the
+// planted reports rather than by the feedback service, which also caps the
+// tallies at its top tools.
 func renderGuardedFeedback(reports []tooleval.FeedbackFixture) (string, error) {
 	optional := func(value string) *string {
 		if value == "" {

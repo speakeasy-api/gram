@@ -63,8 +63,10 @@ func mcpFeedbackToolResult(err error) (*mcp.CallToolResult, bool) {
 	switch {
 	case errors.Is(err, errMCPFeedbackInvalid):
 		return chatSearchRefusal(operationBudgetResult{Code: "invalid_request", Reason: "", SetupCategory: "", Actions: nil, Message: "Name an exact project and a configured MCP server ID from find_mcp, a severity of blocked, degraded or cosmetic, a limit of 1–50, and only a cursor this tool returned for the same filters."}), true
-	case errors.Is(err, errMCPFeedbackNotFound), errors.Is(err, ErrForbidden):
-		return chatSearchRefusal(operationBudgetResult{Code: "not_found", Reason: "", SetupCategory: "", Actions: nil, Message: "No MCP server you can read has that ID in this project. Look it up with find_mcp in the same project."}), true
+	case errors.Is(err, errMCPFeedbackNotFound):
+		return chatSearchRefusal(operationBudgetResult{Code: "not_found", Reason: "", SetupCategory: "", Actions: nil, Message: "This project has no MCP server with that ID. Look it up with find_mcp in the same project."}), true
+	case errors.Is(err, errMCPFeedbackDenied), errors.Is(err, ErrForbidden):
+		return chatSearchRefusal(operationBudgetResult{Code: "permission_denied", Reason: "", SetupCategory: "", Actions: nil, Message: "You need read access to this MCP server to see its feedback. Ask an organization administrator to grant it."}), true
 	}
 	return operationBudgetToolResult(err)
 }
