@@ -77,7 +77,7 @@ func TestPlaintextGuardReportsListedProjectWithoutStore(t *testing.T) {
 }
 
 // canary replaces a captured message's plaintext with a marker and forges the
-// shadow's source hash to match it, so the SQL freshness check passes. Every
+// shadow's source_updated_at to match it, so the SQL freshness check passes. Every
 // reader must still refuse to serve the marker.
 const canary = "CANARY plaintext that must never be served"
 
@@ -135,7 +135,7 @@ func TestNoReaderServesForgedPlaintext(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			result, err := read()
-			require.ErrorIs(t, err, ErrStale, "a forged source hash must not let plaintext through")
+			require.ErrorIs(t, err, ErrStale, "a forged source_updated_at must not let plaintext through")
 			require.NotContains(t, strings.ToLower(fmtAny(result)), strings.ToLower(canary))
 		})
 	}
@@ -150,13 +150,13 @@ func TestNoReaderServesForgedPlaintext(t *testing.T) {
 func fmtAny(v any) string { return fmt.Sprintf("%+v", v) }
 
 // plantCanary captures a message, then puts the canary in its plaintext and
-// forges the shadow's source hash so SQL still calls it current.
+// forges the shadow's source_updated_at so SQL still calls it current.
 func plantCanary(t *testing.T, f *fixture, id uuid.UUID) {
 	t.Helper()
 	f.capture(t, id)
 	_, err := f.db.Exec(t.Context(), `UPDATE chat_messages SET content = $1 WHERE id = $2`, canary, id) //nolint:glint // notestingrawsql: plants the canary in plaintext behind the shadow.
 	require.NoError(t, err)
-	n, err := fixturerepo.New(f.db).ForgeSourceHash(t.Context(), id, project(f.project), f.org)
+	n, err := fixturerepo.New(f.db).ForgeSourceUpdatedAt(t.Context(), id, project(f.project), f.org)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, n)
 }
@@ -170,8 +170,8 @@ func TestNoOtherReaderServesForgedPlaintext(t *testing.T) {
 	}
 	// Shape the fixtures: a tool result answering the call's "example" ID, a
 	// user prompt, an owned chat and a later message to evaluate history for.
-	// None of these columns feed the source hash.
-	//nolint:glint // notestingrawsql: fixture columns outside the transcript fingerprint.
+	// None of these columns is a body field, so none moves source_updated_at.
+	//nolint:glint // notestingrawsql: fixture columns outside the transcript body.
 	_, err := f.db.Exec(t.Context(), `
 UPDATE chat_messages SET role = 'tool', tool_call_id = 'example' WHERE id = $1;
 `, result)
@@ -221,7 +221,7 @@ UPDATE chat_messages SET role = 'tool', tool_call_id = 'example' WHERE id = $1;
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			result, err := read()
-			require.ErrorIs(t, err, ErrStale, "a forged source hash must not let plaintext through")
+			require.ErrorIs(t, err, ErrStale, "a forged source_updated_at must not let plaintext through")
 			require.NotContains(t, strings.ToLower(fmtAny(result)), strings.ToLower(canary))
 		})
 	}

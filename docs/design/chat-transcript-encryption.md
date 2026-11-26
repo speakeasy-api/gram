@@ -156,7 +156,7 @@ and `chat.transcript_shadow.plaintext_reads` by `gram.transcript_shadow.reader`,
 with `gram.outcome:unopened`, the one outcome that serves plaintext besides
 `plaintext_fallback`. Local development fails the read instead. A prod Datadog
 monitor that pages on any count is planned in gram-infra. A test plants a
-canary in plaintext behind a captured shadow, forges the source hash so SQL
+canary in plaintext behind a captured shadow, forges its source_updated_at so SQL
 calls it current, and checks that every reader fails as stale instead of
 serving it.
 
