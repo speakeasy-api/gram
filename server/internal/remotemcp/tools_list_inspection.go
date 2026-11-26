@@ -49,13 +49,13 @@ const (
 // toolUnavailableReason maps an authz denial to its wire reason. A check
 // that reports no denial was refused by the same evaluation moments earlier,
 // so it falls back to not granted.
-func toolUnavailableReason(reason authz.DenialReason) ToolUnavailableReason {
+func toolUnavailableReason(reason authz.Reason) ToolUnavailableReason {
 	switch reason {
-	case authz.DenialReasonBlocked:
+	case authz.ReasonBlocked:
 		return ToolUnavailableReasonBlocked
-	case authz.DenialReasonReadOnly:
+	case authz.ReasonReadOnly:
 		return ToolUnavailableReasonReadOnly
-	case authz.DenialReasonNone, authz.DenialReasonDisposition, authz.DenialReasonNotGranted:
+	case authz.ReasonNone, authz.ReasonDisposition, authz.ReasonNotGranted:
 		return ToolUnavailableReasonNotGranted
 	default:
 		return ToolUnavailableReasonNotGranted

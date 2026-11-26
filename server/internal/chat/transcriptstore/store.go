@@ -134,14 +134,31 @@ func (s *Store) capture(ctx context.Context, db repo.DBTX, organizationID string
 		if err != nil {
 			return safe(err)
 		}
-		meta := metadataOf(row.Content, row.ContentRaw, row.ToolCalls)
+		// The copy records the source_updated_at it was sealed from; the
+		// chat_messages triggers move it on every body change, so the copy is
+		// current exactly while the two are equal.
 		n, err := q.Capture(ctx, repo.CaptureParams{
 			MessageID:       id,
 			ProjectID:       projectID,
 			OrganizationID:  organizationID,
 			ChatID:          row.ChatID,
-			SourceHash:      row.SourceHash,
+			SourceUpdatedAt: row.SourceUpdatedAt,
 			Ciphertext:      ciphertext,
+		})
+		if err != nil {
+			return safe(err)
+		}
+		if n != 1 {
+			return ErrChanged
+		}
+		// Metadata and tool-call IDs live on chat_messages, measured from the
+		// same snapshot and written in the same transaction, so they never
+		// describe another version of the message than the sealed one.
+		meta := metadataOf(row.Content, row.ContentRaw, row.ToolCalls)
+		n, err = q.UpdateMessageMetadata(ctx, repo.UpdateMessageMetadataParams{
+			MessageID:       id,
+			ProjectID:       projectID,
+			SourceUpdatedAt: row.SourceUpdatedAt,
 			ToolCallCount:   meta.toolCallCount,
 			ContentBytes:    meta.contentBytes,
 			ContentRawBytes: meta.contentRawBytes,
@@ -153,8 +170,6 @@ func (s *Store) capture(ctx context.Context, db repo.DBTX, organizationID string
 		if n != 1 {
 			return ErrChanged
 		}
-		// Tool-call IDs are rewritten with the shadow, inside the same
-		// transaction, so they never describe an older version of the message.
 		if err := q.DeleteToolCallIDs(ctx, repo.DeleteToolCallIDsParams{MessageID: id, ProjectID: projectID}); err != nil {
 			return safe(err)
 		}
@@ -169,7 +184,7 @@ func (s *Store) capture(ctx context.Context, db repo.DBTX, organizationID string
 }
 
 // Load refuses missing/stale shadows, including authenticated older payloads
-// whose unencrypted source_hash was forged to match the current source.
+// whose unencrypted source_updated_at was forged to match the current source.
 func (s *Store) Load(ctx context.Context, organizationID string, projectID, messageID uuid.UUID) (transcriptcrypto.Message, error) {
 	var zero transcriptcrypto.Message
 	if organizationID == "" || projectID == uuid.Nil || messageID == uuid.Nil {

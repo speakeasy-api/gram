@@ -87,10 +87,10 @@ func TestMCPAuthClientCheckRejectsMissingDimensions(t *testing.T) {
 		"personal wildcard upstream":  MCPAuthClientCheck(authClientA, MCPAuthClientDimensions{ClientType: AuthClientTypeRemoteSession, ProjectID: authProjectP, ConnectionOwner: sessionUserID, UpstreamClient: "*"}),
 		"shared client with upstream": MCPAuthClientCheck(authClientA, MCPAuthClientDimensions{ClientType: AuthClientTypeServiceAccount, ProjectID: authProjectP, ConnectionOwner: "", UpstreamClient: authUpstreamU}),
 		"shared client with owner":    MCPAuthClientCheck(authClientA, MCPAuthClientDimensions{ClientType: AuthClientTypeEMA, ProjectID: authProjectP, ConnectionOwner: sessionUserID, UpstreamClient: ""}),
-		"extra dimension":             {Scope: ScopeMCPAuth, ResourceKind: "", ResourceID: authClientA, Dimensions: map[string]string{SelectorKeyClientType: AuthClientTypeServiceAccount, SelectorKeyProjectID: authProjectP, SelectorKeyTool: "x"}, exact: true, representedUser: "", probe: false, anyOf: nil, operation: operationDefault},
-		"wrong resource kind":         {Scope: ScopeMCPAuth, ResourceKind: ResourceKindMCP, ResourceID: authClientA, Dimensions: map[string]string{SelectorKeyClientType: AuthClientTypeServiceAccount, SelectorKeyProjectID: authProjectP}, exact: true, representedUser: "", probe: false, anyOf: nil, operation: operationDefault},
-		"dimensionless auth scope":    {Scope: ScopeMCPAuth, ResourceKind: "", ResourceID: authClientA, Dimensions: nil, exact: false, representedUser: "", probe: false, anyOf: nil, operation: operationDefault},
-		"dimensionless block scope":   {Scope: ScopeMCPBlockedAuth, ResourceKind: "", ResourceID: authClientA, Dimensions: nil, exact: false, representedUser: "", probe: false, anyOf: nil, operation: operationDefault},
+		"extra dimension":             {Scope: ScopeMCPAuth, ResourceKind: "", ResourceID: authClientA, Dimensions: map[string]string{SelectorKeyClientType: AuthClientTypeServiceAccount, SelectorKeyProjectID: authProjectP, SelectorKeyTool: "x"}, exact: true, representedUser: "", probe: false, group: nil, operation: operationDefault},
+		"wrong resource kind":         {Scope: ScopeMCPAuth, ResourceKind: ResourceKindMCP, ResourceID: authClientA, Dimensions: map[string]string{SelectorKeyClientType: AuthClientTypeServiceAccount, SelectorKeyProjectID: authProjectP}, exact: true, representedUser: "", probe: false, group: nil, operation: operationDefault},
+		"dimensionless auth scope":    {Scope: ScopeMCPAuth, ResourceKind: "", ResourceID: authClientA, Dimensions: nil, exact: false, representedUser: "", probe: false, group: nil, operation: operationDefault},
+		"dimensionless block scope":   {Scope: ScopeMCPBlockedAuth, ResourceKind: "", ResourceID: authClientA, Dimensions: nil, exact: false, representedUser: "", probe: false, group: nil, operation: operationDefault},
 	}
 	for name, check := range invalid {
 		_, err := GrantsAuthorize(grants, check)
@@ -314,9 +314,9 @@ func TestUnenforcedPathsDenyAuthClientChecks(t *testing.T) {
 	requireForbidden(t, engine.Require(ctx, own))
 	requireForbidden(t, engine.Require(ctx, other, shared))
 	require.NoError(t, engine.Require(ctx, other), "unrelated scopes keep today's behavior")
-	requireForbidden(t, engine.RequireAny(ctx, own, shared))
-	require.NoError(t, engine.RequireAny(ctx, own, other))
-	requireForbidden(t, engine.RequireAnyUnblocked(ctx, shared))
+	requireForbidden(t, engine.Require(ctx, Either(own, shared)))
+	require.NoError(t, engine.Require(ctx, Either(own, other)))
+	requireForbidden(t, engine.Require(ctx, Either(shared)))
 
 	allowed, err := engine.Evaluate(ctx, shared)
 	require.NoError(t, err)
