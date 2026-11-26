@@ -3,6 +3,8 @@ package orgencryption
 import (
 	"context"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // SetClock replaces the clock a Cipher stamps and checks decisions with.
@@ -22,6 +24,16 @@ func (m *Migrator) SetCandidatePageSize(n int32) {
 func (s *Service) EnableKeepWarm(useCases ...UseCase) func() {
 	warm := s.enableKeepWarm(useCases)
 	return func() { s.disableKeepWarm(warm) }
+}
+
+// AgeDataKey makes a cached DEK look as if KMS returned it age ago.
+func (s *Service) AgeDataKey(id uuid.UUID, age time.Duration) {
+	cached, ok := s.dataKeys.Peek(id)
+	if !ok {
+		return
+	}
+	cached.unwrappedAt = time.Now().Add(-age)
+	s.dataKeys.Add(id, cached)
 }
 
 // RecordedUses counts the DEK uses KeepWarm tracks.

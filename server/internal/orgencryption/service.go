@@ -42,6 +42,10 @@ const (
 	// remembers.
 	configCacheSize = 4096
 
+	// warmMargin is the least life a DEK keeps after Warm returns, so a
+	// transaction opened right after it finds the DEK still cached.
+	warmMargin = 30 * time.Second
+
 	// kmsCallTimeout bounds one unwrap, so a hung KMS call does not hold a
 	// caller past its own deadline budget.
 	kmsCallTimeout = 10 * time.Second
@@ -212,9 +216,17 @@ func (s *Service) Warm(ctx context.Context, organizationID string, useCase UseCa
 	if cfg.activeDataKeyID == uuid.Nil {
 		return ErrNotProvisioned
 	}
-	if _, err := s.dataKey(ctx, organizationID, cfg.activeDataKeyID); err != nil {
+	// A cached DEK about to expire could drop out before the transaction uses
+	// it, so unwrap it again when less than warmMargin of its life is left.
+	if cached, ok := s.dataKeys.Get(cfg.activeDataKeyID); ok && time.Since(cached.unwrappedAt) < DataKeyCacheTTL-warmMargin {
+		s.noteUse(cfg.activeDataKeyID, cached.useCase)
+		return nil
+	}
+	dataKey, err := s.unwrapShared(ctx, organizationID, cfg.activeDataKeyID)
+	if err != nil {
 		return err
 	}
+	s.noteUse(cfg.activeDataKeyID, dataKey.useCase)
 	return nil
 }
 

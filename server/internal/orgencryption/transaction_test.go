@@ -166,3 +166,23 @@ func rollbackTransaction(t *testing.T, tx pgx.Tx) {
 		require.NoError(t, err)
 	}
 }
+
+// Warm leaves the DEK cached with at least warmMargin of life, so the
+// transaction opened right after it still finds the DEK.
+func TestWarmRefreshesAKeyCloseToExpiry(t *testing.T) {
+	t.Parallel()
+	ti := newTestInstance(t)
+	ti.provision(t)
+	service, _ := transactionService(t, ti)
+	active, err := repo.New(ti.conn).GetActiveDataEncryptionKey(t.Context(), repo.GetActiveDataEncryptionKeyParams{OrganizationID: ti.orgID, UseCase: string(useCase)})
+	require.NoError(t, err)
+	before := ti.fixture.KMS.Decrypts()
+
+	require.NoError(t, service.Warm(t.Context(), ti.orgID, useCase))
+	require.NoError(t, service.Warm(t.Context(), ti.orgID, useCase))
+	require.Equal(t, before+1, ti.fixture.KMS.Decrypts(), "a fresh key is reused")
+
+	service.AgeDataKey(active.ID, orgencryption.DataKeyCacheTTL-10*time.Second)
+	require.NoError(t, service.Warm(t.Context(), ti.orgID, useCase))
+	require.Equal(t, before+2, ti.fixture.KMS.Decrypts(), "a key about to expire is unwrapped again")
+}
