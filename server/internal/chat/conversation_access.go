@@ -34,7 +34,7 @@ func (s *Service) ReadableConversations(ctx context.Context, ids []string) ([]st
 		}
 		checks = append(checks, authz.Chat(authz.ChatIDFrom(raw)).Read())
 	}
-	decisions, err := s.authz.Decide(ctx, checks...)
+	decisions, err := s.authz.DecideAndRecord(ctx, checks...)
 	if err != nil {
 		return nil, fmt.Errorf("filter conversation grants: %w", err)
 	}

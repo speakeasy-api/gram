@@ -21,7 +21,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
-	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 const (
@@ -360,15 +359,13 @@ func (s *Service) enumerateToolsetConsentInventory(ctx context.Context, endpoint
 		if s.authz != nil && private {
 			// The same classifier tools/list and tools/call use.
 			disposition := toolDisposition(ctx, s.logger, base.Name, base.Annotations)
-			// Listing the tools names none of them, as in tools/list
-			// (filterToolsByMCPConnect), so no check is recorded per tool.
-			if rerr := s.authz.Require(authz.WithoutChallenges(ctx), authz.MCPServer(authz.MCPServerIDFrom(connectResourceID), authz.ProjectIDOf(endpoint.ProjectID)).ToolCall(base.Name, disposition)); rerr != nil {
-				var oopsErr *oops.ShareableError
-				if errors.As(rerr, &oopsErr) && oopsErr.Code == oops.CodeForbidden {
-					roleHidden = append(roleHidden, base.Name)
-					continue
-				}
-				return nil, nil, fmt.Errorf("check tool-level authz for consent inventory: %w", rerr)
+			decision, derr := s.authz.Decide(ctx, authz.MCPServer(authz.MCPServerIDFrom(connectResourceID), authz.ProjectIDOf(endpoint.ProjectID)).ToolCall(base.Name, disposition))
+			if derr != nil {
+				return nil, nil, fmt.Errorf("check tool-level authz for consent inventory: %w", derr)
+			}
+			if !decision.AllAllowed {
+				roleHidden = append(roleHidden, base.Name)
+				continue
 			}
 		}
 		tools = append(tools, consentInventoryTool{

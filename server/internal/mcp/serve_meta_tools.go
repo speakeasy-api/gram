@@ -772,7 +772,7 @@ func (s *Service) loadMemberToolset(
 // memberToolsetConnectAllowed applies a non-public toolset's own mcp:connect
 // gate, matching ServeToolsetResolved's connection check. Grants context was
 // prepared when the member snapshot was resolved. Whether the check is
-// recorded follows ctx: admission and listings pass authz.WithoutChallenges,
+// recorded follows ctx: admission and listings pass authz.ForListing,
 // and a call that named a private member already recorded the same check, so
 // the request keeps one.
 func (s *Service) memberToolsetConnectAllowed(ctx context.Context, shadow *mandatoryShadow, shadowSurface string, authenticated bool, toolset *toolsets_repo.Toolset, public bool) (bool, error) {

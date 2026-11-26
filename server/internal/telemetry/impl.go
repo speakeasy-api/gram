@@ -3937,7 +3937,7 @@ func (s *Service) GetOrgMcpServerActivity(ctx context.Context, payload *telem_ge
 	for i, project := range projects {
 		checks[i] = authz.Project(authz.ProjectIDOf(project.ID)).Read()
 	}
-	decisions, err := s.authz.Decide(ctx, checks...)
+	decisions, err := s.authz.DecideAndRecord(ctx, checks...)
 	if err != nil {
 		return nil, err
 	}
@@ -4644,7 +4644,7 @@ func filterReadable(ctx context.Context, engine *authz.Engine, checks []authz.Ch
 	if len(checks) == 0 || engine == nil {
 		return readable, nil
 	}
-	decisions, err := engine.Decide(ctx, checks...)
+	decisions, err := engine.DecideAndRecord(ctx, checks...)
 	if err != nil {
 		return nil, fmt.Errorf("filter: %w", err)
 	}

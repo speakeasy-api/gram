@@ -291,7 +291,7 @@ func (b *metaCodeBackend) Members(ctx context.Context) ([]codemode.Server, codem
 		defer cancel()
 		// The program lists every server here without naming one, so no
 		// authorization check is recorded for any of them.
-		return b.catalog(authz.WithoutChallenges(bound), gate, members, slug)
+		return b.catalog(authz.ForListing(bound), gate, members, slug)
 	}
 	return servers, list, nil
 }

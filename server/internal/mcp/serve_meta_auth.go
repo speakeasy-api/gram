@@ -72,7 +72,7 @@ func (s *Service) derivedMemberAuth(ctx context.Context, shadow *mandatoryShadow
 	}
 	// Admission runs this for every member, so it records no authorization
 	// check; a call that names the member records it (findNamedMember).
-	allowed, err := s.memberToolsetConnectAllowed(authz.WithoutChallenges(ctx), shadow, shadowSurface, true, &toolset, hosting.Public)
+	allowed, err := s.memberToolsetConnectAllowed(authz.ForListing(ctx), shadow, shadowSurface, true, &toolset, hosting.Public)
 	if err != nil {
 		return false, false, err
 	}

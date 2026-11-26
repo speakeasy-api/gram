@@ -128,7 +128,7 @@ func (s *Service) endpointEMAProviders(ctx context.Context, in PreparationInput,
 	}
 	// Acceptance is status evidence: a failed read leaves it out rather than
 	// failing the whole read. Organization-wide evidence needs org:read.
-	decision, err := s.authz.Decide(authz.WithoutChallenges(ctx), authz.Org(authz.OrgIDFrom(org)).Read())
+	decision, err := s.authz.Decide(ctx, authz.Org(authz.OrgIDFrom(org)).Read())
 	if err != nil {
 		logger.WarnContext(ctx, "check organization read access", attr.SlogError(err))
 	}

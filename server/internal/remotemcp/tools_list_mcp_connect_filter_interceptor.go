@@ -125,7 +125,7 @@ func (i *ToolsListMCPConnectFilterInterceptor) InterceptToolsListResponse(ctx co
 		checks[idx] = authz.MCPServer(authz.MCPServerIDFrom(i.mcpServerID), authz.ProjectIDFrom(i.projectID)).ToolCall(strings.TrimSpace(t.Name), dispositions[strings.TrimSpace(t.Name)])
 	}
 
-	decisions, err := i.authz.Decide(ctx, checks...)
+	decisions, err := i.authz.DecideAndRecord(ctx, checks...)
 	if err != nil {
 		return fmt.Errorf("filter mcp:connect tools: %w", err)
 	}

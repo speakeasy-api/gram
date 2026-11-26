@@ -617,7 +617,7 @@ func (s *Service) admitMetaMembers(
 		// when a call names the member (findNamedMember), so denied members
 		// are kept aside for that.
 		connect := memberConnectCheck(candidate.serverID, candidate.toolsetID, candidate.projectID)
-		refusal, err := s.memberConnectDecision(authz.WithoutChallenges(ctx), shadow, surface, candidate.visibility, connect)
+		refusal, err := s.memberConnectDecision(authz.ForListing(ctx), shadow, surface, candidate.visibility, connect)
 		if err != nil {
 			return ctx, nil, nil, oops.E(oops.CodeUnexpected, err, "check member authz").LogError(ctx, logger)
 		}
@@ -706,7 +706,7 @@ func (s *Service) admitMetaMembers(
 // when the check could not be evaluated. A refusal is Forbidden, or
 // Unauthorized for an anonymous caller on an ungated endpoint, which carries
 // no AuthContext. Whether the check is recorded as an authorization check
-// follows ctx: callers that filter or list pass authz.WithoutChallenges.
+// follows ctx: callers that filter or list pass authz.ForListing.
 // The caller must have prepared the authz context.
 func (s *Service) memberConnectDecision(ctx context.Context, shadow *mandatoryShadow, surface string, visibility string, connect authz.Check) (refusal error, err error) {
 	switch visibility {

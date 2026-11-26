@@ -432,11 +432,11 @@ func TestWithOneChallengePerResource_recordsEachRefusedToolOnce(t *testing.T) {
 	}
 }
 
-func TestWithoutChallenges_recordsNothing(t *testing.T) {
+func TestForListing_recordsNothing(t *testing.T) {
 	t.Parallel()
 
 	ctx, engine, conn, granted := challengeScopeFixture(t)
-	silent := WithoutChallenges(WithOneChallengePerResource(ctx))
+	silent := ForListing(WithOneChallengePerResource(ctx))
 
 	require.NoError(t, engine.Require(silent, MCPServer(MCPServerIDFrom(granted), ProjectIDFrom(testProjectID)).Connect()))
 	require.Error(t, engine.Require(silent, mcpCheck(ScopeMCPConnect, uuid.NewString(), "")))

@@ -667,7 +667,7 @@ func (s *Service) callMetaServerTool(
 	var memberFailures []metaMemberFailure
 	switch params.Name {
 	case metamcp.ToolListServers:
-		body, err = s.handleMetaListServersCall(authz.WithoutChallenges(ctx), logger, gate, catalogSelectedMembers(gate, members), req)
+		body, err = s.handleMetaListServersCall(authz.ForListing(ctx), logger, gate, catalogSelectedMembers(gate, members), req)
 	case metamcp.ToolDescribeServer:
 		body, callFailure, err = s.handleMetaDescribeServerCall(ctx, logger, gate, catalogSelectedMembers(gate, members), req, params.Arguments)
 		if callFailure != nil {
@@ -676,7 +676,7 @@ func (s *Service) callMetaServerTool(
 	case metamcp.ToolDescribeTools:
 		body, memberFailures, err = s.handleMetaDescribeToolsCall(ctx, logger, gate, members, req, params.Arguments)
 	case metamcp.ToolConnectionStatus:
-		body, err = s.handleMetaConnectionStatusCall(authz.WithoutChallenges(ctx), logger, gate, members, req)
+		body, err = s.handleMetaConnectionStatusCall(authz.ForListing(ctx), logger, gate, members, req)
 	case metamcp.ToolExecuteReadOnlyTool:
 		// Logged like execute_tool, below.
 		return s.handleMetaExecuteToolCall(ctx, logger, gate, members, req, params.Name, params.Arguments, params.Meta, memberToolReadOnly)

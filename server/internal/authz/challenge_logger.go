@@ -72,7 +72,7 @@ func (l challengeLogger) Log(ctx context.Context, dbtx database.DBTX, logger *sl
 		return false
 	}
 
-	// A listing records nothing (see WithoutChallenges).
+	// A gateway listing records nothing (see ForListing).
 	if challengesSilenced(ctx) {
 		return false
 	}
@@ -280,8 +280,8 @@ type challengeScopeKey struct{}
 // authorization checks. Decisions still count in the decision metrics either
 // way; only the recorded check, an outbox row each, is skipped.
 type challengeScope struct {
-	// silent records nothing: the caller is filtering or listing, not
-	// asking for one resource.
+	// silent records nothing: a gateway path is listing, not asking for
+	// one resource (see ForListing).
 	silent bool
 	// recorded is shared by every scope derived from one request. Nil for a
 	// silent scope.
@@ -330,10 +330,12 @@ func WithOneChallengePerResource(ctx context.Context) context.Context {
 	})
 }
 
-// WithoutChallenges returns a context under which the engine records no
-// checks. Use it where a request filters or lists resources it did not name,
-// so a caller is not shown a denial for every resource it simply cannot see.
-func WithoutChallenges(ctx context.Context) context.Context {
+// ForListing returns a context under which the engine records no checks, not
+// even from Require. Use it only where a whole code path lists resources
+// through helpers that also gate a single resource, such as the MCP gateway
+// admitting each member it could show. A single Decide or a list's
+// DecideAndRecord does not need it.
+func ForListing(ctx context.Context) context.Context {
 	return context.WithValue(ctx, challengeScopeKey{}, &challengeScope{silent: true, recorded: nil})
 }
 

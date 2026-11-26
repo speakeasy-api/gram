@@ -646,7 +646,7 @@ func (s *Service) grantedPlatformToolScopes(ctx context.Context, authCtx *contex
 	if len(checks) == 0 {
 		return granted
 	}
-	decisions, err := s.authz.Decide(ctx, checks...)
+	decisions, err := s.authz.DecideAndRecord(ctx, checks...)
 	if err != nil {
 		s.logger.WarnContext(ctx, "match platform tool scopes; hiding scope-gated tools", attr.SlogError(err))
 		return granted

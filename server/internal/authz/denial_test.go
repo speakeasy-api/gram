@@ -234,7 +234,7 @@ func TestEngineRequire_DispositionRefusalIsAnOrdinaryRefusal(t *testing.T) {
 	engine := NewEngine(testenv.NewLogger(t), conn, staticChallengeLogging(true), workos.NewStubClient())
 
 	call := MCPServer(MCPServerIDFrom("toolset_1"), ProjectIDFrom(authProjectP)).ToolCall("delete_all", DispositionDestructive)
-	reasons, err := decisionReasons(WithoutChallenges(ctx), engine, []Check{call})
+	reasons, err := decisionReasons(ctx, engine, []Check{call})
 	require.NoError(t, err)
 	require.Equal(t, []Reason{ReasonReadOnly}, reasons)
 

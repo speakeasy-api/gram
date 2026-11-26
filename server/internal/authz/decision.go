@@ -41,10 +41,23 @@ type Decisions struct {
 	Each       []Decision
 }
 
-// Decide answers each check without refusing anything: a "no" is a branch for
-// the handler, not a denial. Use Require to gate an action. Example: a list
-// page passes one check per server and shows those whose decision is allowed.
+// Decide answers each check without refusing or recording anything: a "no" is
+// a branch for the handler, not a denial. Use Require to gate an action, and
+// DecideAndRecord to filter a list. Example: a dashboard asks whether to show
+// the delete button for a server.
 func (e *Engine) Decide(ctx context.Context, checks ...Check) (Decisions, error) {
+	return e.decide(ctx, checks, false)
+}
+
+// DecideAndRecord answers each check like Decide and records the whole call
+// as one authorization check, so the access log can show what a list was
+// filtered by. Example: a list page passes one check per server and shows
+// those whose decision is allowed.
+func (e *Engine) DecideAndRecord(ctx context.Context, checks ...Check) (Decisions, error) {
+	return e.decide(ctx, checks, true)
+}
+
+func (e *Engine) decide(ctx context.Context, checks []Check, record bool) (Decisions, error) {
 	q, err := e.prepare(ctx, checks, false)
 	if err != nil {
 		return Decisions{AllAllowed: false, Each: nil}, e.mapError(ctx, err)
@@ -55,7 +68,7 @@ func (e *Engine) Decide(ctx context.Context, checks ...Check) (Decisions, error)
 	for _, check := range checks {
 		v, err := q.decide(check)
 		if err != nil {
-			if q.enforced {
+			if q.enforced && record {
 				focus := invalidPart(check)
 				e.recordBatch(ctx, q, verdicts, &focus)
 			}
@@ -75,7 +88,7 @@ func (e *Engine) Decide(ctx context.Context, checks ...Check) (Decisions, error)
 			reportAuthorizerRefusal(ctx, e.logger, q.grants, refused, err)
 		}
 	}
-	if len(checks) > 0 {
+	if record && len(checks) > 0 {
 		e.recordBatch(ctx, q, verdicts, nil)
 	}
 	return result, nil

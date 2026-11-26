@@ -224,7 +224,7 @@ func (a *SessionAccess) answersForAgent(ctx context.Context, authCtx *contextval
 	}
 	// Decide, not Require: falling through to the chat:read gate below is
 	// the expected outcome for a non-editor, not a denial worth recording.
-	decision, err := a.authz.Decide(authz.WithoutChallenges(ctx), agentWriteCheck(chat.AgentID.UUID))
+	decision, err := a.authz.Decide(ctx, agentWriteCheck(chat.AgentID.UUID))
 	if err != nil {
 		a.logger.WarnContext(ctx, "agent:write check failed for agent session access", attr.SlogError(err))
 		return false, nil

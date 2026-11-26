@@ -105,8 +105,9 @@ func TestDecide_acceptsEitherNextToOtherChecks(t *testing.T) {
 	require.Equal(t, []bool{true, false}, allowedOf(d))
 }
 
-// Decide records one challenge row per call, whatever the number of checks.
-func TestDecide_recordsOneChallengeRowPerCall(t *testing.T) {
+// DecideAndRecord records one challenge row per call, whatever the number of
+// checks.
+func TestDecideAndRecord_recordsOneChallengeRowPerCall(t *testing.T) {
 	t.Parallel()
 
 	orgID := "org_" + uuid.NewString()
@@ -115,7 +116,7 @@ func TestDecide_recordsOneChallengeRowPerCall(t *testing.T) {
 	seedOrganization(t, ctx, conn, orgID)
 	engine := NewEngine(testenv.NewLogger(t), conn, staticChallengeLogging(true), workos.NewStubClient())
 
-	_, err := engine.Decide(ctx, projectRead("proj_a"), projectRead("proj_b"), projectRead("proj_c"))
+	_, err := engine.DecideAndRecord(ctx, projectRead("proj_a"), projectRead("proj_b"), projectRead("proj_c"))
 	require.NoError(t, err)
 
 	rows := listChallengeOutboxRows(t, conn)
@@ -125,6 +126,24 @@ func TestDecide_recordsOneChallengeRowPerCall(t *testing.T) {
 	require.Equal(t, string(authzrepo.OutcomeAllow), message.GetOutcome())
 	require.Equal(t, uint32(3), message.GetFilterCandidateCount())
 	require.Equal(t, uint32(1), message.GetFilterAllowedCount())
+}
+
+// Decide records nothing, allowed or refused: it answers a question, and the
+// Require or DecideAndRecord that acts on the answer records it.
+func TestDecide_recordsNothing(t *testing.T) {
+	t.Parallel()
+
+	orgID := "org_" + uuid.NewString()
+	ctx := GrantsToContext(enterpriseSessionCtxWithOrg(t, orgID), []Grant{NewGrant(ScopeProjectRead, "proj_a")})
+	conn := newTestDB(t)
+	seedOrganization(t, ctx, conn, orgID)
+	engine := NewEngine(testenv.NewLogger(t), conn, staticChallengeLogging(true), workos.NewStubClient())
+
+	d, err := engine.Decide(ctx, projectRead("proj_a"), projectRead("proj_b"))
+	require.NoError(t, err)
+	require.Equal(t, []bool{true, false}, allowedOf(d))
+
+	require.Empty(t, listChallengeOutboxRows(t, conn))
 }
 
 func projectRead(id string) Check {

@@ -187,7 +187,7 @@ func (s *Service) builtInReadable(ctx context.Context, authCtx *contextvalues.Au
 	if len(checks) == 0 {
 		return true, nil
 	}
-	decisions, err := s.authz.Decide(authz.WithoutChallenges(ctx), checks...)
+	decisions, err := s.authz.Decide(ctx, checks...)
 	if _, mapped := errors.AsType[*oops.ShareableError](err); mapped {
 		// The engine has already mapped and logged it.
 		return false, fmt.Errorf("check built-in dashboard access: %w", err)

@@ -289,7 +289,7 @@ func (s *Service) listDirectGatewayTools(ctx context.Context, logger *slog.Logge
 	}
 	// Listing every member's tools names none of them, so it records no
 	// authorization check for any.
-	inventory, unavailable, err := s.collectGatewayTools(authz.WithoutChallenges(ctx), logger, gate, members, false, nil)
+	inventory, unavailable, err := s.collectGatewayTools(authz.ForListing(ctx), logger, gate, members, false, nil)
 	if err != nil {
 		return nil, err
 	}

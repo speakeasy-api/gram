@@ -527,7 +527,7 @@ func (s *Service) resolveAuthClientChoiceForConsent(ctx context.Context, organiz
 // are not recorded as authorization checks, so viewing such a page adds no
 // failed checks the person did not trigger.
 func (s *Service) resolveProposedAuthClient(ctx context.Context, organizationID string, serverID, projectID uuid.UUID, registrationID, authClientID uuid.NullUUID, subject urn.SessionSubject) (authClientResolution, error) {
-	ctx = authz.WithoutChallenges(ctx)
+	ctx = authz.ForListing(ctx)
 	enforced, err := s.typedConsentAuth(ctx, organizationID)
 	if err != nil {
 		return gapResolution(authClientReasonMissingChoice), fmt.Errorf("read upstream auth enforcement: %w", err)

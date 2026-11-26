@@ -197,7 +197,7 @@ func (s *Service) authorizedMetaMembers(
 	shadow := s.newMandatoryShadow(ctx, endpoint.OrganizationID)
 	// Filtering the candidates names none of them, so it records no
 	// authorization check for any.
-	filterCtx := authz.WithoutChallenges(ctx)
+	filterCtx := authz.ForListing(ctx)
 	authorized := make([]metamcprepo.ListMetaMCPMembersForRemoteSessionClientRow, 0, len(rows))
 	for _, row := range rows {
 		// Only proxy backends reach here, so mcp:connect is keyed on the

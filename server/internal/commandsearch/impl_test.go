@@ -131,6 +131,10 @@ type checkBatches struct {
 	all [][]authz.Check
 }
 
+func (f fakeAuthz) DecideAndRecord(ctx context.Context, checks ...authz.Check) (authz.Decisions, error) {
+	return f.Decide(ctx, checks...)
+}
+
 func (f fakeAuthz) Decide(ctx context.Context, checks ...authz.Check) (authz.Decisions, error) {
 	if f.batches != nil {
 		f.batches.mu.Lock()

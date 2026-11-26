@@ -286,12 +286,12 @@ func filterToolsByMCPConnect(ctx context.Context, logger *slog.Logger, authzEngi
 		if err := ctx.Err(); err != nil {
 			return nil, fmt.Errorf("filter tools by authz: %w", err)
 		}
-		if err := authzEngine.Require(authz.WithoutChallenges(ctx), authz.MCPServer(authz.MCPServerIDFrom(resourceID), authz.ProjectIDFrom(projectID)).ToolCall(t.Name, dispositionFromAnnotations(t.Annotations))); err != nil {
-			var oopsErr *oops.ShareableError
-			if errors.As(err, &oopsErr) && oopsErr.Code == oops.CodeForbidden {
-				continue
-			}
+		decision, err := authzEngine.Decide(ctx, authz.MCPServer(authz.MCPServerIDFrom(resourceID), authz.ProjectIDFrom(projectID)).ToolCall(t.Name, dispositionFromAnnotations(t.Annotations)))
+		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "check tool-level authz for tools/list").LogError(ctx, logger)
+		}
+		if !decision.AllAllowed {
+			continue
 		}
 		allowed = append(allowed, t)
 	}

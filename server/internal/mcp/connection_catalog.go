@@ -461,7 +461,7 @@ func (s *Service) describeCachedMember(ctx context.Context, gate *metaGateContex
 		}
 	}
 	if len(checks) > 0 {
-		decisions, err := s.authz.Decide(ctx, checks...)
+		decisions, err := s.authz.DecideAndRecord(ctx, checks...)
 		if err != nil {
 			return nil, fmt.Errorf("authorize cached member tools: %w", err)
 		}

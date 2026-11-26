@@ -465,9 +465,9 @@ func TestDecide_oneInvalidCheckFailsTheBatch(t *testing.T) {
 	require.ErrorIs(t, err, ErrInvalidCheck)
 }
 
-// --- Decide without challenges ---
+// --- Decide ---
 
-func TestDecideWithoutChallenges_trueWhenGranted(t *testing.T) {
+func TestDecide_trueWhenGranted(t *testing.T) {
 	t.Parallel()
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeChatRead, WildcardResource)})
@@ -477,7 +477,7 @@ func TestDecideWithoutChallenges_trueWhenGranted(t *testing.T) {
 	require.True(t, allowed)
 }
 
-func TestDecideWithoutChallenges_falseWhenUnsatisfied(t *testing.T) {
+func TestDecide_falseWhenUnsatisfied(t *testing.T) {
 	t.Parallel()
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeProjectRead, WildcardResource)})
@@ -487,7 +487,7 @@ func TestDecideWithoutChallenges_falseWhenUnsatisfied(t *testing.T) {
 	require.False(t, allowed)
 }
 
-func TestDecideWithoutChallenges_errorsWhenGrantsMissing(t *testing.T) {
+func TestDecide_errorsWhenGrantsMissing(t *testing.T) {
 	t.Parallel()
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 
@@ -499,10 +499,9 @@ func TestDecideWithoutChallenges_errorsWhenGrantsMissing(t *testing.T) {
 	require.ErrorIs(t, err, ErrMissingGrants)
 }
 
-// A refused quiet Decide is a routine visibility branch, not a denial —
-// it must never emit an authz challenge, otherwise it would pollute the
-// diagnostics UI with false "denied" scopes (the coupling AIS-305 removes).
-func TestDecideWithoutChallenges_neverLogsChallenge(t *testing.T) {
+// A refused Decide is a branch in a handler, not a denial: a row for it would
+// show the caller a failed check they never asked for.
+func TestDecide_neverLogsChallenge(t *testing.T) {
 	t.Parallel()
 
 	orgID := "org_" + uuid.NewString()
