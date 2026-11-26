@@ -30,6 +30,8 @@ func TestMetadataOf(t *testing.T) {
 		{name: "double encoded empty", toolCalls: `"[]"`, count: 0, ids: []string{}},
 		{name: "double encoded null", toolCalls: `"null"`, count: 0, ids: []string{}},
 		{name: "unparseable string", toolCalls: `"not json"`, count: 1, ids: []string{}},
+		{name: "double encoded tab-padded empty array", toolCalls: `"\t[]"`, count: 1, ids: []string{}},
+		{name: "double encoded space-padded empty array", toolCalls: `" [] "`, count: 0, ids: []string{}},
 		{name: "object", toolCalls: `{"id":"call_a"}`, count: 0, ids: []string{}},
 		{name: "array of non-objects", toolCalls: `["call_a",1,{"id":"call_b"}]`, count: 3, ids: []string{"call_b"}},
 		{name: "id key is exact", toolCalls: `[{"ID":"call_a"},{"Id":"call_b"},{"id":"call_c"}]`, count: 3, ids: []string{"call_c"}},
@@ -158,7 +160,7 @@ func TestOpenRowsServesShadowsFallsBackAndFailsStale(t *testing.T) {
 	require.NoError(t, OpenRows(t.Context(), transcripts, f.org, f.project, rows, openRowBody))
 	opened := rows[0]
 	require.Equal(t, "sensitive example", opened.content, "a shadowed message is served from its shadow")
-	require.JSONEq(t, `{"large":9007199254740993,"n":1e2}`, string(opened.contentRaw))
+	require.True(t, sameJSON([]byte(`{"large":9007199254740993,"n":1e2}`), opened.contentRaw), "numbers survive exactly: %s", opened.contentRaw)
 	require.JSONEq(t, `[{"id":"example"}]`, string(opened.toolCalls))
 	require.Equal(t, pgtype.Text{String: "example note", Valid: true}, opened.notes)
 	require.JSONEq(t, `{"example":"summary"}`, string(opened.summaries))

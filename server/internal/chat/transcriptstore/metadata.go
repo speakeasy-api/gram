@@ -3,6 +3,7 @@ package transcriptstore
 import (
 	"bytes"
 	"encoding/json"
+	"strings"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
 )
@@ -90,7 +91,8 @@ func toolCallCount(raw []byte, calls []json.RawMessage) int {
 	if err := json.Unmarshal(raw, &inner); err != nil {
 		return 0
 	}
-	switch string(bytes.TrimSpace([]byte(inner))) {
+	// btrim in SQL strips spaces only, so tabs and newlines stay.
+	switch strings.Trim(inner, " ") {
 	case "", "[]", "null":
 		return 0
 	}
