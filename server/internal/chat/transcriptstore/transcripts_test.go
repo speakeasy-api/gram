@@ -31,6 +31,8 @@ func TestMetadataOf(t *testing.T) {
 		{name: "unparseable string", toolCalls: `"not json"`, count: 1, ids: []string{}},
 		{name: "object", toolCalls: `{"id":"call_a"}`, count: 0, ids: []string{}},
 		{name: "array of non-objects", toolCalls: `["call_a",1,{"id":"call_b"}]`, count: 3, ids: []string{"call_b"}},
+		{name: "id key is exact", toolCalls: `[{"ID":"call_a"},{"Id":"call_b"},{"id":"call_c"}]`, count: 3, ids: []string{"call_c"}},
+		{name: "non-string id", toolCalls: `[{"id":7},{"id":null},{"id":"call_a"}]`, count: 3, ids: []string{"call_a"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
