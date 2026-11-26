@@ -31,10 +31,12 @@ type transactionScope struct {
 // caller owns db and must not use the Encryptor after its transaction ends.
 // Uncommitted state never enters the Service's shared caches.
 //
-// Each returned Encryptor has a private, single-DEK cache with DataKeyCacheTTL;
-// it never reuses the process-level Service cache, even when that cache is warm.
-// A new Encryptor therefore unwraps its first DEK through KMS again (for example,
-// once per transcript Capture batch), rather than once per process/cache period.
+// Each returned Encryptor reads its configuration through db and keeps it in
+// a private cache. For key material it first reads the Service's committed DEK
+// cache, which only holds DEKs unwrapped through the pool, and unwraps through
+// db only on a miss. That private unwrap never enters the shared cache. A
+// caller that warms the shared cache before it opens the transaction (For and
+// RequireUsable) therefore makes no KMS call while the transaction is open.
 func (s *Service) ForIn(db repo.DBTX, organizationID string, useCase UseCase) (*Encryptor, error) {
 	if db == nil {
 		return nil, errors.New("orgencryption: database is required")
@@ -90,6 +92,14 @@ func (e *Encryptor) dataKey(ctx context.Context, id uuid.UUID) (cachedDataKey, e
 	}
 	if tx.dataKeyID == id && time.Now().Before(tx.dataKeyExpires) {
 		return tx.dataKey, nil
+	}
+	// A DEK id always names the same key material, and the shared cache only
+	// holds DEKs unwrapped from committed rows, so reusing one keeps the same
+	// revocation bound as For: DataKeyCacheTTL. The configuration, and with it
+	// suspension and the active DEK, is still read through db.
+	if shared, ok := e.service.dataKeys.Get(id); ok {
+		e.service.noteUse(id)
+		return shared, nil
 	}
 	key, err := e.service.unwrapDataKeyIn(ctx, tx.db, e.organizationID, id, false)
 	if err != nil {

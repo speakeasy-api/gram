@@ -10,9 +10,15 @@
 // calls KMS to verify a KEK before using it.
 //
 // ForIn uses a caller-owned writable READ COMMITTED transaction instead of
-// acquiring another pooled connection. Its TTL caches are private to that
-// Encryptor, so uncommitted state never enters the process cache. Each bound
-// Encryptor unwraps its first DEK again, even when the process cache is warm.
+// acquiring another pooled connection. It reads configuration through that
+// transaction and reuses a DEK the process cache already holds. What it reads
+// or unwraps through the transaction stays private to that Encryptor, so
+// uncommitted state never enters the process cache. Warm the process cache
+// before opening the transaction to keep KMS calls out of it.
+//
+// KeepWarm unwraps recently used DEKs again shortly before DataKeyCacheTTL runs
+// out, so a request on a quiet process does not wait for KMS. Each refresh is
+// a full unwrap through KMS, so it does not extend the revocation bound.
 //
 // Every ciphertext binds the organization, the use case and the column it is
 // stored in as associated data, so a value cannot be moved to another

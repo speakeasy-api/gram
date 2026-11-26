@@ -79,6 +79,31 @@ func message(content string, raw, calls []byte, notes pgtype.Text, summaries []b
 	return m
 }
 
+// Prepare unwraps the organization's transcript key into the process's
+// committed key cache through the pool. Call it before opening the transaction
+// that Capture will use: Capture then reuses the cached key and makes no KMS
+// call while the transaction holds its locks. A warm cache needs no KMS call
+// here either. Prepare decides nothing: Capture still reads the configuration
+// in its transaction and fails closed on its own.
+func (s *Store) Prepare(ctx context.Context, organizationID string) error {
+	if organizationID == "" {
+		return ErrInvalid
+	}
+	ctx, span := s.tracer.Start(ctx, "transcriptstore.Prepare", trace.WithAttributes(attr.OrganizationID(organizationID)))
+	defer span.End()
+
+	encryptor, err := s.service.For(organizationID, orgencryption.UseCaseChatTranscripts)
+	if err == nil {
+		err = encryptor.RequireUsable(ctx)
+	}
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, string(classify(err)))
+		return safe(err)
+	}
+	return nil
+}
+
 // Capture uses the caller's transaction. The caller must roll back on error;
 // a batch is not an independently committed unit. IDs are deduplicated and sorted.
 func (s *Store) Capture(ctx context.Context, db repo.DBTX, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID) error {
@@ -281,6 +306,8 @@ func (s *Store) Backfill(ctx context.Context, organizationID string, projectID, 
 	if organizationID == "" || projectID == uuid.Nil || limit < 1 || limit > 500 {
 		return Page{}, ErrInvalid
 	}
+	// Best effort: Capture checks the key again in the transaction.
+	_ = s.Prepare(ctx, organizationID)
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return Page{}, safe(err)

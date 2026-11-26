@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -56,6 +57,11 @@ type Service struct {
 	dataKeys *expirable.LRU[uuid.UUID, cachedDataKey]
 	configs  *expirable.LRU[configCacheKey, cachedConfig]
 	flights  singleflight.Group
+
+	// lastUsed records when each cached DEK last served a caller, so
+	// KeepWarm refreshes only DEKs still in use.
+	usesMu   sync.Mutex
+	lastUsed map[uuid.UUID]time.Time
 }
 
 type cachedDataKey struct {
@@ -65,6 +71,10 @@ type cachedDataKey struct {
 	// DEK that belongs to someone else is refused before any decryption.
 	organizationID string
 	useCase        string
+
+	// unwrappedAt is when KMS returned the key. KeepWarm unwraps it again
+	// before DataKeyCacheTTL runs out.
+	unwrappedAt time.Time
 }
 
 type configCacheKey struct {
@@ -93,6 +103,8 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, identity *gcpauth.Identit
 		dataKeys: expirable.NewLRU[uuid.UUID, cachedDataKey](dataKeyCacheSize, nil, DataKeyCacheTTL),
 		configs:  expirable.NewLRU[configCacheKey, cachedConfig](configCacheSize, nil, configCacheTTL),
 		flights:  singleflight.Group{},
+		usesMu:   sync.Mutex{},
+		lastUsed: map[uuid.UUID]time.Time{},
 	}, nil
 }
 
@@ -248,9 +260,23 @@ func (s *Service) loadConfigIn(ctx context.Context, db repo.DBTX, organizationID
 // process and DataKeyCacheTTL.
 func (s *Service) dataKey(ctx context.Context, organizationID string, dataKeyID uuid.UUID) (cachedDataKey, error) {
 	if cached, ok := s.dataKeys.Get(dataKeyID); ok {
+		s.noteUse(dataKeyID)
 		return cached, nil
 	}
 
+	dataKey, err := s.unwrapShared(ctx, organizationID, dataKeyID)
+	if err != nil {
+		return cachedDataKey{}, err
+	}
+	s.noteUse(dataKeyID)
+
+	return dataKey, nil
+}
+
+// unwrapShared unwraps a DEK from committed rows through the pool and stores
+// it in the process cache, replacing any cached copy. Concurrent callers for
+// the same DEK share one KMS call.
+func (s *Service) unwrapShared(ctx context.Context, organizationID string, dataKeyID uuid.UUID) (cachedDataKey, error) {
 	flight := s.flights.DoChan(organizationID+"/"+dataKeyID.String(), func() (any, error) {
 		// The flight outlives any one caller's cancellation, so other callers
 		// waiting on it still get the key; kmsCallTimeout bounds it.
@@ -322,7 +348,7 @@ func (s *Service) unwrapDataKeyIn(ctx context.Context, db repo.DBTX, organizatio
 	for _, keyID := range candidates {
 		dataKey, err := s.unwrapWith(ctx, logger, q, dek, keyID, recordUnwrap)
 		if err == nil {
-			return cachedDataKey{key: dataKey, organizationID: dek.OrganizationID, useCase: dek.UseCase}, nil
+			return cachedDataKey{key: dataKey, organizationID: dek.OrganizationID, useCase: dek.UseCase, unwrappedAt: time.Now()}, nil
 		}
 		errs = append(errs, err)
 	}
@@ -383,6 +409,7 @@ func (s *Service) Forget(organizationID string) {
 	for _, id := range s.dataKeys.Keys() {
 		if cached, ok := s.dataKeys.Peek(id); ok && cached.organizationID == organizationID {
 			s.dataKeys.Remove(id)
+			s.forgetUse(id)
 		}
 	}
 }

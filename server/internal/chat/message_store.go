@@ -160,6 +160,21 @@ func (w *ChatMessageWriter) WithTranscriptShadow(store *transcriptstore.Store, p
 	return w
 }
 
+// PrepareTranscriptShadow warms the organization's transcript key before a
+// write transaction opens, so the capture inside it makes no KMS call while it
+// holds the transaction. Callers of WriteInTx call it before they begin their
+// transaction. It is best effort: the capture checks the key again in the
+// transaction and fails the write closed on its own.
+func (w *ChatMessageWriter) PrepareTranscriptShadow(ctx context.Context, organizationID string, projectID uuid.UUID) {
+	if w.transcriptShadow == nil {
+		return
+	}
+	if _, enabled := w.transcriptShadowProjects[projectID]; !enabled {
+		return
+	}
+	_ = w.transcriptShadow.Prepare(ctx, organizationID)
+}
+
 func (w *ChatMessageWriter) captureTranscriptShadow(ctx context.Context, db repo.DBTX, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID) error {
 	if w.transcriptShadow == nil {
 		return nil
@@ -541,6 +556,7 @@ func (w *ChatMessageWriter) writeMessages(ctx context.Context, projectID uuid.UU
 	}
 	params := messageWriteParams(writes)
 
+	w.PrepareTranscriptShadow(ctx, organizationID, projectID)
 	tx, err := w.db.Begin(ctx)
 	if err != nil {
 		return 0, nil, fmt.Errorf("begin chat message transaction: %w", err)
@@ -601,6 +617,7 @@ func (w *ChatMessageWriter) WriteCorrelated(ctx context.Context, projectID uuid.
 		return 0, fmt.Errorf("get project organization id: %w", err)
 	}
 
+	w.PrepareTranscriptShadow(ctx, organizationID, projectID)
 	tx, err := w.db.Begin(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("begin correlated chat message transaction: %w", err)
@@ -769,6 +786,7 @@ func (w *ChatMessageWriter) WriteExternalWithContentParts(ctx context.Context, p
 
 		publicationWrites := []MessageWrite{externalPublication(*write)}
 		inserted, err := func() (bool, error) {
+			w.PrepareTranscriptShadow(ctx, organizationID, projectID)
 			tx, err := w.db.Begin(ctx)
 			if err != nil {
 				return false, fmt.Errorf("begin external chat message transaction: %w", err)
@@ -923,6 +941,7 @@ func (w *ChatMessageWriter) WriteTurn(ctx context.Context, projectID uuid.UUID, 
 	writes := pendingWrites
 	writes = append(writes, assistants...)
 
+	w.PrepareTranscriptShadow(ctx, organizationID, projectID)
 	tx, err := w.db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)

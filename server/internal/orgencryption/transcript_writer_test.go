@@ -107,6 +107,22 @@ func TestTranscriptWriterNative(t *testing.T) {
 	require.Equal(t, m.Params.Content, row.Content, "shadow storage must retain plaintext")
 }
 
+// Each write warms the transcript key before its transaction, so a process
+// unwraps it once per cache period and no capture calls KMS inside a write.
+func TestTranscriptWriterUnwrapsOncePerCachePeriod(t *testing.T) {
+	t.Parallel()
+	f := newTranscriptWriterFixture(t, true, true)
+	before := f.fixture.KMS.Decrypts()
+	for range 3 {
+		m := f.message("EXAMPLE repeated write")
+		n, err := f.writer.Write(t.Context(), f.projectID, []chat.MessageWrite{m})
+		require.NoError(t, err)
+		require.EqualValues(t, 1, n)
+		f.assertShadow(t, m.Params.ID)
+	}
+	require.Equal(t, before+1, f.fixture.KMS.Decrypts())
+}
+
 func TestTranscriptWriterCallerTransaction(t *testing.T) {
 	t.Parallel()
 	for _, commit := range []bool{true, false} {

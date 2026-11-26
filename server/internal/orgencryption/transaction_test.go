@@ -103,6 +103,32 @@ func TestTransactionIgnoresWarmSharedCaches(t *testing.T) {
 	require.ErrorIs(t, encryptor.RequireUsable(ctx), orgencryption.ErrSuspended)
 }
 
+func TestTransactionReusesWarmSharedDataKey(t *testing.T) {
+	t.Parallel()
+	ti := newTestInstance(t)
+	ti.provision(t)
+	service, pool := transactionService(t, ti)
+	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+	defer cancel()
+	committed, err := service.For(ti.orgID, useCase)
+	require.NoError(t, err)
+	require.NoError(t, committed.RequireUsable(ctx))
+	before := ti.fixture.KMS.Decrypts()
+	for range 3 {
+		tx, err := pool.Begin(ctx) //nolint:glint // notestingrawsql: explicit transaction protocol under test
+		require.NoError(t, err)
+		encryptor, err := service.ForIn(tx, ti.orgID, useCase)
+		require.NoError(t, err)
+		ciphertext, err := encryptor.Encrypt(ctx, column, []byte("transaction secret"))
+		require.NoError(t, err)
+		plaintext, err := encryptor.Decrypt(ctx, column, ciphertext)
+		require.NoError(t, err)
+		require.Equal(t, "transaction secret", string(plaintext))
+		require.NoError(t, tx.Commit(ctx))
+	}
+	require.Equal(t, before, ti.fixture.KMS.Decrypts(), "transactions reuse the committed DEK instead of unwrapping it again")
+}
+
 func TestTransactionForInValidation(t *testing.T) {
 	t.Parallel()
 	ti := newTestInstance(t)
