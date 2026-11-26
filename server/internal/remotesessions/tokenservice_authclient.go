@@ -90,17 +90,32 @@ func (m *ChallengeManager) ResolveHostedRegistrationAccessTokens(ctx context.Con
 	if err != nil {
 		return nil, err
 	}
-	attached, err := attachedCaller(ctx, req.Subject)
-	if err != nil {
-		return nil, err
-	}
-	lookup := lookupAuthClient
-	if attached && CredentialOwner(client.CredentialOwner) != CredentialOwnerSelf {
-		// Preserve the sign-in-keyed attachment lookup for attached callers.
-		lookup = lookupSignIn
-	}
 	ctx = context.WithValue(ctx, hostedTokenResourceKey{}, true)
-	return m.resolveClientTokens(ctx, req.Attribution, lookup, req.ProjectID, req.OrganizationID, req.UserSessionIssuerID, req.Subject, []remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow{client}, req.SkipUnusable)
+	return m.resolveClientTokens(ctx, req.Attribution, lookupAuthClient, req.ProjectID, req.OrganizationID, req.UserSessionIssuerID, req.Subject, []remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow{client}, req.SkipUnusable)
+}
+
+// HostedRegistrationNeedsReconnect checks the assigned registration's stored
+// grant without contacting the provider or requiring an issuer-client link.
+func (m *ChallengeManager) HostedRegistrationNeedsReconnect(ctx context.Context, req AuthClientTokenRequest) (bool, error) {
+	if req.ProjectID == uuid.Nil || req.OrganizationID == "" || req.UserSessionIssuerID == uuid.Nil || req.RegistrationID == uuid.Nil || req.Subject.IsZero() {
+		return false, ErrInvalidAuthorizationRequest
+	}
+	client, err := m.reachableClient(ctx, req.ProjectID, req.OrganizationID, req.RegistrationID)
+	if errors.Is(err, ErrChosenClientUnbound) {
+		return true, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if CredentialOwner(client.CredentialOwner) == CredentialOwnerSelf {
+		resources, err := m.selfClientResources(ctx, req.OrganizationID, []remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow{client}, false)
+		if err != nil {
+			return false, err
+		}
+		return clientCredentialRequestResource(client, resources[client.ClientID]) != "", nil
+	}
+	resource := ""
+	return m.storedGrantsNeedReconnectForResource(ctx, lookupAuthClient, req.ProjectID, req.OrganizationID, req.UserSessionIssuerID, []remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow{client}, req.Subject, &resource)
 }
 
 // AuthClientNeedsReconnect is RemoteSessionsNeedReconnect for the one

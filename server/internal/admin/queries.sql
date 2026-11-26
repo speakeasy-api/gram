@@ -1224,17 +1224,6 @@ SELECT id, name, slug
 FROM organization_metadata
 WHERE id = ANY(@ids::text[]);
 
--- name: AdminBackfillMCPAuthFromConnect :execrows
--- Grants unrestricted mcp:auth to every principal holding any mcp:connect
--- grant, whatever its selectors. Temporary grants are skipped: a permanent
--- grant must not be derived from access that ends.
-INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
-SELECT DISTINCT g.organization_id, g.principal_urn, 'mcp:auth', '{"resource_kind":"mcp_auth_client","resource_id":"*"}'::jsonb
-FROM principal_grants AS g
-WHERE g.scope = 'mcp:connect'
-  AND g.expires_at IS NULL
-ON CONFLICT (organization_id, principal_urn, scope, selectors) DO NOTHING;
-
 -- name: AdminBackfillMCPConnectFromReadWrite :one
 -- Makes the connect access that mcp:read and mcp:write imply explicit, ahead
 -- of removing that implication. Every unexpired mcp:read or mcp:write grant
@@ -1496,6 +1485,17 @@ WHERE h.id = ANY(@tool_ids::uuid[]) AND h.project_id = @project_id
     AND h.deleted IS FALSE
 ORDER BY a.name, a.id;
 
+-- name: AdminListHooksPublishState :many
+-- One row per marketplace repository: its organization and the hooks generator
+-- version it last published. Feeds the hooks release progress counts.
+SELECT
+    p.organization_id,
+    o.slug AS organization_slug,
+    COALESCE(c.published_hooks_version, '')::text AS published_hooks_version
+FROM plugin_github_connections c
+JOIN projects p ON p.id = c.project_id AND p.deleted IS FALSE
+JOIN organization_metadata o ON o.id = p.organization_id;
+
 -- name: AdminListTailscaleOAuthMigrationOrganizations :many
 -- Organizations with saved network ingress credentials in either copy,
 -- soft-deleted ingresses included, for the temporary Tailscale OAuth client
@@ -1514,10 +1514,23 @@ FROM organization_metadata AS o
 WHERE o.id = @id;
 
 -- name: AdminListOrganizationEncryptionTransitions :many
--- Every organization with its transition state for one use case, oldest first.
--- An organization without a transition row for the use case is in
--- platform_key, so the LEFT JOIN reports it there and the state filter matches
--- it. Pages with LIMIT and OFFSET: the list is staff-only and small.
+-- Every organization with its transition state for one use case. An
+-- organization without a transition row for the use case is in platform_key,
+-- so the LEFT JOIN reports it there and the state filter matches it.
+--
+-- The caller reads which organizations have values from the use case's copy
+-- stores and passes them as three parallel arrays. with_values_only keeps just
+-- those organizations; sort_by_last_written lists the most recently written
+-- first, then every other organization oldest first. Pages with LIMIT and
+-- OFFSET: the list is staff-only and small.
+WITH organizations_with_values AS (
+  SELECT v.organization_id, v.value_count, v.last_written_at
+  FROM ROWS FROM (
+    unnest(@value_organization_ids::text[]),
+    unnest(@value_counts::bigint[]),
+    unnest(@value_last_written_at::timestamptz[])
+  ) AS v(organization_id, value_count, last_written_at)
+)
 SELECT
   om.id AS organization_id,
   om.name,
@@ -1531,20 +1544,31 @@ SELECT
   t.last_backfill_remaining_count,
   t.last_backfill_unreadable_count,
   t.last_backfill_error,
-  t.last_verified_at
+  t.last_verified_at,
+  COALESCE(v.value_count, 0)::bigint AS value_count,
+  v.last_written_at::timestamptz AS last_written_at
 FROM organization_metadata om
 LEFT JOIN organization_encryption_transitions t
   ON t.organization_id = om.id
   AND t.use_case = @use_case
-WHERE sqlc.narg('state')::text IS NULL
-   OR COALESCE(t.state, 'platform_key') = sqlc.narg('state')::text
-ORDER BY om.created_at, om.id
+LEFT JOIN organizations_with_values v ON v.organization_id = om.id
+WHERE (NOT @with_values_only::boolean OR v.organization_id IS NOT NULL)
+  AND (
+    sqlc.narg('state')::text IS NULL
+    OR COALESCE(t.state, 'platform_key') = sqlc.narg('state')::text
+  )
+ORDER BY
+  CASE WHEN @sort_by_last_written::boolean THEN v.last_written_at END DESC NULLS LAST,
+  om.created_at,
+  om.id
 LIMIT @limit_value
 OFFSET @offset_value;
 
 -- name: AdminCountOrganizationEncryptionTransitionStates :many
 -- How many organizations are in each transition state for one use case,
--- counting organizations without a row as platform_key.
+-- counting organizations without a row as platform_key. with_values_only
+-- counts just the organizations in value_organization_ids, as
+-- AdminListOrganizationEncryptionTransitions lists them.
 SELECT
   COALESCE(t.state, 'platform_key')::text AS state,
   count(*) AS organizations
@@ -1552,6 +1576,8 @@ FROM organization_metadata om
 LEFT JOIN organization_encryption_transitions t
   ON t.organization_id = om.id
   AND t.use_case = @use_case
+WHERE NOT @with_values_only::boolean
+   OR om.id = ANY(@value_organization_ids::text[])
 GROUP BY 1
 ORDER BY 1;
 

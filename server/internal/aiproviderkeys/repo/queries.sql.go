@@ -168,7 +168,13 @@ SELECT
           AND c.api_key_org_encrypted IS NULL
           AND u.id IS NOT NULL
     )::bigint AS unreadable,
-    COUNT(*) FILTER (WHERE c.api_key_encrypted IS NOT NULL)::bigint AS platform_copies
+    COUNT(*) FILTER (WHERE c.api_key_encrypted IS NOT NULL)::bigint AS platform_copies,
+    COUNT(*) FILTER (
+        WHERE (c.api_key_encrypted <> '' OR c.api_key_org_encrypted IS NOT NULL)
+    )::bigint AS value_count,
+    MAX(c.updated_at) FILTER (
+        WHERE (c.api_key_encrypted <> '' OR c.api_key_org_encrypted IS NOT NULL)
+    )::timestamptz AS last_written_at
 FROM ai_integration_configs AS c
 LEFT JOIN organization_encryption_unreadable_values AS u
   ON u.organization_id = c.organization_id
@@ -183,13 +189,24 @@ type CountAIIntegrationConfigAPIKeyCopiesRow struct {
 	Waiting        int64
 	Unreadable     int64
 	PlatformCopies int64
+	ValueCount     int64
+	LastWrittenAt  pgtype.Timestamptz
 }
 
 // Every row has an organization, so nothing is unattributed.
+// value_count and last_written_at cover every row of the organization storing
+// a value under either key, soft-deleted rows included, as
+// ListOrganizationsWith* reports them.
 func (q *Queries) CountAIIntegrationConfigAPIKeyCopies(ctx context.Context, organizationID string) (CountAIIntegrationConfigAPIKeyCopiesRow, error) {
 	row := q.db.QueryRow(ctx, countAIIntegrationConfigAPIKeyCopies, organizationID)
 	var i CountAIIntegrationConfigAPIKeyCopiesRow
-	err := row.Scan(&i.Waiting, &i.Unreadable, &i.PlatformCopies)
+	err := row.Scan(
+		&i.Waiting,
+		&i.Unreadable,
+		&i.PlatformCopies,
+		&i.ValueCount,
+		&i.LastWrittenAt,
+	)
 	return i, err
 }
 
@@ -205,7 +222,13 @@ SELECT
           AND c.api_key_org_encrypted IS NULL
           AND u.id IS NOT NULL
     )::bigint AS unreadable,
-    COUNT(*) FILTER (WHERE c.api_key_encrypted IS NOT NULL)::bigint AS platform_copies
+    COUNT(*) FILTER (WHERE c.api_key_encrypted IS NOT NULL)::bigint AS platform_copies,
+    COUNT(*) FILTER (
+        WHERE (c.api_key_encrypted <> '' OR c.api_key_org_encrypted IS NOT NULL)
+    )::bigint AS value_count,
+    MAX(c.updated_at) FILTER (
+        WHERE (c.api_key_encrypted <> '' OR c.api_key_org_encrypted IS NOT NULL)
+    )::timestamptz AS last_written_at
 FROM model_provider_keys AS c
 LEFT JOIN organization_encryption_unreadable_values AS u
   ON u.organization_id = c.organization_id
@@ -220,13 +243,24 @@ type CountModelProviderKeyCopiesRow struct {
 	Waiting        int64
 	Unreadable     int64
 	PlatformCopies int64
+	ValueCount     int64
+	LastWrittenAt  pgtype.Timestamptz
 }
 
 // Every row has an organization, so nothing is unattributed.
+// value_count and last_written_at cover every row of the organization storing
+// a value under either key, soft-deleted rows included, as
+// ListOrganizationsWith* reports them.
 func (q *Queries) CountModelProviderKeyCopies(ctx context.Context, organizationID string) (CountModelProviderKeyCopiesRow, error) {
 	row := q.db.QueryRow(ctx, countModelProviderKeyCopies, organizationID)
 	var i CountModelProviderKeyCopiesRow
-	err := row.Scan(&i.Waiting, &i.Unreadable, &i.PlatformCopies)
+	err := row.Scan(
+		&i.Waiting,
+		&i.Unreadable,
+		&i.PlatformCopies,
+		&i.ValueCount,
+		&i.LastWrittenAt,
+	)
 	return i, err
 }
 
@@ -242,7 +276,13 @@ SELECT
           AND c.key_org_encrypted IS NULL
           AND u.id IS NOT NULL
     )::bigint AS unreadable,
-    COUNT(*) FILTER (WHERE c.key_encrypted IS NOT NULL)::bigint AS platform_copies
+    COUNT(*) FILTER (WHERE c.key_encrypted IS NOT NULL)::bigint AS platform_copies,
+    COUNT(*) FILTER (
+        WHERE (c.key_encrypted <> '' OR c.key_org_encrypted IS NOT NULL)
+    )::bigint AS value_count,
+    MAX(c.updated_at) FILTER (
+        WHERE (c.key_encrypted <> '' OR c.key_org_encrypted IS NOT NULL)
+    )::timestamptz AS last_written_at
 FROM openrouter_api_keys AS c
 LEFT JOIN organization_encryption_unreadable_values AS u
   ON u.organization_id = c.organization_id
@@ -257,13 +297,24 @@ type CountOpenRouterAPIKeyCopiesRow struct {
 	Waiting        int64
 	Unreadable     int64
 	PlatformCopies int64
+	ValueCount     int64
+	LastWrittenAt  pgtype.Timestamptz
 }
 
 // Every row has an organization, so nothing is unattributed.
+// value_count and last_written_at cover every row of the organization storing
+// a value under either key, soft-deleted rows included, as
+// ListOrganizationsWith* reports them.
 func (q *Queries) CountOpenRouterAPIKeyCopies(ctx context.Context, organizationID string) (CountOpenRouterAPIKeyCopiesRow, error) {
 	row := q.db.QueryRow(ctx, countOpenRouterAPIKeyCopies, organizationID)
 	var i CountOpenRouterAPIKeyCopiesRow
-	err := row.Scan(&i.Waiting, &i.Unreadable, &i.PlatformCopies)
+	err := row.Scan(
+		&i.Waiting,
+		&i.Unreadable,
+		&i.PlatformCopies,
+		&i.ValueCount,
+		&i.LastWrittenAt,
+	)
 	return i, err
 }
 
@@ -523,6 +574,127 @@ func (q *Queries) ListOpenRouterAPIKeyWaiting(ctx context.Context, arg ListOpenR
 	for rows.Next() {
 		var i ListOpenRouterAPIKeyWaitingRow
 		if err := rows.Scan(&i.KeyType, &i.PlatformCopy); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrganizationsWithAIIntegrationConfigAPIKeys = `-- name: ListOrganizationsWithAIIntegrationConfigAPIKeys :many
+SELECT
+    c.organization_id::text AS organization_id,
+    COUNT(*)::bigint AS value_count,
+    MAX(c.updated_at)::timestamptz AS last_written_at
+FROM ai_integration_configs AS c
+WHERE c.organization_id IS NOT NULL
+  AND (c.api_key_encrypted <> '' OR c.api_key_org_encrypted IS NOT NULL)
+GROUP BY c.organization_id
+`
+
+type ListOrganizationsWithAIIntegrationConfigAPIKeysRow struct {
+	OrganizationID string
+	ValueCount     int64
+	LastWrittenAt  pgtype.Timestamptz
+}
+
+// Every organization storing an AI integration API key under either key (an
+// empty platform copy stores no key),
+// soft-deleted rows included, with how many and the latest updated_at of the
+// rows storing them. Rows without organization_id are left out.
+func (q *Queries) ListOrganizationsWithAIIntegrationConfigAPIKeys(ctx context.Context) ([]ListOrganizationsWithAIIntegrationConfigAPIKeysRow, error) {
+	rows, err := q.db.Query(ctx, listOrganizationsWithAIIntegrationConfigAPIKeys)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOrganizationsWithAIIntegrationConfigAPIKeysRow
+	for rows.Next() {
+		var i ListOrganizationsWithAIIntegrationConfigAPIKeysRow
+		if err := rows.Scan(&i.OrganizationID, &i.ValueCount, &i.LastWrittenAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrganizationsWithModelProviderKeys = `-- name: ListOrganizationsWithModelProviderKeys :many
+SELECT
+    c.organization_id::text AS organization_id,
+    COUNT(*)::bigint AS value_count,
+    MAX(c.updated_at)::timestamptz AS last_written_at
+FROM model_provider_keys AS c
+WHERE c.organization_id IS NOT NULL
+  AND (c.api_key_encrypted <> '' OR c.api_key_org_encrypted IS NOT NULL)
+GROUP BY c.organization_id
+`
+
+type ListOrganizationsWithModelProviderKeysRow struct {
+	OrganizationID string
+	ValueCount     int64
+	LastWrittenAt  pgtype.Timestamptz
+}
+
+// Every organization storing a model provider key under either key,
+// soft-deleted rows included, with how many and the latest updated_at of the
+// rows storing them. Rows without organization_id are left out.
+func (q *Queries) ListOrganizationsWithModelProviderKeys(ctx context.Context) ([]ListOrganizationsWithModelProviderKeysRow, error) {
+	rows, err := q.db.Query(ctx, listOrganizationsWithModelProviderKeys)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOrganizationsWithModelProviderKeysRow
+	for rows.Next() {
+		var i ListOrganizationsWithModelProviderKeysRow
+		if err := rows.Scan(&i.OrganizationID, &i.ValueCount, &i.LastWrittenAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrganizationsWithOpenRouterAPIKeys = `-- name: ListOrganizationsWithOpenRouterAPIKeys :many
+SELECT
+    c.organization_id::text AS organization_id,
+    COUNT(*)::bigint AS value_count,
+    MAX(c.updated_at)::timestamptz AS last_written_at
+FROM openrouter_api_keys AS c
+WHERE c.organization_id IS NOT NULL
+  AND (c.key_encrypted <> '' OR c.key_org_encrypted IS NOT NULL)
+GROUP BY c.organization_id
+`
+
+type ListOrganizationsWithOpenRouterAPIKeysRow struct {
+	OrganizationID string
+	ValueCount     int64
+	LastWrittenAt  pgtype.Timestamptz
+}
+
+// Every organization storing an OpenRouter API key under either key,
+// soft-deleted rows included, with how many and the latest updated_at of the
+// rows storing them. Rows without organization_id are left out.
+func (q *Queries) ListOrganizationsWithOpenRouterAPIKeys(ctx context.Context) ([]ListOrganizationsWithOpenRouterAPIKeysRow, error) {
+	rows, err := q.db.Query(ctx, listOrganizationsWithOpenRouterAPIKeys)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOrganizationsWithOpenRouterAPIKeysRow
+	for rows.Next() {
+		var i ListOrganizationsWithOpenRouterAPIKeysRow
+		if err := rows.Scan(&i.OrganizationID, &i.ValueCount, &i.LastWrittenAt); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

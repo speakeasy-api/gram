@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	authclientfixtures "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
+	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
@@ -92,8 +93,8 @@ func TestServePublic_MetaEndpoint_ConnectionStatus_GatedReportsPerMemberSignIn(t
 	_, connectedIssuerID := seedTunneledMetaMember(t, ctx, ti, projectID, meta.ID, "Connected member", "member-connected", 0, "")
 	_, unconnectedIssuerID := seedTunneledMetaMember(t, ctx, ti, projectID, meta.ID, "Unconnected member", "member-unconnected", 1, "")
 
-	connectedClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "status-connected", "", []uuid.UUID{sharedIssuerID, connectedIssuerID})
-	unconnectedClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "status-unconnected", "", []uuid.UUID{sharedIssuerID, unconnectedIssuerID})
+	connectedClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "status-connected", "")
+	unconnectedClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "status-unconnected", "")
 	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, orgID, projectID, []uuid.UUID{connectedIssuerID, unconnectedIssuerID}))
 
 	subject := createTestUser(t, ctx, ti, "status-user-"+uuid.NewString())
@@ -115,6 +116,45 @@ func TestServePublic_MetaEndpoint_ConnectionStatus_GatedReportsPerMemberSignIn(t
 	require.Contains(t, got.text, got.connectURL, "the text fallback must carry the same connect link")
 }
 
+func TestServePublic_MetaEndpoint_ConnectionStatus_HostedUsesAssignedGrant(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID, orgID := *auth.ProjectID, auth.ActiveOrganizationID
+	signIn := createUserSessionIssuer(t, ctx, ti.conn, projectID)
+	slug := "meta-hosted-status-" + uuid.NewString()[:8]
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, slug, signIn)
+	first := seedHostedMetaMember(t, ctx, ti, gateway.ID, "First hosted", 0, mcpservers.VisibilityPublic)
+	sibling := seedHostedMetaMember(t, ctx, ti, gateway.ID, "Second hosted", 1, mcpservers.VisibilityPublic)
+	missing := seedHostedMetaMember(t, ctx, ti, gateway.ID, "Missing placement", 2, mcpservers.VisibilityPublic)
+	open := seedHostedMetaMember(t, ctx, ti, gateway.ID, "No upstream", 3, mcpservers.VisibilityPublic)
+	firstClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "assigned-hosted", "")
+	siblingClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "sibling-hosted", "")
+	placements := upstreamclientsrepo.New(ti.conn)
+	for memberID, clientID := range map[uuid.UUID]uuid.UUID{first.serverID: firstClient, sibling.serverID: siblingClient} {
+		_, err := placements.AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{
+			OrganizationID: orgID, ProjectID: projectID, McpServerID: memberID, RemoteSessionClientID: clientID,
+		})
+		require.NoError(t, err)
+	}
+	require.NoError(t, placements.RequireHostedUpstreamAssignment(ctx, upstreamclientsrepo.RequireHostedUpstreamAssignmentParams{
+		ServerID: missing.serverID, ProjectID: projectID,
+	}))
+	markHostedDownstreamOnly(t, ctx, ti.conn, open.serverID)
+	subject := createTestUser(t, ctx, ti, "hosted-status-"+uuid.NewString())
+	bearer := mintMetaIssuerBearer(t, ti, slug, signIn, subject)
+	insertQualifiedRemoteSessionToken(t, ctx, ti, signIn, siblingClient, subject, "sibling-token", "")
+	statuses := callConnectionStatus(t, ti, context.Background(), slug, bearer).statuses
+	require.Equal(t, metamcp.SignInNotConnected, statuses[first.slug], "the legacy issuer link must not select the sibling's grant")
+	require.Equal(t, metamcp.SignInConnected, statuses[sibling.slug])
+	require.NotContains(t, statuses, missing.slug, "a required but missing placement is not admitted to the gateway")
+	require.Equal(t, metamcp.SignInNotRequired, statuses[open.slug])
+
+	insertQualifiedRemoteSessionToken(t, ctx, ti, signIn, firstClient, subject, "assigned-token", "")
+	require.Equal(t, metamcp.SignInConnected, callConnectionStatus(t, ti, context.Background(), slug, bearer).statuses[first.slug])
+}
+
 // A remote member bound to no sign-in provider still receives a grant routed
 // by its upstream resource, so it reads connected rather than not required.
 func TestServePublic_MetaEndpoint_ConnectionStatus_RemoteMemberRoutedWithoutIssuer(t *testing.T) {
@@ -134,7 +174,7 @@ func TestServePublic_MetaEndpoint_ConnectionStatus_RemoteMemberRoutedWithoutIssu
 	routed := createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member-routed", routedURL, uuid.NullUUID{}, 0)
 	open := createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member-open", "https://open.example.com/mcp/"+uuid.NewString(), uuid.NullUUID{}, 1)
 
-	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "status-routed", "", []uuid.UUID{sharedIssuerID})
+	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "status-routed", "")
 	subject := createTestUser(t, ctx, ti, "status-user-"+uuid.NewString())
 	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, clientID, subject, "token-routed", routedURL)
 	typed := seedTypedSessionClient(t, ctx, ti, orgID, projectID, routed.mcpServerID, clientID, "remote_session", subject)

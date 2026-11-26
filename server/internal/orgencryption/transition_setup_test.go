@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"maps"
 	"slices"
 	"sync"
 	"testing"
@@ -90,6 +91,15 @@ type fakeRow struct {
 	organizationID string
 	platform       pgtype.Text
 	org            pgtype.Text
+
+	// writtenAt stands in for updated_at. Like a feature's fenced writes,
+	// sealing and clearing a copy leave it alone.
+	writtenAt time.Time
+}
+
+// stored reports whether the row stores a value under either key.
+func (r fakeRow) stored() bool {
+	return r.platform.Valid || r.org.Valid
 }
 
 // fakeCopyStore is an in-memory CopyStore. Each write checks the transition
@@ -122,7 +132,7 @@ func (c *fakeCopyStore) put(organizationID string, rowID string, copies orgencry
 	c.store.mu.Lock()
 	defer c.store.mu.Unlock()
 
-	c.store.rows[rowID] = fakeRow{organizationID: organizationID, platform: copies.Platform, org: copies.Org}
+	c.store.rows[rowID] = fakeRow{organizationID: organizationID, platform: copies.Platform, org: copies.Org, writtenAt: time.Now()}
 }
 
 func (c *fakeCopyStore) get(rowID string) orgencryption.Copies {
@@ -216,8 +226,14 @@ func (c *fakeCopyStore) Count(_ context.Context, organizationID string) (orgencr
 	c.store.mu.Lock()
 	defer c.store.mu.Unlock()
 
-	counts := orgencryption.CopyCounts{Waiting: 0, Unreadable: 0, Unattributed: 0, PlatformCopies: 0}
+	counts := orgencryption.CopyCounts{Waiting: 0, Unreadable: 0, Unattributed: 0, PlatformCopies: 0, Values: 0, LastWrittenAt: time.Time{}}
 	for _, row := range c.store.rows {
+		if row.organizationID == organizationID && row.stored() {
+			counts.Values++
+			if row.writtenAt.After(counts.LastWrittenAt) {
+				counts.LastWrittenAt = row.writtenAt
+			}
+		}
 		if row.organizationID != organizationID || !row.platform.Valid {
 			continue
 		}
@@ -233,6 +249,27 @@ func (c *fakeCopyStore) Count(_ context.Context, organizationID string) (orgencr
 	}
 
 	return counts, nil
+}
+
+func (c *fakeCopyStore) ListOrganizationsWithValues(_ context.Context) ([]orgencryption.OrganizationValues, error) {
+	c.store.mu.Lock()
+	defer c.store.mu.Unlock()
+
+	byOrganization := map[string]orgencryption.OrganizationValues{}
+	for _, row := range c.store.rows {
+		if row.organizationID == "" || !row.stored() {
+			continue
+		}
+		organization := byOrganization[row.organizationID]
+		organization.OrganizationID = row.organizationID
+		organization.Values++
+		if row.writtenAt.After(organization.LastWrittenAt) {
+			organization.LastWrittenAt = row.writtenAt
+		}
+		byOrganization[row.organizationID] = organization
+	}
+
+	return slices.Collect(maps.Values(byOrganization)), nil
 }
 
 func (c *fakeCopyStore) ClearPlatformCopies(ctx context.Context, organizationID string, generation int64, limit int32) (orgencryption.ClearedCopies, error) {

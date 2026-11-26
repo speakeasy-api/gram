@@ -34,7 +34,7 @@ export type ListSuspectedProblemsResult = {
    */
   loggingEnabled: boolean;
   /**
-   * At most 100, most people first.
+   * At most 100. Problems each person fixes themselves come last; most people first within each group.
    */
   problems: Array<SuspectedProblem>;
   /**

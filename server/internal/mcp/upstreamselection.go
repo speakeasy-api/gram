@@ -10,12 +10,13 @@
 // replaced by another client.
 //
 // Credentials without a session row (principal credentials, agent keys,
-// assistant tokens) and hosted toolsets keep the issuer-derived path until
-// the organization enforces upstream auth. Then every credential reaching a
+// assistant tokens) keep the compatibility path until the organization
+// enforces upstream auth. Then every credential reaching a
 // proxied server is decided by the typed auth client resolver: a principal
 // credential through the execution-selection profile version it binds, an
 // agent key through its choice or the server's own auth clients, and any
-// other credential by what the server offers.
+// other credential by what the server offers. Hosted toolsets always use
+// the exact registration assigned to the server.
 
 package mcp
 
@@ -469,9 +470,8 @@ func (s *Service) directAgentKeyError(ctx context.Context, authentication *issue
 }
 
 // resolveAccessTokens resolves the authenticated caller's upstream
-// credentials: every client the issuer binds, or only the chosen client once
-// directUpstreamChoice has narrowed authentication to one, or none for a
-// no-auth choice.
+// credentials: the exact hosted assignment, or the proxied selection
+// (including an explicit no-auth choice).
 func (s *Service) resolveAccessTokens(ctx context.Context, authentication *issuerGateAuthentication, skipUnusable bool) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 	tokens, err := s.resolveSelectedAccessTokens(ctx, authentication, skipUnusable)
 	if err != nil {
@@ -488,6 +488,9 @@ func (s *Service) resolveAccessTokens(ctx context.Context, authentication *issue
 
 func (s *Service) resolveSelectedAccessTokens(ctx context.Context, authentication *issuerGateAuthentication, skipUnusable bool) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 	endpoint := authentication.endpoint
+	if endpoint.ToolsetID.Valid && endpoint.McpServerID.Valid {
+		return s.hostedUpstreamTokens(ctx, authentication.refreshAttribution(ctx, s.aiCatalog.SnapshotFor(ctx)), endpoint.OrganizationID, endpoint.ProjectID, endpoint.McpServerID.UUID, endpoint.UserSessionIssuerID, tokenSubject(ctx, authentication.subject, authentication.authorizerOwner), skipUnusable)
+	}
 	if authentication.chosenNoAuth {
 		return map[uuid.UUID]remotesessions.UpstreamToken{}, nil
 	}
@@ -544,7 +547,7 @@ func (s *Service) resolveSelectedAccessTokens(ctx context.Context, authenticatio
 
 // memberChoices applies one credential's choices to a gateway's proxied
 // members and resolves each member's credential from its chosen client, once
-// per member per request. Hosted members keep the issuer-derived path. Once
+// per member per request. Hosted members use their exact registration. Once
 // the organization enforces, each member is served by the typed auth client
 // resolver and the mandatory check, as a direct endpoint is.
 type memberChoices struct {
@@ -1193,7 +1196,7 @@ func (s *Service) serverAssociatedClients(ctx context.Context, organizationID st
 // attachAssociatedClients records each proxied member's associated clients,
 // so consent and gateway eligibility match a client to the members it is
 // configured for rather than to every member sharing its authorization
-// server. Hosted members keep the issuer match.
+// server. Hosted members use only the exact assigned registration.
 func (s *Service) attachAssociatedClients(ctx context.Context, organizationID string, members []metaMember) error {
 	ids := make([]uuid.UUID, 0, len(members))
 	for _, member := range members {
@@ -1213,11 +1216,12 @@ func (s *Service) attachAssociatedClients(ctx context.Context, organizationID st
 	return nil
 }
 
-// memberUsesClient reports whether a client authenticates for a member: one
-// of a proxied member's associated clients, otherwise, for a hosted member, a
-// client of the member's authorization server in the member's own project
-// when a project owns it.
+// memberUsesClient checks exact hosted assignments and explicit proxied
+// associations before considering compatibility matching for a proxied member.
 func memberUsesClient(member metaMember, clientID, clientIssuerID uuid.UUID, clientProjectID uuid.NullUUID) bool {
+	if member.backend == metaMemberBackendHosted {
+		return member.associatedClients[clientID]
+	}
 	if member.associatedClients != nil {
 		return member.associatedClients[clientID]
 	}
@@ -1237,6 +1241,9 @@ func memberUsesClient(member metaMember, clientID, clientIssuerID uuid.UUID, cli
 func memberNeedsSignIn(member metaMember) bool {
 	if len(member.associatedClients) > 0 {
 		return true
+	}
+	if member.backend == metaMemberBackendHosted && member.associatedClients != nil {
+		return false
 	}
 	return !member.typedRegistrations && member.remoteSessionIssuerID.Valid
 }

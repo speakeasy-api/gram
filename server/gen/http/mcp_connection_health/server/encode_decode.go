@@ -2414,6 +2414,10 @@ func marshalMcpconnectionhealthSuspectedProblemToSuspectedProblemResponseBody(v 
 		Headline:            v.Headline,
 		Fact:                v.Fact,
 	}
+	if v.WhoFixes != nil {
+		whoFixes := string(*v.WhoFixes)
+		res.WhoFixes = &whoFixes
+	}
 	if v.Scope != nil {
 		res.Scope = marshalMcpconnectionhealthSuspectedProblemScopeToSuspectedProblemScopeResponseBody(v.Scope)
 	}
@@ -2535,6 +2539,10 @@ func marshalMcpconnectionhealthSuspectedProblemDetailToSuspectedProblemDetailRes
 	if v.Source != nil {
 		source := string(*v.Source)
 		res.Source = &source
+	}
+	if v.WhoFixes != nil {
+		whoFixes := string(*v.WhoFixes)
+		res.WhoFixes = &whoFixes
 	}
 	if v.FailedPer10Minutes != nil {
 		res.FailedPer10Minutes = make([]*SuspectedProblemBucketResponseBody, len(v.FailedPer10Minutes))

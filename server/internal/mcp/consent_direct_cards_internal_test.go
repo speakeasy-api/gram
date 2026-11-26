@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -44,7 +45,7 @@ func TestDirectConsentConnectionCards(t *testing.T) {
 		{name: "deleted excluded", clientType: authClientTypeRemoteSession, state: "deleted", enforced: true, issuerLinked: true},
 		{name: "unlinked excluded", clientType: authClientTypeRemoteSession, state: "unlinked", enforced: true, issuerLinked: true},
 		{name: "off ignores legacy attachment", issuerLinked: true},
-		{name: "hosted preserves legacy", hosted: true, enforced: true, issuerLinked: true, wantCard: true},
+		{name: "hosted assignment without issuer link", hosted: true, enforced: true, wantCard: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -62,7 +63,6 @@ func TestDirectConsentConnectionCards(t *testing.T) {
 			signIn := uuid.New()
 			require.NoError(t, f.q.SeedUserSessionIssuerFixture(ctx, authclientbackfill.SeedUserSessionIssuerFixtureParams{ID: signIn, ProjectID: validUUID(f.projectID), Slug: "usi-" + signIn.String()[:8]}))
 			if tc.issuerLinked {
-				require.NoError(t, f.q.BindClientIssuerFixture(ctx, authclientbackfill.BindClientIssuerFixtureParams{RemoteSessionClientID: f.registration, UserSessionIssuerID: signIn}))
 				f.attach()
 			}
 			if tc.clientType != "" {
@@ -82,7 +82,14 @@ func TestDirectConsentConnectionCards(t *testing.T) {
 			}
 			endpoint := &ResolvedMcpEndpoint{OrganizationID: f.orgID, ProjectID: f.projectID, UserSessionIssuerID: signIn, McpServerID: validUUID(f.serverID)}
 			if tc.hosted {
-				endpoint.ToolsetID = validUUID(uuid.New())
+				hostedID := f.hosted()
+				require.NoError(t, f.q.SetServerUserSessionIssuerFixture(ctx, authclientbackfill.SetServerUserSessionIssuerFixtureParams{ID: hostedID, UserSessionIssuerID: validUUID(signIn)}))
+				hosted, err := mcpserversrepo.New(pool).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: hostedID, ProjectID: f.projectID})
+				require.NoError(t, err)
+				_, err = f.q.SeedAssociationFixture(ctx, authclientbackfill.SeedAssociationFixtureParams{ProjectID: f.projectID, OrganizationID: f.orgID, McpServerID: hosted.ID, RemoteSessionClientID: f.registration})
+				require.NoError(t, err)
+				endpoint.McpServerID = validUUID(hosted.ID)
+				endpoint.ToolsetID = hosted.ToolsetID
 			}
 			state := AuthnChallengeState{}
 			if tc.reconnect != "" {

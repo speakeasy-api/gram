@@ -1,5 +1,7 @@
 -- Run with psql -v ON_ERROR_STOP=1 against an isolated database loaded from
 -- server/database/schema.sql. Fixtures and assertions are rolled back.
+-- For an upgrade check, load the schema immediately before the junction drop
+-- and pass -v junction_drop_migration=/absolute/path/to/the/drop-migration.sql.
 BEGIN;
 
 CREATE FUNCTION pg_temp.fixture_id(n integer) RETURNS uuid LANGUAGE sql AS $$
@@ -45,11 +47,6 @@ SELECT pg_temp.fixture_id(n), CASE WHEN n <= 3 THEN pg_temp.fixture_id(n) END,
   CASE WHEN n IN (1, 2, 4) THEN 'fixture-org-a' WHEN n IN (3, 5) THEN 'fixture-org-b' END,
   pg_temp.fixture_id(1), 'fixture-' || n
 FROM generate_series(1, 6) AS n;
--- Deliberately include cross-scope links: attachment safety must not trust
--- that existing client/issuer links were created with correct tenancy.
-INSERT INTO remote_session_client_user_session_issuers (user_session_issuer_id, remote_session_client_id)
-SELECT pg_temp.fixture_id(i), pg_temp.fixture_id(c)
-FROM generate_series(1, 6) AS i CROSS JOIN generate_series(1, 6) AS c;
 INSERT INTO remote_sessions (id, subject_urn, user_session_issuer_id, remote_session_client_id, organization_id, access_token_encrypted)
 SELECT pg_temp.fixture_id(i * 10 + c), 'fixture-subject-' || i,
   pg_temp.fixture_id(i), pg_temp.fixture_id(c),
@@ -71,6 +68,48 @@ BEGIN
     pg_temp.fixture_id(c), pg_temp.fixture_id(COALESCE(s, i * 10 + c)), 1, 'fixture-owner')
   RETURNING id INTO binding_id;
   RETURN binding_id;
+END;
+$$;
+
+\if :{?junction_drop_migration}
+-- Keep a concrete attachment and its registration, session and downstream
+-- issuer in place while running the real migration against a populated table.
+INSERT INTO remote_session_client_user_session_issuers (remote_session_client_id, user_session_issuer_id)
+VALUES (pg_temp.fixture_id(4), pg_temp.fixture_id(1));
+SELECT pg_temp.attach(1, 'fixture-org-a', 1, 4) AS preserved_binding_id \gset
+\i :junction_drop_migration
+CREATE TEMP TABLE expected_preserved_binding AS
+SELECT :'preserved_binding_id'::uuid AS id;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM expected_preserved_binding expected
+    JOIN principal_remote_session_bindings binding ON binding.id = expected.id
+    JOIN remote_sessions session ON session.id = binding.remote_session_id
+      AND session.remote_session_client_id = binding.remote_session_client_id
+    JOIN remote_session_clients client ON client.id = binding.remote_session_client_id
+    JOIN user_session_issuers issuer ON issuer.id = binding.user_session_issuer_id
+    WHERE binding.organization_id = 'fixture-org-a'
+      AND binding.project_id = pg_temp.fixture_id(1)
+      AND binding.principal_id = pg_temp.fixture_id(1)
+      AND binding.remote_session_id = pg_temp.fixture_id(14)
+      AND client.id = pg_temp.fixture_id(4)
+      AND issuer.id = pg_temp.fixture_id(1)
+      AND binding.revoked_at IS NULL
+  ) THEN
+    RAISE EXCEPTION 'The exact attachment did not survive the junction drop';
+  END IF;
+END;
+$$;
+DELETE FROM principal_remote_session_bindings WHERE id = :'preserved_binding_id'::uuid;
+\endif
+
+DO $$
+BEGIN
+  IF to_regclass('remote_session_client_user_session_issuers') IS NOT NULL THEN
+    RAISE EXCEPTION 'Expected the retired junction to be absent';
+  END IF;
 END;
 $$;
 
@@ -113,12 +152,6 @@ SELECT pg_temp.attach(1, 'fixture-org-a', 1, 1, 41);
 DELETE FROM principal_remote_session_bindings
 WHERE principal_id = pg_temp.fixture_id(1) AND user_session_issuer_id = pg_temp.fixture_id(1)
   AND remote_session_id = pg_temp.fixture_id(41);
-DELETE FROM remote_session_client_user_session_issuers
-WHERE user_session_issuer_id = pg_temp.fixture_id(1) AND remote_session_client_id = pg_temp.fixture_id(4);
-SELECT pg_temp.expect_integrity_error(
-  $$SELECT pg_temp.attach(1, 'fixture-org-a', 1, 4)$$,
-  'principal_remote_session_bindings_client_issuer_fkey');
-
 -- A native FK pins the copied scopes, including parent UPDATEs. The trigger
 -- refreshes snapshots on binding UPDATEs, preventing stale or forged scope keys.
 SELECT pg_temp.attach(1, 'fixture-org-a', 1, 1);
@@ -127,7 +160,7 @@ SELECT pg_temp.expect_integrity_error(
   'principal_remote_session_bindings_client_scope_fkey');
 SELECT pg_temp.expect_integrity_error(
   $$UPDATE user_session_issuers SET project_id = pg_temp.fixture_id(2) WHERE id = pg_temp.fixture_id(1)$$,
-  'principal_remote_session_bindings_issuer_scope_fkey');
+  'principal_remote_session_bindings_issuer_scope_check');
 SELECT pg_temp.expect_integrity_error(
   $$UPDATE principal_remote_session_bindings SET remote_session_client_id = pg_temp.fixture_id(3), remote_session_id = pg_temp.fixture_id(13), client_attachment_scope = 'global'$$,
   'principal_remote_session_bindings_client_scope_check');
@@ -143,8 +176,7 @@ BEGIN
     'DELETE FROM agents WHERE id = pg_temp.fixture_id(1)',
     'DELETE FROM user_session_issuers WHERE id = pg_temp.fixture_id(1)',
     'DELETE FROM remote_session_clients WHERE id = pg_temp.fixture_id(1)',
-    'DELETE FROM remote_sessions WHERE id = pg_temp.fixture_id(11)',
-    'DELETE FROM remote_session_client_user_session_issuers WHERE user_session_issuer_id = pg_temp.fixture_id(1) AND remote_session_client_id = pg_temp.fixture_id(1)'
+    'DELETE FROM remote_sessions WHERE id = pg_temp.fixture_id(11)'
   ] LOOP
     BEGIN
       PERFORM pg_temp.attach(1, 'fixture-org-a', 1, 1);

@@ -16,7 +16,12 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
-import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
+import type { ServerClientAssociation } from "@gram/client/models/components/serverclientassociation.js";
+import { buildServerClientAssociationsQuery } from "@gram/client/react-query/serverClientAssociations.js";
+import {
+  invalidateAllRemoteSessionClient,
+  useRemoteSessionClient,
+} from "@gram/client/react-query/remoteSessionClient.js";
 import type { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
 import {
   UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat,
@@ -35,8 +40,8 @@ import { invalidateAllRemoteSessionIssuers } from "@gram/client/react-query/remo
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMutation, useQueries, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { LegacyCallbackAlert } from "@/pages/remote-identity-providers/clientAlerts";
 import {
@@ -51,7 +56,6 @@ import {
   isPrivateKeyJwtAuthMethod,
   parseScopes,
 } from "./issuerFormUtils";
-import { useAllRemoteSessionClients } from "@/lib/remote-identity";
 import { useIssuerDiscovery } from "./useIssuerDiscovery";
 import { IssuerDuplicateWarning } from "./IssuerDuplicateWarning";
 import { useIssuerDuplicatePreflight } from "./useIssuerDuplicatePreflight";
@@ -60,53 +64,53 @@ import { CONFIG_WRITE_META } from "@/lib/config-write";
 export function ModifyRemoteIdentityProviderSheet({
   open,
   onOpenChange,
-  userSessionIssuer,
+  mcpServerId,
   issuer,
+  association,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  userSessionIssuer: UserSessionIssuer;
+  mcpServerId: string;
   issuer: RemoteSessionIssuer;
+  association: ServerClientAssociation;
 }): JSX.Element {
-  // Fetch every remote_session_client tied to this issuer (across all
-  // user_session_issuers in the project), walking every page. We need the
-  // unfiltered list to compute which OTHER MCP servers are also using this
-  // issuer so the operator gets a heads-up that issuer/endpoint edits will
-  // affect them — a single-page fetch would silently undercount once a
-  // project crosses the default page size of 50.
-  const { items: allClients, isLoading: isLoadingClients } =
-    useAllRemoteSessionClients(
-      { remoteSessionIssuerId: issuer.id },
-      { enabled: open },
+  const client = useSdkClient();
+  const { data: primaryClient, isLoading: isLoadingClient } =
+    useRemoteSessionClient(
+      { id: association.remoteSessionClientId },
+      undefined,
+      { enabled: open, throwOnError: false },
     );
-  const primaryClient: RemoteSessionClient | undefined = allClients.find(
-    (clientRow) =>
-      clientRow.userSessionIssuerIds.includes(userSessionIssuer.id),
-  );
-  const otherUserSessionIssuerIds = useMemo(
-    () =>
-      new Set(
-        allClients
-          .flatMap((clientRow) => clientRow.userSessionIssuerIds)
-          .filter((id) => id !== userSessionIssuer.id),
-      ),
-    [allClients, userSessionIssuer.id],
-  );
-
-  // Look up the MCP servers in the project that bind any of those "other"
-  // user_session_issuers — those are the servers whose authentication will
-  // be touched by issuer-level edits in this sheet.
-  const { data: serversResult } = useMcpServers(undefined, undefined, {
-    enabled: open && otherUserSessionIssuerIds.size > 0,
+  const serversQuery = useMcpServers(undefined, undefined, {
+    enabled: open,
+    throwOnError: false,
   });
-  const affectedMcpServers = useMemo(() => {
-    const servers = serversResult?.mcpServers ?? [];
-    return servers.filter(
-      (mcpServer) =>
-        mcpServer.userSessionIssuerId != null &&
-        otherUserSessionIssuerIds.has(mcpServer.userSessionIssuerId),
-    );
-  }, [serversResult, otherUserSessionIssuerIds]);
+  const otherServers = open
+    ? (serversQuery.data?.mcpServers ?? []).filter(
+        (server) => server.id !== mcpServerId,
+      )
+    : [];
+  // There is no batch association read for project registrations. Read only
+  // on Modify, in parallel, using the same SDK cache as the settings rows.
+  const associations = useQueries({
+    queries: otherServers.map(({ id }) => ({
+      ...buildServerClientAssociationsQuery(client, { mcpServerId: id }),
+      throwOnError: false,
+    })),
+  });
+  const affectedMcpServers = otherServers.filter((_, index) =>
+    associations[index]?.data?.associations.some(
+      (item) => item.remoteSessionIssuerId === issuer.id,
+    ),
+  );
+  const sharedServerCount = Math.max(
+    affectedMcpServers.length,
+    association.serverCount - 1,
+  );
+  const impactPending =
+    serversQuery.isPending || associations.some((query) => query.isPending);
+  const impactUnavailable =
+    serversQuery.isError || associations.some((query) => query.isError);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -124,8 +128,11 @@ export function ModifyRemoteIdentityProviderSheet({
           <ModifyRemoteIdentityProviderSheetBody
             issuer={issuer}
             primaryClient={primaryClient}
-            isLoadingClient={isLoadingClients}
+            isLoadingClient={isLoadingClient}
             affectedMcpServers={affectedMcpServers}
+            sharedServerCount={sharedServerCount}
+            impactPending={impactPending}
+            impactUnavailable={impactUnavailable}
             onClose={() => onOpenChange(false)}
           />
         )}
@@ -139,12 +146,18 @@ function ModifyRemoteIdentityProviderSheetBody({
   primaryClient,
   isLoadingClient,
   affectedMcpServers,
+  sharedServerCount,
+  impactPending,
+  impactUnavailable,
   onClose,
 }: {
   issuer: RemoteSessionIssuer;
   primaryClient: RemoteSessionClient | undefined;
   isLoadingClient: boolean;
   affectedMcpServers: { id: string; name?: string | undefined }[];
+  sharedServerCount: number;
+  impactPending: boolean;
+  impactUnavailable: boolean;
   onClose: () => void;
 }) {
   const client = useSdkClient();
@@ -166,8 +179,9 @@ function ModifyRemoteIdentityProviderSheetBody({
     },
     onSuccess: async () => {
       // The client detail page reads the organization-scoped queries, so
-      // refresh those as well as this project's list.
+      // refresh those as well as this project's registration and list.
       await Promise.all([
+        invalidateAllRemoteSessionClient(queryClient, { refetchType: "all" }),
         invalidateAllRemoteSessionClients(queryClient, { refetchType: "all" }),
         invalidateAllOrganizationRemoteSessionClient(queryClient, {
           refetchType: "all",
@@ -394,6 +408,7 @@ function ModifyRemoteIdentityProviderSheetBody({
       await Promise.all([
         invalidateAllRemoteSessionIssuers(queryClient, { refetchType: "all" }),
         invalidateAllRemoteSessionIssuer(queryClient, { refetchType: "all" }),
+        invalidateAllRemoteSessionClient(queryClient, { refetchType: "all" }),
         invalidateAllRemoteSessionClients(queryClient, { refetchType: "all" }),
         // Also invalidate MCP server queries so the sidebar readiness bar
         // refreshes (AGE-3279).
@@ -468,26 +483,36 @@ function ModifyRemoteIdentityProviderSheetBody({
   return (
     <>
       <div className="flex-1 space-y-6 overflow-y-auto px-6 py-6">
-        {affectedMcpServers.length > 0 && (
+        {(sharedServerCount > 0 || impactPending || impactUnavailable) && (
           <Alert variant="warning" dismissible={false}>
             <Stack gap={2}>
-              <Text className="font-medium">
-                Heads up — this authorization server is shared with{" "}
-                {affectedMcpServers.length === 1
-                  ? "1 other MCP server"
-                  : `${affectedMcpServers.length} other MCP servers`}{" "}
-                in this project.
-              </Text>
+              {sharedServerCount > 0 && (
+                <Text className="font-medium">
+                  This authorization server is shared with at least{" "}
+                  {sharedServerCount === 1
+                    ? "1 other MCP server"
+                    : `${sharedServerCount} other MCP servers`}
+                  .
+                </Text>
+              )}
               <Text small>
-                Issuer URL and endpoint edits apply to every server that uses
-                this authorization server. Client credentials, scope, and
-                audience changes only affect this server.
+                Issuer URL and endpoint edits affect every server using this
+                authorization server. Client credentials, scope, and audience
+                changes affect every server using this registration.
               </Text>
-              <Text small mono>
-                {affectedMcpServers
-                  .map((server) => server.name?.trim() || server.id.slice(0, 8))
-                  .join(", ")}
-              </Text>
+              {impactPending && <Text small>Checking other MCP servers…</Text>}
+              {impactUnavailable && (
+                <Text small>Could not check all accessible MCP servers.</Text>
+              )}
+              {affectedMcpServers.length > 0 && (
+                <Text small mono>
+                  {affectedMcpServers
+                    .map(
+                      (server) => server.name?.trim() || server.id.slice(0, 8),
+                    )
+                    .join(", ")}
+                </Text>
+              )}
             </Stack>
           </Alert>
         )}

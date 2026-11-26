@@ -76,7 +76,8 @@ func TestListRemoteSessions_OrgLevelClientScopedByUserSessionIssuerProject(t *te
 	callerUserIssuer := createUserSessionIssuer(t, ctx, ti.conn, "usi-rs-orglevel-caller")
 	otherProject := createProject(t, ctx, ti.conn, "rs-orglevel-other-project")
 	otherUserIssuer := createUserSessionIssuerInProject(t, ctx, ti.conn, otherProject, "usi-rs-orglevel-other")
-	orgClient := seedOrgLevelRemoteClient(t, ctx, ti.conn, authCtx.ActiveOrganizationID, orgIssuer, "rs-orglevel-client", callerUserIssuer, otherUserIssuer)
+	orgClient := seedOrgLevelRemoteClient(t, ctx, ti.conn, authCtx.ActiveOrganizationID, orgIssuer, "rs-orglevel-client", callerUserIssuer)
+	placeClientForSignInInProject(t, ctx, ti.conn, otherProject, authCtx.ActiveOrganizationID, orgClient, otherUserIssuer)
 
 	mine := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject("user_mine"), callerUserIssuer.String(), orgClient.String())
 	theirs := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject("user_theirs"), otherUserIssuer.String(), orgClient.String())
@@ -274,7 +275,8 @@ func TestRevokeRemoteSession_OtherProjectsOrgLevelSessionNotRevoked(t *testing.T
 	orgIssuer := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "rs-xproj-issuer")
 	otherProject := createProject(t, ctx, ti.conn, "rs-xproj-other-project")
 	otherUserIssuer := createUserSessionIssuerInProject(t, ctx, ti.conn, otherProject, "usi-rs-xproj-other")
-	orgClient := seedOrgLevelRemoteClient(t, ctx, ti.conn, authCtx.ActiveOrganizationID, orgIssuer, "rs-xproj-client", otherUserIssuer)
+	orgClient := seedOrgLevelRemoteClient(t, ctx, ti.conn, authCtx.ActiveOrganizationID, orgIssuer, "rs-xproj-client")
+	placeClientForSignInInProject(t, ctx, ti.conn, otherProject, authCtx.ActiveOrganizationID, orgClient, otherUserIssuer)
 	subject := urn.NewUserSubject("user_xproj")
 	session := insertRemoteSession(t, ctx, ti.conn, subject, otherUserIssuer.String(), orgClient.String())
 

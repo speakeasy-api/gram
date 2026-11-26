@@ -1,13 +1,76 @@
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import {
   appKeyLabel,
   axisLabels,
+  formatAt,
   formatSessionLength,
   formatWeekdayDay,
   nowPosition,
   problemRule,
+  sourceSentence,
   stepResultLabel,
 } from "./format";
+
+// Pin the zone and locale before the formatters are built at import.
+const pinned = vi.hoisted(() => {
+  const tz = process.env.TZ;
+  const Original = Intl.DateTimeFormat;
+  process.env.TZ = "UTC";
+  const Pinned = function (
+    locales?: Intl.LocalesArgument,
+    options?: Intl.DateTimeFormatOptions,
+  ) {
+    return new Original(locales ?? "en-GB", options);
+  } as unknown as typeof Intl.DateTimeFormat;
+  Pinned.supportedLocalesOf = (locales, options) =>
+    Original.supportedLocalesOf(locales, options);
+  Intl.DateTimeFormat = Pinned;
+  return { tz, Original };
+});
+
+afterAll(() => {
+  Intl.DateTimeFormat = pinned.Original;
+  if (pinned.tz === undefined) delete process.env.TZ;
+  else process.env.TZ = pinned.tz;
+});
+
+describe("sourceSentence", () => {
+  it("says where the failures came from in a sentence true for every reason with that source", () => {
+    expect(sourceSentence("speakeasy_setting")).toBe(
+      "A Speakeasy admin should look into these failures.",
+    );
+    expect(sourceSentence("service", "mcp.linear.app")).toBe(
+      "These failures came from the service (mcp.linear.app).",
+    );
+    expect(sourceSentence("service")).toBe(
+      "These failures came from the service.",
+    );
+    expect(sourceSentence("app", "Cursor 2.0.1")).toBe(
+      "These failures point to the app (Cursor 2.0.1).",
+    );
+    expect(sourceSentence("server")).toBe(
+      "These failures came from the MCP server.",
+    );
+    expect(sourceSentence("identity_provider")).toBe(
+      "These failures came from the identity provider, or it could not be reached.",
+    );
+    expect(sourceSentence("speakeasy")).toBe(
+      "Speakeasy should look into these failures.",
+    );
+  });
+});
+
+describe("formatAt", () => {
+  const now = new Date("2026-11-20T12:00:00Z");
+
+  it("shows only the time today", () => {
+    expect(formatAt("2026-11-20T09:48:00Z", now)).toBe("09:48");
+  });
+
+  it("adds the date on another day", () => {
+    expect(formatAt("2026-11-18T16:05:00Z", now)).toBe("18 Nov, 16:05");
+  });
+});
 
 describe("formatSessionLength", () => {
   it("never rounds hours into a day", () => {

@@ -10,8 +10,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
 
-func hiddenTestMember(slug, name string, issuer uuid.UUID, project uuid.UUID) metaMember {
-	member := gatewayTestMember(slug, name, issuer, project)
+func hiddenTestMember(slug, name string, issuer uuid.UUID, project uuid.UUID, registrations ...string) metaMember {
+	member := gatewayTestMember(slug, name, issuer, project, registrations...)
 	member.serverID = uuid.New()
 	return member
 }
@@ -29,8 +29,8 @@ func hiddenTestView() (*gatewayConsentView, map[string]metaMember) {
 	github, linear := uuid.New(), uuid.New()
 	members := []metaMember{
 		hiddenTestMember("docs", "Docs", uuid.Nil, project),
-		hiddenTestMember("github", "GitHub", github, project),
-		hiddenTestMember("linear", "Linear", linear, project),
+		hiddenTestMember("github", "GitHub", github, project, "github-client"),
+		hiddenTestMember("linear", "Linear", linear, project, "linear-client"),
 	}
 	githubCard := gatewayTestCard("github-client", github, uuid.NullUUID{UUID: project, Valid: true})
 	githubCard.Connected = true

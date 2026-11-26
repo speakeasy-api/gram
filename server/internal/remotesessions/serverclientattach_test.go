@@ -144,10 +144,9 @@ func (f attachFixture) clientOfProvider(t *testing.T, ctx context.Context, slug 
 		Audience:                pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
-	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: client.ID,
-		UserSessionIssuerID:   userIssuerID,
-	}))
+	if userIssuerID != uuid.Nil {
+		placeClientForSignInInProject(t, ctx, f.ti.conn, f.projectID, f.orgID, client.ID, userIssuerID)
+	}
 	return client.ID
 }
 
@@ -177,12 +176,12 @@ func TestAttachServerClientAssociation_SharedIssuer(t *testing.T) {
 	issuer := f.issuer(t, ctx, "attach-shared")
 	target := f.serverAt(t, ctx, "attach-shared-a", "https://a.example.com/mcp", issuer)
 	sibling := f.serverAt(t, ctx, "attach-shared-b", "https://b.example.com/mcp", issuer)
-	client, _ := f.client(t, ctx, "attach-shared", issuer)
+	client, _ := f.client(t, ctx, "attach-shared", uuid.Nil)
 	resync(t, ctx, f.ti.conn, f.orgID, f.projectID, issuer)
-	require.Empty(t, associatedClients(t, ctx, f.ti.conn, f.projectID, target), "a shared issuer captures nothing, which is what attach repairs")
+	require.Empty(t, associatedClients(t, ctx, f.ti.conn, f.projectID, target), "a shared issuer alone does not configure the target")
 	siblingBefore, err := f.ti.service.ListServerClientAssociations(ctx, &gen.ListServerClientAssociationsPayload{McpServerID: sibling.String()})
 	require.NoError(t, err)
-	require.Equal(t, []string{client.String()}, siblingBefore.RequiredClientIds, "a sibling falls back to a client nothing claims")
+	require.Empty(t, siblingBefore.RequiredClientIds, "sharing a sign-in does not configure the sibling")
 
 	before, err := audittest.AuditLogCountByAction(ctx, f.ti.conn, audit.ActionRemoteSessionClientAttachMcpServer)
 	require.NoError(t, err)
@@ -191,7 +190,7 @@ func TestAttachServerClientAssociation_SharedIssuer(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, client.String(), result.Association.RemoteSessionClientID)
 	require.Equal(t, "project", result.Association.Scope)
-	require.Empty(t, result.BoundUserSessionIssuerIds, "the client was already bound, so no binding changed")
+	require.Empty(t, result.BoundUserSessionIssuerIds, "an exact placement does not add an issuer binding")
 
 	require.Equal(t, []uuid.UUID{client}, associatedClients(t, ctx, f.ti.conn, f.projectID, target))
 	require.Empty(t, associatedClients(t, ctx, f.ti.conn, f.projectID, sibling), "attach names one server")
@@ -212,7 +211,7 @@ func TestAttachServerClientAssociation_SharedIssuer(t *testing.T) {
 	require.Equal(t, []string{client.String()}, listed.RequiredClientIds, "the server's callers now need its client")
 	siblingAfter, err := f.ti.service.ListServerClientAssociations(ctx, &gen.ListServerClientAssociationsPayload{McpServerID: sibling.String()})
 	require.NoError(t, err)
-	require.Empty(t, siblingAfter.RequiredClientIds, "the attach claims the client, so the sibling stops falling back to it")
+	require.Empty(t, siblingAfter.RequiredClientIds, "attaching on the target does not configure the sibling")
 
 	_, err = f.attach(ctx, target, client)
 	require.NoError(t, err, "attaching again is a no-op")
@@ -287,7 +286,7 @@ func TestAttachServerClientAssociation_RestoresAnEnforcedDetach(t *testing.T) {
 	require.Len(t, links, 1)
 
 	require.NoError(t, detachServerClient(ctx, f.ti, target, client))
-	require.Equal(t, []uuid.UUID{client}, associatedClients(t, ctx, f.ti.conn, f.projectID, target), "the sole consumer's association stays")
+	require.Empty(t, associatedClients(t, ctx, f.ti.conn, f.projectID, target))
 	require.Empty(t, offeredAuthClients(t, ctx, f.ti.conn, target))
 
 	before, err := audittest.AuditLogCountByAction(ctx, f.ti.conn, audit.ActionAuthClientAttachMcpServer)
@@ -356,6 +355,21 @@ func TestAttachServerClientAssociation_NotFound(t *testing.T) {
 	}
 }
 
+func TestServerClientAssociationsRejectNilServerID(t *testing.T) {
+	t.Parallel()
+	ctx, f := newAttachFixture(t)
+	clientID := uuid.New()
+	_, err := f.ti.service.ListServerClientAssociations(ctx, &gen.ListServerClientAssociationsPayload{McpServerID: uuid.Nil.String()})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	_, err = f.attach(ctx, uuid.Nil, clientID)
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	err = f.ti.service.DetachServerClientAssociation(ctx, &gen.DetachServerClientAssociationPayload{
+		McpServerID:           uuid.Nil.String(),
+		RemoteSessionClientID: clientID.String(),
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
 func TestAttachServerClientAssociation_RefusesAnotherTenantsResources(t *testing.T) {
 	t.Parallel()
 	ctx, f := newAttachFixture(t)
@@ -407,10 +421,7 @@ func TestAttachServerClientAssociation_RequiresWriteOnTheServer(t *testing.T) {
 	require.Empty(t, associatedClients(t, ctx, f.ti.conn, f.projectID, server))
 }
 
-// A first association replaces a no-auth choice on the direct endpoint, which
-// offers only clients bound to the server's own issuer, so a client bound only
-// to a gateway would leave that endpoint with nothing to sign in through.
-func TestAttachServerClientAssociation_RefusesClientMissingFromTheServersIssuer(t *testing.T) {
+func TestAttachServerClientAssociation_OffersRegistrationWithoutServersIssuerPair(t *testing.T) {
 	t.Parallel()
 	ctx, f := newAttachFixture(t)
 
@@ -421,11 +432,12 @@ func TestAttachServerClientAssociation_RefusesClientMissingFromTheServersIssuer(
 	client, _ := f.client(t, ctx, "attach-direct", gatewayIssuer)
 
 	_, err := f.attach(ctx, server, client)
-	requireConflict(t, err, "direct endpoint")
-	require.Empty(t, associatedClients(t, ctx, f.ti.conn, f.projectID, server))
+	require.NoError(t, err)
+	require.NotEmpty(t, offeredAuthClients(t, ctx, f.ti.conn, server))
+	require.Equal(t, []uuid.UUID{client}, associatedClients(t, ctx, f.ti.conn, f.projectID, server))
 }
 
-func TestAttachServerClientAssociation_RefusesServerNoIssuerReaches(t *testing.T) {
+func TestAttachServerClientAssociation_OffersHostedRegistrationWithoutIssuer(t *testing.T) {
 	t.Parallel()
 	ctx, f := newAttachFixture(t)
 
@@ -434,7 +446,9 @@ func TestAttachServerClientAssociation_RefusesServerNoIssuerReaches(t *testing.T
 	server := f.hostedServer(t, ctx, "attach-unreachable", uuid.NullUUID{UUID: uuid.Nil, Valid: false})
 
 	_, err := f.attach(ctx, server, client)
-	requireConflict(t, err, "reaches the MCP server")
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{client}, associatedClients(t, ctx, f.ti.conn, f.projectID, server))
+	require.Len(t, offeredAuthClients(t, ctx, f.ti.conn, server), 1)
 }
 
 func TestAttachServerClientAssociation_RefusesASecondClient(t *testing.T) {
@@ -508,8 +522,7 @@ func TestAttachServerClientAssociation_AllowsSelfClientAtAnotherAddress(t *testi
 	require.NoError(t, err)
 }
 
-// A hosted server routes by no upstream address, and it's recorded even though
-// it keeps serving from every client its issuer binds.
+// An unqualified hosted registration can be placed on more than one server.
 func TestAttachServerClientAssociation_HostedServersShareAClient(t *testing.T) {
 	t.Parallel()
 	ctx, f := newAttachFixture(t)
@@ -531,6 +544,29 @@ func TestAttachServerClientAssociation_HostedServersShareAClient(t *testing.T) {
 	require.Equal(t, []uuid.UUID{client}, associatedClients(t, ctx, f.ti.conn, f.projectID, second))
 }
 
+func TestHostedServerAssociationDoesNotRequireOrCreateIssuerLink(t *testing.T) {
+	t.Parallel()
+	ctx, f := newAttachFixture(t)
+	issuer := f.issuer(t, ctx, "hosted-exact-unlinked")
+	first := f.hostedServer(t, ctx, "hosted-exact-a", conv.ToNullUUID(issuer))
+	second := f.hostedServer(t, ctx, "hosted-exact-b", conv.ToNullUUID(issuer))
+	client, _ := f.client(t, ctx, "hosted-exact", uuid.Nil)
+	for _, server := range []uuid.UUID{first, second} {
+		result, err := f.attach(ctx, server, client)
+		require.NoError(t, err)
+		require.Empty(t, result.BoundUserSessionIssuerIds)
+	}
+	// An older placement may predate explicit intent. Detaching it is not an
+	// opt-out, even if the server's value was NULL before this request.
+	require.NoError(t, authclientbackfill.New(f.ti.conn).SetRequiresUpstreamAuthFixture(ctx, authclientbackfill.SetRequiresUpstreamAuthFixtureParams{ID: first, RequiresUpstreamAuth: pgtype.Bool{}}))
+	require.NoError(t, detachServerClient(ctx, f.ti, first, client))
+	require.Empty(t, associatedClients(t, ctx, f.ti.conn, f.projectID, first))
+	require.Equal(t, []uuid.UUID{client}, associatedClients(t, ctx, f.ti.conn, f.projectID, second))
+	stored, err := testrepo.New(f.ti.conn).GetMCPServerRequiresUpstreamAuthFixture(ctx, first)
+	require.NoError(t, err)
+	require.Equal(t, pgtype.Bool{Bool: true, Valid: true}, stored)
+}
+
 // A member with no issuer of its own reaches a client only through its gateway.
 func TestAttachServerClientAssociation_HostedMemberThroughItsGateway(t *testing.T) {
 	t.Parallel()
@@ -548,110 +584,23 @@ func TestAttachServerClientAssociation_HostedMemberThroughItsGateway(t *testing.
 	require.Equal(t, []uuid.UUID{client}, associatedClients(t, ctx, f.ti.conn, f.projectID, hosted))
 }
 
-// Joining a gateway only binds a client the member already has, so a member that
-// joined first would have no client its gateway's consent could offer.
-func TestAttachServerClientAssociation_BindsTheClientToFrontingGateways(t *testing.T) {
+func TestAttachServerClientAssociation_DoesNotBindFrontingGateway(t *testing.T) {
 	t.Parallel()
 	ctx, f := newAttachFixture(t)
-
-	own := f.issuer(t, ctx, "attach-wire-own")
-	gatewayIssuer := f.issuer(t, ctx, "attach-wire-gateway")
-	server := f.serverAt(t, ctx, "attach-wire", "https://a.example.com/mcp", own)
-	f.member(t, ctx, createImpactGateway(t, ctx, f.ti, "attach-wire", gatewayIssuer), server)
-	client, _ := f.client(t, ctx, "attach-wire", own)
-
+	issuer := f.issuer(t, ctx, "attach-mirror-own")
+	gatewayIssuer := f.issuer(t, ctx, "attach-mirror-gateway")
+	server := f.serverAt(t, ctx, "attach-mirror", "https://a.example.com/mcp", issuer)
+	f.member(t, ctx, createImpactGateway(t, ctx, f.ti, "attach-mirror", gatewayIssuer), server)
+	client, _ := f.client(t, ctx, "attach-mirror", issuer)
 	before, err := audittest.AuditLogCountByAction(ctx, f.ti.conn, audit.ActionRemoteSessionClientAttachUserSessionIssuer)
 	require.NoError(t, err)
-
 	result, err := f.attach(ctx, server, client)
 	require.NoError(t, err)
-	require.Equal(t, []string{gatewayIssuer.String()}, result.BoundUserSessionIssuerIds)
-	requireClientBound(t, ctx, f.ti, client, gatewayIssuer, true)
-
+	require.Empty(t, result.BoundUserSessionIssuerIds)
+	requireClientBound(t, ctx, f.ti, client, gatewayIssuer, false)
 	after, err := audittest.AuditLogCountByAction(ctx, f.ti.conn, audit.ActionRemoteSessionClientAttachUserSessionIssuer)
 	require.NoError(t, err)
-	require.Equal(t, before+1, after, "each binding is audited")
-
-	repeated, err := f.attach(ctx, server, client)
-	require.NoError(t, err)
-	require.Empty(t, repeated.BoundUserSessionIssuerIds)
-}
-
-// Attaching again completes the bindings of an association that predates them.
-func TestAttachServerClientAssociation_RepairsAnExistingAssociationsGatewayBinding(t *testing.T) {
-	t.Parallel()
-	ctx, f := newAttachFixture(t)
-
-	own := f.issuer(t, ctx, "attach-repair-own")
-	gatewayIssuer := f.issuer(t, ctx, "attach-repair-gateway")
-	server := f.serverAt(t, ctx, "attach-repair", "https://a.example.com/mcp", own)
-	f.member(t, ctx, createImpactGateway(t, ctx, f.ti, "attach-repair", gatewayIssuer), server)
-	client, _ := f.client(t, ctx, "attach-repair", own)
-	associate(t, ctx, f.ti.conn, f.orgID, f.projectID, server, client)
-
-	result, err := f.attach(ctx, server, client)
-	require.NoError(t, err)
-	require.Equal(t, []string{gatewayIssuer.String()}, result.BoundUserSessionIssuerIds)
-}
-
-func TestAttachServerClientAssociation_RefusesGatewayHoldingAnotherClientOfTheProvider(t *testing.T) {
-	t.Parallel()
-	ctx, f := newAttachFixture(t)
-
-	own := f.issuer(t, ctx, "attach-held-own")
-	gatewayIssuer := f.issuer(t, ctx, "attach-held-gateway")
-	server := f.serverAt(t, ctx, "attach-held", "https://a.example.com/mcp", own)
-	f.member(t, ctx, createImpactGateway(t, ctx, f.ti, "attach-held", gatewayIssuer), server)
-	client, provider := f.client(t, ctx, "attach-held", own)
-	f.clientOfProvider(t, ctx, "attach-held-holder", provider, gatewayIssuer)
-
-	_, err := f.attach(ctx, server, client)
-	requireConflict(t, err, "one client per provider")
-	require.Empty(t, associatedClients(t, ctx, f.ti.conn, f.projectID, server), "a refusal writes nothing")
-	requireClientBound(t, ctx, f.ti, client, gatewayIssuer, false)
-}
-
-func TestAttachServerClientAssociation_RequiresWriteOnAGatewayGainingTheClient(t *testing.T) {
-	t.Parallel()
-	ctx, f := newAttachFixture(t)
-
-	own := f.issuer(t, ctx, "attach-gateway-rbac-own")
-	gatewayIssuer := f.issuer(t, ctx, "attach-gateway-rbac-gateway")
-	server := f.serverAt(t, ctx, "attach-gateway-rbac", "https://a.example.com/mcp", own)
-	f.member(t, ctx, createImpactGateway(t, ctx, f.ti, "attach-gateway-rbac", gatewayIssuer), server)
-	client, _ := f.client(t, ctx, "attach-gateway-rbac", own)
-
-	serverOnly := withExactAccessGrants(t, ctx, f.ti.conn, authz.Grant{
-		Scope:    authz.ScopeMCPWrite,
-		Selector: authz.NewSelector(authz.ScopeMCPWrite, server.String()),
-	})
-	_, err := f.attach(serverOnly, server, client)
-	var shareable *oops.ShareableError
-	require.ErrorAs(t, err, &shareable)
-	require.Equal(t, oops.CodeForbidden, shareable.Code)
-	require.Empty(t, associatedClients(t, ctx, f.ti.conn, f.projectID, server))
-}
-
-// The organization gateway fronts every server, so its issuer has to hold the
-// client, but binding one there is left to an explicit step.
-func TestAttachServerClientAssociation_RefusesClientMissingFromTheOrganizationIssuer(t *testing.T) {
-	t.Parallel()
-	ctx, f := newAttachFixture(t)
-
-	own := f.issuer(t, ctx, "attach-org-own")
-	organizationIssuer := seedOrganizationTierUserSessionIssuer(t, ctx, f.ti.conn, "attach-org")
-	server := f.serverAt(t, ctx, "attach-org", "https://a.example.com/mcp", own)
-	client, _ := f.client(t, ctx, "attach-org", own)
-
-	_, err := f.attach(ctx, server, client)
-	requireConflict(t, err, "organization gateway")
-
-	require.NoError(t, repo.New(f.ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: client,
-		UserSessionIssuerID:   organizationIssuer,
-	}))
-	_, err = f.attach(ctx, server, client)
-	require.NoError(t, err)
+	require.Equal(t, before, after)
 }
 
 func TestAttachServerClientAssociation_GatesTheNewClientsRegistrationInPreflight(t *testing.T) {
@@ -686,121 +635,24 @@ func TestAttachServerClientAssociation_GatesTheNewClientsRegistrationInPreflight
 	require.NoError(t, err)
 }
 
-// In these detach tests a sibling shares the server's own issuer, because a sole
-// consumer's client follows the issuer's binding and its detach is refused.
-func TestDetachServerClientAssociation_ReleasesTheGatewaysBinding(t *testing.T) {
+func TestDetachServerClientAssociation_PreservesExistingGatewayPair(t *testing.T) {
 	t.Parallel()
 	ctx, f := newAttachFixture(t)
-
-	own := f.issuer(t, ctx, "release-own")
-	gatewayIssuer := f.issuer(t, ctx, "release-gateway")
-	server := f.serverAt(t, ctx, "release", "https://a.example.com/mcp", own)
-	f.serverAt(t, ctx, "release-own-sibling", "https://c.example.com/mcp", own)
-	f.member(t, ctx, createImpactGateway(t, ctx, f.ti, "release", gatewayIssuer), server)
-	client, _ := f.client(t, ctx, "release", own)
-
-	_, err := f.attach(ctx, server, client)
-	require.NoError(t, err)
-	before, err := audittest.AuditLogCountByAction(ctx, f.ti.conn, audit.ActionRemoteSessionClientDetachUserSessionIssuer)
-	require.NoError(t, err)
-
-	require.NoError(t, detachServerClient(ctx, f.ti, server, client))
-	requireClientBound(t, ctx, f.ti, client, gatewayIssuer, false)
-	requireClientBound(t, ctx, f.ti, client, own, true)
-	after, err := audittest.AuditLogCountByAction(ctx, f.ti.conn, audit.ActionRemoteSessionClientDetachUserSessionIssuer)
-	require.NoError(t, err)
-	require.Equal(t, before+1, after)
-}
-
-func TestDetachServerClientAssociation_KeepsAGatewayBindingAnotherMemberUses(t *testing.T) {
-	t.Parallel()
-	ctx, f := newAttachFixture(t)
-
-	own := f.issuer(t, ctx, "release-keep-own")
-	gatewayIssuer := f.issuer(t, ctx, "release-keep-gateway")
-	gateway := createImpactGateway(t, ctx, f.ti, "release-keep", gatewayIssuer)
-	first := f.serverAt(t, ctx, "release-keep-a", "https://a.example.com/mcp", own)
-	second := f.serverAt(t, ctx, "release-keep-b", "https://a.example.com/mcp", own)
-	f.member(t, ctx, gateway, first)
-	f.member(t, ctx, gateway, second)
-	client, _ := f.client(t, ctx, "release-keep", own)
-
-	_, err := f.attach(ctx, first, client)
-	require.NoError(t, err)
-	_, err = f.attach(ctx, second, client)
-	require.NoError(t, err)
-
-	require.NoError(t, detachServerClient(ctx, f.ti, first, client))
-	requireClientBound(t, ctx, f.ti, client, gatewayIssuer, true)
-
-	require.NoError(t, detachServerClient(ctx, f.ti, second, client))
-	requireClientBound(t, ctx, f.ti, client, gatewayIssuer, false)
-}
-
-// A hosted member serves from every client its gateway's issuer binds, with no
-// association to show for it.
-func TestDetachServerClientAssociation_KeepsAGatewayBindingAHostedMemberReads(t *testing.T) {
-	t.Parallel()
-	ctx, f := newAttachFixture(t)
-
-	own := f.issuer(t, ctx, "release-hosted-own")
-	gatewayIssuer := f.issuer(t, ctx, "release-hosted-gateway")
-	gateway := createImpactGateway(t, ctx, f.ti, "release-hosted", gatewayIssuer)
-	server := f.serverAt(t, ctx, "release-hosted", "https://a.example.com/mcp", own)
-	f.serverAt(t, ctx, "release-hosted-own-sibling", "https://c.example.com/mcp", own)
-	f.member(t, ctx, gateway, server)
-	f.member(t, ctx, gateway, f.hostedServer(t, ctx, "release-hosted-member", uuid.NullUUID{UUID: uuid.Nil, Valid: false}))
-	client, _ := f.client(t, ctx, "release-hosted", own)
-
+	own := f.issuer(t, ctx, "detach-mirror-own")
+	gatewayIssuer := f.issuer(t, ctx, "detach-mirror-gateway")
+	server := f.serverAt(t, ctx, "detach-mirror", "https://a.example.com/mcp", own)
+	f.member(t, ctx, createImpactGateway(t, ctx, f.ti, "detach-mirror", gatewayIssuer), server)
+	client, _ := f.client(t, ctx, "detach-mirror", gatewayIssuer)
+	seedLiveAgentBinding(t, ctx, f.ti, client, gatewayIssuer)
 	_, err := f.attach(ctx, server, client)
 	require.NoError(t, err)
 	require.NoError(t, detachServerClient(ctx, f.ti, server, client))
+	require.Empty(t, offeredAuthClients(t, ctx, f.ti.conn, server))
 	requireClientBound(t, ctx, f.ti, client, gatewayIssuer, true)
+	requireLiveAgentBindings(t, ctx, f.ti, client, gatewayIssuer)
 }
 
-// A server on the gateway's own issuer can fall back to an unclaimed client.
-func TestDetachServerClientAssociation_KeepsABindingAServerOnTheIssuerReads(t *testing.T) {
-	t.Parallel()
-	ctx, f := newAttachFixture(t)
-
-	own := f.issuer(t, ctx, "release-direct-own")
-	gatewayIssuer := f.issuer(t, ctx, "release-direct-gateway")
-	server := f.serverAt(t, ctx, "release-direct", "https://a.example.com/mcp", own)
-	f.serverAt(t, ctx, "release-direct-own-sibling", "https://c.example.com/mcp", own)
-	f.member(t, ctx, createImpactGateway(t, ctx, f.ti, "release-direct", gatewayIssuer), server)
-	f.serverAt(t, ctx, "release-direct-sibling", "https://b.example.com/mcp", gatewayIssuer)
-	client, _ := f.client(t, ctx, "release-direct", own)
-
-	_, err := f.attach(ctx, server, client)
-	require.NoError(t, err)
-	require.NoError(t, detachServerClient(ctx, f.ti, server, client))
-	requireClientBound(t, ctx, f.ti, client, gatewayIssuer, true)
-}
-
-func TestDetachServerClientAssociation_KeepsAGatewayBindingTheCallerCannotChange(t *testing.T) {
-	t.Parallel()
-	ctx, f := newAttachFixture(t)
-
-	own := f.issuer(t, ctx, "release-rbac-own")
-	gatewayIssuer := f.issuer(t, ctx, "release-rbac-gateway")
-	server := f.serverAt(t, ctx, "release-rbac", "https://a.example.com/mcp", own)
-	f.serverAt(t, ctx, "release-rbac-own-sibling", "https://c.example.com/mcp", own)
-	f.member(t, ctx, createImpactGateway(t, ctx, f.ti, "release-rbac", gatewayIssuer), server)
-	client, _ := f.client(t, ctx, "release-rbac", own)
-	_, err := f.attach(ctx, server, client)
-	require.NoError(t, err)
-
-	serverOnly := withExactAccessGrants(t, ctx, f.ti.conn, authz.Grant{
-		Scope:    authz.ScopeMCPWrite,
-		Selector: authz.NewSelector(authz.ScopeMCPWrite, server.String()),
-	})
-	require.NoError(t, detachServerClient(serverOnly, f.ti, server, client))
-	require.Empty(t, associatedClients(t, ctx, f.ti.conn, f.projectID, server))
-	requireClientBound(t, ctx, f.ti, client, gatewayIssuer, true)
-}
-
-// Detach undoing the gateway binding is what lets an administrator swap a
-// member's client: the gateway holds one client per provider.
+// A client swap changes the offer, not the gateway issuer.
 func TestAttachServerClientAssociation_SwapsAClientAfterDetach(t *testing.T) {
 	t.Parallel()
 	ctx, f := newAttachFixture(t)
@@ -819,7 +671,7 @@ func TestAttachServerClientAssociation_SwapsAClientAfterDetach(t *testing.T) {
 
 	result, err := f.attach(ctx, server, second)
 	require.NoError(t, err)
-	require.Equal(t, []string{gatewayIssuer.String()}, result.BoundUserSessionIssuerIds)
+	require.Empty(t, result.BoundUserSessionIssuerIds)
 	require.Equal(t, []uuid.UUID{second}, associatedClients(t, ctx, f.ti.conn, f.projectID, server))
 }
 
@@ -854,15 +706,13 @@ func TestDetachServerClientAssociation_KeepsAnOrganizationIssuersBinding(t *test
 	f.serverAt(t, ctx, "release-org-sibling", "https://c.example.com/mcp", own)
 	f.member(t, ctx, createImpactGateway(t, ctx, f.ti, "release-org", organizationIssuer), server)
 	client, _ := f.client(t, ctx, "release-org", own)
-	require.NoError(t, repo.New(f.ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: client,
-		UserSessionIssuerID:   organizationIssuer,
-	}))
+	other := placeClientForSignIn(t, ctx, f.ti.conn, client, organizationIssuer)
 
 	_, err := f.attach(ctx, server, client)
 	require.NoError(t, err)
 	require.NoError(t, detachServerClient(ctx, f.ti, server, client))
-	requireClientBound(t, ctx, f.ti, client, organizationIssuer, true)
+	require.Empty(t, associatedClients(t, ctx, f.ti.conn, f.projectID, server))
+	require.Equal(t, []uuid.UUID{client}, associatedClients(t, ctx, f.ti.conn, f.projectID, other))
 }
 
 // A captured association can predate the rules a new attach follows.
@@ -884,51 +734,8 @@ func TestAttachServerClientAssociation_AgainRefusesNothingAnExistingAssociationA
 
 	result, err := f.attach(ctx, server, client)
 	require.NoError(t, err, "the client's missing own-issuer binding doesn't refuse an association that already stands")
-	require.Equal(t, []string{openGateway.String()}, result.BoundUserSessionIssuerIds, "only the gateway it can complete")
+	require.Empty(t, result.BoundUserSessionIssuerIds)
+	requireClientBound(t, ctx, f.ti, client, openGateway, false)
 	requireClientBound(t, ctx, f.ti, client, heldGateway, false)
 	requireClientBound(t, ctx, f.ti, holder, heldGateway, true)
-}
-
-// Binding a client to a gateway's issuer lets reconcile associate any member with
-// that derived provider, which would put the client at two addresses.
-func TestAttachServerClientAssociation_RefusesBindingAnotherMemberWouldCaptureAtAnotherAddress(t *testing.T) {
-	t.Parallel()
-	ctx, f := newAttachFixture(t)
-
-	own := f.issuer(t, ctx, "capture-own")
-	otherOwn := f.issuer(t, ctx, "capture-other")
-	gatewayIssuer := f.issuer(t, ctx, "capture-gateway")
-	gateway := createImpactGateway(t, ctx, f.ti, "capture", gatewayIssuer)
-	target := f.serverAt(t, ctx, "capture-target", "https://a.example.com/mcp", own)
-	f.member(t, ctx, gateway, target)
-	member := f.serverAt(t, ctx, "capture-member", "https://b.example.com/mcp", otherOwn)
-	f.member(t, ctx, gateway, member)
-	client, provider := f.client(t, ctx, "capture", own)
-	f.clientOfProvider(t, ctx, "capture-member", provider, otherOwn)
-	resync(t, ctx, f.ti.conn, f.orgID, f.projectID, otherOwn)
-
-	_, err := f.attach(ctx, target, client)
-	requireConflict(t, err, "different upstream address")
-	require.Empty(t, associatedClients(t, ctx, f.ti.conn, f.projectID, target))
-	requireClientBound(t, ctx, f.ti, client, gatewayIssuer, false)
-}
-
-func TestAttachServerClientAssociation_AllowsBindingAnotherMemberWouldCaptureAtTheSameAddress(t *testing.T) {
-	t.Parallel()
-	ctx, f := newAttachFixture(t)
-
-	own := f.issuer(t, ctx, "capture-same-own")
-	otherOwn := f.issuer(t, ctx, "capture-same-other")
-	gatewayIssuer := f.issuer(t, ctx, "capture-same-gateway")
-	gateway := createImpactGateway(t, ctx, f.ti, "capture-same", gatewayIssuer)
-	target := f.serverAt(t, ctx, "capture-same-target", "https://a.example.com/mcp", own)
-	f.member(t, ctx, gateway, target)
-	member := f.serverAt(t, ctx, "capture-same-member", "https://a.example.com/mcp/", otherOwn)
-	f.member(t, ctx, gateway, member)
-	client, provider := f.client(t, ctx, "capture-same", own)
-	f.clientOfProvider(t, ctx, "capture-same-member", provider, otherOwn)
-	resync(t, ctx, f.ti.conn, f.orgID, f.projectID, otherOwn)
-
-	_, err := f.attach(ctx, target, client)
-	require.NoError(t, err)
 }

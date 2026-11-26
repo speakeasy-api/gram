@@ -144,6 +144,7 @@ type Endpoints struct {
 	MigrateOrganizationAssistantIdentities  goa.Endpoint
 	MigrateOrganizationAssistantsToKit      goa.Endpoint
 	GetHooksRollout                         goa.Endpoint
+	GetHooksReleaseProgress                 goa.Endpoint
 	SetHooksRolloutDefault                  goa.Endpoint
 	GetOrganizationHooksRollout             goa.Endpoint
 	SetOrganizationHooksRollout             goa.Endpoint
@@ -308,6 +309,7 @@ func NewEndpoints(s Service) *Endpoints {
 		MigrateOrganizationAssistantIdentities:  NewMigrateOrganizationAssistantIdentitiesEndpoint(s, a.APIKeyAuth),
 		MigrateOrganizationAssistantsToKit:      NewMigrateOrganizationAssistantsToKitEndpoint(s, a.APIKeyAuth),
 		GetHooksRollout:                         NewGetHooksRolloutEndpoint(s, a.APIKeyAuth),
+		GetHooksReleaseProgress:                 NewGetHooksReleaseProgressEndpoint(s, a.APIKeyAuth),
 		SetHooksRolloutDefault:                  NewSetHooksRolloutDefaultEndpoint(s, a.APIKeyAuth),
 		GetOrganizationHooksRollout:             NewGetOrganizationHooksRolloutEndpoint(s, a.APIKeyAuth),
 		SetOrganizationHooksRollout:             NewSetOrganizationHooksRolloutEndpoint(s, a.APIKeyAuth),
@@ -452,6 +454,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.MigrateOrganizationAssistantIdentities = m(e.MigrateOrganizationAssistantIdentities)
 	e.MigrateOrganizationAssistantsToKit = m(e.MigrateOrganizationAssistantsToKit)
 	e.GetHooksRollout = m(e.GetHooksRollout)
+	e.GetHooksReleaseProgress = m(e.GetHooksReleaseProgress)
 	e.SetHooksRolloutDefault = m(e.SetHooksRolloutDefault)
 	e.GetOrganizationHooksRollout = m(e.GetOrganizationHooksRollout)
 	e.SetOrganizationHooksRollout = m(e.SetOrganizationHooksRollout)
@@ -3350,6 +3353,29 @@ func NewGetHooksRolloutEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 			return nil, err
 		}
 		return s.GetHooksRollout(ctx, p)
+	}
+}
+
+// NewGetHooksReleaseProgressEndpoint returns an endpoint function that calls
+// the method "getHooksReleaseProgress" of service "admin".
+func NewGetHooksReleaseProgressEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetHooksReleaseProgressPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetHooksReleaseProgress(ctx, p)
 	}
 }
 

@@ -1,21 +1,49 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AuthenticationSectionBody } from "./AuthenticationSection";
+import {
+  AuthenticationSection,
+  AuthenticationSectionBody,
+} from "./AuthenticationSection";
 import type { AuthTarget } from "./authTarget";
 
 const {
   attachSheet,
-  useAllRemoteSessionClients,
+  saveNoUpstream,
+  useMcpServerAuthentication,
+  deniedScopes,
+  useServerClientAssociations,
   useRemoteSessionIssuersByIds,
   useUserSessionIssuer,
   useEffectiveUserSessionIssuers,
 } = vi.hoisted(() => ({
   attachSheet: vi.fn(),
-  useAllRemoteSessionClients: vi.fn(),
+  saveNoUpstream: vi.fn(),
+  useMcpServerAuthentication: vi.fn(),
+  deniedScopes: new Set<string>(),
+  useServerClientAssociations: vi.fn(),
   useRemoteSessionIssuersByIds: vi.fn(),
   useUserSessionIssuer: vi.fn(),
   useEffectiveUserSessionIssuers: vi.fn(),
+}));
+
+vi.mock("@/pages/mcp/gateway/GatewayMemberSignInField", () => ({
+  GatewayAuthorizationServersField: () => null,
+}));
+
+vi.mock(
+  "@gram/client/react-query/setMcpServerUpstreamAuthRequirement.js",
+  () => ({
+    useSetMcpServerUpstreamAuthRequirementMutation: () => ({
+      mutate: saveNoUpstream,
+    }),
+  }),
+);
+
+vi.mock("@gram/client/react-query/mcpServerAuthentication.js", () => ({
+  useMcpServerAuthentication: (...args: unknown[]) =>
+    useMcpServerAuthentication(...args),
+  invalidateAllMcpServerAuthentication: vi.fn(),
 }));
 
 vi.mock("@gram/client/react-query/userSessionIssuer.js", () => ({
@@ -40,13 +68,15 @@ vi.mock("./UserSessionIssuerField", () => ({
   ),
 }));
 
-vi.mock("./authTarget", () => ({
-  useMcpServerAuthTarget: vi.fn(),
+vi.mock("@/contexts/Sdk", () => ({ useSdkClient: () => ({}) }));
+vi.mock("@/pages/mcp/x/useFollowRenamedServer", () => ({
+  useFollowRenamedServer: () => vi.fn(),
 }));
+vi.mock("./SetupStepBanner", () => ({ SetupStepBanner: () => null }));
 
-vi.mock("@/lib/remote-identity/queries/useAllRemoteSessionClients", () => ({
-  useAllRemoteSessionClients: (...args: unknown[]) =>
-    useAllRemoteSessionClients(...args),
+vi.mock("@gram/client/react-query/serverClientAssociations.js", () => ({
+  useServerClientAssociations: (...args: unknown[]) =>
+    useServerClientAssociations(...args),
 }));
 
 vi.mock("@/lib/remote-identity/queries/useRemoteSessionIssuersByIds", () => ({
@@ -124,15 +154,20 @@ vi.mock("@tanstack/react-query", async (importOriginal) => ({
 vi.mock("@/components/require-scope", () => ({
   RequireScope: ({
     children,
+    scope,
+    level,
   }: {
+    scope: string;
+    level: string;
     children: ReactNode | ((props: { disabled: boolean }) => ReactNode);
-  }) => (
-    <>
-      {typeof children === "function"
-        ? children({ disabled: false })
-        : children}
-    </>
-  ),
+  }) =>
+    level === "section" && deniedScopes.has(scope) ? null : (
+      <>
+        {typeof children === "function"
+          ? children({ disabled: false })
+          : children}
+      </>
+    ),
 }));
 
 vi.mock("./CimdAdmissionModeField", () => ({
@@ -164,6 +199,7 @@ vi.mock("./CimdCustomClientsField", () => ({
 }));
 
 beforeEach(() => {
+  useMcpServerAuthentication.mockReturnValue({});
   useRemoteSessionIssuersByIds.mockImplementation((ids: string[]) => ({
     items: ids.map((id) => ({ id })),
     isLoading: false,
@@ -188,17 +224,115 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  deniedScopes.clear();
 });
 
 describe("AuthenticationSectionBody", () => {
+  it("opts out the selected hosted server, not the server representing its toolset", () => {
+    useServerClientAssociations.mockReturnValue({
+      data: { associations: [] },
+      isLoading: false,
+    });
+    render(
+      <AuthenticationSection
+        mcpServer={{
+          id: "second-server",
+          projectId: "project-id",
+          userSessionIssuerId: "user-session-issuer",
+          toolsetId: "toolset-id",
+          toolset: {
+            id: "toolset-id",
+            hostingMcpServerId: "first-server",
+            name: "Shared toolset",
+            slug: "shared-toolset",
+            toolCount: 0,
+            toolSelectionMode: "static",
+          },
+          visibility: "private",
+          networkAccessMode: "public_only",
+          createdAt: new Date(0),
+          updatedAt: new Date(0),
+        }}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "No upstream authentication" }),
+    );
+
+    expect(saveNoUpstream).toHaveBeenCalledTimes(1);
+    expect(saveNoUpstream).toHaveBeenCalledWith({
+      request: {
+        setMcpServerUpstreamAuthRequirementRequestBody: {
+          mcpServerId: "second-server",
+          requiresUpstreamAuth: false,
+        },
+      },
+    });
+  });
+
+  it("shows a saved no-upstream decision after reload", () => {
+    useServerClientAssociations.mockReturnValue({ data: { associations: [] } });
+    useMcpServerAuthentication.mockReturnValue({
+      data: { status: "no_auth_required" },
+    });
+    render(
+      <AuthenticationSectionBody target={standardTargetWithSessionIssuer} />,
+    );
+    expect(
+      screen.getByText(/No upstream authentication required/),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "No upstream authentication" }),
+    ).toBeNull();
+  });
+
+  it.each(["non-hosted", "assigned", "gateway", "org:admin", "mcp:write"])(
+    "does not offer hosted opt-out for %s",
+    (scenario) => {
+      const target = { ...standardTargetWithSessionIssuer };
+      if (scenario === "non-hosted") target.hosted = false;
+      if (scenario === "gateway")
+        target.attachImpactTarget = { metaMcpServerId: "gateway-1" };
+      if (scenario.includes(":")) deniedScopes.add(scenario);
+      useServerClientAssociations.mockReturnValue({
+        data: {
+          associations:
+            scenario === "assigned"
+              ? [{ remoteSessionIssuerId: "provider-1" }]
+              : [],
+        },
+        isLoading: false,
+      });
+      render(<AuthenticationSectionBody target={target} />);
+      expect(
+        screen.queryByRole("button", { name: "No upstream authentication" }),
+      ).toBeNull();
+    },
+  );
+
+  it("shows a saved upstream registration before downstream sign-in is configured", () => {
+    useServerClientAssociations.mockReturnValue({
+      data: { associations: [{ remoteSessionIssuerId: "saved-provider" }] },
+      isLoading: false,
+    });
+    render(
+      <AuthenticationSectionBody target={standardTargetWithoutSessionIssuer} />,
+    );
+    expect(screen.getByText("attached-saved-provider")).toBeDefined();
+    expect(
+      screen.queryByRole("button", { name: "No upstream authentication" }),
+    ).toBeNull();
+  });
+
   it("includes a target-specific setup action before a session issuer is configured", () => {
     useUserSessionIssuer.mockReturnValue({
       data: null,
       isLoading: false,
       isError: false,
     });
-    useAllRemoteSessionClients.mockReturnValue({
-      items: [],
+    useServerClientAssociations.mockReturnValue({
+      data: { associations: [] },
       isLoading: false,
     });
     render(
@@ -214,8 +348,15 @@ describe("AuthenticationSectionBody", () => {
   it("renders an attached provider the issuer listing does not contain", () => {
     // The listing mock above returns no issuers at all, standing in for an
     // attached issuer pushed past the first page by the platform catalog.
-    useAllRemoteSessionClients.mockReturnValue({
-      items: [{ id: "client-1", remoteSessionIssuerId: "issuer-far" }],
+    useServerClientAssociations.mockReturnValue({
+      data: {
+        associations: [
+          {
+            remoteSessionClientId: "client-1",
+            remoteSessionIssuerId: "issuer-far",
+          },
+        ],
+      },
       isLoading: false,
     });
     render(
@@ -230,8 +371,15 @@ describe("AuthenticationSectionBody", () => {
   });
 
   it("reports a failed provider lookup instead of an empty provider list", () => {
-    useAllRemoteSessionClients.mockReturnValue({
-      items: [{ id: "client-1", remoteSessionIssuerId: "issuer-gone" }],
+    useServerClientAssociations.mockReturnValue({
+      data: {
+        associations: [
+          {
+            remoteSessionClientId: "client-1",
+            remoteSessionIssuerId: "issuer-gone",
+          },
+        ],
+      },
       isLoading: false,
     });
     useRemoteSessionIssuersByIds.mockReturnValue({
@@ -257,8 +405,8 @@ describe("AuthenticationSectionBody", () => {
         isLoading: false,
         isError: false,
       });
-      useAllRemoteSessionClients.mockReturnValue({
-        items: [],
+      useServerClientAssociations.mockReturnValue({
+        data: { associations: [] },
         isLoading: false,
       });
       render(
@@ -279,7 +427,10 @@ describe("AuthenticationSectionBody", () => {
       isLoading: false,
       isError: false,
     });
-    useAllRemoteSessionClients.mockReturnValue({ items: [], isLoading: false });
+    useServerClientAssociations.mockReturnValue({
+      data: { associations: [] },
+      isLoading: false,
+    });
     render(
       <AuthenticationSectionBody target={standardTargetWithSessionIssuer} />,
     );
@@ -302,7 +453,10 @@ describe("AuthenticationSectionBody", () => {
       isLoading: false,
       isError: false,
     });
-    useAllRemoteSessionClients.mockReturnValue({ items: [], isLoading: false });
+    useServerClientAssociations.mockReturnValue({
+      data: { associations: [] },
+      isLoading: false,
+    });
     render(
       <AuthenticationSectionBody target={standardTargetWithSessionIssuer} />,
     );
@@ -323,8 +477,8 @@ describe("AuthenticationSectionBody", () => {
         isLoading: false,
         isError: false,
       });
-      useAllRemoteSessionClients.mockReturnValue({
-        items: [],
+      useServerClientAssociations.mockReturnValue({
+        data: { associations: [] },
         isLoading: false,
       });
       render(
@@ -338,9 +492,11 @@ describe("AuthenticationSectionBody", () => {
 });
 
 const standardTargetWithSessionIssuer: AuthTarget = {
+  hosted: true,
   slug: "standard-server",
   projectId: "project-1",
   permissionResourceId: "mcp-server-1",
+  mcpServerId: "mcp-server-1",
   attachImpactTarget: { mcpServerId: "mcp-server-1" },
   supportsOrganizationIssuers: true,
   userSessionIssuerId: "user-session-issuer",

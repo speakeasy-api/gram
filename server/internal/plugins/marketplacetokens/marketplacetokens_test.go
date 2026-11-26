@@ -346,7 +346,8 @@ func TestBackfillVerifyAndFinalizeMoveTokensToTheOrganizationKey(t *testing.T) {
 	store := marketplacetokens.NewCopyStore(ti.conn)
 	counts, err := store.Count(t.Context(), ti.orgID)
 	require.NoError(t, err)
-	require.Equal(t, orgencryption.CopyCounts{Waiting: 1, Unreadable: 0, Unattributed: 0, PlatformCopies: 1}, counts)
+	require.False(t, counts.LastWrittenAt.IsZero())
+	require.Equal(t, orgencryption.CopyCounts{Waiting: 1, Unreadable: 0, Unattributed: 0, PlatformCopies: 1, Values: 1, LastWrittenAt: counts.LastWrittenAt}, counts)
 
 	ti.enroll(t)
 	result := ti.run(t)
@@ -412,4 +413,53 @@ func TestCopyStoreClearPlatformCopiesIsFencedOnGeneration(t *testing.T) {
 	require.NoError(t, err)
 	require.Zero(t, cleared, "a clear decided under a stale generation changes nothing")
 	require.True(t, ti.stored(t, conn.ID).MarketplaceTokenEncrypted.Valid)
+}
+
+func TestCopyStoreReportsStoredTokens(t *testing.T) {
+	t.Parallel()
+
+	ti := newTestInstance(t)
+	none := pgtype.Text{String: "", Valid: false}
+	plant := func(conn repo.PluginGithubConnection, organizationID, legacy, platform, org pgtype.Text) repo.PluginGithubConnection {
+		require.NoError(t, repo.New(ti.conn).PlantMarketplaceTokenFixture(t.Context(), repo.PlantMarketplaceTokenFixtureParams{
+			OrganizationID: organizationID, LegacyToken: legacy, TokenHash: none, PlatformCopy: platform, OrgCopy: org, ID: conn.ID,
+		}))
+		return ti.stored(t, conn.ID)
+	}
+
+	organizationID := conv.ToPGText(ti.orgID)
+	platformOnly := plant(ti.createConnection(t, ti.orgID), organizationID, none, conv.ToPGText("platform-copy"), none)
+	orgOnly := plant(ti.createConnection(t, ti.orgID), organizationID, none, none, conv.ToPGText("org-copy"))
+	// A plaintext token is not one of the organization's values, and an
+	// unattributed copy belongs to no organization.
+	plant(ti.createConnection(t, ti.orgID), organizationID, conv.ToPGText("legacy-token"), none, none)
+	plant(ti.createConnection(t, ti.orgID), none, none, conv.ToPGText("unattributed-copy"), none)
+
+	lastWrittenAt := platformOnly.UpdatedAt.Time
+	if orgOnly.UpdatedAt.Time.After(lastWrittenAt) {
+		lastWrittenAt = orgOnly.UpdatedAt.Time
+	}
+
+	store := marketplacetokens.NewCopyStore(ti.conn)
+	listed, err := store.ListOrganizationsWithValues(t.Context())
+	require.NoError(t, err)
+	var organization orgencryption.OrganizationValues
+	for _, h := range listed {
+		if h.OrganizationID == ti.orgID {
+			organization = h
+		}
+	}
+	require.Equal(t, int64(2), organization.Values)
+	require.True(t, lastWrittenAt.Equal(organization.LastWrittenAt), "listed %v, stored %v", organization.LastWrittenAt, lastWrittenAt)
+
+	counted, err := store.Count(t.Context(), ti.orgID)
+	require.NoError(t, err)
+	require.Equal(t, organization.Values, counted.Values)
+	require.True(t, organization.LastWrittenAt.Equal(counted.LastWrittenAt))
+
+	other := createOrganization(t, ti.conn)
+	empty, err := store.Count(t.Context(), other)
+	require.NoError(t, err)
+	require.Zero(t, empty.Values)
+	require.True(t, empty.LastWrittenAt.IsZero())
 }

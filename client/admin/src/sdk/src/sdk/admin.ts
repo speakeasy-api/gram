@@ -36,6 +36,7 @@ import { adminGetGlobalIssuer } from "../funcs/adminGetGlobalIssuer.js";
 import { adminGetGlobalIssuerDuplicatePreflight } from "../funcs/adminGetGlobalIssuerDuplicatePreflight.js";
 import { adminGetGlobalIssuerMigratePreflight } from "../funcs/adminGetGlobalIssuerMigratePreflight.js";
 import { adminGetHookClients } from "../funcs/adminGetHookClients.js";
+import { adminGetHooksReleaseProgress } from "../funcs/adminGetHooksReleaseProgress.js";
 import { adminGetHooksRollout } from "../funcs/adminGetHooksRollout.js";
 import { adminGetInferenceKeys } from "../funcs/adminGetInferenceKeys.js";
 import { adminGetInferenceSpendHistory } from "../funcs/adminGetInferenceSpendHistory.js";
@@ -151,6 +152,7 @@ import { AdminChatAnalysisTriggerResult } from "../models/components/adminchatan
 import { AdminCustomerUsageResponse } from "../models/components/admincustomerusageresponse.js";
 import { AdminHookClientsResult } from "../models/components/adminhookclientsresult.js";
 import { AdminHookFleetResult } from "../models/components/adminhookfleetresult.js";
+import { AdminHooksReleaseProgress } from "../models/components/adminhooksreleaseprogress.js";
 import { AdminHooksRollout } from "../models/components/adminhooksrollout.js";
 import { AdminInferenceKey } from "../models/components/admininferencekey.js";
 import { AdminInferenceKeyLimit } from "../models/components/admininferencekeylimit.js";
@@ -576,6 +578,21 @@ export class Admin extends ClientSDK {
   }
 
   /**
+   * getHooksReleaseProgress admin
+   *
+   * @remarks
+   * Returns how far the current hooks release has reached: organizations the rollout pins clear for it, marketplace repositories republished with it, and installs reporting its binary version.
+   */
+  async getHooksReleaseProgress(
+    options?: RequestOptions,
+  ): Promise<AdminHooksReleaseProgress> {
+    return unwrapAsync(adminGetHooksReleaseProgress(
+      this,
+      options,
+    ));
+  }
+
+  /**
    * setHooksRolloutDefault admin
    *
    * @remarks
@@ -596,7 +613,7 @@ export class Admin extends ClientSDK {
    * backfillMcpAuthGrants admin
    *
    * @remarks
-   * Grants unrestricted mcp:auth to every principal that holds any mcp:connect grant, in every organization. The connect grant's selectors are ignored. Safe to run more than once.
+   * Retired. Rejects authenticated calls and does not modify grants.
    */
   async backfillMcpAuthGrants(
     options?: RequestOptions,
@@ -1561,7 +1578,7 @@ export class Admin extends ClientSDK {
    * listOrganizationEncryptionTransitions admin
    *
    * @remarks
-   * Lists organizations by transition state for one use case, oldest first. Organizations never enrolled are in platform_key.
+   * Lists organizations by transition state for one use case. Organizations never enrolled are in platform_key. By default it lists only organizations with values for the use case, most recently written first.
    */
   async listOrganizationEncryptionTransitions(
     request?: AdminListOrganizationEncryptionTransitionsRequest | undefined,
@@ -2569,7 +2586,7 @@ export class Admin extends ClientSDK {
    * runUpstreamOAuthMigration admin
    *
    * @remarks
-   * Migrates one organization's upstream OAuth configuration: records the server to client associations its configuration proves, then each live credential's client choice. Idempotent, so it is safe to run again; a server the configuration does not prove is reported and never guessed.
+   * Retired. Rejects authenticated calls and does not change upstream authentication configuration.
    */
   async runUpstreamOAuthMigration(
     request: RunUpstreamOAuthMigrationRequestBody,
@@ -2586,7 +2603,7 @@ export class Admin extends ClientSDK {
    * getUpstreamOAuthMigrationStatus admin
    *
    * @remarks
-   * Reports where one organization stands in the upstream OAuth migration from a dry run that writes nothing.
+   * Reports typed upstream authentication readiness for one organization without making changes.
    */
   async getUpstreamOAuthMigrationStatus(
     request: AdminGetUpstreamOAuthMigrationStatusRequest,

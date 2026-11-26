@@ -665,7 +665,6 @@ func seedOwnerAttachedMember(t *testing.T) (context.Context, ownerAttachedMember
 	require.NoError(t, err)
 	client, err := q.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{ProjectID: conv.ToNullUUID(projectID), RemoteSessionIssuerID: provider.ID, ClientID: "gateway-owner-client"})
 	require.NoError(t, err)
-	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: client.ID, UserSessionIssuerID: issuerID}))
 	// Shared issuers do not make a client eligible for every member.
 	require.NoError(t, testrepo.New(ti.conn).InsertMCPServerRemoteSessionClientFixture(ctx, testrepo.InsertMCPServerRemoteSessionClientFixtureParams{ProjectID: projectID, OrganizationID: authCtx.ActiveOrganizationID, McpServerID: serverID, RemoteSessionClientID: client.ID}))
 	insertQualifiedRemoteSessionToken(t, ctx, ti, issuerID, client.ID, urn.NewUserSubject(authCtx.UserID), "owner-assigned-token", upstream.url)
@@ -842,6 +841,7 @@ func TestServeAgentGateway_ExecutesPlatformToolOnHostedMember(t *testing.T) {
 		ToolsetID: conv.ToNullUUID(toolset.ID), Visibility: mcpservers.VisibilityPrivate,
 	})
 	require.NoError(t, err)
+	markHostedDownstreamOnly(t, ctx, ti.conn, serverID)
 	seedUserMCPConnectGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authCtx.UserID, toolset.ID.String())
 	seedPrincipalMCPConnectGrant(t, ctx, ti, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeAgent, fx.agent.ID.String()), toolset.ID)
 	token := mintAgentGatewayKey(t, ctx, ti, fx.agent.ID, toolset.ID)
@@ -886,6 +886,7 @@ func TestServeAgentGateway_PlatformToolMissingSlackTokenSaysWhatToConfigure(t *t
 		ToolsetID: conv.ToNullUUID(toolset.ID), Visibility: mcpservers.VisibilityPrivate,
 	})
 	require.NoError(t, err)
+	markHostedDownstreamOnly(t, ctx, ti.conn, serverID)
 	seedUserMCPConnectGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authCtx.UserID, toolset.ID.String())
 	seedPrincipalMCPConnectGrant(t, ctx, ti, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeAgent, fx.agent.ID.String()), toolset.ID)
 	token := mintAgentGatewayKey(t, ctx, ti, fx.agent.ID, toolset.ID)

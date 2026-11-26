@@ -348,13 +348,11 @@ type Service interface {
 	// Lists every organization the upstream OAuth migration applies to, so staff
 	// can check and migrate them one by one.
 	ListUpstreamOAuthMigrationOrganizations(context.Context, *ListUpstreamOAuthMigrationOrganizationsPayload) (res *AdminUpstreamOAuthMigrationOrganizations, err error)
-	// Reports where one organization stands in the upstream OAuth migration from a
-	// dry run that writes nothing.
+	// Reports typed upstream authentication readiness for one organization without
+	// making changes.
 	GetUpstreamOAuthMigrationStatus(context.Context, *GetUpstreamOAuthMigrationStatusPayload) (res *AdminUpstreamOAuthMigrationStatus, err error)
-	// Migrates one organization's upstream OAuth configuration: records the server
-	// to client associations its configuration proves, then each live credential's
-	// client choice. Idempotent, so it is safe to run again; a server the
-	// configuration does not prove is reported and never guessed.
+	// Retired. Rejects authenticated calls and does not change upstream
+	// authentication configuration.
 	RunUpstreamOAuthMigration(context.Context, *RunUpstreamOAuthMigrationPayload) (res *AdminUpstreamOAuthMigrationRun, err error)
 	// Enables upstream auth enforcement for one organization: its direct proxied
 	// servers and assistant turns are served by the typed auth client resolver,
@@ -371,9 +369,7 @@ type Service interface {
 	// Retired. Older staff clients can still reach this endpoint, but requests are
 	// rejected. Upstream auth enforcement cannot be turned off.
 	DisableUpstreamAuthEnforcement(context.Context, *DisableUpstreamAuthEnforcementPayload) (res *AdminUpstreamOAuthMigrationStatus, err error)
-	// Grants unrestricted mcp:auth to every principal that holds any mcp:connect
-	// grant, in every organization. The connect grant's selectors are ignored.
-	// Safe to run more than once.
+	// Retired. Rejects authenticated calls and does not modify grants.
 	BackfillMcpAuthGrants(context.Context, *BackfillMcpAuthGrantsPayload) (res *AdminBackfillMCPAuthGrantsResult, err error)
 	// Adds an explicit mcp:connect grant, with the same principal, selectors and
 	// expiry, for every unexpired mcp:read or mcp:write grant in every
@@ -467,6 +463,10 @@ type Service interface {
 	// build publishes, the default pin, canary organizations, organization
 	// overrides and recent changes.
 	GetHooksRollout(context.Context, *GetHooksRolloutPayload) (res *AdminHooksRollout, err error)
+	// Returns how far the current hooks release has reached: organizations the
+	// rollout pins clear for it, marketplace repositories republished with it, and
+	// installs reporting its binary version.
+	GetHooksReleaseProgress(context.Context, *GetHooksReleaseProgressPayload) (res *AdminHooksReleaseProgress, err error)
 	// Moves the default hooks rollout pin for every organization without an
 	// override. Customer organizations receive a hooks version on the next rollout
 	// sweep once the pin reaches it. Lowering the pin holds back later versions;
@@ -495,8 +495,9 @@ type Service interface {
 	// Reports an organization's encryption configuration and, for each use case
 	// that moves to organization keys, its transition state with live counts.
 	GetOrganizationEncryption(context.Context, *GetOrganizationEncryptionPayload) (res *AdminOrganizationEncryption, err error)
-	// Lists organizations by transition state for one use case, oldest first.
-	// Organizations never enrolled are in platform_key.
+	// Lists organizations by transition state for one use case. Organizations
+	// never enrolled are in platform_key. By default it lists only organizations
+	// with values for the use case, most recently written first.
 	ListOrganizationEncryptionTransitions(context.Context, *ListOrganizationEncryptionTransitionsPayload) (res *AdminOrganizationEncryptionTransitionList, err error)
 	// Moves one organization's use case from platform_key to dual_write.
 	// Provisions the organization's key and data key first and changes nothing if
@@ -542,7 +543,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [139]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "setAdoptionDashboardUrl", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "setMcpServerScopePin", "getMcpServerToolCalls", "getHookClients", "getOrganizationHookFleet", "listRegistryPromotionCandidates", "getRegistryPromotionCandidate", "promoteRegistryCandidate", "curateRegistryPromotionCandidate", "retryRegistryPromotionDocs", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "listPlatformMcpFeedback", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage", "listUpstreamOAuthMigrationOrganizations", "getUpstreamOAuthMigrationStatus", "runUpstreamOAuthMigration", "enableUpstreamAuthEnforcement", "disableUpstreamAuthEnforcement", "backfillMcpAuthGrants", "backfillMcpConnectGrants", "getSecretBackfills", "runMarketplaceTokenBackfill", "runRunnerKeyOrganizationBackfill", "getProjectRedeployPreview", "redeployProject", "listCustomDomains", "listPlatformExternalCredentials", "getGcpIamPlatformCredential", "createGcpIamPlatformCredential", "updateGcpIamPlatformCredential", "verifyGcpIamPlatformCredential", "deleteGcpIamPlatformCredential", "getMemoryEvalOptions", "listMemoryEvalRuns", "getMemoryEvalRun", "startMemoryEvalRun", "listAssistantOrganizations", "repairOrganizationAssistantAgentNames", "listOrganizationAssistants", "migrateOrganizationAssistantIdentities", "migrateOrganizationAssistantsToKit", "getHooksRollout", "setHooksRolloutDefault", "getOrganizationHooksRollout", "setOrganizationHooksRollout", "clearOrganizationHooksRollout", "listTailscaleOAuthMigration", "runTailscaleOAuthMigrationStep", "getOrganizationEncryption", "listOrganizationEncryptionTransitions", "enrollOrganizationEncryption", "rollbackOrganizationEncryption", "runOrganizationEncryption", "finalizeOrganizationEncryption"}
+var MethodNames = [140]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "setAdoptionDashboardUrl", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "setMcpServerScopePin", "getMcpServerToolCalls", "getHookClients", "getOrganizationHookFleet", "listRegistryPromotionCandidates", "getRegistryPromotionCandidate", "promoteRegistryCandidate", "curateRegistryPromotionCandidate", "retryRegistryPromotionDocs", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "listPlatformMcpFeedback", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage", "listUpstreamOAuthMigrationOrganizations", "getUpstreamOAuthMigrationStatus", "runUpstreamOAuthMigration", "enableUpstreamAuthEnforcement", "disableUpstreamAuthEnforcement", "backfillMcpAuthGrants", "backfillMcpConnectGrants", "getSecretBackfills", "runMarketplaceTokenBackfill", "runRunnerKeyOrganizationBackfill", "getProjectRedeployPreview", "redeployProject", "listCustomDomains", "listPlatformExternalCredentials", "getGcpIamPlatformCredential", "createGcpIamPlatformCredential", "updateGcpIamPlatformCredential", "verifyGcpIamPlatformCredential", "deleteGcpIamPlatformCredential", "getMemoryEvalOptions", "listMemoryEvalRuns", "getMemoryEvalRun", "startMemoryEvalRun", "listAssistantOrganizations", "repairOrganizationAssistantAgentNames", "listOrganizationAssistants", "migrateOrganizationAssistantIdentities", "migrateOrganizationAssistantsToKit", "getHooksRollout", "getHooksReleaseProgress", "setHooksRolloutDefault", "getOrganizationHooksRollout", "setOrganizationHooksRollout", "clearOrganizationHooksRollout", "listTailscaleOAuthMigration", "runTailscaleOAuthMigrationStep", "getOrganizationEncryption", "listOrganizationEncryptionTransitions", "enrollOrganizationEncryption", "rollbackOrganizationEncryption", "runOrganizationEncryption", "finalizeOrganizationEncryption"}
 
 type AdminAssistantAgentNameRepairResult struct {
 	AssistantID string
@@ -685,7 +686,7 @@ type AdminAuditLog struct {
 // AdminBackfillMCPAuthGrantsResult is the result type of the admin service
 // backfillMcpAuthGrants method.
 type AdminBackfillMCPAuthGrantsResult struct {
-	// How many principals gained the mcp:auth grant.
+	// Legacy response field; the retired endpoint does not grant access.
 	Granted int64
 }
 
@@ -979,6 +980,68 @@ type AdminHookFleetVersion struct {
 	Status string
 	// Installs whose latest version is this one.
 	Installs int64
+}
+
+// Hooks installs across every organization, by binary version.
+type AdminHooksReleaseFleet struct {
+	// Installs count when they sent a hook in this many full UTC days.
+	WindowDays int
+	// Installs seen in the window.
+	Installs int64
+	// Installs reporting exactly the binary version this build ships, on any
+	// endpoint.
+	InstallsOnCurrent int64
+	// Installs per binary version and status, newest first. A version can appear
+	// once per status, for example current and unsupported when some installs
+	// still send to a legacy endpoint.
+	Versions []*AdminHooksReleaseInstallVersion
+}
+
+// Hooks installs reporting one binary version.
+type AdminHooksReleaseInstallVersion struct {
+	// The hooks binary version, or empty for installs that sent no version.
+	Version string
+	// How the version compares to the release Speakeasy ships.
+	Status string
+	// Installs whose latest version is this one.
+	Installs int64
+}
+
+// AdminHooksReleaseProgress is the result type of the admin service
+// getHooksReleaseProgress method.
+type AdminHooksReleaseProgress struct {
+	// The hooks generator version this server build publishes.
+	CurrentVersion int
+	// The hooks binary version this server build ships. Absent when unknown.
+	CurrentBinaryVersion *string
+	// Organizations with at least one marketplace repository.
+	Organizations int64
+	// Of those, organizations whose next publish moves to current_version:
+	// canaries and organizations pinned at or above it.
+	OrganizationsCleared int64
+	// Organizations pinned below current_version.
+	OrganizationsHeld int64
+	// Organizations with no pin, which follow the legacy hooks-rollout PostHog
+	// flag the admin server cannot read.
+	OrganizationsOnLegacyFlag int64
+	// Marketplace repositories.
+	Repos int64
+	// Repositories whose last published hooks plugin carries current_version.
+	ReposOnCurrent int64
+	// Repositories per published hooks generator version, newest first.
+	RepoVersions []*AdminHooksReleaseRepoVersion
+	// Installs running the release. Absent when the hooks fleet is unavailable.
+	Fleet *AdminHooksReleaseFleet
+}
+
+// Marketplace repositories whose last published hooks plugin carries one hooks
+// generator version.
+type AdminHooksReleaseRepoVersion struct {
+	// The hooks generator version last published, or empty for repositories that
+	// have never published the hooks plugin.
+	Version string
+	// Repositories on this version.
+	Repos int64
 }
 
 // AdminHooksRollout is the result type of the admin service getHooksRollout
@@ -1888,9 +1951,10 @@ type AdminOrganizationEncryptionTransitionList struct {
 	UseCase string
 	// Every use case that moves from the platform key to organization keys.
 	UseCases []string
-	// The page of organizations, oldest first.
+	// The page of organizations, in the requested order.
 	Organizations []*AdminOrganizationEncryptionTransitionRow
-	// How many organizations are in each state, across every page.
+	// How many organizations the values filter keeps are in each state, across
+	// every page.
 	StateCounts []*AdminOrganizationEncryptionStateCount
 	// Whether another page follows.
 	HasMore bool
@@ -1924,6 +1988,16 @@ type AdminOrganizationEncryptionTransitionRow struct {
 	LastBackfillError *string
 	// When the last clean verification pass started.
 	LastVerifiedAt *string
+	// How many values the organization stores for the use case under either key,
+	// soft-deleted rows included. A row storing values in two columns counts once
+	// in each.
+	ValueCount int64
+	// The latest updated_at of a row storing one of the organization's values. A
+	// change that updates the row's updated_at moves it, such as a session's token
+	// refresh or an OpenRouter key's limit change; a write that leaves updated_at
+	// alone, such as a backfill seal, does not. Absent when the organization has
+	// none.
+	LastWrittenAt *string
 }
 
 // AdminOrganizationEncryptionUseCase is the result type of the admin service
@@ -3326,6 +3400,12 @@ type GetHookClientsPayload struct {
 	Refresh bool
 }
 
+// GetHooksReleaseProgressPayload is the payload type of the admin service
+// getHooksReleaseProgress method.
+type GetHooksReleaseProgressPayload struct {
+	AdminSessionToken *string
+}
+
 // GetHooksRolloutPayload is the payload type of the admin service
 // getHooksRollout method.
 type GetHooksRolloutPayload struct {
@@ -3806,6 +3886,14 @@ type ListOrganizationEncryptionTransitionsPayload struct {
 	UseCase *string
 	// Only organizations in this state.
 	State *string
+	// present lists only organizations with at least one value for the use case
+	// under either key, soft-deleted rows included. all lists every organization.
+	Values string
+	// last_written lists the most recently written organizations first, then
+	// organizations without values oldest first. oldest lists the oldest
+	// organizations first. The list pages by offset, so an organization whose last
+	// write changes between page requests can repeat or be skipped.
+	Sort string
 	// Organizations per page.
 	Limit int
 	// Organizations to skip.

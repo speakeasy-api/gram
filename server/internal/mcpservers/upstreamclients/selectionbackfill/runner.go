@@ -101,6 +101,8 @@ type Options struct {
 
 	// PageSize overrides defaultPageSize when positive.
 	PageSize int
+	// TypedOnly limits maintenance to typed offers, regardless of feature state.
+	TypedOnly bool
 }
 
 // Gap is one credential and server pair left without a choice.
@@ -194,9 +196,12 @@ func Run(ctx context.Context, db DBTX, opts Options) (Report, error) {
 			// so a run that outlives an enforcement change writes the rest under
 			// the new state, and a run with no organization decides every
 			// credential by its own organization.
-			typedOnly, err := authenforcement.ReadEnforced(ctx, db, credential.OrganizationID)
-			if err != nil {
-				return report, fmt.Errorf("read enforcement for credential %s: %w", credential.CredentialID, err)
+			typedOnly := opts.TypedOnly
+			if !typedOnly {
+				typedOnly, err = authenforcement.ReadEnforced(ctx, db, credential.OrganizationID)
+				if err != nil {
+					return report, fmt.Errorf("read enforcement for credential %s: %w", credential.CredentialID, err)
+				}
 			}
 			coverageParams := ListUpstreamClientSelectionCoverageParams{
 				UserSessionIssuerID: credential.UserSessionIssuerID,
@@ -252,35 +257,6 @@ func Run(ctx context.Context, db DBTX, opts Options) (Report, error) {
 	}
 }
 
-// ReconcileIssuerInLockedTransaction records missing choices and names typed
-// clients on existing choices for one issuer's live credential lineages. The
-// caller holds the complete server/source writer scope and registration gates.
-// It uses migration selection policy without granting permissions.
-func ReconcileIssuerInLockedTransaction(ctx context.Context, tx pgx.Tx, organizationID string, issuerID uuid.UUID) error {
-	_, err := ReconcileIssuerScopeInLockedTransaction(ctx, tx, organizationID, issuerID, nil, nil)
-	return err
-}
-
-// ReconcileIssuerScopeInLockedTransaction limits existing credentials to the
-// maintenance servers. Moved lineages instead record full target reach: moving
-// their issuer changes their audience even on servers needing no typed sync.
-// A nil server scope retains full reach; an empty scope records/maps nothing
-// for existing credentials. The returned count reports guarded bulk rows whose
-// legacy evidence changed before their mapping write.
-func ReconcileIssuerScopeInLockedTransaction(ctx context.Context, tx pgx.Tx, organizationID string, issuerID uuid.UUID, serverIDs, fullReachCredentialIDs []uuid.UUID) (int64, error) {
-	if err := RecordIssuerScopeInLockedTransaction(ctx, tx, organizationID, issuerID, serverIDs, fullReachCredentialIDs); err != nil {
-		return 0, err
-	}
-	if serverIDs != nil && len(serverIDs) == 0 && len(fullReachCredentialIDs) == 0 {
-		return 0, nil
-	}
-	skipped, err := authclientbackfill.ReconcileUserSessionSelectionsForServersInLockedTransaction(ctx, tx, organizationID, issuerID, serverIDs)
-	if err != nil {
-		return skipped, fmt.Errorf("map issuer credential choices: %w", err)
-	}
-	return skipped, nil
-}
-
 // ReconcileTypedIssuerScopeInLockedTransaction is the live issuer-move path;
 // compatibility parent rows are never input to choice repair.
 func ReconcileTypedIssuerScopeInLockedTransaction(ctx context.Context, tx pgx.Tx, organizationID string, issuerID uuid.UUID, serverIDs, movedCredentialIDs []uuid.UUID) (int64, error) {
@@ -296,35 +272,15 @@ func ReconcileTypedIssuerScopeInLockedTransaction(ctx context.Context, tx pgx.Tx
 
 // RecordTypedIssuerScopeInLockedTransaction uses only deliberate typed offers.
 func RecordTypedIssuerScopeInLockedTransaction(ctx context.Context, tx pgx.Tx, organizationID string, issuerID uuid.UUID, serverIDs, movedCredentialIDs []uuid.UUID) error {
-	return recordIssuerScope(ctx, tx, organizationID, issuerID, serverIDs, movedCredentialIDs, true)
-}
 
-// RecordIssuerScopeInLockedTransaction records the missing choices of one
-// issuer's live credential lineages and maps nothing, with the scoping
-// ReconcileIssuerScopeInLockedTransaction describes. A caller about to change
-// what the issuer binds records first: each credential is then decided by the
-// bindings it was served through, and a recorded choice is never replaced.
-func RecordIssuerScopeInLockedTransaction(ctx context.Context, tx pgx.Tx, organizationID string, issuerID uuid.UUID, serverIDs, fullReachCredentialIDs []uuid.UUID) error {
-	return recordIssuerScope(ctx, tx, organizationID, issuerID, serverIDs, fullReachCredentialIDs, false)
-}
-
-func recordIssuerScope(ctx context.Context, tx pgx.Tx, organizationID string, issuerID uuid.UUID, serverIDs, fullReachCredentialIDs []uuid.UUID, forceTyped bool) error {
 	if tx == nil || organizationID == "" || issuerID == uuid.Nil {
 		return errors.New("reconcile issuer credentials: no transaction or tenant scope")
 	}
-	if serverIDs != nil && len(serverIDs) == 0 && len(fullReachCredentialIDs) == 0 {
+	if serverIDs != nil && len(serverIDs) == 0 && len(movedCredentialIDs) == 0 {
 		return nil
 	}
-	typedOnly := forceTyped
-	if !typedOnly {
-		var err error
-		typedOnly, err = authenforcement.ReadEnforced(ctx, tx, organizationID)
-		if err != nil {
-			return fmt.Errorf("read enforcement for issuer selection recording: %w", err)
-		}
-	}
-	fullReach := make(map[uuid.UUID]bool, len(fullReachCredentialIDs))
-	for _, id := range fullReachCredentialIDs {
+	fullReach := make(map[uuid.UUID]bool, len(movedCredentialIDs))
+	for _, id := range movedCredentialIDs {
 		fullReach[id] = true
 	}
 	q, sessions := New(tx), usersessionsrepo.New(tx)
@@ -345,10 +301,10 @@ func recordIssuerScope(ctx context.Context, tx pgx.Tx, organizationID string, is
 			}
 			cursor = credential.CredentialID
 		}
-		if _, err := recordCredentialSelections(ctx, sessions, issuerID, existingIDs, serverIDs, typedOnly, forceTyped); err != nil {
+		if _, err := recordCredentialSelections(ctx, sessions, issuerID, existingIDs, serverIDs, true, true); err != nil {
 			return fmt.Errorf("record existing issuer credential choices: %w", err)
 		}
-		if _, err := recordCredentialSelections(ctx, sessions, issuerID, movedIDs, nil, typedOnly, forceTyped); err != nil {
+		if _, err := recordCredentialSelections(ctx, sessions, issuerID, movedIDs, nil, true, true); err != nil {
 			return fmt.Errorf("record moved issuer credential choices: %w", err)
 		}
 		if len(credentials) < defaultPageSize {

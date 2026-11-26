@@ -25,8 +25,8 @@ import (
 )
 
 // organizationGatewayAssociation is a server in a sibling project associated
-// with a client bound to the organization's only organization-level issuer:
-// the organization gateway fronts the server, so the binding serves it.
+// with its own upstream registration. The organization gateway fronts the
+// server through the organization's only organization-level sign-in issuer.
 type organizationGatewayAssociation struct {
 	organizationIssuer uuid.UUID
 	projectID          uuid.UUID
@@ -96,10 +96,6 @@ func seedOrganizationGatewayAssociation(t *testing.T, ctx context.Context, ti *t
 		ClientIDIssuedAt:      conv.ToPGTimestamptz(time.Now()),
 	})
 	require.NoError(t, err)
-	require.NoError(t, rq.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: client.ID,
-		UserSessionIssuerID:   organizationIssuer,
-	}))
 	require.NoError(t, testrepo.New(ti.conn).InsertMCPServerRemoteSessionClientFixture(ctx, testrepo.InsertMCPServerRemoteSessionClientFixtureParams{
 		ProjectID:             projectID,
 		OrganizationID:        orgID,
@@ -135,10 +131,8 @@ func requireOrganizationGatewayAssociation(t *testing.T, ctx context.Context, ti
 	require.Empty(t, links, "so the typed link derived from the association is retired")
 }
 
-// Whether an organization has one organization-level issuer decides whether
-// its organization gateway fronts every server. Creation and deletion still
-// prune legacy associations; a scope move does not infer offer ownership.
-func TestOrganizationIssuerWritersPruneOrganizationGatewayAssociations(t *testing.T) {
+// Organization-gateway reach can change without removing any server's own offer.
+func TestOrganizationIssuerWritersPreserveServerOffers(t *testing.T) {
 	t.Parallel()
 
 	t.Run("creating a second organization issuer", func(t *testing.T) {
@@ -154,7 +148,7 @@ func TestOrganizationIssuerWritersPruneOrganizationGatewayAssociations(t *testin
 		})
 		require.NoError(t, err)
 
-		requireOrganizationGatewayAssociation(t, ctx, ti, seeded, false)
+		requireOrganizationGatewayAssociation(t, ctx, ti, seeded, true)
 	})
 
 	t.Run("deleting the organization issuer", func(t *testing.T) {
@@ -164,7 +158,7 @@ func TestOrganizationIssuerWritersPruneOrganizationGatewayAssociations(t *testin
 
 		require.NoError(t, ti.service.DeleteIssuer(ctx, &orggen.DeleteIssuerPayload{ID: seeded.organizationIssuer.String(), SessionToken: nil}))
 
-		requireOrganizationGatewayAssociation(t, ctx, ti, seeded, false)
+		requireOrganizationGatewayAssociation(t, ctx, ti, seeded, true)
 	})
 
 	t.Run("moving the organization issuer preserves an existing offer", func(t *testing.T) {

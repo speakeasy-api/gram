@@ -305,7 +305,7 @@ func impliesCycle(t ResourceType) string {
 // PluginWrite), for spotting a dimension set that would reuse it.
 func camelAction(action Action) string {
 	var b strings.Builder
-	for _, word := range strings.Split(string(action), "_") {
+	for word := range strings.SplitSeq(string(action), "_") {
 		if word != "" {
 			b.WriteString(strings.ToUpper(word[:1]) + word[1:])
 		}
@@ -340,7 +340,7 @@ func validateOpenKeys(fail func(string, ...any), owner string, p Permission, dec
 	seen := make(map[OpenOn]bool, len(p.Open))
 	for _, open := range p.Open {
 		switch open.On {
-		case OpenOnProbe, OpenOnPolicyAudience:
+		case OpenOnProbe:
 		case OpenOnConnection:
 			if len(p.DimensionSets) == 0 {
 				fail("%s: only a permission with dimension sets has a connection to open keys on", owner)

@@ -148,6 +148,7 @@ type Server struct {
 	MigrateOrganizationAssistantIdentities  http.Handler
 	MigrateOrganizationAssistantsToKit      http.Handler
 	GetHooksRollout                         http.Handler
+	GetHooksReleaseProgress                 http.Handler
 	SetHooksRolloutDefault                  http.Handler
 	GetOrganizationHooksRollout             http.Handler
 	SetOrganizationHooksRollout             http.Handler
@@ -316,6 +317,7 @@ func New(
 			{"MigrateOrganizationAssistantIdentities", "POST", "/admin/organization.migrateAssistantIdentities"},
 			{"MigrateOrganizationAssistantsToKit", "POST", "/admin/organization.migrateAssistantsToKit"},
 			{"GetHooksRollout", "GET", "/admin/hooksRollout.get"},
+			{"GetHooksReleaseProgress", "GET", "/admin/hooksRollout.progress"},
 			{"SetHooksRolloutDefault", "POST", "/admin/hooksRollout.setDefault"},
 			{"GetOrganizationHooksRollout", "GET", "/admin/organization.hooksRollout"},
 			{"SetOrganizationHooksRollout", "POST", "/admin/organization.setHooksRollout"},
@@ -456,6 +458,7 @@ func New(
 		MigrateOrganizationAssistantIdentities:  NewMigrateOrganizationAssistantIdentitiesHandler(e.MigrateOrganizationAssistantIdentities, mux, decoder, encoder, errhandler, formatter),
 		MigrateOrganizationAssistantsToKit:      NewMigrateOrganizationAssistantsToKitHandler(e.MigrateOrganizationAssistantsToKit, mux, decoder, encoder, errhandler, formatter),
 		GetHooksRollout:                         NewGetHooksRolloutHandler(e.GetHooksRollout, mux, decoder, encoder, errhandler, formatter),
+		GetHooksReleaseProgress:                 NewGetHooksReleaseProgressHandler(e.GetHooksReleaseProgress, mux, decoder, encoder, errhandler, formatter),
 		SetHooksRolloutDefault:                  NewSetHooksRolloutDefaultHandler(e.SetHooksRolloutDefault, mux, decoder, encoder, errhandler, formatter),
 		GetOrganizationHooksRollout:             NewGetOrganizationHooksRolloutHandler(e.GetOrganizationHooksRollout, mux, decoder, encoder, errhandler, formatter),
 		SetOrganizationHooksRollout:             NewSetOrganizationHooksRolloutHandler(e.SetOrganizationHooksRollout, mux, decoder, encoder, errhandler, formatter),
@@ -603,6 +606,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.MigrateOrganizationAssistantIdentities = m(s.MigrateOrganizationAssistantIdentities)
 	s.MigrateOrganizationAssistantsToKit = m(s.MigrateOrganizationAssistantsToKit)
 	s.GetHooksRollout = m(s.GetHooksRollout)
+	s.GetHooksReleaseProgress = m(s.GetHooksReleaseProgress)
 	s.SetHooksRolloutDefault = m(s.SetHooksRolloutDefault)
 	s.GetOrganizationHooksRollout = m(s.GetOrganizationHooksRollout)
 	s.SetOrganizationHooksRollout = m(s.SetOrganizationHooksRollout)
@@ -749,6 +753,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountMigrateOrganizationAssistantIdentitiesHandler(mux, h.MigrateOrganizationAssistantIdentities)
 	MountMigrateOrganizationAssistantsToKitHandler(mux, h.MigrateOrganizationAssistantsToKit)
 	MountGetHooksRolloutHandler(mux, h.GetHooksRollout)
+	MountGetHooksReleaseProgressHandler(mux, h.GetHooksReleaseProgress)
 	MountSetHooksRolloutDefaultHandler(mux, h.SetHooksRolloutDefault)
 	MountGetOrganizationHooksRolloutHandler(mux, h.GetOrganizationHooksRollout)
 	MountSetOrganizationHooksRolloutHandler(mux, h.SetOrganizationHooksRollout)
@@ -7576,6 +7581,60 @@ func NewGetHooksRolloutHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "getHooksRollout")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetHooksReleaseProgressHandler configures the mux to serve the "admin"
+// service "getHooksReleaseProgress" endpoint.
+func MountGetHooksReleaseProgressHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/hooksRollout.progress", f)
+}
+
+// NewGetHooksReleaseProgressHandler creates a HTTP handler which loads the
+// HTTP request and calls the "admin" service "getHooksReleaseProgress"
+// endpoint.
+func NewGetHooksReleaseProgressHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetHooksReleaseProgressRequest(mux, decoder)
+		encodeResponse = EncodeGetHooksReleaseProgressResponse(encoder)
+		encodeError    = EncodeGetHooksReleaseProgressError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getHooksReleaseProgress")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
 		payload, err := decodeRequest(r)
 		if err != nil {
