@@ -13,9 +13,10 @@ import (
 )
 
 const changeContent = `-- name: ChangeContent :execrows
-UPDATE chat_messages SET content='changed' WHERE id=$1 AND project_id=$2
+UPDATE chat_messages SET content='changed', source_updated_at=clock_timestamp() WHERE id=$1 AND project_id=$2
 `
 
+// Body updates stamp source_updated_at as the application's writes do.
 func (q *Queries) ChangeContent(ctx context.Context, iD uuid.UUID, projectID uuid.NullUUID) (int64, error) {
 	result, err := q.db.Exec(ctx, changeContent, iD, projectID)
 	if err != nil {
@@ -25,7 +26,7 @@ func (q *Queries) ChangeContent(ctx context.Context, iD uuid.UUID, projectID uui
 }
 
 const changeNotes = `-- name: ChangeNotes :execrows
-UPDATE chat_messages SET tool_outcome_notes='changed' WHERE id=$1 AND project_id=$2
+UPDATE chat_messages SET tool_outcome_notes='changed', source_updated_at=clock_timestamp() WHERE id=$1 AND project_id=$2
 `
 
 func (q *Queries) ChangeNotes(ctx context.Context, iD uuid.UUID, projectID uuid.NullUUID) (int64, error) {
@@ -128,12 +129,12 @@ func (q *Queries) CreateTextMessage(ctx context.Context, iD uuid.UUID, chatID uu
 	return result.RowsAffected(), nil
 }
 
-const forgeSourceHash = `-- name: ForgeSourceHash :execrows
-UPDATE chat_message_transcripts t SET source_hash=sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')) FROM chat_messages m WHERE m.id=t.message_id AND m.id=$1 AND m.project_id=$2 AND t.project_id=$2 AND t.organization_id=$3
+const forgeSourceUpdatedAt = `-- name: ForgeSourceUpdatedAt :execrows
+UPDATE chat_message_transcripts t SET source_updated_at=m.source_updated_at, source_hash=NULL FROM chat_messages m WHERE m.id=t.message_id AND m.id=$1 AND m.project_id=$2 AND t.project_id=$2 AND t.organization_id=$3
 `
 
-func (q *Queries) ForgeSourceHash(ctx context.Context, iD uuid.UUID, projectID uuid.NullUUID, organizationID string) (int64, error) {
-	result, err := q.db.Exec(ctx, forgeSourceHash, iD, projectID, organizationID)
+func (q *Queries) ForgeSourceUpdatedAt(ctx context.Context, iD uuid.UUID, projectID uuid.NullUUID, organizationID string) (int64, error) {
+	result, err := q.db.Exec(ctx, forgeSourceUpdatedAt, iD, projectID, organizationID)
 	if err != nil {
 		return 0, err
 	}
@@ -162,10 +163,28 @@ func (q *Queries) LockChat(ctx context.Context, iD uuid.UUID, projectID uuid.UUI
 	return err
 }
 
-const messageSnapshot = `-- name: MessageSnapshot :one
-SELECT row_to_json(m)::text FROM chat_messages m WHERE id=$1 AND project_id=$2
+const messageFreshness = `-- name: MessageFreshness :one
+SELECT source_updated_at, tool_call_count FROM chat_messages WHERE id=$1
 `
 
+type MessageFreshnessRow struct {
+	SourceUpdatedAt pgtype.Timestamptz
+	ToolCallCount   pgtype.Int4
+}
+
+func (q *Queries) MessageFreshness(ctx context.Context, id uuid.UUID) (MessageFreshnessRow, error) {
+	row := q.db.QueryRow(ctx, messageFreshness, id)
+	var i MessageFreshnessRow
+	err := row.Scan(&i.SourceUpdatedAt, &i.ToolCallCount)
+	return i, err
+}
+
+const messageSnapshot = `-- name: MessageSnapshot :one
+SELECT (to_jsonb(m) - 'tool_call_count' - 'content_bytes' - 'content_raw_bytes' - 'tool_calls_bytes')::text FROM chat_messages m WHERE id=$1 AND project_id=$2
+`
+
+// The message as sealing must leave it: the metadata columns are the only ones
+// it writes.
 func (q *Queries) MessageSnapshot(ctx context.Context, iD uuid.UUID, projectID uuid.NullUUID) (string, error) {
 	row := q.db.QueryRow(ctx, messageSnapshot, iD, projectID)
 	var column_1 string
@@ -186,7 +205,7 @@ func (q *Queries) MoveMessageProject(ctx context.Context, projectID uuid.NullUUI
 }
 
 const raceContent = `-- name: RaceContent :execrows
-UPDATE chat_messages SET content='raced' WHERE id=$1 AND project_id=$2
+UPDATE chat_messages SET content='raced', source_updated_at=clock_timestamp() WHERE id=$1 AND project_id=$2
 `
 
 func (q *Queries) RaceContent(ctx context.Context, iD uuid.UUID, projectID uuid.NullUUID) (int64, error) {
@@ -198,7 +217,7 @@ func (q *Queries) RaceContent(ctx context.Context, iD uuid.UUID, projectID uuid.
 }
 
 const raceRawContent = `-- name: RaceRawContent :execrows
-UPDATE chat_messages SET content_raw='{"different":true}' WHERE id=$1 AND project_id=$2
+UPDATE chat_messages SET content_raw='{"different":true}', source_updated_at=clock_timestamp() WHERE id=$1 AND project_id=$2
 `
 
 func (q *Queries) RaceRawContent(ctx context.Context, iD uuid.UUID, projectID uuid.NullUUID) (int64, error) {
@@ -227,7 +246,7 @@ func (q *Queries) ReplaceCiphertext(ctx context.Context, ciphertext string, mess
 }
 
 const setContent = `-- name: SetContent :execrows
-UPDATE chat_messages SET content = $1 WHERE id = $2 AND project_id = $3
+UPDATE chat_messages SET content = $1, source_updated_at = clock_timestamp() WHERE id = $2 AND project_id = $3
 `
 
 func (q *Queries) SetContent(ctx context.Context, content string, iD uuid.UUID, projectID uuid.NullUUID) (int64, error) {
@@ -242,7 +261,7 @@ const setJSONField = `-- name: SetJSONField :execrows
 UPDATE chat_messages SET
 content_raw=CASE WHEN $1::text='content_raw' THEN $2::jsonb ELSE content_raw END,
 tool_calls=CASE WHEN $1::text='tool_calls' THEN $2::jsonb ELSE tool_calls END,
-tool_call_summaries=CASE WHEN $1::text='tool_call_summaries' THEN $2::jsonb ELSE tool_call_summaries END
+tool_call_summaries=CASE WHEN $1::text='tool_call_summaries' THEN $2::jsonb ELSE tool_call_summaries END, source_updated_at=clock_timestamp()
 WHERE id=$3 AND project_id=$4
 `
 
@@ -271,8 +290,20 @@ func (q *Queries) SetRole(ctx context.Context, role string, iD uuid.UUID, projec
 	return result.RowsAffected(), nil
 }
 
+const setSource = `-- name: SetSource :execrows
+UPDATE chat_messages SET source=$1 WHERE id=$2
+`
+
+func (q *Queries) SetSource(ctx context.Context, source pgtype.Text, iD uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, setSource, source, iD)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setStorageError = `-- name: SetStorageError :execrows
-UPDATE chat_messages SET storage_error=$1::text WHERE id=$2 AND project_id=$3
+UPDATE chat_messages SET storage_error=$1::text, source_updated_at=clock_timestamp() WHERE id=$2 AND project_id=$3
 `
 
 func (q *Queries) SetStorageError(ctx context.Context, storageError pgtype.Text, messageID uuid.UUID, projectID uuid.NullUUID) (int64, error) {
@@ -284,7 +315,7 @@ func (q *Queries) SetStorageError(ctx context.Context, storageError pgtype.Text,
 }
 
 const setToolCalls = `-- name: SetToolCalls :execrows
-UPDATE chat_messages SET tool_calls=$1 WHERE id=$2 AND project_id=$3
+UPDATE chat_messages SET tool_calls=$1, source_updated_at=clock_timestamp() WHERE id=$2 AND project_id=$3
 `
 
 func (q *Queries) SetToolCalls(ctx context.Context, toolCalls []byte, iD uuid.UUID, projectID uuid.NullUUID) (int64, error) {
@@ -296,7 +327,7 @@ func (q *Queries) SetToolCalls(ctx context.Context, toolCalls []byte, iD uuid.UU
 }
 
 const shadowMetadata = `-- name: ShadowMetadata :one
-SELECT tool_call_count, content_bytes, content_raw_bytes, tool_calls_bytes FROM chat_message_transcripts WHERE message_id=$1
+SELECT tool_call_count, content_bytes, content_raw_bytes, tool_calls_bytes FROM chat_messages WHERE id=$1 AND tool_call_count IS NOT NULL
 `
 
 type ShadowMetadataRow struct {
@@ -306,8 +337,8 @@ type ShadowMetadataRow struct {
 	ToolCallsBytes  pgtype.Int4
 }
 
-func (q *Queries) ShadowMetadata(ctx context.Context, messageID uuid.UUID) (ShadowMetadataRow, error) {
-	row := q.db.QueryRow(ctx, shadowMetadata, messageID)
+func (q *Queries) ShadowMetadata(ctx context.Context, id uuid.UUID) (ShadowMetadataRow, error) {
+	row := q.db.QueryRow(ctx, shadowMetadata, id)
 	var i ShadowMetadataRow
 	err := row.Scan(
 		&i.ToolCallCount,
@@ -319,7 +350,7 @@ func (q *Queries) ShadowMetadata(ctx context.Context, messageID uuid.UUID) (Shad
 }
 
 const shadowToolCallIDs = `-- name: ShadowToolCallIDs :many
-SELECT tool_call_id FROM chat_message_transcript_tool_calls WHERE message_id=$1 ORDER BY tool_call_id
+SELECT tool_call_id FROM chat_message_tool_call_ids WHERE message_id=$1 ORDER BY tool_call_id
 `
 
 func (q *Queries) ShadowToolCallIDs(ctx context.Context, messageID uuid.UUID) ([]string, error) {

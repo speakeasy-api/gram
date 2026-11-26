@@ -134,14 +134,31 @@ func (s *Store) capture(ctx context.Context, db repo.DBTX, organizationID string
 		if err != nil {
 			return safe(err)
 		}
-		meta := metadataOf(row.Content, row.ContentRaw, row.ToolCalls)
+		// The copy records the source_updated_at it was sealed from; the
+		// every body update moves it, so the copy is
+		// current exactly while the two are equal.
 		n, err := q.Capture(ctx, repo.CaptureParams{
 			MessageID:       id,
 			ProjectID:       projectID,
 			OrganizationID:  organizationID,
 			ChatID:          row.ChatID,
-			SourceHash:      row.SourceHash,
+			SourceUpdatedAt: row.SourceUpdatedAt,
 			Ciphertext:      ciphertext,
+		})
+		if err != nil {
+			return safe(err)
+		}
+		if n != 1 {
+			return ErrChanged
+		}
+		// Metadata and tool-call IDs live on chat_messages, measured from the
+		// same snapshot and written in the same transaction, so they never
+		// describe another version of the message than the sealed one.
+		meta := metadataOf(row.Content, row.ContentRaw, row.ToolCalls)
+		n, err = q.UpdateMessageMetadata(ctx, repo.UpdateMessageMetadataParams{
+			MessageID:       id,
+			ProjectID:       projectID,
+			SourceUpdatedAt: row.SourceUpdatedAt,
 			ToolCallCount:   meta.toolCallCount,
 			ContentBytes:    meta.contentBytes,
 			ContentRawBytes: meta.contentRawBytes,
@@ -153,8 +170,6 @@ func (s *Store) capture(ctx context.Context, db repo.DBTX, organizationID string
 		if n != 1 {
 			return ErrChanged
 		}
-		// Tool-call IDs are rewritten with the shadow, inside the same
-		// transaction, so they never describe an older version of the message.
 		if err := q.DeleteToolCallIDs(ctx, repo.DeleteToolCallIDsParams{MessageID: id, ProjectID: projectID}); err != nil {
 			return safe(err)
 		}
@@ -169,7 +184,7 @@ func (s *Store) capture(ctx context.Context, db repo.DBTX, organizationID string
 }
 
 // Load refuses missing/stale shadows, including authenticated older payloads
-// whose unencrypted source_hash was forged to match the current source.
+// whose unencrypted source_updated_at was forged to match the current source.
 func (s *Store) Load(ctx context.Context, organizationID string, projectID, messageID uuid.UUID) (transcriptcrypto.Message, error) {
 	var zero transcriptcrypto.Message
 	if organizationID == "" || projectID == uuid.Nil || messageID == uuid.Nil {
@@ -297,8 +312,9 @@ type Page struct {
 }
 
 // Backfill commits a whole bounded page or returns no progress. Retry ErrChanged
-// with the same cursor. Every source row is recaptured, even when its public
-// fingerprint matches: hashes cannot authenticate a shadow. Reset the cursor
+// with the same cursor. Every source row is recaptured, even when its
+// source_updated_at matches: a timestamp cannot authenticate a shadow, and
+// resealing clears a legacy source_hash. Reset the cursor
 // to zero on the next sweep to catch messages inserted below the preceding sweep's cursor.
 func (s *Store) Backfill(ctx context.Context, organizationID string, projectID, after uuid.UUID, limit int32) (Page, error) {
 	if organizationID == "" || projectID == uuid.Nil || limit < 1 || limit > 500 {
@@ -330,7 +346,7 @@ func (s *Store) Backfill(ctx context.Context, organizationID string, projectID, 
 	return page, nil
 }
 
-// Progress describes fingerprint-matching coverage, not authenticated ciphertext
+// Progress describes source_updated_at coverage, not authenticated ciphertext
 // or plaintext removal. Only Load authenticates shadows. Unattributed rows
 // belong to a scoped chat but cannot safely be captured without ownership repair.
 type Progress struct{ Current, Waiting, Unattributed int64 }

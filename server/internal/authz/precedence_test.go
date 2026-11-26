@@ -116,7 +116,7 @@ func TestEngineRequirePrincipalPrecedenceAppliesPerPolicy(t *testing.T) {
 	require.Equal(t, oops.CodeForbidden, forbidden.Code)
 }
 
-func TestRequireAnyUnblockedPrincipalPrecedence(t *testing.T) {
+func TestEitherPrincipalPrecedence(t *testing.T) {
 	t.Parallel()
 
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
@@ -167,7 +167,7 @@ func TestRequireAnyUnblockedPrincipalPrecedence(t *testing.T) {
 			t.Parallel()
 
 			ctx := GrantsToContext(enterpriseSessionCtx(t), tc.grants)
-			err := engine.RequireAnyUnblocked(ctx, checks...)
+			err := engine.Require(ctx, Either(checks...))
 			if tc.allowed {
 				require.NoError(t, err)
 				return

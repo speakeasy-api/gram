@@ -256,10 +256,10 @@ func (s *Service) ListUserSessionIssuers(ctx context.Context, payload *gen.ListU
 		mcpResourceID = requestedResourceID
 	}
 
-	if err := s.authz.RequireAny(ctx,
+	if err := s.authz.Require(ctx, authz.Either(
 		authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read(),
 		authz.MCPServer(authz.MCPServerIDOf(mcpResourceID), authz.ProjectIDOf(*authCtx.ProjectID)).Write(),
-	); err != nil {
+	)); err != nil {
 		return nil, err
 	}
 

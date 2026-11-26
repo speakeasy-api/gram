@@ -18,7 +18,7 @@ import (
 
 const (
 	noPlaintextTranscriptReadAnalyzer = "noplaintexttranscriptread"
-	noPlaintextTranscriptReadDoc      = "only the transcript store may call sqlc queries that read the plaintext transcript columns of chat_messages; it opens encrypted shadows for projects that keep them"
+	noPlaintextTranscriptReadDoc      = "only the transcript store may call sqlc queries that read or update the plaintext transcript columns of chat_messages; it opens encrypted copies on read and stamps source_updated_at on update"
 )
 
 type noPlaintextTranscriptReadSettings struct {
@@ -85,7 +85,7 @@ func newNoPlaintextTranscriptReadAnalyzerWith(_ noPlaintextTranscriptReadSetting
 			}
 
 			ins := pass.ResultOf[inspect.Analyzer].(*inspector.Inspector)
-			queries := map[string]map[string]bool{}
+			queries := map[string]map[string]plaintextTranscriptUse{}
 			readers := map[string]bool{}
 
 			ins.WithStack([]ast.Node{(*ast.SelectorExpr)(nil)}, func(node ast.Node, push bool, stack []ast.Node) bool {
@@ -101,7 +101,8 @@ func newNoPlaintextTranscriptReadAnalyzerWith(_ noPlaintextTranscriptReadSetting
 				if !ok || !isSqlcQueriesMethod(called) {
 					return true
 				}
-				if !sqlcQueryReadsPlaintextTranscript(pass.Fset, called, queries) {
+				use := sqlcQueryPlaintextTranscriptUse(pass.Fset, called, queries)
+				if use == plaintextTranscriptUnused {
 					return true
 				}
 
@@ -113,6 +114,10 @@ func newNoPlaintextTranscriptReadAnalyzerWith(_ noPlaintextTranscriptReadSetting
 					return true
 				}
 
+				if use == plaintextTranscriptUpdate {
+					pass.ReportRangef(sel, "do not call %q here: it updates the plaintext transcript columns of chat_messages; move the query into transcriptstore, which stamps source_updated_at and reseals (caller %q)", called.Name(), callerOrPackage(caller, pass))
+					return true
+				}
 				pass.ReportRangef(sel, "do not call %q here: it reads the plaintext transcript columns of chat_messages; move the query into transcriptstore and read through transcriptstore.Transcripts (caller %q)", called.Name(), callerOrPackage(caller, pass))
 				return true
 			})
@@ -227,10 +232,20 @@ func isSqlcQueriesMethod(fn *types.Func) bool {
 // sqlcQueryReadsPlaintextTranscript reads the SQL that sqlc generated for the
 // method. The signal lives only in SQL text, which has no type-system
 // representation, so this parses the generated file (cached per file).
-func sqlcQueryReadsPlaintextTranscript(fset *token.FileSet, fn *types.Func, cache map[string]map[string]bool) bool {
+// plaintextTranscriptUse is how a sqlc query touches the plaintext transcript
+// columns of chat_messages.
+type plaintextTranscriptUse int
+
+const (
+	plaintextTranscriptUnused plaintextTranscriptUse = iota
+	plaintextTranscriptRead
+	plaintextTranscriptUpdate
+)
+
+func sqlcQueryPlaintextTranscriptUse(fset *token.FileSet, fn *types.Func, cache map[string]map[string]plaintextTranscriptUse) plaintextTranscriptUse {
 	filename := fset.Position(fn.Pos()).Filename
 	if filename == "" {
-		return false
+		return plaintextTranscriptUnused
 	}
 	byName, ok := cache[filename]
 	if !ok {
@@ -242,10 +257,10 @@ func sqlcQueryReadsPlaintextTranscript(fset *token.FileSet, fn *types.Func, cach
 
 var sqlcQueryHeader = regexp.MustCompile(`^-- name: (\w+) :`)
 
-// parseSqlcQueries maps each query name in a sqlc-generated file to whether
-// its SQL reads plaintext transcript columns.
-func parseSqlcQueries(filename string) map[string]bool {
-	result := map[string]bool{}
+// parseSqlcQueries maps each query name in a sqlc-generated file to how its
+// SQL touches plaintext transcript columns. A read wins over an update.
+func parseSqlcQueries(filename string) map[string]plaintextTranscriptUse {
+	result := map[string]plaintextTranscriptUse{}
 	file, err := parser.ParseFile(token.NewFileSet(), filename, nil, parser.ParseComments)
 	if err != nil || !ast.IsGenerated(file) {
 		return result
@@ -273,7 +288,14 @@ func parseSqlcQueries(filename string) map[string]bool {
 				if m == nil {
 					continue
 				}
-				result[m[1]] = sqlReadsPlaintextTranscript(sql)
+				switch {
+				case sqlReadsPlaintextTranscript(sql):
+					result[m[1]] = plaintextTranscriptRead
+				case sqlUpdatesPlaintextTranscript(sql):
+					result[m[1]] = plaintextTranscriptUpdate
+				default:
+					result[m[1]] = plaintextTranscriptUnused
+				}
 			}
 		}
 	}
@@ -285,6 +307,9 @@ var (
 	sqlChatMessagesAs  = regexp.MustCompile(`\bchat_messages\s+(?:as\s+)?([a-z_][a-z0-9_]*)`)
 	sqlInsertColumns   = regexp.MustCompile(`\binsert\s+into\s+[a-z0-9_.]+\s*(?:as\s+[a-z_][a-z0-9_]*\s*)?\([^)]*\)`)
 	sqlSetKeyword      = regexp.MustCompile(`\bset\b`)
+	sqlUpdateTarget    = regexp.MustCompile(`\bupdate\s+(?:only\s+)?chat_messages\b`)
+	sqlUpsertTarget    = regexp.MustCompile(`\binsert\s+into\s+chat_messages\b[\s\S]*\bon\s+conflict\b[\s\S]*\bdo\s+update\b`)
+	sqlBodySetTarget   = regexp.MustCompile(`(?:^|,)\s*(` + strings.Join(plaintextTranscriptColumns, "|") + `)\s*=`)
 	sqlSetTerminator   = regexp.MustCompile(`^(where|from|returning)\b`)
 	sqlSetTarget       = regexp.MustCompile(`^\s*[a-z_][a-z0-9_]*\s*=`)
 	sqlColumnRef       = regexp.MustCompile(`(\bas\s+)?(?:([a-z_][a-z0-9_]*)\s*\.\s*)?\b(` + strings.Join(plaintextTranscriptColumns, "|") + `)\b`)
@@ -350,6 +375,30 @@ func sqlReadsPlaintextTranscript(sql string) bool {
 		}
 	}
 	return false
+}
+
+// sqlUpdatesPlaintextTranscript reports whether a query updates a plaintext
+// transcript column of chat_messages: an UPDATE of chat_messages, or an INSERT
+// into it with ON CONFLICT DO UPDATE, whose SET clause assigns one. Every such
+// update must also stamp source_updated_at, so it belongs in the transcript
+// store. A plain INSERT is not an update: the column default stamps it.
+func sqlUpdatesPlaintextTranscript(sql string) bool {
+	s := stripSQLCommentsAndStrings(strings.ToLower(sql))
+	if !sqlUpdateTarget.MatchString(s) && !sqlUpsertTarget.MatchString(s) {
+		return false
+	}
+	rest := s
+	for {
+		loc := sqlSetKeyword.FindStringIndex(rest)
+		if loc == nil {
+			return false
+		}
+		end := setClauseEnd(rest, loc[1])
+		if sqlBodySetTarget.MatchString(rest[loc[1]:end]) {
+			return true
+		}
+		rest = rest[end:]
+	}
 }
 
 // stripSetClauses runs stripSetTargets over each SET clause. A clause ends at

@@ -1,7 +1,12 @@
 import { useIsPlatformAdmin, useSession } from "@/contexts/Auth";
 import { Scope } from "@gram/client/models/components/rolegrant.js";
 import { useGrants } from "@gram/client/react-query/grants.js";
-import { scopeExclusions, scopeResourceKinds } from "@/lib/authz.gen";
+import {
+  type Check,
+  scopeExclusions,
+  scopeOpenKeys,
+  scopeResourceKinds,
+} from "@/lib/authz.gen";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 // Open SDK enums accept future values, but only understood scopes may authorize.
@@ -242,6 +247,126 @@ export function canWriteProjectMCPServersInGrants(
 }
 
 /**
+ * Whether a grant selector covers a check built by a constructor in
+ * lib/authz.gen.ts, as Check.matchesAllowSelector does on the server: every
+ * key the grant names must be carried with a matching value, except the keys
+ * the check's scope opens on a probe or a connection.
+ */
+function allowSelectorMatches(
+  grantSelector: Record<string, string>,
+  checkSelector: Record<string, string>,
+  open: readonly string[],
+): boolean {
+  for (const [key, grantVal] of Object.entries(grantSelector)) {
+    const checkVal = checkSelector[key];
+    if (checkVal === undefined) {
+      if (open.includes(key)) continue;
+      return false;
+    }
+    if (grantVal !== "*" && grantVal !== checkVal) return false;
+  }
+  return true;
+}
+
+function openKeysFor(check: Check): readonly string[] {
+  const open = scopeOpenKeys[check.scope];
+  if (!open) return [];
+  return [
+    ...(check.isProbe ? open.probe : []),
+    ...(check.connection ? open.connection : []),
+  ];
+}
+
+function checkSelector(
+  check: Check,
+  resourceId: string,
+): Record<string, string> {
+  return {
+    resourceKind: check.resourceKind,
+    resourceId,
+    ...check.dimensions,
+  };
+}
+
+/** One check on one resource, with blocks and direct-grant precedence. */
+function allowedOnResource(
+  grants: EffectiveGrant[],
+  check: Check,
+  resourceId: string,
+): boolean {
+  const selector = checkSelector(check, resourceId);
+  const open = openKeysFor(check);
+  const allowMatches = (selectors: Selectors | undefined) =>
+    selectors === undefined
+      ? true
+      : selectors.some((s) => allowSelectorMatches(s, selector, open));
+  const exclusionScopes = exclusionScopesForScope(check.scope);
+
+  let allowed = false;
+  let directAllow = false;
+  let absoluteBlock = false;
+  let inheritedBlock = false;
+  for (const grant of grants) {
+    if (grant.scope === undefined || !knownScopes.has(grant.scope)) continue;
+    if (exclusionScopes.includes(grant.scope)) {
+      if (grantSelectorsMatch(grant, selector, true)) {
+        if (
+          exclusionYieldsToDirectGrants(grant.scope) &&
+          !directSelectorsMatch(grant, selector, true)
+        ) {
+          inheritedBlock = true;
+        } else {
+          absoluteBlock = true;
+        }
+      }
+    }
+    if (grant.scope === check.scope || grant.subScopes?.includes(check.scope)) {
+      if (allowMatches(grant.selectors)) allowed = true;
+      if (allowMatches(grant.directSelectors ?? [])) directAllow = true;
+    }
+  }
+  return allowed && !absoluteBlock && !(inheritedBlock && !directAllow);
+}
+
+type Selectors = Array<Record<string, string>>;
+
+/**
+ * Whether the server would allow a check built by a constructor in
+ * lib/authz.gen.ts. Unlike hasScopeInGrants it never skips a key the check
+ * leaves out: the constructors carry every key the server needs. A probe on
+ * a collection asks about any resource of the kind in that parent: the
+ * collection itself, or a resource some allow grant reaches.
+ */
+export function canInGrants(grants: EffectiveGrant[], check: Check): boolean {
+  if (check.invalid) {
+    if (import.meta.env.DEV) {
+      console.error("invalid authz check: an id cannot name a resource", check);
+    }
+    return false;
+  }
+  if (!knownScopes.has(check.scope)) return false;
+  if (allowedOnResource(grants, check, check.resourceId)) return true;
+  if (!check.collection || !check.isProbe) return false;
+
+  const candidates = new Set<string>();
+  for (const grant of grants) {
+    if (grant.scope !== check.scope && !grant.subScopes?.includes(check.scope))
+      continue;
+    for (const { resourceId = "*" } of grant.selectors ?? [{}]) {
+      // A wildcard grant reaches resources no grant names.
+      candidates.add(resourceId === "*" ? anyUnnamedResource : resourceId);
+    }
+  }
+  for (const resourceId of candidates) {
+    if (allowedOnResource(grants, check, resourceId)) return true;
+  }
+  return false;
+}
+
+/** A resource id no grant names, standing for every resource of that kind. */
+const anyUnnamedResource = "\u0000";
+
+/**
  * Core RBAC hook. Fetches the current user's effective grants and provides
  * helpers to check whether the user holds a particular scope.
  */
@@ -317,6 +442,15 @@ function useRBACImpl() {
     [hasScope],
   );
 
+  /**
+   * Whether the server would allow check, built by a constructor in
+   * lib/authz.gen.ts: can(authz.mcpServer(id, projectId).write()).
+   */
+  const can = useCallback(
+    (check: Check): boolean => !!grants && canInGrants(grants, check),
+    [grants],
+  );
+
   const hasAnyScopeInProject = useCallback(
     (scopes: Scope[], projectId: string): boolean => {
       return scopes.some((scope) =>
@@ -340,6 +474,7 @@ function useRBACImpl() {
 
   return useMemo(
     () => ({
+      can,
       hasScope,
       hasAllScopes,
       hasAnyScope,
@@ -352,6 +487,7 @@ function useRBACImpl() {
       error: error ?? null,
     }),
     [
+      can,
       hasScope,
       hasAllScopes,
       hasAnyScope,
