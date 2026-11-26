@@ -85,7 +85,11 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       // Two rosters, two entries: a person arrives from the identity
       // provider, an agent is registered here. The bare identities URL
       // redirects to the people.
-      { route: routes.identities.people, scope: observe },
+      {
+        route: routes.identities.people,
+        scope: observe,
+        resourceId: projectId,
+      },
       { route: routes.identities.agents, scope: observe },
       {
         route: routes.mcpSessions,
@@ -96,8 +100,12 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
         route: routes.remoteIdentityProviders,
         scope: ["org:read", "org:admin"],
       },
-      { route: routes.deployments, scope: readWrite },
-      { route: routes.mcp, scope: ["mcp:read", "mcp:write"] },
+      { route: routes.deployments, scope: readWrite, resourceId: projectId },
+      {
+        route: routes.mcp,
+        scope: ["mcp:read", "mcp:write"],
+        projectId,
+      },
       // Channels is deliberately absent: while it is hidden it is reachable
       // only by direct URL, so neither the sidebar nor Command K offers it.
       ...(isAssistantsAvailable
@@ -115,7 +123,7 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
         resourceId: projectId,
       },
       { route: routes.plugins, scope: readWrite },
-      { route: routes.environments, scope: readWrite },
+      { route: routes.environments, scope: readWrite, resourceId: projectId },
       { route: routes.watchdog, scope: ["org:admin"] as Scope[] },
       { route: routes.riskEvents, scope: ["org:admin"] as Scope[] },
       { route: routes.policyCenter, scope: readWrite },

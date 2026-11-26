@@ -34,9 +34,11 @@ import { useProject } from "@/contexts/Auth";
 import * as authz from "@/lib/authz.gen";
 
 export default function DeploymentsPage(): JSX.Element {
+  const project = useProject();
   return (
     <ResourceListPage
       scope={["project:read", "project:write"]}
+      resourceId={project.id}
       title="Deployments"
       description="Each push deploys every source in the project together, so a deployment is the version its sources and tools arrive in."
       belowHeader={<McpTabs active="deployments" />}
