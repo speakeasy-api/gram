@@ -53,6 +53,9 @@ const config: KnipConfig = {
     // (all templates + widgets) whose full API is exposed whether or not every
     // page has migrated onto it yet — same rationale as components/ui above.
     "src/components/page-templates/**/*",
+    // Generated from the Go registry: one check constructor per resource kind,
+    // whether or not a page asks about that kind yet.
+    "src/lib/authz.gen.ts",
   ],
 };
 

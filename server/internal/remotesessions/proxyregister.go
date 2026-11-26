@@ -285,7 +285,7 @@ func (s *Service) handleProxyRegister(w http.ResponseWriter, r *http.Request) er
 		// Project authorization resolves the requested project before enforcing
 		// project:read. Organization administrators may legitimately lack that
 		// project grant, so admit them only when resolution succeeded inside their
-		// active organization; RequireAny below still gates the mutation itself.
+		// active organization; the Require below still gates the mutation itself.
 		resolved, ok := contextvalues.GetAuthContext(authedCtx)
 		if !ok || resolved == nil || resolved.ProjectID == nil || s.authz.Require(authedCtx, authz.Org(authz.OrgIDFrom(resolved.ActiveOrganizationID)).Admin()) != nil {
 			return oops.E(oops.CodeUnauthorized, err, "unauthorized access").LogError(authedCtx, s.logger)
@@ -296,10 +296,10 @@ func (s *Service) handleProxyRegister(w http.ResponseWriter, r *http.Request) er
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.RequireAny(ctx,
+	if err := s.authz.Require(ctx, authz.Either(
 		authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write(),
 		authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin(),
-	); err != nil {
+	)); err != nil {
 		return err
 	}
 

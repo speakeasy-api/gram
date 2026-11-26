@@ -142,7 +142,7 @@ func (i *ToolsListMCPConnectFilterInterceptor) InterceptToolsListResponse(ctx co
 
 	// Only an inspected listing explains its marks. The reasons come from the
 	// grants already on the context, so they cost no extra round trip.
-	var reasons []authz.DenialReason
+	var reasons []authz.Reason
 	if inspecting {
 		reasons, err = i.authz.DenialReasons(ctx, checks)
 		if err != nil {
