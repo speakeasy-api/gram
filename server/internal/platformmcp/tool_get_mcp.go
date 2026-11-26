@@ -44,8 +44,11 @@ func registerGetMCPTool(reg *Registrar, reader Reader) {
 					}
 				}
 			}
-			// An mcp_id that is not an MCP server ID, such as a gateway ID,
-			// is the caller's to correct, so it gets the same readable refusal.
+			// An mcp_id that is not a UUID at all, such as a gateway ID with a
+			// kind prefix, is the caller's to correct, so it gets a readable
+			// refusal. A bare UUID that names no visible MCP server is refused
+			// by the authorization check instead, without saying whether it
+			// exists.
 			if errors.Is(err, ErrMCPIDInvalid) {
 				if result, handled := operationBudgetToolResult(err); handled {
 					if refusal, ok := refusalFromResult(result); ok {
