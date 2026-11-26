@@ -53,6 +53,10 @@ func Render(r registry.Registry) ([]File, error) {
 	if err != nil {
 		return nil, err
 	}
+	caseConstructors, err := renderDashboardCaseConstructors(r)
+	if err != nil {
+		return nil, err
+	}
 	vocabulary, err := renderVocabulary(registry.VocabularyFiles())
 	if err != nil {
 		return nil, err
@@ -63,6 +67,7 @@ func Render(r registry.Registry) ([]File, error) {
 		{Path: "internal/authz/refs_gen.go", Content: refs},
 		{Path: "internal/authz/tables_gen.go", Content: tables},
 		{Path: dashboardTablesPath, Content: renderDashboardTables(r)},
+		{Path: dashboardCaseConstructorsPath, Content: caseConstructors},
 	}...), nil
 }
 
