@@ -114,7 +114,7 @@ func configureReaderTranscripts(ctx context.Context, c *cli.Context, db *pgxpool
 	if orgEncryption.Service == nil {
 		return configureReadOnlyTranscripts(c, logger, meterProvider)
 	}
-	return configureTranscriptShadow(ctx, c, db, nil, orgEncryption, tracerProvider, meterProvider)
+	return configureTranscripts(ctx, c, db, nil, orgEncryption, tracerProvider, meterProvider)
 }
 
 // configureReadOnlyTranscripts is for a process that reads chat messages but
