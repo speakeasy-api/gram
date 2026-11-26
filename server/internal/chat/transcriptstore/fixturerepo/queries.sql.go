@@ -48,6 +48,17 @@ func (q *Queries) Ciphertext(ctx context.Context, messageID uuid.UUID, projectID
 	return ciphertext, err
 }
 
+const copySourceHashIsSet = `-- name: CopySourceHashIsSet :one
+SELECT (source_hash IS NOT NULL)::boolean AS hashed FROM chat_message_transcripts WHERE message_id=$1
+`
+
+func (q *Queries) CopySourceHashIsSet(ctx context.Context, messageID uuid.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, copySourceHashIsSet, messageID)
+	var hashed bool
+	err := row.Scan(&hashed)
+	return hashed, err
+}
+
 const createChat = `-- name: CreateChat :execrows
 INSERT INTO chats(id,project_id,organization_id) VALUES($1,$2,$3)
 `
@@ -140,6 +151,20 @@ SELECT id FROM chats WHERE id=$1 AND project_id=$2 AND organization_id=$3 FOR UP
 func (q *Queries) LockChat(ctx context.Context, iD uuid.UUID, projectID uuid.UUID, organizationID string) error {
 	_, err := q.db.Exec(ctx, lockChat, iD, projectID, organizationID)
 	return err
+}
+
+const makeLegacyCopy = `-- name: MakeLegacyCopy :execrows
+UPDATE chat_message_transcripts t SET source_updated_at=NULL, source_hash=sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')) FROM chat_messages m WHERE m.id=t.message_id AND m.id=$1 AND m.project_id=$2 AND t.project_id=$2
+`
+
+// Turn a sealed copy back into one sealed before source_updated_at existed:
+// no recorded timestamp, and the unkeyed source_hash of the current row.
+func (q *Queries) MakeLegacyCopy(ctx context.Context, iD uuid.UUID, projectID uuid.NullUUID) (int64, error) {
+	result, err := q.db.Exec(ctx, makeLegacyCopy, iD, projectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const markRiskAnalyzed = `-- name: MarkRiskAnalyzed :execrows

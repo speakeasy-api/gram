@@ -123,13 +123,27 @@ func TestTranscriptsGateByProject(t *testing.T) {
 }
 
 type openRow struct {
-	id      uuid.UUID
-	content string
-	notes   pgtype.Text
+	id           uuid.UUID
+	content      string
+	contentRaw   []byte
+	toolCalls    []byte
+	notes        pgtype.Text
+	summaries    []byte
+	storageError pgtype.Text
 }
 
 func openRowBody(r *openRow) Body {
-	return Body{MessageID: r.id, Content: &r.content, ContentRaw: nil, ToolCalls: nil, ToolOutcomeNotes: &r.notes, ToolCallSummaries: nil, StorageError: nil}
+	return Body{MessageID: r.id, Content: &r.content, ContentRaw: &r.contentRaw, ToolCalls: &r.toolCalls, ToolOutcomeNotes: &r.notes, ToolCallSummaries: &r.summaries, StorageError: &r.storageError}
+}
+
+// plaintextRow is a loaded row whose six body fields all hold placeholder
+// plaintext, so a test can see which ones Open replaced.
+func plaintextRow(id uuid.UUID) openRow {
+	return openRow{
+		id: id, content: "plaintext", contentRaw: []byte(`{"plaintext":true}`), toolCalls: []byte(`[]`),
+		notes: pgtype.Text{String: "plaintext", Valid: true}, summaries: []byte(`{"plaintext":true}`),
+		storageError: pgtype.Text{String: "plaintext", Valid: true},
+	}
 }
 
 func TestOpenRowsServesShadowsFallsBackAndFailsStale(t *testing.T) {
@@ -138,25 +152,29 @@ func TestOpenRowsServesShadowsFallsBackAndFailsStale(t *testing.T) {
 	shadowed, unshadowed := uuid.New(), uuid.New()
 	f.add(t, shadowed)
 	f.add(t, unshadowed)
+	_, err := fixturerepo.New(f.db).SetStorageError(t.Context(), pgtype.Text{String: "example error", Valid: true}, shadowed, project(f.project))
+	require.NoError(t, err)
 	f.capture(t, shadowed)
 	transcripts := NewTranscripts(f.store, f.project)
 
-	rows := []openRow{
-		{id: shadowed, content: "plaintext", notes: pgtype.Text{String: "", Valid: false}},
-		{id: unshadowed, content: "plaintext", notes: pgtype.Text{String: "", Valid: false}},
-	}
+	rows := []openRow{plaintextRow(shadowed), plaintextRow(unshadowed)}
 	require.NoError(t, OpenRows(t.Context(), transcripts, f.org, f.project, rows, openRowBody))
-	require.Equal(t, "sensitive example", rows[0].content, "a shadowed message is served from its shadow")
-	require.Equal(t, pgtype.Text{String: "example note", Valid: true}, rows[0].notes)
-	require.Equal(t, "plaintext", rows[1].content, "a message with no shadow keeps its plaintext")
+	opened := rows[0]
+	require.Equal(t, "sensitive example", opened.content, "a shadowed message is served from its shadow")
+	require.JSONEq(t, `{"large":9007199254740993,"n":1e2}`, string(opened.contentRaw))
+	require.JSONEq(t, `[{"id":"example"}]`, string(opened.toolCalls))
+	require.Equal(t, pgtype.Text{String: "example note", Valid: true}, opened.notes)
+	require.JSONEq(t, `{"example":"summary"}`, string(opened.summaries))
+	require.Equal(t, pgtype.Text{String: "example error", Valid: true}, opened.storageError, "all six fields come from the copy")
+	require.Equal(t, plaintextRow(unshadowed), rows[1], "a message with no shadow keeps its plaintext")
 
-	off := []openRow{{id: shadowed, content: "plaintext", notes: pgtype.Text{String: "", Valid: false}}}
+	off := []openRow{plaintextRow(shadowed)}
 	require.NoError(t, OpenRows(t.Context(), NewTranscripts(f.store), f.org, f.project, off, openRowBody))
-	require.Equal(t, "plaintext", off[0].content, "a project off the list reads plaintext")
+	require.Equal(t, plaintextRow(shadowed), off[0], "a project off the list reads plaintext")
 
-	_, err := fixturerepo.New(f.db).ChangeContent(t.Context(), shadowed, project(f.project))
+	_, err = fixturerepo.New(f.db).ChangeContent(t.Context(), shadowed, project(f.project))
 	require.NoError(t, err)
-	stale := []openRow{{id: shadowed, content: "changed", notes: pgtype.Text{String: "", Valid: false}}}
+	stale := []openRow{plaintextRow(shadowed)}
 	err = OpenRows(t.Context(), transcripts, f.org, f.project, stale, openRowBody)
 	require.ErrorIs(t, err, ErrStale, "a stale shadow fails the read instead of serving plaintext")
 }

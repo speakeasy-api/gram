@@ -95,3 +95,11 @@ SELECT source_updated_at, tool_call_count FROM chat_messages WHERE id=$1;
 
 -- name: MessageMetadata :one
 SELECT tool_call_count, content_bytes, content_raw_bytes, tool_calls_bytes FROM chat_messages WHERE id=$1;
+
+-- name: MakeLegacyCopy :execrows
+-- Turn a sealed copy back into one sealed before source_updated_at existed:
+-- no recorded timestamp, and the unkeyed source_hash of the current row.
+UPDATE chat_message_transcripts t SET source_updated_at=NULL, source_hash=sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')) FROM chat_messages m WHERE m.id=t.message_id AND m.id=$1 AND m.project_id=$2 AND t.project_id=$2;
+
+-- name: CopySourceHashIsSet :one
+SELECT (source_hash IS NOT NULL)::boolean AS hashed FROM chat_message_transcripts WHERE message_id=$1;

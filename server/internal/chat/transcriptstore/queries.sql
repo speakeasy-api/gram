@@ -15,7 +15,11 @@ WITH live AS MATERIALIZED (
  WHERE m.id = @message_id AND m.project_id = @project_id AND p.organization_id = @organization_id
  AND m.chat_id = @chat_id
  AND m.source_updated_at IS NOT DISTINCT FROM sqlc.narg('source_updated_at')::timestamptz
- FOR SHARE OF m, c, p
+ -- NO KEY UPDATE on the message, because UpdateMessageMetadata then updates it
+ -- in the same transaction: two captures holding SHARE would deadlock on the
+ -- upgrade. It still lets readers and key-share locks through.
+ FOR NO KEY UPDATE OF m
+ FOR SHARE OF c, p
 )
 INSERT INTO chat_message_transcripts (message_id, project_id, organization_id, ciphertext, source_updated_at)
 SELECT live.id, @project_id, @organization_id, @ciphertext, sqlc.narg('source_updated_at')::timestamptz FROM live

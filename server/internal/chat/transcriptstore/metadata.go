@@ -76,10 +76,12 @@ func toolCallID(element json.RawMessage) string {
 	return id
 }
 
-// toolCallCount matches how the dashboard decides a message carries tool
-// calls: an array counts its elements, whatever they are, and a
-// double-encoded string that is not empty, "[]" or "null" but cannot be
-// parsed counts as one.
+// toolCallCount matches the plaintext rule it replaces, the tool_calls CASE in
+// GetChatEntryTotals, which feeds the dashboard's trace totals: an array counts
+// its elements, whatever they are, and a double-encoded string that is not
+// empty, "[]" or "null" counts as one when it cannot be parsed into elements.
+// Keeping the two equal means a message counts the same whether or not it is
+// sealed.
 func toolCallCount(raw []byte, calls []json.RawMessage) int {
 	if len(calls) > 0 {
 		return len(calls)
