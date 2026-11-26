@@ -59,7 +59,10 @@ if canRead.AllAllowed {
 }
 // discovery: "could they act on any matching resource?"
 canConnect, err := s.authz.Decide(authz.WithoutChallenges(ctx), authz.MCPServer(id, p).Connect().Probe())
-if err == nil && canConnect.AllAllowed {
+if err != nil {
+	return err
+}
+if canConnect.AllAllowed {
 	// offer the connect button
 }
 // a list: one decision per row, in order, and one challenge row for the call

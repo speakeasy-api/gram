@@ -123,12 +123,19 @@ type fakeAuthz struct {
 	denied   authz.Scope
 	allow    func(authz.Check) bool
 	allowCtx func(context.Context, authz.Check) (bool, error)
-	batches  *[][]authz.Check
+	batches  *checkBatches
+}
+
+type checkBatches struct {
+	mu  sync.Mutex
+	all [][]authz.Check
 }
 
 func (f fakeAuthz) Decide(ctx context.Context, checks ...authz.Check) (authz.Decisions, error) {
 	if f.batches != nil {
-		*f.batches = append(*f.batches, checks)
+		f.batches.mu.Lock()
+		f.batches.all = append(f.batches.all, checks)
+		f.batches.mu.Unlock()
 	}
 	decisions := authz.Decisions{AllAllowed: len(checks) > 0, Each: make([]authz.Decision, len(checks))}
 	for i, check := range checks {
@@ -406,8 +413,8 @@ func TestSearchFiltersAssistantRowsBeforeApplyingResultLimit(t *testing.T) {
 	hidden, visible := uuid.New(), uuid.New()
 	store := storeWithAllKinds()
 	store.assistants = []repo.ListCommandIndexAssistantsRow{{ID: hidden, Name: "Assistant hidden"}, {ID: visible, Name: "Assistant visible"}}
-	var batches [][]authz.Check
-	authorizer := fakeAuthz{batches: &batches, allow: func(check authz.Check) bool {
+	batches := &checkBatches{}
+	authorizer := fakeAuthz{batches: batches, allow: func(check authz.Check) bool {
 		if check.Scope != authz.ScopeAssistantRead {
 			return true
 		}
@@ -418,8 +425,8 @@ func TestSearchFiltersAssistantRowsBeforeApplyingResultLimit(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{visible.String()}, itemIDs(result.Items, "assistant"))
 	var assistantBatches [][]authz.Check
-	for _, batch := range batches {
-		if batch[0].Scope == authz.ScopeAssistantRead {
+	for _, batch := range batches.all {
+		if len(batch) > 0 && batch[0].Scope == authz.ScopeAssistantRead {
 			assistantBatches = append(assistantBatches, batch)
 		}
 	}
