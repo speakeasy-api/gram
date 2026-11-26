@@ -45,6 +45,10 @@ func (e *Engine) RequireAnyUnblocked(ctx context.Context, checks ...Check) error
 	if err != nil {
 		return e.mapError(ctx, err)
 	}
+	if bounded, ok := authorization.boundedByAuthorizer(); ok && blocked == nil {
+		vetoed, err := firstUnoverriddenExclusion(bounded, checks)
+		reportAuthorizerRefusal(ctx, e.logger, authorization, vetoed, err)
+	}
 	if blocked != nil {
 		challengeLogger{
 			Operation:            authzrepo.OperationRequireAny,
