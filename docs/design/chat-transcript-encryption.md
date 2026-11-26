@@ -112,8 +112,8 @@ body fields. Readers no longer keep their own allowlist.
 Capture also stores plaintext-free metadata next to each shadow, measured from
 the same snapshot it seals: `tool_call_count` and the byte lengths of
 `content`, `content_raw` and `tool_calls` (as `octet_length` of their text
-form), plus one `chat_message_transcript_tool_calls` row per provider
-tool-call ID. They are current exactly when the shadow is, so readers can
+form, with a NULL value recorded as 0), plus one
+`chat_message_transcript_tool_calls` row per provider tool-call ID. They are current exactly when the shadow is, so readers can
 count, budget and look up tool calls without decrypting. Shadows captured
 before these columns existed hold NULL until a backfill recaptures them.
 
