@@ -221,6 +221,7 @@ var textOnlyTools = map[string]string{
 	"search_chats":                         textOnlyLog,
 	"read_chat":                            textOnlyLog,
 	"search_team_memory":                   textOnlyLog,
+	listMCPFeedbackToolName:                textOnlyLog,
 	"find_signal_sessions":                 textOnlyLog,
 	"list_skill_feedback":                  textOnlyLog,
 	"list_skill_suggestion_feedback":       textOnlyLog,

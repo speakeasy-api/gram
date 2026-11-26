@@ -364,6 +364,7 @@ type PostgresReader struct {
 	chatMetadata              *ChatMetadataService
 	chatSearch                *ChatSearchService
 	teamMemory                *TeamMemoryService
+	mcpFeedback               *MCPFeedbackReadService
 	organizationGateway       *OrganizationGatewayService
 	inboundEMATrust           *InboundEMATrustService
 	gatewaySessions           GatewaySessionManagement
@@ -419,6 +420,7 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		chatMetadata:              nil,
 		chatSearch:                nil,
 		teamMemory:                nil,
+		mcpFeedback:               nil,
 		organizationGateway:       nil,
 		inboundEMATrust:           nil,
 		gatewaySessions:           nil,
@@ -691,6 +693,14 @@ func (r *PostgresReader) WithChatSearch(service *ChatSearchService) *PostgresRea
 func (r *PostgresReader) WithTeamMemory(service *TeamMemoryService) *PostgresReader {
 	if r != nil && service.valid() {
 		r.teamMemory = service
+	}
+	return r
+}
+
+// WithMCPFeedback serves list_mcp_feedback.
+func (r *PostgresReader) WithMCPFeedback(service *MCPFeedbackReadService) *PostgresReader {
+	if r != nil && service.valid() {
+		r.mcpFeedback = service
 	}
 	return r
 }
