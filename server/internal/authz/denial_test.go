@@ -95,7 +95,7 @@ func TestEngineEvaluateLoadedGrants_DoesNotRecord(t *testing.T) {
 	require.Equal(t, Denial{Scope: ScopeLogRead, ResourceKind: "project"}, denial)
 }
 
-func TestEngineRequireAny_RecordsTheLeastPrivilegedAlternative(t *testing.T) {
+func TestEngineEither_RecordsTheLeastPrivilegedAlternative(t *testing.T) {
 	t.Parallel()
 
 	const projectID = "0196cbd1-9328-74e7-b7bb-6e5357565573"
@@ -124,7 +124,7 @@ func TestEngineRequireAny_RecordsTheLeastPrivilegedAlternative(t *testing.T) {
 			none:   false,
 		},
 		{
-			name: "not an alternative a block refused",
+			name: "nothing when a block refuses the group",
 			grants: []Grant{
 				NewGrant(ScopeProjectRead, WildcardResource),
 				NewGrantWithSelector(ScopeProjectBlockedRead, Selector{
@@ -133,8 +133,8 @@ func TestEngineRequireAny_RecordsTheLeastPrivilegedAlternative(t *testing.T) {
 				}),
 			},
 			checks: []Check{orgCheck, projectCheck},
-			want:   Denial{Scope: ScopeOrgRead, ResourceKind: "org"},
-			none:   false,
+			want:   Denial{Scope: "", ResourceKind: ""},
+			none:   true,
 		},
 		{
 			name: "nothing when every alternative is blocked",
@@ -156,7 +156,7 @@ func TestEngineRequireAny_RecordsTheLeastPrivilegedAlternative(t *testing.T) {
 			engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 			ctx := WithDenialRecorder(GrantsToContext(enterpriseSessionCtx(t), tt.grants))
 
-			require.Error(t, engine.RequireAny(ctx, tt.checks...))
+			require.Error(t, engine.Require(ctx, Either(tt.checks...)))
 
 			denial, ok := RecordedDenial(ctx)
 			require.Equal(t, !tt.none, ok)
@@ -176,7 +176,7 @@ func TestRecordedDenial_WithoutARecorder(t *testing.T) {
 	require.False(t, ok)
 }
 
-func TestDenialReasons_SkipsValidationWhenRBACIsNotEnforced(t *testing.T) {
+func TestDenialReasons_WhenRBACIsNotEnforced(t *testing.T) {
 	t.Parallel()
 
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
@@ -189,9 +189,12 @@ func TestDenialReasons_SkipsValidationWhenRBACIsNotEnforced(t *testing.T) {
 	invalid := Check{Scope: ScopeMCPConnect, ResourceKind: "", ResourceID: "", Dimensions: nil}
 	authClient := MCPAuthClientCheck("ac_1", MCPAuthClientDimensions{ClientType: AuthClientTypeServiceAccount, ProjectID: authProjectP, ConnectionOwner: "", UpstreamClient: ""})
 
-	reasons, err := engine.DenialReasons(ctx, []Check{valid, invalid, authClient})
+	reasons, err := engine.DenialReasons(ctx, []Check{valid, authClient})
 	require.NoError(t, err, "unenforced callers get the unenforced result, like FindMatched")
-	require.Equal(t, []DenialReason{DenialReasonNone, DenialReasonNone, DenialReasonNotGranted}, reasons)
+	require.Equal(t, []Reason{ReasonNone, ReasonNotGranted}, reasons)
+
+	_, err = engine.DenialReasons(ctx, []Check{valid, invalid})
+	require.ErrorIs(t, err, ErrInvalidCheck, "in tests an invalid check fails even when RBAC is skipped")
 }
 
 // A call refused only because the caller's grant names another disposition
@@ -208,7 +211,7 @@ func TestDenialReasons_OtherDispositionIsReported(t *testing.T) {
 	call := MCPServer(MCPServerIDFrom("toolset_1"), ProjectIDFrom(authProjectP)).ToolCall("delete_all", DispositionDestructive)
 	reasons, err := engine.DenialReasons(ctx, []Check{call})
 	require.NoError(t, err)
-	require.Equal(t, []DenialReason{DenialReasonDisposition}, reasons)
+	require.Equal(t, []Reason{ReasonDisposition}, reasons)
 }
 
 // A call refused because it names no tool while the grant is limited to one
@@ -225,7 +228,7 @@ func TestDenialReasons_MissingToolIsNotADispositionRefusal(t *testing.T) {
 	call := MCPServer(MCPServerIDFrom("toolset_1"), ProjectIDFrom(authProjectP)).ToolCall("", DispositionDestructive)
 	reasons, err := engine.DenialReasons(ctx, []Check{call})
 	require.NoError(t, err)
-	require.Equal(t, []DenialReason{DenialReasonNotGranted}, reasons)
+	require.Equal(t, []Reason{ReasonNotGranted}, reasons)
 }
 
 // A tool call recorded as a denial is rebuilt as a tool call, so a grant that

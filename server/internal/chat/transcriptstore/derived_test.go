@@ -54,7 +54,7 @@ func TestEntryTotalsCountToolCallsFromShadowMetadata(t *testing.T) {
 
 	totals := func(transcripts *Transcripts) GetChatEntryTotalsRow {
 		t.Helper()
-		row, err := transcripts.GetChatEntryTotals(t.Context(), f.db, GetChatEntryTotalsParams{ChatID: f.chat, ProjectID: f.project, Generation: 0, RiskMessageIds: []uuid.UUID{}, RiskContentPartIds: []uuid.UUID{}, OpenShadows: false})
+		row, err := transcripts.GetChatEntryTotals(t.Context(), f.db, GetChatEntryTotalsParams{ChatID: f.chat, ProjectID: f.project, Generation: 0, RiskMessageIds: []uuid.UUID{}, RiskContentPartIds: []uuid.UUID{}})
 		require.NoError(t, err)
 		return row
 	}

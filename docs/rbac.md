@@ -998,7 +998,7 @@ A grant key the check does not include never matches: absence is not permission.
 - a connection to a server (`authz.MCPServer(authz.MCPServerIDOf(toolset.ID), authz.ProjectIDOf(projectID)).Connect()`), which names no tool, so a grant limited to some tools or dispositions still lets the caller connect;
 - the risk policy audience question (`authz.RiskPolicyEvaluateCheck`), which names no server, so an audience grant limited to a server still places the caller under the policy.
 
-Blocks, auth client checks and `WithStrictSelectorMatch` allow none of them. A `Require` or `RequireAny` refusal caused only by a missing key is logged as an error naming the key, so a call site that should carry it shows up.
+Blocks, auth client checks and `WithStrictSelectorMatch` allow none of them. A `Require` refusal caused only by a missing key is logged as an error naming the key, so a call site that should carry it shows up.
 
 Some resource kinds also require a dimension on every check. `requiredCheckDimensions` in `server/internal/authz/checks.go` lists them, and the engine rejects a check of that kind that omits one, or sets it to `*`, as an invalid check (it fails closed). Today only `mcp` is listed, with `project_id`: an MCP grant can be bounded to one project (`{"resource_kind":"mcp","resource_id":"*","project_id":"<PROJECT_ID>"}`), and a check without the project should be refused as invalid rather than match no project-bounded grant. Build MCP checks with `authz.MCPServer(authz.MCPServerIDOf(toolset.ID), authz.ProjectIDOf(projectID))`, which always carries the project. Project-level operations use `authz.MCPServers(authz.ProjectIDOf(projectID))`, which names the project as both the resource and the `project_id`.
 
@@ -1077,23 +1077,24 @@ if err := s.authz.Require(
 
 This requires both write access where the clone will be created and read access to the source toolset. That is the right shape for operations that combine multiple resources or multiple permissions. Cloning is not just "read source" and not just "write destination"; it needs both.
 
-### `RequireAny`
+### `Either`
 
-Use `RequireAny` when several scopes are legitimate alternatives and any one of them should authorize the operation.
+Use `Require(ctx, authz.Either(...))` when several scopes are legitimate alternatives and any one of them should authorize the operation. A block on any alternative still refuses the request, unless a direct user grant on the concrete resource outranks it.
 
-For example, if a future handler could be reached by either an organization admin or a project writer, it could express that as two checks and require any one of them:
+For example, a handler reached by either an organization admin or a project writer:
 
 ```go
-if err := s.authz.RequireAny(
-	ctx,
-	authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil},
-	authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil},
-); err != nil {
+if err := s.authz.Require(ctx, authz.Either(
+	authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin(),
+	authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write(),
+)); err != nil {
 	return nil, err
 }
 ```
 
-Do not use `RequireAny` to avoid deciding what permission an operation needs. Use it only when the alternatives are intentionally equivalent authorization paths.
+With org admin granted and a block on project write, this is refused.
+
+Do not use `Either` to avoid deciding what permission an operation needs. Use it only when the alternatives are intentionally equivalent authorization paths.
 
 ### `Filter`
 

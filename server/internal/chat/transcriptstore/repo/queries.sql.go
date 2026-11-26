@@ -57,14 +57,14 @@ WITH live AS MATERIALIZED (
  SELECT m.id FROM chat_messages m
  JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
  JOIN projects p ON p.id = c.project_id
- WHERE m.id = $9 AND m.project_id = $1 AND p.organization_id = $2
- AND m.chat_id = $10
- AND sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')) = $4::bytea
+ WHERE m.id = $5 AND m.project_id = $1 AND p.organization_id = $2
+ AND m.chat_id = $6
+ AND m.source_updated_at IS NOT DISTINCT FROM $4::timestamptz
  FOR SHARE OF m, c, p
 )
-INSERT INTO chat_message_transcripts (message_id, project_id, organization_id, ciphertext, source_hash, tool_call_count, content_bytes, content_raw_bytes, tool_calls_bytes)
-SELECT live.id, $1, $2, $3, $4::bytea, $5::integer, $6::integer, $7::integer, $8::integer FROM live
-ON CONFLICT (message_id) DO UPDATE SET ciphertext = EXCLUDED.ciphertext, source_hash = EXCLUDED.source_hash, tool_call_count = EXCLUDED.tool_call_count, content_bytes = EXCLUDED.content_bytes, content_raw_bytes = EXCLUDED.content_raw_bytes, tool_calls_bytes = EXCLUDED.tool_calls_bytes, updated_at = clock_timestamp()
+INSERT INTO chat_message_transcripts (message_id, project_id, organization_id, ciphertext, source_updated_at)
+SELECT live.id, $1, $2, $3, $4::timestamptz FROM live
+ON CONFLICT (message_id) DO UPDATE SET ciphertext = EXCLUDED.ciphertext, source_hash = NULL, source_updated_at = EXCLUDED.source_updated_at, updated_at = clock_timestamp()
 WHERE chat_message_transcripts.project_id = $1 AND chat_message_transcripts.organization_id = $2
 `
 
@@ -72,11 +72,7 @@ type CaptureParams struct {
 	ProjectID       uuid.UUID
 	OrganizationID  string
 	Ciphertext      string
-	SourceHash      []byte
-	ToolCallCount   int32
-	ContentBytes    int32
-	ContentRawBytes int32
-	ToolCallsBytes  int32
+	SourceUpdatedAt pgtype.Timestamptz
 	MessageID       uuid.UUID
 	ChatID          uuid.UUID
 }
@@ -86,11 +82,7 @@ func (q *Queries) Capture(ctx context.Context, arg CaptureParams) (int64, error)
 		arg.ProjectID,
 		arg.OrganizationID,
 		arg.Ciphertext,
-		arg.SourceHash,
-		arg.ToolCallCount,
-		arg.ContentBytes,
-		arg.ContentRawBytes,
-		arg.ToolCallsBytes,
+		arg.SourceUpdatedAt,
 		arg.MessageID,
 		arg.ChatID,
 	)
@@ -101,7 +93,7 @@ func (q *Queries) Capture(ctx context.Context, arg CaptureParams) (int64, error)
 }
 
 const deleteToolCallIDs = `-- name: DeleteToolCallIDs :exec
-DELETE FROM chat_message_transcript_tool_calls WHERE message_id = $1 AND project_id = $2
+DELETE FROM chat_message_tool_call_ids WHERE message_id = $1 AND project_id = $2
 `
 
 type DeleteToolCallIDsParams struct {
@@ -116,7 +108,7 @@ func (q *Queries) DeleteToolCallIDs(ctx context.Context, arg DeleteToolCallIDsPa
 
 const findIndexedToolCallMessageID = `-- name: FindIndexedToolCallMessageID :one
 SELECT m.id
-FROM chat_message_transcript_tool_calls tc
+FROM chat_message_tool_call_ids tc
 JOIN chat_messages m ON m.id = tc.message_id AND m.project_id = tc.project_id
 WHERE tc.chat_id = $1
   AND tc.tool_call_id = $2
@@ -133,8 +125,8 @@ type FindIndexedToolCallMessageIDParams struct {
 	ProjectID  uuid.UUID
 }
 
-// The newest assistant message of a chat whose shadow indexes the tool call.
-// Reads no plaintext.
+// The newest assistant message of a chat whose sealed tool-call IDs include
+// the tool call. Reads no plaintext and no encrypted copy.
 func (q *Queries) FindIndexedToolCallMessageID(ctx context.Context, arg FindIndexedToolCallMessageIDParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, findIndexedToolCallMessageID, arg.ChatID, arg.ToolCallID, arg.ProjectID)
 	var id uuid.UUID
@@ -143,12 +135,11 @@ func (q *Queries) FindIndexedToolCallMessageID(ctx context.Context, arg FindInde
 }
 
 const insertToolCallIDs = `-- name: InsertToolCallIDs :exec
-INSERT INTO chat_message_transcript_tool_calls (message_id, tool_call_id, chat_id, project_id)
-SELECT t.message_id, ids.tool_call_id, m.chat_id, t.project_id
-FROM chat_message_transcripts t
-JOIN chat_messages m ON m.id = t.message_id AND m.project_id = t.project_id
+INSERT INTO chat_message_tool_call_ids (message_id, tool_call_id, chat_id, project_id)
+SELECT m.id, ids.tool_call_id, m.chat_id, m.project_id
+FROM chat_messages m
 CROSS JOIN unnest($1::text[]) AS ids(tool_call_id)
-WHERE t.message_id = $2 AND t.project_id = $3
+WHERE m.id = $2 AND m.project_id = $3::uuid
 ON CONFLICT (message_id, tool_call_id) DO NOTHING
 `
 
@@ -158,10 +149,9 @@ type InsertToolCallIDsParams struct {
 	ProjectID   uuid.UUID
 }
 
-// The chat and project come from the captured shadow and its message, not
-// from the caller, so a row cannot name another chat or project than its
-// message. The tool-call IDs are the caller's, parsed from the snapshot that
-// capture just sealed.
+// The chat and project come from the message, not from the caller, so a row
+// cannot name another chat or project than its message. The tool-call IDs are
+// the caller's, parsed from the snapshot that was just sealed.
 func (q *Queries) InsertToolCallIDs(ctx context.Context, arg InsertToolCallIDsParams) error {
 	_, err := q.db.Exec(ctx, insertToolCallIDs, arg.ToolCallIds, arg.MessageID, arg.ProjectID)
 	return err
@@ -170,7 +160,7 @@ func (q *Queries) InsertToolCallIDs(ctx context.Context, arg InsertToolCallIDsPa
 const load = `-- name: Load :one
 SELECT m.id, m.chat_id, m.content, m.content_raw, m.tool_calls,
        m.tool_outcome_notes, m.tool_call_summaries, m.storage_error, t.ciphertext,
-       (t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')))::boolean AS current
+       (CASE WHEN t.source_updated_at IS NULL AND t.source_hash IS NOT NULL THEN t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')) ELSE t.source_updated_at IS NOT DISTINCT FROM m.source_updated_at END)::boolean AS current
 FROM chat_messages m
 JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
 JOIN projects p ON p.id = c.project_id
@@ -218,7 +208,7 @@ func (q *Queries) Load(ctx context.Context, arg LoadParams) (LoadRow, error) {
 const loadMany = `-- name: LoadMany :many
 SELECT m.id, m.chat_id, m.content, m.content_raw, m.tool_calls,
        m.tool_outcome_notes, m.tool_call_summaries, m.storage_error, t.ciphertext,
-       (t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')))::boolean AS current
+       (CASE WHEN t.source_updated_at IS NULL AND t.source_hash IS NOT NULL THEN t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')) ELSE t.source_updated_at IS NOT DISTINCT FROM m.source_updated_at END)::boolean AS current
 FROM chat_messages m
 JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
 JOIN projects p ON p.id = c.project_id
@@ -296,8 +286,8 @@ func (q *Queries) LockChatMessage(ctx context.Context, arg LockChatMessageParams
 }
 
 const progress = `-- name: Progress :one
-SELECT count(*) FILTER (WHERE m.project_id = c.project_id AND t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')))::bigint AS current,
-       count(*) FILTER (WHERE m.project_id = c.project_id AND (t.message_id IS NULL OR t.source_hash <> sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8'))))::bigint AS waiting,
+SELECT count(*) FILTER (WHERE m.project_id = c.project_id AND t.message_id IS NOT NULL AND (CASE WHEN t.source_updated_at IS NULL AND t.source_hash IS NOT NULL THEN t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')) ELSE t.source_updated_at IS NOT DISTINCT FROM m.source_updated_at END))::bigint AS current,
+       count(*) FILTER (WHERE m.project_id = c.project_id AND (t.message_id IS NULL OR NOT (CASE WHEN t.source_updated_at IS NULL AND t.source_hash IS NOT NULL THEN t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')) ELSE t.source_updated_at IS NOT DISTINCT FROM m.source_updated_at END)))::bigint AS waiting,
        count(*) FILTER (WHERE m.project_id IS DISTINCT FROM c.project_id)::bigint AS unattributed
 FROM chats c JOIN projects p ON p.id = c.project_id
 JOIN chat_messages m ON m.chat_id = c.id
@@ -326,7 +316,7 @@ func (q *Queries) Progress(ctx context.Context, arg ProgressParams) (ProgressRow
 const snapshot = `-- name: Snapshot :one
 SELECT m.id, m.chat_id, m.content, m.content_raw, m.tool_calls,
        m.tool_outcome_notes, m.tool_call_summaries, m.storage_error,
-       sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8'))::bytea AS source_hash
+       m.source_updated_at
 FROM chat_messages m
 JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
 JOIN projects p ON p.id = c.project_id
@@ -348,7 +338,7 @@ type SnapshotRow struct {
 	ToolOutcomeNotes  pgtype.Text
 	ToolCallSummaries []byte
 	StorageError      pgtype.Text
-	SourceHash        []byte
+	SourceUpdatedAt   pgtype.Timestamptz
 }
 
 func (q *Queries) Snapshot(ctx context.Context, arg SnapshotParams) (SnapshotRow, error) {
@@ -363,7 +353,44 @@ func (q *Queries) Snapshot(ctx context.Context, arg SnapshotParams) (SnapshotRow
 		&i.ToolOutcomeNotes,
 		&i.ToolCallSummaries,
 		&i.StorageError,
-		&i.SourceHash,
+		&i.SourceUpdatedAt,
 	)
 	return i, err
+}
+
+const updateMessageMetadata = `-- name: UpdateMessageMetadata :execrows
+UPDATE chat_messages
+SET tool_call_count = $1::integer, content_bytes = $2::integer,
+    content_raw_bytes = $3::integer, tool_calls_bytes = $4::integer
+WHERE id = $5 AND project_id = $6::uuid
+  AND source_updated_at IS NOT DISTINCT FROM $7::timestamptz
+`
+
+type UpdateMessageMetadataParams struct {
+	ToolCallCount   int32
+	ContentBytes    int32
+	ContentRawBytes int32
+	ToolCallsBytes  int32
+	MessageID       uuid.UUID
+	ProjectID       uuid.UUID
+	SourceUpdatedAt pgtype.Timestamptz
+}
+
+// Plaintext-free metadata measured from the snapshot just sealed. It does not
+// touch a body column, so it leaves source_updated_at alone, and it lands only
+// while the message is still the version that was sealed.
+func (q *Queries) UpdateMessageMetadata(ctx context.Context, arg UpdateMessageMetadataParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateMessageMetadata,
+		arg.ToolCallCount,
+		arg.ContentBytes,
+		arg.ContentRawBytes,
+		arg.ToolCallsBytes,
+		arg.MessageID,
+		arg.ProjectID,
+		arg.SourceUpdatedAt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

@@ -1572,7 +1572,6 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		Generation:         generation,
 		RiskMessageIds:     riskAnchors.MessageIDs,
 		RiskContentPartIds: riskAnchors.ContentPartIDs,
-		OpenShadows:        false,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat entry totals").LogError(ctx, s.logger)

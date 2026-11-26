@@ -25,10 +25,10 @@ func (s *Service) distributionAuthContext(ctx context.Context, id string) (*cont
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid skill id")
 	}
-	if err := s.authz.RequireAnyUnblocked(ctx,
+	if err := s.authz.Require(ctx, authz.Either(
 		authz.Skills(authz.ProjectIDOf(*ac.ProjectID)).Read(),
 		authz.Skill(authz.SkillIDOf(skillID)).Read(),
-	); err != nil {
+	)); err != nil {
 		return nil, err
 	}
 	if _, err := projectsrepo.New(s.db).GetProjectByIDAndOrganizationID(ctx, projectsrepo.GetProjectByIDAndOrganizationIDParams{ID: *ac.ProjectID, OrganizationID: ac.ActiveOrganizationID}); err != nil {

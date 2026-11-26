@@ -166,17 +166,15 @@ func (t *Transcripts) ListSearchWindowedMessages(ctx context.Context, db DBTX, w
 }
 
 // GetChatEntryTotalsParams selects a generation and its risk anchors.
-// OpenShadows is set by the method; leave it false.
 type GetChatEntryTotalsParams = plainrepo.GetChatEntryTotalsParams
 
 // GetChatEntryTotalsRow counts a generation's trace entries by kind.
 type GetChatEntryTotalsRow = plainrepo.GetChatEntryTotalsRow
 
 // GetChatEntryTotals counts a generation's trace entries. It returns no
-// message body. For a project that keeps shadows, whether a message carries
-// tool calls comes from its shadow's metadata, not its plaintext.
+// message body. Whether a sealed message carries tool calls comes from its
+// metadata, not its plaintext.
 func (t *Transcripts) GetChatEntryTotals(ctx context.Context, db DBTX, params GetChatEntryTotalsParams) (GetChatEntryTotalsRow, error) {
-	params.OpenShadows = t.Enabled(params.ProjectID)
 	row, err := plainrepo.New(db).GetChatEntryTotals(ctx, params)
 	if err != nil {
 		return row, fmt.Errorf("get chat entry totals: %w", err)

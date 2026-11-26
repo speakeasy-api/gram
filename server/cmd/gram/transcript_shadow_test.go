@@ -102,9 +102,8 @@ func TestTranscriptShadowSchemaCompatibility(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, cleanup()) })
 	const columns = `message_id uuid NOT NULL, project_id uuid NOT NULL,
- organization_id text NOT NULL, ciphertext text NOT NULL, source_hash bytea NOT NULL,
- updated_at timestamptz NOT NULL DEFAULT clock_timestamp(), tool_call_count integer,
- content_bytes integer, content_raw_bytes integer, tool_calls_bytes integer`
+ organization_id text NOT NULL, ciphertext text NOT NULL, source_hash bytea,
+ updated_at timestamptz NOT NULL DEFAULT clock_timestamp(), source_updated_at timestamptz`
 	type schemaCase struct {
 		name, ddl string
 		ok        bool
@@ -128,24 +127,31 @@ func TestTranscriptShadowSchemaCompatibility(t *testing.T) {
 		{name: "identity extra column", ddl: "CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id), extra bigint NOT NULL GENERATED ALWAYS AS IDENTITY)", ok: true},
 		{name: "primary key", ddl: "CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id))", ok: true},
 		{name: "unique index with included column", ddl: "CREATE TABLE chat_message_transcripts (" + columns + "); CREATE UNIQUE INDEX ON chat_message_transcripts (message_id) INCLUDE (project_id)", ok: true},
-		{name: "wrong type tool call id", ddl: "ALTER TABLE chat_message_transcript_tool_calls ALTER COLUMN tool_call_id TYPE integer USING 0; CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id))"},
-		{name: "nullable tool call chat", ddl: "ALTER TABLE chat_message_transcript_tool_calls ALTER COLUMN chat_id DROP NOT NULL; CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id))"},
-		{name: "missing tool call conflict target", ddl: "ALTER TABLE chat_message_transcript_tool_calls DROP CONSTRAINT chat_message_transcript_tool_calls_pkey; CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id))"},
-		{name: "deferrable tool call conflict target", ddl: "ALTER TABLE chat_message_transcript_tool_calls DROP CONSTRAINT chat_message_transcript_tool_calls_pkey; ALTER TABLE chat_message_transcript_tool_calls ADD UNIQUE (message_id, tool_call_id) DEFERRABLE; CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id))"},
-		{name: "unique tool call conflict target", ddl: "ALTER TABLE chat_message_transcript_tool_calls DROP CONSTRAINT chat_message_transcript_tool_calls_pkey; CREATE UNIQUE INDEX ON chat_message_transcript_tool_calls (tool_call_id, message_id); CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id))", ok: true},
-		{name: "missing tool call table", ddl: "DROP TABLE chat_message_transcript_tool_calls; CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id))"},
-		{name: "tool call extra required column without default", ddl: "ALTER TABLE chat_message_transcript_tool_calls ADD COLUMN extra text NOT NULL; CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id))"},
-		{name: "tool call defaulted extra column", ddl: "ALTER TABLE chat_message_transcript_tool_calls ADD COLUMN extra text NOT NULL DEFAULT ''; CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id))", ok: true},
+		{name: "wrong type tool call id", ddl: "ALTER TABLE chat_message_tool_call_ids ALTER COLUMN tool_call_id TYPE integer USING 0; CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id))"},
+		{name: "nullable tool call chat", ddl: "ALTER TABLE chat_message_tool_call_ids ALTER COLUMN chat_id DROP NOT NULL; CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id))"},
+		{name: "missing tool call conflict target", ddl: "ALTER TABLE chat_message_tool_call_ids DROP CONSTRAINT chat_message_tool_call_ids_pkey; CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id))"},
+		{name: "deferrable tool call conflict target", ddl: "ALTER TABLE chat_message_tool_call_ids DROP CONSTRAINT chat_message_tool_call_ids_pkey; ALTER TABLE chat_message_tool_call_ids ADD UNIQUE (message_id, tool_call_id) DEFERRABLE; CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id))"},
+		{name: "unique tool call conflict target", ddl: "ALTER TABLE chat_message_tool_call_ids DROP CONSTRAINT chat_message_tool_call_ids_pkey; CREATE UNIQUE INDEX ON chat_message_tool_call_ids (tool_call_id, message_id); CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id))", ok: true},
+		{name: "missing tool call table", ddl: "DROP TABLE chat_message_tool_call_ids; CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id))"},
+		{name: "sidecar without source_updated_at", ddl: "CREATE TABLE chat_message_transcripts (" + strings.Replace(columns, ", source_updated_at timestamptz", "", 1) + ", PRIMARY KEY (message_id))"},
+		{name: "source_hash still required", ddl: "CREATE TABLE chat_message_transcripts (" + strings.Replace(columns, "source_hash bytea", "source_hash bytea NOT NULL", 1) + ", PRIMARY KEY (message_id))"},
+		{name: "missing insert trigger", ddl: "DROP TRIGGER chat_messages_source_updated_at_insert ON chat_messages; CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id))"},
+		{name: "disabled update trigger", ddl: "ALTER TABLE chat_messages DISABLE TRIGGER chat_messages_source_updated_at_update; CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id))"},
+		{name: "tool call extra required column without default", ddl: "ALTER TABLE chat_message_tool_call_ids ADD COLUMN extra text NOT NULL; CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id))"},
+		{name: "tool call defaulted extra column", ddl: "ALTER TABLE chat_message_tool_call_ids ADD COLUMN extra text NOT NULL DEFAULT ''; CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id))", ok: true},
 	}
+	base := "CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id)); "
 	for _, name := range []string{"tool_call_count", "content_bytes", "content_raw_bytes", "tool_calls_bytes"} {
 		tests = append(tests,
-			schemaCase{name: "missing " + name, ddl: "CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id)); ALTER TABLE chat_message_transcripts DROP COLUMN " + name},
-			schemaCase{name: "wrong type " + name, ddl: "CREATE TABLE chat_message_transcripts (" + strings.Replace(columns, name+" integer", name+" text", 1) + ", PRIMARY KEY (message_id))"},
+			schemaCase{name: "chat_messages missing " + name, ddl: base + "ALTER TABLE chat_messages DROP COLUMN " + name},
+			schemaCase{name: "chat_messages wrong type " + name, ddl: base + "ALTER TABLE chat_messages ALTER COLUMN " + name + " TYPE text"},
 		)
 	}
+	// CASCADE also drops the triggers that read source_updated_at.
+	tests = append(tests, schemaCase{name: "chat_messages missing source_updated_at", ddl: base + "ALTER TABLE chat_messages DROP COLUMN source_updated_at CASCADE"})
 	for _, column := range []struct{ name, typ string }{
 		{"message_id", "uuid"}, {"project_id", "uuid"}, {"organization_id", "text"},
-		{"ciphertext", "text"}, {"source_hash", "bytea"}, {"updated_at", "timestamptz"},
+		{"ciphertext", "text"}, {"updated_at", "timestamptz"},
 	} {
 		base := "CREATE TABLE chat_message_transcripts (" + columns + ", UNIQUE (message_id)); "
 		tests = append(tests,
@@ -217,11 +223,10 @@ func TestTranscriptShadowSchemaFollowsSearchPath(t *testing.T) {
 	//nolint:glint // notestingrawsql: isolated DDL fixture that moves the table into another schema.
 	_, err = db.Exec(t.Context(), `DROP TABLE IF EXISTS chat_message_transcripts CASCADE;
 CREATE SCHEMA app;
-ALTER TABLE chat_message_transcript_tool_calls SET SCHEMA app;
+ALTER TABLE chat_message_tool_call_ids SET SCHEMA app;
 CREATE TABLE app.chat_message_transcripts (message_id uuid NOT NULL PRIMARY KEY, project_id uuid NOT NULL,
- organization_id text NOT NULL, ciphertext text NOT NULL, source_hash bytea NOT NULL,
- updated_at timestamptz NOT NULL DEFAULT clock_timestamp(), tool_call_count integer,
- content_bytes integer, content_raw_bytes integer, tool_calls_bytes integer)`)
+ organization_id text NOT NULL, ciphertext text NOT NULL, source_hash bytea,
+ updated_at timestamptz NOT NULL DEFAULT clock_timestamp(), source_updated_at timestamptz)`)
 	require.NoError(t, err)
 
 	tx, err := db.BeginTx(t.Context(), pgx.TxOptions{AccessMode: pgx.ReadOnly}) //nolint:glint // notestingrawsql: proves preflight is read-only.
@@ -230,7 +235,8 @@ CREATE TABLE app.chat_message_transcripts (message_id uuid NOT NULL PRIMARY KEY,
 	require.EqualError(t, checkTranscriptSchema(t.Context(), tx), "chat transcript shadow schema is unavailable or incompatible",
 		"a table outside the search_path is not the one the store would use")
 
-	_, err = tx.Exec(t.Context(), "SET LOCAL search_path = app") //nolint:glint // notestingrawsql: mirrors the deployed connection's search_path.
+	// Put app first and keep the rest of the path, which still reaches chat_messages.
+	_, err = tx.Exec(t.Context(), "SELECT set_config('search_path', 'app, ' || current_setting('search_path'), true)") //nolint:glint // notestingrawsql: mirrors the deployed connection's search_path.
 	require.NoError(t, err)
 	require.NoError(t, checkTranscriptSchema(t.Context(), tx))
 }

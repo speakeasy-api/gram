@@ -107,12 +107,12 @@ func (q *Queries) CreateProject(ctx context.Context, iD uuid.UUID, organizationI
 	return result.RowsAffected(), nil
 }
 
-const forgeSourceHash = `-- name: ForgeSourceHash :execrows
-UPDATE chat_message_transcripts t SET source_hash=sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')) FROM chat_messages m WHERE m.id=t.message_id AND m.id=$1 AND m.project_id=$2 AND t.project_id=$2 AND t.organization_id=$3
+const forgeSourceUpdatedAt = `-- name: ForgeSourceUpdatedAt :execrows
+UPDATE chat_message_transcripts t SET source_updated_at=m.source_updated_at, source_hash=NULL FROM chat_messages m WHERE m.id=t.message_id AND m.id=$1 AND m.project_id=$2 AND t.project_id=$2 AND t.organization_id=$3
 `
 
-func (q *Queries) ForgeSourceHash(ctx context.Context, iD uuid.UUID, projectID uuid.NullUUID, organizationID string) (int64, error) {
-	result, err := q.db.Exec(ctx, forgeSourceHash, iD, projectID, organizationID)
+func (q *Queries) ForgeSourceUpdatedAt(ctx context.Context, iD uuid.UUID, projectID uuid.NullUUID, organizationID string) (int64, error) {
+	result, err := q.db.Exec(ctx, forgeSourceUpdatedAt, iD, projectID, organizationID)
 	if err != nil {
 		return 0, err
 	}
@@ -154,9 +154,11 @@ func (q *Queries) MarkRiskAnalyzed(ctx context.Context, id uuid.UUID) (int64, er
 }
 
 const messageSnapshot = `-- name: MessageSnapshot :one
-SELECT row_to_json(m)::text FROM chat_messages m WHERE id=$1 AND project_id=$2
+SELECT (to_jsonb(m) - 'tool_call_count' - 'content_bytes' - 'content_raw_bytes' - 'tool_calls_bytes')::text FROM chat_messages m WHERE id=$1 AND project_id=$2
 `
 
+// The message as sealing must leave it: the metadata columns are the only ones
+// it writes.
 func (q *Queries) MessageSnapshot(ctx context.Context, iD uuid.UUID, projectID uuid.NullUUID) (string, error) {
 	row := q.db.QueryRow(ctx, messageSnapshot, iD, projectID)
 	var column_1 string
@@ -326,7 +328,7 @@ func (q *Queries) SetToolCalls(ctx context.Context, toolCalls []byte, iD uuid.UU
 }
 
 const shadowMetadata = `-- name: ShadowMetadata :one
-SELECT tool_call_count, content_bytes, content_raw_bytes, tool_calls_bytes FROM chat_message_transcripts WHERE message_id=$1
+SELECT tool_call_count, content_bytes, content_raw_bytes, tool_calls_bytes FROM chat_messages WHERE id=$1 AND tool_call_count IS NOT NULL
 `
 
 type ShadowMetadataRow struct {
@@ -336,8 +338,8 @@ type ShadowMetadataRow struct {
 	ToolCallsBytes  pgtype.Int4
 }
 
-func (q *Queries) ShadowMetadata(ctx context.Context, messageID uuid.UUID) (ShadowMetadataRow, error) {
-	row := q.db.QueryRow(ctx, shadowMetadata, messageID)
+func (q *Queries) ShadowMetadata(ctx context.Context, id uuid.UUID) (ShadowMetadataRow, error) {
+	row := q.db.QueryRow(ctx, shadowMetadata, id)
 	var i ShadowMetadataRow
 	err := row.Scan(
 		&i.ToolCallCount,
@@ -349,7 +351,7 @@ func (q *Queries) ShadowMetadata(ctx context.Context, messageID uuid.UUID) (Shad
 }
 
 const shadowToolCallIDs = `-- name: ShadowToolCallIDs :many
-SELECT tool_call_id FROM chat_message_transcript_tool_calls WHERE message_id=$1 ORDER BY tool_call_id
+SELECT tool_call_id FROM chat_message_tool_call_ids WHERE message_id=$1 ORDER BY tool_call_id
 `
 
 func (q *Queries) ShadowToolCallIDs(ctx context.Context, messageID uuid.UUID) ([]string, error) {

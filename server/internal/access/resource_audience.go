@@ -118,15 +118,13 @@ func (s *Service) ListResourceAudience(ctx context.Context, payload *gen.ListRes
 	if err != nil {
 		return nil, err
 	}
-	// Organization admins can always read the rules they are allowed to write
-	// (SetResourceAudience requires only org:admin). Without this, a block that
-	// reaches an admin through user:all or one of their roles would hide the
-	// server's rules from them, and the organization-wide assignment review
-	// could never load.
-	if err := s.authz.RequireAny(ctx,
+	// Organization admins can read the rules they are allowed to write
+	// (SetResourceAudience requires only org:admin), unless a block on the
+	// server reaches them.
+	if err := s.authz.Require(ctx, authz.Either(
 		authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin(),
 		authz.MCPServer(authz.MCPServerIDFrom(payload.ResourceID), authz.ProjectIDFrom(projectID)).Read(),
-	); err != nil {
+	)); err != nil {
 		return nil, err
 	}
 	// The entries name the people each rule reaches, so seeing them takes
