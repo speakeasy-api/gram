@@ -103,7 +103,8 @@ rollout, migrate those writes too and establish a fenced plaintext-removal proto
 
 `transcriptstore.Transcripts` holds the store and the capture allowlist, and is
 the one place that decides per project whether a write captures a shadow and a
-read opens one. `Capture` and `Open` do nothing for a project off the list, and a nil
+read opens one. `Capture` and `Open` do nothing for a project off the list,
+`Backfill` and `Progress` return `ErrNotEnabled` for it, and a nil
 `Transcripts` serves no project. The writer captures through
 `Transcripts.Capture`, and readers open a page of any sqlc row type with
 `transcriptstore.OpenRows`, which maps each row to a `Body` of pointers at its
@@ -166,10 +167,14 @@ outcome) and `transcriptstore.Capture` / `transcriptstore.LoadMany` spans.
 Capture only seals messages written after a project joins the capture
 allowlist. `gram transcript-shadow-backfill` seals the messages that already
 exist. Run it from a server pod, which has the organization encryption identity
-and settings. The project must be on the capture allowlist
-(`GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS`), or the command refuses to run:
-sealing a project that does not capture leaves shadows that go stale on its
-next write.
+and settings. It builds the same `Transcripts` the server builds at startup
+(checking the schema and provisioning keys for the allowlisted projects) and
+seals through `Transcripts.Backfill`, so each backfilled shadow gets the same
+metadata and tool-call ID rows as a live capture. It also recaptures shadows
+sealed before the metadata columns existed. A project off the capture allowlist
+(`GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS`) gets `ErrNotEnabled` and the command
+refuses to run: sealing a project that does not capture leaves shadows that go
+stale on its next write.
 
 ```sh
 gram transcript-shadow-backfill --project-id <PROJECT_ID>
@@ -184,10 +189,9 @@ and reports coverage again at the end. When a run stops early (an error or
 reaches the end of the project prints no cursor: start the next sweep from the
 zero cursor so it covers messages inserted below the prior one.
 
-Reads do not use shadows yet: `chat.load` still serves plaintext. Shadow reads
-depend on #9534. Once they land, a message with no shadow falls back to its
-plaintext body and the read metric counts it under the `plaintext_fallback`
-outcome, and the backfill is what drives that count to zero for a project.
+Shadow reads (above) serve the plaintext body of a message that has no shadow
+and count it under the `plaintext_fallback` read outcome. The backfill is what
+drives that count to zero for a project.
 Only `success` and `plaintext_fallback` serve the message. Every other read
 outcome (`not_found`, `stale`, `changed`, `invalid`, `error`) fails the read, so
 a zero `plaintext_fallback` count means reads are using shadows only when those

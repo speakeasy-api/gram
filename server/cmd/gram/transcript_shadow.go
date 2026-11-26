@@ -42,6 +42,23 @@ func parseTranscriptShadowProjectIDs(values []string) ([]uuid.UUID, error) {
 // messages. It returns nil when no project keeps shadows.
 func configureTranscriptShadow(ctx context.Context, c *cli.Context, db *pgxpool.Pool, writer *chat.ChatMessageWriter, orgEncryption orgEncryptionDeps, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider) (*transcriptstore.Transcripts, error) {
 	var none *transcriptstore.Transcripts
+	// Check the writer before newTranscriptShadow provisions any key.
+	if writer == nil && len(c.StringSlice(chatTranscriptShadowProjectIDsFlag)) > 0 {
+		return none, fmt.Errorf("chat transcript shadow requires a writer")
+	}
+	transcripts, err := newTranscriptShadow(ctx, c, db, orgEncryption, tracerProvider, meterProvider)
+	if err != nil || transcripts == nil {
+		return none, err
+	}
+	writer.WithTranscripts(transcripts)
+	return transcripts, nil
+}
+
+// newTranscriptShadow builds Transcripts for the projects on the capture
+// allowlist: it checks the schema, then provisions each of their
+// organizations' keys. It returns nil when no project keeps shadows.
+func newTranscriptShadow(ctx context.Context, c *cli.Context, db *pgxpool.Pool, orgEncryption orgEncryptionDeps, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider) (*transcriptstore.Transcripts, error) {
+	var none *transcriptstore.Transcripts
 	values := c.StringSlice(chatTranscriptShadowProjectIDsFlag)
 	if len(values) == 0 {
 		// An explicitly supplied blank must not silently disable the feature.
@@ -57,8 +74,8 @@ func configureTranscriptShadow(ctx context.Context, c *cli.Context, db *pgxpool.
 	if orgEncryption.Service == nil || orgEncryption.Provisioner == nil {
 		return none, fmt.Errorf("chat transcript shadow requires organization encryption service and provisioner")
 	}
-	if db == nil || writer == nil {
-		return none, fmt.Errorf("chat transcript shadow requires database and writer")
+	if db == nil {
+		return none, fmt.Errorf("chat transcript shadow requires database")
 	}
 	// Check compatibility before resolving projects, provisioning keys or enabling writes.
 	if err := checkTranscriptShadowSchema(ctx, db); err != nil {
@@ -91,9 +108,7 @@ func configureTranscriptShadow(ctx context.Context, c *cli.Context, db *pgxpool.
 			return none, fmt.Errorf("provision chat transcript shadow encryption: %w", err)
 		}
 	}
-	transcripts := transcriptstore.NewTranscripts(store, projectIDs...)
-	writer.WithTranscripts(transcripts)
-	return transcripts, nil
+	return transcriptstore.NewTranscripts(store, projectIDs...), nil
 }
 
 // checkTranscriptShadowSchema checks the tables the store writes: the sidecar

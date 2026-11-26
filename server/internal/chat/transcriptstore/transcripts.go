@@ -2,6 +2,7 @@ package transcriptstore
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -9,6 +10,11 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore/repo"
 )
+
+// ErrNotEnabled means the project does not keep shadows, so it has nothing to
+// backfill or measure. Sealing copies for such a project would leave shadows
+// that go stale on its next write.
+var ErrNotEnabled = errors.New("project does not keep transcript shadows")
 
 // Transcripts is the one entry point for the bodies of chat messages in
 // projects that keep encrypted shadows. It owns the decision a caller would
@@ -49,6 +55,34 @@ func (t *Transcripts) Capture(ctx context.Context, db repo.DBTX, organizationID 
 		return fmt.Errorf("capture encrypted transcript shadow: %w", err)
 	}
 	return nil
+}
+
+// Backfill seals one page of the project's existing messages after the
+// cursor, with the same capture and metadata as a live write. See
+// Store.Backfill for the page and retry contract. It returns ErrNotEnabled for
+// a project that does not keep shadows.
+func (t *Transcripts) Backfill(ctx context.Context, organizationID string, projectID, after uuid.UUID, limit int32) (Page, error) {
+	if !t.Enabled(projectID) {
+		return Page{After: after, Count: 0, More: false}, ErrNotEnabled
+	}
+	page, err := t.store.Backfill(ctx, organizationID, projectID, after, limit)
+	if err != nil {
+		return page, fmt.Errorf("backfill encrypted transcript shadows: %w", err)
+	}
+	return page, nil
+}
+
+// Progress reports the project's shadow coverage. It returns ErrNotEnabled
+// for a project that does not keep shadows.
+func (t *Transcripts) Progress(ctx context.Context, organizationID string, projectID uuid.UUID) (Progress, error) {
+	if !t.Enabled(projectID) {
+		return Progress{Current: 0, Waiting: 0, Unattributed: 0}, ErrNotEnabled
+	}
+	progress, err := t.store.Progress(ctx, organizationID, projectID)
+	if err != nil {
+		return progress, fmt.Errorf("read encrypted transcript shadow coverage: %w", err)
+	}
+	return progress, nil
 }
 
 // Body points at the body fields of one loaded message, so Open can replace

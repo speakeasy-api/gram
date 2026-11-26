@@ -42,26 +42,36 @@ func TestBackfillTranscriptShadowsSealsEveryPageAndResumes(t *testing.T) {
 	require.NoError(t, keys.Provisioner.EnsureUseCase(t.Context(), org, orgencryption.UseCaseChatTranscripts, orgencryption.SystemActor()))
 	store, err := transcriptstore.New(db, keys.Service, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t))
 	require.NoError(t, err)
+	transcripts := transcriptstore.NewTranscripts(store, projectID)
+
+	// A project off the capture allowlist is never sealed.
+	_, err = backfillTranscriptShadows(t.Context(), transcriptstore.NewTranscripts(store, uuid.New()), org, projectID, uuid.Nil, 2, 0)
+	require.ErrorIs(t, err, transcriptstore.ErrNotEnabled)
 
 	// One page of two, then resume from its cursor until the project is covered.
-	run, err := backfillTranscriptShadows(t.Context(), store, org, projectID, uuid.Nil, 2, 1)
+	run, err := backfillTranscriptShadows(t.Context(), transcripts, org, projectID, uuid.Nil, 2, 1)
 	require.NoError(t, err)
 	require.Equal(t, 2, run.Sealed)
 	require.False(t, run.Complete)
 	require.NotEqual(t, uuid.Nil, run.After)
 
-	run, err = backfillTranscriptShadows(t.Context(), store, org, projectID, run.After, 2, 0)
+	run, err = backfillTranscriptShadows(t.Context(), transcripts, org, projectID, run.After, 2, 0)
 	require.NoError(t, err)
 	require.Equal(t, messages-2, run.Sealed)
 	require.True(t, run.Complete)
 
 	// Coverage counts fingerprints; opening every shadow proves they decrypt.
+	// Backfill fills the plaintext-free metadata like a live capture.
 	for _, id := range ids {
 		_, err := store.Load(t.Context(), org, projectID, id)
 		require.NoError(t, err)
+		meta, err := fixtures.ShadowMetadata(t.Context(), id)
+		require.NoError(t, err)
+		require.True(t, meta.ToolCallCount.Valid)
+		require.True(t, meta.ContentBytes.Valid)
 	}
 
-	progress, err := store.Progress(t.Context(), org, projectID)
+	progress, err := transcripts.Progress(t.Context(), org, projectID)
 	require.NoError(t, err)
 	require.Equal(t, transcriptstore.Progress{Current: messages, Waiting: 0, Unattributed: 0}, progress)
 }

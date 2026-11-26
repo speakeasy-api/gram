@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"slices"
 
 	"github.com/google/uuid"
 	"github.com/urfave/cli/v2"
@@ -13,11 +12,10 @@ import (
 
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
-	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 )
 
 const (
-	// transcriptShadowBackfillMaxPage is the largest page Store.Backfill accepts.
+	// transcriptShadowBackfillMaxPage is the largest page Transcripts.Backfill accepts.
 	// Each page is one transaction that seals every message in it.
 	transcriptShadowBackfillMaxPage = 500
 
@@ -72,15 +70,6 @@ func newTranscriptShadowBackfillCommand() *cli.Command {
 			if maxPages < 0 {
 				return errors.New("max-pages must not be negative")
 			}
-			// Sealing copies for a project that does not capture would leave
-			// shadows that go stale on its next write and encrypt data nobody opted in.
-			captureProjectIDs, err := parseTranscriptShadowProjectIDs(c.StringSlice(chatTranscriptShadowProjectIDsFlag))
-			if err != nil {
-				return err
-			}
-			if !slices.Contains(captureProjectIDs, projectID) {
-				return fmt.Errorf("project must be listed in --%s", chatTranscriptShadowProjectIDsFlag)
-			}
 			apply := c.Bool("apply")
 			if apply && c.String("confirm-environment") != c.String("environment") {
 				return errors.New("--apply requires --confirm-environment to equal --environment")
@@ -101,16 +90,20 @@ func newTranscriptShadowBackfillCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
-			if orgEncryption.Service == nil || orgEncryption.Provisioner == nil {
-				return errors.New("transcript shadow backfill requires organization encryption")
-			}
-			store, err := transcriptstore.New(db, orgEncryption.Service, otel.GetTracerProvider(), otel.GetMeterProvider())
+			// The same Transcripts the server builds at startup: it checks the
+			// schema and provisions keys for the projects on the capture
+			// allowlist. Sealing copies for a project that does not capture
+			// would leave shadows that go stale on its next write.
+			transcripts, err := newTranscriptShadow(ctx, c, db, orgEncryption, otel.GetTracerProvider(), otel.GetMeterProvider())
 			if err != nil {
-				return fmt.Errorf("create transcript shadow store: %w", err)
+				return err
+			}
+			if !transcripts.Enabled(projectID) {
+				return fmt.Errorf("project must be listed in --%s", chatTranscriptShadowProjectIDsFlag)
 			}
 
 			out := c.App.Writer
-			if err := writeTranscriptShadowProgress(ctx, out, store, organizationID, projectID, "before"); err != nil {
+			if err := writeTranscriptShadowProgress(ctx, out, transcripts, organizationID, projectID, "before"); err != nil {
 				return err
 			}
 			if !apply {
@@ -120,22 +113,14 @@ func newTranscriptShadowBackfillCommand() *cli.Command {
 				return nil
 			}
 
-			// Check the sidecar contract the same way capture startup does, so an
-			// incompatible schema stops the run before it creates a key.
-			if err := checkTranscriptShadowSchema(ctx, db); err != nil {
-				return err
-			}
-			if err := orgEncryption.Provisioner.EnsureUseCase(ctx, organizationID, orgencryption.UseCaseChatTranscripts, orgencryption.SystemActor()); err != nil {
-				return fmt.Errorf("provision transcript encryption: %w", err)
-			}
-			run, err := backfillTranscriptShadows(ctx, store, organizationID, projectID, after, int32(pageSize), maxPages)
+			run, err := backfillTranscriptShadows(ctx, transcripts, organizationID, projectID, after, int32(pageSize), maxPages)
 			if writeErr := writeTranscriptShadowBackfillResult(out, run, err); writeErr != nil {
 				return writeErr
 			}
 			if err != nil {
 				return err
 			}
-			return writeTranscriptShadowProgress(ctx, out, store, organizationID, projectID, "after")
+			return writeTranscriptShadowProgress(ctx, out, transcripts, organizationID, projectID, "after")
 		},
 	}
 }
@@ -157,10 +142,10 @@ type transcriptShadowBackfillRun struct {
 // backfillTranscriptShadows seals pages until the project is covered or
 // maxPages pages are sealed (0 means no limit). It returns the run, including
 // the cursor to resume from when it fails or stops early.
-func backfillTranscriptShadows(ctx context.Context, store *transcriptstore.Store, organizationID string, projectID, after uuid.UUID, pageSize int32, maxPages int) (transcriptShadowBackfillRun, error) {
+func backfillTranscriptShadows(ctx context.Context, transcripts *transcriptstore.Transcripts, organizationID string, projectID, after uuid.UUID, pageSize int32, maxPages int) (transcriptShadowBackfillRun, error) {
 	run := transcriptShadowBackfillRun{Sealed: 0, After: after, Complete: false}
 	for pages := 0; maxPages == 0 || pages < maxPages; pages++ {
-		page, err := backfillTranscriptShadowPage(ctx, store, organizationID, projectID, run.After, pageSize)
+		page, err := backfillTranscriptShadowPage(ctx, transcripts, organizationID, projectID, run.After, pageSize)
 		if err != nil {
 			return run, err
 		}
@@ -189,9 +174,9 @@ func writeTranscriptShadowBackfillResult(out io.Writer, run transcriptShadowBack
 	return nil
 }
 
-func backfillTranscriptShadowPage(ctx context.Context, store *transcriptstore.Store, organizationID string, projectID, after uuid.UUID, pageSize int32) (transcriptstore.Page, error) {
+func backfillTranscriptShadowPage(ctx context.Context, transcripts *transcriptstore.Transcripts, organizationID string, projectID, after uuid.UUID, pageSize int32) (transcriptstore.Page, error) {
 	for attempt := 1; ; attempt++ {
-		page, err := store.Backfill(ctx, organizationID, projectID, after, pageSize)
+		page, err := transcripts.Backfill(ctx, organizationID, projectID, after, pageSize)
 		if err == nil {
 			return page, nil
 		}
@@ -201,8 +186,8 @@ func backfillTranscriptShadowPage(ctx context.Context, store *transcriptstore.St
 	}
 }
 
-func writeTranscriptShadowProgress(ctx context.Context, out io.Writer, store *transcriptstore.Store, organizationID string, projectID uuid.UUID, label string) error {
-	progress, err := store.Progress(ctx, organizationID, projectID)
+func writeTranscriptShadowProgress(ctx context.Context, out io.Writer, transcripts *transcriptstore.Transcripts, organizationID string, projectID uuid.UUID, label string) error {
+	progress, err := transcripts.Progress(ctx, organizationID, projectID)
 	if err != nil {
 		return fmt.Errorf("read transcript shadow coverage: %w", err)
 	}
