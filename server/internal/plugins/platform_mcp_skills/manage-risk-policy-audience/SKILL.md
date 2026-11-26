@@ -17,7 +17,7 @@ Use the executing client's authenticated Platform MCP connection. Installing thi
 
 ## Remove the authenticated requester
 
-For “remove me,” explain that removing the requester from a policy, or excluding anyone from it, is not supported, and no tool does it. Do not claim that deleting a positive user grant proves the requester is no longer covered.
+For “remove me,” explain that self-removal and effective exclusion are not supported. Do not claim that deleting a positive user grant proves the requester is no longer covered.
 
 Stop without writing. Do not work around this with `change_risk_policy_audience`, general audience replacement, policy disablement, role or membership changes, a risk exclusion, or reconstruction of Everyone as today's member list. Never infer a human from managed-assistant attribution. A separately requested administrator change to direct positive grants is a different outcome, not a workaround for self-exclusion.
 

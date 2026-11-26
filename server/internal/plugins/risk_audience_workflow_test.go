@@ -26,7 +26,7 @@ func TestGeneratePlatformMCPRiskAudienceWorkflow(t *testing.T) {
 	for _, guardrail := range []string{
 		"external OAuth connection",
 		"Stop without writing",
-		"no tool does it",
+		"self-removal and effective exclusion are not supported",
 		"Do not work around this",
 		"obtain confirmation again",
 		"`confirmed: false`",

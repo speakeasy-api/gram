@@ -127,7 +127,7 @@ func validateRiskPolicyAudienceDelta(input changeRiskPolicyAudienceInput) ([]urn
 
 func validateRiskPolicyAudienceDeltaTarget(kind string, audience []string, input changeRiskPolicyAudienceInput) error {
 	if kind != "targeted" {
-		return selfRemovalRefusal("Audience deltas require a targeted audience; Everyone-except-one is not supported.")
+		return invalidRiskPolicyAudienceRefusal("Audience deltas require a targeted audience; Everyone-except-one is not supported.")
 	}
 	remaining := make(map[string]bool, len(audience))
 	for _, value := range audience {
@@ -139,18 +139,18 @@ func validateRiskPolicyAudienceDeltaTarget(kind string, audience []string, input
 	}
 	for _, value := range input.RemovePrincipals {
 		if !remaining[value] {
-			return selfRemovalRefusal("A removal has no exact audience grant. No policy was changed.")
+			return invalidRiskPolicyAudienceRefusal("A removal has no exact audience grant. No policy was changed.")
 		}
 		delete(remaining, value)
 	}
 	for _, value := range input.AddPrincipals {
 		if remaining[value] {
-			return selfRemovalRefusal("An addition already has an exact audience grant. No policy was changed.")
+			return invalidRiskPolicyAudienceRefusal("An addition already has an exact audience grant. No policy was changed.")
 		}
 		remaining[value] = true
 	}
 	if len(remaining) == 0 || len(remaining) > 100 {
-		return selfRemovalRefusal("The resulting targeted audience must contain between 1 and 100 principals. No policy was changed.")
+		return invalidRiskPolicyAudienceRefusal("The resulting targeted audience must contain between 1 and 100 principals. No policy was changed.")
 	}
 	return nil
 }
@@ -166,6 +166,6 @@ func riskPolicyAudienceReplacementSchema() *jsonschema.Schema {
 	return &jsonschema.Schema{OneOf: []*jsonschema.Schema{branch("everyone", 0, 0), branch("targeted", 1, 100)}}
 }
 
-func selfRemovalRefusal(message string) error {
+func invalidRiskPolicyAudienceRefusal(message string) error {
 	return &RiskMutationError{Code: "invalid_request", Message: message, Cause: ErrRiskMutationInvalid}
 }
