@@ -68,10 +68,11 @@ func (e *Engine) Decide(ctx context.Context, checks ...Check) (Decisions, error)
 	if !q.enforced {
 		return result, nil
 	}
-	e.reportAuthorizerRefusals(ctx, q.grants, allowedPlainChecks(verdicts), false)
+	e.reportAuthorizerRefusals(ctx, q.grants, allowedPlainChecks(verdicts))
 	for _, v := range verdicts {
 		if v.Allowed && v.check.group != nil {
-			e.reportAuthorizerRefusals(ctx, q.grants, q.grants.allowedAlternatives(v.check.group), true)
+			refused, err := q.grants.authorizerRefusesGroup(v.check.group)
+			reportAuthorizerRefusal(ctx, e.logger, q.grants, refused, err)
 		}
 	}
 	if len(checks) > 0 {
@@ -160,10 +161,11 @@ func (e *Engine) requireAll(ctx context.Context, q question, checks []Check, exp
 		return nil
 	}
 	if operation == authzrepo.OperationRequireAny {
-		e.reportAuthorizerRefusals(ctx, q.grants, q.grants.allowedAlternatives(allowed[0].check.group), true)
+		refused, err := q.grants.authorizerRefusesGroup(allowed[0].check.group)
+		reportAuthorizerRefusal(ctx, e.logger, q.grants, refused, err)
 		row.Focus = &allowed[0].check.group[allowed[0].alternative]
 	} else {
-		e.reportAuthorizerRefusals(ctx, q.grants, checks, false)
+		e.reportAuthorizerRefusals(ctx, q.grants, checks)
 	}
 	row.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
 	return nil
