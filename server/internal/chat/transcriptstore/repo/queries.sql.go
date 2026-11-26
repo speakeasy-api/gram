@@ -80,6 +80,28 @@ func (q *Queries) Capture(ctx context.Context, arg CaptureParams) (int64, error)
 	return result.RowsAffected(), nil
 }
 
+const currentCiphertext = `-- name: CurrentCiphertext :one
+SELECT ciphertext FROM chat_message_transcripts
+WHERE message_id = $1 AND project_id = $2 AND organization_id = $3
+  AND source_hash IS NULL
+`
+
+type CurrentCiphertextParams struct {
+	MessageID      uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+// The transcript an update decrypts and changes. Call it after Snapshot, which
+// holds the message lock. A legacy transcript with source_hash may be stale,
+// so it is not returned and the update starts from the plaintext row.
+func (q *Queries) CurrentCiphertext(ctx context.Context, arg CurrentCiphertextParams) (string, error) {
+	row := q.db.QueryRow(ctx, currentCiphertext, arg.MessageID, arg.ProjectID, arg.OrganizationID)
+	var ciphertext string
+	err := row.Scan(&ciphertext)
+	return ciphertext, err
+}
+
 const deleteToolCallIDs = `-- name: DeleteToolCallIDs :exec
 DELETE FROM chat_message_tool_call_ids WHERE message_id = $1 AND project_id = $2
 `

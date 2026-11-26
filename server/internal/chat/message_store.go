@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptcrypto"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/metering"
@@ -148,7 +149,7 @@ func NewChatMessageWriter(logger *slog.Logger, db *pgxpool.Pool, assetStorage as
 // transaction as the write, for projects with encrypted transcripts. Configure it before
 // serving requests, after the schema migration and organization key
 // provisioning. It does not encrypt assets or remove plaintext. Body updates
-// outside the writer reseal through SealTranscripts.
+// outside the writer change the transcript through UpdateTranscript.
 func (w *ChatMessageWriter) WithTranscripts(transcripts *transcriptstore.Transcripts) *ChatMessageWriter {
 	w.transcripts = transcripts
 	return w
@@ -181,17 +182,17 @@ func (w *ChatMessageWriter) sealTranscripts(ctx context.Context, db repo.DBTX, o
 	return w.transcripts.Seal(ctx, db, organizationID, projectID, messageIDs)
 }
 
-// SealTranscripts reseals the encrypted transcripts of messages whose body the
-// caller just updated, inside the caller's transaction, for projects with
-// encrypted transcripts. Call PrepareTranscripts before beginning that
-// transaction. Body updates delete the old transcript, so a caller that skips
-// this leaves the message on plaintext until backfill. A nil writer seals
-// nothing.
-func (w *ChatMessageWriter) SealTranscripts(ctx context.Context, db repo.DBTX, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID) error {
+// UpdateTranscript changes the encrypted transcript of a message whose body
+// the caller just updated in plaintext, inside the caller's transaction: it
+// decrypts the transcript, applies the same change in Go and re-encrypts. Call
+// PrepareTranscripts before beginning the transaction. A nil writer, or a
+// project without encrypted transcripts, updates nothing.
+func (w *ChatMessageWriter) UpdateTranscript(ctx context.Context, db repo.DBTX, organizationID string, projectID, messageID uuid.UUID, apply func(*transcriptcrypto.Message) error) error {
 	if w == nil {
 		return nil
 	}
-	return w.sealTranscripts(ctx, db, organizationID, projectID, messageIDs)
+	//nolint:wrapcheck // Update already wraps with the transcript context.
+	return w.transcripts.Update(ctx, db, organizationID, projectID, messageID, apply)
 }
 
 func messageWriteIDs(writes []MessageWrite) []uuid.UUID {

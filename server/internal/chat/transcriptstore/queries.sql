@@ -10,6 +10,14 @@ WHERE m.id = @message_id AND m.project_id = @project_id AND p.organization_id = 
 FOR NO KEY UPDATE OF m
 FOR SHARE OF c, p;
 
+-- name: CurrentCiphertext :one
+-- The transcript an update decrypts and changes. Call it after Snapshot, which
+-- holds the message lock. A legacy transcript with source_hash may be stale,
+-- so it is not returned and the update starts from the plaintext row.
+SELECT ciphertext FROM chat_message_transcripts
+WHERE message_id = @message_id AND project_id = @project_id AND organization_id = @organization_id
+  AND source_hash IS NULL;
+
 -- name: Capture :execrows
 -- A resealed transcript drops the legacy source_hash.
 INSERT INTO chat_message_transcripts (message_id, project_id, organization_id, ciphertext)

@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptcrypto"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 )
 
@@ -106,7 +107,7 @@ func (w *ChatMessageWriter) ProjectMessage(ctx context.Context, projectID, messa
 				return false, fmt.Errorf("look up projection shadow organization: %w", err)
 			}
 		}
-		if err := w.sealTranscripts(ctx, tx, organizationID, projectID, []uuid.UUID{messageID}); err != nil {
+		if err := w.sealProjection(ctx, tx, organizationID, projectID, messageID, exists, write); err != nil {
 			return false, err
 		}
 	}
@@ -118,4 +119,20 @@ func (w *ChatMessageWriter) ProjectMessage(ctx context.Context, projectID, messa
 		w.notifyMessagesStored(ctx, projectID)
 	}
 	return changed > 0, nil
+}
+
+// sealProjection seals a new projected message, or changes the transcript of a
+// patched one: the patch replaces content, content_raw and tool_calls, and the
+// transcript gets the same change.
+func (w *ChatMessageWriter) sealProjection(ctx context.Context, tx repo.DBTX, organizationID string, projectID, messageID uuid.UUID, patched bool, write MessageWrite) error {
+	if !patched {
+		return w.sealTranscripts(ctx, tx, organizationID, projectID, []uuid.UUID{messageID})
+	}
+	//nolint:wrapcheck // Update already wraps with the transcript context.
+	return w.transcripts.Update(ctx, tx, organizationID, projectID, messageID, func(m *transcriptcrypto.Message) error {
+		m.Content = write.Params.Content
+		m.ContentRaw = write.Params.ContentRaw
+		m.ToolCalls = write.Params.ToolCalls
+		return nil
+	})
 }
