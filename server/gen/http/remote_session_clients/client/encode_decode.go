@@ -2993,6 +2993,22 @@ func unmarshalEMAProviderResponseBodyToTypesEMAProvider(v *EMAProviderResponseBo
 	return res
 }
 
+// unmarshalIdentityChainingServerResponseBodyToRemotesessionclientsIdentityChainingServer
+// builds a value of type *remotesessionclients.IdentityChainingServer from a
+// value of type *IdentityChainingServerResponseBody.
+func unmarshalIdentityChainingServerResponseBodyToRemotesessionclientsIdentityChainingServer(v *IdentityChainingServerResponseBody) *remotesessionclients.IdentityChainingServer {
+	if v == nil {
+		return nil
+	}
+	res := &remotesessionclients.IdentityChainingServer{
+		ID:   *v.ID,
+		Name: *v.Name,
+		Slug: *v.Slug,
+	}
+
+	return res
+}
+
 // unmarshalRemoteSessionClientResponseBodyToTypesRemoteSessionClient builds a
 // value of type *types.RemoteSessionClient from a value of type
 // *RemoteSessionClientResponseBody.

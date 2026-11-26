@@ -8294,6 +8294,147 @@ func (q *Queries) ListEMABindingAcceptanceForOrganization(ctx context.Context, o
 	return items, nil
 }
 
+const listEMABindingCandidateServers = `-- name: ListEMABindingCandidateServers :many
+SELECT m.id
+FROM mcp_servers m
+JOIN projects p ON p.id = m.project_id AND p.organization_id = $1::text AND p.deleted IS FALSE
+LEFT JOIN remote_mcp_servers r ON r.id = m.remote_mcp_server_id AND r.project_id = m.project_id AND r.deleted IS FALSE
+LEFT JOIN tunneled_mcp_servers t ON t.id = m.tunneled_mcp_server_id AND t.deleted IS FALSE
+WHERE m.project_id = $2
+  AND m.deleted IS FALSE
+  AND (m.user_session_issuer_id = $3::uuid
+    OR $3::uuid = (
+      -- The gateways' issuer, as ListEMABindingServers reads it.
+      SELECT (array_agg(gi.id))[1]
+      FROM user_session_issuers AS gi
+      WHERE gi.organization_id = $1::text
+        AND gi.project_id IS NULL
+        AND gi.deleted IS FALSE
+        AND EXISTS (
+          SELECT 1 FROM organization_features AS gf
+          WHERE gf.organization_id = $1::text
+            AND gf.feature_name = 'organization_gateway_disabled'
+        )
+      HAVING count(*) = 1
+    ))
+  AND (
+    (r.id IS NOT NULL AND (
+      lower(substring(r.url from '^https?://[^/?#]+')) = lower(substring($4::text from '^https?://[^/?#]+'))
+      OR EXISTS (
+        SELECT 1 FROM remote_protected_resources rpr
+        WHERE rpr.project_id = m.project_id AND rpr.deleted IS FALSE
+          AND (rpr.resource_identifier = $4::text OR rpr.metadata->>'resource' = $4::text)
+          AND lower(substring(rpr.metadata_url from '^https?://[^/?#]+')) = lower(substring(r.url from '^https?://[^/?#]+'))
+      )
+    ))
+    OR (t.id IS NOT NULL AND t.resource_identifier = $4::text)
+  )
+ORDER BY m.id
+`
+
+type ListEMABindingCandidateServersParams struct {
+	OrganizationID      string
+	ProjectID           uuid.UUID
+	UserSessionIssuerID uuid.UUID
+	Resource            string
+}
+
+// Live servers in the project a binding target could reach once on: a superset of ListEMABindingServers and ListEMASameOriginServers.
+func (q *Queries) ListEMABindingCandidateServers(ctx context.Context, arg ListEMABindingCandidateServersParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listEMABindingCandidateServers,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.UserSessionIssuerID,
+		arg.Resource,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEMABindingTargetServers = `-- name: ListEMABindingTargetServers :many
+SELECT m.id, m.toolset_id, COALESCE(m.name, '')::text AS name, COALESCE(m.slug, '')::text AS slug
+FROM mcp_servers m
+JOIN projects p ON p.id = m.project_id AND p.organization_id = $1::text AND p.deleted IS FALSE
+LEFT JOIN remote_mcp_servers r ON r.id = m.remote_mcp_server_id AND r.project_id = m.project_id AND r.deleted IS FALSE
+WHERE m.project_id = $2
+  AND m.deleted IS FALSE
+  AND (
+    m.id = ANY($3::uuid[])
+    OR (NOT $4::boolean AND r.id IS NOT NULL AND m.user_session_issuer_id = $5 AND (
+      r.url = $6::text
+      OR EXISTS (
+        SELECT 1 FROM remote_protected_resources rpr
+        WHERE rpr.project_id = r.project_id AND rpr.resource_identifier = r.url AND rpr.deleted IS FALSE
+          AND rpr.metadata->>'resource' = $6::text
+      )
+    ))
+  )
+ORDER BY COALESCE(m.name, ''), m.id
+`
+
+type ListEMABindingTargetServersParams struct {
+	OrganizationID      string
+	ProjectID           uuid.UUID
+	ReachedServerIds    []uuid.UUID
+	Ready               bool
+	UserSessionIssuerID uuid.NullUUID
+	Resource            string
+}
+
+type ListEMABindingTargetServersRow struct {
+	ID        uuid.UUID
+	ToolsetID uuid.NullUUID
+	Name      string
+	Slug      string
+}
+
+// Live servers in the project a binding target reaches: once ready, only those the binding writer matched; before, remote servers on its sign-in naming its resource.
+func (q *Queries) ListEMABindingTargetServers(ctx context.Context, arg ListEMABindingTargetServersParams) ([]ListEMABindingTargetServersRow, error) {
+	rows, err := q.db.Query(ctx, listEMABindingTargetServers,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.ReachedServerIds,
+		arg.Ready,
+		arg.UserSessionIssuerID,
+		arg.Resource,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListEMABindingTargetServersRow
+	for rows.Next() {
+		var i ListEMABindingTargetServersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ToolsetID,
+			&i.Name,
+			&i.Slug,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listEMABindingsForUpstream = `-- name: ListEMABindingsForUpstream :many
 SELECT id, project_id, organization_id, user_session_issuer_id, remote_session_issuer_id, resource, remote_session_client_id, generation, state, grant_source, requested_scopes, claim_id, claimed_at, created_at, updated_at FROM remote_session_ema_bindings
 WHERE project_id = $1 AND organization_id = $2

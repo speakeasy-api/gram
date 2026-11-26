@@ -1,3 +1,5 @@
+import { Link } from "react-router";
+
 import { Button } from "@/components/ui/Button";
 
 import type { StepAffordances } from "./ConnectionChecklist";
@@ -9,7 +11,7 @@ import {
   oktaAdminConsoleUrl,
   oktaApiServiceIntegrationsUrl,
 } from "../../oktaConsoleLinks";
-import { READINESS_SECTION_ID } from "../../tabs";
+import { oktaViewHref, READINESS_SECTION_ID } from "../../tabs";
 
 function adminConsoleLink(connection: LiveConnection): JSX.Element {
   return (
@@ -66,7 +68,9 @@ export const STEP_AFFORDANCES: StepAffordances = {
   add_agent_public_key: () => (
     <div>
       <Button asChild variant="secondary">
-        <a href={`#${OKTA_SIGN_IN_SECTION_ID}`}>Go to Okta sign-in</a>
+        <Link to={oktaViewHref("setup", OKTA_SIGN_IN_SECTION_ID)}>
+          Go to Okta sign-in
+        </Link>
       </Button>
     </div>
   ),

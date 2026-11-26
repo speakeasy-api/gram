@@ -361,7 +361,7 @@ func agentItems(app *AgentAppSignal, done completions) []ChecklistItem {
 			Key:         ChecklistKeyAddAgentPublicKey,
 			Group:       ChecklistGroupCrossAppAccess,
 			Title:       "Add the agent's public key",
-			Description: "Use Set up Okta sign-in on this page. It registers the linked app, whose Client ID is the agent ID, as the organization's sign-in client and shows its public key. In Okta, open the agent's Credentials (Client registration), paste this key in the agent's Credentials and click Activate.",
+			Description: "Use Set up Okta sign-in in the Okta sign-in section of the Connection tab. It registers the linked app, whose Client ID is the agent ID, as the organization's sign-in client and shows its public key. In Okta, open the agent's Credentials (Client registration), paste this key in the agent's Credentials and click Activate.",
 			Details: []string{
 				"Okta rejects edits to the linked app, including activating it, until the agent has an active public key, so do this before the next step.",
 				"Okta stores the pasted key, not a key URL. Rotating the signing key set or publishing a new key in it means pasting the new public key in Okta again.",

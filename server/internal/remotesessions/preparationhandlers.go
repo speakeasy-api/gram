@@ -101,6 +101,12 @@ func (s *Service) ReadEMA(ctx context.Context, p *gen.ReadEMAPayload) (*gen.Iden
 	if view.EmaProviders, view.LastAcceptedAt, err = s.endpointEMAProviders(ctx, in, result.Issuer); err != nil {
 		return nil, err
 	}
+	// The shared-server list is advisory: without it the settings still load.
+	if servers, hidden, complete, err := s.emaBindingServers(ctx, in); err != nil {
+		s.logger.WarnContext(ctx, "list servers sharing the identity chaining binding", attr.SlogError(err))
+	} else {
+		view.Servers, view.HiddenServerCount, view.ServersComplete = servers, &hidden, &complete
+	}
 	return view, nil
 }
 
@@ -169,6 +175,7 @@ func preparationAPIView(r *PreparationResult) *gen.IdentityChainingPreparation {
 		Generation: r.Generation, ExternalClientID: conv.PtrEmpty(r.ExternalClientID), Issuer: conv.PtrEmpty(r.Issuer),
 		Resource: r.Resource, GrantTypes: r.GrantTypes, Scopes: append([]string{}, r.Scopes...), GrantSource: r.GrantSource,
 		EmaProviders: nil, LastAcceptedAt: nil, ConnectionScopes: r.ConnectionScopes, ScopesOutOfDate: nil,
+		Servers: nil, HiddenServerCount: nil, ServersComplete: nil,
 	}
 	if r.ConnectionScopes != nil {
 		out.ScopesOutOfDate = new(r.ScopesOutOfDate)

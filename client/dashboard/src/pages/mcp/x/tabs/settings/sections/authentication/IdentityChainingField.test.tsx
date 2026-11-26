@@ -13,10 +13,12 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IdentityChainingField } from "./IdentityChainingField";
-import type { ChainingProviders } from "./identityChainingGate";
+import { sharedServersText } from "./identityChainingShared";
 
 const pending = vi.hoisted(() => ({ prepare: false, unlink: false }));
-const unlinked = { state: "unlinked", scopes: [] };
+// readEMA lists the servers a binding shares; these name none and are complete.
+const listed = { servers: [], hiddenServerCount: 0, serversComplete: true };
+const unlinked = { state: "unlinked", scopes: [], ...listed };
 const read = vi.hoisted(() => ({
   data: {} as Record<string, unknown>,
   error: null as unknown,
@@ -177,24 +179,25 @@ const clients = ["first", "second"].map((id) => ({
 })) as RemoteSessionClient[];
 
 function field(
-  providers: ChainingProviders = { external: true },
   userSessionIssuer = {
     id: "session-issuer",
     trustedRemoteSessionIssuerId: "idp",
     trustedRemoteSessionClientId: "idp-client",
   } as UserSessionIssuer,
+  mcpServerId = "server-self",
 ) {
   return (
     <IdentityChainingField
       userSessionIssuer={userSessionIssuer}
-      providers={providers}
       linkedClients={clients}
       resource="https://example.com/mcp"
+      mcpServerId={mcpServerId}
     />
   );
 }
 
 const bound = (clientId: string) => ({
+  ...listed,
   state: "ready",
   bindingId: "binding",
   clientId,
@@ -255,8 +258,8 @@ describe("identity chaining client selection", () => {
 function trackerAndWiki() {
   return (
     <IdentityChainingField
+      mcpServerId="server-self"
       userSessionIssuer={{ id: "session-issuer" } as UserSessionIssuer}
-      providers={{ external: false }}
       linkedClients={
         [
           {
@@ -306,9 +309,42 @@ describe("identity chaining client for this service", () => {
     expect(screen.queryByText("tracker-client")).toBeNull();
     expect(
       screen.getByText(
-        /Link a client registered with this server’s authorization server/,
+        "First, use Add credential in Upstream credentials above to add a per-person credential registered with this server’s authorization server.",
       ),
     ).toBeTruthy();
+    expect(screen.queryByText(/Identity above/)).toBeNull();
+  });
+
+  it("asks for a credential registered with the server's authorization server", () => {
+    prmMock.value = {
+      metadata: { authorizationServers: ["https://tracker.example.com/"] },
+    };
+    render(field(), { wrapper: MemoryRouter });
+    expect(
+      screen.getByText(
+        "First, use Add credential in Upstream credentials above to add a per-person credential registered with this server’s authorization server.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.queryByText(/credential for this server’s identity provider/),
+    ).toBeNull();
+  });
+
+  it("tells someone who can't add a credential that an admin must", () => {
+    state.orgAdmin = false;
+    prmMock.value = {
+      metadata: { authorizationServers: ["https://tracker.example.com/"] },
+    };
+    issuerNames.items = [
+      { id: "tracker", name: "Tracker", issuer: "https://tracker.example.com" },
+    ];
+    render(trackerAndWiki(), { wrapper: MemoryRouter });
+    expect(
+      screen.getByText(
+        "An organization admin must first add a per-person credential registered with this server’s authorization server in Upstream credentials above.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText(/use Add credential/)).toBeNull();
   });
 
   it.each([
@@ -332,7 +368,9 @@ describe("identity chaining client for this service", () => {
     render(trackerAndWiki(), { wrapper: MemoryRouter });
     expect(screen.queryByText("tracker-client")).toBeNull();
     expect(screen.queryByText("wiki-client")).toBeNull();
-    expect(screen.queryByText(/Link a client/)).toBeNull();
+    expect(
+      screen.queryByText(/Add credential in Upstream credentials/),
+    ).toBeNull();
     expect(screen.queryByRole("button", { name: "Turn on" })).toBeNull();
   });
 
@@ -358,8 +396,8 @@ describe("identity chaining client for this service", () => {
     staleRead.byIssuer = { wiki: { ...bound("wiki-client"), generation: 4 } };
     render(
       <IdentityChainingField
+        mcpServerId="server-self"
         userSessionIssuer={{ id: "session-issuer" } as UserSessionIssuer}
-        providers={{ external: false }}
         linkedClients={
           [
             {
@@ -373,14 +411,17 @@ describe("identity chaining client for this service", () => {
       />,
       { wrapper: MemoryRouter },
     );
-    expect(screen.getByText(/still on for client wiki-client/)).toBeTruthy();
+    expect(
+      screen.getByText(/still on for credential wiki-client/),
+    ).toBeTruthy();
     expect(
       screen.getByText(
-        /Link a client registered with this server’s authorization server/,
+        /Add credential in Upstream credentials above to add a per-person credential registered with this server’s authorization server/,
       ),
     ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Turn off" }));
     const dialog = screen.getByRole("dialog");
+    expect(dialog.textContent).not.toMatch(/may change too/);
     fireEvent.click(within(dialog).getByRole("button", { name: "Turn off" }));
     expect(state.unlink).toHaveBeenCalledWith({
       request: {
@@ -405,8 +446,8 @@ describe("identity chaining client for this service", () => {
     staleRead.byIssuer = { wiki: unlinked };
     render(
       <IdentityChainingField
+        mcpServerId="server-self"
         userSessionIssuer={{ id: "session-issuer" } as UserSessionIssuer}
-        providers={{ external: false }}
         linkedClients={
           [
             {
@@ -431,8 +472,8 @@ describe("identity chaining client for this service", () => {
     staleRead.byIssuer = { wiki: { ...bound("wiki-client"), generation: 4 } };
     render(
       <IdentityChainingField
+        mcpServerId="server-self"
         userSessionIssuer={{ id: "session-issuer" } as UserSessionIssuer}
-        providers={{ external: false }}
         linkedClients={
           [
             {
@@ -446,9 +487,11 @@ describe("identity chaining client for this service", () => {
       />,
       { wrapper: MemoryRouter },
     );
-    expect(screen.getByText(/still on for client wiki-client/)).toBeTruthy();
     expect(
-      screen.getByText(/couldn’t check that client’s authorization server/),
+      screen.getByText(/still on for credential wiki-client/),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/couldn’t check that credential’s authorization server/),
     ).toBeTruthy();
     expect(screen.queryByText(/no longer uses/)).toBeNull();
     expect(screen.getByRole("button", { name: "Turn off" })).toBeTruthy();
@@ -467,12 +510,170 @@ describe("identity chaining client for this service", () => {
   });
 });
 
+describe("identity chaining shared with other servers", () => {
+  const servers = [
+    { id: "this", name: "This server", slug: "this" },
+    { id: "docs", name: "Docs", slug: "docs" },
+  ];
+  const issuer = {
+    id: "session-issuer",
+    trustedRemoteSessionIssuerId: "idp",
+    trustedRemoteSessionClientId: "idp-client",
+  } as UserSessionIssuer;
+
+  it("names the other servers, and counts those the viewer can't see", () => {
+    expect(sharedServersText(servers, 0, "this")).toBe("Docs");
+    expect(sharedServersText(servers, 2, "this")).toBe(
+      "Docs and 2 other servers you can’t see",
+    );
+    expect(sharedServersText([servers[0]!], 1, "this")).toBe(
+      "1 server you can’t see",
+    );
+    expect(sharedServersText([servers[0]!], 0, "this")).toBeNull();
+  });
+
+  it("says an on setting is shared and lists the servers Turn off changes", () => {
+    read.data = { ...bound("second"), servers, hiddenServerCount: 0 };
+    render(field(issuer, "this"), {
+      wrapper: MemoryRouter,
+    });
+    expect(
+      screen.getByText(
+        /This setting also applies to Docs, on the same sign-in and service\./,
+      ),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Turn off" }));
+    expect(
+      within(screen.getByRole("dialog")).getByText(
+        /This also turns it off for Docs, on the same sign-in and service\./,
+      ),
+    ).toBeTruthy();
+  });
+
+  it("names the servers turning off an old credential also changes", () => {
+    prmMock.value = {
+      metadata: { authorizationServers: ["https://tracker.example.com/"] },
+    };
+    issuerNames.items = [
+      { id: "wiki", name: "Wiki", issuer: "https://wiki.example.com" },
+    ];
+    staleRead.byIssuer = {
+      wiki: { ...bound("wiki-client"), generation: 4, servers },
+    };
+    render(
+      <IdentityChainingField
+        mcpServerId="this"
+        userSessionIssuer={{ id: "session-issuer" } as UserSessionIssuer}
+        linkedClients={
+          [
+            {
+              id: "wiki-client",
+              clientId: "wiki-client",
+              remoteSessionIssuerId: "wiki",
+            },
+          ] as RemoteSessionClient[]
+        }
+        resource="https://example.com/mcp"
+      />,
+      { wrapper: MemoryRouter },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Turn off" }));
+    expect(screen.getByRole("dialog").textContent).toContain(
+      "This also turns it off for Docs, on the same sign-in and service.",
+    );
+  });
+
+  it.each([
+    [
+      "the list couldn't be read",
+      { servers: undefined, hiddenServerCount: undefined },
+      "Speakeasy couldn’t list the other servers that use this sign-in and service, so they may change too.",
+    ],
+    [
+      "the list may be missing servers",
+      { servers: [], serversComplete: false },
+      "Other servers that use this sign-in and service may change too.",
+    ],
+  ])("still confirms Turn on when %s", (_case, shared, says) => {
+    read.data = { ...unlinked, ...shared };
+    render(field(issuer, "this"), {
+      wrapper: MemoryRouter,
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Turn on" }));
+    expect(state.prepare).not.toHaveBeenCalled();
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.textContent).toContain(says);
+    expect(dialog.textContent).not.toContain("This also turns it on for");
+    expect(dialog.textContent).not.toContain("those servers");
+    expect(dialog.textContent).toMatch(
+      /On every server this changes, people without their own .+ connection/,
+    );
+    fireEvent.click(within(dialog).getByRole("button", { name: "Turn on" }));
+    expect(state.prepare).toHaveBeenCalledOnce();
+  });
+
+  it("turns on without asking when nothing else shares the setting", () => {
+    read.data = unlinked;
+    render(field(issuer, "this"), {
+      wrapper: MemoryRouter,
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Turn on" }));
+    expect(state.prepare).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("confirms Turn on when it also turns on other servers", () => {
+    read.data = {
+      ...unlinked,
+      servers,
+      hiddenServerCount: 0,
+      serversComplete: true,
+    };
+    render(field(issuer, "this"), {
+      wrapper: MemoryRouter,
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Turn on" }));
+    expect(state.prepare).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog").textContent).toContain(
+      "This also turns it on for Docs, on the same sign-in and service.",
+    );
+  });
+
+  it("says the credential changes on the other servers when switching it", () => {
+    read.data = { ...bound("elsewhere"), servers, hiddenServerCount: 0 };
+    render(field(issuer, "this"), {
+      wrapper: MemoryRouter,
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Use this credential instead" }),
+    );
+    expect(state.prepare).not.toHaveBeenCalled();
+    const dialog = screen.getByRole("dialog");
+    expect(
+      within(dialog).getByText(
+        /This also changes the credential for Docs, on the same sign-in and service\./,
+      ),
+    ).toBeTruthy();
+    expect(dialog.textContent).not.toContain("turns it on");
+    expect(dialog.textContent).toMatch(
+      /On every server this changes, people without their own (.+) connection will be signed in to \1 through your company sign-in\./,
+    );
+    expect(dialog.textContent).not.toContain("stop signing in");
+    fireEvent.click(
+      within(dialog).getByRole("button", {
+        name: "Use this credential instead",
+      }),
+    );
+    expect(state.prepare).toHaveBeenCalledOnce();
+  });
+});
+
 describe("identity chaining bound client", () => {
   it("selects the client the binding uses", () => {
     read.data = bound("second");
     render(field(), { wrapper: MemoryRouter });
     expect(screen.getByRole("combobox").textContent).toBe("second");
-    expect(screen.queryByText("Use this client instead")).toBeNull();
+    expect(screen.queryByText("Use this credential instead")).toBeNull();
   });
 
   it("says whether chaining is on, next to the action that changes it", () => {
@@ -499,7 +700,7 @@ describe("identity chaining bound client", () => {
     expect(
       (
         screen.getByRole("button", {
-          name: "Use this client instead",
+          name: "Use this credential instead",
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(false);
@@ -517,7 +718,6 @@ describe("identity chaining bound client", () => {
 });
 
 describe("identity chaining vouched for by Speakeasy", () => {
-  const speakeasyOnly = { external: false };
   const plainIssuer = {
     id: "session-issuer",
     slug: "speakeasy-sign-in",
@@ -541,8 +741,8 @@ describe("identity chaining vouched for by Speakeasy", () => {
   ) {
     return (
       <IdentityChainingField
+        mcpServerId="server-self"
         userSessionIssuer={plainIssuer}
-        providers={speakeasyOnly}
         speakeasyIssuerUrl="https://speakeasy.example.com/issuer"
         linkedClients={clients}
         resource="https://example.com/mcp"
@@ -753,7 +953,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
         ),
       ).toBeTruthy();
       const enable = screen.getByRole("button", {
-        name: clientId === "first" ? "Turn on" : "Use this client instead",
+        name: clientId === "first" ? "Turn on" : "Use this credential instead",
       }) as HTMLButtonElement;
       expect(enable.disabled).toBe(true);
       const disable = screen.getByRole("button", {
@@ -831,7 +1031,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
   });
 
   it("offers every linked client when no sign-in client is trusted", () => {
-    render(field(speakeasyOnly, plainIssuer), { wrapper: MemoryRouter });
+    render(field(plainIssuer), { wrapper: MemoryRouter });
     expect(screen.getByRole("combobox")).toBeTruthy();
     expect(
       screen.getByRole("link", { name: "Manage client" }).getAttribute("href"),
@@ -842,13 +1042,14 @@ describe("identity chaining vouched for by Speakeasy", () => {
 
   it("keeps the identity provider's sign-in client out of the picker", () => {
     read.data = { ...unlinked, emaProviders: providersOf(okta) };
-    render(field({ external: true }, trusting), { wrapper: MemoryRouter });
+    render(field(trusting), { wrapper: MemoryRouter });
     expect(screen.queryByRole("combobox")).toBeNull();
     expect(within(chain()).getByRole("link", { name: "first" })).toBeTruthy();
   });
 
   it("keeps the trusted sign-in client out even when only Speakeasy applies", () => {
-    render(field(speakeasyOnly, trusting), { wrapper: MemoryRouter });
+    read.data = { ...unlinked, emaProviders: providersOf(speakeasy) };
+    render(field(trusting), { wrapper: MemoryRouter });
     expect(screen.queryByRole("combobox")).toBeNull();
   });
 
@@ -941,13 +1142,13 @@ describe("identity chaining vouched for by Speakeasy", () => {
       "/org/identity?tab=identity-providers&service=https%3A%2F%2Fvendor.example.com#accepted-providers",
     );
     const links = within(chain()).getAllByText(
-      /^(Sign-in|Vouched for by|example.com trusts|Remote session client)$/,
+      /^(Sign-in|Vouched for by|example.com trusts|Upstream credential)$/,
     );
     expect(links.map((link) => link.textContent)).toEqual([
       "Sign-in",
       "Vouched for by",
       "example.com trusts",
-      "Remote session client",
+      "Upstream credential",
     ]);
     expect(
       within(chain()).getByRole("link", { name: "first" }).getAttribute("href"),
@@ -1063,7 +1264,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
       emaProviders: providersOf(speakeasy),
     };
     render(speakeasyField(), { wrapper: MemoryRouter });
-    expect(screen.getByText("Couldn’t check the client")).toBeTruthy();
+    expect(screen.getByText("Couldn’t check the credential")).toBeTruthy();
     expect(screen.queryByText("Grants unknown")).toBeNull();
     expect(screen.queryByText(/remote_session_client/)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Technical details" }));
@@ -1472,8 +1673,8 @@ describe("identity chaining vouched for by Speakeasy", () => {
     staleRead.byIssuer = { wiki: { ...bound("wiki-client"), generation: 4 } };
     render(
       <IdentityChainingField
+        mcpServerId="server-self"
         userSessionIssuer={{ id: "session-issuer" } as UserSessionIssuer}
-        providers={{ external: false }}
         linkedClients={
           [
             {
@@ -1493,7 +1694,9 @@ describe("identity chaining vouched for by Speakeasy", () => {
       />,
       { wrapper: MemoryRouter },
     );
-    expect(screen.getByText(/still on for client wiki-client/)).toBeTruthy();
+    expect(
+      screen.getByText(/still on for credential wiki-client/),
+    ).toBeTruthy();
     expect(screen.getByRole("button", { name: "Turn off" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Turn on" })).toBeNull();
   });
@@ -1521,8 +1724,8 @@ describe("identity chaining vouched for by Speakeasy", () => {
       };
       const element = () => (
         <IdentityChainingField
+          mcpServerId="server-self"
           userSessionIssuer={{ id: "session-issuer" } as UserSessionIssuer}
-          providers={{ external: false }}
           linkedClients={
             [
               {
@@ -1551,7 +1754,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
         rendered.rerender(element());
       }
       expect(
-        screen.getByText(/unknown state for client wiki-client/),
+        screen.getByText(/unknown state for credential wiki-client/),
       ).toBeTruthy();
       for (const button of screen.getAllByRole("button", {
         name: "Turn off",
@@ -1704,8 +1907,8 @@ describe("identity chaining connection scopes", () => {
     };
     render(
       <IdentityChainingField
+        mcpServerId="server-self"
         userSessionIssuer={{ id: "session-issuer" } as UserSessionIssuer}
-        providers={{ external: false }}
         linkedClients={scoped}
         resource="https://example.com/mcp"
       />,
@@ -1732,8 +1935,8 @@ describe("identity chaining connection scopes", () => {
     };
     render(
       <IdentityChainingField
+        mcpServerId="server-self"
         userSessionIssuer={{ id: "session-issuer" } as UserSessionIssuer}
-        providers={{ external: false }}
         linkedClients={scoped}
         resource="https://example.com/mcp"
       />,

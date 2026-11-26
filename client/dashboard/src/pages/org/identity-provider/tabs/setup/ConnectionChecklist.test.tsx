@@ -258,6 +258,23 @@ describe("ConnectionChecklist", () => {
     ).toBe("#readiness");
   });
 
+  it("links the agent public key step to Okta sign-in on the Connection view", () => {
+    renderChecklist(
+      connectionWith("verified", [
+        ...pendingChecklist,
+        item("add_agent_public_key", "cross_app_access"),
+      ]),
+    );
+    const step = screen.getByText("Step add_agent_public_key").closest("li")!;
+    expect(
+      within(step)
+        .getByRole("link", { name: "Go to Okta sign-in" })
+        .getAttribute("href"),
+    ).toBe(
+      "/identity?tab=identity-providers&provider=okta&view=setup#okta-sign-in",
+    );
+  });
+
   it("renders only the requested groups", () => {
     renderChecklist(
       connectionWith("verified", [
