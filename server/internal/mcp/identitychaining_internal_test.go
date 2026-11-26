@@ -192,6 +192,18 @@ func TestMetaMemberChainer(t *testing.T) {
 		ungated.userSessionIssuerID = uuid.Nil
 		require.Nil(t, s.metaMemberChainer(&ungated, member, mcpidentity.KindUserSession, uuid.Nil))
 	})
+	t.Run("an unclassified rejection keeps its stage", func(t *testing.T) {
+		t.Parallel()
+		outcome := identitychaining.Outcome{Stage: identitychaining.StageExchange, Reason: identitychaining.ReasonUnknownRejection, Confidence: identitychaining.ConfidenceUnknown, Retryable: false, Cached: false, Provider: ""}
+		s := chainingService(t, &recordingChainer{outcome: outcome})
+		chain := s.metaMemberChainer(gate, member, mcpidentity.KindUserSession, uuid.Nil)
+		require.NotNil(t, chain)
+		_, err := chain(humanChainingContext(t, "user-1", chainingTestOrg), "https://docs.example.test/mcp")
+		chaining, ok := errors.AsType[memberChainingError](err)
+		require.True(t, ok, "a known verdict is a member chaining refusal")
+		require.Equal(t, identitychaining.StageExchange, chaining.stage)
+		require.Len(t, memberChainingDetail(err), 1)
+	})
 	for _, tc := range []struct {
 		name    string
 		outcome identitychaining.Outcome

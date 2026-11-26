@@ -538,7 +538,8 @@ func TestChainMetaMember_RefusalBehindAHeldConnectionKeepsTheReconnect(t *testin
 	ctx := humanChainingContext(t, "user-1", chainingTestOrg)
 
 	serviceClient := uuid.New()
-	unreadable := remotesessions.UpstreamToken{CredentialOwner: remotesessions.CredentialOwnerSubject, RemoteSessionClientID: serviceClient, ClientCredentialErr: fmt.Errorf("decrypt: %w", remotesessions.ErrStoredSignInUnreadable)}
+	remoteSession := uuid.New()
+	unreadable := remotesessions.UpstreamToken{CredentialOwner: remotesessions.CredentialOwnerSubject, RemoteSessionClientID: serviceClient, ClientCredentialErr: remotesessions.StoredSignInUnreadableForTest(remoteSession, errors.New("decrypt"))}
 	_, token, err := chainMetaMember(ctx, *gate, member, "https://docs.example.test/mcp", unreadable, nil)
 	require.Empty(t, token)
 	require.Contains(t, err.Error(), `server "docs" can't use its saved sign-in anymore`)
@@ -560,7 +561,8 @@ func TestChainMetaMember_RefusalBehindAHeldConnectionKeepsTheReconnect(t *testin
 		refusal, beside = beside, refusal
 	}
 	require.Equal(t, serviceClient.String(), refusal.RemoteSessionClientID, "the refusal names the held connection's service client")
-	require.Equal(t, beside.RemoteSessionID, refusal.RemoteSessionID, "and carries the held row's options")
+	require.Equal(t, remoteSession.String(), beside.RemoteSessionID)
+	require.Equal(t, remoteSession.String(), refusal.RemoteSessionID, "and carries the held row's options")
 	require.Equal(t, string(identitychaining.StageExchange), refusal.SubReason, "the detail names the failed stage")
 	require.Equal(t, string(mcpconnectionattempts.OutcomeBlocked), refusal.Outcome)
 

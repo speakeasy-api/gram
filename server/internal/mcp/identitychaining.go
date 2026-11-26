@@ -415,15 +415,15 @@ func (s *Service) metaMemberChainer(gate *metaGateContext, member metaMember, ki
 		case outcome.Retryable:
 			return "", memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("Company sign-in for server %q is temporarily unavailable. Try again in a moment.", member.slug)}, status: 0, retryable: outcome.SafeToRepeat() && ctx.Err() == nil, retryAfter: 0}
 		}
+		failure := &metaMemberError{message: fmt.Sprintf("Company sign-in for server %q isn't working. Contact your administrator.", member.slug)}
 		verdict, ok := chainingVerdictOf(outcome)
-		if !ok || verdict.message == nil {
-			failure := &metaMemberError{message: fmt.Sprintf("Company sign-in for server %q isn't working. Contact your administrator.", member.slug)}
-			if !ok {
-				return "", failure
-			}
-			return "", memberConnectionError{failure, verdict.code}
+		if !ok {
+			return "", failure
 		}
-		chaining := memberChainingError{metaMemberError: &metaMemberError{message: memberChainingText(member.slug, *verdict.message)}, stage: ""}
+		if verdict.message != nil {
+			failure.message = memberChainingText(member.slug, *verdict.message)
+		}
+		chaining := memberChainingError{metaMemberError: failure, stage: ""}
 		if chainingGateReason(outcome) == issuerGateReasonIdentityChainingRefused {
 			chaining.stage = outcome.Stage
 		}

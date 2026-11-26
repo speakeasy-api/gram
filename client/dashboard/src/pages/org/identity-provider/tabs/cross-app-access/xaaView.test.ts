@@ -237,8 +237,8 @@ describe("refusalNotes", () => {
         { refusedBy: "service", people: 1, lastRefusedAt },
       ]).map((note) => note.summary),
     ).toEqual([
-      "In the last day, your identity provider refused 2 people who haven't connected since. Last refusal 3h ago. Check they are assigned to the app and allowed these permissions there.",
-      "In the last day, the service refused 1 person who hasn't connected since. Last refusal 3h ago. Check the service accepts sign-ins from your identity provider and that its client is set up.",
+      "In the last day, your identity provider refused 2 people who haven't connected since being refused. Last refusal 3h ago. Check they are assigned to the app and allowed these permissions there.",
+      "In the last day, the service refused 1 person who hasn't connected since being refused. Last refusal 3h ago. Check the service accepts sign-ins from your identity provider and that its client is set up.",
     ]);
   });
 

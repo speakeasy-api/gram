@@ -151,11 +151,11 @@ export function observedNote(row: {
 
 function peopleNotConnected(count: number): string {
   return count === 1
-    ? "1 person who hasn't connected since"
-    : `${count} people who haven't connected since`;
+    ? "1 person who hasn't connected since being refused"
+    : `${count} people who haven't connected since being refused`;
 }
 
-/** People refused in the last day who haven't connected since, next to a state that stays as it is. */
+/** People refused in the last day who haven't connected since being refused, next to a state that stays as it is. */
 export function refusalNotes(
   refusals: OktaResourceConnectionRefusal[] | undefined,
 ): StateNoteCopy[] {

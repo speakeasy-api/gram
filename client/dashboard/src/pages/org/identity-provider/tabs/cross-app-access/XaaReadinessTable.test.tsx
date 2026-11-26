@@ -51,7 +51,7 @@ describe("XaaReadinessTable", () => {
     });
     expect(
       within(notes).getByText(
-        /^In the last day, the service refused 2 people who haven't connected since/,
+        /^In the last day, the service refused 2 people who haven't connected since being refused\. Last/,
       ),
     ).toBeTruthy();
     const serverRow = screen

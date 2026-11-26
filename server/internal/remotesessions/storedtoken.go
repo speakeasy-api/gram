@@ -51,6 +51,11 @@ func UnreadableRemoteSessionID(err error) (uuid.UUID, bool) {
 	return unreadable.remoteSessionID, true
 }
 
+// StoredSignInUnreadableForTest is ErrStoredSignInUnreadable for remoteSessionID, as resolution returns it.
+func StoredSignInUnreadableForTest(remoteSessionID uuid.UUID, err error) error {
+	return &storedSignInUnreadableError{remoteSessionID: remoteSessionID, err: err}
+}
+
 // storedTokenKeyError is a stored token the organization's key could not open
 // right now, such as a suspended or unreachable key. It reads as
 // ErrRemoteSessionUnavailable and, unlike that sentinel, not as
