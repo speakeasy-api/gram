@@ -79,8 +79,25 @@ func TestBackfillTranscriptShadowsSealsEveryPageAndResumes(t *testing.T) {
 func TestRequireTranscriptShadowProject(t *testing.T) {
 	t.Parallel()
 	listed, other := uuid.New(), uuid.New()
-	require.NoError(t, requireTranscriptShadowProject([]string{other.String(), listed.String()}, listed))
-	require.ErrorContains(t, requireTranscriptShadowProject([]string{other.String()}, listed), "project must be listed")
-	require.ErrorContains(t, requireTranscriptShadowProject(nil, listed), "project must be listed")
-	require.Error(t, requireTranscriptShadowProject([]string{"not-a-uuid"}, listed))
+	cases := []struct {
+		name    string
+		values  []string
+		wantErr string
+	}{
+		{name: "listed", values: []string{other.String(), listed.String()}, wantErr: ""},
+		{name: "unlisted", values: []string{other.String()}, wantErr: "project must be listed"},
+		{name: "empty", values: nil, wantErr: "project must be listed"},
+		{name: "malformed", values: []string{"not-a-uuid"}, wantErr: "invalid chat transcript shadow project UUID"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := requireTranscriptShadowProject(tc.values, listed)
+			if tc.wantErr == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorContains(t, err, tc.wantErr)
+		})
+	}
 }
