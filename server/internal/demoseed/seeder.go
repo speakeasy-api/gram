@@ -39,7 +39,8 @@ type seeder struct {
 	logger    *slog.Logger
 	// now is the Postgres transaction's now(), read once at the start of the
 	// run, so Go-computed timestamps agree with any now() a query still uses
-	// and ClickHouse rows line up with the Postgres ones.
+	// and ClickHouse rows line up with the Postgres ones. runAt can pin it
+	// instead, so repeated runs generate the same rows.
 	now time.Time
 	// signalSequences joins synthetic readings to actual PostgreSQL message order.
 	signalSequences map[int]int64
@@ -85,11 +86,13 @@ func (s *seeder) runPostgres(ctx context.Context) error {
 		return fmt.Errorf("raise statement timeout: %w", err)
 	}
 
-	now, err := s.q.Now(ctx)
-	if err != nil {
-		return fmt.Errorf("read transaction time: %w", err)
+	if s.now.IsZero() {
+		now, err := s.q.Now(ctx)
+		if err != nil {
+			return fmt.Errorf("read transaction time: %w", err)
+		}
+		s.now = now.Time
 	}
-	s.now = now.Time
 
 	phases := []phase{
 		{"preflight and org", s.seedOrg},
