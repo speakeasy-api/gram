@@ -84,6 +84,7 @@ const currentCiphertext = `-- name: CurrentCiphertext :one
 SELECT ciphertext FROM chat_message_transcripts
 WHERE message_id = $1 AND project_id = $2 AND organization_id = $3
   AND source_hash IS NULL
+FOR UPDATE
 `
 
 type CurrentCiphertextParams struct {
@@ -92,9 +93,11 @@ type CurrentCiphertextParams struct {
 	OrganizationID string
 }
 
-// The transcript an update decrypts and changes. Call it after Snapshot, which
-// holds the message lock. A legacy transcript with source_hash may be stale,
-// so it is not returned and the update starts from the plaintext row.
+// The transcript an update decrypts and changes, locked until the transaction
+// ends. Every transcript writer takes Snapshot's message lock first, so this
+// lock only states the intent; take them in that order. A legacy transcript
+// with source_hash may be stale, so it is not returned and the update starts
+// from the plaintext row.
 func (q *Queries) CurrentCiphertext(ctx context.Context, arg CurrentCiphertextParams) (string, error) {
 	row := q.db.QueryRow(ctx, currentCiphertext, arg.MessageID, arg.ProjectID, arg.OrganizationID)
 	var ciphertext string
