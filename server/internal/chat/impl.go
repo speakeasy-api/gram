@@ -711,12 +711,8 @@ func (s *Service) GetWorkUnitsTrend(ctx context.Context, payload *gen.GetWorkUni
 	if enforce, err := s.authz.ShouldEnforce(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to authorize work units trend").LogError(ctx, s.logger)
 	} else if enforce {
-		decision, err := s.authz.Decide(ctx, authz.Chats(authz.ProjectIDFrom(projectID)).Read())
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to authorize work units trend").LogError(ctx, s.logger)
-		}
-		if !decision.AllAllowed {
-			return nil, oops.C(oops.CodeForbidden)
+		if err := s.authz.Require(ctx, authz.Chats(authz.ProjectIDFrom(projectID)).Read()); err != nil {
+			return nil, err
 		}
 	}
 

@@ -146,10 +146,9 @@ func TestRequireAndDecideAgree(t *testing.T) {
 	}
 }
 
-// A challenge row from Decide names the alternative that allowed a group.
-// Example: Either(proj_c, proj_b) is recorded as proj_b; refused, it
-// lists
-// both.
+// A challenge row from DecideAndRecord names the alternative that allowed a
+// group. Example: Either(proj_c, proj_b) is recorded as proj_b; refused, it
+// lists both.
 func TestDecideAndRecord_recordsWinningAlternative(t *testing.T) {
 	t.Parallel()
 

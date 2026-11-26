@@ -85,7 +85,7 @@ func (i *ToolsListMCPConnectFilterInterceptor) Name() string {
 
 // InterceptToolsListResponse implements [proxy.ToolsListResponseInterceptor].
 // It builds one [authz.MCPServerRef.ToolCall] check per tool, hands the batch to
-// [authz.Engine.Decide] for per-tool decisions (one challenge-log
+// [authz.Engine.DecideAndRecord] for per-tool decisions (one challenge-log
 // entry for the batch, not N), and rebuilds the tool slice in input order
 // keeping only authorized entries, or marking the rest in an inspected listing.
 //

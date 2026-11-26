@@ -1119,7 +1119,7 @@ for i, project := range projects {
 }
 ```
 
-`DecideAndRecord` records one challenge row for the whole call. `Decide` records nothing, so a branch whose "no" is the expected case, such as showing a member only their own sessions, adds no row. `Require` records both allows and refusals, so the access log can say why someone was allowed to do something.
+`DecideAndRecord` records one challenge row for each call with at least one check. `Decide` records nothing, so a branch whose "no" is the expected case, such as showing a member only their own sessions, adds no row. `Require` records both allows and refusals, so the access log can say why someone was allowed to do something.
 
 Use `DecideAndRecord` when the correct result is "return the subset this caller can see." Use `Require` when the correct result is "deny the whole operation unless the caller can access this resource."
 
@@ -1127,7 +1127,7 @@ Use `DecideAndRecord` when the correct result is "return the subset this caller 
 
 Use the narrowest scope that describes the operation. GET and list handlers usually need a `*:read` scope. Mutations usually need `*:write`. Runtime MCP usage needs `mcp:connect`, while role and RBAC management usually need `org:admin`.
 
-A few operations deserve extra thought. Creating a project-owned child resource usually requires `project:write`, even if the child resource has its own read scope. Cloning a toolset needs destination write access and source read access. Calling a private MCP tool should use `mcp:connect`, narrowed by tool and disposition when available. Listing resources should usually use `DecideAndRecord`, because the correct behavior is often to return the visible subset instead of failing the whole list because one resource is inaccessible.
+A few operations deserve extra thought. Creating a project-owned child resource usually requires `project:write`, even if the child resource has its own read scope. Cloning a toolset needs destination write access and source read access. Calling a private MCP tool should use `mcp:connect`, narrowed by tool and disposition when available. Listing resources should usually use `DecideAndRecord`, because the correct behavior is often to return the visible subset instead of failing the whole list because one resource is inaccessible. The MCP gateway is the one exception: it lists members through helpers that also gate a single member with `Require`, so those listing paths wrap their context in `authz.ForListing(ctx)`, which records nothing even from `Require`.
 
 ## Examples
 

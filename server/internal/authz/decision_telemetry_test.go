@@ -11,6 +11,8 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/authz/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -117,4 +119,28 @@ func decisionAttributeMap(attrs []attribute.KeyValue) map[string]string {
 		result[string(attr.Key)] = attr.Value.AsString()
 	}
 	return result
+}
+
+// Decide writes no challenge row, but its decision still shows in the
+// request's trace like a recorded one.
+func TestDecide_emitsDecisionTelemetryWithoutRecording(t *testing.T) {
+	t.Parallel()
+
+	exporter := tracetest.NewInMemoryExporter()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
+	t.Cleanup(func() { require.NoError(t, provider.Shutdown(context.Background())) })
+
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeProjectRead, "proj_a")})
+	ctx, span := provider.Tracer("test").Start(ctx, "request")
+	_, err := engine.Decide(ctx, projectRead("proj_b"))
+	require.NoError(t, err)
+	span.End()
+
+	spans := exporter.GetSpans()
+	require.Len(t, spans, 1)
+	require.Len(t, spans[0].Events, 1)
+	attrs := decisionAttributeMap(spans[0].Events[0].Attributes)
+	require.Equal(t, "filter", attrs["gram.authorization.operation"])
+	require.Equal(t, "deny", attrs["gram.authorization.result"])
 }

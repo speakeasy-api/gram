@@ -68,9 +68,9 @@ func (e *Engine) decide(ctx context.Context, checks []Check, record bool) (Decis
 	for _, check := range checks {
 		v, err := q.decide(check)
 		if err != nil {
-			if q.enforced && record {
+			if q.enforced {
 				focus := invalidPart(check)
-				e.recordBatch(ctx, q, verdicts, &focus)
+				e.reportBatch(ctx, q, verdicts, &focus, record)
 			}
 			return Decisions{AllAllowed: false, Each: nil}, e.mapError(ctx, err)
 		}
@@ -88,8 +88,8 @@ func (e *Engine) decide(ctx context.Context, checks []Check, record bool) (Decis
 			reportAuthorizerRefusal(ctx, e.logger, q.grants, refused, err)
 		}
 	}
-	if record && len(checks) > 0 {
-		e.recordBatch(ctx, q, verdicts, nil)
+	if len(checks) > 0 {
+		e.reportBatch(ctx, q, verdicts, nil, record)
 	}
 	return result, nil
 }
@@ -541,7 +541,10 @@ func (a grantAuthorization) allowsWithDisposition(check Check, disposition strin
 	return evaluation.Grant != nil, err
 }
 
-func (e *Engine) recordBatch(ctx context.Context, q question, decided []verdict, focus *Check) {
+// reportBatch emits the decision telemetry for a Decide call, and writes its
+// challenge row only when record is set: a Decide that records no row still
+// counts in the authorization traces.
+func (e *Engine) reportBatch(ctx context.Context, q question, decided []verdict, focus *Check, record bool) {
 	checks := make([]Check, 0, len(decided))
 	matches := make([]grantMatch, 0, len(decided))
 	allowedCount := 0
@@ -584,6 +587,10 @@ func (e *Engine) recordBatch(ctx context.Context, q question, decided []verdict,
 		row.Reason = authzrepo.ReasonDenyGrant
 	case q.grants.grantCount() == 0:
 		row.Reason = authzrepo.ReasonNoGrants
+	}
+	if !record {
+		RecordAuthorizationDecision(ctx, row.Operation, row.Outcome, row.Reason)
+		return
 	}
 	row.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
 }
