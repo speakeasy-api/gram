@@ -909,6 +909,29 @@ func TestService_Callback_SignupIntent(t *testing.T) {
 		require.Equal(t, userInfo.Email, entry.ActorDisplay)
 	})
 
+	t.Run("personal email is refused without creating an org", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := defaultMockUserInfo()
+		userInfo.Email = "someone@gmail.com"
+		userInfo.Organizations = nil
+		ctx, instance := newTestAuthServiceForOrganizationProvisioning(t, userInfo)
+
+		ctx, stateParam := instance.stateWithSignupIntent(ctx, t, "", "Acme Inc")
+		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
+			Code:  new("mock_code"),
+			State: &stateParam,
+		})
+		require.NoError(t, err)
+		require.Contains(t, result.Location, "signin_error=personal_email_not_allowed")
+		require.Empty(t, result.SessionToken)
+		require.Empty(t, instance.trialNotifier.trialStarted)
+
+		organizations, err := orgRepo.New(instance.conn).ListOrganizationsForUser(ctx, conv.ToPGText(userInfo.UserID))
+		require.NoError(t, err)
+		require.Empty(t, organizations)
+	})
+
 	t.Run("trial notifier failure does not fail signup", func(t *testing.T) {
 		t.Parallel()
 
