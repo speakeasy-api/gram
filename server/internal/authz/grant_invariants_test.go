@@ -389,6 +389,13 @@ func TestGrantInvariants_Either(t *testing.T) {
 				if decided.AllAllowed != allowed {
 					failures.add("[%s] Decide(Either(%s on %s, %s on %s)) = %v, Require = %v", describeGrants(grants), a.name, a.server.id, b.name, b.server.id, decided.AllAllowed, allowed)
 				}
+				loaded, err := GrantsAuthorize(grants, Either(a.check, b.check))
+				if err != nil {
+					t.Fatalf("GrantsAuthorize(Either) errored: %v", err)
+				}
+				if loaded != allowed {
+					failures.add("[%s] GrantsAuthorize(Either(%s on %s, %s on %s)) = %v, Require = %v", describeGrants(grants), a.name, a.server.id, b.name, b.server.id, loaded, allowed)
+				}
 			}
 		}
 	})
@@ -412,13 +419,21 @@ func TestGrantInvariants_EitherRefusesEveryBlock(t *testing.T) {
 				}
 				block := NewGrant(blockScope, a.server.id)
 				block.PrincipalUrn = holder
-				ctx := GrantsToContext(enterpriseSessionCtx(t), append(slices.Clone(grants), block))
+				withBlock := append(slices.Clone(grants), block)
+				ctx := GrantsToContext(enterpriseSessionCtx(t), withBlock)
 				for j, b := range checks {
 					if i == j {
 						continue
 					}
 					if engineAllows(t, engine.Require(ctx, Either(b.check, a.check))) {
 						failures.add("[%s] plus %s still allows Either(%s on %s, %s on %s)", describeGrants(grants), describeGrant(block), b.name, b.server.id, a.name, a.server.id)
+					}
+					loaded, err := GrantsAuthorize(withBlock, Either(b.check, a.check))
+					if err != nil {
+						t.Fatalf("GrantsAuthorize(Either) errored: %v", err)
+					}
+					if loaded {
+						failures.add("[%s] plus %s: GrantsAuthorize still allows Either(%s on %s, %s on %s)", describeGrants(grants), describeGrant(block), b.name, b.server.id, a.name, a.server.id)
 					}
 				}
 			}
