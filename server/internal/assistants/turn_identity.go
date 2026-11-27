@@ -21,6 +21,10 @@ var ErrTurnIdentity = errors.New("assistant turn identity rejected")
 // Speakeasy user.
 var ErrSlackSenderUnlinked = errors.New("slack sender is not linked to a Speakeasy user")
 
+// errAssistantOwnerUnavailable is returned when an automated turn falls back
+// to an assistant that has no recorded owner.
+var errAssistantOwnerUnavailable = errors.New("assistant owner is unavailable")
+
 // wakeIdentityVersionRequester marks wakes that captured their requester when
 // they were scheduled.
 const wakeIdentityVersionRequester = 1
@@ -181,7 +185,7 @@ func selectTurnUserWithResolution(ctx context.Context, assistant assistantRecord
 		}
 	}
 	if assistant.CreatedByUserID == "" {
-		return "", false, "", errors.New("assistant owner is unavailable")
+		return "", false, "", errAssistantOwnerUnavailable
 	}
 	return assistant.CreatedByUserID, false, ATEInitiatorNoUser, nil
 }
@@ -245,8 +249,12 @@ func (s *ServiceCore) resolveTurnIdentity(ctx context.Context, assistant assista
 			return turnIdentity{}, fmt.Errorf("%w: %w", ErrTurnIdentity, err)
 		}
 		if thread.SourceKind != sourceKindSpeakeasySlack && eventSource != sourceKindSpeakeasySlack {
+			selectedUser, known, resolution, selErr := selectTurnUserWithResolution(ctx, assistant, thread.SourceKind, event, slackrepo.New(s.db).ResolveSlackMappingUser)
+			if selErr != nil && !errors.Is(selErr, errAssistantOwnerUnavailable) {
+				return turnIdentity{}, fmt.Errorf("%w: %w", ErrTurnIdentity, selErr)
+			}
 			initiator := ateThreadInitiator{UserID: "", Resolution: ATEInitiatorNoUser}
-			if selectedUser, known, resolution, selErr := selectTurnUserWithResolution(ctx, assistant, thread.SourceKind, event, slackrepo.New(s.db).ResolveSlackMappingUser); selErr == nil && known {
+			if selErr == nil && known {
 				initiator = ateThreadInitiator{UserID: selectedUser, Resolution: resolution}
 			}
 			return turnIdentity{UserID: legacyTurnUserID(assistant, thread, event), AgentBacked: false, HumanKnown: false, Initiator: initiator}, nil
