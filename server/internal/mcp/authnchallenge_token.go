@@ -2692,7 +2692,7 @@ func (s *Service) humanReplayRevoked(ctx context.Context, endpoint *ResolvedMcpE
 			return refreshReplayLookupFailed, false, err
 		}
 		if blocked {
-			userblock.LogRefusal(ctx, s.logger, "mcp_refresh_token_replay", session.SubjectUrn.ID)
+			userblock.LogRefusal(ctx, endpoint.LogWith(s.logger), "mcp_refresh_token_replay", session.SubjectUrn.ID)
 			return refreshUserDisabled, false, nil
 		}
 	}
