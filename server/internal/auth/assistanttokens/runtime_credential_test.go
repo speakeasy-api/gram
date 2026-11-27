@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -94,6 +95,23 @@ func TestBindRuntime(t *testing.T) {
 	gotChat, hasChat := RuntimeChatID(boundTurn)
 	require.True(t, hasChat)
 	require.Equal(t, f.chatID, gotChat)
+	require.False(t, InferenceTranscriptOwned(boundTurn))
+
+	// A Kit-owned turn credential minted with a short lifetime binds the runtime
+	// and marks the transcript as Kit-owned while keeping RuntimeChatID intact.
+	kitBinding := binding
+	kitBinding.TranscriptOwned = true
+	kitRaw, kitExp, err := manager.MintTurnCredentialWithLifetime(t.Context(), workload, kitBinding, 5*time.Minute)
+	require.NoError(t, err)
+	require.True(t, kitExp.After(time.Now().Add(4*time.Minute)))
+	kitCtx, err := credentials.Authenticate(t.Context(), kitRaw)
+	require.NoError(t, err)
+	boundKit, err := manager.BindRuntime(kitCtx)
+	require.NoError(t, err)
+	require.True(t, InferenceTranscriptOwned(boundKit))
+	gotKitChat, hasKitChat := RuntimeChatID(boundKit)
+	require.True(t, hasKitChat)
+	require.Equal(t, f.chatID, gotKitChat)
 
 	// Soft-deleting the bound thread rejects the turn credential as unauthorized.
 	require.NoError(t, assistantsrepo.New(f.conn).SoftDeleteAssistantThread(t.Context(), assistantsrepo.SoftDeleteAssistantThreadParams{

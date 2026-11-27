@@ -84,7 +84,7 @@ func TestWorkloadInference_Standalone(t *testing.T) {
 	require.Equal(t, []any{mcp.InferenceResource}, claims["aud"])
 	require.Equal(t, urn.NewWorkloadSubject(issuerID, subject).String(), claims["sub"])
 
-	authorized, handled, err := ti.service.AuthorizeWorkloadInference(t.Context(), response.AccessToken, uuid.Nil)
+	authorized, handled, err := ti.service.AuthorizeWorkloadInference(t.Context(), response.AccessToken)
 	require.NoError(t, err)
 	require.True(t, handled)
 	inferenceAuth, ok := contextvalues.GetAuthContext(authorized)

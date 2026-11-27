@@ -1,6 +1,8 @@
 package gram
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"testing"
 
@@ -8,20 +10,68 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/urfave/cli/v2"
 	"go.opentelemetry.io/otel/trace"
+	goahttp "goa.design/goa/v3/http"
 
 	"github.com/speakeasy-api/gram/server/internal/assistants"
+	"github.com/speakeasy-api/gram/server/internal/atecred"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-func TestATEIssuerAndJWKSFlags(t *testing.T) {
+func TestATECredentialProviderAuthFlags(t *testing.T) {
 	t.Parallel()
 	c := kitCLIContext(t, map[string]string{
-		"assistant-ate-issuer-url": "https://idp.ate.example.com",
-		"assistant-ate-jwks-url":   "https://idp.ate.example.com/custom/jwks",
+		"assistant-ate-cred-provider-service-account": "ate-cred@proj.iam.gserviceaccount.com",
+		"assistant-ate-cred-provider-local-token":     "local-secret-token",
 	})
-	require.Equal(t, "https://idp.ate.example.com", c.String("assistant-ate-issuer-url"))
-	require.Equal(t, "https://idp.ate.example.com/custom/jwks", c.String("assistant-ate-jwks-url"))
+	require.Equal(t, "ate-cred@proj.iam.gserviceaccount.com", c.String("assistant-ate-cred-provider-service-account"))
+	require.Equal(t, "local-secret-token", c.String("assistant-ate-cred-provider-local-token"))
+}
+
+func TestMountATECredentialMintEndpointFromCLI(t *testing.T) {
+	t.Parallel()
+	serverURL, err := url.Parse("https://api.example.com")
+	require.NoError(t, err)
+
+	t.Run("disabled leaves mint endpoint unmounted", func(t *testing.T) {
+		t.Parallel()
+		mux := goahttp.NewMuxer()
+		err := mountATECredentialMintEndpointFromCLI(t.Context(), testenv.NewLogger(t), mux, kitCLIContext(t, nil), &assistants.ServiceCore{}, serverURL)
+		require.NoError(t, err)
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, atecred.MintEndpointPath, nil))
+		require.Equal(t, http.StatusNotFound, rec.Code)
+	})
+
+	t.Run("non-local fails closed when service account is empty", func(t *testing.T) {
+		t.Parallel()
+		c := kitCLIContext(t, map[string]string{
+			"environment":                             "production",
+			"assistant-ate-enabled":                   "true",
+			"assistant-ate-atespace":                  "prod-assistants",
+			"assistant-ate-cred-provider-local-token": "forbidden-in-prod",
+		})
+		require.Panics(t, func() {
+			_ = mountATECredentialMintEndpointFromCLI(t.Context(), testenv.NewLogger(t), goahttp.NewMuxer(), c, &assistants.ServiceCore{}, serverURL)
+		})
+	})
+
+	t.Run("local static token mounts mint endpoint and authenticates", func(t *testing.T) {
+		t.Parallel()
+		mux := goahttp.NewMuxer()
+		c := kitCLIContext(t, map[string]string{
+			"environment":                             "local",
+			"assistant-ate-enabled":                   "true",
+			"assistant-ate-atespace":                  "local-assistants",
+			"assistant-ate-cred-provider-local-token": "dev-static-token",
+		})
+		err := mountATECredentialMintEndpointFromCLI(t.Context(), testenv.NewLogger(t), mux, c, &assistants.ServiceCore{}, serverURL)
+		require.NoError(t, err)
+
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, atecred.MintEndpointPath, nil))
+		require.Equal(t, http.StatusUnauthorized, rec.Code)
+	})
 }
 
 func TestATERuntimeConstructionWithoutClusterEndpoint(t *testing.T) {
@@ -101,27 +151,6 @@ func TestATEStartupValidationAndDisabledProvider(t *testing.T) {
 		})
 	})
 
-	t.Run("enabled ATE rejects missing assistant-ate-issuer-url", func(t *testing.T) {
-		t.Parallel()
-		c := kitCLIContext(t, map[string]string{
-			"environment":                     "production",
-			"assistant-ate-enabled":           "true",
-			"assistant-ate-image":             "gcr.io/example/gram-ate-runtime:sha-deadbeef@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-			"assistant-ate-worker-selector":   "workload-type=ate-assistants",
-			"assistant-ate-api-address":       "127.0.0.1:1",
-			"assistant-ate-router-address":    "127.0.0.1:2",
-			"assistant-ate-service-ca-file":   "/nonexistent/ca.pem",
-			"assistant-ate-client-cert-file":  "/nonexistent/cert.pem",
-			"assistant-ate-client-key-file":   "/nonexistent/key.pem",
-			"assistant-ate-audience-jwt-file": "/nonexistent/token",
-			"assistant-ate-atespace":          "prod-assistants",
-			"assistant-ate-template":          "kit-v1",
-		})
-		require.Panics(t, func() {
-			_ = installKitLocalRuntimeFromCLI(testenv.NewLogger(t), c, &assistants.ServiceCore{}, nil, nil, redis.NewClient(&redis.Options{Addr: "127.0.0.1:0"}), serverURL, nil)
-		})
-	})
-
 	t.Run("enabled ATE rejects missing or invalid assistant-ate-worker-selector", func(t *testing.T) {
 		t.Parallel()
 		for _, selector := range []string{"", "not-a-selector", "a..b/key=val"} {
@@ -129,7 +158,6 @@ func TestATEStartupValidationAndDisabledProvider(t *testing.T) {
 				"environment":                     "production",
 				"assistant-ate-enabled":           "true",
 				"assistant-ate-image":             "gcr.io/example/gram-ate-runtime:sha-deadbeef@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-				"assistant-ate-issuer-url":        "https://ate.example.com",
 				"assistant-ate-api-address":       "127.0.0.1:1",
 				"assistant-ate-router-address":    "127.0.0.1:2",
 				"assistant-ate-service-ca-file":   "/nonexistent/ca.pem",
@@ -156,7 +184,6 @@ func TestATEStartupValidationAndDisabledProvider(t *testing.T) {
 			"assistant-ate-enabled":           "true",
 			"assistant-ate-image":             "gcr.io/example/gram-ate-runtime:sha-0123456789abcdef0123456789abcdef01234567@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 			"assistant-ate-worker-selector":   "workload-type=ate-assistants,tier=prod",
-			"assistant-ate-issuer-url":        "https://ate.example.com",
 			"assistant-ate-api-address":       "127.0.0.1:1",
 			"assistant-ate-router-address":    "127.0.0.1:2",
 			"assistant-ate-service-ca-file":   "/nonexistent/ca.pem",

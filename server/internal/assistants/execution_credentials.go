@@ -77,6 +77,7 @@ func (s *ServiceCore) mintTurnCredential(ctx context.Context, assistant assistan
 	token, err := s.assistantTokens.MintTurnCredential(ctx, credential, assistanttokens.RuntimeBinding{
 		OrganizationID: assistant.OrganizationID, ProjectID: assistant.ProjectID,
 		AssistantID: assistant.ID, ThreadID: thread.ID, ChatID: thread.ChatID,
+		TranscriptOwned: false,
 	})
 	if err != nil {
 		return "", fmt.Errorf("mint turn credential: %w", err)

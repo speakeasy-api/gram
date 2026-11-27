@@ -75,19 +75,7 @@ WHERE s.runtime_id = $1 AND s.project_id = $2 AND s.assistant_id = $3
   AND r.runtime_version = 3 AND a.runtime_version = 3
   AND NOT r.deleted AND NOT r.ended AND r.state IN ('starting', 'active') AND NOT a.deleted AND a.status = 'active'
   AND NOT t.deleted AND NOT c.deleted
-  AND (
-    r.backend_metadata_json->'workload' = $4::jsonb
-    OR EXISTS (
-      SELECT 1
-      FROM assistant_ate_actors act
-      WHERE act.runtime_id = r.id
-        AND act.project_id = r.project_id
-        AND act.assistant_id = r.assistant_id
-        AND act.assistant_thread_id = s.assistant_thread_id
-        AND NOT act.deleted
-        AND act.workload_binding_json = $4::jsonb
-    )
-  )
+  AND r.backend_metadata_json->'workload' = $4::jsonb
 `
 
 type ListKitInferenceSessionBindingsParams struct {
@@ -139,25 +127,6 @@ JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
 WHERE r.project_id = $1 AND a.organization_id = $2
   AND r.backend_metadata_json->'workload'->>'issuer_id' = $3::text
   AND r.backend_metadata_json->'workload'->>'subject' = $4::text
-UNION ALL
-SELECT r.id AS runtime_id, r.assistant_id,
-  jsonb_build_object(
-    'runtime_id', r.id,
-    'assistant_id', r.assistant_id,
-    'project_id', r.project_id,
-    'runtime_version', r.runtime_version,
-    'workload', act.workload_binding_json
-  ) AS backend_metadata_json,
-  (r.runtime_version = 3 AND a.runtime_version = 3
-   AND NOT r.deleted AND NOT r.ended AND r.state IN ('starting', 'active')
-   AND NOT a.deleted AND a.status = 'active'
-   AND NOT act.deleted)::boolean AS active
-FROM assistant_ate_actors act
-JOIN assistant_runtimes r ON r.id = act.runtime_id AND r.project_id = act.project_id
-JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
-WHERE act.project_id = $1 AND act.organization_id = $2
-  AND act.workload_binding_json->>'issuer_id' = $3::text
-  AND act.workload_binding_json->>'subject' = $4::text
 `
 
 type ListKitWorkloadBindingsParams struct {
@@ -174,7 +143,7 @@ type ListKitWorkloadBindingsRow struct {
 	Active              bool
 }
 
-// The workload subject is unique to one runtime generation (or ATE thread actor), not a guest claim.
+// The workload subject is unique to one runtime generation, not a guest claim.
 func (q *Queries) ListKitWorkloadBindings(ctx context.Context, arg ListKitWorkloadBindingsParams) ([]ListKitWorkloadBindingsRow, error) {
 	rows, err := q.db.Query(ctx, listKitWorkloadBindings,
 		arg.ProjectID,
