@@ -5,7 +5,7 @@ COPY server/cmd/kit-ate-init/main.go ./main.go
 RUN CGO_ENABLED=0 GOOS=linux GOARCH="${TARGETARCH:-$(go env GOARCH)}" \
     go build -trimpath -ldflags="-s -w" -o /kit-ate-init ./main.go
 
-FROM ghcr.io/speakeasy-api/kit@sha256:affcda1d5296d5d4fc17edd83fb6938363dc4f29367265fb66185ae0d56b8f13
+FROM ghcr.io/speakeasy-api/kit:v0.3.1@sha256:81b17712102093a3b3019f5012df6de132de0d07e90ec4a61fea8cb13b155539
 USER 0:0
 COPY --from=build --chmod=0755 /kit-ate-init /usr/local/bin/kit-ate-init
 USER 1000:1000
