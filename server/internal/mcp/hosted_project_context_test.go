@@ -35,7 +35,7 @@ func TestHostedPlatformTool_ProjectContext(t *testing.T) {
 					target.ActiveOrganizationID = "test-foreign-organization"
 					_, err := orgrepo.New(ti.conn).UpsertOrganizationMetadata(ctx, orgrepo.UpsertOrganizationMetadataParams{
 						ID: target.ActiveOrganizationID, Name: "Foreign organization", Slug: "foreign-organization",
-						WorkosID: pgtype.Text{}, Whitelisted: pgtype.Bool{},
+						WorkosID: pgtype.Text{}, Whitelisted: pgtype.Bool{Bool: true, Valid: true},
 					})
 					require.NoError(t, err)
 					project, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
