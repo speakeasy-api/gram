@@ -312,7 +312,7 @@ func (s *Service) UploadTranscript(ctx context.Context, payload *gen.UploadTrans
 		return nil, oops.E(oops.CodeInvalid, err, "unrecognized transcript: expected messages JSON, Claude Code JSONL, or Pi JSONL").LogWarn(ctx, logger)
 	}
 
-	chatID, err := intentpolicy.StoreTranscript(ctx, s.db, s.chatWriter, intentpolicy.StoreParams{
+	chatID, err := intentpolicy.StoreTranscript(ctx, s.chatWriter, intentpolicy.StoreParams{
 		ChatID:         uuid.Nil,
 		ProjectID:      *authCtx.ProjectID,
 		OrganizationID: authCtx.ActiveOrganizationID,

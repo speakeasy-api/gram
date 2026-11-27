@@ -14,6 +14,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptcrypto"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -101,6 +102,17 @@ func TestTranscriptShadowFlags(t *testing.T) {
 	}
 }
 
+// openOne opens one loaded message of a listed project through the store's
+// read path.
+func openOne(t *testing.T, transcripts *transcriptstore.Transcripts, projectID uuid.UUID) error {
+	t.Helper()
+	rows := []uuid.UUID{uuid.New()}
+	//nolint:wrapcheck // the test checks the store's own error.
+	return transcriptstore.OpenChatMessages(t.Context(), transcripts, "org", projectID, rows, func(id *uuid.UUID) transcriptstore.OpenTarget {
+		return transcriptstore.OpenTarget{MessageID: *id, Set: func(transcriptcrypto.ProtectedFields) {}}
+	})
+}
+
 func TestReadOnlyTranscripts(t *testing.T) {
 	t.Parallel()
 	none, err := configureReadOnlyTranscripts(newTranscriptShadowCLIContext(t, nil), testenv.NewLogger(t), testenv.NewMeterProvider(t))
@@ -122,18 +134,17 @@ func TestReadOnlyTranscriptsStrictInLocalDevelopment(t *testing.T) {
 	t.Parallel()
 	listed := uuid.MustParse("10000000-0000-4000-8000-000000000001")
 	values := map[string]string{chatTranscriptShadowProjectIDsFlag: listed.String()}
-	body := []transcriptstore.ProtectedFieldRefs{{MessageID: uuid.New(), Content: new(string), ContentRaw: nil, ToolCalls: nil, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}}
 
 	local, err := configureReadOnlyTranscripts(newTranscriptShadowCLIContextIn(t, "local", values), testenv.NewLogger(t), testenv.NewMeterProvider(t))
 	require.NoError(t, err)
-	require.ErrorIs(t, local.Open(t.Context(), "org", listed, body), transcriptstore.ErrPlaintextRead, "local development rejects the plaintext read")
+	require.ErrorIs(t, openOne(t, local, listed), transcriptstore.ErrPlaintextRead, "local development rejects the plaintext read")
 
 	reader := sdkmetric.NewManualReader()
 	provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
 	t.Cleanup(func() { require.NoError(t, provider.Shutdown(context.Background())) })
 	prod, err := configureReadOnlyTranscripts(newTranscriptShadowCLIContextIn(t, "prod", values), testenv.NewLogger(t), provider)
 	require.NoError(t, err)
-	require.NoError(t, prod.Open(t.Context(), "org", listed, body), "production serves, logs and counts")
+	require.NoError(t, openOne(t, prod, listed), "production serves, logs and counts")
 
 	var collected metricdata.ResourceMetrics
 	require.NoError(t, reader.Collect(t.Context(), &collected))
@@ -152,7 +163,7 @@ func TestReadOnlyTranscriptsStrictInLocalDevelopment(t *testing.T) {
 	require.Equal(t, int64(1), points[0].Value)
 	require.Equal(t, attribute.NewSet(
 		attr.ProjectID(listed.String()),
-		attr.TranscriptShadowReader("Open"),
+		attr.TranscriptShadowReader("OpenChatMessages"),
 		attr.Outcome("unopened"),
 	), points[0].Attributes)
 
@@ -169,6 +180,5 @@ func TestReaderTranscriptsFallBackWithoutOrgEncryption(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, transcripts)
 	require.False(t, transcripts.Enabled(listed), "without organization encryption streams cannot open shadows")
-	body := []transcriptstore.ProtectedFieldRefs{{MessageID: uuid.New(), Content: new(string), ContentRaw: nil, ToolCalls: nil, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}}
-	require.ErrorIs(t, transcripts.Open(t.Context(), "org", listed, body), transcriptstore.ErrPlaintextRead, "so its reads go through the guard")
+	require.ErrorIs(t, openOne(t, transcripts, listed), transcriptstore.ErrPlaintextRead, "so its reads go through the guard")
 }

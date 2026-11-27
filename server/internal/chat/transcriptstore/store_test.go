@@ -62,7 +62,7 @@ func setup(t *testing.T, provision bool) *fixture {
 	require.NoError(t, err)
 	if provision {
 		require.NoError(t, f.keys.Provisioner.EnsureUseCase(t.Context(), f.org, orgencryption.UseCaseChatTranscripts, orgencryption.SystemActor()))
-		// Writers warm the key before their transaction; Capture never calls KMS.
+		// Writers warm the key before their transaction; ResealChatMessages never calls KMS.
 		require.NoError(t, f.store.Prepare(t.Context(), f.org))
 	}
 	return f
@@ -77,7 +77,7 @@ func (f *fixture) capture(t *testing.T, ids ...uuid.UUID) {
 	tx, err := f.db.Begin(t.Context()) //nolint:glint // notestingrawsql: caller-owned transaction boundary exercises atomicity and lock lifetime; fixture data uses generated queries.
 	require.NoError(t, err)
 	defer func() { _ = tx.Rollback(t.Context()) }()
-	require.NoError(t, f.store.Capture(t.Context(), tx, f.org, f.project, ids))
+	require.NoError(t, f.store.ResealChatMessages(t.Context(), tx, f.org, f.project, ids))
 	require.NoError(t, tx.Commit(t.Context()))
 }
 
@@ -104,7 +104,7 @@ func TestCaptureWithOneConnectionNeedsAWarmKey(t *testing.T) {
 	cold, err := pool.Begin(ctx) //nolint:glint // notestingrawsql: caller-owned transaction boundary exercises atomicity and lock lifetime; fixture data uses generated queries.
 	require.NoError(t, err)
 	defer func() { _ = cold.Rollback(context.Background()) }()
-	require.ErrorIs(t, store.Capture(ctx, cold, f.org, f.project, []uuid.UUID{first}), orgencryption.ErrKeyNotWarm)
+	require.ErrorIs(t, store.ResealChatMessages(ctx, cold, f.org, f.project, []uuid.UUID{first}), orgencryption.ErrKeyNotWarm)
 	require.NoError(t, cold.Rollback(ctx))
 	require.Equal(t, before, f.keys.KMS.Decrypts(), "no KMS call inside the transaction")
 
@@ -113,7 +113,7 @@ func TestCaptureWithOneConnectionNeedsAWarmKey(t *testing.T) {
 	tx, err := pool.Begin(ctx) //nolint:glint // notestingrawsql: caller-owned transaction boundary exercises atomicity and lock lifetime; fixture data uses generated queries.
 	require.NoError(t, err)
 	defer func() { _ = tx.Rollback(context.Background()) }()
-	require.NoError(t, store.Capture(ctx, tx, f.org, f.project, []uuid.UUID{first, second}))
+	require.NoError(t, store.ResealChatMessages(ctx, tx, f.org, f.project, []uuid.UUID{first, second}))
 	require.Equal(t, before+1, f.keys.KMS.Decrypts(), "the batch uses the warm key")
 	require.NoError(t, tx.Commit(ctx))
 	opened, err := store.Load(ctx, f.org, f.project, first)
@@ -148,7 +148,7 @@ func TestCaptureLoadOwnershipAndStaleness(t *testing.T) {
 		require.ErrorIs(t, err, ErrNotFound)
 		tx, err := f.db.Begin(t.Context()) //nolint:glint // notestingrawsql: caller-owned transaction boundary exercises atomicity and lock lifetime; fixture data uses generated queries.
 		require.NoError(t, err)
-		require.ErrorIs(t, f.store.Capture(t.Context(), tx, target.org, target.project, []uuid.UUID{id}), ErrNotFound)
+		require.ErrorIs(t, f.store.ResealChatMessages(t.Context(), tx, target.org, target.project, []uuid.UUID{id}), ErrNotFound)
 		require.NoError(t, tx.Rollback(t.Context()))
 	}
 	_, err = fixturerepo.New(f.db).ChangeContent(t.Context(), id, project(f.project))
@@ -180,7 +180,7 @@ func TestCaptureLocksTheMessageUntilCommit(t *testing.T) {
 	tx, err := f.db.Begin(t.Context()) //nolint:glint // notestingrawsql: caller-owned transaction boundary exercises atomicity and lock lifetime; fixture data uses generated queries.
 	require.NoError(t, err)
 	defer func() { _ = tx.Rollback(t.Context()) }()
-	require.NoError(t, f.store.Capture(t.Context(), tx, f.org, f.project, []uuid.UUID{id}))
+	require.NoError(t, f.store.ResealChatMessages(t.Context(), tx, f.org, f.project, []uuid.UUID{id}))
 	edit, err := f.db.Begin(t.Context()) //nolint:glint // notestingrawsql: caller-owned transaction boundary exercises atomicity and lock lifetime; fixture data uses generated queries.
 	require.NoError(t, err)
 	defer func() { _ = edit.Rollback(t.Context()) }()
@@ -252,7 +252,7 @@ func TestKeyFailureAndCallerRollback(t *testing.T) {
 	tx, err := f.db.Begin(t.Context()) //nolint:glint // notestingrawsql: caller-owned transaction boundary exercises atomicity and lock lifetime; fixture data uses generated queries.
 	require.NoError(t, err)
 	defer func() { _ = tx.Rollback(t.Context()) }()
-	require.ErrorIs(t, f.store.Capture(t.Context(), tx, f.org, f.project, []uuid.UUID{low, uuid.MustParse("ffffffff-ffff-ffff-ffff-ffffffffffff")}), ErrNotFound)
+	require.ErrorIs(t, f.store.ResealChatMessages(t.Context(), tx, f.org, f.project, []uuid.UUID{low, uuid.MustParse("ffffffff-ffff-ffff-ffff-ffffffffffff")}), ErrNotFound)
 	require.NoError(t, tx.Rollback(t.Context()))
 	_, err = f.store.Load(t.Context(), f.org, f.project, low)
 	require.ErrorIs(t, err, ErrNotFound)
@@ -277,7 +277,7 @@ func TestSemanticJSON(t *testing.T) {
 	}
 	// Redaction preserves errors.Is across database/provider errors.
 	require.ErrorIs(t, safe(context.DeadlineExceeded), context.DeadlineExceeded)
-	require.NoError(t, (&Store{}).Capture(context.Background(), nil, "", uuid.Nil, nil))
+	require.NoError(t, (&Store{}).ResealChatMessages(context.Background(), nil, "", uuid.Nil, nil))
 	_, err := New(nil, nil, nil, nil, nil)
 	require.ErrorIs(t, err, ErrInvalid)
 }
@@ -316,7 +316,7 @@ func TestConcurrentCapturesOfOneMessageDoNotDeadlock(t *testing.T) {
 
 	secondDone := make(chan error, 1)
 	hook := &afterCaptureExec{DBTX: first, once: func() {
-		go func() { secondDone <- f.store.Capture(ctx, second, f.org, f.project, []uuid.UUID{id}) }()
+		go func() { secondDone <- f.store.ResealChatMessages(ctx, second, f.org, f.project, []uuid.UUID{id}) }()
 		// Let the second capture take every lock it can get, until it waits
 		// on one, before the first goes on to update the message.
 		require.Eventually(t, func() bool {
@@ -325,7 +325,7 @@ func TestConcurrentCapturesOfOneMessageDoNotDeadlock(t *testing.T) {
 			return err == nil && waiting > 0
 		}, 5*time.Second, 10*time.Millisecond)
 	}}
-	require.NoError(t, f.store.Capture(ctx, hook, f.org, f.project, []uuid.UUID{id}))
+	require.NoError(t, f.store.ResealChatMessages(ctx, hook, f.org, f.project, []uuid.UUID{id}))
 	require.NoError(t, first.Commit(ctx))
 	require.NoError(t, <-secondDone)
 	require.NoError(t, second.Commit(ctx))
@@ -402,7 +402,7 @@ func TestUnattributedOwnershipFailsClosed(t *testing.T) {
 	_, err = fixturerepo.New(f.db).MoveMessageProject(t.Context(), project(wrong), id, project(f.project))
 	require.NoError(t, err)
 	for _, pid := range []uuid.UUID{f.project, wrong} {
-		require.ErrorIs(t, f.store.Capture(t.Context(), f.db, f.org, pid, []uuid.UUID{id}), ErrNotFound)
+		require.ErrorIs(t, f.store.ResealChatMessages(t.Context(), f.db, f.org, pid, []uuid.UUID{id}), ErrNotFound)
 		_, err = f.store.Load(t.Context(), f.org, pid, id)
 		require.ErrorIs(t, err, ErrNotFound)
 	}
@@ -477,7 +477,7 @@ func TestCaptureDoesNotInvertChatAndWrapLocks(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		result <- ordinaryStore.Capture(ctx, normal, f.org, f.project, []uuid.UUID{normalID})
+		result <- ordinaryStore.ResealChatMessages(ctx, normal, f.org, f.project, []uuid.UUID{normalID})
 	}()
 	defer func() {
 		cancel()
@@ -492,7 +492,7 @@ func TestCaptureDoesNotInvertChatAndWrapLocks(t *testing.T) {
 	// wrap lock, compaction's unwrap would wait on it and never commit.
 	compactionCtx, stop := context.WithTimeout(ctx, 2*time.Second)
 	defer stop()
-	require.NoError(t, compactionStore.Capture(compactionCtx, compaction, f.org, f.project, []uuid.UUID{compactionID}))
+	require.NoError(t, compactionStore.ResealChatMessages(compactionCtx, compaction, f.org, f.project, []uuid.UUID{compactionID}))
 	require.NoError(t, compaction.Commit(ctx))
 	select {
 	case err := <-result:

@@ -155,10 +155,7 @@ func (s *ServiceCore) RecordCompactedGeneration(ctx context.Context, projectID, 
 		})
 	}
 
-	if err := s.chatWriter.PrepareTranscripts(ctx, projectID); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "prepare compacted chat messages").LogError(ctx, s.logger, logAttrs...)
-	}
-	tx, err := s.db.Begin(ctx)
+	tx, err := s.chatWriter.Begin(ctx, projectID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "begin compaction transaction").LogError(ctx, s.logger, logAttrs...)
 	}
@@ -174,13 +171,12 @@ func (s *ServiceCore) RecordCompactedGeneration(ctx context.Context, projectID, 
 		writes[i].Params.Generation = currentGen + 1
 	}
 	if err := chat.MarkCompactedLineage(ctx, s.transcripts, tx, projectID, threadRow.ChatID, currentGen, writes); err != nil {
-		return fmt.Errorf("capture compacted lineage: %w", err)
+		return oops.E(oops.CodeUnexpected, err, "capture compacted lineage").LogError(ctx, s.logger, logAttrs...)
 	}
 	n, err := s.chatWriter.WriteInTx(ctx, tx, writes)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "write compacted chat messages").LogError(ctx, s.logger, logAttrs...)
 	}
-
 	if err := tx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit compaction transaction").LogError(ctx, s.logger, logAttrs...)
 	}

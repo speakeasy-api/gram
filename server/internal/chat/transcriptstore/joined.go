@@ -22,7 +22,7 @@ import (
 // lookup that opening needs runs once per project per process, on the first
 // shadow read, and is cached after that.
 type joinedRow struct {
-	body       ProtectedFieldRefs
+	body       bodyRefs
 	chatID     uuid.UUID
 	ciphertext pgtype.Text
 	current    bool
@@ -136,9 +136,44 @@ func (t *Transcripts) organization(ctx context.Context, db plainrepo.DBTX, proje
 	return org, nil
 }
 
+// bodyRefs points at the protected fields of one loaded row, so an opened
+// shadow can replace them whatever query loaded the row. A nil field was not
+// loaded and is left alone.
+type bodyRefs struct {
+	MessageID         uuid.UUID
+	Content           *string
+	ContentRaw        *[]byte
+	ToolCalls         *[]byte
+	ToolOutcomeNotes  *pgtype.Text
+	ToolCallSummaries *[]byte
+	StorageError      *pgtype.Text
+}
+
+// set writes the opened fields through the refs. A nil ref is left alone.
+func (b bodyRefs) set(f transcriptcrypto.ProtectedFields) {
+	if b.Content != nil {
+		*b.Content = f.Content
+	}
+	if b.ContentRaw != nil {
+		*b.ContentRaw = f.ContentRaw
+	}
+	if b.ToolCalls != nil {
+		*b.ToolCalls = f.ToolCalls
+	}
+	if b.ToolCallSummaries != nil {
+		*b.ToolCallSummaries = f.ToolCallSummaries
+	}
+	if b.ToolOutcomeNotes != nil {
+		*b.ToolOutcomeNotes = optionalText(f.ToolOutcomeNotes)
+	}
+	if b.StorageError != nil {
+		*b.StorageError = optionalText(f.StorageError)
+	}
+}
+
 // plain returns the opened message with every loaded field replaced by the
 // plaintext row's value, so comparing the two compares the loaded fields only.
-func (b ProtectedFieldRefs) plain(m transcriptcrypto.ProtectedFields) transcriptcrypto.ProtectedFields {
+func (b bodyRefs) plain(m transcriptcrypto.ProtectedFields) transcriptcrypto.ProtectedFields {
 	if b.Content != nil {
 		m.Content = *b.Content
 	}

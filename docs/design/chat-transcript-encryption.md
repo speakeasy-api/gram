@@ -16,7 +16,7 @@ Every query that reads the protected fields lives in `transcriptstore/internal/p
 
 ## Writes
 
-Writers call `Prepare` before `BEGIN`, so KMS runs outside the transaction; only the active key is cached. `InsertChatMessages` and `UpdateChatMessage` write every copy the mode needs in one transaction. A failure rolls back; a sanity-check mismatch is logged.
+Writers open their transaction with `Begin`, which loads the key before `BEGIN`, so KMS runs outside the transaction; only the active key is cached. `transcriptstore` runs every chat message insert, and `UpdateChatMessage` every change. Both use one protector: it reads the protected fields once, writes them (empty in encrypted mode) with their metadata in the same statement, and, outside plaintext mode, seals that same value, all in one transaction. A failure rolls back; a sanity-check mismatch is logged.
 
 Legacy transcripts with an unkeyed `source_hash` read as missing until `Backfill` reseals them.
 

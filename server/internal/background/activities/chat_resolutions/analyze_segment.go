@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
@@ -101,25 +102,14 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 		return fmt.Errorf("failed to analyze segment with LLM: %w", err)
 	}
 
-	// Outcome notes are part of the protected fields, which may be encrypted, so the
-	// key loads before the transaction below begins, but only when some outcome
-	// will be written. A segment that writes none must not fail on the key.
-	var prepared error
-	if writesAnOutcome(result.ToolCalls, args.StartIndex, len(allMessages)) {
-		prepared = a.transcripts.Prepare(ctx, args.OrgID, args.ProjectID)
-	}
-
-	// Use transaction for atomic updates
-	tx, err := a.db.Begin(ctx)
+	score := min(max(result.Score, 0), 100)
+	// Outcome notes are part of the protected fields, which may be encrypted,
+	// so Begin loads the key before the transaction begins.
+	tx, err := a.transcripts.Begin(ctx, a.db, args.OrgID, args.ProjectID)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer func() {
-		if err := tx.Rollback(ctx); err != nil {
-			a.logger.WarnContext(ctx, "failed to rollback transaction", attr.SlogError(err))
-		}
-	}()
-
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 	txRepo := a.repo.WithTx(tx)
 
 	// Collect each message's judged outcome; the last one for a message wins.
@@ -135,9 +125,6 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 			updated = append(updated, msgID)
 		}
 		judged[msgID] = tc
-	}
-	if len(updated) > 0 && prepared != nil {
-		return fmt.Errorf("prepare tool call outcome notes: %w", prepared)
 	}
 	// Write each message's outcome and notes as one change to its row.
 	// UpdateChatMessage locks the row and keeps every copy of the protected fields, which holds
@@ -155,7 +142,6 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 	}
 
 	// Insert resolution
-	score := min(max(result.Score, 0), 100)
 
 	resolutionID, err := txRepo.InsertChatResolution(ctx, repo.InsertChatResolutionParams{
 		ProjectID:       args.ProjectID,
@@ -192,7 +178,6 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 		}
 	}
 
-	// Commit transaction
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
@@ -403,16 +388,4 @@ func (a *AnalyzeSegment) formatUserFeedback(userFeedback []UserFeedback) string 
 		}
 	}
 	return feedbackText.String()
-}
-
-// writesAnOutcome reports whether any analyzed tool call maps to a message in
-// the chat, so the segment will write at least one outcome.
-func writesAnOutcome(toolCalls []toolCallAnalysis, startIndex, messageCount int) bool {
-	for _, tc := range toolCalls {
-		absoluteIndex := startIndex + tc.MessageIndex
-		if absoluteIndex >= 0 && absoluteIndex < messageCount {
-			return true
-		}
-	}
-	return false
 }

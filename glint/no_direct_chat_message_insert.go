@@ -11,10 +11,10 @@ import (
 
 const (
 	noDirectChatMessageInsertAnalyzer = "nodirectchatmessageinsert"
-	noDirectChatMessageInsertMessage  = "do not call CreateChatMessage directly; use chat.ChatMessageWriter.Write() or .WriteTurn() to ensure risk analysis observers are notified"
+	noDirectChatMessageInsertMessage  = "do not call CreateChatMessage directly; use chat.ChatMessageWriter.Write() or .WriteTurn() to ensure risk analysis observers are notified and encrypted transcripts are kept"
 
-	chatRepoPkgPath = "github.com/speakeasy-api/gram/server/internal/chat/repo"
-	chatPkgPath     = "github.com/speakeasy-api/gram/server/internal/chat"
+	chatRepoPkgPath        = "github.com/speakeasy-api/gram/server/internal/chat/repo"
+	transcriptstorePkgPath = "github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 )
 
 type noDirectChatMessageInsertSettings struct {
@@ -27,8 +27,9 @@ func newNoDirectChatMessageInsertAnalyzer(rule noDirectChatMessageInsertSettings
 		Doc:      noDirectChatMessageInsertMessage,
 		Requires: []*analysis.Analyzer{inspect.Analyzer},
 		Run: func(pass *analysis.Pass) (any, error) {
-			// Allow calls from within the chat package itself.
-			if pass.Pkg.Path() == chatPkgPath {
+			// transcriptstore runs every chat message insert, so it keeps each
+			// project's encrypted transcripts.
+			if pass.Pkg.Path() == transcriptstorePkgPath {
 				return nil, nil
 			}
 

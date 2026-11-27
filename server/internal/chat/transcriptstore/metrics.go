@@ -53,7 +53,7 @@ const (
 // slow tail that would hold a message transaction or a chat page open.
 var durationBuckets = []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.5, 1, 2.5, 5}
 
-// outcome classifies a Capture or LoadMany call for metrics and spans. Any
+// outcome classifies a write, reseal or LoadMany call for metrics and spans. Any
 // capture outcome other than success rolls back the caller's message write.
 // On reads, success and plaintext_fallback both serve the message, and so
 // does unopened (see plaintext_guard.go) when the plaintext guard is not

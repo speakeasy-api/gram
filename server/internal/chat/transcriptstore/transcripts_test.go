@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptcrypto"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore/fixturerepo"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -115,7 +116,9 @@ func TestTranscriptsGateByProject(t *testing.T) {
 	f.insert(t, other, offList)
 	for _, id := range []uuid.UUID{unlisted, offList} {
 		_, err := fixturerepo.New(f.db).MessageMetadata(t.Context(), id)
-		require.Error(t, err, "a project off the list captures nothing")
+		require.NoError(t, err, "every mode writes the metadata")
+		_, err = f.store.Load(t.Context(), f.org, f.project, id)
+		require.ErrorIs(t, err, ErrNotFound, "a project off the list seals nothing")
 	}
 
 	enabled := NewTranscripts(f.store, f.project)
@@ -140,8 +143,11 @@ type openRow struct {
 	storageError pgtype.Text
 }
 
-func openRowBody(r *openRow) ProtectedFieldRefs {
-	return ProtectedFieldRefs{MessageID: r.id, Content: &r.content, ContentRaw: &r.contentRaw, ToolCalls: &r.toolCalls, ToolOutcomeNotes: &r.notes, ToolCallSummaries: &r.summaries, StorageError: &r.storageError}
+func openRowBody(r *openRow) OpenTarget {
+	return OpenTarget{MessageID: r.id, Set: func(f transcriptcrypto.ProtectedFields) {
+		r.content, r.contentRaw, r.toolCalls, r.summaries = f.Content, f.ContentRaw, f.ToolCalls, f.ToolCallSummaries
+		r.notes, r.storageError = optionalText(f.ToolOutcomeNotes), optionalText(f.StorageError)
+	}}
 }
 
 // plaintextRow is a loaded row whose six body fields all hold placeholder
@@ -154,7 +160,7 @@ func plaintextRow(id uuid.UUID) openRow {
 	}
 }
 
-func TestOpenRowsServesTranscriptsAndFallsBackToPlaintext(t *testing.T) {
+func TestOpenChatMessagesServesTranscriptsAndFallsBackToPlaintext(t *testing.T) {
 	t.Parallel()
 	f := setup(t, true)
 	sealed, unsealed := uuid.New(), uuid.New()
@@ -166,7 +172,7 @@ func TestOpenRowsServesTranscriptsAndFallsBackToPlaintext(t *testing.T) {
 	transcripts := NewTranscripts(f.store, f.project)
 
 	rows := []openRow{plaintextRow(sealed), plaintextRow(unsealed)}
-	require.NoError(t, OpenRows(t.Context(), transcripts, f.org, f.project, rows, openRowBody))
+	require.NoError(t, OpenChatMessages(t.Context(), transcripts, f.org, f.project, rows, openRowBody))
 	opened := rows[0]
 	require.Equal(t, "sensitive example", opened.content, "a sealed message is served from its transcript")
 	require.True(t, sameJSON([]byte(`{"large":9007199254740993,"n":1e2}`), opened.contentRaw), "numbers survive exactly: %s", opened.contentRaw)
@@ -174,18 +180,19 @@ func TestOpenRowsServesTranscriptsAndFallsBackToPlaintext(t *testing.T) {
 	require.Equal(t, pgtype.Text{String: "example note", Valid: true}, opened.notes)
 	require.JSONEq(t, `{"example":"summary"}`, string(opened.summaries))
 	require.Equal(t, pgtype.Text{String: "example error", Valid: true}, opened.storageError, "all six fields come from the copy")
-	require.Equal(t, plaintextRow(unsealed), rows[1], "a message with no transcript keeps its plaintext")
+	require.Equal(t, "sensitive example", rows[1].content, "a message with no transcript is served its stored plaintext")
+	require.False(t, rows[1].storageError.Valid, "every field comes from the stored row")
 
 	off := []openRow{plaintextRow(sealed)}
-	require.NoError(t, OpenRows(t.Context(), NewTranscripts(f.store), f.org, f.project, off, openRowBody))
+	require.NoError(t, OpenChatMessages(t.Context(), NewTranscripts(f.store), f.org, f.project, off, openRowBody))
 	require.Equal(t, plaintextRow(sealed), off[0], "a project off the list reads plaintext")
 
 	_, err = fixturerepo.New(f.db).ChangeContent(t.Context(), sealed, project(f.project))
 	require.NoError(t, err)
 	stale := []openRow{plaintextRow(sealed)}
 	stale[0].content = "changed"
-	require.NoError(t, OpenRows(t.Context(), transcripts, f.org, f.project, stale, openRowBody))
-	require.Equal(t, "changed", stale[0].content, "a disagreeing transcript is logged and the plaintext is kept")
+	require.NoError(t, OpenChatMessages(t.Context(), transcripts, f.org, f.project, stale, openRowBody))
+	require.Equal(t, "changed", stale[0].content, "a disagreeing transcript is logged and the stored plaintext is served")
 }
 
 func TestToolCallIDsStayWithTheirProject(t *testing.T) {
@@ -369,7 +376,7 @@ func TestEncryptedMode(t *testing.T) {
 	open := func(id uuid.UUID) (openRow, error) {
 		t.Helper()
 		rows := []openRow{plaintextRow(id)}
-		err := OpenRows(ctx, encrypted, f.org, f.project, rows, openRowBody)
+		err := OpenChatMessages(ctx, encrypted, f.org, f.project, rows, openRowBody)
 		return rows[0], err
 	}
 	emptied := func(id uuid.UUID) {
@@ -415,7 +422,7 @@ func TestEncryptedMode(t *testing.T) {
 	// reaches chat_messages or its write-ahead log.
 	inserted := uuid.New()
 	written := f.insert(t, encrypted, inserted)
-	require.Empty(t, written.Content, "the INSERT gets empty protected fields")
+	require.Empty(t, written.Content, "the INSERT writes empty protected fields")
 	require.Nil(t, written.ContentRaw)
 	require.Nil(t, written.ToolCalls)
 	require.False(t, written.StorageError.Valid)
@@ -452,10 +459,10 @@ func TestModes(t *testing.T) {
 	require.Panics(t, func() { NewTranscripts(nil).WithEncryptedProjects(shadow) })
 }
 
-// insert stores one message through InsertChatMessages with the chat writer's
-// own CreateChatMessage query, as ChatMessageWriter does. It returns the
-// params the INSERT received, which is what reached chat_messages.
-func (f *fixture) insert(t *testing.T, transcripts *Transcripts, id uuid.UUID) chatrepo.CreateChatMessageParams {
+// insert stores one message through InsertChatMessages in its own
+// transaction, as ChatMessageWriter does, and returns the row it stored in
+// chat_messages.
+func (f *fixture) insert(t *testing.T, transcripts *Transcripts, id uuid.UUID) repo.ChatMessage {
 	t.Helper()
 	ctx := t.Context()
 	params := []chatrepo.CreateChatMessageParams{{
@@ -466,22 +473,30 @@ func (f *fixture) insert(t *testing.T, transcripts *Transcripts, id uuid.UUID) c
 		StorageError: pgtype.Text{String: "example storage error", Valid: true},
 		CreatedAt:    pgtype.Timestamptz{Time: time.Now(), InfinityModifier: pgtype.Finite, Valid: true},
 	}}
-	p := &params[0]
-	refs := []ProtectedFieldRefs{{MessageID: id, Content: &p.Content, ContentRaw: &p.ContentRaw, ToolCalls: &p.ToolCalls, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: &p.StorageError}}
-	var written chatrepo.CreateChatMessageParams
-	require.NoError(t, transcripts.Prepare(ctx, f.org, f.project))
-	tx, err := f.db.Begin(ctx) //nolint:glint // notestingrawsql: caller-owned transaction boundary is the behavior under test.
+	tx, err := transcripts.Begin(ctx, f.db, f.org, f.project)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = tx.Rollback(context.Background()) })
-	ids, err := transcripts.InsertChatMessages(ctx, tx, f.org, f.project, refs, func() ([]uuid.UUID, error) {
-		written = params[0]
-		_, err := chatrepo.New(tx).CreateChatMessage(ctx, params) //nolint:glint // nodirectchatmessageinsert: drives InsertChatMessages with the writer's own insert query.
-		require.NoError(t, err)
-		return []uuid.UUID{id}, nil
-	})
+	n, err := transcripts.InsertChatMessages(ctx, tx, f.org, f.project, params)
 	require.NoError(t, err)
-	require.Equal(t, []uuid.UUID{id}, ids)
+	require.EqualValues(t, 1, n)
 	require.NoError(t, tx.Commit(ctx))
-	require.Equal(t, "sensitive example", params[0].Content, "the caller's params are restored")
-	return written
+	require.Equal(t, "sensitive example", params[0].Content, "the caller's params are never changed")
+	row, err := repo.New(f.db).LockChatMessage(ctx, repo.LockChatMessageParams{MessageID: id, ProjectID: project(f.project), OrganizationID: f.org})
+	require.NoError(t, err)
+	return row.ChatMessage
+}
+
+// An insert seals and measures under its own project, so a row that names
+// another project is refused before anything is written.
+func TestInsertRefusesAnotherProjectsMessage(t *testing.T) {
+	t.Parallel()
+	f := setup(t, true)
+	transcripts := NewTranscripts(f.store, f.project)
+	other := chatrepo.CreateChatMessageParams{ID: uuid.New(), ChatID: f.chat, Role: "user", ProjectID: uuid.New(), Content: "EXAMPLE"}
+	_, err := transcripts.InsertChatMessages(t.Context(), f.db, f.org, f.project, []chatrepo.CreateChatMessageParams{other})
+	require.ErrorIs(t, err, ErrInvalid)
+	_, err = transcripts.InsertExternalChatMessage(t.Context(), f.db, f.org, f.project, chatrepo.CreateExternalChatMessageParams{ID: uuid.New(), ChatID: f.chat, Role: "user", ProjectID: uuid.New(), Content: "EXAMPLE"})
+	require.ErrorIs(t, err, ErrInvalid)
+	_, _, err = transcripts.UpsertCorrelatedChatMessage(t.Context(), f.db, f.org, f.project, UpsertCorrelatedChatMessageParams{ID: uuid.New(), ChatID: f.chat, Role: "user", ProjectID: uuid.New(), Content: "EXAMPLE"})
+	require.ErrorIs(t, err, ErrInvalid)
 }

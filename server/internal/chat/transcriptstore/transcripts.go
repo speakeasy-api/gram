@@ -70,9 +70,9 @@ func (t *Transcripts) Enabled(projectID uuid.UUID) bool {
 }
 
 // Prepare loads the organization's transcript key into the process cache
-// before the caller opens the transaction that InsertChatMessages or
-// UpdateChatMessage will use, so neither makes a KMS call while the
-// transaction is open. An error means they would fail too.
+// before the caller opens the transaction that an insert or UpdateChatMessage
+// will use, so neither makes a KMS call while the transaction is open. An
+// error means they would fail too. Begin calls it for you.
 func (t *Transcripts) Prepare(ctx context.Context, organizationID string, projectID uuid.UUID) error {
 	if !t.Enabled(projectID) {
 		return nil
@@ -81,30 +81,6 @@ func (t *Transcripts) Prepare(ctx context.Context, organizationID string, projec
 		return fmt.Errorf("prepare encrypted chat transcript: %w", err)
 	}
 	return nil
-}
-
-// InsertChatMessages is the one way to store new messages, as
-// UpdateChatMessage is for existing ones. Inside the caller's transaction it
-// runs insert, which executes the INSERT and returns the IDs of the rows it
-// created, and keeps every copy the project needs. refs point at the protected
-// fields of the params insert writes, one per message.
-//
-// Plaintext mode only inserts. Shadow mode inserts, then seals each new row
-// from what Postgres stored. Encrypted mode copies the protected fields and
-// empties them before insert runs, so plaintext never reaches the table (or
-// its write-ahead log), restores them once insert returns, and seals each new
-// row from the copy. Call Prepare before beginning the transaction, and roll
-// back on error.
-func (t *Transcripts) InsertChatMessages(ctx context.Context, db repo.DBTX, organizationID string, projectID uuid.UUID, refs []ProtectedFieldRefs, insert func() ([]uuid.UUID, error)) ([]uuid.UUID, error) {
-	mode := t.Mode(projectID)
-	if mode == ModePlaintext {
-		return insert()
-	}
-	ids, err := t.store.insert(ctx, db, mode == ModeEncrypted, organizationID, projectID, refs, insert)
-	if err != nil {
-		return nil, fmt.Errorf("insert chat messages: %w", err)
-	}
-	return ids, nil
 }
 
 // Mode is how a project stores protected fields.
@@ -145,135 +121,88 @@ func (t *Transcripts) Mode(projectID uuid.UUID) Mode {
 // change fails. It reports whether anything changed. Call Prepare before
 // beginning the transaction, and roll back on error.
 func (t *Transcripts) UpdateChatMessage(ctx context.Context, db repo.DBTX, organizationID string, projectID, chatID, messageID uuid.UUID, apply func(*chatrepo.ChatMessage) error) (bool, error) {
-	mode := t.Mode(projectID)
-	if mode == ModePlaintext {
-		changed, err := updateChatMessage(ctx, db, nil, false, organizationID, projectID, chatID, messageID, apply)
-		if err != nil {
-			return false, fmt.Errorf("update chat message: %w", err)
-		}
-		return changed, nil
+	p, err := t.protector(db, organizationID, projectID)
+	if err != nil {
+		return false, fmt.Errorf("update chat message: %w", err)
 	}
-	changed, err := t.store.updateChatMessageIn(ctx, db, mode == ModeEncrypted, organizationID, projectID, chatID, messageID, apply)
+	changed, err := p.update(ctx, chatID, messageID, apply)
 	if err != nil {
 		return false, fmt.Errorf("update chat message: %w", err)
 	}
 	return changed, nil
 }
 
-// ProtectedFieldRefs points at the protected fields of one loaded message, so Open can replace
-// them with the opened copy whatever query loaded the row. A nil field was
-// not loaded and is left alone.
-type ProtectedFieldRefs struct {
-	MessageID         uuid.UUID
-	Content           *string
-	ContentRaw        *[]byte
-	ToolCalls         *[]byte
-	ToolOutcomeNotes  *pgtype.Text
-	ToolCallSummaries *[]byte
-	StorageError      *pgtype.Text
+// OpenTarget is one loaded message for Open: its ID, and Set, which writes
+// the opened protected fields into the row the caller loaded. Each row type's
+// Set writes only the fields that row has.
+type OpenTarget struct {
+	MessageID uuid.UUID
+	Set       func(transcriptcrypto.ProtectedFields)
 }
 
-// Open replaces each message's protected fields with its decrypted transcript, in one query per
-// page; in plaintext mode it reads no transcript. In shadow mode a message with
-// no transcript yet keeps its plaintext and counts as plaintext_fallback, and a
-// transcript that disagrees with its plaintext row is logged, counted as stale,
-// and the plaintext is kept, the same rule UpdateChatMessage follows. In encrypted
-// mode the transcript is served without comparison, and a message without one
-// fails the read with ErrMissingTranscript. A transcript that cannot be
-// decrypted fails the read in either mode.
-func (t *Transcripts) Open(ctx context.Context, organizationID string, projectID uuid.UUID, refs []ProtectedFieldRefs) error {
-	if len(refs) == 0 {
+// open writes each message's protected fields into its target, in one query
+// per page; in plaintext mode it reads no transcript. In shadow mode a message
+// with no transcript yet gets its plaintext and counts as plaintext_fallback,
+// and a transcript that disagrees with its plaintext row is logged, counted as
+// stale, and the plaintext is served, the same rule UpdateChatMessage follows.
+// In encrypted mode the transcript is served without comparison, and a message
+// without one fails the read with ErrMissingTranscript. A transcript that
+// cannot be decrypted fails the read in either mode.
+func (t *Transcripts) open(ctx context.Context, organizationID string, projectID uuid.UUID, targets []OpenTarget) error {
+	if len(targets) == 0 || !t.Enabled(projectID) {
 		return nil
 	}
-	if err := t.checkOpenable(ctx, projectID, "Open"); err != nil {
-		return err
-	}
-	if !t.Enabled(projectID) {
-		return nil
-	}
-	ids := make([]uuid.UUID, len(refs))
-	for i, b := range refs {
-		ids[i] = b.MessageID
+	ids := make([]uuid.UUID, len(targets))
+	for i, target := range targets {
+		ids[i] = target.MessageID
 	}
 	opened, err := t.store.open(ctx, organizationID, projectID, ids, t.Mode(projectID) == ModeEncrypted)
 	if err != nil {
 		return fmt.Errorf("open encrypted chat transcript: %w", err)
 	}
-	for _, b := range refs {
-		message, ok := opened[b.MessageID]
-		if !ok {
-			continue
+	for _, target := range targets {
+		// A message outside the project or organization is not opened; the
+		// caller's page query is project-scoped, so this does not happen.
+		if o, ok := opened[target.MessageID]; ok {
+			target.Set(o.fields)
 		}
-		b.set(message)
 	}
 	return nil
 }
 
-// OpenRows is Open for a page of rows of any sqlc row type. refsOf maps a row
-// to pointers at its protected fields.
-func OpenRows[T any](ctx context.Context, t *Transcripts, organizationID string, projectID uuid.UUID, rows []T, refsOf func(*T) ProtectedFieldRefs) error {
+// OpenChatMessages opens a page of loaded messages of any sqlc row type; see open for
+// the fallback and failure rules. targetOf maps a
+// row to its target.
+func OpenChatMessages[T any](ctx context.Context, t *Transcripts, organizationID string, projectID uuid.UUID, rows []T, targetOf func(*T) OpenTarget) error {
 	if len(rows) == 0 {
 		return nil
 	}
+	// A listed project this process cannot open goes through the plaintext
+	// guard.
+	if err := t.checkOpenable(ctx, projectID, "OpenChatMessages"); err != nil {
+		return err
+	}
+	// Plaintext reads build no targets.
 	if !t.Enabled(projectID) {
-		// Open reports a listed project this process cannot open.
-		return t.checkOpenable(ctx, projectID, "OpenRows")
+		return nil
 	}
-	refs := make([]ProtectedFieldRefs, len(rows))
+	targets := make([]OpenTarget, len(rows))
 	for i := range rows {
-		refs[i] = refsOf(&rows[i])
+		targets[i] = targetOf(&rows[i])
 	}
-	return t.Open(ctx, organizationID, projectID, refs)
+	return t.open(ctx, organizationID, projectID, targets)
 }
 
-// fields reads the protected fields the refs point at. A nil ref reads as
-// empty.
-func (r ProtectedFieldRefs) fields() transcriptcrypto.ProtectedFields {
-	f := emptyProtectedFields
-	if r.Content != nil {
-		f.Content = *r.Content
-	}
-	if r.ContentRaw != nil {
-		f.ContentRaw = *r.ContentRaw
-	}
-	if r.ToolCalls != nil {
-		f.ToolCalls = *r.ToolCalls
-	}
-	if r.ToolCallSummaries != nil {
-		f.ToolCallSummaries = *r.ToolCallSummaries
-	}
-	// Copy the strings: insertEncrypted empties the refs while it holds f.
-	if r.ToolOutcomeNotes != nil && r.ToolOutcomeNotes.Valid {
-		notes := r.ToolOutcomeNotes.String
-		f.ToolOutcomeNotes = &notes
-	}
-	if r.StorageError != nil && r.StorageError.Valid {
-		storageError := r.StorageError.String
-		f.StorageError = &storageError
-	}
-	return f
-}
-
-// set writes fields through the refs. A nil ref is left alone.
-func (r ProtectedFieldRefs) set(f transcriptcrypto.ProtectedFields) {
-	if r.Content != nil {
-		*r.Content = f.Content
-	}
-	if r.ContentRaw != nil {
-		*r.ContentRaw = f.ContentRaw
-	}
-	if r.ToolCalls != nil {
-		*r.ToolCalls = f.ToolCalls
-	}
-	if r.ToolCallSummaries != nil {
-		*r.ToolCallSummaries = f.ToolCallSummaries
-	}
-	if r.ToolOutcomeNotes != nil {
-		*r.ToolOutcomeNotes = optionalText(f.ToolOutcomeNotes)
-	}
-	if r.StorageError != nil {
-		*r.StorageError = optionalText(f.StorageError)
-	}
+// WithProtectedFields returns the row with its six protected fields set from
+// fields. A full chat_messages row's OpenTarget uses it as its Set.
+func WithProtectedFields(m chatrepo.ChatMessage, fields transcriptcrypto.ProtectedFields) chatrepo.ChatMessage {
+	m.Content = fields.Content
+	m.ContentRaw = fields.ContentRaw
+	m.ToolCalls = fields.ToolCalls
+	m.ToolOutcomeNotes = optionalText(fields.ToolOutcomeNotes)
+	m.ToolCallSummaries = fields.ToolCallSummaries
+	m.StorageError = optionalText(fields.StorageError)
+	return m
 }
 
 func optionalText(v *string) pgtype.Text {
