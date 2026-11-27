@@ -135843,7 +135843,7 @@ components:
                         - mcp_auth_client
                 sensitive:
                     type: boolean
-                    description: Whether granting this scope exposes other members' private activity or allows destructive administration. Clients warn before granting it.
+                    description: Whether granting this scope exposes other members' private activity or identity, handles credentials, decides other members' access, or allows destructive administration. Clients warn before granting it.
                 sensitivity:
                     type: string
                     description: Why the scope is sensitive. Absent when sensitive is false.
@@ -135851,6 +135851,10 @@ components:
                         - conversations
                         - tool_logs
                         - destructive_admin
+                        - credentials
+                        - member_identity
+                        - member_activity
+                        - access_control
                 slug:
                     type: string
                     description: Unique scope identifier.

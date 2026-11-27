@@ -167,6 +167,11 @@ func TestService_ListScopes_CategoriesAndSensitivitiesAreInTheDesignEnum(t *test
 	for _, category := range authz.ScopeCategories {
 		require.True(t, categories[string(category)], "category %q is not declared in the design", category)
 	}
+	// Every reason is declared before any scope carries it, so a client built
+	// from the design already knows it when the first such scope ships.
+	for _, sensitivity := range authz.Sensitivities {
+		require.True(t, sensitivities[string(sensitivity)], "sensitivity %q is not declared in the design", sensitivity)
+	}
 
 	ctx, ti := newTestAccessService(t)
 	result, err := ti.service.ListScopes(ctx, &gen.ListScopesPayload{})

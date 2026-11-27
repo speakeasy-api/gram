@@ -10670,7 +10670,8 @@ type ScopeDefinitionResponseBody struct {
 	// are checked against a project but are not project permissions.
 	Category *string `form:"category,omitempty" json:"category,omitempty" xml:"category,omitempty"`
 	// Whether granting this scope exposes other members' private activity or
-	// allows destructive administration. Clients warn before granting it.
+	// identity, handles credentials, decides other members' access, or allows
+	// destructive administration. Clients warn before granting it.
 	Sensitive *bool `form:"sensitive,omitempty" json:"sensitive,omitempty" xml:"sensitive,omitempty"`
 	// Why the scope is sensitive. Absent when sensitive is false.
 	Sensitivity *string `form:"sensitivity,omitempty" json:"sensitivity,omitempty" xml:"sensitivity,omitempty"`
@@ -34334,8 +34335,8 @@ func ValidateScopeDefinitionResponseBody(body *ScopeDefinitionResponseBody) (err
 		}
 	}
 	if body.Sensitivity != nil {
-		if !(*body.Sensitivity == "conversations" || *body.Sensitivity == "tool_logs" || *body.Sensitivity == "destructive_admin") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sensitivity", *body.Sensitivity, []any{"conversations", "tool_logs", "destructive_admin"}))
+		if !(*body.Sensitivity == "conversations" || *body.Sensitivity == "tool_logs" || *body.Sensitivity == "destructive_admin" || *body.Sensitivity == "credentials" || *body.Sensitivity == "member_identity" || *body.Sensitivity == "member_activity" || *body.Sensitivity == "access_control") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sensitivity", *body.Sensitivity, []any{"conversations", "tool_logs", "destructive_admin", "credentials", "member_identity", "member_activity", "access_control"}))
 		}
 	}
 	if body.Visibility != nil {

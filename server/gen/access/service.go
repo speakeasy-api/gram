@@ -1692,7 +1692,8 @@ type ScopeDefinition struct {
 	// are checked against a project but are not project permissions.
 	Category string
 	// Whether granting this scope exposes other members' private activity or
-	// allows destructive administration. Clients warn before granting it.
+	// identity, handles credentials, decides other members' access, or allows
+	// destructive administration. Clients warn before granting it.
 	Sensitive bool
 	// Why the scope is sensitive. Absent when sensitive is false.
 	Sensitivity *string

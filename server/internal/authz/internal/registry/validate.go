@@ -136,6 +136,9 @@ func (r Registry) Validate() error {
 			if c := t.CategoryFor(p); !slices.Contains(ScopeCategories, c) {
 				fail("%s: unknown category %q", owner, c)
 			}
+			if p.Sensitivity != SensitivityNone && !slices.Contains(Sensitivities, p.Sensitivity) {
+				fail("%s: unknown sensitivity %q; add it to sensitivity.go", owner, p.Sensitivity)
+			}
 			permissionDimKeys := map[string]bool{}
 			for _, d := range p.Dimensions {
 				validateDimension(fail, owner, d)
@@ -305,7 +308,7 @@ func impliesCycle(t ResourceType) string {
 // PluginWrite), for spotting a dimension set that would reuse it.
 func camelAction(action Action) string {
 	var b strings.Builder
-	for _, word := range strings.Split(string(action), "_") {
+	for word := range strings.SplitSeq(string(action), "_") {
 		if word != "" {
 			b.WriteString(strings.ToUpper(word[:1]) + word[1:])
 		}

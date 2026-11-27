@@ -91,6 +91,10 @@ export const Sensitivity = {
   Conversations: "conversations",
   ToolLogs: "tool_logs",
   DestructiveAdmin: "destructive_admin",
+  Credentials: "credentials",
+  MemberIdentity: "member_identity",
+  MemberActivity: "member_activity",
+  AccessControl: "access_control",
 } as const;
 /**
  * Why the scope is sensitive. Absent when sensitive is false.
@@ -199,7 +203,7 @@ export type ScopeDefinition = {
    */
   resourceType: ResourceType;
   /**
-   * Whether granting this scope exposes other members' private activity or allows destructive administration. Clients warn before granting it.
+   * Whether granting this scope exposes other members' private activity or identity, handles credentials, decides other members' access, or allows destructive administration. Clients warn before granting it.
    */
   sensitive: boolean;
   /**

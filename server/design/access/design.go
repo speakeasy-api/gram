@@ -1553,10 +1553,10 @@ var ScopeModel = Type("ScopeDefinition", func() {
 		Description("How the dashboard groups the permission. Differs from resource_type where one resource type carries several permission families: plugins and tool logs are checked against a project but are not project permissions.")
 		Enum("org", "project", "mcp", "mcp_auth_client", "environment", "skill", "plugin", "assistant", "risk_policy", "session", "inference", "log", "agent", "workload")
 	})
-	Attribute("sensitive", Boolean, "Whether granting this scope exposes other members' private activity or allows destructive administration. Clients warn before granting it.")
+	Attribute("sensitive", Boolean, "Whether granting this scope exposes other members' private activity or identity, handles credentials, decides other members' access, or allows destructive administration. Clients warn before granting it.")
 	Attribute("sensitivity", String, func() {
 		Description("Why the scope is sensitive. Absent when sensitive is false.")
-		Enum("conversations", "tool_logs", "destructive_admin")
+		Enum("conversations", "tool_logs", "destructive_admin", "credentials", "member_identity", "member_activity", "access_control")
 	})
 	Attribute("sub_scopes", ArrayOf(String), "User-visible scopes a grant of this scope also satisfies, one step down: org:admin also satisfies org:read. Empty when the scope implies nothing else.")
 	Attribute("visibility", String, func() {
