@@ -442,7 +442,7 @@ func (s *Store) sanityCheck(ctx context.Context, q *repo.Queries, codec *transcr
 // Both cases are logged as errors and counted; consistent is false for them.
 func (s *Store) hydrate(ctx context.Context, codec *transcriptcrypto.Codec, encrypted bool, projectID uuid.UUID, row repo.LockChatMessageRow) (fields transcriptcrypto.ProtectedFields, consistent bool, err error) {
 	plain := protectedFieldsOf(row.ChatMessage)
-	// Snapshot read and locked the current transcript with the row.
+	// LockChatMessage read and locked the current transcript with the row.
 	ciphertext := row.CurrentCiphertext
 	if encrypted && ciphertext == "" {
 		s.metrics.check(ctx, projectID, outcomeMissingTranscript)

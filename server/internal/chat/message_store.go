@@ -181,10 +181,14 @@ func (w *ChatMessageWriter) sealTranscripts(ctx context.Context, db repo.DBTX, o
 	return w.transcripts.Seal(ctx, db, organizationID, projectID, messageIDs)
 }
 
-// UpdateChatMessage changes an existing message through Transcripts.UpdateChatMessage,
-// inside the caller's transaction, so every copy of its protected fields the project keeps
-// gets the same value. Call PrepareTranscripts before beginning the
-// transaction. A nil writer updates the plaintext only.
+// UpdateChatMessage changes an existing message through
+// Transcripts.UpdateChatMessage, inside the caller's transaction, so every copy
+// of the row the project keeps gets the same value. apply receives the whole
+// row, with its protected fields decrypted outside plaintext mode. Besides the
+// protected fields it may change only tool_outcome, finish_reason,
+// content_hash and risk_analyzed_at; any other change fails. Call
+// PrepareTranscripts before beginning the transaction. A nil writer updates
+// the plaintext only.
 func (w *ChatMessageWriter) UpdateChatMessage(ctx context.Context, db repo.DBTX, organizationID string, projectID, chatID, messageID uuid.UUID, apply func(*repo.ChatMessage) error) (bool, error) {
 	var transcripts *transcriptstore.Transcripts
 	if w != nil {

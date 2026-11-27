@@ -118,15 +118,16 @@ func (w *ChatMessageWriter) ProjectMessage(ctx context.Context, projectID, messa
 }
 
 // patchProjection rewrites an existing kit message in the caller's
-// transaction through UpdateChatMessage, which keeps every copy of the protected fields in
-// step: content, content_raw and tool_calls, the content hash and finish
-// reason, and a cleared risk mark when the protected fields changed, so the new protected fields are
-// analyzed again. It returns 1 when anything changed.
+// transaction through UpdateChatMessage, which keeps every copy of the row in
+// step. It sets the content hash and finish reason, and when content,
+// content_raw or tool_calls differ from the row as UpdateChatMessage read it
+// (decrypted in encrypted mode), it writes them and clears the risk mark so
+// the new content is analyzed again. It returns 1 when anything changed.
 func (w *ChatMessageWriter) patchProjection(ctx context.Context, tx pgx.Tx, projectID uuid.UUID, row repo.ChatMessage, write MessageWrite, prepared error) (int64, error) {
-	// Postgres re-serializes jsonb, so compare the stored JSON by value: an
-	// unchanged patch must not lock the row and open its transcript.
-	bodyChanged := row.Content != write.Params.Content || !transcriptstore.SameJSON(row.ContentRaw, write.Params.ContentRaw) || !transcriptstore.SameJSON(row.ToolCalls, write.Params.ToolCalls)
-	if !bodyChanged && bytes.Equal(row.ContentHash, write.Params.ContentHash) && row.FinishReason == write.Params.FinishReason {
+	// An unchanged patch must not lock the row and open its transcript. In
+	// encrypted mode the plaintext columns are empty, so this check passes
+	// and apply compares against the decrypted row instead.
+	if !contentDiffers(row, write) && bytes.Equal(row.ContentHash, write.Params.ContentHash) && row.FinishReason == write.Params.FinishReason {
 		return 0, nil
 	}
 	if prepared != nil && w.transcripts.Enabled(projectID) {
@@ -139,7 +140,7 @@ func (w *ChatMessageWriter) patchProjection(ctx context.Context, tx pgx.Tx, proj
 	changed, err := w.transcripts.UpdateChatMessage(ctx, tx, organizationID, projectID, row.ChatID, row.ID, func(m *repo.ChatMessage) error {
 		m.ContentHash = write.Params.ContentHash
 		m.FinishReason = write.Params.FinishReason
-		if !bodyChanged {
+		if !contentDiffers(*m, write) {
 			return nil
 		}
 		m.Content = write.Params.Content
@@ -155,4 +156,10 @@ func (w *ChatMessageWriter) patchProjection(ctx context.Context, tx pgx.Tx, proj
 		return 0, nil
 	}
 	return 1, nil
+}
+
+// contentDiffers reports whether the write changes content, content_raw or
+// tool_calls. Postgres re-serializes jsonb, so JSON is compared by value.
+func contentDiffers(row repo.ChatMessage, write MessageWrite) bool {
+	return row.Content != write.Params.Content || !transcriptstore.SameJSON(row.ContentRaw, write.Params.ContentRaw) || !transcriptstore.SameJSON(row.ToolCalls, write.Params.ToolCalls)
 }

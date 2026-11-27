@@ -32,15 +32,15 @@ const (
 	// open, by outcome.
 	meterReadMessages = "chat.transcript_shadow.read.messages"
 
-	// meterUpdateDuration is the time one shadow-mode UpdateBody call spends
+	// meterUpdateDuration is the time one shadow-mode UpdateChatMessage call spends
 	// inside the caller's transaction.
 	meterUpdateDuration = "chat.transcript_shadow.update.duration"
 
-	// meterUpdateMessages counts shadow-mode UpdateBody calls by outcome.
+	// meterUpdateMessages counts shadow-mode UpdateChatMessage calls by outcome.
 	meterUpdateMessages = "chat.transcript_shadow.update.messages"
 
 	// meterUpdateChecks counts one consistency result per shadow-mode
-	// UpdateBody call: success when both copies agreed before and after (or
+	// UpdateChatMessage call: success when both copies agreed before and after (or
 	// before, for an update that changed nothing), otherwise the check that
 	// failed, or error when reading or decrypting the transcript failed and the
 	// update rolled back. It tracks how well shadow mode keeps the transcript and

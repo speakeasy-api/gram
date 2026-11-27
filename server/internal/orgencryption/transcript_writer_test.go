@@ -3,9 +3,11 @@ package orgencryption_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/chat"
@@ -323,4 +325,51 @@ func TestTranscriptWriterProjection(t *testing.T) {
 			f.assertTranscript(t, m.Params.ID)
 		})
 	}
+}
+
+// In encrypted mode the plaintext columns are empty, so an unchanged kit
+// re-patch must compare against the decrypted row: it reports no change and
+// keeps the completed risk analysis.
+func TestTranscriptWriterEncryptedRepatchKeepsRiskAnalysis(t *testing.T) {
+	t.Parallel()
+	f := newTranscriptWriterFixture(t, true, false)
+	f.writer.WithTranscripts(transcriptstore.NewTranscripts(f.store).WithEncryptedProjects(f.projectID))
+	m := f.message("EXAMPLE encrypted projection")
+	m.Params.Source = conv.ToPGText("kit")
+	m.Params.ToolCalls = []byte(`[{"id":"example-call","type":"function","function":{"name":"example","arguments":"{}"}}]`)
+	guard := func(context.Context, pgx.Tx) error { return nil }
+	build := func(*chatrepo.ChatMessage) (chat.MessageWrite, bool, error) { return m, true, nil }
+	changed, err := f.writer.ProjectMessage(t.Context(), f.projectID, m.Params.ID, guard, build)
+	require.NoError(t, err)
+	require.True(t, changed)
+
+	require.NoError(t, f.writer.PrepareTranscripts(t.Context(), f.projectID))
+	tx, err := f.conn.Begin(t.Context()) //nolint:glint // notestingrawsql: caller-owned transaction boundary is the behavior under test.
+	require.NoError(t, err)
+	_, err = f.writer.UpdateChatMessage(t.Context(), tx, f.orgID, f.projectID, f.chatID, m.Params.ID, func(row *chatrepo.ChatMessage) error {
+		row.RiskAnalyzedAt = pgtype.Timestamptz{Time: time.Now(), InfinityModifier: pgtype.Finite, Valid: true}
+		return nil
+	})
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit(t.Context()))
+
+	changed, err = f.writer.ProjectMessage(t.Context(), f.projectID, m.Params.ID, guard, build)
+	require.NoError(t, err)
+	require.False(t, changed, "an unchanged re-patch changes nothing")
+	row, err := chatrepo.New(f.conn).GetKitProjectionMessage(t.Context(), chatrepo.GetKitProjectionMessageParams{ProjectID: uuid.NullUUID{UUID: f.projectID, Valid: true}, ID: m.Params.ID})
+	require.NoError(t, err)
+	require.Empty(t, row.Content, "encrypted mode keeps the plaintext empty")
+	require.True(t, row.RiskAnalyzedAt.Valid, "an unchanged re-patch keeps the completed risk analysis")
+
+	m.Params.Content = "EXAMPLE changed projection"
+	changed, err = f.writer.ProjectMessage(t.Context(), f.projectID, m.Params.ID, guard, build)
+	require.NoError(t, err)
+	require.True(t, changed)
+	row, err = chatrepo.New(f.conn).GetKitProjectionMessage(t.Context(), chatrepo.GetKitProjectionMessageParams{ProjectID: uuid.NullUUID{UUID: f.projectID, Valid: true}, ID: m.Params.ID})
+	require.NoError(t, err)
+	require.False(t, row.RiskAnalyzedAt.Valid, "changed content is analyzed again")
+	encrypted := transcriptstore.NewTranscripts(f.store).WithEncryptedProjects(f.projectID)
+	content := row.Content
+	require.NoError(t, encrypted.Open(t.Context(), f.orgID, f.projectID, []transcriptstore.ProtectedFieldRefs{{MessageID: m.Params.ID, Content: &content, ContentRaw: nil, ToolCalls: nil, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}}))
+	require.Equal(t, "EXAMPLE changed projection", content)
 }

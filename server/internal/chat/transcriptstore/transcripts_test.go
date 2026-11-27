@@ -407,9 +407,11 @@ func TestEncryptedMode(t *testing.T) {
 	_, err = f.updateBody(t, encrypted, f.chat, populated, func(*chatrepo.ChatMessage) error { return nil })
 	require.NoError(t, err)
 	emptied(populated)
-	meta, err := fixtures.MessageMetadata(ctx, updated)
-	require.NoError(t, err)
-	require.Equal(t, pgtype.Int4{Int32: int32(len("sensitive example")), Valid: true}, meta.ContentBytes, "metadata describes the body, not the empty columns")
+	for _, id := range []uuid.UUID{updated, populated} {
+		meta, err := fixtures.MessageMetadata(ctx, id)
+		require.NoError(t, err)
+		require.Equal(t, pgtype.Int4{Int32: int32(len("sensitive example")), Valid: true}, meta.ContentBytes, "metadata describes the protected fields, not the empty columns")
+	}
 
 	// A new message: Seal empties the plaintext it was sealed from.
 	inserted := uuid.New()
