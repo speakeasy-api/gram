@@ -47,6 +47,29 @@ type runTurnRequest struct {
 	// (populated strictly from resolveTurnIdentity). On ATE, it is persisted
 	// once when the thread's first actor row is created and never overwritten.
 	Initiator ateThreadInitiator
+
+	// NextSteerEvent, when non-nil and the Kit gateway advertises
+	// capabilities.session.prompt.delivery.steer, claims and prepares newly
+	// arrived pending events on the same thread for mid-turn delivery.
+	NextSteerEvent func(ctx context.Context) (kitSteerTurn, bool, error)
+}
+
+// kitSteerTurn carries a single thread event claimed while a Kit turn is
+// already running so it can be inserted with ACP delivery="steer".
+type kitSteerTurn struct {
+	EventID                uuid.UUID
+	EventAttempt           int
+	CanonicalUserMessageID uuid.UUID
+	IdempotencyKey         string
+	SourceInstructions     string
+	Prompt                 string
+	InputParts             []runtimeContentPart
+	// OnOutcome is called once per claimed steer. It reports inserted=true when
+	// Kit acknowledges insertion, including when ack correlation later fails. It
+	// reports inserted=false, withdrawn=true when the held prompt is withdrawn
+	// via $/cancel_request before insertion. It reports inserted=false,
+	// withdrawn=false when submission or the prompt wait fails before insertion.
+	OnOutcome func(inserted, withdrawn bool)
 }
 
 type RuntimeBackend interface {

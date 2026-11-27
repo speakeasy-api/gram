@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid"
 )
 
-const KitIntegrationImage = "localhost/kit-control-plane:v0.2.19"
+const KitIntegrationImage = "localhost/kit-control-plane:v0.3.1"
 
 // KitWorkloadAssertionPath is an external projection, never part of persistent HOME.
 const KitWorkloadAssertionPath = "/var/run/secrets/speakeasy/workload/assertion"
@@ -136,7 +136,7 @@ func DefaultKitLocalRuntimeConfig(origin *url.URL) KitLocalRuntimeConfig {
 	return KitLocalRuntimeConfig{WorkloadAssertionFile: "", Fence: nil, Network: "", Environment: "local", Image: KitIntegrationImage, Command: command, Args: args, GuestPort: 8081, ServerURL: origin, CompatibilityGeneration: "kit-project-gateway-v2", HomeOwnedByRuntimeUser: true, Env: nil, ExtraCACertFile: "", Bootstrap: nil, Protocol: nil, Ready: nil}
 }
 
-// kitBootstrapConfig is the public Kit generic workload contract.
+// kitBootstrapConfig is the public Kit v0.3.1 generic workload contract.
 // When EgressInjectedAuth is true, the sandbox holds no assertion file or
 // workload token-exchange block: Kit uses OpenAI-compatible bearer auth
 // (OPENROUTER_BASE_URL + placeholder OPENROUTER_API_KEY) and ATE's egress
