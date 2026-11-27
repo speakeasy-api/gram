@@ -281,19 +281,26 @@ func toolDisposition(ctx context.Context, logger *slog.Logger, toolName string, 
 // tool: the caller asked for a list, not for any one tool, and the call that
 // names a tool records its own.
 func filterToolsByMCPConnect(ctx context.Context, logger *slog.Logger, authzEngine *authz.Engine, resourceID string, projectID string, tools []*toolListEntry) ([]*toolListEntry, error) {
-	allowed := make([]*toolListEntry, 0, len(tools))
-	for _, t := range tools {
+	if len(tools) == 0 {
+		return make([]*toolListEntry, 0), nil
+	}
+	server := authz.MCPServer(authz.MCPServerIDFrom(resourceID), authz.ProjectIDFrom(projectID))
+	checks := make([]authz.Check, len(tools))
+	for i, t := range tools {
 		if err := ctx.Err(); err != nil {
 			return nil, fmt.Errorf("filter tools by authz: %w", err)
 		}
-		decision, err := authzEngine.Decide(ctx, authz.MCPServer(authz.MCPServerIDFrom(resourceID), authz.ProjectIDFrom(projectID)).ToolCall(t.Name, dispositionFromAnnotations(t.Annotations)))
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "check tool-level authz for tools/list").LogError(ctx, logger)
+		checks[i] = server.ToolCall(t.Name, dispositionFromAnnotations(t.Annotations))
+	}
+	decisions, err := authzEngine.Decide(ctx, checks...)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "check tool-level authz for tools/list").LogError(ctx, logger)
+	}
+	allowed := make([]*toolListEntry, 0, len(tools))
+	for i, t := range tools {
+		if decisions.Each[i].Allowed {
+			allowed = append(allowed, t)
 		}
-		if !decision.AllAllowed {
-			continue
-		}
-		allowed = append(allowed, t)
 	}
 	return allowed, nil
 }

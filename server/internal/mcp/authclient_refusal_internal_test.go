@@ -22,7 +22,7 @@ import (
 // whose context newRefusalFixture returns.
 type refusalFixture struct {
 	permitter mandatoryPermitter
-	preview   mandatoryPreview
+	preview   mandatoryPermitter
 	orgID     string
 	read      func() []*authzv1.Challenge
 }
@@ -67,7 +67,7 @@ func newRefusalFixture(t *testing.T) (context.Context, refusalFixture) {
 
 	return authz.GrantsToContext(ctx, []authz.Grant{ownConnections}), refusalFixture{
 		permitter: mandatoryPermitter{engine: engine, refusals: newOnceLog()},
-		preview:   mandatoryPreview{engine: engine},
+		preview:   mandatoryPermitter{engine: engine},
 		orgID:     orgID,
 		read:      read,
 	}

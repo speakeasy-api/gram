@@ -286,11 +286,10 @@ func (s *Service) GetServerIdentityImpact(ctx context.Context, payload *gen.GetS
 		checks = append(checks, authz.MCPServers(authz.ProjectIDOf(row.ProjectID)).Read())
 	}
 
-	decisions, err := s.authz.Decide(ctx, checks...)
+	decisions, err := s.authz.Filter(ctx, checks...)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "check MCP server read access").LogError(ctx, logger)
 	}
-	s.authz.Record(ctx, decisions)
 	result := &gen.ServerIdentityImpactResult{Servers: []*gen.ServerIdentityImpactServer{}, HiddenServerCount: 0, DetachClientIds: uuidStrings(change.detachClients), ReleaseClientIds: uuidStrings(change.releaseClients)}
 	for i, candidate := range candidates {
 		switch {
@@ -329,11 +328,10 @@ func (s *Service) previewOfferReplacement(ctx context.Context, logger *slog.Logg
 	for _, server := range servers {
 		checks = append(checks, authz.MCPServer(authz.MCPServerIDOf(mcpGrantResourceID(server.ID, server.ToolsetID)), authz.ProjectIDOf(projectID)).Read())
 	}
-	decisions, err := s.authz.Decide(ctx, checks...)
+	decisions, err := s.authz.Filter(ctx, checks...)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "check MCP server read access").LogError(ctx, logger)
 	}
-	s.authz.Record(ctx, decisions)
 	for i, server := range servers {
 		if !decisions.Each[i].Allowed {
 			result.HiddenServerCount++

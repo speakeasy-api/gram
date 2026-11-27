@@ -106,29 +106,56 @@ func TestDecide_acceptsEitherNextToOtherChecks(t *testing.T) {
 	require.Equal(t, []bool{true, false}, allowedOf(d))
 }
 
-// Recording a decision about several checks writes one list row, whatever
-// the number of checks.
-func TestRecord_writesOneListRowForSeveralChecks(t *testing.T) {
+// Filter records one list row, whatever the number of checks — including a
+// one-item list, which must not look like a gate refusal on that resource.
+func TestFilter_writesListRowForOneOrMoreChecks(t *testing.T) {
 	t.Parallel()
 
-	orgID := "org_" + uuid.NewString()
-	ctx := GrantsToContext(enterpriseSessionCtxWithOrg(t, orgID), []Grant{NewGrant(ScopeProjectRead, "proj_a")})
-	conn := newTestDB(t)
-	seedOrganization(t, ctx, conn, orgID)
-	engine := NewEngine(testenv.NewLogger(t), conn, staticChallengeLogging(true), workos.NewStubClient())
+	for _, tc := range []struct {
+		name           string
+		checks         []Check
+		wantOutcome    authzrepo.Outcome
+		wantCandidates uint32
+		wantAllowed    uint32
+	}{
+		{
+			name:           "one refused item",
+			checks:         []Check{projectRead("proj_b")},
+			wantOutcome:    authzrepo.OutcomeDeny,
+			wantCandidates: 1,
+			wantAllowed:    0,
+		},
+		{
+			name:           "several items",
+			checks:         []Check{projectRead("proj_a"), projectRead("proj_b"), projectRead("proj_c")},
+			wantOutcome:    authzrepo.OutcomeAllow,
+			wantCandidates: 3,
+			wantAllowed:    1,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-	d, err := engine.Decide(ctx, projectRead("proj_a"), projectRead("proj_b"), projectRead("proj_c"))
-	require.NoError(t, err)
-	engine.Record(ctx, d)
+			orgID := "org_" + uuid.NewString()
+			ctx := GrantsToContext(enterpriseSessionCtxWithOrg(t, orgID), []Grant{NewGrant(ScopeProjectRead, "proj_a")})
+			conn := newTestDB(t)
+			seedOrganization(t, ctx, conn, orgID)
+			engine := NewEngine(testenv.NewLogger(t), conn, staticChallengeLogging(true), workos.NewStubClient())
 
-	rows := listChallengeOutboxRows(t, conn)
-	require.Len(t, rows, 1)
-	message := &authzv1.Challenge{}
-	require.NoError(t, proto.Unmarshal(rows[0].Message, message))
-	require.Equal(t, string(authzrepo.OperationFilter), message.GetOperation())
-	require.Equal(t, string(authzrepo.OutcomeAllow), message.GetOutcome())
-	require.Equal(t, uint32(3), message.GetFilterCandidateCount())
-	require.Equal(t, uint32(1), message.GetFilterAllowedCount())
+			_, err := engine.Filter(ctx, tc.checks...)
+			require.NoError(t, err)
+
+			rows := listChallengeOutboxRows(t, conn)
+			require.Len(t, rows, 1)
+			message := &authzv1.Challenge{}
+			require.NoError(t, proto.Unmarshal(rows[0].Message, message))
+			require.Equal(t, string(authzrepo.OperationFilter), message.GetOperation())
+			require.Equal(t, string(tc.wantOutcome), message.GetOutcome())
+			require.Equal(t, tc.wantCandidates, message.GetFilterCandidateCount())
+			require.Equal(t, tc.wantAllowed, message.GetFilterAllowedCount())
+			require.Empty(t, message.GetResourceId())
+		})
+	}
 }
 
 // Recording a decision about one check writes the row Require writes for it,

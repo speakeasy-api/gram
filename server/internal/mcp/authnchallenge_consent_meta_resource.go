@@ -204,11 +204,11 @@ func (s *Service) authorizedMetaMembers(
 		// set and turns ambiguous into a confident wrong answer.
 		connect := authz.MCPServer(authz.MCPServerIDOf(row.McpServerID), authz.ProjectIDOf(row.ProjectID)).Connect()
 		// Filtering the candidates names none of them, so none is recorded.
-		refusal, _, err := s.memberConnectDecision(ctx, shadow, mandatorySurfaceConsent, row.McpServerVisibility, connect)
+		res, err := s.memberConnectDecision(ctx, shadow, mandatorySurfaceConsent, row.McpServerVisibility, connect)
 		if err != nil {
 			return nil, fmt.Errorf("authorize meta MCP member access: %w", err)
 		}
-		if refusal != nil {
+		if !res.allowed() {
 			continue
 		}
 		authorized = append(authorized, row)

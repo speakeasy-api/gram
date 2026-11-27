@@ -24,7 +24,7 @@ func TestChallengeLogger_skipsWithoutAuthContext(t *testing.T) {
 
 	conn := newTestDB(t)
 	check := Check{Scope: ScopeProjectRead, ResourceID: "proj_1"}
-	challengeLogger{
+	challengeRow{
 		Operation: authzrepo.OperationRequire,
 		Outcome:   authzrepo.OutcomeAllow,
 		Reason:    authzrepo.ReasonGrantMatched,
@@ -50,7 +50,7 @@ func TestChallengeLogger_skipsWhenImpersonating(t *testing.T) {
 	seedOrganization(t, ctx, conn, orgID)
 
 	check := Check{Scope: ScopeProjectRead, ResourceID: "proj_impersonated"}
-	challengeLogger{
+	challengeRow{
 		Operation: authzrepo.OperationRequire,
 		Outcome:   authzrepo.OutcomeAllow,
 		Reason:    authzrepo.ReasonGrantMatched,
@@ -82,7 +82,7 @@ func TestChallengeLogger_publishesUserPrincipal(t *testing.T) {
 	seedOrganization(t, ctx, conn, orgID)
 
 	check := Check{Scope: ScopeProjectRead, ResourceID: "proj_user"}
-	challengeLogger{
+	challengeRow{
 		Operation:           authzrepo.OperationRequire,
 		Outcome:             authzrepo.OutcomeAllow,
 		Reason:              authzrepo.ReasonGrantMatched,
@@ -131,7 +131,7 @@ func TestChallengeLogger_publishesAfterRequestCanceled(t *testing.T) {
 	cancel()
 
 	check := Check{Scope: ScopeProjectRead, ResourceID: "proj_canceled"}
-	challengeLogger{
+	challengeRow{
 		Operation: authzrepo.OperationRequire,
 		Outcome:   authzrepo.OutcomeAllow,
 		Reason:    authzrepo.ReasonGrantMatched,
@@ -163,7 +163,7 @@ func TestChallengeLogger_publishesAPIKeyPrincipal(t *testing.T) {
 	seedOrganization(t, ctx, conn, orgID)
 
 	check := Check{Scope: ScopeProjectRead, ResourceID: "proj_apikey"}
-	challengeLogger{
+	challengeRow{
 		Operation: authzrepo.OperationRequire,
 		Outcome:   authzrepo.OutcomeAllow,
 		Reason:    authzrepo.ReasonGrantMatched,
@@ -212,7 +212,7 @@ func TestChallengeLogger_publishesAssistantPrincipal(t *testing.T) {
 	seedOrganization(t, ctx, conn, orgID)
 
 	check := MCPServer(MCPServerIDFrom("tool_assistant"), ProjectIDFrom(testProjectID)).Connect()
-	challengeLogger{
+	challengeRow{
 		Operation: authzrepo.OperationRequire,
 		Outcome:   authzrepo.OutcomeAllow,
 		Reason:    authzrepo.ReasonGrantMatched,
@@ -243,7 +243,7 @@ func TestChallengeLogger_stampsRequestID(t *testing.T) {
 	seedOrganization(t, ctx, conn, orgID)
 
 	check := Check{Scope: ScopeProjectRead, ResourceID: "proj_req"}
-	challengeLogger{
+	challengeRow{
 		Operation: authzrepo.OperationRequire,
 		Outcome:   authzrepo.OutcomeDeny,
 		Reason:    authzrepo.ReasonNoGrants,
@@ -281,7 +281,7 @@ func TestChallengeLogger_publishesNestedAndExpandedFields(t *testing.T) {
 		},
 	}
 
-	challengeLogger{
+	challengeRow{
 		Operation:           authzrepo.OperationRequire,
 		Outcome:             authzrepo.OutcomeAllow,
 		Reason:              authzrepo.ReasonGrantMatched,
@@ -323,7 +323,7 @@ func TestChallengeLogger_publishesFilterCounts(t *testing.T) {
 	seedOrganization(t, ctx, conn, orgID)
 	focus := Check{Scope: ScopeProjectRead, ResourceID: "proj_filter"}
 
-	challengeLogger{
+	challengeRow{
 		Operation:            authzrepo.OperationFilter,
 		Outcome:              authzrepo.OutcomeAllow,
 		Reason:               authzrepo.ReasonGrantMatched,
@@ -438,18 +438,15 @@ func TestWithOneChallengePerResource_batchesDoNotTakeAResourcesSlot(t *testing.T
 	ctx, engine, conn, _ := challengeScopeFixture(t)
 	ctx = WithOneChallengePerResource(ctx)
 	ungranted := uuid.NewString()
-	server := MCPServer(MCPServerIDFrom(ungranted), ProjectIDFrom(testProjectID))
-	// Two tools, since a decision about one check is recorded as that check
-	// and does take the server's slot.
-	tools := []Check{server.ToolCall("search", ""), server.ToolCall("fetch", "")}
+	tool := []Check{MCPServer(MCPServerIDFrom(ungranted), ProjectIDFrom(testProjectID)).ToolCall("search", "")}
 
-	// A batch filtering the server's tools records, but leaves the server's
-	// own denial to be recorded when a call names it. Once that is recorded,
-	// a later batch about the server records nothing.
-	_, err := allowedEach(ctx, engine, tools)
+	// Filtering the server's tools records a filter row even for one tool,
+	// leaving the server's own denial to be recorded when a call names it.
+	// Once that is recorded, a later filter about the server records nothing.
+	_, err := allowedEach(ctx, engine, tool)
 	require.NoError(t, err)
 	require.Error(t, engine.Require(ctx, MCPServer(MCPServerIDFrom(ungranted), ProjectIDFrom(testProjectID)).Connect()))
-	_, err = allowedEach(ctx, engine, tools)
+	_, err = allowedEach(ctx, engine, tool)
 	require.NoError(t, err)
 
 	// A batch row names no single resource.

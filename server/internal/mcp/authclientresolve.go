@@ -237,20 +237,28 @@ type mandatoryPermitter struct {
 	visibility serverVisibilityLookup
 
 	// refusals remembers the refusals already recorded as authorization
-	// challenges.
+	// challenges. When nil, the permitter evaluates a preview and records
+	// nothing.
 	refusals *onceLog
 }
 
 func (p mandatoryPermitter) Permitted(ctx context.Context, req authClientPermitRequest) (bool, error) {
-	authorization, decision, err := decideMandatoryAuthClient(ctx, p.engine, req, p.visibility)
+	authorization, err := p.engine.PrepareMandatory(ctx)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("admit caller for auth client: %w", err)
+	}
+	decision, err := decideAuthClientUse(ctx, authorization, req, p.visibility)
+	if err != nil {
+		return false, fmt.Errorf("evaluate auth client check: %w", err)
 	}
 	if decision.Allowed {
 		return true, nil
 	}
-	// Only a refusal that was recorded is remembered, so one skipped (a
-	// preview, logging off, a failed write) is recorded the next time.
+	if p.refusals == nil {
+		return false, nil
+	}
+	// Only a refusal that was recorded is remembered, so one skipped (logging
+	// off, a failed write) is recorded the next time.
 	key := authClientRefusalKey(req, authorization, decision)
 	if p.refusals.first(key) {
 		check := mandatoryAuthClientCheck(req.ProjectID, req.ClientID, req.RegistrationID, req.ClientType, req.connectionOwner())
@@ -259,36 +267,6 @@ func (p mandatoryPermitter) Permitted(ctx context.Context, req authClientPermitR
 		}
 	}
 	return false, nil
-}
-
-// mandatoryPreview decides a proposed client the way mandatoryPermitter
-// decides one in use, and records nothing: a consent, catalog, recovery or
-// sign-in page asks what a member could be served, and viewing it adds no
-// failed checks the person did not trigger.
-type mandatoryPreview struct {
-	engine     *authz.Engine
-	visibility serverVisibilityLookup
-}
-
-func (p mandatoryPreview) Permitted(ctx context.Context, req authClientPermitRequest) (bool, error) {
-	_, decision, err := decideMandatoryAuthClient(ctx, p.engine, req, p.visibility)
-	if err != nil {
-		return false, err
-	}
-	return decision.Allowed, nil
-}
-
-func decideMandatoryAuthClient(ctx context.Context, engine *authz.Engine, req authClientPermitRequest, visibility serverVisibilityLookup) (authz.MandatoryAuthorization, authz.MandatoryDecision, error) {
-	var refused authz.MandatoryDecision
-	authorization, err := engine.PrepareMandatory(ctx)
-	if err != nil {
-		return authorization, refused, fmt.Errorf("admit caller for auth client: %w", err)
-	}
-	decision, err := decideAuthClientUse(ctx, authorization, req, visibility)
-	if err != nil {
-		return authorization, refused, fmt.Errorf("evaluate auth client check: %w", err)
-	}
-	return authorization, decision, nil
 }
 
 // serverVisibilityLookup reads the visibility a server in an organization is
@@ -520,7 +498,7 @@ func (s *Service) resolveAuthClientForServing(ctx context.Context, selector *ups
 		CredentialKind: selector.credentialKindOrDefault(), CredentialID: selector.credentialID, Subject: subject,
 		UserSessionIssuerID: selector.userSessionIssuerID, ConnectionOwner: "", AttachedConsent: authz.AttachedConnectionConsent{},
 	}
-	return s.prepareAuthClient(ctx, req, res, true, s.authClientPermitFor, func(permit authClientPermitRequest, _ bool) {
+	return s.prepareAuthClient(ctx, req, res, true, true, func(permit authClientPermitRequest, _ bool) {
 		if resolved {
 			// The shadow compares the mandatory check with the
 			// connect-equivalent rule served before it, whichever of the two
@@ -550,7 +528,7 @@ func (s *Service) resolveAuthClientChoiceForConsent(ctx context.Context, organiz
 //
 // A proposal is a preview, not a use of the client: a consent, catalog,
 // recovery or sign-in page asks what a member could be served, so it is
-// decided by authClientPreviewFor, which records nothing.
+// decided without recording refusals.
 func (s *Service) resolveProposedAuthClient(ctx context.Context, organizationID string, serverID, projectID uuid.UUID, registrationID, authClientID uuid.NullUUID, subject urn.SessionSubject) (authClientResolution, error) {
 	enforced, err := s.typedConsentAuth(ctx, organizationID)
 	if err != nil {
@@ -579,7 +557,7 @@ func (s *Service) resolveProposedAuthClientWithPolicy(ctx context.Context, organ
 		res.choice = upstreamChoice{clientID: row.RegistrationID, remoteSessionIssuerID: row.RegistrationIssuerID}
 	}
 
-	return s.prepareAuthClient(ctx, authClientPermitRequest{OrganizationID: organizationID, ProjectID: projectID, ServerID: serverID, ClientID: res.clientID, ClientType: res.clientType, RegistrationID: res.choice.clientID, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: uuid.Nil, Subject: subject, UserSessionIssuerID: uuid.Nil, ConnectionOwner: "", AttachedConsent: authz.AttachedConnectionConsent{}}, res, enforced, s.authClientPreviewFor, nil)
+	return s.prepareAuthClient(ctx, authClientPermitRequest{OrganizationID: organizationID, ProjectID: projectID, ServerID: serverID, ClientID: res.clientID, ClientType: res.clientType, RegistrationID: res.choice.clientID, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: uuid.Nil, Subject: subject, UserSessionIssuerID: uuid.Nil, ConnectionOwner: "", AttachedConsent: authz.AttachedConnectionConsent{}}, res, enforced, false, nil)
 }
 
 // resolveNoAuthChoice decides a no-auth choice for a server as a recorded one
@@ -600,8 +578,8 @@ func (s *Service) resolveNoAuthChoice(ctx context.Context, organizationID string
 	return decideAuthClient(rows[0]), nil
 }
 
-func (s *Service) prepareAuthClient(ctx context.Context, permit authClientPermitRequest, res authClientResolution, mandatory bool, permitFor func(mandatory bool) (authClientPermitter, error), observe func(permit authClientPermitRequest, permitted bool)) (authClientResolution, error) {
-	res, err := s.checkAuthClientPermission(ctx, permit, res, mandatory, permitFor, observe)
+func (s *Service) prepareAuthClient(ctx context.Context, permit authClientPermitRequest, res authClientResolution, mandatory, recordRefusals bool, observe func(permit authClientPermitRequest, permitted bool)) (authClientResolution, error) {
+	res, err := s.checkAuthClientPermission(ctx, permit, res, mandatory, recordRefusals, observe)
 	if err != nil {
 		return res, err
 	}
@@ -622,36 +600,37 @@ func (s *Service) prepareAuthClient(ctx context.Context, permit authClientPermit
 
 // observe, when set, receives the permit request, with its connection owner
 // resolved, and the decision before it is applied.
-func (s *Service) checkAuthClientPermission(ctx context.Context, permit authClientPermitRequest, res authClientResolution, mandatory bool, permitFor func(mandatory bool) (authClientPermitter, error), observe func(permit authClientPermitRequest, permitted bool)) (authClientResolution, error) {
+func (s *Service) checkAuthClientPermission(ctx context.Context, permit authClientPermitRequest, res authClientResolution, mandatory, recordRefusals bool, observe func(permit authClientPermitRequest, permitted bool)) (authClientResolution, error) {
 	// A mapped client keeps its permit even when serving falls back to the
 	// registration or current server headers.
-	if res.outcome == authClientResolved || (res.outcome == authClientLegacy && res.clientID != uuid.Nil) {
-		permitter, err := permitFor(mandatory)
-		if err != nil {
-			return res, err
-		}
-		connection, err := s.authClientConnection(ctx, permit, mandatory)
-		if err != nil {
-			return res, fmt.Errorf("check auth client permission: %w", err)
-		}
-		permit.ConnectionOwner = connection.owner
-		permit.AttachedConsent = connection.consent
-		res.attachedSession = connection.attachedSession
-		res.connectionOwner = connection.owner
-		if connection.authorizer {
-			res.authorizerOwner = connection.owner
-		}
-		permitted, err := permitter.Permitted(ctx, permit)
-		if err != nil {
-			return res, fmt.Errorf("check auth client permission: %w", err)
-		}
-		if observe != nil {
-			observe(permit, permitted)
-		}
-		if !permitted {
-			res.outcome = authClientNoAccess
-			res.reason = authClientReasonNotPermitted
-		}
+	if res.outcome != authClientResolved && (res.outcome != authClientLegacy || res.clientID == uuid.Nil) {
+		return res, nil
+	}
+	permitter, err := s.authClientPermitFor(mandatory, recordRefusals)
+	if err != nil {
+		return res, err
+	}
+	connection, err := s.authClientConnection(ctx, permit, mandatory)
+	if err != nil {
+		return res, fmt.Errorf("check auth client permission: %w", err)
+	}
+	permit.ConnectionOwner = connection.owner
+	permit.AttachedConsent = connection.consent
+	res.attachedSession = connection.attachedSession
+	res.connectionOwner = connection.owner
+	if connection.authorizer {
+		res.authorizerOwner = connection.owner
+	}
+	permitted, err := permitter.Permitted(ctx, permit)
+	if err != nil {
+		return res, fmt.Errorf("check auth client permission: %w", err)
+	}
+	if observe != nil {
+		observe(permit, permitted)
+	}
+	if !permitted {
+		res.outcome = authClientNoAccess
+		res.reason = authClientReasonNotPermitted
 	}
 	return res, nil
 }
@@ -775,8 +754,9 @@ func (s *Service) refuseForeignCallerOutsideTypedServing(ctx context.Context, or
 }
 
 // Serving always uses mandatory mcp:auth. Browser consent also uses it;
-// other proposed choices retain their eligibility policy.
-func (s *Service) authClientPermitFor(mandatory bool) (authClientPermitter, error) {
+// other proposed choices retain their eligibility policy. When recordRefusals
+// is false (previews), the permitter evaluates without recording denials.
+func (s *Service) authClientPermitFor(mandatory, recordRefusals bool) (authClientPermitter, error) {
 	if s.authClientPermitter != nil {
 		return s.authClientPermitter, nil
 	}
@@ -786,22 +766,11 @@ func (s *Service) authClientPermitFor(mandatory bool) (authClientPermitter, erro
 	if s.authz == nil {
 		return nil, errors.New("upstream auth enforcement needs the authorization engine")
 	}
-	return mandatoryPermitter{engine: s.authz, visibility: s.mandatoryServerVisibility, refusals: s.authClientRefusals}, nil
-}
-
-// authClientPreviewFor is authClientPermitFor for a proposed client, which
-// is decided without recording a refusal.
-func (s *Service) authClientPreviewFor(mandatory bool) (authClientPermitter, error) {
-	if s.authClientPermitter != nil {
-		return s.authClientPermitter, nil
+	var refusals *onceLog
+	if recordRefusals {
+		refusals = s.authClientRefusals
 	}
-	if !mandatory {
-		return connectPermitter{}, nil
-	}
-	if s.authz == nil {
-		return nil, errors.New("upstream auth enforcement needs the authorization engine")
-	}
-	return mandatoryPreview{engine: s.authz, visibility: s.mandatoryServerVisibility}, nil
+	return mandatoryPermitter{engine: s.authz, visibility: s.mandatoryServerVisibility, refusals: refusals}, nil
 }
 
 // withoutDeniedSources drops client headers that read a denied inbound header,

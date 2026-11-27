@@ -20,7 +20,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/hiddenmcpservers"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
@@ -30,7 +29,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
-	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
 // metaMemberBackend classifies how the meta MCP reaches one member.
@@ -87,10 +85,15 @@ type metaMember struct {
 	// selects across issuers, so it is not an address and is never dialed.
 	tunneledResourceIdentifier string
 
-	// connect is the mcp:connect decision admission made for a private
-	// member. A call that names the member records it; a listing does not. A
-	// public member needs no grant, so it holds nothing to record.
+	// connect is the mcp:connect decision admission made for a private member
+	// or a derived gateway's private toolset. A call that names the member
+	// records it; a listing does not.
 	connect authz.Decisions
+
+	// recordToolsetConnect is set by findNamedMember when a named call reaches
+	// a public hosted member whose toolset was not decided at admission, so
+	// loadMemberToolset records the toolset's connect decision directly.
+	recordToolsetConnect bool
 
 	// feedbackToolEnabled reports whether the member server has its feedback
 	// tool switched on, read with the member listing. The tool's name and
@@ -521,7 +524,11 @@ func (s *Service) resolveOrganizationMemberSnapshotWithRecheck(
 			needsSignIn := !serving && memberNeedsSignIn(member)
 			supported, needsOAuth = remoteMemberAuth(offerMetadata.source[member.remoteServerID.UUID], needsSignIn)
 		} else {
-			supported, needsOAuth, err = s.derivedMemberAuth(ctx, shadow, authzSurface, member)
+			var toolsetConnect authz.Decisions
+			supported, needsOAuth, toolsetConnect, err = s.derivedMemberAuth(ctx, shadow, authzSurface, member)
+			if len(member.connect.Each) == 0 && len(toolsetConnect.Each) > 0 {
+				member.connect = toolsetConnect
+			}
 			if errors.Is(err, errMemberToolsetDenied) {
 				// Keep denied toolsets aside so a named call records their denial.
 				denied = append(denied, member)
@@ -624,7 +631,7 @@ func (s *Service) admitMetaMembers(
 		// call that names the member records it (findNamedMember), so denied
 		// members are kept aside for that.
 		connect := memberConnectCheck(candidate.serverID, candidate.toolsetID, candidate.projectID)
-		refusal, decided, err := s.memberConnectDecision(ctx, shadow, surface, candidate.visibility, connect)
+		res, err := s.memberConnectDecision(ctx, shadow, surface, candidate.visibility, connect)
 		if err != nil {
 			return ctx, nil, nil, oops.E(oops.CodeUnexpected, err, "check member authz").LogError(ctx, logger)
 		}
@@ -650,7 +657,8 @@ func (s *Service) admitMetaMembers(
 			upstreamIssuer:                 candidate.upstreamIssuer,
 			upstreamIssuerFromAssociations: fromAssociations,
 			tunneledResourceIdentifier:     candidate.tunneledResourceIdentifier,
-			connect:                        decided,
+			connect:                        res.decision,
+			recordToolsetConnect:           false,
 			feedbackToolEnabled:            candidate.feedbackToolEnabled,
 			chosenClientID:                 uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 			upstreamNoAuth:                 false,
@@ -659,8 +667,7 @@ func (s *Service) admitMetaMembers(
 			typedRegistrations:             false,
 		}
 		switch {
-		case refusal == nil:
-
+		case res.allowed():
 			members = append(members, member)
 			s.recordMemberIssuerParity(ctx, logger, organizationID, member)
 		case candidate.visibility == mcpservers.VisibilityPrivate:
@@ -704,6 +711,17 @@ func (s *Service) admitMetaMembers(
 	return ctx, members, denied, nil
 }
 
+// memberConnectResult is the outcome of deciding mcp:connect for a member
+// server or its toolset. refusal is non-nil (Forbidden or Unauthorized) when
+// the caller may not connect; decision holds the authz decision for a caller
+// to record when a call names the server.
+type memberConnectResult struct {
+	refusal  error
+	decision authz.Decisions
+}
+
+func (r memberConnectResult) allowed() bool { return r.refusal == nil }
+
 // memberConnectDecision is the one connect decision for a server a caller
 // reaches through another surface: a gateway member, a member's own toolset,
 // a consent candidate, or a proxied backend. A public server is open. A
@@ -711,57 +729,54 @@ func (s *Service) admitMetaMembers(
 // check. The decision is recorded in the mandatory shadow under surface, and
 // returned for the caller to record when a call names the server.
 //
-// It returns a non-nil refusal when the caller may not connect, and err only
-// when the check could not be evaluated. A refusal is Forbidden, or
-// Unauthorized for an anonymous caller on an ungated endpoint, which carries
-// no AuthContext. The caller must have prepared the authz context.
-func (s *Service) memberConnectDecision(ctx context.Context, shadow *mandatoryShadow, surface string, visibility string, connect authz.Check) (refusal error, decided authz.Decisions, err error) {
-	if refusal, open := memberConnectWithoutGrant(ctx, shadow, surface, visibility, connect); open || refusal != nil {
-		return refusal, authz.Decisions{AllAllowed: false, Each: nil}, nil
+// It returns err only when the check could not be evaluated; access refusals
+// live in memberConnectResult.refusal. The caller must have prepared the authz
+// context.
+func (s *Service) memberConnectDecision(ctx context.Context, shadow *mandatoryShadow, surface string, visibility string, connect authz.Check) (memberConnectResult, error) {
+	var none memberConnectResult
+	switch visibility {
+	case mcpservers.VisibilityPublic:
+		shadow.recordServer(ctx, surface, true, authz.MandatoryServerPublic, connect)
+		return none, nil
+	case mcpservers.VisibilityPrivate:
+	default:
+		return memberConnectResult{refusal: oops.E(oops.CodeForbidden, nil, "unrecognized server visibility %q", visibility), decision: none.decision}, nil
 	}
-	decided, err = s.authz.Decide(ctx, connect)
-	if err != nil && !isAccessDenial(err) {
-		return nil, authz.Decisions{AllAllowed: false, Each: nil}, fmt.Errorf("decide member connect: %w", err)
-	}
-	if err == nil && decided.AllAllowed {
-		shadow.recordServer(ctx, surface, true, authz.MandatoryServerPrivate, connect)
-		return nil, decided, nil
-	}
-	shadow.recordServer(ctx, surface, false, authz.MandatoryServerPrivate, connect)
+
+	decided, err := s.authz.Decide(ctx, connect)
 	if err != nil {
-		return err, authz.Decisions{AllAllowed: false, Each: nil}, nil
+		if !isAccessDenial(err) {
+			return none, fmt.Errorf("decide member connect: %w", err)
+		}
+		shadow.recordServer(ctx, surface, false, authz.MandatoryServerPrivate, connect)
+		return memberConnectResult{refusal: err, decision: none.decision}, nil
 	}
-	return oops.C(oops.CodeForbidden), decided, nil
+	shadow.recordServer(ctx, surface, decided.AllAllowed, authz.MandatoryServerPrivate, connect)
+	if !decided.AllAllowed {
+		return memberConnectResult{refusal: oops.C(oops.CodeForbidden), decision: decided}, nil
+	}
+	return memberConnectResult{refusal: nil, decision: decided}, nil
 }
 
 // requireMemberConnect is memberConnectDecision for a call that serves the
 // one server it names, such as a proxied backend's own endpoint: the decision
 // is recorded, and a refusal tells the client what it lacks.
 func (s *Service) requireMemberConnect(ctx context.Context, shadow *mandatoryShadow, surface string, visibility string, connect authz.Check) (refusal error, err error) {
-	if refusal, open := memberConnectWithoutGrant(ctx, shadow, surface, visibility, connect); open || refusal != nil {
-		return refusal, nil
+	switch visibility {
+	case mcpservers.VisibilityPublic:
+		shadow.recordServer(ctx, surface, true, authz.MandatoryServerPublic, connect)
+		return nil, nil
+	case mcpservers.VisibilityPrivate:
+	default:
+		return oops.E(oops.CodeForbidden, nil, "unrecognized server visibility %q", visibility), nil
 	}
+
 	requireErr := s.authz.Require(ctx, connect)
 	if requireErr != nil && !isAccessDenial(requireErr) {
 		return nil, fmt.Errorf("require member connect: %w", requireErr)
 	}
 	shadow.recordServer(ctx, surface, requireErr == nil, authz.MandatoryServerPrivate, connect)
 	return requireErr, nil
-}
-
-// memberConnectWithoutGrant settles the visibilities that need no grant: a
-// public server is open, and an unknown visibility is refused. It reports
-// neither for a private server, which needs the connect check.
-func memberConnectWithoutGrant(ctx context.Context, shadow *mandatoryShadow, surface string, visibility string, connect authz.Check) (refusal error, open bool) {
-	switch visibility {
-	case mcpservers.VisibilityPublic:
-		shadow.recordServer(ctx, surface, true, authz.MandatoryServerPublic, connect)
-		return nil, true
-	case mcpservers.VisibilityPrivate:
-		return nil, false
-	default:
-		return oops.E(oops.CodeForbidden, nil, "unrecognized server visibility %q", visibility), false
-	}
 }
 
 // memberConnectCheck is the mcp:connect check a member's grants answer.
@@ -778,52 +793,31 @@ func memberConnectCheck(serverID uuid.UUID, toolsetID uuid.NullUUID, projectID u
 }
 
 // findNamedMember resolves the server a call names and records the connect
-// decision the request makes for it: the one admission made for a private
-// member, allowed or denied, and for a public member, its private toolset's.
-// A slug that names no server records nothing.
+// decision made for it at admission (for private members and derived gateways'
+// private toolsets). For an admitted public hosted member whose toolset was
+// not decided at admission, it marks the returned member so loadMemberToolset
+// records the toolset's connect decision directly. A slug that names no server
+// records nothing.
 func (s *Service) findNamedMember(ctx context.Context, gate *metaGateContext, members []metaMember, slug string) (metaMember, bool) {
-	member, ok := findMetaMember(members, slug)
-	if ok {
-		s.recordNamedMemberConnect(ctx, gate, member)
+	if member, ok := findMetaMember(members, slug); ok {
+		if len(member.connect.Each) > 0 {
+			s.authz.Record(ctx, member.connect)
+		} else {
+			member.recordToolsetConnect = true
+		}
 		return member, true
 	}
+	var none metaMember
 	if denied, found := findDeniedMember(gate.deniedMembers, slug); found {
-		s.recordNamedMemberConnect(ctx, gate, denied)
+		s.authz.Record(ctx, denied.connect)
+		return none, false
 	}
 	// A server the caller hid is still one it may use: its decision is
 	// recorded, though the call is refused as hidden.
 	if hidden, found := findMetaMember(gate.hiddenMembers, slug); found {
-		s.recordNamedMemberConnect(ctx, gate, hidden)
+		s.authz.Record(ctx, hidden.connect)
 	}
-	return member, false
-}
-
-// recordNamedMemberConnect records the connect decision for a member a call
-// names. A private member's was made at admission. A public member needs no
-// grant itself, but a hosted one behind a private toolset is decided here on
-// that toolset, which loadMemberToolset decides again without recording.
-func (s *Service) recordNamedMemberConnect(ctx context.Context, gate *metaGateContext, member metaMember) {
-	if member.visibility == mcpservers.VisibilityPrivate {
-		s.authz.Record(ctx, member.connect)
-		return
-	}
-	if member.backend != metaMemberBackendHosted || !member.toolsetID.Valid || !gate.authenticated {
-		return
-	}
-	toolset, err := toolsets_repo.New(s.db).GetToolsetByIDAndProject(ctx, toolsets_repo.GetToolsetByIDAndProjectParams{ID: member.toolsetID.UUID, ProjectID: member.projectID})
-	if err != nil {
-		// Nothing to record: loading the member fails the same way.
-		return
-	}
-	hosting, _, err := hostedmcp.LoadServerState(ctx, s.db, toolset)
-	if err != nil || hosting.Public {
-		return
-	}
-	_, decided, err := s.memberToolsetConnectAllowed(ctx, nil, mandatorySurfaceGatewayMember, true, &toolset, false)
-	if err != nil {
-		return
-	}
-	s.authz.Record(ctx, decided)
+	return none, false
 }
 
 // findDeniedMember matches a slug against members admission turned away.

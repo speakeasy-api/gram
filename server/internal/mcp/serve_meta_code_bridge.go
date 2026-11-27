@@ -289,7 +289,11 @@ func (b *metaCodeBackend) Members(ctx context.Context) ([]codemode.Server, codem
 	list := func(callCtx context.Context, slug string) (*codemode.Catalog, error) {
 		bound, cancel := boundToCallback(ctx, callCtx)
 		defer cancel()
-		return b.catalog(bound, gate, members, slug)
+		member, ok := findMetaMember(members, slug)
+		if !ok {
+			return nil, codemode.ErrToolUnavailable
+		}
+		return b.catalog(bound, gate, member)
 	}
 	return servers, list, nil
 }
@@ -307,17 +311,14 @@ func (b *metaCodeBackend) List(ctx context.Context, slug string) (*codemode.Cata
 	if err != nil {
 		return nil, err
 	}
-	if _, ok := b.service.findNamedMember(ctx, gate, members, slug); !ok {
-		return nil, codemode.ErrToolUnavailable
-	}
-	return b.catalog(ctx, gate, members, slug)
-}
-
-func (b *metaCodeBackend) catalog(ctx context.Context, gate *metaGateContext, members []metaMember, slug string) (*codemode.Catalog, error) {
-	member, ok := findMetaMember(members, slug)
+	member, ok := b.service.findNamedMember(ctx, gate, members, slug)
 	if !ok {
 		return nil, codemode.ErrToolUnavailable
 	}
+	return b.catalog(ctx, gate, member)
+}
+
+func (b *metaCodeBackend) catalog(ctx context.Context, gate *metaGateContext, member metaMember) (*codemode.Catalog, error) {
 	catalog, err := b.describe(ctx, gate, member)
 	if err != nil {
 		return nil, b.helperFailure(ctx, gate, member, err)
