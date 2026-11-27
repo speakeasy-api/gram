@@ -2113,8 +2113,8 @@ WHERE organization_id = @organization_id AND project_id = @project_id
 
 -- name: GetAssistantATEActorByUIDWithChat :one
 -- Uses assistant_ate_actors_actor_uid_key for tenant-scoped live actor identity
--- lookup, verifying the owning runtime, assistant, and thread are active and
--- returning the thread's canonical chat_id.
+-- lookup, verifying the actor is running, the owning runtime is active for the
+-- same assistant, and the assistant, thread, and chat are all live.
 SELECT
   a.id,
   a.organization_id,
@@ -2131,22 +2131,27 @@ SELECT
   t.chat_id
 FROM assistant_ate_actors a
 JOIN assistant_runtimes r
-  ON r.id = a.runtime_id AND r.project_id = a.project_id
+  ON r.id = a.runtime_id AND r.project_id = a.project_id AND r.assistant_id = a.assistant_id
 JOIN assistants asst
   ON asst.id = a.assistant_id AND asst.project_id = a.project_id AND asst.organization_id = a.organization_id
 JOIN assistant_threads t
   ON t.id = a.assistant_thread_id AND t.project_id = a.project_id AND t.assistant_id = a.assistant_id
+JOIN chats c
+  ON c.id = t.chat_id AND c.project_id = a.project_id AND c.organization_id = a.organization_id
 WHERE a.actor_uid = @actor_uid
   AND a.organization_id = @organization_id
   AND a.project_id = @project_id
   AND a.deleted IS FALSE
+  AND a.state = 'running'
   AND r.runtime_version = 3
   AND r.backend = 'ate'
+  AND r.state = 'active'
   AND r.deleted IS FALSE
   AND r.ended IS FALSE
   AND asst.deleted IS FALSE
   AND asst.status = 'active'
-  AND t.deleted IS FALSE;
+  AND t.deleted IS FALSE
+  AND c.deleted IS FALSE;
 
 -- name: GetAssistantATEActorForThread :one
 SELECT * FROM assistant_ate_actors

@@ -207,6 +207,7 @@ func newMCPService(c *cli.Context, d mcpServiceDependencies) (service *mcp.Servi
 	}
 	chainer.SetSpeakeasyIssuer(d.IssuerGate, d.IssuerSigner, d.Features)
 	service.SetIdentityChainer(chainer)
+	service.SetWorkloadAuthorizerResolver(newATEWorkloadAuthorizerAdapter(d.DB))
 	return service, nil
 }
 

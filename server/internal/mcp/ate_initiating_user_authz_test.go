@@ -26,9 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
-	"github.com/speakeasy-api/gram/server/internal/audit"
 	auditrepo "github.com/speakeasy-api/gram/server/internal/audit/repo"
-	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/constants"
@@ -36,10 +34,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
-	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
-	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	authclientfixtures "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
@@ -714,60 +710,35 @@ func TestATEInitiatingUserAuthz_AuditLogRecordsAgentActorAndInitiatingUserAuthor
 	fx := newATEActorAuthzFixture(t)
 	fx.f.ti.service.SetAuthClientPermitted(true)
 
+	authCtx, ok := contextvalues.GetAuthContext(fx.f.ctx)
+	require.True(t, ok)
+
 	userA := fx.seedOrgMember(t, "alice-audit", true, false)
+	member, upstream := seedExecutableHostedProjectMember(t, ctx, fx.f.ti, authCtx, "audit_ping", `{"ok":true}`)
+	t.Cleanup(upstream.Close)
+
+	agentURN := urn.NewPrincipal(urn.PrincipalTypeAgent, fx.f.agentID.String())
+	seedUserMCPConnectGrant(t, ctx, fx.f.ti.conn, fx.orgID, fx.ownerUserID, member.toolsetID.String())
+	seedPrincipalMCPConnectGrant(t, ctx, fx.f.ti, fx.orgID, agentURN, member.toolsetID)
+	seedUserMCPConnectGrant(t, ctx, fx.f.ti.conn, fx.orgID, userA, member.toolsetID.String())
+
 	actorA := fx.seedThreadActor(t, "alice-audit", userA, assistants.ATEInitiatorDashboardSender)
 	tokenA := fx.mintActorToken(t, actorA, mcp.DirectWorkloadProjectGatewayAudience)
 
-	// Authenticate through the Project Gateway issuer gate and verify the
-	// resulting context stamps agent actor + userA authorizer + assistant thread
-	// binding for both audit logging and telemetry tool-call logs.
-	endpoint, err := fx.f.ti.service.LoadResolvedMcpEndpointBySlug(
-		ctx, testenv.NewLogger(t),
-		fx.gateway.organizationSlug+"/projects/"+fx.gateway.projectSlug,
-		mcproute.OrganizationGateway,
-	)
-	require.NoError(t, err)
+	// Drive a real execute_tool request through Project Gateway so the
+	// production audit logger and telemetry pipeline emit the persisted records.
+	callBody := makeMetaRPCBody(t, mcpversions.MethodToolsCall, map[string]any{
+		"name":      metamcp.ToolExecuteTool,
+		"arguments": map[string]any{"name": member.slug + "--audit_ping", "arguments": map[string]any{}},
+	})
+	resp := serveProjectGatewayHTTPWithOptions(t, fx.f.ti, fx.gateway, tokenA, callBody, "", nil)
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+	text, isErr := metaToolResultText(t, decodeRPCResponse(t, resp))
+	require.False(t, isErr, text)
+	require.Contains(t, text, `"ok":true`)
 
-	admittedCtx, _, _, err := fx.f.ti.service.ApplyIssuerGate(ctx, httptest.NewRecorder(), tokenA, fx.f.ti.serverURL.String(), endpoint)
-	require.NoError(t, err)
-	identity, hasIdentity := mcpidentity.FromContext(admittedCtx)
-	require.True(t, hasIdentity)
-	require.Equal(t, mcpidentity.KindAgent, identity.Kind())
-	require.Equal(t, fx.f.agentID.String(), identity.AgentID())
-
-	actor, hasActor := contextvalues.AuthenticatedActor(admittedCtx)
-	require.True(t, hasActor)
-	require.Equal(t, urn.NewPrincipal(urn.PrincipalTypeAgent, fx.f.agentID.String()), actor)
-
-	authorizerID, ownerID, hasProv := contextvalues.PrincipalCredentialProvenance(admittedCtx)
-	require.True(t, hasProv)
-	require.Equal(t, userA, authorizerID)
-	require.Equal(t, fx.ownerUserID, ownerID)
-
-	asstPrincipal, hasAsst := contextvalues.GetAssistantToolTarget(admittedCtx)
-	require.True(t, hasAsst)
-	require.Equal(t, fx.assistantID, asstPrincipal.AssistantID)
-	require.Equal(t, actorA.threadID, asstPrincipal.ThreadID)
-
-	boundChat, hasChat := assistanttokens.RuntimeChatID(admittedCtx)
-	require.True(t, hasChat)
-	require.Equal(t, actorA.chatID, boundChat)
-
-	// Exercise audit.LogAssistantToolCall with the exact actor/authorizer produced by admittedCtx
-	// and verify the persisted audit_logs row records agent as actor and initiating user as authorizer.
-	authorizerURN := urn.NewPrincipal(urn.PrincipalTypeUser, authorizerID)
-	require.NoError(t, fx.f.ti.audit.LogAssistantToolCall(admittedCtx, fx.f.ti.conn, audit.LogAssistantToolCallEvent{
-		OrganizationID: fx.orgID,
-		ProjectID:      fx.projectID,
-		Actor:          actor,
-		AssistantURN:   urn.NewAssistant(asstPrincipal.AssistantID),
-		Thread:         asstPrincipal.ThreadID,
-		Chat:           boundChat.String(),
-		ToolsetSlug:    "test-toolset",
-		ToolName:       "test-tool",
-		ToolURN:        urn.NewTool(urn.ToolKindExternalMCP, "test-toolset", "test-tool"),
-		Authorizer:     &authorizerURN,
-	}))
+	// Verify the production audit_logs row records agent as actor and initiating user as authorizer.
+	authorizerURN := urn.NewPrincipal(urn.PrincipalTypeUser, userA)
 	logs, err := auditrepo.New(fx.f.ti.conn).ListAuditLogs(ctx, auditrepo.ListAuditLogsParams{
 		OrganizationID:         fx.orgID,
 		ProjectID:              uuid.NullUUID{UUID: fx.projectID, Valid: true},
@@ -783,12 +754,16 @@ func TestATEInitiatingUserAuthz_AuditLogRecordsAgentActorAndInitiatingUserAuthor
 	require.Equal(t, actorA.threadID.String(), meta["thread_id"])
 	require.Equal(t, actorA.chatID.String(), meta["chat_id"])
 
-	// Verify tool-call telemetry attributes also record agent actor + initiating user authorizer.
-	attrs := tm.HTTPLogAttributes{}
-	attrs.RecordAuthenticatedActor(admittedCtx)
-	require.Equal(t, "agent", attrs["gram.authorization.actor.type"])
-	require.Equal(t, fx.f.agentID.String(), attrs["gram.authorization.actor.id"])
-	require.Equal(t, userA, attrs["gram.authorization.authorizer_user_id"])
+	// Verify the production ClickHouse telemetry tool_call row records agent actor,
+	// initiating user authorizer, and canonical conversation chat_id.
+	requireTelemetryRowCount(t, `gram_project_id = ?
+		   AND event_source = 'tool_call'
+		   AND tool_name = 'audit_ping'
+		   AND toString(attributes.gram.authorization.actor.type) = 'agent'
+		   AND toString(attributes.gram.authorization.actor.id) = ?
+		   AND toString(attributes.gram.authorization.authorizer_user_id) = ?
+		   AND toString(attributes.gen_ai.conversation.id) = ?`,
+		1, fx.projectID.String(), fx.f.agentID.String(), userA, actorA.chatID.String())
 }
 
 func TestATEInitiatingUserAuthz_InjectionAndSpoofingVectorsRejected(t *testing.T) {
@@ -993,5 +968,42 @@ func TestATEInitiatingUserAuthz_InjectionAndSpoofingVectorsRejected(t *testing.T
 			resp := serveProjectGatewayHTTPWithOptions(t, fx.f.ti, fx.gateway, tc.token, listServersBody(t), "", nil)
 			require.Equal(t, http.StatusUnauthorized, resp.Code, "case %q must fail closed 401, got body: %s", tc.name, resp.Body.String())
 		}
+	})
+
+	// Vector 8: Non-running actor states (suspended/crashed), stopped runtimes,
+	// and soft-deleted chats fail closed 401 even inside the 5s Stage-1 cache window.
+	t.Run("suspended or crashed actor, stopped runtime, and deleted chat fail closed 401", func(t *testing.T) {
+		t.Parallel()
+		for _, nonRunningState := range []string{"suspended", "crashed"} {
+			actorNonRun := fx.seedThreadActor(t, "state-"+nonRunningState, userA, assistants.ATEInitiatorDashboardSender)
+			tok := fx.mintActorToken(t, actorNonRun, mcp.DirectWorkloadProjectGatewayAudience)
+			require.Equal(t, http.StatusOK, serveProjectGatewayHTTPWithOptions(t, fx.f.ti, fx.gateway, tok, listServersBody(t), "", nil).Code)
+
+			_, err := assistantrepo.New(fx.f.ti.conn).UpdateAssistantATEActorState(ctx, assistantrepo.UpdateAssistantATEActorStateParams{
+				State: nonRunningState, ProjectID: fx.projectID, ID: actorNonRun.actorRowID,
+			})
+			require.NoError(t, err)
+			resp := serveProjectGatewayHTTPWithOptions(t, fx.f.ti, fx.gateway, tok, listServersBody(t), "", nil)
+			require.Equal(t, http.StatusUnauthorized, resp.Code, "actor in state %q must be rejected 401", nonRunningState)
+		}
+
+		// Soft-deleted chat must reject the actor immediately.
+		actorDelChat := fx.seedThreadActor(t, "del-chat", userA, assistants.ATEInitiatorDashboardSender)
+		tokDelChat := fx.mintActorToken(t, actorDelChat, mcp.DirectWorkloadProjectGatewayAudience)
+		require.Equal(t, http.StatusOK, serveProjectGatewayHTTPWithOptions(t, fx.f.ti, fx.gateway, tokDelChat, listServersBody(t), "", nil).Code)
+		require.NoError(t, testrepo.New(fx.f.ti.conn).ForceSoftDeleteChat(ctx, actorDelChat.chatID))
+		require.Equal(t, http.StatusUnauthorized, serveProjectGatewayHTTPWithOptions(t, fx.f.ti, fx.gateway, tokDelChat, listServersBody(t), "", nil).Code)
+
+		// Stopped runtime (isolated fixture so sibling subtests are unaffected) must reject immediately.
+		fxStopped := newATEActorAuthzFixture(t)
+		fxStopped.f.ti.service.SetDirectWorkloadClock(func() time.Time { return frozenNow })
+		uStopped := fxStopped.seedOrgMember(t, "alice-stopped", true, false)
+		actorStopped := fxStopped.seedThreadActor(t, "stopped-rt", uStopped, assistants.ATEInitiatorDashboardSender)
+		tokStopped := fxStopped.mintActorToken(t, actorStopped, mcp.DirectWorkloadProjectGatewayAudience)
+		require.Equal(t, http.StatusOK, serveProjectGatewayHTTPWithOptions(t, fxStopped.f.ti, fxStopped.gateway, tokStopped, listServersBody(t), "", nil).Code)
+		require.NoError(t, assistantrepo.New(fxStopped.f.ti.conn).SetAssistantRuntimeStateForTest(ctx, assistantrepo.SetAssistantRuntimeStateForTestParams{
+			ProjectID: fxStopped.projectID, RuntimeID: fxStopped.runtimeID, State: "stopped", UpdatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
+		}))
+		require.Equal(t, http.StatusUnauthorized, serveProjectGatewayHTTPWithOptions(t, fxStopped.f.ti, fxStopped.gateway, tokStopped, listServersBody(t), "", nil).Code)
 	})
 }

@@ -1326,7 +1326,6 @@ func newStartCommand() *cli.Command {
 				return err
 			}
 			// The keepalive re-check runs on the API process: the probe needs the runtime's endpoint routing and proxy builders.
-			mcpService.SetWorkloadAuthorizerResolver(newATEWorkloadAuthorizerAdapter(db))
 			mcpService.StartRemoteSessionRecheck(ctx)
 
 			chatClient := chat.NewAgenticChatClient(completionsClient)
