@@ -10,6 +10,13 @@ pub struct McpServer {
     pub url: String,
     #[serde(default)]
     pub headers: BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub is_gateway: bool,
+}
+
+/// Returns true when the server list is the single Project Gateway entry.
+pub fn is_gateway_mode(servers: &[McpServer]) -> bool {
+    servers.len() == 1 && servers[0].is_gateway
 }
 
 /// `/threads/{thread_id}/turn` request body. The runner looks up — or
