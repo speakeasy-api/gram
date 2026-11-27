@@ -1,4 +1,8 @@
 import { useEffect, useState, type FC, type PropsWithChildren } from "react";
+import { Link } from "react-router";
+import { FALLBACK_TITLE } from "@/elements/components/activeChatTitle.helpers";
+import { useProjectAssistantChats } from "@/hooks/useProjectAssistantChats";
+import { useRoutes } from "@/routes";
 import {
   ThreadPrimitive,
   useAuiState,
@@ -186,6 +190,34 @@ export const TerminalWelcome: FC = () => {
           </ol>
         </div>
       )}
+      <TerminalRecentChats />
+    </div>
+  );
+};
+
+const RECENT_CHATS_COUNT = 5;
+
+/** The last few conversations, so the user can pick one back up. */
+const TerminalRecentChats: FC = () => {
+  const routes = useRoutes();
+  const { chats } = useProjectAssistantChats({
+    pinnedFirst: true,
+    limit: RECENT_CHATS_COUNT,
+  });
+  if (chats.length === 0) return null;
+  return (
+    <div className="gram-term-tips gram-term-recent">
+      <p className="gram-term-dim">Recent chats:</p>
+      <ul>
+        {chats.slice(0, RECENT_CHATS_COUNT).map((chat) => (
+          <li key={chat.id}>
+            <span className="gram-term-dim">- </span>
+            <Link to={routes.chat.conversation.href(chat.id)}>
+              {chat.title || FALLBACK_TITLE}
+            </Link>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 };

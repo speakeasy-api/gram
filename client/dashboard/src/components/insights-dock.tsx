@@ -1340,12 +1340,15 @@ export function InsightsProvider({
   // Bump the runtime key so a fresh conversation opens, then queue the prompt
   // for the bridge to append once the new runtime mounts. Nonce defeats
   // reference-equality skipping when the same chart is clicked twice in a row.
-  const handleSendPrompt = useCallback((text: string) => {
-    setRuntimeKey((k) => k + 1);
-    setPendingPrompt({ text, nonce: Date.now() });
-    // Sending always drops into the live conversation, never the history list.
-    setHistoryView(false);
-  }, []);
+  const handleSendPrompt = useCallback(
+    (text: string, options?: { newConversation?: boolean }) => {
+      if (options?.newConversation !== false) setRuntimeKey((k) => k + 1);
+      setPendingPrompt({ text, nonce: Date.now() });
+      // Sending always drops into the live conversation, never the history list.
+      setHistoryView(false);
+    },
+    [],
+  );
 
   // Docked-pill "Continue chat": reopen the recent conversation as its own
   // full page. Navigating (rather than reopening the dock panel) loads the
@@ -1874,7 +1877,9 @@ function PendingPromptBridge({
 }): null {
   const thread = useAui().thread();
   const isThreadReady = useAuiState(
-    ({ thread }) => !thread.isLoading && !thread.isDisabled,
+    // Wait out a running reply: appending mid-run would interleave turns.
+    ({ thread }) =>
+      !thread.isLoading && !thread.isDisabled && !thread.isRunning,
   );
   const firedNonceRef = useRef<number | null>(null);
 
