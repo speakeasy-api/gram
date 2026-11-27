@@ -29,8 +29,13 @@ type Transcripts struct {
 }
 
 // NewTranscripts encrypts transcripts for the listed projects only. An empty list
-// turns every method into a no-op; there is no implicit all-project mode.
+// turns every method into a no-op; there is no implicit all-project mode. Listed
+// projects without a store are a wiring mistake that would silently skip
+// encryption, so it panics.
 func NewTranscripts(store *Store, projectIDs ...uuid.UUID) *Transcripts {
+	if store == nil && len(projectIDs) > 0 {
+		panic("transcriptstore: NewTranscripts needs a store when projects are listed")
+	}
 	projects := make(map[uuid.UUID]struct{}, len(projectIDs))
 	for _, projectID := range projectIDs {
 		projects[projectID] = struct{}{}
@@ -103,20 +108,57 @@ func (t *Transcripts) Progress(ctx context.Context, organizationID string, proje
 	return progress, nil
 }
 
-// Update changes the encrypted transcript of a message whose body the caller
-// just updated in plaintext, in the caller's transaction: it decrypts the
-// transcript, or starts from the plaintext row when there is none yet, applies
-// the same change in Go and re-encrypts. Call Prepare before beginning the
-// transaction, and run the plaintext update first. A project without encrypted
-// transcripts updates only its plaintext.
-func (t *Transcripts) Update(ctx context.Context, db repo.DBTX, organizationID string, projectID, messageID uuid.UUID, apply func(*transcriptcrypto.Message) error) error {
-	if !t.Enabled(projectID) {
-		return nil
+// Mode is how a project stores message bodies.
+type Mode int
+
+const (
+	// ModePlaintext keeps bodies in the plaintext columns only.
+	ModePlaintext Mode = iota
+	// ModeShadow keeps the plaintext columns and an encrypted transcript of
+	// the same body. Reads open the transcript; writes keep both current.
+	ModeShadow
+	// ModeEncrypted keeps the body only in the encrypted transcript. It is not
+	// available yet: no project is put in it.
+	ModeEncrypted
+)
+
+// Mode reports how the project stores message bodies.
+func (t *Transcripts) Mode(projectID uuid.UUID) Mode {
+	if t.Enabled(projectID) {
+		return ModeShadow
 	}
-	if err := t.store.Update(ctx, db, organizationID, projectID, messageID, apply); err != nil {
-		return fmt.Errorf("update chat transcript: %w", err)
+	return ModePlaintext
+}
+
+// UpdateBody is the one way to change the body of an existing message: content,
+// content_raw, tool_calls, tool_outcome_notes, tool_call_summaries and
+// storage_error. Inside the caller's transaction it locks the message row,
+// reads the body (from the decrypted transcript in shadow mode), lets apply
+// change it in Go and writes the result to every copy the project keeps. It
+// reports whether the body changed. Call Prepare before beginning the
+// transaction, and roll back on error. Non-body columns stay in the caller's
+// own statements in the same transaction.
+func (t *Transcripts) UpdateBody(ctx context.Context, db repo.DBTX, organizationID string, projectID, chatID, messageID uuid.UUID, apply func(*transcriptcrypto.Message) error) (bool, error) {
+	var store *Store
+	switch t.Mode(projectID) {
+	case ModePlaintext:
+	case ModeShadow:
+		store = t.store
+	case ModeEncrypted:
+		return false, fmt.Errorf("update chat message body: %w", ErrUnsupported)
 	}
-	return nil
+	if store == nil {
+		changed, err := updateBody(ctx, db, nil, organizationID, projectID, chatID, messageID, apply)
+		if err != nil {
+			return false, fmt.Errorf("update chat message body: %w", err)
+		}
+		return changed, nil
+	}
+	changed, err := store.UpdateBody(ctx, db, organizationID, projectID, chatID, messageID, apply)
+	if err != nil {
+		return false, fmt.Errorf("update chat message body: %w", err)
+	}
+	return changed, nil
 }
 
 // Body points at the body fields of one loaded message, so Open can replace

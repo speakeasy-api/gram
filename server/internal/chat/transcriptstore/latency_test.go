@@ -45,7 +45,7 @@ func slowStore(t *testing.T, f *fixture) *Store {
 	kms := &slowKMS{KMS: f.keys.KMS, delay: prodUnwrap}
 	service, err := orgencryption.NewService(testenv.NewLogger(t), f.db, gcpauth.NewIdentity(gcpauth.NewStubResolver()), kms.clients, f.keys.Keys)
 	require.NoError(t, err)
-	store, err := New(f.db, service, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t))
+	store, err := New(f.db, service, testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t))
 	require.NoError(t, err)
 	return store
 }

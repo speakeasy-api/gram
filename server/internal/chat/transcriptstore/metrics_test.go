@@ -22,7 +22,7 @@ func TestCaptureRecordsOutcomeMetrics(t *testing.T) {
 	f.add(t, stored)
 
 	reader := sdkmetric.NewManualReader()
-	store, err := New(f.db, f.keys.Service, testenv.NewTracerProvider(t), sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)))
+	store, err := New(f.db, f.keys.Service, testenv.NewLogger(t), testenv.NewTracerProvider(t), sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)))
 	require.NoError(t, err)
 
 	tx, err := f.db.Begin(t.Context()) //nolint:glint // notestingrawsql: caller-owned transaction boundary matches how the chat writer calls Capture; fixture data uses generated queries.
@@ -75,7 +75,7 @@ func TestLoadManyOpensAPageAndRecordsReadMetrics(t *testing.T) {
 	f.capture(t, first, second)
 
 	reader := sdkmetric.NewManualReader()
-	store, err := New(f.db, f.keys.Service, testenv.NewTracerProvider(t), sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)))
+	store, err := New(f.db, f.keys.Service, testenv.NewLogger(t), testenv.NewTracerProvider(t), sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)))
 	require.NoError(t, err)
 
 	opened, err := store.LoadMany(t.Context(), f.org, f.project, []uuid.UUID{first, second, first})
@@ -102,7 +102,7 @@ func TestLoadManyLeavesOutMessagesWithoutAShadow(t *testing.T) {
 	f.capture(t, captured)
 
 	reader := sdkmetric.NewManualReader()
-	store, err := New(f.db, f.keys.Service, testenv.NewTracerProvider(t), sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)))
+	store, err := New(f.db, f.keys.Service, testenv.NewLogger(t), testenv.NewTracerProvider(t), sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)))
 	require.NoError(t, err)
 
 	opened, err := store.LoadMany(t.Context(), f.org, f.project, []uuid.UUID{captured, uncaptured})

@@ -22,12 +22,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
-// TranscriptUpdater changes the encrypted transcript of a message whose body
-// was just updated, inside the caller's transaction. PrepareTranscripts loads
-// the key before that transaction begins.
-type TranscriptUpdater interface {
+// MessageBodyUpdater changes the body of an existing message, so every copy of
+// it (plaintext and encrypted transcript) gets the same value, inside the
+// caller's transaction. PrepareTranscripts loads the key before that
+// transaction begins.
+type MessageBodyUpdater interface {
 	PrepareTranscripts(ctx context.Context, projectID uuid.UUID) error
-	UpdateTranscript(ctx context.Context, db repo.DBTX, organizationID string, projectID, messageID uuid.UUID, apply func(*transcriptcrypto.Message) error) error
+	UpdateMessageBody(ctx context.Context, db repo.DBTX, organizationID string, projectID, chatID, messageID uuid.UUID, apply func(*transcriptcrypto.Message) error) (bool, error)
 }
 
 type AnalyzeSegment struct {
@@ -36,17 +37,17 @@ type AnalyzeSegment struct {
 	chatClient      openrouter.CompletionClient
 	db              *pgxpool.Pool
 	telemetryLogger *telemetry.Logger
-	transcripts     TranscriptUpdater
+	bodies          MessageBodyUpdater
 }
 
-func NewAnalyzeSegment(logger *slog.Logger, db *pgxpool.Pool, chatClient openrouter.CompletionClient, telemetryLogger *telemetry.Logger, transcripts TranscriptUpdater) *AnalyzeSegment {
+func NewAnalyzeSegment(logger *slog.Logger, db *pgxpool.Pool, chatClient openrouter.CompletionClient, telemetryLogger *telemetry.Logger, bodies MessageBodyUpdater) *AnalyzeSegment {
 	return &AnalyzeSegment{
 		logger:          logger,
 		repo:            repo.New(db),
 		chatClient:      chatClient,
 		db:              db,
 		telemetryLogger: telemetryLogger,
-		transcripts:     transcripts,
+		bodies:          bodies,
 	}
 }
 
@@ -110,10 +111,18 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 		return fmt.Errorf("failed to analyze segment with LLM: %w", err)
 	}
 
-	// Outcome notes change the encrypted transcripts in the transaction below,
-	// so the key loads before it begins. A segment that updates no outcome
-	// seals nothing and must not fail on the key.
-	prepared := a.transcripts.PrepareTranscripts(ctx, args.ProjectID)
+	// Outcome notes are part of the message body, which may be encrypted, so the
+	// key loads before the transaction below begins, but only when some outcome
+	// will be written. A segment that writes none must not fail on the key.
+	var prepared error
+	for _, tc := range result.ToolCalls {
+		absoluteIndex := args.StartIndex + tc.MessageIndex
+		if absoluteIndex < 0 || absoluteIndex >= len(allMessages) {
+			continue
+		}
+		prepared = a.bodies.PrepareTranscripts(ctx, args.ProjectID)
+		break
+	}
 
 	// Use transaction for atomic updates
 	tx, err := a.db.Begin(ctx)
@@ -128,8 +137,8 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 
 	txRepo := a.repo.WithTx(tx)
 
-	// Update tool call outcomes. The last notes written to a message are the
-	// ones its transcript must hold.
+	// Update tool call outcomes. The notes are part of the body, so they are
+	// written below through UpdateMessageBody; the last notes for a message win.
 	var updated []uuid.UUID
 	notes := make(map[uuid.UUID]pgtype.Text)
 	for _, tc := range result.ToolCalls {
@@ -137,12 +146,10 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 		absoluteIndex := args.StartIndex + tc.MessageIndex
 		if absoluteIndex >= 0 && absoluteIndex < len(allMessages) {
 			msgID := allMessages[absoluteIndex].ID
-			outcomeNotes := conv.ToPGText(tc.Notes)
 			if err := txRepo.UpdateToolCallOutcome(ctx, repo.UpdateToolCallOutcomeParams{
-				ID:               msgID,
-				ProjectID:        args.ProjectID,
-				ToolOutcome:      conv.ToPGText(tc.Outcome),
-				ToolOutcomeNotes: outcomeNotes,
+				ID:          msgID,
+				ProjectID:   args.ProjectID,
+				ToolOutcome: conv.ToPGText(tc.Outcome),
 			}); err != nil {
 				a.logger.WarnContext(ctx, "failed to update tool call outcome",
 					attr.SlogError(err),
@@ -154,17 +161,15 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 			if _, seen := notes[msgID]; !seen {
 				updated = append(updated, msgID)
 			}
-			notes[msgID] = outcomeNotes
+			notes[msgID] = conv.ToPGText(tc.Notes)
 		}
 	}
-	// Outcome notes are part of the message body, so each encrypted transcript
-	// gets the same change in the same transaction.
 	if len(updated) > 0 && prepared != nil {
-		return fmt.Errorf("prepare tool call outcome transcripts: %w", prepared)
+		return fmt.Errorf("prepare tool call outcome notes: %w", prepared)
 	}
 	for _, msgID := range updated {
 		latest := notes[msgID]
-		err := a.transcripts.UpdateTranscript(ctx, tx, args.OrgID, args.ProjectID, msgID, func(m *transcriptcrypto.Message) error {
+		_, err := a.bodies.UpdateMessageBody(ctx, tx, args.OrgID, args.ProjectID, args.ChatID, msgID, func(m *transcriptcrypto.Message) error {
 			m.ToolOutcomeNotes = nil
 			if latest.Valid {
 				m.ToolOutcomeNotes = &latest.String
@@ -172,7 +177,7 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 			return nil
 		})
 		if err != nil {
-			return fmt.Errorf("update tool call outcome transcript: %w", err)
+			return fmt.Errorf("update tool call outcome notes: %w", err)
 		}
 	}
 

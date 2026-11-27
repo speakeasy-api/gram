@@ -382,7 +382,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	}
 	clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
 	clientAssertionSigner.PinManagedSigner(c.String(identityProviderSigningServiceAccount))
-	if _, err := configureTranscripts(ctx, c, db, chatWriter, orgEncryption, tracerProvider, meterProvider); err != nil {
+	if _, err := configureTranscripts(ctx, c, db, chatWriter, orgEncryption, logger, tracerProvider, meterProvider); err != nil {
 		return err
 	}
 	issuerGate := newInternalSessionIssuerGate(c, db, featureFlags, false)

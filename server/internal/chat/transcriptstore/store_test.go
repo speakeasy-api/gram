@@ -58,7 +58,7 @@ func setup(t *testing.T, provision bool) *fixture {
 	_, err = fixturerepo.New(db).CreateChat(t.Context(), f.chat, f.project, f.org)
 	require.NoError(t, err)
 	f.keys = orgencryptiontest.New(t, db)
-	f.store, err = New(db, f.keys.Service, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t))
+	f.store, err = New(db, f.keys.Service, testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t))
 	require.NoError(t, err)
 	if provision {
 		require.NoError(t, f.keys.Provisioner.EnsureUseCase(t.Context(), f.org, orgencryption.UseCaseChatTranscripts, orgencryption.SystemActor()))
@@ -96,7 +96,7 @@ func TestCaptureWithOneConnectionNeedsAWarmKey(t *testing.T) {
 	t.Cleanup(pool.Close)
 	service, err := orgencryption.NewService(testenv.NewLogger(t), pool, gcpauth.NewIdentity(gcpauth.NewStubResolver()), f.keys.KMS.Clients, f.keys.Keys)
 	require.NoError(t, err)
-	store, err := New(pool, service, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t))
+	store, err := New(pool, service, testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t))
 	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
 	defer cancel()
@@ -278,7 +278,7 @@ func TestSemanticJSON(t *testing.T) {
 	// Redaction preserves errors.Is across database/provider errors.
 	require.ErrorIs(t, safe(context.DeadlineExceeded), context.DeadlineExceeded)
 	require.NoError(t, (&Store{}).Capture(context.Background(), nil, "", uuid.Nil, nil))
-	_, err := New(nil, nil, nil, nil)
+	_, err := New(nil, nil, nil, nil, nil)
 	require.ErrorIs(t, err, ErrInvalid)
 }
 
@@ -467,7 +467,7 @@ func TestCaptureDoesNotInvertChatAndWrapLocks(t *testing.T) {
 	warm := func() *Store {
 		service, err := orgencryption.NewService(testenv.NewLogger(t), f.db, gcpauth.NewIdentity(gcpauth.NewStubResolver()), f.keys.KMS.Clients, f.keys.Keys)
 		require.NoError(t, err)
-		store, err := New(f.db, service, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t))
+		store, err := New(f.db, service, testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t))
 		require.NoError(t, err)
 		require.NoError(t, store.Prepare(ctx, f.org))
 		return store

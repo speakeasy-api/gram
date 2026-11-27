@@ -52,29 +52,44 @@ Asset uploads can precede the transaction and remain outside this guarantee.
 An empty shared-writer project allowlist also disables capture; it never means
 all projects.
 
-Capture resolves configuration and keys through the caller's transaction, not a
-second pooled connection. Use a writable READ COMMITTED transaction. Its private
-TTL cache reuses one DEK within a batch without publishing uncommitted state to
-the process cache or starting detached work. This currently costs a fresh KMS
-unwrap per Capture batch, even when the process cache is warm; account for that
-latency/cost when choosing a shadow allowlist. Keep this opt-in experiment
-limited to low-volume projects; broad/high-volume activation is deferred until
-a committed-state-safe cross-transaction unwrap cache or an explicit unwrap
-rate/concurrency bound is implemented. Reusing transaction-loaded keys globally
-is unsafe because those keys or configuration may later roll back.
+Keys load before the transaction. `Prepare` unwraps the organization's active
+transcript key into the process cache through the pool, and `KeepWarm` refreshes
+a recently used key before it expires. Inside the transaction, sealing reads
+the encryption configuration through the caller's connection, so suspension and
+the active key are still checked there, but it takes the key only from the
+cache and never calls KMS. A cold key fails the write instead of unwrapping
+inside the transaction. Use a writable READ COMMITTED transaction.
 
 A transcript is current by construction. Writers load the key before they
 begin a transaction. A new message is sealed from the row it inserts:
 sealing locks the message row, reads the body, encrypts it and upserts the
 transcript in the caller's transaction, so no body update can land in
-between. A body update (kit projection patches, tool-call summaries and
-tool-call outcome notes) changes the plaintext in SQL, then `Update` makes the
-same change to the transcript in the same transaction: it decrypts the
-transcript, or starts from the plaintext row when there is none yet, applies
-the change in Go and re-encrypts. This is the path the update keeps once the
-plaintext is gone. The changed body must equal the updated plaintext row, or
-the update fails and rolls back. A failure at any step rolls back the body
-update with it, so there is no freshness marker to compare.
+between.
+
+Every change to the body of an existing message (kit projection patches,
+tool-call summaries and tool-call outcome notes) goes through
+`Transcripts.UpdateBody`, the only code that writes the six protected
+columns of an existing row. Inside the caller's transaction it locks the
+message row, reads the body, lets the caller change it in Go, and writes the
+result to every copy the project keeps, so no two code paths have to agree.
+The project's mode decides the copies:
+
+- Plaintext: the plaintext row only.
+- Shadow: the body is read from the decrypted transcript, then written to the
+  plaintext row and the transcript. A missing, legacy or disagreeing transcript
+  is logged as an error and the update starts from the plaintext row, which
+  stays the source of truth while both copies exist. After the write, a sanity
+  check decrypts the stored transcript and compares it with the stored
+  plaintext row. Every check is counted in
+  `chat.transcript_shadow.update.checks` by outcome (`success`,
+  `missing_transcript`, `hydrate_mismatch`, `sanity_mismatch`), and a mismatch
+  is logged with each differing field's size and nullness, never its contents.
+- Encrypted (not available yet): the transcript only.
+
+Each write also refreshes the metadata and tool-call IDs. A failure at any step
+rolls back with the caller's transaction, so there is no freshness marker to
+compare. Non-body columns, such as `tool_outcome`, `finish_reason` and the risk
+mark, stay in the caller's own statements in the same transaction.
 
 Transcripts sealed before resealing began still carry the old unkeyed
 `source_hash`, a versioned SHA-256 fingerprint of the sensitive fields, and may

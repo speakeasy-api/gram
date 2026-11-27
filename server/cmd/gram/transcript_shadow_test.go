@@ -41,7 +41,7 @@ func TestTranscriptShadowDisabled(t *testing.T) {
 	require.NoError(t, os.Unsetenv("GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS"))
 	c := newTranscriptShadowCLIContext(t, nil)
 	require.Empty(t, c.StringSlice(chatTranscriptShadowProjectIDsFlag))
-	shadow, err := configureTranscripts(t.Context(), c, nil, nil, orgEncryptionDeps{}, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t))
+	shadow, err := configureTranscripts(t.Context(), c, nil, nil, orgEncryptionDeps{}, testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t))
 	require.NoError(t, err)
 	require.Nil(t, shadow)
 	require.False(t, shadow.Enabled(uuid.New()))
@@ -73,7 +73,7 @@ func TestTranscriptShadowRejectsInvalidConfiguration(t *testing.T) {
 			t.Setenv("GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS", "")
 			require.NoError(t, os.Unsetenv("GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS"))
 			c := newTranscriptShadowCLIContext(t, map[string]string{chatTranscriptShadowProjectIDsFlag: value})
-			_, err := configureTranscripts(t.Context(), c, nil, nil, orgEncryptionDeps{}, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t))
+			_, err := configureTranscripts(t.Context(), c, nil, nil, orgEncryptionDeps{}, testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t))
 			require.Error(t, err)
 		})
 	}
@@ -199,7 +199,7 @@ ON CONFLICT (message_id) DO UPDATE SET ciphertext = EXCLUDED.ciphertext`)
 				c := newTranscriptShadowCLIContext(t, map[string]string{chatTranscriptShadowProjectIDsFlag: "10000000-0000-4000-8000-000000000001"})
 				_, err := configureTranscripts(t.Context(), c, db, &chat.ChatMessageWriter{}, orgEncryptionDeps{
 					Service: &orgencryption.Service{}, Provisioner: &orgencryption.Provisioner{},
-				}, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t))
+				}, testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t))
 				require.EqualError(t, err, "chat transcript shadow schema is unavailable or incompatible")
 			}
 		})

@@ -40,7 +40,7 @@ func TestBackfillTranscriptShadowsSealsEveryPageAndResumes(t *testing.T) {
 
 	keys := orgencryptiontest.New(t, db)
 	require.NoError(t, keys.Provisioner.EnsureUseCase(t.Context(), org, orgencryption.UseCaseChatTranscripts, orgencryption.SystemActor()))
-	store, err := transcriptstore.New(db, keys.Service, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t))
+	store, err := transcriptstore.New(db, keys.Service, testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t))
 	require.NoError(t, err)
 	transcripts := transcriptstore.NewTranscripts(store, projectID)
 

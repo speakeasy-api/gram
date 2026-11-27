@@ -1242,6 +1242,9 @@ const (
 	// one encrypted transcript read that had no shadow and were served from
 	// plaintext.
 	TranscriptShadowPlaintextFallbackCountKey = attribute.Key("gram.transcript_shadow.plaintext_fallback_count")
+	// TranscriptShadowMismatchKey lists the body fields on which an encrypted
+	// transcript and its plaintext row differ, by size and nullness only.
+	TranscriptShadowMismatchKey = attribute.Key("gram.transcript_shadow.mismatch")
 	// TelemetryLogIDKey carries the telemetry_logs row id on records relayed
 	// to a customer OTLP destination. Delivery is at-least-once, so this is
 	// the key a destination dedupes redeliveries on.
@@ -4729,6 +4732,10 @@ func TranscriptShadowMessageCount(v int) attribute.KeyValue {
 
 func TranscriptShadowPlaintextFallbackCount(v int) attribute.KeyValue {
 	return TranscriptShadowPlaintextFallbackCountKey.Int(v)
+}
+
+func SlogTranscriptShadowMismatch(v any) slog.Attr {
+	return slog.Any(string(TranscriptShadowMismatchKey), v)
 }
 
 func SlogRegistryEntryID(v string) slog.Attr   { return slog.String(string(RegistryEntryIDKey), v) }
