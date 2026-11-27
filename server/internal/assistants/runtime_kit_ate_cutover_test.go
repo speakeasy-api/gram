@@ -25,9 +25,11 @@ import (
 )
 
 type cutoverStubKitBackend struct {
-	name      string
-	reapCalls atomic.Int64
-	reapedIDs []uuid.UUID
+	name             string
+	reapCalls        atomic.Int64
+	reapedIDs        []uuid.UUID
+	switchFenceCalls atomic.Int64
+	switchBusy       atomic.Bool
 }
 
 func (b *cutoverStubKitBackend) Backend() string                  { return b.name }
@@ -61,6 +63,14 @@ func (b *cutoverStubKitBackend) Reap(_ context.Context, r assistantRuntimeRecord
 }
 func (b *cutoverStubKitBackend) ReapStoppedMachine(context.Context, assistantRuntimeRecord) error {
 	return nil
+}
+func (b *cutoverStubKitBackend) RuntimeReadyForAdmission(context.Context) error { return nil }
+func (b *cutoverStubKitBackend) PrepareRuntimeSwitch(_ context.Context, _ assistantRecord, _ []assistantRuntimeRecord, _ int16) (runtimeSwitchReadiness, error) {
+	b.switchFenceCalls.Add(1)
+	if b.switchBusy.Load() {
+		return runtimeSwitchReadiness{Release: func() {}}, errRuntimeSwitchBusy
+	}
+	return runtimeSwitchReadiness{DestinationReady: true, Settled: true, Release: func() {}}, nil
 }
 
 func insertCutoverPendingEvent(t *testing.T, db *pgxpool.Pool, projectID, assistantID, threadID uuid.UUID, correlation string) uuid.UUID {
@@ -513,8 +523,15 @@ func TestKitATE_RecordsColdStartAndResumeDurationMetricsAndLogs(t *testing.T) {
 	require.True(t, seenModes[ateStartupModeColdStart], "expected cold_start histogram data point")
 	require.True(t, seenModes[ateStartupModeResume], "expected resume histogram data point")
 
-	// Also verify KitATERuntimeBackend supports runtime-version switch readiness checks.
+	// Also verify KitATERuntimeBackend supports runtime-version switch readiness checks
+	// and requires the caller's LifecycleTx advisory lock fence.
 	require.NoError(t, ateBackend.RuntimeReadyForAdmission(ctx))
+	rec.LifecycleTx = nil
+	_, err = ateBackend.PrepareRuntimeSwitch(ctx, assistantRecord{
+		ID: runtimeSeed.AssistantID, ProjectID: runtimeSeed.ProjectID,
+	}, []assistantRuntimeRecord{rec}, 2)
+	require.ErrorIs(t, err, ErrKitRuntimeBinding)
+
 	tx := testenv.BeginTx(t, ctx, db)
 	rec.LifecycleTx = tx
 	readiness, err := ateBackend.PrepareRuntimeSwitch(ctx, assistantRecord{
@@ -525,4 +542,82 @@ func TestKitATE_RecordsColdStartAndResumeDurationMetricsAndLogs(t *testing.T) {
 	require.NotNil(t, readiness.Release)
 	require.NoError(t, tx.Rollback(ctx))
 	readiness.Release()
+}
+
+func TestKitATECutover_BusySupersededRuntimeDefersAdmissionAndWarmup(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	core, db, runtimeSeed, _, localCfg, _ := kitWorkloadDBFixture(t)
+	q := assistantrepo.New(db)
+
+	require.NoError(t, q.SetAssistantDesiredRuntimeVersionForTest(ctx, assistantrepo.SetAssistantDesiredRuntimeVersionForTestParams{
+		RuntimeVersion: 3, AssistantID: runtimeSeed.AssistantID, ProjectID: runtimeSeed.ProjectID,
+	}))
+
+	busyThread := insertATEThreadFixture(t, db, runtimeSeed.ProjectID, runtimeSeed.AssistantID, "cutover-busy-1")
+	pendingThread := insertATEThreadFixture(t, db, runtimeSeed.ProjectID, runtimeSeed.AssistantID, "cutover-busy-2")
+	require.NoError(t, q.ReserveAssistantRuntimeV2(ctx, assistantrepo.ReserveAssistantRuntimeV2Params{
+		AssistantThreadID: busyThread, AssistantID: runtimeSeed.AssistantID, ProjectID: runtimeSeed.ProjectID,
+		Backend: runtimeBackendGKE, State: runtimeStateActive,
+	}))
+	oldRuntime, err := q.GetAssistantRuntimeV2(ctx, assistantrepo.GetAssistantRuntimeV2Params{
+		ProjectID: runtimeSeed.ProjectID, AssistantID: runtimeSeed.AssistantID,
+	})
+	require.NoError(t, err)
+
+	// Mark an in-flight processing event on busyThread and a pending event on pendingThread.
+	busyEvtID := insertCutoverPendingEvent(t, db, runtimeSeed.ProjectID, runtimeSeed.AssistantID, busyThread, "cutover-busy-1")
+	require.NoError(t, q.SetAssistantThreadEventStatus(ctx, assistantrepo.SetAssistantThreadEventStatusParams{
+		Status: eventStatusProcessing, UpdatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true}, ID: busyEvtID, ProjectID: runtimeSeed.ProjectID,
+	}))
+	insertCutoverPendingEvent(t, db, runtimeSeed.ProjectID, runtimeSeed.AssistantID, pendingThread, "cutover-busy-2")
+
+	gkeStub := &cutoverStubKitBackend{name: runtimeBackendGKE}
+	ateBackend, _ := newCutoverATEBackend(t, core, localCfg, testenv.NewLogger(t), nil)
+	require.NoError(t, core.installKitRuntime(gkeStub))
+	require.NoError(t, core.installKitRuntime(ateBackend))
+
+	// Both admission and warmup must defer without retiring the busy GKE runtime.
+	admitted, err := core.AdmitPendingThreads(ctx, runtimeSeed.AssistantID)
+	require.NoError(t, err)
+	require.Empty(t, admitted.ThreadIDs)
+	require.Zero(t, gkeStub.reapCalls.Load())
+
+	warmup, err := core.EnsureWarmupThread(ctx, runtimeSeed.AssistantID)
+	require.NoError(t, err)
+	require.False(t, warmup.ShouldSignal)
+	require.Zero(t, gkeStub.reapCalls.Load())
+
+	stillOld, err := q.GetAssistantRuntimeV2(ctx, assistantrepo.GetAssistantRuntimeV2Params{
+		ProjectID: runtimeSeed.ProjectID, AssistantID: runtimeSeed.AssistantID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, oldRuntime.ID, stillOld.ID)
+
+	// Also verify versionedRuntimeBackend.PrepareRuntimeSwitch reaches retiring GKE rows.
+	tx := testenv.BeginTx(t, ctx, db)
+	coord, ok := core.runtime.(runtimeSwitchCoordinator)
+	require.True(t, ok)
+	ready, err := coord.PrepareRuntimeSwitch(ctx, assistantRecord{
+		ID: runtimeSeed.AssistantID, ProjectID: runtimeSeed.ProjectID,
+	}, []assistantRuntimeRecord{{
+		LifecycleTx: tx, ID: oldRuntime.ID, AssistantThreadID: oldRuntime.AssistantThreadID,
+		AssistantID: oldRuntime.AssistantID, ProjectID: oldRuntime.ProjectID,
+		RuntimeVersion: 3, Backend: runtimeBackendGKE, State: runtimeStateActive,
+	}}, 2)
+	require.NoError(t, err)
+	require.True(t, ready.Settled)
+	require.EqualValues(t, 1, gkeStub.switchFenceCalls.Load())
+	require.NoError(t, tx.Rollback(ctx))
+	ready.Release()
+
+	// Once the in-flight event settles, pendingThread admission cuts over cleanly.
+	require.NoError(t, q.SetAssistantThreadEventStatus(ctx, assistantrepo.SetAssistantThreadEventStatusParams{
+		Status: eventStatusCompleted, UpdatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true}, ID: busyEvtID, ProjectID: runtimeSeed.ProjectID,
+	}))
+	admitted, err = core.AdmitPendingThreads(ctx, runtimeSeed.AssistantID)
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{pendingThread}, admitted.ThreadIDs)
+	require.EqualValues(t, 1, gkeStub.reapCalls.Load())
+	require.EqualValues(t, 2, gkeStub.switchFenceCalls.Load())
 }

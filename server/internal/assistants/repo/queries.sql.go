@@ -132,6 +132,35 @@ type AddAssistantMcpServersParams struct {
 	ProjectID     uuid.UUID
 }
 
+const assistantHasActiveProcessingEvents = `-- name: AssistantHasActiveProcessingEvents :one
+SELECT EXISTS (
+  SELECT 1 FROM assistant_thread_events e
+  WHERE e.project_id = $1 AND e.assistant_id = $2
+    AND e.deleted IS FALSE AND e.status NOT IN ('pending', 'completed', 'failed', 'cancelled')
+) OR EXISTS (
+  SELECT 1 FROM trigger_instances t
+  WHERE t.project_id = $1 AND t.target_kind = 'assistant'
+    AND t.target_ref = $2::uuid::text AND t.definition_slug = 'wake'
+    AND t.deleted IS FALSE AND t.status NOT IN ('fired', 'cancelled')
+) AS busy
+`
+
+type AssistantHasActiveProcessingEventsParams struct {
+	ProjectID   uuid.UUID
+	AssistantID uuid.UUID
+}
+
+// True when any thread has an unsettled non-pending event (e.g. processing)
+// or an unsettled wake trigger. Used by admission before retiring a superseded
+// Kit backend runtime so in-flight turns are never interrupted while still
+// allowing pending admissions to cut over an otherwise idle runtime.
+func (q *Queries) AssistantHasActiveProcessingEvents(ctx context.Context, arg AssistantHasActiveProcessingEventsParams) (pgtype.Bool, error) {
+	row := q.db.QueryRow(ctx, assistantHasActiveProcessingEvents, arg.ProjectID, arg.AssistantID)
+	var busy pgtype.Bool
+	err := row.Scan(&busy)
+	return busy, err
+}
+
 const assistantHasUnsettledEvents = `-- name: AssistantHasUnsettledEvents :one
 SELECT EXISTS (
   SELECT 1 FROM assistant_thread_events e
@@ -3370,6 +3399,50 @@ func (q *Queries) ListPendingRuntimeSwitchRetirements(ctx context.Context, limit
 	return items, nil
 }
 
+const listProjectsWithSupersededKitRuntimes = `-- name: ListProjectsWithSupersededKitRuntimes :many
+SELECT DISTINCT r.project_id
+FROM assistant_runtimes r
+JOIN projects p ON p.id = r.project_id
+JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
+WHERE r.runtime_version = 3
+  AND r.backend <> $1
+  AND r.deleted IS FALSE
+  AND r.ended IS FALSE
+  AND r.state IN ('active', 'stopped', 'failed')
+  AND p.deleted IS FALSE
+  AND a.deleted IS FALSE
+ORDER BY r.project_id ASC
+LIMIT $2
+`
+
+type ListProjectsWithSupersededKitRuntimesParams struct {
+	TargetBackend string
+	LimitCount    int32
+}
+
+// Internal background reaper query: enumerates projects that hold live Kit v3
+// runtime rows parked on a backend different from the deployment's active Kit
+// target backend so subsequent runtime reads stay strictly project-scoped.
+func (q *Queries) ListProjectsWithSupersededKitRuntimes(ctx context.Context, arg ListProjectsWithSupersededKitRuntimesParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listProjectsWithSupersededKitRuntimes, arg.TargetBackend, arg.LimitCount)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var project_id uuid.UUID
+		if err := rows.Scan(&project_id); err != nil {
+			return nil, err
+		}
+		items = append(items, project_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRunningAssistantATEActorsPage = `-- name: ListRunningAssistantATEActorsPage :many
 SELECT a.id, a.organization_id, a.project_id, a.assistant_id, a.runtime_id, a.assistant_thread_id, a.actor_name, a.actor_uid, a.state, a.configured, a.workload_binding_json, a.warm_until, a.created_at, a.updated_at, a.deleted_at, a.deleted
 FROM assistant_ate_actors a
@@ -3512,28 +3585,33 @@ func (q *Queries) ListStoppedRuntimesForReap(ctx context.Context, arg ListStoppe
 	return items, nil
 }
 
-const listSupersededKitRuntimes = `-- name: ListSupersededKitRuntimes :many
-SELECT id, assistant_thread_id, assistant_id, project_id, backend, state, warm_until, lease_owner, last_heartbeat_at, backend_metadata_json, ended_at, runtime_version, created_at, updated_at, deleted_at, deleted, ended FROM assistant_runtimes
-WHERE runtime_version = 3
-  AND backend <> $1
-  AND deleted IS FALSE
-  AND ended IS FALSE
-  AND state IN ('active', 'stopped', 'failed')
-ORDER BY updated_at ASC
-LIMIT $2
+const listSupersededKitRuntimesByProject = `-- name: ListSupersededKitRuntimesByProject :many
+SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.backend, r.state, r.warm_until, r.lease_owner, r.last_heartbeat_at, r.backend_metadata_json, r.ended_at, r.runtime_version, r.created_at, r.updated_at, r.deleted_at, r.deleted, r.ended
+FROM assistant_runtimes r
+JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
+WHERE r.project_id = $1
+  AND r.runtime_version = 3
+  AND r.backend <> $2
+  AND r.deleted IS FALSE
+  AND r.ended IS FALSE
+  AND r.state IN ('active', 'stopped', 'failed')
+  AND a.deleted IS FALSE
+ORDER BY r.updated_at ASC
+LIMIT $3
 `
 
-type ListSupersededKitRuntimesParams struct {
+type ListSupersededKitRuntimesByProjectParams struct {
+	ProjectID     uuid.UUID
 	TargetBackend string
 	LimitCount    int32
 }
 
-// Live Kit v3 runtime rows parked on a backend different from the deployment's
-// active Kit target backend. Used by the switch reaper so idle runtimes on an
-// old backend converge after a backend flip (e.g. GKE -> ATE or rollback)
-// without waiting for another turn.
-func (q *Queries) ListSupersededKitRuntimes(ctx context.Context, arg ListSupersededKitRuntimesParams) ([]AssistantRuntime, error) {
-	rows, err := q.db.Query(ctx, listSupersededKitRuntimes, arg.TargetBackend, arg.LimitCount)
+// Project-scoped Kit v3 runtime rows parked on a backend different from the
+// deployment's active Kit target backend. Used by the switch reaper so idle
+// runtimes on an old backend converge after a backend flip (e.g. GKE -> ATE or
+// rollback) without waiting for another turn.
+func (q *Queries) ListSupersededKitRuntimesByProject(ctx context.Context, arg ListSupersededKitRuntimesByProjectParams) ([]AssistantRuntime, error) {
+	rows, err := q.db.Query(ctx, listSupersededKitRuntimesByProject, arg.ProjectID, arg.TargetBackend, arg.LimitCount)
 	if err != nil {
 		return nil, err
 	}

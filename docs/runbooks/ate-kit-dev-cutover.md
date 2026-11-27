@@ -10,8 +10,10 @@ locally at execution time.
 
 ## 1. Pre-flight & Backend Flip
 
-There is no per-assistant backend selector: when `GRAM_ASSISTANT_ATE_ENABLED=true`,
-every Kit assistant (`runtime_version = 3`) in the environment runs on ATE.
+There is no per-assistant backend selector: ATE is selected when
+`GRAM_ASSISTANT_ATE_ENABLED=true` and `GRAM_ASSISTANT_RUNTIME_PROVIDER` is not
+`disabled`; in that case, every Kit assistant (`runtime_version = 3`) in the
+environment runs on ATE.
 
 Verify the required environment variables are set on both the `server` and
 `worker` deployments:
@@ -58,7 +60,7 @@ GROUP BY 1, 2, 3
 ORDER BY 1, 2, 3;
 ```
 
-Expected: zero rows with `backend = 'gke' AND ended IS FALSE`.
+Expected after all turns settle: zero rows with `backend = 'gke' AND ended IS FALSE`. A remaining live GKE row may be an assistant with in-flight turns or unsettled wakes; re-run the query after it quiesces.
 
 ## 2. Acceptance Exercise
 
@@ -69,10 +71,12 @@ least one granted MCP tool. Drive turns via the `assistants-dev` MCP server
 
 ### 2.1 Separate Actors and Isolated Workspaces for Two Threads
 
-1. Start **Thread A** (`correlation_id = "ate-accept-a"`) and ask the assistant
-   to write a unique marker file inside its workspace:
+1. Start **Thread A** by omitting `chat_id` from `run_turn`, save its returned
+   `chat_id` (`<CHAT_ID_A>`) for follow-up turns, and ask the assistant to write
+   a unique marker file inside its workspace:
    - Prompt: `Create /home/kit/workspace/thread-a.txt containing "from-thread-a" and confirm.`
-2. Start **Thread B** (`correlation_id = "ate-accept-b"`) on the same assistant:
+2. Start **Thread B** on the same assistant by omitting `chat_id` from a second
+   `run_turn` call (saving `<CHAT_ID_B>`):
    - Prompt: `Check whether /home/kit/workspace/thread-a.txt exists, then create /home/kit/workspace/thread-b.txt containing "from-thread-b".`
 3. Verify Thread B reports `/home/kit/workspace/thread-a.txt` does **not** exist.
 4. Confirm two distinct live actor rows exist in Postgres for the same runtime:
@@ -201,6 +205,13 @@ WHERE runtime_version = 3 AND backend = 'ate' AND deleted IS FALSE AND ended IS 
 SELECT count(*) AS live_ate_actors
 FROM assistant_ate_actors
 WHERE deleted IS FALSE;
+
+-- Confirm retired actor subjects (for example actor/<ATESPACE>/<ACTOR_NAME_A>)
+-- are no longer admitted in the test project:
+SELECT count(*) AS remaining_ate_admissions
+FROM workload_identity_admissions
+WHERE project_id = '<PROJECT_ID>'
+  AND subject IN ('actor/<ATESPACE>/<ACTOR_NAME_A>', 'actor/<ATESPACE>/<ACTOR_NAME_B>');
 ```
 
-Both counts converge to `0` automatically.
+All three counts converge to `0` automatically.

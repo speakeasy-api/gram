@@ -3022,6 +3022,12 @@ func (s *ServiceCore) admitPendingThreadsV2(ctx context.Context, assistant assis
 	// active state and admit the rest.
 	firstThreadOnly := false
 	var retiredSuperseded *assistantRuntimeRecord
+	var releaseSwitchFence func()
+	defer func() {
+		if releaseSwitchFence != nil {
+			releaseSwitchFence()
+		}
+	}()
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		if err := queries.ReserveAssistantRuntimeV2(ctx, assistantrepo.ReserveAssistantRuntimeV2Params{
@@ -3047,11 +3053,52 @@ func (s *ServiceCore) admitPendingThreadsV2(ctx context.Context, assistant assis
 		return AdmitPendingThreadsResult{ProjectID: assistant.ProjectID, ThreadIDs: nil}, nil
 	case row.RuntimeVersion == 3 && row.Backend != selectedBackend:
 		// The deployment's Kit v3 backend flipped (for example GKE -> ATE or
-		// rollback ATE -> GKE). Retire the old-backend runtime through the
-		// existing switch-retirement path — setting ended_at frees
-		// assistant_runtimes_v2_one_per_assistant immediately — and reserve a
-		// fresh runtime on the newly selected backend so threads start fresh
-		// sessions with no manual action.
+		// rollback ATE -> GKE). Never interrupt a busy superseded runtime: if
+		// another thread has an in-flight turn/wake or the retiring backend's
+		// switch coordinator reports active guest work, defer admission until
+		// it settles. Once idle, retire through switch_retiring (freeing
+		// assistant_runtimes_v2_one_per_assistant) and reserve a fresh runtime
+		// on the newly selected backend so threads start fresh sessions.
+		if row.State != runtimeStateActive && row.State != runtimeStateStopped && row.State != runtimeStateFailed {
+			return AdmitPendingThreadsResult{ProjectID: assistant.ProjectID, ThreadIDs: nil}, nil
+		}
+		busy, busyErr := queries.AssistantHasActiveProcessingEvents(ctx, assistantrepo.AssistantHasActiveProcessingEventsParams{
+			ProjectID:   assistant.ProjectID,
+			AssistantID: assistant.ID,
+		})
+		if busyErr != nil {
+			return AdmitPendingThreadsResult{}, fmt.Errorf("check in-flight work before Kit backend switch: %w", busyErr)
+		}
+		if !busy.Valid || busy.Bool {
+			return AdmitPendingThreadsResult{ProjectID: assistant.ProjectID, ThreadIDs: nil}, nil
+		}
+		if coordinator, ok := s.runtime.(kitBackendSwitchCoordinator); ok {
+			candidate := assistantRuntimeRecord{
+				LifecycleTx:         tx,
+				Retired:             false,
+				ID:                  row.ID,
+				AssistantThreadID:   row.AssistantThreadID,
+				AssistantID:         row.AssistantID,
+				ProjectID:           row.ProjectID,
+				RuntimeVersion:      row.RuntimeVersion,
+				Backend:             row.Backend,
+				BackendMetadataJSON: row.BackendMetadataJson,
+				State:               row.State,
+				WarmUntil:           row.WarmUntil,
+			}
+			switchCtx := withAdmitBackendSwitch(context.WithValue(ctx, runtimeSwitchQueriesKey{}, queries))
+			readiness, switchErr := coordinator.PrepareKitBackendSwitch(switchCtx, assistant, candidate)
+			releaseSwitchFence = readiness.Release
+			if switchErr != nil {
+				if errors.Is(switchErr, errRuntimeSwitchBusy) {
+					return AdmitPendingThreadsResult{ProjectID: assistant.ProjectID, ThreadIDs: nil}, nil
+				}
+				return AdmitPendingThreadsResult{}, fmt.Errorf("prepare Kit backend switch on admit: %w", switchErr)
+			}
+			if !readiness.DestinationReady || !readiness.Settled || readiness.Release == nil {
+				return AdmitPendingThreadsResult{ProjectID: assistant.ProjectID, ThreadIDs: nil}, nil
+			}
+		}
 		if err := queries.RetireAssistantRuntimesForSwitch(ctx, assistantrepo.RetireAssistantRuntimesForSwitchParams{
 			ProjectID:   assistant.ProjectID,
 			AssistantID: assistant.ID,
@@ -3223,6 +3270,12 @@ func (s *ServiceCore) EnsureWarmupThread(ctx context.Context, assistantID uuid.U
 		AssistantID: assistant.ID,
 	})
 	var retiredSuperseded *assistantRuntimeRecord
+	var releaseSwitchFence func()
+	defer func() {
+		if releaseSwitchFence != nil {
+			releaseSwitchFence()
+		}
+	}()
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		if err := queries.ReserveAssistantRuntimeV2(ctx, assistantrepo.ReserveAssistantRuntimeV2Params{
@@ -3239,6 +3292,46 @@ func (s *ServiceCore) EnsureWarmupThread(ctx context.Context, assistantID uuid.U
 	case row.State == runtimeStateExpiring:
 		return noop, nil
 	case row.RuntimeVersion == 3 && row.Backend != selectedBackend:
+		if row.State != runtimeStateActive && row.State != runtimeStateStopped && row.State != runtimeStateFailed {
+			return noop, nil
+		}
+		busy, busyErr := queries.AssistantHasUnsettledEvents(ctx, assistantrepo.AssistantHasUnsettledEventsParams{
+			ProjectID:   assistant.ProjectID,
+			AssistantID: assistant.ID,
+		})
+		if busyErr != nil {
+			return noop, fmt.Errorf("check unsettled work before Kit warmup switch: %w", busyErr)
+		}
+		if !busy.Valid || busy.Bool {
+			return noop, nil
+		}
+		if coordinator, ok := s.runtime.(kitBackendSwitchCoordinator); ok {
+			candidate := assistantRuntimeRecord{
+				LifecycleTx:         tx,
+				Retired:             false,
+				ID:                  row.ID,
+				AssistantThreadID:   row.AssistantThreadID,
+				AssistantID:         row.AssistantID,
+				ProjectID:           row.ProjectID,
+				RuntimeVersion:      row.RuntimeVersion,
+				Backend:             row.Backend,
+				BackendMetadataJSON: row.BackendMetadataJson,
+				State:               row.State,
+				WarmUntil:           row.WarmUntil,
+			}
+			switchCtx := context.WithValue(ctx, runtimeSwitchQueriesKey{}, queries)
+			readiness, switchErr := coordinator.PrepareKitBackendSwitch(switchCtx, assistant, candidate)
+			releaseSwitchFence = readiness.Release
+			if switchErr != nil {
+				if errors.Is(switchErr, errRuntimeSwitchBusy) {
+					return noop, nil
+				}
+				return noop, fmt.Errorf("prepare Kit backend switch on warmup: %w", switchErr)
+			}
+			if !readiness.DestinationReady || !readiness.Settled || readiness.Release == nil {
+				return noop, nil
+			}
+		}
 		if err := queries.RetireAssistantRuntimesForSwitch(ctx, assistantrepo.RetireAssistantRuntimesForSwitchParams{
 			ProjectID:   assistant.ProjectID,
 			AssistantID: assistant.ID,

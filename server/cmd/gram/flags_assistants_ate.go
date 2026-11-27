@@ -36,11 +36,7 @@ func assistantATERuntimeFlags() []cli.Flag {
 	}
 }
 
-func installKitATERuntimeFromCLI(c *cli.Context, core *assistants.ServiceCore, redisClient *redis.Client, serverURL *url.URL, orgHosts *orghost.Resolver) error {
-	if !c.Bool("assistant-ate-enabled") {
-		return nil
-	}
-
+func validateKitATEFlagsFromCLI(c *cli.Context, serverURL *url.URL) (map[string]string, string, string) {
 	workerSelector, selectorErr := assistants.ParseKitATEWorkerSelector(c.String("assistant-ate-worker-selector"))
 	issuerURL := strings.TrimSpace(c.String("assistant-ate-issuer-url"))
 	jwksURL := strings.TrimSpace(c.String("assistant-ate-jwks-url"))
@@ -62,6 +58,14 @@ func installKitATERuntimeFromCLI(c *cli.Context, core *assistants.ServiceCore, r
 		"assistant-ate-atespace is set", c.String("assistant-ate-atespace") != "",
 		"assistant-ate-template is set", c.String("assistant-ate-template") != "",
 	)
+	return workerSelector, issuerURL, jwksURL
+}
+
+func installKitATERuntimeFromCLI(c *cli.Context, core *assistants.ServiceCore, redisClient *redis.Client, serverURL *url.URL, orgHosts *orghost.Resolver) error {
+	if !c.Bool("assistant-ate-enabled") {
+		return nil
+	}
+	workerSelector, issuerURL, jwksURL := validateKitATEFlagsFromCLI(c, serverURL)
 
 	err := core.InstallKitATERuntime(c.Context, kitATECompositionConfigFromCLI(c, redisClient, orgHosts, workerSelector, issuerURL, jwksURL))
 	if err != nil {

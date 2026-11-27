@@ -1212,9 +1212,22 @@ func (k *KitATERuntimeBackend) RuntimeReadyForAdmission(ctx context.Context) err
 	return nil
 }
 
+type admitBackendSwitchContextKey struct{}
+
+func withAdmitBackendSwitch(ctx context.Context) context.Context {
+	return context.WithValue(ctx, admitBackendSwitchContextKey{}, true)
+}
+
+func isAdmitBackendSwitch(ctx context.Context) bool {
+	allowed, _ := ctx.Value(admitBackendSwitchContextKey{}).(bool)
+	return allowed
+}
+
 // PrepareRuntimeSwitch verifies destination readiness (when switching to v3)
-// and that every active ATE runtime row is settled under the caller's
-// assistant advisory lock before retiring it.
+// and that every active ATE runtime row and its running thread actors are
+// settled under the caller's exclusive assistant advisory lock (`LifecycleTx`,
+// which fences all `kitATEThreadLifecycle` shared locks and admissions until
+// the caller's transaction commits or rolls back).
 func (k *KitATERuntimeBackend) PrepareRuntimeSwitch(ctx context.Context, assistant assistantRecord, rows []assistantRuntimeRecord, destination int16) (runtimeSwitchReadiness, error) {
 	result := runtimeSwitchReadiness{
 		DestinationReady: false,
@@ -1231,21 +1244,73 @@ func (k *KitATERuntimeBackend) PrepareRuntimeSwitch(ctx context.Context, assista
 		result.DestinationReady = true
 	}
 	for _, row := range rows {
-		if row.AssistantID != assistant.ID || row.ProjectID != assistant.ProjectID {
+		if row.AssistantID != assistant.ID || row.ProjectID != assistant.ProjectID || row.LifecycleTx == nil {
 			return result, ErrKitRuntimeBinding
 		}
 		if _, err := k.metadata(row); err != nil {
 			return result, err
 		}
-		if err := k.config.CheckSettled(ctx, row); err != nil {
-			if errors.Is(err, ErrKitRuntimeBinding) {
-				return result, err
+		if !isAdmitBackendSwitch(ctx) {
+			if err := k.config.CheckSettled(ctx, row); err != nil {
+				if errors.Is(err, ErrKitRuntimeBinding) {
+					return result, err
+				}
+				return result, errRuntimeSwitchBusy
 			}
-			return result, errRuntimeSwitchBusy
+		}
+		if err := k.verifyActorsSettledForSwitch(ctx, row); err != nil {
+			return result, err
 		}
 	}
 	result.Settled = true
 	return result, nil
+}
+
+func (k *KitATERuntimeBackend) verifyActorsSettledForSwitch(ctx context.Context, row assistantRuntimeRecord) error {
+	actors, err := k.config.Store.ListForRuntime(ctx, row)
+	if err != nil {
+		return fmt.Errorf("%w: list ATE actors for switch: %w", errRuntimeSwitchUnavailable, err)
+	}
+	for _, t := range actors {
+		if err := k.validateActorRow(row, t); err != nil {
+			return err
+		}
+		actor, err := k.getActor(ctx, t)
+		if status.Code(err) == codes.NotFound {
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("%w: inspect ATE actor for switch: %w", errRuntimeSwitchUnavailable, err)
+		}
+		switch actor.GetStatus().GetState() {
+		case ateapiv1.ActorState_ACTOR_STATE_SUSPENDED, ateapiv1.ActorState_ACTOR_STATE_CRASHED:
+			continue
+		case ateapiv1.ActorState_ACTOR_STATE_RUNNING:
+			token, err := k.config.Token(ctx, row, t.ThreadID)
+			if err != nil {
+				return fmt.Errorf("%w: load ATE actor token for switch: %w", errRuntimeSwitchUnavailable, err)
+			}
+			protocol, err := k.protocol(ctx, row, t.ThreadID, t, token)
+			if err != nil {
+				return fmt.Errorf("%w: build ATE actor protocol for switch: %w", errRuntimeSwitchUnavailable, err)
+			}
+			checker, ok := protocol.(interface {
+				VerifyNativeThreadSettled(context.Context, assistantRuntimeRecord, uuid.UUID) error
+			})
+			if !ok {
+				return errRuntimeSwitchUnavailable
+			}
+			if err := checker.VerifyNativeThreadSettled(ctx, row, t.ThreadID); err != nil {
+				if errors.Is(err, ErrKitRuntimeBinding) {
+					return fmt.Errorf("verify ATE actor switch settlement: %w", err)
+				}
+				return errRuntimeSwitchBusy
+			}
+		default:
+			return errRuntimeSwitchBusy
+		}
+	}
+	return nil
 }
 
 func kitATETrustedDNSHost(host string) bool {

@@ -57,6 +57,9 @@ func (v *versionedRuntimeBackend) routeCleanup(r assistantRuntimeRecord) (Runtim
 		if retiring, ok := v.kitRetiring[r.Backend]; ok && retiring != nil && retiring.SupportsBackend(r.Backend) {
 			return retiring, nil
 		}
+		if v.kit == nil && len(v.kitRetiring) == 0 {
+			return nil, fmt.Errorf("assistant runtime version %d is not configured", r.RuntimeVersion)
+		}
 		return nil, fmt.Errorf("assistant runtime version %d does not support backend %q", r.RuntimeVersion, r.Backend)
 	}
 	return v.route(r)
@@ -301,6 +304,59 @@ func (t *telemetryRuntimeBackend) PrepareRuntimeSwitch(ctx context.Context, assi
 	return result, nil
 }
 
+func (t *telemetryRuntimeBackend) PrepareKitBackendSwitch(ctx context.Context, assistant assistantRecord, row assistantRuntimeRecord) (runtimeSwitchReadiness, error) {
+	coordinator, ok := t.inner.(kitBackendSwitchCoordinator)
+	if !ok {
+		return runtimeSwitchReadiness{}, errRuntimeSwitchUnavailable
+	}
+	result, err := coordinator.PrepareKitBackendSwitch(ctx, assistant, row)
+	if err != nil {
+		return result, fmt.Errorf("prepare Kit backend switch: %w", err)
+	}
+	return result, nil
+}
+
+type kitBackendSwitchCoordinator interface {
+	PrepareKitBackendSwitch(context.Context, assistantRecord, assistantRuntimeRecord) (runtimeSwitchReadiness, error)
+}
+
+func (v *versionedRuntimeBackend) PrepareKitBackendSwitch(ctx context.Context, assistant assistantRecord, row assistantRuntimeRecord) (runtimeSwitchReadiness, error) {
+	target, err := v.forVersion(3)
+	if err != nil {
+		return runtimeSwitchReadiness{}, err
+	}
+	if ready, ok := target.(interface{ RuntimeReadyForAdmission(context.Context) error }); ok {
+		if err := ready.RuntimeReadyForAdmission(ctx); err != nil {
+			return runtimeSwitchReadiness{}, fmt.Errorf("check destination Kit backend readiness: %w", err)
+		}
+	}
+	source, err := v.routeCleanup(row)
+	if err != nil {
+		return runtimeSwitchReadiness{}, err
+	}
+	coordinator, ok := source.(runtimeSwitchCoordinator)
+	if !ok {
+		return runtimeSwitchReadiness{}, errRuntimeSwitchUnavailable
+	}
+	// Pass destination=2 so the retiring source backend verifies source-row
+	// settlement and acquires its guest admission fence without requiring the
+	// retiring backend itself to be destination-ready for new v3 admissions.
+	result, err := coordinator.PrepareRuntimeSwitch(ctx, assistant, []assistantRuntimeRecord{row}, 2)
+	if err != nil {
+		if result.Release != nil {
+			result.Release()
+		}
+		return runtimeSwitchReadiness{}, fmt.Errorf("prepare retiring Kit backend switch: %w", err)
+	}
+	if !result.Settled || result.Release == nil {
+		if result.Release != nil {
+			result.Release()
+		}
+		return runtimeSwitchReadiness{}, errRuntimeSwitchBusy
+	}
+	return runtimeSwitchReadiness{DestinationReady: true, Settled: true, Release: result.Release}, nil
+}
+
 func (v *versionedRuntimeBackend) PrepareRuntimeSwitch(ctx context.Context, assistant assistantRecord, rows []assistantRuntimeRecord, destination int16) (runtimeSwitchReadiness, error) {
 	target, err := v.forVersion(destination)
 	if err != nil {
@@ -320,7 +376,7 @@ func (v *versionedRuntimeBackend) PrepareRuntimeSwitch(ctx context.Context, assi
 		}
 	}
 	for _, row := range rows {
-		source, err := v.route(row)
+		source, err := v.routeCleanup(row)
 		if err != nil {
 			release()
 			return runtimeSwitchReadiness{}, err

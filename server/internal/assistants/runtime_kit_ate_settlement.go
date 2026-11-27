@@ -15,6 +15,18 @@ import (
 // CloseNativeThreadSession runs under the caller's lifecycle admission fence.
 // Native close releases the workspace writer before the actor can be suspended.
 func (p *KitRuntimeProtocol) CloseNativeThreadSession(ctx context.Context, r assistantRuntimeRecord, thread uuid.UUID) error {
+	return p.nativeThreadSettlement(ctx, r, thread, true)
+}
+
+// VerifyNativeThreadSettled inspects the running native Kit session under the
+// caller's exclusive assistant admission fence without closing it, ensuring no
+// foreground turn, background job, or active subagent is still running before
+// retiring an ATE runtime.
+func (p *KitRuntimeProtocol) VerifyNativeThreadSettled(ctx context.Context, r assistantRuntimeRecord, thread uuid.UUID) error {
+	return p.nativeThreadSettlement(ctx, r, thread, false)
+}
+
+func (p *KitRuntimeProtocol) nativeThreadSettlement(ctx context.Context, r assistantRuntimeRecord, thread uuid.UUID, closeSession bool) error {
 	if p.config.Endpoint == nil || p.config.Endpoint.Path != "/acp" || r.LifecycleTx == nil ||
 		thread == uuid.Nil || r.ID == uuid.Nil || r.ProjectID == uuid.Nil || r.AssistantID == uuid.Nil {
 		return ErrKitRuntimeBinding
@@ -42,7 +54,7 @@ func (p *KitRuntimeProtocol) CloseNativeThreadSession(ctx context.Context, r ass
 		return err
 	}
 	defer closeKitTransport(c)
-	return p.closeNativeThreadSession(ctx, c, session)
+	return p.settleNativeThreadSession(ctx, c, session, closeSession)
 }
 
 // Native session/list is the durable workspace catalog, not a resident-actor
@@ -73,6 +85,10 @@ func nativeThreadCatalog(raw json.RawMessage, cwd, canonical string) error {
 }
 
 func (p *KitRuntimeProtocol) closeNativeThreadSession(ctx context.Context, c *kitacp.Client, session string) error {
+	return p.settleNativeThreadSession(ctx, c, session, true)
+}
+
+func (p *KitRuntimeProtocol) settleNativeThreadSession(ctx context.Context, c *kitacp.Client, session string, closeSession bool) error {
 	// Resume may emit configuration notifications even without replay. Consume
 	// both streams without projecting or reacquiring lifecycle admission locks.
 	drain, cancel := context.WithCancel(ctx)
@@ -116,6 +132,9 @@ func (p *KitRuntimeProtocol) closeNativeThreadSession(ctx context.Context, c *ki
 	}
 	if !settled {
 		return errors.New("native Kit thread session is not settled")
+	}
+	if !closeSession {
+		return nil
 	}
 	if _, err := c.Call(ctx, "session/close", map[string]string{"sessionId": session}, session); err != nil {
 		return fmt.Errorf("close native Kit thread session: %w", err)

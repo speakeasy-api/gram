@@ -11,7 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/speakeasy-api/gram/server/internal/assistants"
-	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
@@ -55,14 +54,18 @@ func installKitLocalRuntimeFromCLI(logger *slog.Logger, c *cli.Context, core *as
 			logger.WarnContext(c.Context, "ignoring ATE Kit settings: the assistant runtime provider is disabled")
 			return nil
 		}
-		// During forward cutover (GKE -> ATE), if GKE Kit flags are still
-		// present in the environment, best-effort install GKE first so
+		// Validate required ATE configuration up front before registering any
+		// retiring GKE transition backend.
+		validateKitATEFlagsFromCLI(c, serverURL)
+		// During forward cutover (GKE -> ATE), when GKE Kit cluster flags are
+		// configured alongside ATE, register GKE first so
 		// installKitATERuntimeFromCLI promotes ATE as the active Kit v3
-		// backend and demotes GKE into retiring-only cleanup. Never fail ATE
-		// startup when GKE flags are absent or incomplete.
-		if c.String("assistant-kit-image") != "" && base.Provider == assistants.RuntimeProviderGKE && core != nil {
-			if gkeErr := installKitGKEOrLocalRuntimeFromCLI(c, core, redisClient, serverURL, orgHosts, base); gkeErr != nil {
-				logger.WarnContext(c.Context, "skipping retiring Kit GKE backend during ATE startup", attr.SlogError(gkeErr))
+		// backend and demotes GKE into retiring-only cleanup. Fail startup if
+		// explicit GKE transition flags are broken so persisted GKE rows cannot
+		// silently lose their cleanup route.
+		if base.Provider == assistants.RuntimeProviderGKE && core != nil && hasExplicitKitGKEFlags(c) {
+			if err := installKitGKEOrLocalRuntimeFromCLI(c, core, redisClient, serverURL, orgHosts, base); err != nil {
+				return fmt.Errorf("install retiring Kit GKE backend for ATE cutover: %w", err)
 			}
 		}
 		return installKitATERuntimeFromCLI(c, core, redisClient, serverURL, orgHosts)
@@ -83,15 +86,23 @@ func installKitLocalRuntimeFromCLI(logger *slog.Logger, c *cli.Context, core *as
 	if err := installKitGKEOrLocalRuntimeFromCLI(c, core, redisClient, serverURL, orgHosts, base); err != nil {
 		return err
 	}
-	// During rollback (ATE -> GKE), if ATE flags remain configured while
-	// GRAM_ASSISTANT_ATE_ENABLED=false, best-effort attach ATE strictly for
-	// retiring cleanup so existing ATE thread actors and admissions drain.
+	// During rollback (ATE -> GKE), when ATE flags remain configured while
+	// GRAM_ASSISTANT_ATE_ENABLED=false, attach ATE strictly for retiring
+	// cleanup so existing ATE thread actors and admissions drain cleanly.
 	if core != nil {
-		if ateErr := installRetiringKitATERuntimeFromCLI(c, core, redisClient, serverURL, orgHosts); ateErr != nil {
-			logger.WarnContext(c.Context, "skipping retiring Kit ATE backend during rollback startup", attr.SlogError(ateErr))
+		if err := installRetiringKitATERuntimeFromCLI(c, core, redisClient, serverURL, orgHosts); err != nil {
+			return fmt.Errorf("install retiring Kit ATE backend for rollback: %w", err)
 		}
 	}
 	return nil
+}
+
+func hasExplicitKitGKEFlags(c *cli.Context) bool {
+	return c.String("assistant-kit-image") != "" &&
+		(c.String("assistant-kit-gke-cluster-name") != "" ||
+			c.String("assistant-kit-gke-cluster-location") != "" ||
+			c.String("assistant-kit-gke-project-number") != "" ||
+			c.String("assistant-kit-gke-organization-id") != "")
 }
 
 func installKitGKEOrLocalRuntimeFromCLI(c *cli.Context, core *assistants.ServiceCore, redisClient *redis.Client, serverURL *url.URL, orgHosts *orghost.Resolver, base assistants.RuntimeBackendConfig) error {
