@@ -1,0 +1,25 @@
+server/internal/intentpolicy/store.go
+  s_939a11e59e098b::t_ea35a4245faea1 106
+  s_939a11e59e098b::t_170924a55ef5d6 121
+  s_939a11e59e098b::t_c8eb279f360ee8 7
+  s_939a11e59e098b::t_a301e2bab6bdbc 162-167
+server/internal/intentpolicies/intentpolicies_test.go
+  s_939a11e59e098b::t_596bd4f7425e5b 107-114,117-125
+  s_939a11e59e098b::t_e13ee53683731e 115-116
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "90f2e09b3d76ccb2c17490fca2c6937d70ecf840",
+  "prompts": {},
+  "sessions": {
+    "s_939a11e59e098b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e06bbd70-3627-49d7-9eb0-bf822f5d09b6",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

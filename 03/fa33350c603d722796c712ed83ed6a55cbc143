@@ -1,0 +1,26 @@
+.changeset/intent-policy-label-primitives.md
+  h_e404c1a6a54184 1-6
+client/dashboard/src/pages/security/intent-policies/GuardrailView.tsx
+  h_e404c1a6a54184 770
+client/dashboard/src/pages/security/intent-policies/events.test.ts
+  h_e404c1a6a54184 147
+client/dashboard/src/pages/security/intent-policies/guardrail.test.ts
+  h_e404c1a6a54184 18,50,53-55,58,76,117,121-122
+client/dashboard/src/pages/security/intent-policies/guardrail.ts
+  h_e404c1a6a54184 21
+client/dashboard/src/pages/security/intent-policies/model.test.ts
+  h_e404c1a6a54184 42,57,68,70-72,127-131,133-134,139-149,153-157,163,198,201-202,204,209,211,218,221
+client/dashboard/src/pages/security/intent-policies/model.ts
+  h_e404c1a6a54184 84-85,87,133-141,145-149
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "03fa33350c603d722796c712ed83ed6a55cbc143",
+  "prompts": {},
+  "humans": {
+    "h_e404c1a6a54184": {
+      "author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

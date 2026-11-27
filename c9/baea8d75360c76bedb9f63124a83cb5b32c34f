@@ -1,0 +1,19 @@
+server/internal/intentpolicy/store_internal_test.go
+  s_7f7b161a4d59e4::t_4b0425f5f66c31 15-16
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c9baea8d75360c76bedb9f63124a83cb5b32c34f",
+  "prompts": {},
+  "sessions": {
+    "s_7f7b161a4d59e4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "5f8a32ee-f004-438b-97f5-eb7c5a009f3f",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

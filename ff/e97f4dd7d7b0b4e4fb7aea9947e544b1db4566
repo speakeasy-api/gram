@@ -1,0 +1,30 @@
+.speakeasy/out.openapi.yaml
+  h_e404c1a6a54184 106065
+client/dashboard/src/sdk/.speakeasy/gen.lock
+  h_e404c1a6a54184 8140
+client/dashboard/src/sdk/src/models/components/intentcondition.ts
+  h_e404c1a6a54184 45
+server/gen/http/intent_policies/client/encode_decode.go
+  h_e404c1a6a54184 794-796
+server/gen/http/intent_policies/client/types.go
+  h_e404c1a6a54184 696,2282-2283
+server/gen/http/intent_policies/server/encode_decode.go
+  h_e404c1a6a54184 748-750
+server/gen/http/intent_policies/server/types.go
+  h_e404c1a6a54184 698
+server/gen/http/openapi3.yaml
+  h_e404c1a6a54184 121511
+server/gen/intent_policies/service.go
+  h_e404c1a6a54184 144
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ffe97f4dd7d7b0b4e4fb7aea9947e544b1db4566",
+  "prompts": {},
+  "humans": {
+    "h_e404c1a6a54184": {
+      "author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

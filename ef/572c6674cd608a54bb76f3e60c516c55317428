@@ -1,0 +1,20 @@
+server/internal/intentpolicy/contracts_test.go
+  h_e404c1a6a54184 124-126
+server/internal/intentpolicy/gemini.go
+  h_e404c1a6a54184 37
+server/internal/intentpolicy/guardrail.go
+  h_e404c1a6a54184 29,262
+server/internal/intentpolicy/jev.go
+  h_e404c1a6a54184 17
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ef572c6674cd608a54bb76f3e60c516c55317428",
+  "prompts": {},
+  "humans": {
+    "h_e404c1a6a54184": {
+      "author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

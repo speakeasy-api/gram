@@ -1,0 +1,14 @@
+server/internal/intentpolicy/guardrail.go
+  h_e404c1a6a54184 260-261
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4d90a0b89faad5990e4d1ca5ddde54f37783b811",
+  "prompts": {},
+  "humans": {
+    "h_e404c1a6a54184": {
+      "author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
