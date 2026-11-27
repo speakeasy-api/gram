@@ -27,10 +27,10 @@ import (
 // its unbound root triggers bound. The caller owns the transaction; a failed
 // call must roll it back.
 //
-// Legacy agents start with project-wide wildcard Connect; Kit agents omit
-// project-wide wildcard Connect and start with explicit Connect grants only on
-// their built-in toolsets (plus optional assistant-slack when linked), with
-// project MCP server grants managed explicitly afterwards. The persisted
+// Default-runtime agents start with project-wide wildcard Connect; Kit agents
+// omit project-wide wildcard Connect and start with explicit Connect grants
+// only on their built-in toolsets (plus optional assistant-slack when linked),
+// with project MCP server grants managed explicitly afterwards. The persisted
 // runtime controls the initial policy for every caller, including staff
 // provisioning. Existing policies remain unchanged.
 func (s *Service) Provision(ctx context.Context, tx pgx.Tx, p ProvisionParams) error {
@@ -227,7 +227,7 @@ func BuiltinConnectGrants(project uuid.UUID, managed bool) []authz.Grant {
 // initialGrants grants project metadata, skills, explicit Connect grants on
 // the assistant's built-in toolsets, optional assistant-slack grants when
 // Slack auth-client triggers are already linked, and administration of the
-// assistant itself. Only legacy (non-Kit) runtimes bootstrap project-wide
+// assistant itself. Non-Kit runtimes also bootstrap project-wide
 // wildcard Connect.
 func initialGrants(project, assistant uuid.UUID, managed, projectConnect bool, slackAuthClients []uuid.NullUUID) []authz.Grant {
 	projectMCP := authz.NewSelector(authz.ScopeMCPRead, authz.WildcardResource)

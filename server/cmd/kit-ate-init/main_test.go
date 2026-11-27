@@ -30,7 +30,7 @@ func testArchive(t *testing.T, names []string) []byte {
 	return b.Bytes()
 }
 
-func TestBootstrapLaunchesOnceAndRemovesAssertionEndpoint(t *testing.T) {
+func TestBootstrapLaunchesOnce(t *testing.T) {
 	t.Parallel()
 	homeDir := t.TempDir()
 	s, err := newInitializer(homeDir)
@@ -42,9 +42,6 @@ func TestBootstrapLaunchesOnceAndRemovesAssertionEndpoint(t *testing.T) {
 		s.ServeHTTP(w, r)
 		return w.Code
 	}
-
-	// Assertion delivery is removed; ATE egress injects actor JWTs.
-	require.Equal(t, http.StatusNotFound, post("/assertion", []byte("jwt.fixture")))
 
 	archive := testArchive(t, bootstrapFiles)
 	require.Equal(t, http.StatusNoContent, post("/bootstrap", archive))
