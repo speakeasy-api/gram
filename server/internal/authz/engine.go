@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/userblock"
 )
 
 // MembershipFetcher retrieves a WorkOS membership for a user+org pair.
@@ -59,6 +60,9 @@ type Engine struct {
 	// keys reach.
 	refuseInvalidChecks bool
 	membership          MembershipFetcher
+	// userBlock rejects any context whose user, credential authorizer, or
+	// credential owner staff blocked (users.blacklisted_at).
+	userBlock *userblock.Gate
 }
 
 func NewEngine(
@@ -97,7 +101,49 @@ func NewEngine(
 		isDev:                            devMode,
 		refuseInvalidChecks:              devMode || testing.Testing(),
 		membership:                       membership,
+		userBlock:                        userblock.NewGate(db),
 	}
+}
+
+// CheckUserBlock rejects ctx when its user, or the user who authorized or owns
+// its principal credential, is blocked from the platform. PrepareContext runs
+// it; authentication paths that never prepare a context call it directly.
+func (e *Engine) CheckUserBlock(ctx context.Context) error {
+	if e == nil || e.userBlock == nil {
+		return nil
+	}
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return nil
+	}
+	userIDs := []string{authCtx.UserID}
+	if credential, hasCredential := contextvalues.PrincipalCredentialAuthorization(ctx); hasCredential {
+		userIDs = append(userIDs, credential.AuthorizerUserID)
+	}
+	if authorizer, owner, hasProvenance := contextvalues.PrincipalCredentialProvenance(ctx); hasProvenance {
+		userIDs = append(userIDs, authorizer, owner)
+	}
+	return e.CheckUsersBlocked(ctx, userIDs...)
+}
+
+// LogUserBlockRefusal records a refusal of a blocked user by a path that
+// checked the block itself, through the engine's logger.
+func (e *Engine) LogUserBlockRefusal(ctx context.Context, surface, userID string) {
+	if e == nil {
+		return
+	}
+	userblock.LogRefusal(ctx, e.logger, surface, userID)
+}
+
+// CheckUsersBlocked rejects when any of userIDs is blocked from the platform.
+func (e *Engine) CheckUsersBlocked(ctx context.Context, userIDs ...string) error {
+	if e == nil || e.userBlock == nil {
+		return nil
+	}
+	if err := e.userBlock.Check(ctx, e.logger, "authz_admission", userIDs...); err != nil {
+		return fmt.Errorf("user block: %w", err)
+	}
+	return nil
 }
 
 // GetScopeOverrides returns the parsed scope overrides from the request context
@@ -122,6 +168,22 @@ func (e *Engine) GetScopeOverrides(ctx context.Context) ([]RoleGrant, bool) {
 }
 
 func (e *Engine) PrepareContext(ctx context.Context) (context.Context, error) {
+	if err := e.CheckUserBlock(ctx); err != nil {
+		return ctx, err
+	}
+	prepared, err := e.prepareContext(ctx)
+	if err != nil {
+		return prepared, err
+	}
+	// Live admission resolves the principal credential's current owner, so
+	// check again once it is known.
+	if err := e.CheckUserBlock(prepared); err != nil {
+		return ctx, err
+	}
+	return prepared, nil
+}
+
+func (e *Engine) prepareContext(ctx context.Context) (context.Context, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return ctx, nil
