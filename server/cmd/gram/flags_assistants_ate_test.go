@@ -101,15 +101,13 @@ func TestATEStartupValidationAndDisabledProvider(t *testing.T) {
 		})
 	})
 
-	t.Run("enabled ATE rejects missing assistant-ate-issuer-url even when assistant-kit-workload-issuer is set", func(t *testing.T) {
+	t.Run("enabled ATE rejects missing assistant-ate-issuer-url", func(t *testing.T) {
 		t.Parallel()
 		c := kitCLIContext(t, map[string]string{
 			"environment":                     "production",
 			"assistant-ate-enabled":           "true",
 			"assistant-ate-image":             "gcr.io/example/gram-ate-runtime:sha-deadbeef@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 			"assistant-ate-worker-selector":   "workload-type=ate-assistants",
-			"assistant-kit-workload-issuer":   "https://ate.example.com",
-			"assistant-kit-workload-jwks-url": "https://ate.example.com/.well-known/jwks.json",
 			"assistant-ate-api-address":       "127.0.0.1:1",
 			"assistant-ate-router-address":    "127.0.0.1:2",
 			"assistant-ate-service-ca-file":   "/nonexistent/ca.pem",
