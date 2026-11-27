@@ -52,6 +52,34 @@ func (q *Queries) Backfill(ctx context.Context, arg BackfillParams) ([]uuid.UUID
 	return items, nil
 }
 
+const canonicalJSON = `-- name: CanonicalJSON :one
+SELECT COALESCE($1::jsonb::text, '')::text AS content_raw,
+       COALESCE($2::jsonb::text, '')::text AS tool_calls,
+       COALESCE($3::jsonb::text, '')::text AS tool_call_summaries
+`
+
+type CanonicalJSONParams struct {
+	ContentRaw        []byte
+	ToolCalls         []byte
+	ToolCallSummaries []byte
+}
+
+type CanonicalJSONRow struct {
+	ContentRaw        string
+	ToolCalls         string
+	ToolCallSummaries string
+}
+
+// The text form Postgres stores for jsonb values, so an encrypted-mode body is
+// sealed and measured exactly as a plaintext row would hold it. NULL comes
+// back as the empty string, which no JSON value is.
+func (q *Queries) CanonicalJSON(ctx context.Context, arg CanonicalJSONParams) (CanonicalJSONRow, error) {
+	row := q.db.QueryRow(ctx, canonicalJSON, arg.ContentRaw, arg.ToolCalls, arg.ToolCallSummaries)
+	var i CanonicalJSONRow
+	err := row.Scan(&i.ContentRaw, &i.ToolCalls, &i.ToolCallSummaries)
+	return i, err
+}
+
 const capture = `-- name: Capture :execrows
 INSERT INTO chat_message_transcripts (message_id, project_id, organization_id, ciphertext)
 VALUES ($1, $2, $3, $4)
@@ -280,8 +308,11 @@ func (q *Queries) Progress(ctx context.Context, arg ProgressParams) (ProgressRow
 }
 
 const snapshot = `-- name: Snapshot :one
-SELECT m.id, m.chat_id, m.content, m.content_raw, m.tool_calls,
-       m.tool_outcome_notes, m.tool_call_summaries, m.storage_error
+SELECT m.id, m.seq, m.chat_id, m.project_id, m.role, m.content, m.content_raw, m.content_asset_url, m.model, m.message_id, m.finish_reason, m.tool_calls, m.prompt_tokens, m.completion_tokens, m.total_tokens, m.storage_error, m.user_id, m.external_user_id, m.external_message_id, m.origin, m.user_agent, m.ip_address, m.source, m.tool_call_id, m.tool_urn, m.tool_outcome, m.tool_outcome_notes, m.tool_call_summaries, m.content_hash, m.generation, m.capture_kind, m.original_message_id, m.replayed, m.created_at, m.risk_analyzed_at, m.tool_call_count, m.content_bytes, m.content_raw_bytes, m.tool_calls_bytes,
+       COALESCE((SELECT t.ciphertext FROM chat_message_transcripts t
+        WHERE t.message_id = m.id AND t.project_id = m.project_id
+          AND t.organization_id = p.organization_id AND t.source_hash IS NULL
+        FOR UPDATE), '')::text AS current_ciphertext
 FROM chat_messages m
 JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
 JOIN projects p ON p.id = c.project_id
@@ -297,30 +328,61 @@ type SnapshotParams struct {
 }
 
 type SnapshotRow struct {
-	ID                uuid.UUID
-	ChatID            uuid.UUID
-	Content           string
-	ContentRaw        []byte
-	ToolCalls         []byte
-	ToolOutcomeNotes  pgtype.Text
-	ToolCallSummaries []byte
-	StorageError      pgtype.Text
+	ChatMessage       ChatMessage
+	CurrentCiphertext string
 }
 
-// Locks the message for the rest of the caller's transaction, so no body update
-// can land between this read and the transcript written from it.
+// Reads the whole message row and its current transcript in one statement and
+// locks both for the rest of the caller's transaction, so no body update can
+// land between this read and the copies written from it. A legacy transcript
+// with source_hash is not current: the column is empty for it, as for a message
+// with no transcript (a real ciphertext is never empty). Every writer takes
+// these locks through this statement, so they are always taken in the same
+// order.
 func (q *Queries) Snapshot(ctx context.Context, arg SnapshotParams) (SnapshotRow, error) {
 	row := q.db.QueryRow(ctx, snapshot, arg.MessageID, arg.ProjectID, arg.OrganizationID)
 	var i SnapshotRow
 	err := row.Scan(
-		&i.ID,
-		&i.ChatID,
-		&i.Content,
-		&i.ContentRaw,
-		&i.ToolCalls,
-		&i.ToolOutcomeNotes,
-		&i.ToolCallSummaries,
-		&i.StorageError,
+		&i.ChatMessage.ID,
+		&i.ChatMessage.Seq,
+		&i.ChatMessage.ChatID,
+		&i.ChatMessage.ProjectID,
+		&i.ChatMessage.Role,
+		&i.ChatMessage.Content,
+		&i.ChatMessage.ContentRaw,
+		&i.ChatMessage.ContentAssetUrl,
+		&i.ChatMessage.Model,
+		&i.ChatMessage.MessageID,
+		&i.ChatMessage.FinishReason,
+		&i.ChatMessage.ToolCalls,
+		&i.ChatMessage.PromptTokens,
+		&i.ChatMessage.CompletionTokens,
+		&i.ChatMessage.TotalTokens,
+		&i.ChatMessage.StorageError,
+		&i.ChatMessage.UserID,
+		&i.ChatMessage.ExternalUserID,
+		&i.ChatMessage.ExternalMessageID,
+		&i.ChatMessage.Origin,
+		&i.ChatMessage.UserAgent,
+		&i.ChatMessage.IpAddress,
+		&i.ChatMessage.Source,
+		&i.ChatMessage.ToolCallID,
+		&i.ChatMessage.ToolUrn,
+		&i.ChatMessage.ToolOutcome,
+		&i.ChatMessage.ToolOutcomeNotes,
+		&i.ChatMessage.ToolCallSummaries,
+		&i.ChatMessage.ContentHash,
+		&i.ChatMessage.Generation,
+		&i.ChatMessage.CaptureKind,
+		&i.ChatMessage.OriginalMessageID,
+		&i.ChatMessage.Replayed,
+		&i.ChatMessage.CreatedAt,
+		&i.ChatMessage.RiskAnalyzedAt,
+		&i.ChatMessage.ToolCallCount,
+		&i.ChatMessage.ContentBytes,
+		&i.ChatMessage.ContentRawBytes,
+		&i.ChatMessage.ToolCallsBytes,
+		&i.CurrentCiphertext,
 	)
 	return i, err
 }
@@ -358,63 +420,93 @@ func (q *Queries) UpdateMessageMetadata(ctx context.Context, arg UpdateMessageMe
 	return result.RowsAffected(), nil
 }
 
-const writeMessageBody = `-- name: WriteMessageBody :one
+const writeMessage = `-- name: WriteMessage :one
 UPDATE chat_messages AS m
 SET content = $1, content_raw = $2, tool_calls = $3,
     tool_outcome_notes = $4, tool_call_summaries = $5,
-    storage_error = $6
-WHERE m.id = $7 AND m.project_id = $8
-RETURNING m.id, m.chat_id, m.content, m.content_raw, m.tool_calls,
-          m.tool_outcome_notes, m.tool_call_summaries, m.storage_error
+    storage_error = $6, tool_outcome = $7,
+    finish_reason = $8, content_hash = $9,
+    risk_analyzed_at = $10
+WHERE m.id = $11 AND m.project_id = $12
+RETURNING m.id, m.seq, m.chat_id, m.project_id, m.role, m.content, m.content_raw, m.content_asset_url, m.model, m.message_id, m.finish_reason, m.tool_calls, m.prompt_tokens, m.completion_tokens, m.total_tokens, m.storage_error, m.user_id, m.external_user_id, m.external_message_id, m.origin, m.user_agent, m.ip_address, m.source, m.tool_call_id, m.tool_urn, m.tool_outcome, m.tool_outcome_notes, m.tool_call_summaries, m.content_hash, m.generation, m.capture_kind, m.original_message_id, m.replayed, m.created_at, m.risk_analyzed_at, m.tool_call_count, m.content_bytes, m.content_raw_bytes, m.tool_calls_bytes
 `
 
-type WriteMessageBodyParams struct {
+type WriteMessageParams struct {
 	Content           string
 	ContentRaw        []byte
 	ToolCalls         []byte
 	ToolOutcomeNotes  pgtype.Text
 	ToolCallSummaries []byte
 	StorageError      pgtype.Text
+	ToolOutcome       pgtype.Text
+	FinishReason      pgtype.Text
+	ContentHash       []byte
+	RiskAnalyzedAt    pgtype.Timestamptz
 	MessageID         uuid.UUID
 	ProjectID         uuid.NullUUID
 }
 
-type WriteMessageBodyRow struct {
-	ID                uuid.UUID
-	ChatID            uuid.UUID
-	Content           string
-	ContentRaw        []byte
-	ToolCalls         []byte
-	ToolOutcomeNotes  pgtype.Text
-	ToolCallSummaries []byte
-	StorageError      pgtype.Text
-}
-
-// The only statement that writes the protected body columns of an existing
-// message. Call it only through Transcripts.UpdateBody, which locks the row,
-// applies the change in Go and writes the encrypted transcript from what this
-// returns, in the same transaction.
-func (q *Queries) WriteMessageBody(ctx context.Context, arg WriteMessageBodyParams) (WriteMessageBodyRow, error) {
-	row := q.db.QueryRow(ctx, writeMessageBody,
+// The only statement that changes an existing message's body: the six body
+// columns, plus the non-body columns a body change may come with. Call it only
+// through Transcripts.UpdateMessage, which locks the row, applies the change
+// in Go and writes the encrypted transcript from what this returns, in the
+// same transaction.
+func (q *Queries) WriteMessage(ctx context.Context, arg WriteMessageParams) (ChatMessage, error) {
+	row := q.db.QueryRow(ctx, writeMessage,
 		arg.Content,
 		arg.ContentRaw,
 		arg.ToolCalls,
 		arg.ToolOutcomeNotes,
 		arg.ToolCallSummaries,
 		arg.StorageError,
+		arg.ToolOutcome,
+		arg.FinishReason,
+		arg.ContentHash,
+		arg.RiskAnalyzedAt,
 		arg.MessageID,
 		arg.ProjectID,
 	)
-	var i WriteMessageBodyRow
+	var i ChatMessage
 	err := row.Scan(
 		&i.ID,
+		&i.Seq,
 		&i.ChatID,
+		&i.ProjectID,
+		&i.Role,
 		&i.Content,
 		&i.ContentRaw,
+		&i.ContentAssetUrl,
+		&i.Model,
+		&i.MessageID,
+		&i.FinishReason,
 		&i.ToolCalls,
+		&i.PromptTokens,
+		&i.CompletionTokens,
+		&i.TotalTokens,
+		&i.StorageError,
+		&i.UserID,
+		&i.ExternalUserID,
+		&i.ExternalMessageID,
+		&i.Origin,
+		&i.UserAgent,
+		&i.IpAddress,
+		&i.Source,
+		&i.ToolCallID,
+		&i.ToolUrn,
+		&i.ToolOutcome,
 		&i.ToolOutcomeNotes,
 		&i.ToolCallSummaries,
-		&i.StorageError,
+		&i.ContentHash,
+		&i.Generation,
+		&i.CaptureKind,
+		&i.OriginalMessageID,
+		&i.Replayed,
+		&i.CreatedAt,
+		&i.RiskAnalyzedAt,
+		&i.ToolCallCount,
+		&i.ContentBytes,
+		&i.ContentRawBytes,
+		&i.ToolCallsBytes,
 	)
 	return i, err
 }

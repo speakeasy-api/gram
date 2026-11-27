@@ -1,8 +1,16 @@
 -- name: Snapshot :one
--- Locks the message for the rest of the caller's transaction, so no body update
--- can land between this read and the transcript written from it.
-SELECT m.id, m.chat_id, m.content, m.content_raw, m.tool_calls,
-       m.tool_outcome_notes, m.tool_call_summaries, m.storage_error
+-- Reads the whole message row and its current transcript in one statement and
+-- locks both for the rest of the caller's transaction, so no body update can
+-- land between this read and the copies written from it. A legacy transcript
+-- with source_hash is not current: the column is empty for it, as for a message
+-- with no transcript (a real ciphertext is never empty). Every writer takes
+-- these locks through this statement, so they are always taken in the same
+-- order.
+SELECT sqlc.embed(m),
+       COALESCE((SELECT t.ciphertext FROM chat_message_transcripts t
+        WHERE t.message_id = m.id AND t.project_id = m.project_id
+          AND t.organization_id = p.organization_id AND t.source_hash IS NULL
+        FOR UPDATE), '')::text AS current_ciphertext
 FROM chat_messages m
 JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
 JOIN projects p ON p.id = c.project_id
@@ -21,18 +29,28 @@ WHERE message_id = @message_id AND project_id = @project_id AND organization_id 
   AND source_hash IS NULL
 FOR UPDATE;
 
--- name: WriteMessageBody :one
--- The only statement that writes the protected body columns of an existing
--- message. Call it only through Transcripts.UpdateBody, which locks the row,
--- applies the change in Go and writes the encrypted transcript from what this
--- returns, in the same transaction.
+-- name: WriteMessage :one
+-- The only statement that changes an existing message's body: the six body
+-- columns, plus the non-body columns a body change may come with. Call it only
+-- through Transcripts.UpdateMessage, which locks the row, applies the change
+-- in Go and writes the encrypted transcript from what this returns, in the
+-- same transaction.
 UPDATE chat_messages AS m
 SET content = @content, content_raw = sqlc.narg('content_raw'), tool_calls = sqlc.narg('tool_calls'),
     tool_outcome_notes = sqlc.narg('tool_outcome_notes'), tool_call_summaries = sqlc.narg('tool_call_summaries'),
-    storage_error = sqlc.narg('storage_error')
+    storage_error = sqlc.narg('storage_error'), tool_outcome = sqlc.narg('tool_outcome'),
+    finish_reason = sqlc.narg('finish_reason'), content_hash = sqlc.narg('content_hash'),
+    risk_analyzed_at = sqlc.narg('risk_analyzed_at')
 WHERE m.id = @message_id AND m.project_id = @project_id
-RETURNING m.id, m.chat_id, m.content, m.content_raw, m.tool_calls,
-          m.tool_outcome_notes, m.tool_call_summaries, m.storage_error;
+RETURNING m.*;
+
+-- name: CanonicalJSON :one
+-- The text form Postgres stores for jsonb values, so an encrypted-mode body is
+-- sealed and measured exactly as a plaintext row would hold it. NULL comes
+-- back as the empty string, which no JSON value is.
+SELECT COALESCE(sqlc.narg('content_raw')::jsonb::text, '')::text AS content_raw,
+       COALESCE(sqlc.narg('tool_calls')::jsonb::text, '')::text AS tool_calls,
+       COALESCE(sqlc.narg('tool_call_summaries')::jsonb::text, '')::text AS tool_call_summaries;
 
 -- name: Capture :execrows
 -- A resealed transcript drops the legacy source_hash.

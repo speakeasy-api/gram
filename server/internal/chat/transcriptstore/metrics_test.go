@@ -119,19 +119,27 @@ func TestLoadManyLeavesOutMessagesWithoutAShadow(t *testing.T) {
 	require.Equal(t, map[string]int64{"success": 1, "plaintext_fallback": 2}, countsByOutcome(t, collected, meterReadMessages))
 }
 
-func TestLoadManyFailsThePageWhenAShadowIsStale(t *testing.T) {
+func TestLoadManyServesPlaintextForAStaleTranscript(t *testing.T) {
 	t.Parallel()
 	f := setup(t, true)
-	id := uuid.New()
-	f.add(t, id)
-	f.capture(t, id)
-	_, err := fixturerepo.New(f.db).ChangeContent(t.Context(), id, project(f.project))
+	stale, current := uuid.New(), uuid.New()
+	f.add(t, stale)
+	f.add(t, current)
+	f.capture(t, stale, current)
+	_, err := fixturerepo.New(f.db).ChangeContent(t.Context(), stale, project(f.project))
 	require.NoError(t, err)
 
-	opened, err := f.store.LoadMany(t.Context(), f.org, f.project, []uuid.UUID{id})
-	require.ErrorIs(t, err, ErrStale)
-	require.Nil(t, opened)
+	reader := sdkmetric.NewManualReader()
+	store, err := New(f.db, f.keys.Service, testenv.NewLogger(t), testenv.NewTracerProvider(t), sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)))
+	require.NoError(t, err)
+	opened, err := store.LoadMany(t.Context(), f.org, f.project, []uuid.UUID{stale, current})
+	require.NoError(t, err, "a disagreeing transcript does not fail the page")
+	require.NotContains(t, opened, stale, "its message is served from plaintext")
+	require.Contains(t, opened, current)
 
+	var collected metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(t.Context(), &collected))
+	require.Equal(t, map[string]int64{"success": 1, "stale": 1}, countsByOutcome(t, collected, meterReadMessages))
 }
 
 func TestLoadManyIsScopedToTheProjectAndOrganization(t *testing.T) {

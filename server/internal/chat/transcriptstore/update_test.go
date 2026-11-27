@@ -13,7 +13,7 @@ import (
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
-	"github.com/speakeasy-api/gram/server/internal/chat/transcriptcrypto"
+	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore/fixturerepo"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -49,8 +49,8 @@ type failedRow struct{}
 
 func (failedRow) Scan(...any) error { return errInjected }
 
-func summaryChange(summary string) func(*transcriptcrypto.Message) error {
-	return func(m *transcriptcrypto.Message) error {
+func summaryChange(summary string) func(*chatrepo.ChatMessage) error {
+	return func(m *chatrepo.ChatMessage) error {
 		m.ToolCallSummaries = []byte(`{"example":"` + summary + `"}`)
 		return nil
 	}
@@ -63,12 +63,12 @@ func (f *fixture) summaries(t *testing.T, id uuid.UUID) string {
 	return string(opened.ToolCallSummaries)
 }
 
-// UpdateBody writes the plaintext row and the transcript in the caller's
+// UpdateMessage writes the plaintext row and the transcript in the caller's
 // transaction, so a failure at any step, rolled back, leaves both copies with
 // the old body and nothing stale.
-func TestFailedUpdateBodyRollsBack(t *testing.T) {
+func TestFailedUpdateMessageRollsBack(t *testing.T) {
 	t.Parallel()
-	for _, step := range []string{"WriteMessageBody", "Capture", "UpdateMessageMetadata", "DeleteToolCallIDs", "InsertToolCallIDs"} {
+	for _, step := range []string{"WriteMessage", "Capture", "UpdateMessageMetadata", "DeleteToolCallIDs", "InsertToolCallIDs"} {
 		t.Run(step, func(t *testing.T) {
 			t.Parallel()
 			f := setup(t, true)
@@ -80,7 +80,7 @@ func TestFailedUpdateBodyRollsBack(t *testing.T) {
 			tx, err := f.db.Begin(t.Context()) //nolint:glint // notestingrawsql: caller-owned transaction boundary is the behavior under test.
 			require.NoError(t, err)
 			defer func() { _ = tx.Rollback(t.Context()) }()
-			_, err = NewTranscripts(f.store, f.project).UpdateBody(t.Context(), &failAt{DBTX: tx, name: step}, f.org, f.project, f.chat, id, summaryChange("new summary"))
+			_, err = NewTranscripts(f.store, f.project).UpdateMessage(t.Context(), &failAt{DBTX: tx, name: step}, f.org, f.project, f.chat, id, summaryChange("new summary"))
 			require.ErrorIs(t, err, errInjected)
 			require.NoError(t, tx.Rollback(t.Context()))
 
@@ -107,7 +107,7 @@ func TestBodyChangeCommittedWithoutItsTranscript(t *testing.T) {
 		tx, err := f.db.Begin(t.Context()) //nolint:glint // notestingrawsql: caller-owned transaction boundary is the behavior under test.
 		require.NoError(t, err)
 		defer func() { _ = tx.Rollback(t.Context()) }()
-		_, err = NewTranscripts(f.store, f.project).UpdateBody(t.Context(), &failAt{DBTX: tx, name: "Capture"}, f.org, f.project, f.chat, id, summaryChange("new summary"))
+		_, err = NewTranscripts(f.store, f.project).UpdateMessage(t.Context(), &failAt{DBTX: tx, name: "Capture"}, f.org, f.project, f.chat, id, summaryChange("new summary"))
 		require.ErrorIs(t, err, errInjected)
 		// A Go-side failure does not abort the Postgres transaction, so a
 		// caller that drops the error can still commit the plaintext write.
@@ -128,7 +128,7 @@ func TestBodyChangeCommittedWithoutItsTranscript(t *testing.T) {
 		tx, err := f.db.Begin(t.Context()) //nolint:glint // notestingrawsql: caller-owned transaction boundary is the behavior under test.
 		require.NoError(t, err)
 		defer func() { _ = tx.Rollback(t.Context()) }()
-		_, err = off.UpdateBody(t.Context(), tx, f.org, f.project, f.chat, id, summaryChange("new summary"))
+		_, err = off.UpdateMessage(t.Context(), tx, f.org, f.project, f.chat, id, summaryChange("new summary"))
 		require.NoError(t, err, "plaintext mode writes only the plaintext row")
 		require.NoError(t, tx.Commit(t.Context()))
 
@@ -160,7 +160,7 @@ func (d *staleCiphertext) Exec(ctx context.Context, sql string, args ...any) (pg
 // Every shadow-mode update counts its consistency checks: success when both
 // copies agreed before and after, otherwise the check that failed. These are
 // the numbers that show how well shadow mode keeps the copies in step.
-func TestUpdateBodyCountsConsistencyChecks(t *testing.T) {
+func TestUpdateMessageCountsConsistencyChecks(t *testing.T) {
 	t.Parallel()
 	f := setup(t, true)
 	ctx := t.Context()
@@ -180,7 +180,7 @@ func TestUpdateBodyCountsConsistencyChecks(t *testing.T) {
 		if wrapped, ok := db.(*staleCiphertext); ok {
 			wrapped.DBTX = tx
 		}
-		_, err = transcripts.UpdateBody(ctx, db, f.org, f.project, f.chat, id, setNotes(notes))
+		_, err = transcripts.UpdateMessage(ctx, db, f.org, f.project, f.chat, id, setNotes(notes))
 		require.NoError(t, err)
 		require.NoError(t, tx.Commit(ctx))
 	}

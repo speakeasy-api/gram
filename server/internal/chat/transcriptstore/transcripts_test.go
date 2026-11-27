@@ -7,7 +7,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/chat/transcriptcrypto"
+	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore/fixturerepo"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -180,7 +180,7 @@ func plaintextRow(id uuid.UUID) openRow {
 	}
 }
 
-func TestOpenRowsServesShadowsFallsBackAndFailsStale(t *testing.T) {
+func TestOpenRowsServesTranscriptsAndFallsBackToPlaintext(t *testing.T) {
 	t.Parallel()
 	f := setup(t, true)
 	shadowed, unshadowed := uuid.New(), uuid.New()
@@ -209,8 +209,9 @@ func TestOpenRowsServesShadowsFallsBackAndFailsStale(t *testing.T) {
 	_, err = fixturerepo.New(f.db).ChangeContent(t.Context(), shadowed, project(f.project))
 	require.NoError(t, err)
 	stale := []openRow{plaintextRow(shadowed)}
-	err = OpenRows(t.Context(), transcripts, f.org, f.project, stale, openRowBody)
-	require.ErrorIs(t, err, ErrStale, "a stale shadow fails the read instead of serving plaintext")
+	stale[0].content = "changed"
+	require.NoError(t, OpenRows(t.Context(), transcripts, f.org, f.project, stale, openRowBody))
+	require.Equal(t, "changed", stale[0].content, "a disagreeing transcript is logged and the plaintext is kept")
 }
 
 func TestToolCallIDsStayWithTheirProject(t *testing.T) {
@@ -229,13 +230,13 @@ func TestToolCallIDsStayWithTheirProject(t *testing.T) {
 	require.Equal(t, []string{"example"}, ids)
 }
 
-// updateBody runs one UpdateBody in its own committed transaction.
-func (f *fixture) updateBody(t *testing.T, transcripts *Transcripts, chatID, id uuid.UUID, apply func(*transcriptcrypto.Message) error) (bool, error) {
+// updateBody runs one UpdateMessage in its own committed transaction.
+func (f *fixture) updateBody(t *testing.T, transcripts *Transcripts, chatID, id uuid.UUID, apply func(*chatrepo.ChatMessage) error) (bool, error) {
 	t.Helper()
 	tx, err := f.db.Begin(t.Context()) //nolint:glint // notestingrawsql: caller-owned transaction boundary is the behavior under test.
 	require.NoError(t, err)
 	defer func() { _ = tx.Rollback(t.Context()) }()
-	changed, err := transcripts.UpdateBody(t.Context(), tx, f.org, f.project, chatID, id, apply)
+	changed, err := transcripts.UpdateMessage(t.Context(), tx, f.org, f.project, chatID, id, apply)
 	if err != nil {
 		return false, err
 	}
@@ -243,13 +244,16 @@ func (f *fixture) updateBody(t *testing.T, transcripts *Transcripts, chatID, id 
 	return changed, nil
 }
 
-func setNotes(v string) func(*transcriptcrypto.Message) error {
-	return func(m *transcriptcrypto.Message) error { m.ToolOutcomeNotes = &v; return nil }
+func setNotes(v string) func(*chatrepo.ChatMessage) error {
+	return func(m *chatrepo.ChatMessage) error {
+		m.ToolOutcomeNotes = pgtype.Text{String: v, Valid: true}
+		return nil
+	}
 }
 
 // In shadow mode one change, made once in Go, lands in the plaintext row, the
 // transcript, the metadata and the tool-call IDs.
-func TestUpdateBodyKeepsEveryCopyCurrent(t *testing.T) {
+func TestUpdateMessageKeepsEveryCopyCurrent(t *testing.T) {
 	t.Parallel()
 	f := setup(t, true)
 	ctx := t.Context()
@@ -265,11 +269,21 @@ func TestUpdateBodyKeepsEveryCopyCurrent(t *testing.T) {
 	require.NoError(t, err, "plaintext and transcript agree")
 	require.Equal(t, "changed note", *opened.ToolOutcomeNotes)
 
+	changed, err = f.updateBody(t, transcripts, f.chat, id, func(m *chatrepo.ChatMessage) error {
+		m.ToolCallSummaries = []byte(`{"example":"summary","other":"done"}`)
+		return nil
+	})
+	require.NoError(t, err)
+	require.True(t, changed)
+	opened, err = f.store.Load(ctx, f.org, f.project, id)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"example":"summary","other":"done"}`, string(opened.ToolCallSummaries))
+
 	changed, err = f.updateBody(t, transcripts, f.chat, id, setNotes("changed note"))
 	require.NoError(t, err)
 	require.False(t, changed, "the same value is not written again")
 
-	changed, err = f.updateBody(t, transcripts, f.chat, id, func(m *transcriptcrypto.Message) error {
+	changed, err = f.updateBody(t, transcripts, f.chat, id, func(m *chatrepo.ChatMessage) error {
 		m.Content, m.ToolCalls = "patched", []byte(`[{"id":"call_new"}]`)
 		return nil
 	})
@@ -289,9 +303,9 @@ func TestUpdateBodyKeepsEveryCopyCurrent(t *testing.T) {
 	require.Equal(t, Progress{Current: 1}, progress)
 }
 
-// In plaintext mode UpdateBody writes the plaintext row and the metadata, and
+// In plaintext mode UpdateMessage writes the plaintext row and the metadata, and
 // no transcript.
-func TestUpdateBodyInPlaintextMode(t *testing.T) {
+func TestUpdateMessageInPlaintextMode(t *testing.T) {
 	t.Parallel()
 	f := setup(t, true)
 	ctx := t.Context()
@@ -299,7 +313,7 @@ func TestUpdateBodyInPlaintextMode(t *testing.T) {
 	f.add(t, id)
 	var none *Transcripts
 
-	changed, err := f.updateBody(t, none, f.chat, id, func(m *transcriptcrypto.Message) error {
+	changed, err := f.updateBody(t, none, f.chat, id, func(m *chatrepo.ChatMessage) error {
 		m.Content = "plain update"
 		return nil
 	})
@@ -319,7 +333,7 @@ func TestUpdateBodyInPlaintextMode(t *testing.T) {
 // is none, only a legacy one, or one that disagrees with the plaintext row,
 // it starts from the plaintext row, which stays the source of truth, and the
 // write seals a current transcript.
-func TestUpdateBodyStartsFromTheTranscriptOrThePlaintext(t *testing.T) {
+func TestUpdateMessageStartsFromTheTranscriptOrThePlaintext(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 	for _, tc := range []struct {
@@ -337,7 +351,7 @@ func TestUpdateBodyStartsFromTheTranscriptOrThePlaintext(t *testing.T) {
 		}, content: "changed"},
 		{name: "transcript disagrees with the plaintext", prepare: func(f *fixture, id uuid.UUID) {
 			f.capture(t, id)
-			// A write that bypassed UpdateBody left the transcript behind.
+			// A write that bypassed UpdateMessage left the transcript behind.
 			_, err := fixturerepo.New(f.db).ChangeContent(ctx, id, project(f.project))
 			require.NoError(t, err)
 		}, content: "changed"},
@@ -365,4 +379,101 @@ func TestNewTranscriptsNeedsAStoreForListedProjects(t *testing.T) {
 	t.Parallel()
 	require.Panics(t, func() { NewTranscripts(nil, uuid.New()) })
 	require.NotPanics(t, func() { require.False(t, NewTranscripts(nil).Enabled(uuid.New())) })
+}
+
+// In encrypted mode the transcript is the only copy of the body: updates start
+// from it and write the plaintext columns empty, Seal empties them in the same
+// transaction, reads serve the transcript without comparison, and a message
+// without a transcript fails instead of falling back to the empty plaintext.
+func TestEncryptedMode(t *testing.T) {
+	t.Parallel()
+	f := setup(t, true)
+	ctx := t.Context()
+	encrypted := NewTranscripts(f.store).WithEncryptedProjects(f.project)
+	require.Equal(t, ModeEncrypted, encrypted.Mode(f.project))
+	require.True(t, encrypted.Enabled(f.project))
+	fixtures := fixturerepo.New(f.db)
+	open := func(id uuid.UUID) (openRow, error) {
+		t.Helper()
+		rows := []openRow{plaintextRow(id)}
+		err := OpenRows(ctx, encrypted, f.org, f.project, rows, openRowBody)
+		return rows[0], err
+	}
+	emptied := func(id uuid.UUID) {
+		t.Helper()
+		snapshot, err := fixtures.MessageSnapshot(ctx, id, project(f.project))
+		require.NoError(t, err)
+		for _, want := range []string{`"content": ""`, `"content_raw": null`, `"tool_calls": null`, `"tool_outcome_notes": null`, `"tool_call_summaries": null`, `"storage_error": null`} {
+			require.Contains(t, snapshot, want, "the plaintext body columns are empty")
+		}
+	}
+
+	// A message sealed in shadow mode, then updated in encrypted mode.
+	updated := uuid.New()
+	f.add(t, updated)
+	f.capture(t, updated)
+	changed, err := f.updateBody(t, encrypted, f.chat, updated, setNotes("encrypted note"))
+	require.NoError(t, err)
+	require.True(t, changed)
+	emptied(updated)
+	row, err := open(updated)
+	require.NoError(t, err)
+	require.Equal(t, "sensitive example", row.content, "the body comes from the transcript")
+	require.True(t, sameJSON([]byte(`{"large":9007199254740993,"n":1e2}`), row.contentRaw), "content_raw: %s", row.contentRaw)
+	require.JSONEq(t, `[{"id":"example"}]`, string(row.toolCalls))
+	require.Equal(t, pgtype.Text{String: "encrypted note", Valid: true}, row.notes)
+	require.JSONEq(t, `{"example":"summary"}`, string(row.summaries))
+	require.Equal(t, pgtype.Text{}, row.storageError, "no storage error, served as NULL rather than the placeholder")
+
+	// A backfill must not reseal it from the empty plaintext row.
+	_, err = f.store.Backfill(ctx, f.org, f.project, uuid.Nil, 10)
+	require.NoError(t, err)
+	row, err = open(updated)
+	require.NoError(t, err)
+	require.Equal(t, "sensitive example", row.content, "the transcript survives a backfill")
+
+	// A row sealed in shadow mode is emptied by an update that changes nothing.
+	populated := uuid.New()
+	f.add(t, populated)
+	f.capture(t, populated)
+	_, err = f.updateBody(t, encrypted, f.chat, populated, func(*chatrepo.ChatMessage) error { return nil })
+	require.NoError(t, err)
+	emptied(populated)
+	meta, err := fixtures.ShadowMetadata(ctx, updated)
+	require.NoError(t, err)
+	require.Equal(t, pgtype.Int4{Int32: int32(len("sensitive example")), Valid: true}, meta.ContentBytes, "metadata describes the body, not the empty columns")
+
+	// A new message: Seal empties the plaintext it was sealed from.
+	inserted := uuid.New()
+	f.add(t, inserted)
+	tx, err := f.db.Begin(ctx) //nolint:glint // notestingrawsql: caller-owned transaction boundary is the behavior under test.
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback(ctx) }()
+	require.NoError(t, encrypted.Seal(ctx, tx, f.org, f.project, []uuid.UUID{inserted}))
+	require.NoError(t, tx.Commit(ctx))
+	emptied(inserted)
+	row, err = open(inserted)
+	require.NoError(t, err)
+	require.Equal(t, "sensitive example", row.content)
+
+	// No transcript: nothing to serve or change.
+	missing := uuid.New()
+	f.add(t, missing)
+	_, err = f.updateBody(t, encrypted, f.chat, missing, setNotes("lost"))
+	require.ErrorIs(t, err, ErrMissingTranscript)
+	_, err = open(missing)
+	require.ErrorIs(t, err, ErrMissingTranscript)
+}
+
+// Until a project is put in it, encrypted mode is unreachable from config.
+func TestModes(t *testing.T) {
+	t.Parallel()
+	f := setup(t, false)
+	shadow, other := uuid.New(), uuid.New()
+	transcripts := NewTranscripts(f.store, shadow)
+	require.Equal(t, ModeShadow, transcripts.Mode(shadow))
+	require.Equal(t, ModePlaintext, transcripts.Mode(other))
+	var none *Transcripts
+	require.Equal(t, ModePlaintext, none.Mode(shadow))
+	require.Panics(t, func() { NewTranscripts(nil).WithEncryptedProjects(shadow) })
 }

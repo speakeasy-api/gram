@@ -9,8 +9,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
-	"github.com/speakeasy-api/gram/server/internal/chat/transcriptcrypto"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 )
 
@@ -117,43 +118,41 @@ func (w *ChatMessageWriter) ProjectMessage(ctx context.Context, projectID, messa
 }
 
 // patchProjection rewrites an existing kit message in the caller's
-// transaction: content, content_raw and tool_calls through UpdateBody, which
-// keeps every copy of the body in step, then the content hash, finish reason
-// and risk mark in SQL. It returns 1 when anything changed.
+// transaction through UpdateMessage, which keeps every copy of the body in
+// step: content, content_raw and tool_calls, the content hash and finish
+// reason, and a cleared risk mark when the body changed, so the new body is
+// analyzed again. It returns 1 when anything changed.
 func (w *ChatMessageWriter) patchProjection(ctx context.Context, tx pgx.Tx, projectID uuid.UUID, row repo.ChatMessage, write MessageWrite, prepared error) (int64, error) {
-	q := repo.New(tx)
-	bodyChanged := false
-	if row.Content != write.Params.Content || !bytes.Equal(row.ContentRaw, write.Params.ContentRaw) || !bytes.Equal(row.ToolCalls, write.Params.ToolCalls) {
-		if prepared != nil && w.transcripts.Enabled(projectID) {
-			return 0, prepared
-		}
-		organizationID, err := q.GetProjectOrganizationID(ctx, projectID)
-		if err != nil {
-			return 0, fmt.Errorf("look up projection organization: %w", err)
-		}
-		bodyChanged, err = w.transcripts.UpdateBody(ctx, tx, organizationID, projectID, row.ChatID, row.ID, func(m *transcriptcrypto.Message) error {
-			m.Content = write.Params.Content
-			m.ContentRaw = write.Params.ContentRaw
-			m.ToolCalls = write.Params.ToolCalls
-			return nil
-		})
-		if err != nil {
-			return 0, fmt.Errorf("patch projected message body: %w", err)
-		}
+	// Postgres re-serializes jsonb, so compare the stored JSON by value: an
+	// unchanged patch must not lock the row and open its transcript.
+	bodyChanged := row.Content != write.Params.Content || !transcriptstore.SameJSON(row.ContentRaw, write.Params.ContentRaw) || !transcriptstore.SameJSON(row.ToolCalls, write.Params.ToolCalls)
+	if !bodyChanged && bytes.Equal(row.ContentHash, write.Params.ContentHash) && row.FinishReason == write.Params.FinishReason {
+		return 0, nil
 	}
-	n, err := q.PatchKitProjectionFields(ctx, repo.PatchKitProjectionFieldsParams{
-		ProjectID:    uuid.NullUUID{UUID: projectID, Valid: true},
-		ChatID:       row.ChatID,
-		ID:           row.ID,
-		ContentHash:  write.Params.ContentHash,
-		FinishReason: write.Params.FinishReason,
-		BodyChanged:  bodyChanged,
+	if prepared != nil && w.transcripts.Enabled(projectID) {
+		return 0, prepared
+	}
+	organizationID, err := repo.New(tx).GetProjectOrganizationID(ctx, projectID)
+	if err != nil {
+		return 0, fmt.Errorf("look up projection organization: %w", err)
+	}
+	changed, err := w.transcripts.UpdateMessage(ctx, tx, organizationID, projectID, row.ChatID, row.ID, func(m *repo.ChatMessage) error {
+		m.ContentHash = write.Params.ContentHash
+		m.FinishReason = write.Params.FinishReason
+		if !bodyChanged {
+			return nil
+		}
+		m.Content = write.Params.Content
+		m.ContentRaw = write.Params.ContentRaw
+		m.ToolCalls = write.Params.ToolCalls
+		m.RiskAnalyzedAt = pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
+		return nil
 	})
 	if err != nil {
-		return 0, fmt.Errorf("patch projected message fields: %w", err)
+		return 0, fmt.Errorf("patch projected message: %w", err)
 	}
-	if bodyChanged || n > 0 {
-		return 1, nil
+	if !changed {
+		return 0, nil
 	}
-	return 0, nil
+	return 1, nil
 }

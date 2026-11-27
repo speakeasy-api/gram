@@ -39,10 +39,12 @@ const (
 	// meterUpdateMessages counts shadow-mode UpdateBody calls by outcome.
 	meterUpdateMessages = "chat.transcript_shadow.update.messages"
 
-	// meterUpdateChecks counts the consistency checks of shadow-mode
-	// UpdateBody calls by result: success when both copies agreed before and
-	// after, otherwise which check failed. It tracks how well shadow mode keeps
-	// the transcript and the plaintext in step.
+	// meterUpdateChecks counts one consistency result per shadow-mode
+	// UpdateBody call: success when both copies agreed before and after (or
+	// before, for an update that changed nothing), otherwise the check that
+	// failed, or error when reading or decrypting the transcript failed and the
+	// update rolled back. It tracks how well shadow mode keeps the transcript and
+	// the plaintext in step.
 	meterUpdateChecks = "chat.transcript_shadow.update.checks"
 )
 
@@ -65,8 +67,9 @@ const (
 	// outcome; the LoadMany call itself still succeeds.
 	outcomePlaintextFallback outcome = "plaintext_fallback"
 
-	// Consistency checks of a shadow-mode body update. None of them fails the
-	// update: the plaintext row wins and the error is logged.
+	// Consistency checks of a shadow-mode body update. None of these fails the
+	// update: the plaintext row wins and the error is logged. A read or decrypt
+	// failure does fail it and is counted as error.
 	//
 	// outcomeMissingTranscript: the message had no current transcript to
 	// start from (none yet, or only a legacy one).
