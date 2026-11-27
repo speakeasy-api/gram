@@ -118,9 +118,9 @@ func (w *ChatMessageWriter) ProjectMessage(ctx context.Context, projectID, messa
 }
 
 // patchProjection rewrites an existing kit message in the caller's
-// transaction through UpdateMessage, which keeps every copy of the body in
+// transaction through UpdateChatMessage, which keeps every copy of the protected fields in
 // step: content, content_raw and tool_calls, the content hash and finish
-// reason, and a cleared risk mark when the body changed, so the new body is
+// reason, and a cleared risk mark when the protected fields changed, so the new protected fields are
 // analyzed again. It returns 1 when anything changed.
 func (w *ChatMessageWriter) patchProjection(ctx context.Context, tx pgx.Tx, projectID uuid.UUID, row repo.ChatMessage, write MessageWrite, prepared error) (int64, error) {
 	// Postgres re-serializes jsonb, so compare the stored JSON by value: an
@@ -136,7 +136,7 @@ func (w *ChatMessageWriter) patchProjection(ctx context.Context, tx pgx.Tx, proj
 	if err != nil {
 		return 0, fmt.Errorf("look up projection organization: %w", err)
 	}
-	changed, err := w.transcripts.UpdateMessage(ctx, tx, organizationID, projectID, row.ChatID, row.ID, func(m *repo.ChatMessage) error {
+	changed, err := w.transcripts.UpdateChatMessage(ctx, tx, organizationID, projectID, row.ChatID, row.ID, func(m *repo.ChatMessage) error {
 		m.ContentHash = write.Params.ContentHash
 		m.FinishReason = write.Params.FinishReason
 		if !bodyChanged {

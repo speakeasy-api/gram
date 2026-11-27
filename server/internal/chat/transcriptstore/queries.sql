@@ -1,6 +1,6 @@
--- name: Snapshot :one
+-- name: LockChatMessage :one
 -- Reads the whole message row and its current transcript in one statement and
--- locks both for the rest of the caller's transaction, so no body update can
+-- locks both for the rest of the caller's transaction, so no protected fields update can
 -- land between this read and the copies written from it. A legacy transcript
 -- with source_hash is not current: the column is empty for it, as for a message
 -- with no transcript (a real ciphertext is never empty). Every writer takes
@@ -20,7 +20,7 @@ FOR SHARE OF c, p;
 
 -- name: CurrentCiphertext :one
 -- The transcript an update decrypts and changes, locked until the transaction
--- ends. Every transcript writer takes Snapshot's message lock first, so this
+-- ends. Every transcript writer takes LockChatMessage's message lock first, so this
 -- lock only states the intent; take them in that order. A legacy transcript
 -- with source_hash may be stale, so it is not returned and the update starts
 -- from the plaintext row.
@@ -29,10 +29,10 @@ WHERE message_id = @message_id AND project_id = @project_id AND organization_id 
   AND source_hash IS NULL
 FOR UPDATE;
 
--- name: WriteMessage :one
--- The only statement that changes an existing message's body: the six body
--- columns, plus the non-body columns a body change may come with. Call it only
--- through Transcripts.UpdateMessage, which locks the row, applies the change
+-- name: WriteChatMessage :one
+-- The only statement that changes an existing message's protected fields: the six protected fields
+-- columns, plus the non-protected fields the protected fields change may come with. Call it only
+-- through Transcripts.UpdateChatMessage, which locks the row, applies the change
 -- in Go and writes the encrypted transcript from what this returns, in the
 -- same transaction.
 UPDATE chat_messages AS m
@@ -45,8 +45,8 @@ WHERE m.id = @message_id AND m.project_id = @project_id
 RETURNING m.*;
 
 -- name: CanonicalJSON :one
--- The text form Postgres stores for jsonb values, so an encrypted-mode body is
--- sealed and measured exactly as a plaintext row would hold it. NULL comes
+-- The text form Postgres stores for jsonb values, so encrypted-mode protected fields are
+-- sealed and measured exactly as a plaintext row would hold them. NULL comes
 -- back as the empty string, which no JSON value is.
 SELECT COALESCE(sqlc.narg('content_raw')::jsonb::text, '')::text AS content_raw,
        COALESCE(sqlc.narg('tool_calls')::jsonb::text, '')::text AS tool_calls,
@@ -60,7 +60,7 @@ ON CONFLICT (message_id) DO UPDATE SET ciphertext = EXCLUDED.ciphertext, source_
 WHERE chat_message_transcripts.project_id = @project_id AND chat_message_transcripts.organization_id = @organization_id;
 
 -- name: Load :one
--- A transcript that still carries the legacy source_hash was sealed before body
+-- A transcript that still carries the legacy source_hash was sealed before protected fields
 -- updates resealed it, so it may be stale: it reads as missing until backfill
 -- reseals it.
 SELECT m.id, m.chat_id, m.content, m.content_raw, m.tool_calls,
@@ -101,7 +101,7 @@ WHERE m.id = ANY(@message_ids::uuid[]) AND m.project_id = @project_id AND p.orga
 
 -- name: UpdateMessageMetadata :execrows
 -- Plaintext-free metadata measured from the snapshot just sealed, in the same
--- transaction, while Snapshot's lock keeps the body unchanged.
+-- transaction, while Snapshot's lock keeps the protected fields unchanged.
 UPDATE chat_messages
 SET tool_call_count = @tool_call_count::integer, content_bytes = @content_bytes::integer,
     content_raw_bytes = @content_raw_bytes::integer, tool_calls_bytes = @tool_calls_bytes::integer

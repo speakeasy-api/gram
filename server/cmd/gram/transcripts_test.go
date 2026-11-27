@@ -96,7 +96,7 @@ func TestTranscriptShadowFlags(t *testing.T) {
 
 // All DDL is confined to a disposable database. Preflight runs in read-only
 // transactions so even a compatible check cannot modify data or provision keys.
-func TestTranscriptShadowSchemaCompatibility(t *testing.T) {
+func TestTranscriptSchemaCompatibility(t *testing.T) {
 	t.Parallel()
 	infra, cleanup, err := testenv.Launch(t.Context(), testenv.LaunchOptions{Postgres: true})
 	require.NoError(t, err)
@@ -193,14 +193,14 @@ ON CONFLICT (message_id) DO UPDATE SET ciphertext = EXCLUDED.ciphertext`)
 			if tc.ok {
 				require.NoError(t, err)
 			} else {
-				require.EqualError(t, err, "chat transcript shadow schema is unavailable or incompatible")
+				require.EqualError(t, err, "chat transcript schema is unavailable or incompatible")
 				// Empty dependencies would panic if provisioning or activation were
 				// attempted. A nonexistent project also proves schema runs first.
 				c := newTranscriptShadowCLIContext(t, map[string]string{chatTranscriptShadowProjectIDsFlag: "10000000-0000-4000-8000-000000000001"})
 				_, err := configureTranscripts(t.Context(), c, db, &chat.ChatMessageWriter{}, orgEncryptionDeps{
 					Service: &orgencryption.Service{}, Provisioner: &orgencryption.Provisioner{},
 				}, testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t))
-				require.EqualError(t, err, "chat transcript shadow schema is unavailable or incompatible")
+				require.EqualError(t, err, "chat transcript schema is unavailable or incompatible")
 			}
 		})
 	}
@@ -209,7 +209,7 @@ ON CONFLICT (message_id) DO UPDATE SET ciphertext = EXCLUDED.ciphertext`)
 // Deployed databases keep application tables in a non-public schema reached
 // through search_path. The check must find the table where the store's
 // unqualified queries do.
-func TestTranscriptShadowSchemaFollowsSearchPath(t *testing.T) {
+func TestTranscriptSchemaFollowsSearchPath(t *testing.T) {
 	t.Parallel()
 	infra, cleanup, err := testenv.Launch(t.Context(), testenv.LaunchOptions{Postgres: true})
 	require.NoError(t, err)
@@ -229,7 +229,7 @@ CREATE TABLE app.chat_message_transcripts (message_id uuid NOT NULL PRIMARY KEY,
 	tx, err := db.BeginTx(t.Context(), pgx.TxOptions{AccessMode: pgx.ReadOnly}) //nolint:glint // notestingrawsql: proves preflight is read-only.
 	require.NoError(t, err)
 	defer func() { require.NoError(t, tx.Rollback(t.Context())) }()
-	require.EqualError(t, checkTranscriptSchema(t.Context(), tx), "chat transcript shadow schema is unavailable or incompatible",
+	require.EqualError(t, checkTranscriptSchema(t.Context(), tx), "chat transcript schema is unavailable or incompatible",
 		"a table outside the search_path is not the one the store would use")
 
 	// Put app first and keep the rest of the path, which still reaches chat_messages.
