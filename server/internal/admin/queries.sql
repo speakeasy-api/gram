@@ -642,6 +642,13 @@ SET
 WHERE id = sqlc.arg('id')::text
 RETURNING id;
 
+-- name: LockOrganizationFunctionTimeout :one
+-- Pin the exact target and its current function timeout before a change.
+SELECT id, name, slug, function_timeout_seconds, updated_at
+FROM organization_metadata
+WHERE id = @id
+FOR UPDATE;
+
 -- name: AdminSetOrganizationFunctionTimeout :one
 -- NULL restores the platform default. Keyed on id alone, like every other
 -- admin write.
