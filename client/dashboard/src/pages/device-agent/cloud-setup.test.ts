@@ -45,6 +45,41 @@ describe("buildCloudSetupCommand", () => {
     expect(script).toContain("chmod 0600 /etc/speakeasy/managed.json");
   });
 
+  it("leaves the control plane to the daemon's default when none is given", () => {
+    const script = buildCloudSetupCommand({ ...input, controlPlaneURL: null });
+
+    expect(script).not.toContain("CONTROL_PLANE_URL");
+    expect(script).not.toContain("_control_plane_url");
+  });
+
+  it("points the daemon at the given control plane", () => {
+    const script = buildCloudSetupCommand({
+      ...input,
+      controlPlaneURL: "https://ai.eu.example.com",
+    });
+    const result = spawnSync("bash", ["-n"], {
+      input: script,
+      encoding: "utf8",
+    });
+
+    expect(result.status).toBe(0);
+    expect(script).toContain("CONTROL_PLANE_URL='https://ai.eu.example.com'");
+    expect(script).toContain(
+      `"hide_ui": true,\n  "_control_plane_url": "\${CONTROL_PLANE_URL}"\n}`,
+    );
+  });
+
+  it.each([
+    "https://ai.eu.example.com/",
+    "https://ai.eu.example.com/path",
+    'https://ai.eu.example.com"',
+    "not a url",
+  ])("rejects a control plane that is not a bare origin: %s", (url) => {
+    expect(() =>
+      buildCloudSetupCommand({ ...input, controlPlaneURL: url }),
+    ).toThrow("a valid control plane URL is required");
+  });
+
   it("registers a singleton SessionStart hook that revives the daemon", () => {
     const script = buildCloudSetupCommand(input);
     const settingsJSON = script.match(/<<'JSON'\n([\s\S]*?)\nJSON\n/)?.[1];
