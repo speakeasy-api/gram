@@ -655,10 +655,10 @@ func TestChannelsAdmissionRebuildsLiveMembershipAndGrants(t *testing.T) {
 	inherited := authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeChannelsReadAll, project.ID.String())})
 	prepared, err := admission.PrepareContext(inherited, identity)
 	require.NoError(t, err)
-	decision, err := engine.Decide(authz.WithoutChallenges(prepared), authz.Check{Scope: authz.ScopeChannelsConnect, ResourceID: project.ID.String(), ResourceKind: "project"})
+	decision, err := engine.Decide(prepared, authz.Check{Scope: authz.ScopeChannelsConnect, ResourceID: project.ID.String(), ResourceKind: "project"})
 	require.NoError(t, err)
 	require.True(t, decision.AllAllowed)
-	decision, err = engine.Decide(authz.WithoutChallenges(prepared), authz.Check{Scope: authz.ScopeChannelsReadAll, ResourceID: project.ID.String(), ResourceKind: "project"})
+	decision, err = engine.Decide(prepared, authz.Check{Scope: authz.ScopeChannelsReadAll, ResourceID: project.ID.String(), ResourceKind: "project"})
 	require.NoError(t, err)
 	require.False(t, decision.AllAllowed, "inherited grants must not cross the authentication boundary")
 	_, err = accessrepo.New(db).DeletePrincipalGrant(ctx, accessrepo.DeletePrincipalGrantParams{ID: grant.ID, OrganizationID: orgID})
@@ -666,7 +666,7 @@ func TestChannelsAdmissionRebuildsLiveMembershipAndGrants(t *testing.T) {
 	// SSE reconciliation must rebuild even with a previously admitted context.
 	prepared, err = admission.PrepareContext(prepared, identity)
 	require.NoError(t, err)
-	decision, err = engine.Decide(authz.WithoutChallenges(prepared), authz.Check{Scope: authz.ScopeChannelsConnect, ResourceID: project.ID.String(), ResourceKind: "project"})
+	decision, err = engine.Decide(prepared, authz.Check{Scope: authz.ScopeChannelsConnect, ResourceID: project.ID.String(), ResourceKind: "project"})
 	require.NoError(t, err)
 	require.False(t, decision.AllAllowed)
 	features.SetFlag(feature.FlagChannels, orgID, false)
@@ -731,7 +731,7 @@ func TestChannelsOAuthDefersToEffectiveAccessExceptions(t *testing.T) {
 		t.Helper()
 		prepared, err := admission.PrepareContext(ctx, identity)
 		require.NoError(t, err)
-		decision, err := config.Authz.Decide(authz.WithoutChallenges(prepared), authz.Check{Scope: authz.ScopeChannelsConnect, ResourceID: project.ID.String(), ResourceKind: "project"})
+		decision, err := config.Authz.Decide(prepared, authz.Check{Scope: authz.ScopeChannelsConnect, ResourceID: project.ID.String(), ResourceKind: "project"})
 		require.NoError(t, err)
 		return decision.AllAllowed
 	}

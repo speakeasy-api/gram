@@ -711,12 +711,8 @@ func (s *Service) GetWorkUnitsTrend(ctx context.Context, payload *gen.GetWorkUni
 	if enforce, err := s.authz.ShouldEnforce(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to authorize work units trend").LogError(ctx, s.logger)
 	} else if enforce {
-		decision, err := s.authz.Decide(authz.WithoutChallenges(ctx), authz.Chats(authz.ProjectIDFrom(projectID)).Read())
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to authorize work units trend").LogError(ctx, s.logger)
-		}
-		if !decision.AllAllowed {
-			return nil, oops.C(oops.CodeForbidden)
+		if err := s.authz.Require(ctx, authz.Chats(authz.ProjectIDFrom(projectID)).Read()); err != nil {
+			return nil, err
 		}
 	}
 
@@ -1113,7 +1109,7 @@ func (s *Service) chatVisibilityScope(ctx context.Context, authCtx *contextvalue
 	if enforce, err := s.authz.ShouldEnforce(ctx); err != nil {
 		s.logger.WarnContext(ctx, "could not determine RBAC enforcement for chat visibility; showing own sessions", attr.SlogError(err))
 	} else if enforce {
-		decision, err := s.authz.Decide(authz.WithoutChallenges(ctx), authz.Chats(authz.ProjectIDOf(*authCtx.ProjectID)).Read())
+		decision, err := s.authz.Decide(ctx, authz.Chats(authz.ProjectIDOf(*authCtx.ProjectID)).Read())
 		if err != nil {
 			// An unsatisfied grant yields (false, nil); a non-nil error is
 			// unexpected. Log it but still serve own sessions rather than
@@ -1182,6 +1178,8 @@ func (s *Service) editableAgentIDs(ctx context.Context, authCtx *contextvalues.A
 	for _, id := range agentIDs {
 		checks = append(checks, agentWriteCheck(id))
 	}
+	// Not recorded, for the reason chat:read is not above: every chat listing
+	// asks, and a refusal here is the expected answer, not one to grant.
 	decisions, err := s.authz.Decide(ctx, checks...)
 	if err != nil {
 		// Visibility is never a hard gate: fall back to owned agents.

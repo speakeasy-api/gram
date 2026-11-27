@@ -65,7 +65,7 @@ func (e *Engine) ResolveReadScope(ctx context.Context, scope Scope, projectID st
 	}
 	// Decide, not Require: a member without the grant is expected, not a
 	// denial to record. It also keeps project-wide reads where RBAC is off.
-	allowed, err := e.Decide(WithoutChallenges(ctx), check)
+	allowed, err := e.Decide(ctx, check)
 	if err != nil {
 		return ReadScope{}, oops.E(oops.CodeUnexpected, err, "evaluate read scope")
 	}

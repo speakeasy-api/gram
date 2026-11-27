@@ -2,6 +2,7 @@ package authz
 
 import (
 	"bytes"
+	"context"
 	"log/slog"
 	"testing"
 
@@ -105,8 +106,61 @@ func TestDecide_acceptsEitherNextToOtherChecks(t *testing.T) {
 	require.Equal(t, []bool{true, false}, allowedOf(d))
 }
 
-// Decide records one challenge row per call, whatever the number of checks.
-func TestDecide_recordsOneChallengeRowPerCall(t *testing.T) {
+// Filter records one list row, whatever the number of checks — including a
+// one-item list, which must not look like a gate refusal on that resource.
+func TestFilter_writesListRowForOneOrMoreChecks(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name           string
+		checks         []Check
+		wantOutcome    authzrepo.Outcome
+		wantCandidates uint32
+		wantAllowed    uint32
+	}{
+		{
+			name:           "one refused item",
+			checks:         []Check{projectRead("proj_b")},
+			wantOutcome:    authzrepo.OutcomeDeny,
+			wantCandidates: 1,
+			wantAllowed:    0,
+		},
+		{
+			name:           "several items",
+			checks:         []Check{projectRead("proj_a"), projectRead("proj_b"), projectRead("proj_c")},
+			wantOutcome:    authzrepo.OutcomeAllow,
+			wantCandidates: 3,
+			wantAllowed:    1,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			orgID := "org_" + uuid.NewString()
+			ctx := GrantsToContext(enterpriseSessionCtxWithOrg(t, orgID), []Grant{NewGrant(ScopeProjectRead, "proj_a")})
+			conn := newTestDB(t)
+			seedOrganization(t, ctx, conn, orgID)
+			engine := NewEngine(testenv.NewLogger(t), conn, staticChallengeLogging(true), workos.NewStubClient())
+
+			_, err := engine.Filter(ctx, tc.checks...)
+			require.NoError(t, err)
+
+			rows := listChallengeOutboxRows(t, conn)
+			require.Len(t, rows, 1)
+			message := &authzv1.Challenge{}
+			require.NoError(t, proto.Unmarshal(rows[0].Message, message))
+			require.Equal(t, string(authzrepo.OperationFilter), message.GetOperation())
+			require.Equal(t, string(tc.wantOutcome), message.GetOutcome())
+			require.Equal(t, tc.wantCandidates, message.GetFilterCandidateCount())
+			require.Equal(t, tc.wantAllowed, message.GetFilterAllowedCount())
+			require.Empty(t, message.GetResourceId())
+		})
+	}
+}
+
+// Recording a decision about several checks writes one list row, whatever the
+// number of checks.
+func TestRecord_writesOneListRowForSeveralChecks(t *testing.T) {
 	t.Parallel()
 
 	orgID := "org_" + uuid.NewString()
@@ -115,16 +169,88 @@ func TestDecide_recordsOneChallengeRowPerCall(t *testing.T) {
 	seedOrganization(t, ctx, conn, orgID)
 	engine := NewEngine(testenv.NewLogger(t), conn, staticChallengeLogging(true), workos.NewStubClient())
 
-	_, err := engine.Decide(ctx, projectRead("proj_a"), projectRead("proj_b"), projectRead("proj_c"))
+	d, err := engine.Decide(ctx, projectRead("proj_a"), projectRead("proj_b"), projectRead("proj_c"))
 	require.NoError(t, err)
+	engine.Record(ctx, d)
 
 	rows := listChallengeOutboxRows(t, conn)
 	require.Len(t, rows, 1)
 	message := &authzv1.Challenge{}
 	require.NoError(t, proto.Unmarshal(rows[0].Message, message))
+	require.Equal(t, string(authzrepo.OperationFilter), message.GetOperation())
 	require.Equal(t, string(authzrepo.OutcomeAllow), message.GetOutcome())
 	require.Equal(t, uint32(3), message.GetFilterCandidateCount())
 	require.Equal(t, uint32(1), message.GetFilterAllowedCount())
+	require.Empty(t, message.GetResourceId())
+}
+
+// Recording a decision about one check writes the row Require writes for it,
+// so a named server's row has the scope and resource the access log offers to
+// grant. Example: proj_b, refused, is recorded as a refused Require on proj_b.
+func TestRecord_writesOneCheckAsRequireDoes(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name  string
+		check Check
+	}{
+		{name: "allowed", check: projectRead("proj_a")},
+		{name: "refused", check: projectRead("proj_b")},
+		{name: "allowed group", check: Either(projectRead("proj_b"), projectRead("proj_a"))},
+		{name: "refused group", check: Either(projectRead("proj_b"), projectRead("proj_c"))},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			recorded := func(record func(ctx context.Context, engine *Engine)) *authzv1.Challenge {
+				t.Helper()
+				orgID := "org_" + uuid.NewString()
+				ctx := GrantsToContext(enterpriseSessionCtxWithOrg(t, orgID), []Grant{NewGrant(ScopeProjectRead, "proj_a")})
+				conn := newTestDB(t)
+				seedOrganization(t, ctx, conn, orgID)
+				record(ctx, NewEngine(testenv.NewLogger(t), conn, staticChallengeLogging(true), workos.NewStubClient()))
+				rows := listChallengeOutboxRows(t, conn)
+				require.Len(t, rows, 1)
+				message := &authzv1.Challenge{}
+				require.NoError(t, proto.Unmarshal(rows[0].Message, message))
+				return message
+			}
+			required := recorded(func(ctx context.Context, engine *Engine) {
+				_ = engine.Require(ctx, tc.check)
+			})
+			decided := recorded(func(ctx context.Context, engine *Engine) {
+				d, err := engine.Decide(ctx, tc.check)
+				require.NoError(t, err)
+				engine.Record(ctx, d)
+			})
+
+			require.Equal(t, required.GetOperation(), decided.GetOperation())
+			require.Equal(t, required.GetOutcome(), decided.GetOutcome())
+			require.Equal(t, required.GetReason(), decided.GetReason())
+			require.Equal(t, required.GetScope(), decided.GetScope())
+			require.Equal(t, required.GetResourceId(), decided.GetResourceId())
+			require.Len(t, decided.GetRequestedChecks(), len(required.GetRequestedChecks()))
+			require.Len(t, decided.GetMatchedGrants(), len(required.GetMatchedGrants()))
+		})
+	}
+}
+
+// Decide records nothing, allowed or refused: it answers a question, and the
+// caller records the answer with Record when the access log should show it.
+func TestDecide_recordsNothing(t *testing.T) {
+	t.Parallel()
+
+	orgID := "org_" + uuid.NewString()
+	ctx := GrantsToContext(enterpriseSessionCtxWithOrg(t, orgID), []Grant{NewGrant(ScopeProjectRead, "proj_a")})
+	conn := newTestDB(t)
+	seedOrganization(t, ctx, conn, orgID)
+	engine := NewEngine(testenv.NewLogger(t), conn, staticChallengeLogging(true), workos.NewStubClient())
+
+	d, err := engine.Decide(ctx, projectRead("proj_a"), projectRead("proj_b"))
+	require.NoError(t, err)
+	require.Equal(t, []bool{true, false}, allowedOf(d))
+
+	require.Empty(t, listChallengeOutboxRows(t, conn))
 }
 
 func projectRead(id string) Check {

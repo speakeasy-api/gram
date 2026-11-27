@@ -87,7 +87,7 @@ func AdministratorWriteContext(ctx context.Context, engine *authz.Engine, organi
 	if !ok || authCtx == nil || authCtx.UserID == "" || authCtx.ActiveOrganizationID != organizationID {
 		return ctx, nil
 	}
-	decision, err := engine.Decide(authz.WithoutChallenges(ctx), authz.Org(authz.OrgIDFrom(organizationID)).Admin())
+	decision, err := engine.Decide(ctx, authz.Org(authz.OrgIDFrom(organizationID)).Admin())
 	if err != nil {
 		return ctx, fmt.Errorf("evaluate organization administrator for shadow MCP admission: %w", err)
 	}

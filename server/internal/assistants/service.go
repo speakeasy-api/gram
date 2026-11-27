@@ -1455,7 +1455,7 @@ func (s *ServiceCore) readableEnvironments(ctx context.Context, projectID uuid.U
 	if unresolved {
 		checks = append(checks, authz.Environments(authz.ProjectIDOf(projectID)).Read())
 	}
-	decisions, err := s.authz.Decide(ctx, checks...)
+	decisions, err := s.authz.Filter(ctx, checks...)
 	if err != nil {
 		return nil, fmt.Errorf("authorize assistant environments: %w", err)
 	}

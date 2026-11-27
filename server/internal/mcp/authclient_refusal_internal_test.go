@@ -22,6 +22,7 @@ import (
 // whose context newRefusalFixture returns.
 type refusalFixture struct {
 	permitter mandatoryPermitter
+	preview   mandatoryPermitter
 	orgID     string
 	read      func() []*authzv1.Challenge
 }
@@ -66,6 +67,7 @@ func newRefusalFixture(t *testing.T) (context.Context, refusalFixture) {
 
 	return authz.GrantsToContext(ctx, []authz.Grant{ownConnections}), refusalFixture{
 		permitter: mandatoryPermitter{engine: engine, refusals: newOnceLog()},
+		preview:   mandatoryPermitter{engine: engine},
 		orgID:     orgID,
 		read:      read,
 	}
@@ -132,7 +134,7 @@ func TestMandatoryPermitterRecordsNothingForAPreview(t *testing.T) {
 	ctx, f := newRefusalFixture(t)
 
 	use := f.personalUse("user_a", uuid.New())
-	permitted, err := f.permitter.Permitted(authz.WithoutChallenges(ctx), use)
+	permitted, err := f.preview.Permitted(ctx, use)
 	require.NoError(t, err)
 	require.False(t, permitted)
 	require.Empty(t, f.read(), "a consent or catalog preview is not a use")

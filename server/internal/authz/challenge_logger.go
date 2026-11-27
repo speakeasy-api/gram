@@ -27,10 +27,9 @@ type grantMatch struct {
 	ViaCheck Check
 }
 
-// challengeLogger captures the data describing a single authz decision. The
-// engine constructs one of these inline at each Require/Decide
-// call site, then invokes Log to persist it.
-type challengeLogger struct {
+// challengeRow is the row describing one authorization decision. The engine
+// builds it while deciding; Record, Filter, and Require write it.
+type challengeRow struct {
 	Operation authzrepo.Operation
 	Outcome   authzrepo.Outcome
 	Reason    authzrepo.Reason
@@ -47,14 +46,12 @@ type challengeLogger struct {
 
 const challengeLogStepTimeout = 10 * time.Second
 
-// Log enqueues the challenge for asynchronous ingestion into ClickHouse. The
+// write enqueues the challenge for asynchronous ingestion into ClickHouse. The
 // enqueue is gated behind the ChallengeLoggingEnabled feature check — if the
 // feature is not enabled for the org (or the check fails), the call is a
 // no-op. Errors are logged at warn level and never bubble back to the caller.
 // It reports whether the challenge was enqueued.
-func (l challengeLogger) Log(ctx context.Context, dbtx database.DBTX, logger *slog.Logger, isEnabled ChallengeLoggingEnabled) bool {
-	RecordAuthorizationDecision(ctx, l.Operation, l.Outcome, l.Reason)
-
+func (l challengeRow) write(ctx context.Context, dbtx database.DBTX, logger *slog.Logger, isEnabled ChallengeLoggingEnabled) bool {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return false
@@ -69,11 +66,6 @@ func (l challengeLogger) Log(ctx context.Context, dbtx database.DBTX, logger *sl
 	// Likewise for sessions exploring the shared demo org: challenges there
 	// belong to the visitor, and the daily seed rerun would wipe them anyway.
 	if authCtx.ActiveOrganizationID == constants.DemoOrganizationID {
-		return false
-	}
-
-	// A listing records nothing (see WithoutChallenges).
-	if challengesSilenced(ctx) {
 		return false
 	}
 
@@ -276,19 +268,9 @@ func roleSlugsFromContext(ctx context.Context) []string {
 
 type challengeScopeKey struct{}
 
-// challengeScope decides which decisions of one request are recorded as
-// authorization checks. Decisions still count in the decision metrics either
-// way; only the recorded check, an outbox row each, is skipped.
-type challengeScope struct {
-	// silent records nothing: the caller is filtering or listing, not
-	// asking for one resource.
-	silent bool
-	// recorded is shared by every scope derived from one request. Nil for a
-	// silent scope.
-	recorded *recordedChallenges
-}
-
-// recordedChallenges remembers which decisions a request has recorded.
+// recordedChallenges remembers which decisions one request has recorded.
+// Decisions still count in the decision metrics either way; only the recorded
+// check, an outbox row each, is skipped.
 type recordedChallenges struct {
 	mu sync.Mutex
 	// decided holds every scope and resource with a recorded decision.
@@ -321,43 +303,27 @@ type challengeDenial struct {
 // (the server, then the tool it calls), and every one of those would otherwise
 // be its own row.
 func WithOneChallengePerResource(ctx context.Context) context.Context {
-	if scope, ok := ctx.Value(challengeScopeKey{}).(*challengeScope); ok && scope.recorded != nil {
+	if recorded, ok := ctx.Value(challengeScopeKey{}).(*recordedChallenges); ok && recorded != nil {
 		return ctx
 	}
-	return context.WithValue(ctx, challengeScopeKey{}, &challengeScope{
-		silent:   false,
-		recorded: &recordedChallenges{mu: sync.Mutex{}, decided: map[challengeResource]struct{}{}, denied: map[challengeDenial]struct{}{}},
+	return context.WithValue(ctx, challengeScopeKey{}, &recordedChallenges{
+		mu:      sync.Mutex{},
+		decided: map[challengeResource]struct{}{},
+		denied:  map[challengeDenial]struct{}{},
 	})
-}
-
-// WithoutChallenges returns a context under which the engine records no
-// checks. Use it where a request filters or lists resources it did not name,
-// so a caller is not shown a denial for every resource it simply cannot see.
-func WithoutChallenges(ctx context.Context) context.Context {
-	return context.WithValue(ctx, challengeScopeKey{}, &challengeScope{silent: true, recorded: nil})
-}
-
-// challengesSilenced reports a context that records no checks. It is read
-// before anything else a recorded check costs, such as the feature flag.
-func challengesSilenced(ctx context.Context) bool {
-	scope, ok := ctx.Value(challengeScopeKey{}).(*challengeScope)
-	return ok && scope.silent
 }
 
 // claimChallenge reports whether a decision is recorded under ctx's scope, and
 // marks it recorded. Call it only once the decision is about to be written.
-func claimChallenge(ctx context.Context, l challengeLogger) bool {
-	scope, ok := ctx.Value(challengeScopeKey{}).(*challengeScope)
-	if !ok {
+func claimChallenge(ctx context.Context, l challengeRow) bool {
+	recorded, ok := ctx.Value(challengeScopeKey{}).(*recordedChallenges)
+	if !ok || recorded == nil {
 		return true
 	}
-	if scope.recorded == nil {
-		return false
-	}
 
-	// A batch Decide names no one resource. It never takes a
-	// resource's slot, so a later decision about that resource still records,
-	// but it is skipped once that resource has a recorded decision.
+	// A filter row names no one resource. It never takes a resource's slot, so
+	// a later decision about that resource still records, but it is skipped
+	// once that resource has a recorded decision.
 	batch := l.Focus == nil
 	focus := l.Focus
 	if batch && len(l.Checks) > 0 {
@@ -368,9 +334,9 @@ func claimChallenge(ctx context.Context, l challengeLogger) bool {
 	}
 	key := challengeResource{scope: focus.Scope, resourceID: focus.ResourceID}
 
-	scope.recorded.mu.Lock()
-	defer scope.recorded.mu.Unlock()
-	_, decided := scope.recorded.decided[key]
+	recorded.mu.Lock()
+	defer recorded.mu.Unlock()
+	_, decided := recorded.decided[key]
 	if batch {
 		return !decided
 	}
@@ -389,14 +355,14 @@ func claimChallenge(ctx context.Context, l challengeLogger) bool {
 			disposition: focus.Dimensions[SelectorKeyDisposition],
 			server:      focus.Dimensions[ChallengeKeyMCPServerID],
 		}
-		if _, seen := scope.recorded.denied[denial]; seen {
+		if _, seen := recorded.denied[denial]; seen {
 			return false
 		}
-		scope.recorded.denied[denial] = struct{}{}
+		recorded.denied[denial] = struct{}{}
 	default:
 		// Errors are always recorded: they are not a decision about access.
 		return true
 	}
-	scope.recorded.decided[key] = struct{}{}
+	recorded.decided[key] = struct{}{}
 	return true
 }

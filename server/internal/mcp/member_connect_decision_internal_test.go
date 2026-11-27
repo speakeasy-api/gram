@@ -15,9 +15,9 @@ import (
 )
 
 // Every caller of memberConnectDecision makes the same decision, but only a
-// call that names one server records an authorization check. Gateway
-// admission and the consent page filter every server the caller could reach,
-// so a caller is not shown a denial for each server it simply cannot see.
+// call that names one server records it, allowed or denied. Gateway admission
+// and the consent page filter every server the caller could reach, so a
+// caller is not shown a denial for each server it simply cannot see.
 func TestMemberConnectDecision_RecordsOnlyNamedServers(t *testing.T) {
 	t.Parallel()
 
@@ -77,13 +77,16 @@ func TestMemberConnectDecision_RecordsOnlyNamedServers(t *testing.T) {
 			name: "named server",
 			decide: func(t *testing.T, s *Service) []uuid.UUID {
 				t.Helper()
-				shadow := s.newMandatoryShadow(ctx, shadowOrg)
+				candidate := func(id uuid.UUID) metaMemberCandidate {
+					return metaMemberCandidate{serverID: id, projectID: project, slug: "s-" + id.String()[:8], visibility: mcpservers.VisibilityPrivate, remoteServerID: uuid.NullUUID{UUID: id, Valid: true}}
+				}
+				_, members, turnedAway, err := s.admitMetaMembers(ctx, testenv.NewLogger(t), mandatorySurfaceGatewayMember, shadowOrg, []metaMemberCandidate{candidate(granted), candidate(denied)})
+				require.NoError(t, err)
+				gate := &metaGateContext{deniedMembers: turnedAway}
 				allowed := []uuid.UUID{}
 				for _, id := range []uuid.UUID{granted, denied} {
-					refusal, err := s.memberConnectDecision(ctx, shadow, mandatorySurfaceGatewayMember, mcpservers.VisibilityPrivate, authz.MCPServer(authz.MCPServerIDOf(id), authz.ProjectIDOf(project)).Connect())
-					require.NoError(t, err)
-					if refusal == nil {
-						allowed = append(allowed, id)
+					if member, ok := s.findNamedMember(ctx, gate, members, "s-"+id.String()[:8]); ok {
+						allowed = append(allowed, member.serverID)
 					}
 				}
 				return allowed

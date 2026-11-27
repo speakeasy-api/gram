@@ -334,7 +334,7 @@ func (s *Service) ListTemporaryGrants(ctx context.Context, payload *gen.ListTemp
 	}
 	trace.SpanFromContext(ctx).SetAttributes(attr.OrganizationID(ac.ActiveOrganizationID), attr.UserID(ac.UserID))
 
-	decision, err := s.authz.Decide(authz.WithoutChallenges(ctx), authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin())
+	decision, err := s.authz.Decide(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin())
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "check organization admin").LogError(ctx, s.logger)
 	}

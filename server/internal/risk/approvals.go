@@ -117,7 +117,7 @@ func (s *Service) enforcedOrgAdmin(ctx context.Context, organizationID string) (
 	if !enforced {
 		return false, nil
 	}
-	decision, err := s.authz.Decide(authz.WithoutChallenges(ctx), authz.Org(authz.OrgIDFrom(organizationID)).Admin())
+	decision, err := s.authz.Decide(ctx, authz.Org(authz.OrgIDFrom(organizationID)).Admin())
 	if err != nil {
 		return false, oops.E(oops.CodeUnexpected, err, "check admin access").LogError(ctx, s.logger)
 	}

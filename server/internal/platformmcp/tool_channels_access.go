@@ -131,7 +131,7 @@ func (s *ChannelsAccessService) Get(ctx context.Context, principal Principal, in
 		return channelsAccessNotEnabled(), nil
 	}
 	ref := authz.Project(authz.ProjectIDOf(project.ID))
-	decisions, err := s.engine.Decide(authz.WithoutChallenges(ctx), ref.ChannelsConnect(), ref.ChannelsAdmin(), ref.ChannelsReadAll())
+	decisions, err := s.engine.Decide(ctx, ref.ChannelsConnect(), ref.ChannelsAdmin(), ref.ChannelsReadAll())
 	if err != nil {
 		return GetMyChannelsAccessOutput{}, fmt.Errorf("evaluate channels permissions: %w", err)
 	}

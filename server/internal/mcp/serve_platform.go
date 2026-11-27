@@ -625,7 +625,7 @@ func platformToolCallError(ctx context.Context, logger *slog.Logger, err error, 
 }
 
 // grantedPlatformToolScopes reports which of the tools' required scopes the
-// caller holds on the active project. One Decide call covers the batch,
+// caller holds on the active project. One Filter call covers the batch,
 // so a hidden tool leaves a filter record for diagnosis without recording a
 // denied requirement: a tool the caller cannot use is simply not offered.
 // Any failure hides every scope-gated tool.
@@ -646,7 +646,7 @@ func (s *Service) grantedPlatformToolScopes(ctx context.Context, authCtx *contex
 	if len(checks) == 0 {
 		return granted
 	}
-	decisions, err := s.authz.Decide(ctx, checks...)
+	decisions, err := s.authz.Filter(ctx, checks...)
 	if err != nil {
 		s.logger.WarnContext(ctx, "match platform tool scopes; hiding scope-gated tools", attr.SlogError(err))
 		return granted

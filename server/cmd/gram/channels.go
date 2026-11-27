@@ -255,7 +255,7 @@ func newChannelsAuthenticator(config channelsConfig, tokens channelsTokenAuthent
 		// implied by mcp:connect or by organization membership, so one combined
 		// check would quietly widen whichever of them the caller lacks.
 		project := authz.Project(authz.ProjectIDOf(principal.ProjectID))
-		decisions, err := config.Authz.Decide(authz.WithoutChallenges(prepared), project.ChannelsConnect(), project.ChannelsAdmin(), project.ChannelsReadAll())
+		decisions, err := config.Authz.Decide(prepared, project.ChannelsConnect(), project.ChannelsAdmin(), project.ChannelsReadAll())
 		if err != nil {
 			return channels.Principal{}, fmt.Errorf("evaluate channels permissions: %w", err)
 		}

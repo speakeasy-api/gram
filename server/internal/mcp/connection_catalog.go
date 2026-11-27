@@ -461,6 +461,9 @@ func (s *Service) describeCachedMember(ctx context.Context, gate *metaGateContex
 		}
 	}
 	if len(checks) > 0 {
+		// Listings and named describes share this filter, so it records
+		// nothing: a call that names the member records its connect decision,
+		// and calling a tool records that tool's check.
 		decisions, err := s.authz.Decide(ctx, checks...)
 		if err != nil {
 			return nil, fmt.Errorf("authorize cached member tools: %w", err)

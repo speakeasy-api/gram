@@ -21,7 +21,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
-	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 const (
@@ -344,7 +343,10 @@ func (s *Service) enumerateToolsetConsentInventory(ctx context.Context, endpoint
 	// The resolved endpoint carries the server's visibility on both addressing paths.
 	private := !endpoint.IsPublic
 	connectResourceID := endpoint.connectResourceID().String()
-	tools = []consentInventoryTool{}
+	server := authz.MCPServer(authz.MCPServerIDFrom(connectResourceID), authz.ProjectIDOf(endpoint.ProjectID))
+
+	candidates := make([]consentInventoryTool, 0, len(toolset.Tools))
+	checks := make([]authz.Check, 0, len(toolset.Tools))
 	for _, tool := range toolset.Tools {
 		if cerr := ctx.Err(); cerr != nil {
 			return nil, nil, fmt.Errorf("enumerate consent inventory: %w", cerr)
@@ -356,28 +358,33 @@ func (s *Service) enumerateToolsetConsentInventory(ctx context.Context, endpoint
 		if berr != nil {
 			continue
 		}
-		values := trueAnnotationValues(base.Annotations)
-		if s.authz != nil && private {
-			// The same classifier tools/list and tools/call use.
-			disposition := toolDisposition(ctx, s.logger, base.Name, base.Annotations)
-			// Listing the tools names none of them, as in tools/list
-			// (filterToolsByMCPConnect), so no check is recorded per tool.
-			if rerr := s.authz.Require(authz.WithoutChallenges(ctx), authz.MCPServer(authz.MCPServerIDFrom(connectResourceID), authz.ProjectIDOf(endpoint.ProjectID)).ToolCall(base.Name, disposition)); rerr != nil {
-				var oopsErr *oops.ShareableError
-				if errors.As(rerr, &oopsErr) && oopsErr.Code == oops.CodeForbidden {
-					roleHidden = append(roleHidden, base.Name)
-					continue
-				}
-				return nil, nil, fmt.Errorf("check tool-level authz for consent inventory: %w", rerr)
-			}
-		}
-		tools = append(tools, consentInventoryTool{
+		candidates = append(candidates, consentInventoryTool{
 			Name:           base.Name,
 			Definition:     nil,
 			DefinitionHash: consentEvidenceHash(tool),
-			Annotations:    values,
+			Annotations:    trueAnnotationValues(base.Annotations),
 			Source:         "",
 		})
+		if s.authz != nil && private {
+			// The same classifier tools/list and tools/call use.
+			disposition := toolDisposition(ctx, s.logger, base.Name, base.Annotations)
+			checks = append(checks, server.ToolCall(base.Name, disposition))
+		}
+	}
+	if len(checks) == 0 {
+		return candidates, nil, nil
+	}
+	decisions, err := s.authz.Decide(ctx, checks...)
+	if err != nil {
+		return nil, nil, fmt.Errorf("check tool-level authz for consent inventory: %w", err)
+	}
+	tools = make([]consentInventoryTool, 0, len(candidates))
+	for i, candidate := range candidates {
+		if !decisions.Each[i].Allowed {
+			roleHidden = append(roleHidden, candidate.Name)
+			continue
+		}
+		tools = append(tools, candidate)
 	}
 	return tools, roleHidden, nil
 }

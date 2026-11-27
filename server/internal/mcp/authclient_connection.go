@@ -138,7 +138,7 @@ func (s *Service) authClientConnection(ctx context.Context, permit authClientPer
 // decision enforcement would make. Otherwise the connect-equivalent rule
 // decides, and the owner's policy is not read at all.
 func (s *Service) attachedConsentUse(ctx context.Context, organizationID string, mandatory bool) (load, required bool, err error) {
-	permitter, err := s.authClientPermitFor(mandatory)
+	permitter, err := s.authClientPermitFor(mandatory, false)
 	if err != nil {
 		return false, false, err
 	}

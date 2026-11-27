@@ -409,7 +409,7 @@ func (s *Service) ListPlugins(ctx context.Context, payload *gen.ListPluginsPaylo
 // implying organization scopes. An existing organization reader retains read
 // access even if plugin writes are explicitly excluded.
 func (s *Service) requirePluginRead(ctx context.Context, ac *contextvalues.AuthContext) error {
-	decision, err := s.authz.Decide(authz.WithoutChallenges(ctx), authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Read())
+	decision, err := s.authz.Decide(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Read())
 	if err != nil {
 		return fmt.Errorf("evaluate plugin read access: %w", err)
 	}
@@ -425,7 +425,7 @@ func (s *Service) requirePluginRead(ctx context.Context, ac *contextvalues.AuthC
 // filterPluginAudience keeps recipient identities and counts on the same
 // admin-only boundary as the assignment management API, including mutations.
 func (s *Service) filterPluginAudience(ctx context.Context, ac *contextvalues.AuthContext, plugin *gen.Plugin) (*gen.Plugin, error) {
-	decision, err := s.authz.Decide(authz.WithoutChallenges(ctx), authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin())
+	decision, err := s.authz.Decide(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin())
 	if err != nil {
 		return nil, fmt.Errorf("evaluate plugin administrator access: %w", err)
 	}
@@ -1798,7 +1798,7 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 		return nil, err
 	}
 
-	decision, err := s.authz.Decide(authz.WithoutChallenges(ctx), authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin())
+	decision, err := s.authz.Decide(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin())
 	if err != nil {
 		return nil, fmt.Errorf("evaluate plugin administrator access: %w", err)
 	}

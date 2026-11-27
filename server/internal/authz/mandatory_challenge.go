@@ -42,7 +42,7 @@ func (e *Engine) LogMandatoryDenial(ctx context.Context, authorization Mandatory
 		recorded.Dimensions[ChallengeKeyMCPServerID] = serverID
 	}
 
-	return challengeLogger{
+	row := &challengeRow{
 		Operation:            authzrepo.OperationRequire,
 		Outcome:              authzrepo.OutcomeDeny,
 		Reason:               reason,
@@ -52,7 +52,8 @@ func (e *Engine) LogMandatoryDenial(ctx context.Context, authorization Mandatory
 		EvaluatedGrantCount:  uint32(authorization.authorization.grantCount()), //nolint:gosec // grant count is small
 		FilterCandidateCount: 0,
 		FilterAllowedCount:   0,
-	}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
+	}
+	return e.emitAndWrite(ctx, row)
 }
 
 // mandatoryChallengeReason names a refusal in the terms challenges use, and

@@ -86,12 +86,12 @@ func (i toolsListInspection) requested(list *proxy.ToolsListResponse) bool {
 	return requested
 }
 
-// allowed reports whether the caller may inspect. It decides without
-// challenges because being refused only means an ordinary listing; recording a
-// denial would ask admins to grant something nobody needed.
+// allowed reports whether the caller may inspect. It asks with Decide, not
+// Require: being refused only means an ordinary listing, and a recorded denial
+// would ask admins to grant something nobody needed.
 func (i toolsListInspection) allowed(ctx context.Context) (bool, error) {
 	server := authz.MCPServer(authz.MCPServerIDFrom(i.mcpServerID), authz.ProjectIDFrom(i.projectID))
-	decisions, err := i.authz.Decide(authz.WithoutChallenges(ctx), server.Read(), server.Write())
+	decisions, err := i.authz.Decide(ctx, server.Read(), server.Write())
 	if err != nil {
 		return false, fmt.Errorf("authorize tools/list inspection: %w", err)
 	}

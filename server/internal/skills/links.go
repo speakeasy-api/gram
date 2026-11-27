@@ -561,7 +561,7 @@ func (s *Service) readableLinkTargets(ctx context.Context, projectID uuid.UUID, 
 	if len(checks) == 0 {
 		return readable, nil
 	}
-	decisions, err := s.authz.Decide(ctx, checks...)
+	decisions, err := s.authz.Filter(ctx, checks...)
 	if err != nil {
 		return nil, fmt.Errorf("filter skill links by readable target: %w", err)
 	}

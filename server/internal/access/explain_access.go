@@ -351,7 +351,7 @@ func (s *Service) ExplainResourceAccess(ctx context.Context, payload *gen.Explai
 	}
 	// Directory attribute values can carry personal data, so which mapping
 	// produced a role is shown to the same audience as the mappings.
-	decision, err := s.authz.Decide(authz.WithoutChallenges(ctx), authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin())
+	decision, err := s.authz.Decide(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin())
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "evaluate directory mapping visibility").LogError(ctx, logger)
 	}

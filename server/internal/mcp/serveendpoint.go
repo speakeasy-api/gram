@@ -1180,7 +1180,7 @@ func (s *Service) authorizeProxyBackendAccess(
 		s.newMandatoryShadow(ctx, organizationID).shadowRequireServer(ctx, surface, err, mandatoryVisibility(mcpServer.Visibility == mcpservers.VisibilityPublic), connect)
 		return nil, err
 	}
-	refusal, err := s.memberConnectDecision(prepared, s.newMandatoryShadow(prepared, organizationID), surface, mcpServer.Visibility, connect)
+	refusal, err := s.requireMemberConnect(prepared, s.newMandatoryShadow(prepared, organizationID), surface, mcpServer.Visibility, connect)
 	if err != nil {
 		return nil, fmt.Errorf("authorize MCP server access: %w", err)
 	}

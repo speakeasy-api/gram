@@ -274,7 +274,7 @@ func (s *Service) ListProjects(ctx context.Context, payload *gen.ListProjectsPay
 	for i, project := range projects {
 		checks[i] = authz.Project(authz.ProjectIDOf(project.ID)).Read()
 	}
-	decisions, err := s.authz.Decide(ctx, checks...)
+	decisions, err := s.authz.Filter(ctx, checks...)
 	if err != nil {
 		return nil, err
 	}

@@ -131,12 +131,13 @@ func (s *postgresXAAServerReader) Server(ctx context.Context, organizationID str
 		return none, false, nil
 	}
 	// org:admin does not imply mcp:read, as in the dashboard's readiness list.
-	decision, err := engine.Decide(ctx, authz.MCPServer(authz.MCPServerIDOf(serverID), authz.ProjectIDOf(projectID)).Read())
-	if err != nil {
-		return none, false, fmt.Errorf("filter XAA readiness server: %w", err)
-	}
-	if !decision.AllAllowed {
-		return none, false, nil
+	// The caller named this server, so a refusal is recorded like any gate's,
+	// and answers as a missing server so it does not reveal the server exists.
+	if err := engine.Require(ctx, authz.MCPServer(authz.MCPServerIDOf(serverID), authz.ProjectIDOf(projectID)).Read()); err != nil {
+		if isAuthorizationRefusal(err) {
+			return none, false, nil
+		}
+		return none, false, fmt.Errorf("authorize XAA readiness server: %w", err)
 	}
 	vendor, err := remotesessions.NormalizeVendorIssuer(row.Issuer)
 	if err != nil {

@@ -71,6 +71,7 @@ type featureChecker interface {
 
 type authorizer interface {
 	Decide(context.Context, ...authz.Check) (authz.Decisions, error)
+	Filter(context.Context, ...authz.Check) (authz.Decisions, error)
 	RequirePluginWrite(context.Context, string, string) error
 }
 
@@ -489,7 +490,7 @@ func (s *Service) authorizedKinds(ctx context.Context, organizationID string, pr
 	for i, candidate := range checks {
 		kindChecks[i] = candidate.check
 	}
-	decisions, err := s.authz.Decide(authz.WithoutChallenges(ctx), kindChecks...)
+	decisions, err := s.authz.Decide(ctx, kindChecks...)
 	if err != nil {
 		return nil, fmt.Errorf("authorize command search kinds: %w", err)
 	}
@@ -524,7 +525,7 @@ func (s *Service) filterRows(ctx context.Context, rows []*gen.Commandresourceind
 	for i, row := range rows {
 		checks[i] = check(row.ID)
 	}
-	decisions, err := s.authz.Decide(ctx, checks...)
+	decisions, err := s.authz.Filter(ctx, checks...)
 	if err != nil {
 		return nil, fmt.Errorf("authorize command search rows: %w", err)
 	}

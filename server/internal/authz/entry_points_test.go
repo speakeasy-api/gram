@@ -146,11 +146,9 @@ func TestRequireAndDecideAgree(t *testing.T) {
 	}
 }
 
-// A challenge row from Decide names the alternative that allowed a group.
-// Example: Either(proj_c, proj_b) is recorded as proj_b; refused, it
-// lists
-// both.
-func TestDecide_recordsWinningAlternative(t *testing.T) {
+// A filtered list names the alternative that allowed a group. Example:
+// Either(proj_c, proj_b) is recorded as proj_b; refused, it lists both.
+func TestFilter_listNamesWinningAlternative(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
@@ -165,7 +163,7 @@ func TestDecide_recordsWinningAlternative(t *testing.T) {
 			t.Parallel()
 
 			ctx, engine, conn := entryPointEngine(t, true)
-			_, err := engine.Decide(ctx, tc.check)
+			_, err := engine.Filter(ctx, tc.check)
 			require.NoError(t, err)
 
 			rows := listChallengeOutboxRows(t, conn)
@@ -247,16 +245,16 @@ func entryPointEngine(t *testing.T, enforced bool) (context.Context, *Engine, *p
 	return ctx, NewEngine(testenv.NewLogger(t), conn, staticChallengeLogging(true), workos.NewStubClient()), conn
 }
 
-// allAllowed answers checks the way a quiet branch does: without a challenge
-// row.
+// allAllowed answers checks the way a handler's branch does: without a
+// challenge row.
 func allAllowed(ctx context.Context, engine *Engine, checks ...Check) (bool, error) {
-	decisions, err := engine.Decide(WithoutChallenges(ctx), checks...)
+	decisions, err := engine.Decide(ctx, checks...)
 	return decisions.AllAllowed, err
 }
 
 // allowedEach answers each check the way a list page does.
 func allowedEach(ctx context.Context, engine *Engine, checks []Check) ([]bool, error) {
-	decisions, err := engine.Decide(ctx, checks...)
+	decisions, err := engine.Filter(ctx, checks...)
 	if err != nil {
 		return nil, err
 	}
@@ -283,7 +281,7 @@ func allowedIDs(ctx context.Context, engine *Engine, checks []Check) ([]string, 
 }
 
 func decisionReasons(ctx context.Context, engine *Engine, checks []Check) ([]Reason, error) {
-	decisions, err := engine.Decide(WithoutChallenges(ctx), checks...)
+	decisions, err := engine.Decide(ctx, checks...)
 	if err != nil {
 		return nil, err
 	}

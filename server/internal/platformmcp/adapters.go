@@ -549,9 +549,8 @@ func (r *PostgresReader) pluginNamesVisible(ctx context.Context, principal Princ
 	if r.authz == nil || principal.OrganizationID == "" {
 		return false
 	}
-	// Decide asks which checks pass; Require asserts that they must. Asking
-	// records the org:admin check as a filter, where Require would record every
-	// ordinary member read as a denied requirement.
+	// Decide, not Require: a member without org:admin still reads the
+	// inventory, only without plugin names, so nothing was refused.
 	decision, err := r.authz.Decide(ctx, authz.Org(authz.OrgIDFrom(principal.OrganizationID)).Admin())
 	return err == nil && decision.AllAllowed
 }
@@ -788,7 +787,7 @@ func (r *PostgresReader) ListProjects(ctx context.Context, principal Principal, 
 		for _, row := range rows {
 			checks = append(checks, authz.Project(authz.ProjectIDOf(row.ID)).Read())
 		}
-		decisions, err := r.authz.Decide(ctx, checks...)
+		decisions, err := r.authz.Filter(ctx, checks...)
 		if err != nil {
 			return ListProjectsOutput{}, fmt.Errorf("filter platform mcp project page: %w", err)
 		}
@@ -1071,7 +1070,7 @@ func (r *PostgresReader) allowedMCPIDs(ctx context.Context, organizationID strin
 	for _, server := range servers {
 		checks = append(checks, authz.MCPServer(authz.MCPServerIDOf(server.ID), authz.ProjectIDOf(server.ProjectID)).Read())
 	}
-	decisions, err := r.authz.Decide(ctx, checks...)
+	decisions, err := r.authz.Filter(ctx, checks...)
 	if err != nil {
 		return nil, fmt.Errorf("filter platform mcp authorization candidates: %w", err)
 	}
