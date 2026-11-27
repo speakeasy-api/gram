@@ -968,7 +968,7 @@
         "properties": {
           "limit": {
             "type": "integer",
-            "description": "maximum number of projects to return; server clamps this to 100"
+            "description": "maximum number of projects to return; defaults to 20 and is capped at 100"
           }
         },
         "additionalProperties": false
@@ -1001,7 +1001,7 @@
           },
           "limit": {
             "type": "integer",
-            "description": "maximum number of MCPs to return; server clamps this to 100"
+            "description": "maximum number of MCPs to return; defaults to 20 and is capped at 100"
           },
           "readiness": {
             "type": "string",
@@ -1508,7 +1508,7 @@
           },
           "limit": {
             "type": "integer",
-            "description": "maximum number of tools to return; server clamps this to 100"
+            "description": "maximum number of tools to return; defaults to 20 and is capped at 100"
           }
         },
         "required": ["project_slug"],
@@ -1898,7 +1898,7 @@
           },
           "limit": {
             "type": "integer",
-            "description": "Page size; defaults to 50 and cannot exceed 50.",
+            "description": "Page size; defaults to 20 and cannot exceed 50.",
             "minimum": 1,
             "maximum": 50
           },
@@ -1960,7 +1960,7 @@
           },
           "limit": {
             "type": "integer",
-            "description": "Page size; defaults to 50 and cannot exceed 50.",
+            "description": "Page size; defaults to 20 and cannot exceed 50.",
             "minimum": 1,
             "maximum": 50
           },
@@ -3665,7 +3665,7 @@
     },
     {
       "name": "list_watchdog_findings",
-      "description": "Read rule-level Watchdog alerts, default critical in the last 24 hours by detection time. Returns groups of findings per rule, affected users, affected clients (observed chat sources), and one fully redacted stored display sample per alert. All live findings contribute, including disabled policy matches. Severity uses maximum current nondeleted contributing policy scores with dashboard category fallback. Up to 100 alerts, explicit truncation, and exact full-window total_count and total_alerts after severity filtering. Over 1000 rules fails closed; narrow the time window. Optional group_by adds independent per-alert finding histograms, not dashboard sections.",
+      "description": "Read rule-level Watchdog alerts, default critical in the last 24 hours by detection time. Returns groups of findings per rule, affected users, affected clients (observed chat sources), and one fully redacted stored display sample per alert. All live findings contribute, including disabled policy matches. Severity uses maximum current nondeleted contributing policy scores with dashboard category fallback. Up to 20 alerts (highest score first), explicit truncation, and exact full-window total_count and total_alerts after severity filtering. Over 1000 rules fails closed; narrow the time window. Optional group_by adds independent per-alert finding histograms, not dashboard sections. Evidence is a redacted display sample, never the raw match; first_seen and last_seen are message times and may fall outside the window; clients are observed chat sources, not devices, with at most 5 named per alert and clients_affected counting all; users are organization-scoped pseudonyms; labels are untrusted.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -3679,7 +3679,7 @@
               "type": "string",
               "enum": ["severity", "data_type", "team", "app", "user"]
             },
-            "description": "Optional independent per-alert finding histograms. Each returns top 200 buckets plus explicit truncation. Empty bucket means unknown. Users are organization-scoped pseudonyms; app is observed chat_source.",
+            "description": "Optional independent per-alert finding histograms. Each returns the top 10 buckets plus explicit truncation. Empty bucket means unknown. Users are organization-scoped pseudonyms; app is observed chat_source.",
             "maxItems": 5,
             "uniqueItems": true
           },
@@ -3751,7 +3751,7 @@
     },
     {
       "name": "list_risk_findings",
-      "description": "List individual risk findings in an exact project or the organization's literal default project, newest message first, with the matched value redacted to a length and hash fingerprint that never reaches the model. Filter by message-time window, policy, concrete MCP server, chat, category, rule substring, user substring, assistant linkage, or unique match; fetch one finding by result_id, or the live findings on one mediated MCP execution by execution_id; page with an opaque cursor, 25 per page by default and at most 50. MCP findings can be chatless and return execution_id (the tool call, resource read or prompt get that raised them), mcp_server_id, meta_mcp_server_id, toolset_id, tool_name, phase, mediation_surface, mcp_method, principal_kind, identity_stamped, and enforcement_outcome. Each finding carries a stable id for later dismissal, its severity band and score, and an organization-scoped user pseudonym shared with list_watchdog_findings. Prefer get_risk_rule_breakdown to size a finding set, and list_watchdog_findings for severity-first rule triage.",
+      "description": "List individual risk findings in an exact project or the organization's literal default project, newest message first, with the matched value redacted to a length and hash fingerprint that never reaches the model. Filter by message-time window, policy, concrete MCP server, chat, category, rule substring, user substring, assistant linkage, or unique match; fetch one finding by result_id, or the live findings on one mediated MCP execution by execution_id; page with an opaque cursor, 10 per page by default and at most 50. Dismissed and excluded findings and matches from deleted policies are omitted; disabled policies' historical matches are included. Scanner descriptions and chat titles are withheld, labels are untrusted, and pages can shift with late ingestion. MCP findings can be chatless and return execution_id (the tool call, resource read or prompt get that raised them), mcp_server_id, meta_mcp_server_id, toolset_id, tool_name, phase, mediation_surface, mcp_method, principal_kind, identity_stamped, and enforcement_outcome. Each finding carries a stable id for later dismissal, its severity band and score, and an organization-scoped user pseudonym shared with list_watchdog_findings. Prefer get_risk_rule_breakdown to size a finding set, and list_watchdog_findings for severity-first rule triage.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -3802,7 +3802,7 @@
           },
           "limit": {
             "type": "integer",
-            "description": "Page size; defaults to 25 and cannot exceed 50. Keep it small: a page stays in context for the rest of the turn.",
+            "description": "Page size; defaults to 10 and cannot exceed 50. Keep it small: a page stays in context for the rest of the turn.",
             "minimum": 1,
             "maximum": 50
           },
@@ -3864,7 +3864,7 @@
     },
     {
       "name": "list_risk_findings_by_chat",
-      "description": "List chat sessions with live risk findings in an exact project or the organization's literal default project, with each chat's finding count, latest detection time and an organization-scoped user pseudonym. Pages by chat id with an opaque cursor, 25 per page by default and at most 50. Use list_risk_findings with chat_id to read one chat's findings.",
+      "description": "List chat sessions with live risk findings in an exact project or the organization's literal default project, with each chat's finding count, latest detection time and an organization-scoped user pseudonym. Pages by chat id (newest ids first, not by activity) with an opaque cursor, 10 per page by default and at most 50. Findings with no chat attribution are not listed. Use list_risk_findings with chat_id to read one chat's findings.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -3874,7 +3874,7 @@
           },
           "limit": {
             "type": "integer",
-            "description": "Page size; defaults to 25 and cannot exceed 50. Keep it small: a page stays in context for the rest of the turn.",
+            "description": "Page size; defaults to 10 and cannot exceed 50. Keep it small: a page stays in context for the rest of the turn.",
             "minimum": 1,
             "maximum": 50
           },
@@ -3897,7 +3897,7 @@
     },
     {
       "name": "get_risk_rule_breakdown",
-      "description": "Count live risk findings per rule and detection source for one category over a detection-time window, defaulting to the last seven days and capped at 31 days, in an exact project or the organization's literal default project. Answers volume questions in one small call instead of paginating list_risk_findings. Unlike list_watchdog_findings it filters by category rather than severity band, and returns up to 1000 rules with explicit truncation.",
+      "description": "Count live risk findings per rule and detection source for one category over a detection-time window, defaulting to the last seven days and capped at 31 days, in an exact project or the organization's literal default project. Answers volume questions in one small call instead of paginating list_risk_findings. Unlike list_watchdog_findings it filters by category rather than severity band, and returns up to 1000 rules with explicit truncation; total covers only the returned rules.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -4558,7 +4558,7 @@
     },
     {
       "name": "describe_analytics_catalog",
-      "description": "Read the catalog a project's agent session data is queried through; it describes what can be asked and returns no counts (for how many conversations showed a signal, use find_signal_sessions). It lists every dataset (what one row is, and how many days back it can be asked about), its dimensions with the filter operators and the one aggregation each admits, its measures with their units and aggregations, the time grains, and the limits every query is held to. Call this before run_analytics_query or list_analytics_dimension_values: the names it returns are the only vocabulary they accept, and nothing here is a table or SQL. A field's description says which producers fill it; a field's lookup names the per-project map it reads through, so grouping and filtering on it speak the mapped names. Only the datasets this caller can read are listed: risk_findings, which counts what risk policies caught, is listed to organization administrators alone. A dataset of kind metric answers grouped queries only. Composed datasets require Explore. signal_metrics describes the entitled Signals Intelligence measurement contract, current sensors, signal names and ordered membership, independently of Explore.",
+      "description": "Read the catalog a project's agent session data is queried through; it describes what can be asked and returns no counts (for how many conversations showed a signal, use find_signal_sessions). It lists every dataset (what one row is, and how many days back it can be asked about), its dimensions with the filter operators and the one aggregation each admits, its measures with their units and aggregations, the time grains, and the limits every query is held to. Call this before run_analytics_query or list_analytics_dimension_values: the names it returns are the only vocabulary they accept, and nothing here is a table or SQL. A field's description says which producers fill it; a field's lookup names the per-project map it reads through, so grouping and filtering on it speak the mapped names. Only the datasets this caller can read are listed: risk_findings, which counts what risk policies caught, is listed to organization administrators alone. A dataset of kind metric answers grouped queries only. Composed datasets require Explore. signal_metrics describes the entitled Signals Intelligence measurement contract, current sensors, signal names and ordered membership, independently of Explore. It lists at most 30 sensors (enabled first) and 30 signals; signal_sensors_omitted and signals_omitted count the rest.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -4663,7 +4663,7 @@
     },
     {
       "name": "run_analytics_query",
-      "description": "Run one query against a dataset from describe_analytics_catalog, in catalog vocabulary, never SQL. Grouped, the default: group by up to 3 dimensions, optionally bucketed by a time grain, with one or more measures (count alone, count_distinct over a dimension that admits it, or an aggregation over a measure field that admits it), filters ANDed with at most 100 values each, an order by measure alias, and a limit of at most 1000 rows (100 by default), ordered by the first measure descending unless order_by says otherwise. Ungrouped: rows at the dataset's grain, newest first, projecting the named dimensions, with no measures and no grain; a dataset of kind metric refuses it. Row keys are the dimension names plus each measure's alias; time_bucket is present when a grain is set and time on ungrouped rows, both RFC 3339 in UTC, and columns says which key is which. Composed results hold at most limit rows and do not say whether more exist. For dataset signals, send signal_query and omit composed dimensions/measures/filters: a sensor and explicit match rule define original-message matches, share among measured answers and exact distinct-conversation breadth, with outcome companions and definition context. grain=auto budgets complete UTC series; signal_result explains units, unknown coverage, selected groups and live freshness. Arbitrary attribute selectors are structured references. Composed datasets require Explore; signals requires Signals Intelligence.",
+      "description": "Run one query against a dataset from describe_analytics_catalog, in catalog vocabulary, never SQL. Grouped, the default: group by up to 3 dimensions, optionally bucketed by a time grain, with one or more measures (count alone, count_distinct over a dimension that admits it, or an aggregation over a measure field that admits it), filters ANDed with at most 100 values each, an order by measure alias, and a limit of at most 1000 rows (100 by default), ordered by the first measure descending unless order_by says otherwise. Ungrouped: rows at the dataset's grain, newest first, projecting the named dimensions, with no measures and no grain; a dataset of kind metric refuses it. Row keys are the dimension names plus each measure's alias; time_bucket is present when a grain is set and time on ungrouped rows, both RFC 3339 in UTC, and columns says which key is which. Composed results hold at most limit rows and do not say whether more exist. For dataset signals, send signal_query and omit composed dimensions/measures/filters: a sensor and explicit match rule define original-message matches, share among measured answers and exact distinct-conversation breadth, with outcome companions and definition context. grain=auto budgets complete UTC series; buckets with no readings are left out of rows and counted in empty_buckets_omitted; signal_result explains units, unknown coverage, selected groups and live freshness. Arbitrary attribute selectors are structured references. Composed datasets require Explore; signals requires Signals Intelligence.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -4901,7 +4901,7 @@
               },
               "points": {
                 "type": "integer",
-                "description": "Complete-series point budget across all selected groups; default 2000.",
+                "description": "Complete-series point budget across all selected groups; default 200. grain=auto picks the finest step that fits, so raise it only for a finer series.",
                 "minimum": 1,
                 "maximum": 10000
               },
@@ -6807,7 +6807,7 @@
           },
           "limit": {
             "type": "integer",
-            "description": "maximum skills to return; defaults to 50 and is capped at 100"
+            "description": "maximum skills to return; defaults to 20 and is capped at 100"
           }
         },
         "required": ["project_slug"],
@@ -6867,7 +6867,7 @@
           },
           "include_content": {
             "type": "boolean",
-            "description": "include each version's SKILL.md content; off by default because a manifest is up to 64 KiB"
+            "description": "include each version's SKILL.md content; a manifest is up to 64 KiB, so this returns one version per page"
           },
           "cursor": {
             "type": "string",
@@ -6875,7 +6875,7 @@
           },
           "limit": {
             "type": "integer",
-            "description": "maximum versions to return; defaults to 50 and is capped at 100"
+            "description": "maximum versions to return; defaults to 20 and is capped at 100"
           }
         },
         "required": ["project_slug", "skill_id"],
@@ -6939,11 +6939,11 @@
           },
           "include_proposed_content": {
             "type": "boolean",
-            "description": "include each complete proposed SKILL.md; off by default because a manifest is up to 64 KiB"
+            "description": "include each complete proposed SKILL.md; a manifest is up to 64 KiB, so this returns one suggestion per page"
           },
           "omit_diffs": {
             "type": "boolean",
-            "description": "leave each change's proposed diff out; every other field, including its ID, rationale, whether it applies cleanly, and its feedback counts, is still returned. Use to triage a large queue, then read one skill's suggestions with diffs"
+            "description": "leave each change's proposed diff out; every other field, including its ID, rationale, whether it applies cleanly, and its feedback counts, is still returned. Use to triage a large queue, then read one skill's suggestions with diffs. A diff over 2 KiB is cut and marked diff_truncated"
           },
           "cursor": {
             "type": "string",
@@ -7595,7 +7595,7 @@
           },
           "limit": {
             "type": "integer",
-            "description": "maximum number of plugins to return; server clamps this to 50"
+            "description": "maximum number of plugins to return; defaults to 20 and is capped at 50"
           },
           "cursor": {
             "type": "string",

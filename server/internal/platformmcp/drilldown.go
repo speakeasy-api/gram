@@ -33,7 +33,7 @@ const (
 	// maxDrilldownResponseBytes bounds a serialized drill-down result. Rows are
 	// dropped until the projection fits rather than the response being refused,
 	// so a caller always receives the leading rows it was ordered by.
-	maxDrilldownResponseBytes = 256 * 1024
+	maxDrilldownResponseBytes = 32 * 1024
 )
 
 // DrilldownAuditor records the one drill-down that answers about a person.

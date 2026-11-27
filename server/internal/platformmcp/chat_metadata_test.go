@@ -143,7 +143,7 @@ func TestListChatsOutputProjectsOnlyAllowlistedFields(t *testing.T) {
 	require.NoError(t, err)
 	var decoded map[string]any
 	require.NoError(t, json.Unmarshal(encoded, &decoded))
-	require.ElementsMatch(t, []string{"project", "data", "chats", "total_matches", "limitations"}, keysOf(decoded))
+	require.ElementsMatch(t, []string{"project", "data", "chats", "total_matches"}, keysOf(decoded))
 
 	chats, ok := decoded["chats"].([]any)
 	require.True(t, ok)
@@ -157,7 +157,6 @@ func TestListChatsOutputProjectsOnlyAllowlistedFields(t *testing.T) {
 	require.InDelta(t, 14, chat["message_count"], 0)
 	require.InDelta(t, 2, chat["risk_findings_count"], 0)
 	require.InDelta(t, 1, decoded["total_matches"], 0)
-	require.Contains(t, output.Limitations, "Metadata only")
 	require.Equal(t, FreshnessCurrent, output.Envelope.Freshness)
 	require.Equal(t, DiagnosticWindowLastWeek, output.Envelope.ResolvedWindow.Window)
 	require.False(t, output.Envelope.NoObservations)

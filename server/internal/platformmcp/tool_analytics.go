@@ -53,7 +53,7 @@ func registerAnalyticsTools(reg *Registrar, service *AnalyticsService) {
 		Description: "Read the catalog a project's agent session data is queried through; it describes what can be asked and returns no counts (for how many conversations showed a signal, use find_signal_sessions). It lists every dataset (what one row is, and how many days back it can be asked about), its dimensions with the filter operators and the one aggregation each admits, its measures with their units and aggregations, the time grains, and the limits every query is held to. " +
 			"Call this before run_analytics_query or list_analytics_dimension_values: the names it returns are the only vocabulary they accept, and nothing here is a table or SQL. A field's description says which producers fill it; a field's lookup names the per-project map it reads through, so grouping and filtering on it speak the mapped names. " +
 			"Only the datasets this caller can read are listed: risk_findings, which counts what risk policies caught, is listed to organization administrators alone. A dataset of kind metric answers grouped queries only. " +
-			"Composed datasets require Explore. signal_metrics describes the entitled Signals Intelligence measurement contract, current sensors, signal names and ordered membership, independently of Explore.",
+			"Composed datasets require Explore. signal_metrics describes the entitled Signals Intelligence measurement contract, current sensors, signal names and ordered membership, independently of Explore. It lists at most 30 sensors (enabled first) and 30 signals; signal_sensors_omitted and signals_omitted count the rest.",
 		Annotations: readOnlyAnnotations(),
 		InputSchema: analyticsProjectSchema(nil, []string{"project_slug"}),
 	}
@@ -81,7 +81,7 @@ func registerAnalyticsTools(reg *Registrar, service *AnalyticsService) {
 			fmt.Sprintf("Grouped, the default: group by up to %d dimensions, optionally bucketed by a time grain, with one or more measures (count alone, count_distinct over a dimension that admits it, or an aggregation over a measure field that admits it), filters ANDed with at most %d values each, an order by measure alias, and a limit of at most %d rows (%d by default), ordered by the first measure descending unless order_by says otherwise. ", analytics.MaxDimensions, analytics.MaxFilterValues, analytics.MaxLimit, analytics.DefaultLimit) +
 			"Ungrouped: rows at the dataset's grain, newest first, projecting the named dimensions, with no measures and no grain; a dataset of kind metric refuses it. " +
 			"Row keys are the dimension names plus each measure's alias; time_bucket is present when a grain is set and time on ungrouped rows, both RFC 3339 in UTC, and columns says which key is which. " +
-			"Composed results hold at most limit rows and do not say whether more exist. For dataset signals, send signal_query and omit composed dimensions/measures/filters: a sensor and explicit match rule define original-message matches, share among measured answers and exact distinct-conversation breadth, with outcome companions and definition context. grain=auto budgets complete UTC series; signal_result explains units, unknown coverage, selected groups and live freshness. Arbitrary attribute selectors are structured references. Composed datasets require Explore; signals requires Signals Intelligence.",
+			"Composed results hold at most limit rows and do not say whether more exist. For dataset signals, send signal_query and omit composed dimensions/measures/filters: a sensor and explicit match rule define original-message matches, share among measured answers and exact distinct-conversation breadth, with outcome companions and definition context. grain=auto budgets complete UTC series; buckets with no readings are left out of rows and counted in empty_buckets_omitted; signal_result explains units, unknown coverage, selected groups and live freshness. Arbitrary attribute selectors are structured references. Composed datasets require Explore; signals requires Signals Intelligence.",
 		Annotations: readOnlyAnnotations(),
 		InputSchema: runAnalyticsQuerySchema(),
 	}
@@ -283,7 +283,7 @@ func signalQuerySchema() *jsonschema.Schema {
 		"group_by":  boundedArraySchema(signalDimensionSchema(), 0, 3, true),
 		"filters":   boundedArraySchema(filter, 0, 20, false),
 		"groups":    {Type: "integer", Minimum: new(float64(1)), Maximum: new(float64(20)), Description: "Top groups over the complete window; default five."},
-		"points":    {Type: "integer", Minimum: new(float64(1)), Maximum: new(float64(10000)), Description: "Complete-series point budget across all selected groups; default 2000."},
+		"points":    {Type: "integer", Minimum: new(float64(1)), Maximum: new(float64(10000)), Description: "Complete-series point budget across all selected groups; default 200. grain=auto picks the finest step that fits, so raise it only for a finer series."},
 	}, []string{"selection"})
 }
 

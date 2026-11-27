@@ -3,6 +3,9 @@ package platformmcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -716,4 +719,66 @@ func TestPlatformOverviewExplainsAssertionReuseSafeguards(t *testing.T) {
 	require.Contains(t, platformOverview, "Reuse of assertions with jti or uti identifiers defaults to disabled")
 	require.Contains(t, platformOverview, "authorized workload administrator must explicitly opt in")
 	require.Contains(t, platformOverview, "Tokens without replay identifiers retain existing exact-token compatibility")
+}
+
+type sizedResultInput struct {
+	Bytes int `json:"bytes"`
+}
+
+type sizedResultOutput struct {
+	Body string `json:"body"`
+}
+
+func TestOversizedToolResultRefusesAtEachAudienceBudget(t *testing.T) {
+	t.Parallel()
+
+	server := mcp.NewServer(&mcp.Implementation{Name: "budget-test", Version: "0.0.1"}, nil)
+	bindExternalTestPrincipal(server)
+	registrar := newRegistrar(server)
+	registrar.withExternalAuthorizer(allowExternalCallAuthorizer{})
+	addTool(registrar, &mcp.Tool{Name: "sized_result"}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, func(_ context.Context, _ *mcp.CallToolRequest, input sizedResultInput) (*mcp.CallToolResult, sizedResultOutput, error) {
+		return nil, sizedResultOutput{Body: strings.Repeat("x", input.Bytes)}, nil
+	})
+	descriptor := registrar.Descriptors()[0]
+
+	// The assistant path: a direct Invoke under the tighter budget.
+	small, err := descriptor.Invoke(t.Context(), json.RawMessage(`{"bytes":1024}`))
+	require.NoError(t, err)
+	smallOutput, ok := small.(sizedResultOutput)
+	require.True(t, ok)
+	require.Len(t, smallOutput.Body, 1024)
+
+	_, err = descriptor.Invoke(t.Context(), json.RawMessage(fmt.Sprintf(`{"bytes":%d}`, maxAssistantResultBytes)))
+	refusal, isRefusal := errors.AsType[*ToolRefusalError](err)
+	require.True(t, isRefusal, "an oversized direct result is a refusal, not a failure: %v", err)
+	var payload resultTooLarge
+	require.NoError(t, json.Unmarshal([]byte(refusal.Payload), &payload))
+	require.Equal(t, resultTooLargeCode, payload.Code)
+	require.Equal(t, maxAssistantResultBytes, payload.MaxBytes)
+	require.Greater(t, payload.Bytes, maxAssistantResultBytes)
+	require.Contains(t, payload.Message, "sized_result")
+
+	// The external path: the same size fits the external budget; a larger one does not.
+	clientTransport, serverTransport := mcp.NewInMemoryTransports()
+	serverSession, err := server.Connect(t.Context(), serverTransport, nil)
+	require.NoError(t, err)
+	defer func() { _ = serverSession.Close() }()
+	client := mcp.NewClient(&mcp.Implementation{Name: "budget-client", Version: "0.0.1"}, nil)
+	session, err := client.Connect(t.Context(), clientTransport, nil)
+	require.NoError(t, err)
+	defer func() { _ = session.Close() }()
+
+	fits, err := session.CallTool(t.Context(), &mcp.CallToolParams{Name: "sized_result", Arguments: map[string]any{"bytes": maxAssistantResultBytes}})
+	require.NoError(t, err)
+	require.False(t, fits.IsError, "an external client has the larger budget")
+
+	result, err := session.CallTool(t.Context(), &mcp.CallToolParams{Name: "sized_result", Arguments: map[string]any{"bytes": maxExternalResultBytes}})
+	require.NoError(t, err)
+	require.True(t, result.IsError)
+	require.Len(t, result.Content, 1)
+	text, ok := result.Content[0].(*mcp.TextContent)
+	require.True(t, ok)
+	require.Contains(t, text.Text, resultTooLargeCode)
+	require.Contains(t, text.Text, fmt.Sprintf(`"max_bytes":%d`, maxExternalResultBytes))
+	require.Less(t, len(text.Text), 1024, "the refusal itself stays small")
 }

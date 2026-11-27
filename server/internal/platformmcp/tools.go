@@ -66,7 +66,7 @@ const platformOverview = "This session exposes a catalogue filtered to workflows
 	"Inbound enterprise-managed authorization lets an MCP client sign in to Speakeasy with an ID-JAG from the company identity provider. Where the catalogue lists get_inbound_ema_trust (organization administrators on external clients only), read it first: it names each organization-level issuer's trusted identity provider, the audience to configure in that provider, and its client ID metadata admission mode, which decides which MCP clients can exchange an ID-JAG. trust_inbound_ema_identity_provider and untrust_inbound_ema_identity_provider preview with confirmed=false and change only after the user confirms the exact issuer and provider; pass the preview's expected_trusted_remote_session_issuer_id back on the confirmed call, and for a trust also its identity_provider.issuer_url as expected_identity_provider_issuer_url. An inbound-only trust has no sign-in client, so it does not change which provider vouches for outbound EMA, and neither tool changes a provider that interactive sign-in goes through. Users resolve only through active synced directory users, with the ID-JAG's email, who are live members; Speakeasy never creates users from an ID-JAG."
 
 type ListProjectsInput struct {
-	Limit int `json:"limit,omitempty" jsonschema:"maximum number of projects to return; server clamps this to 100"`
+	Limit int `json:"limit,omitempty" jsonschema:"maximum number of projects to return; defaults to 20 and is capped at 100"`
 }
 
 type Project struct {
@@ -95,7 +95,7 @@ type FindMCPInput struct {
 	ProjectSlug string `json:"project_slug,omitempty" jsonschema:"the project's slug, as list_projects returns it; omit it to list the organization's Default project, or to search the whole organization with query"`
 	Query       string `json:"query,omitempty" jsonschema:"optional MCP name, slug, ID, or source URL search; without project_slug, searches the organization"`
 	Cursor      string `json:"cursor,omitempty" jsonschema:"opaque cursor returned by a previous unfiltered find_mcp result"`
-	Limit       int    `json:"limit,omitempty" jsonschema:"maximum number of MCPs to return; server clamps this to 100"`
+	Limit       int    `json:"limit,omitempty" jsonschema:"maximum number of MCPs to return; defaults to 20 and is capped at 100"`
 	Readiness   string `json:"readiness,omitempty" jsonschema:"optional persisted readiness state filter"`
 }
 
@@ -877,9 +877,14 @@ func removeMCPFromPluginAnnotations() *mcp.ToolAnnotations {
 	return writeAnnotations(true, true, true)
 }
 
+// defaultPageSize is the page an omitted limit asks for. Every row stays in
+// an agent's context for the rest of its turn, so the default is a short page
+// and a caller asks for more only when it needs them.
+const defaultPageSize = 20
+
 func boundedLimit(limit int) int {
 	if limit <= 0 {
-		return 50
+		return defaultPageSize
 	}
 	return min(limit, 100)
 }

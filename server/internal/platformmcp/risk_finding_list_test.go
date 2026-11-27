@@ -210,7 +210,6 @@ func TestRiskFindingListFiltersAndCursorBinding(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, out.Findings, 1)
 	require.NotEmpty(t, out.NextCursor)
-	require.Equal(t, riskFindingListLimitations, out.Limitations)
 	params := f.clickhouse.list[0]
 	require.Equal(t, mcpServerID.String(), params.MCPServerID)
 	require.Equal(t, "secrets", params.Category)

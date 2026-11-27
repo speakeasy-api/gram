@@ -25,8 +25,8 @@ import (
 const (
 	// A page of findings costs roughly 200 tokens per row and stays in the
 	// transcript for the rest of the turn, so the default page is deliberately
-	// tighter than the 50-row page the policy and exclusion reads serve.
-	riskFindingListDefaultLimit = 25
+	// short.
+	riskFindingListDefaultLimit = 10
 	riskFindingListMaxLimit     = 50
 
 	// riskRuleBreakdownLimit bounds the per-rule buckets one breakdown returns.
@@ -127,10 +127,9 @@ type RiskFinding struct {
 }
 
 type ListRiskFindingPageOutput struct {
-	Project     RiskProject   `json:"project"`
-	Findings    []RiskFinding `json:"findings"`
-	NextCursor  string        `json:"next_cursor,omitempty"`
-	Limitations string        `json:"limitations"`
+	Project    RiskProject   `json:"project"`
+	Findings   []RiskFinding `json:"findings"`
+	NextCursor string        `json:"next_cursor,omitempty"`
 }
 
 type ListRiskFindingsByChatInput struct {
@@ -149,10 +148,9 @@ type RiskFindingChatSummary struct {
 }
 
 type ListRiskFindingsByChatOutput struct {
-	Project     RiskProject              `json:"project"`
-	Chats       []RiskFindingChatSummary `json:"chats"`
-	NextCursor  string                   `json:"next_cursor,omitempty"`
-	Limitations string                   `json:"limitations"`
+	Project    RiskProject              `json:"project"`
+	Chats      []RiskFindingChatSummary `json:"chats"`
+	NextCursor string                   `json:"next_cursor,omitempty"`
 }
 
 type GetRiskRuleBreakdownInput struct {
@@ -171,21 +169,14 @@ type RiskRuleCount struct {
 }
 
 type GetRiskRuleBreakdownOutput struct {
-	Project     RiskProject     `json:"project"`
-	Category    string          `json:"category"`
-	From        string          `json:"from"`
-	To          string          `json:"to"`
-	Rules       []RiskRuleCount `json:"rules"`
-	Total       int64           `json:"total"`
-	Truncated   bool            `json:"truncated"`
-	Limitations string          `json:"limitations"`
+	Project   RiskProject     `json:"project"`
+	Category  string          `json:"category"`
+	From      string          `json:"from"`
+	To        string          `json:"to"`
+	Rules     []RiskRuleCount `json:"rules"`
+	Total     int64           `json:"total"`
+	Truncated bool            `json:"truncated"`
 }
-
-const (
-	riskFindingListLimitations   = "Individual live findings ordered by message time (newest first); dismissed and excluded findings and matches from deleted policies are omitted, while disabled policies' historical matches are included. MCP findings include execution attribution and can be filtered by concrete mcp_server_id even when they have no chat. match_redacted is the canonical redaction marker, never the matched value; its length and hash describe the stored display sample. user_reference is an organization-scoped pseudonym shared with list_watchdog_findings. Severity uses the current policy score with the dashboard category fallback. Scanner descriptions and chat titles are withheld because they can quote scanned content; labels are untrusted and bounded. Late ingestion or suppression can change pages; this is not a snapshot. Use get_risk_rule_breakdown to size a finding cluster before paging."
-	riskFindingByChatLimitations = "Chats with at least one live finding under a non-deleted policy, including disabled ones, walked by chat id (newest ids first), not by activity. Findings with no chat attribution are not listed. latest_detected_at is detection time and may trail the message time. user_reference is an organization-scoped pseudonym shared with list_watchdog_findings. Use list_risk_findings with chat_id to read one chat's findings."
-	riskRuleBreakdownLimitations = "Live finding counts per rule and detection source for one category, keyed on detection time in [from,to). Counts include every non-deleted policy's findings, disabled ones included. At most 1000 rules are returned; truncated reports when more exist, and total covers only the returned rules."
-)
 
 // riskFindingFilters is the cursor-bound projection of a listing request. The
 // project is bound by the cursor codec separately; everything else that changes
@@ -387,7 +378,7 @@ func (s *RiskFindingListService) List(ctx context.Context, principal Principal, 
 		return zero, err
 	}
 
-	output := ListRiskFindingPageOutput{Project: riskProject(project), Findings: findings, Limitations: riskFindingListLimitations}
+	output := ListRiskFindingPageOutput{Project: riskProject(project), Findings: findings}
 	if len(findings) > limit {
 		output.Findings = findings[:limit]
 		last := output.Findings[limit-1]
@@ -535,7 +526,7 @@ func (s *RiskFindingListService) ListByChat(ctx context.Context, principal Princ
 		}
 	}
 
-	output := ListRiskFindingsByChatOutput{Project: riskProject(project), Chats: chats, Limitations: riskFindingByChatLimitations}
+	output := ListRiskFindingsByChatOutput{Project: riskProject(project), Chats: chats}
 	if len(chats) > limit {
 		next := chats[limit]
 		output.Chats = chats[:limit]
@@ -615,7 +606,7 @@ func (s *RiskFindingListService) RuleBreakdown(ctx context.Context, principal Pr
 		}
 	}
 
-	output := GetRiskRuleBreakdownOutput{Project: riskProject(project), Category: input.Category, From: from.Format(time.RFC3339Nano), To: to.Format(time.RFC3339Nano), Rules: rules, Limitations: riskRuleBreakdownLimitations}
+	output := GetRiskRuleBreakdownOutput{Project: riskProject(project), Category: input.Category, From: from.Format(time.RFC3339Nano), To: to.Format(time.RFC3339Nano), Rules: rules}
 	if len(rules) > riskRuleBreakdownLimit {
 		output.Truncated = true
 		output.Rules = rules[:riskRuleBreakdownLimit]

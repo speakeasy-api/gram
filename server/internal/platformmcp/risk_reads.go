@@ -22,7 +22,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
 )
 
-const riskReadPageSize = 50
+const (
+	riskReadPageSize        = 50
+	riskReadDefaultPageSize = defaultPageSize
+)
 
 var (
 	ErrRiskReadInvalid  = errors.New("invalid platform mcp risk read")
@@ -435,7 +438,7 @@ func riskPageLimit(value int) (int, error) {
 		return 0, ErrRiskReadInvalid
 	}
 	if value == 0 {
-		return riskReadPageSize, nil
+		return riskReadDefaultPageSize, nil
 	}
 	return value, nil
 }

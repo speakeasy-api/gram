@@ -443,10 +443,15 @@ func (s *SkillsService) ListSkillVersions(ctx context.Context, principal Princip
 	if _, err := uuid.Parse(input.SkillID); err != nil {
 		return ListSkillVersionsOutput{}, ErrRegistrationInvalid
 	}
+	limit := boundedLimit(input.Limit)
+	if input.IncludeContent {
+		// A manifest is up to 64 KiB, so content is read one version a page.
+		limit = 1
+	}
 	result, err := s.skills.ListVersions(ctx, &genskills.ListVersionsPayload{
 		ID:               input.SkillID,
 		Cursor:           optionalString(strings.TrimSpace(input.Cursor)),
-		Limit:            boundedLimit(input.Limit),
+		Limit:            limit,
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
@@ -666,9 +671,15 @@ type ListSkillFeedbackOutput struct {
 	NextCursor  string                       `json:"next_cursor,omitempty"`
 }
 
+// maxSuggestionDiffBytes bounds one proposed diff in a suggestion listing. A
+// longer diff is cut and flagged; include_proposed_content reads the whole
+// proposal one suggestion at a time.
+const maxSuggestionDiffBytes = 2 * 1024
+
 type SkillSuggestionChange struct {
 	ID                   string `json:"id"`
 	ProposedDiff         string `json:"proposed_diff,omitempty"`
+	DiffTruncated        bool   `json:"diff_truncated,omitempty"`
 	Rationale            string `json:"rationale"`
 	AppliesCleanly       bool   `json:"applies_cleanly"`
 	FeedbackCount        int64  `json:"feedback_count"`
@@ -751,15 +762,26 @@ func (s *SkillsService) ListSkillSuggestions(ctx context.Context, principal Prin
 			return ListSkillSuggestionsOutput{}, ErrRegistrationInvalid
 		}
 	}
-	result, err := s.skills.ListSuggestions(ctx, &genskills.ListSuggestionsPayload{SkillID: optionalString(strings.TrimSpace(input.SkillID)), Cursor: optionalString(strings.TrimSpace(input.Cursor)), Limit: boundedSkillInsightLimit(input.Limit), SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	limit := boundedSkillInsightLimit(input.Limit)
+	if input.IncludeProposedContent {
+		// A proposed manifest is up to 64 KiB, so it is read one suggestion a page.
+		limit = 1
+	}
+	result, err := s.skills.ListSuggestions(ctx, &genskills.ListSuggestionsPayload{SkillID: optionalString(strings.TrimSpace(input.SkillID)), Cursor: optionalString(strings.TrimSpace(input.Cursor)), Limit: limit, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	if err != nil {
 		return ListSkillSuggestionsOutput{}, err
 	}
 	suggestions := buildSkillSuggestions(result.Suggestions, input.IncludeProposedContent)
-	if input.OmitDiffs {
-		for i := range suggestions {
-			for j := range suggestions[i].Changes {
-				suggestions[i].Changes[j].ProposedDiff = ""
+	for i := range suggestions {
+		for j := range suggestions[i].Changes {
+			change := &suggestions[i].Changes[j]
+			if input.OmitDiffs {
+				change.ProposedDiff = ""
+				continue
+			}
+			if len(change.ProposedDiff) > maxSuggestionDiffBytes {
+				change.ProposedDiff = truncateUTF8(change.ProposedDiff, maxSuggestionDiffBytes)
+				change.DiffTruncated = true
 			}
 		}
 	}

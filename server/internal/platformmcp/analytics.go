@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 
 	"github.com/google/uuid"
 
@@ -158,7 +159,15 @@ type DescribeAnalyticsCatalogOutput struct {
 	Limits AnalyticsLimits `json:"limits"`
 	// SignalMetrics is the entitled semantic contract, with current names and scopes.
 	SignalMetrics *analytics.SignalCatalog `json:"signal_metrics,omitempty"`
+	// SignalSensorsOmitted and SignalsOmitted count catalog entries past the
+	// listing cap, so a caller knows the list is partial.
+	SignalSensorsOmitted int `json:"signal_sensors_omitted,omitempty"`
+	SignalsOmitted       int `json:"signals_omitted,omitempty"`
 }
+
+// maxCatalogSignalEntries bounds the sensors and the signals one catalog
+// lists. A project may author up to 1000 of each; enabled sensors come first.
+const maxCatalogSignalEntries = 30
 
 // Describe serves the catalog to a caller who may read the named project.
 func (s *AnalyticsService) Describe(ctx context.Context, principal Principal, input DescribeAnalyticsCatalogInput) (DescribeAnalyticsCatalogOutput, error) {
@@ -198,6 +207,26 @@ func (s *AnalyticsService) Describe(ctx context.Context, principal Principal, in
 		out.SignalMetrics, err = s.engine.DescribeSignals(ctx, analyticsTenant(principal, project))
 		if err != nil {
 			return DescribeAnalyticsCatalogOutput{}, fmt.Errorf("describe signal metrics: %w", err)
+		}
+		if metrics := out.SignalMetrics; metrics != nil {
+			slices.SortStableFunc(metrics.Sensors, func(a, b analytics.SignalSensor) int {
+				switch {
+				case a.Enabled == b.Enabled:
+					return 0
+				case a.Enabled:
+					return -1
+				default:
+					return 1
+				}
+			})
+			if n := len(metrics.Sensors); n > maxCatalogSignalEntries {
+				out.SignalSensorsOmitted = n - maxCatalogSignalEntries
+				metrics.Sensors = metrics.Sensors[:maxCatalogSignalEntries]
+			}
+			if n := len(metrics.Signals); n > maxCatalogSignalEntries {
+				out.SignalsOmitted = n - maxCatalogSignalEntries
+				metrics.Signals = metrics.Signals[:maxCatalogSignalEntries]
+			}
 		}
 	}
 	return out, nil
@@ -241,10 +270,12 @@ func (s *AnalyticsService) requireDataset(ctx context.Context, principal Princip
 
 func describeAnalyticsCatalog(project ResolvedProject, catalog *analytics.Catalog, datasets []*analytics.Dataset) DescribeAnalyticsCatalogOutput {
 	out := DescribeAnalyticsCatalogOutput{
-		SignalMetrics: nil,
-		Project:       analyticsProject(project),
-		Datasets:      make([]AnalyticsDataset, 0, len(datasets)),
-		Grains:        analyticsNames(analytics.TimeGrains()),
+		SignalMetrics:        nil,
+		SignalSensorsOmitted: 0,
+		SignalsOmitted:       0,
+		Project:              analyticsProject(project),
+		Datasets:             make([]AnalyticsDataset, 0, len(datasets)),
+		Grains:               analyticsNames(analytics.TimeGrains()),
 		Limits: AnalyticsLimits{
 			MaxDimensions:      analytics.MaxDimensions,
 			MaxFilterValues:    analytics.MaxFilterValues,
@@ -431,6 +462,8 @@ type RunAnalyticsQueryOutput struct {
 	Rows    []map[string]any  `json:"rows"`
 	// SignalResult preserves measurement and completeness metadata beside Rows.
 	SignalResult *analytics.SignalResult `json:"signal_result,omitempty"`
+	// EmptyBucketsOmitted counts signal buckets with no readings, left out of Rows.
+	EmptyBucketsOmitted int `json:"empty_buckets_omitted,omitempty"`
 }
 
 // Query runs one query for a caller who may read the named project.
@@ -461,7 +494,7 @@ func (s *AnalyticsService) Query(ctx context.Context, principal Principal, input
 		OrderBy:      make([]analytics.OrderBy, 0, len(input.OrderBy)),
 		Limit:        input.Limit,
 		Ungrouped:    input.Ungrouped,
-		SignalQuery:  input.SignalQuery,
+		SignalQuery:  agentSignalQuery(input.SignalQuery),
 	}
 	for _, measure := range input.Measures {
 		req.Measures = append(req.Measures, analytics.Measure{Op: measure.Op, Field: measure.Field, Alias: measure.Alias})
@@ -477,20 +510,41 @@ func (s *AnalyticsService) Query(ctx context.Context, principal Principal, input
 		return zero, fmt.Errorf("run analytics query: %w", err)
 	}
 	out := RunAnalyticsQueryOutput{
-		SignalResult: result.SignalResult,
-		Project:      analyticsProject(project),
-		Dataset:      result.Dataset,
-		Plan:         result.Plan,
-		Columns:      make([]AnalyticsColumn, 0, len(result.Columns)),
-		Rows:         make([]map[string]any, 0, len(result.Rows)),
+		SignalResult:        result.SignalResult,
+		Project:             analyticsProject(project),
+		Dataset:             result.Dataset,
+		Plan:                result.Plan,
+		Columns:             make([]AnalyticsColumn, 0, len(result.Columns)),
+		Rows:                make([]map[string]any, 0, len(result.Rows)),
+		EmptyBucketsOmitted: 0,
 	}
 	for _, column := range result.Columns {
 		out.Columns = append(out.Columns, AnalyticsColumn{Name: column.Name, Kind: string(column.Kind)})
 	}
 	for _, row := range result.Rows {
+		// A signal series is zero-filled so a chart has every bucket. An agent
+		// only needs the buckets that hold readings; the rest are counted.
+		if observed, ok := row["observed"].(bool); ok && !observed && result.SignalResult != nil {
+			out.EmptyBucketsOmitted++
+			continue
+		}
 		out.Rows = append(out.Rows, row)
 	}
 	return out, nil
+}
+
+// agentSignalPoints is the point budget a signal query gets when the caller
+// sets none. The dashboard's default draws a fine chart; grain=auto picks the
+// finest step that fits the budget, so an agent's default is coarse.
+const agentSignalPoints = 200
+
+func agentSignalQuery(query *signalquery.Request) *signalquery.Request {
+	if query == nil || query.Points != 0 {
+		return query
+	}
+	budgeted := *query
+	budgeted.Points = agentSignalPoints
+	return &budgeted
 }
 
 // authorize holds the caller to project:read on the exact project, then to

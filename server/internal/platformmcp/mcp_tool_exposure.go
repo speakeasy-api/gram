@@ -95,7 +95,7 @@ type ListProjectToolsInput struct {
 	Query      string `json:"query,omitempty" jsonschema:"optional match on tool name, tool URN, or source slug"`
 	SourceKind string `json:"source_kind,omitempty" jsonschema:"optional source filter: function or openapi"`
 	Cursor     string `json:"cursor,omitempty" jsonschema:"opaque cursor returned by a previous list_project_tools result"`
-	Limit      int    `json:"limit,omitempty" jsonschema:"maximum number of tools to return; server clamps this to 100"`
+	Limit      int    `json:"limit,omitempty" jsonschema:"maximum number of tools to return; defaults to 20 and is capped at 100"`
 }
 
 type ListProjectToolsOutput struct {

@@ -380,7 +380,7 @@ func riskReadToolCall[Out any](ctx context.Context, telemetry RiskTelemetry, too
 func riskListSchema(withPolicy bool) *jsonschema.Schema {
 	properties := map[string]*jsonschema.Schema{
 		"cursor": {Type: "string", Description: "Opaque cursor returned by the previous page."},
-		"limit":  {Type: "integer", Minimum: new(float64(1)), Maximum: new(float64(riskReadPageSize)), Description: "Page size; defaults to 50 and cannot exceed 50."},
+		"limit":  {Type: "integer", Minimum: new(float64(1)), Maximum: new(float64(riskReadPageSize)), Description: "Page size; defaults to 20 and cannot exceed 50."},
 	}
 	if withPolicy {
 		properties["policy_id"] = uuidSchema("Optional exact policy ID filter.")

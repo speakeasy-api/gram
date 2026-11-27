@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"reflect"
 	"slices"
+	"time"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -420,14 +421,25 @@ func addTool[In, Out any](r *Registrar, tool *mcp.Tool, meta ToolMeta, handler m
 	inputSchema, resolved := prepareInputSchema[In](tool)
 	projectTarget, resolvesProject := projectSlugTargetFor[In](tool.Name)
 	// handle resolves a project named by slug, then runs the handler.
-	handle := func(ctx context.Context, request *mcp.CallToolRequest, input In) (*mcp.CallToolResult, Out, error) {
+	handle := func(ctx context.Context, request *mcp.CallToolRequest, input In, audience Audience) (result *mcp.CallToolResult, output Out, err error) {
+		started := time.Now()
+		defer func() {
+			recordToolCallDuration(ctx, tool.Name, audience, callOutcome(result, err), time.Since(started))
+		}()
 		if resolvesProject {
 			if err := r.resolveProjectSlug(ctx, projectTarget, &input, meta.ProjectScope == ProjectScopeExplicit); err != nil {
-				var output Out
 				return nil, output, err
 			}
 		}
-		return handler(ctx, request, input)
+		result, output, err = handler(ctx, request, input)
+		if err != nil || (result != nil && result.IsError) {
+			return result, output, err
+		}
+		if refusal, ok := oversizedResult(ctx, tool.Name, audience, output); ok {
+			var empty Out
+			return refusal, empty, nil
+		}
+		return result, output, nil
 	}
 	if meta.servesAudience(AudienceExternal) && meta.Authorization == "" {
 		panic(fmt.Sprintf("platformmcp: external tool %q declares no authorization policy", tool.Name))
@@ -458,7 +470,7 @@ func addTool[In, Out any](r *Registrar, tool *mcp.Tool, meta ToolMeta, handler m
 			var output Out
 			err := r.authorizeExternal(ctx, meta.Authorization)
 			if err == nil {
-				result, output, err = handle(ctx, request, input)
+				result, output, err = handle(ctx, request, input, AudienceExternal)
 			}
 			if err == nil {
 				return card(ctx, result, output, input), output, nil
@@ -496,7 +508,9 @@ func addTool[In, Out any](r *Registrar, tool *mcp.Tool, meta ToolMeta, handler m
 			}
 			//nolint:exhaustruct_v5 // A direct call has no MCP session or params; handlers read the principal from ctx.
 			request := &mcp.CallToolRequest{}
-			result, output, err := handle(ctx, request, input)
+			// Invoke is the assistant's path; the external surface is served
+			// through the MCP server above.
+			result, output, err := handle(ctx, request, input, AudienceAssistant)
 			if err != nil {
 				return nil, r.failSafe(ctx, tool.Name, err)
 			}
@@ -768,3 +782,56 @@ func normalizeAgainstSchema(resolved *jsonschema.Resolved, arguments json.RawMes
 
 // ErrToolNotFound reports a tool that is not admitted to the requested audience.
 var ErrToolNotFound = errors.New("platform mcp tool not found for this audience")
+
+// Result budgets bound one serialized tool result. A result stays in an
+// agent's context for the rest of its turn, so a tool that would return more
+// refuses with a request to narrow instead. Tools that page or trim their own
+// rows stay well under these; they are the catalogue's backstop, not page
+// sizes. The managed assistant gets the tighter budget: it keeps every result
+// until compaction, while an external client brings its own context policy.
+const (
+	maxAssistantResultBytes = 32 * 1024
+	maxExternalResultBytes  = 64 * 1024
+)
+
+func maxResultBytes(audience Audience) int {
+	if audience == AudienceAssistant {
+		return maxAssistantResultBytes
+	}
+	return maxExternalResultBytes
+}
+
+const resultTooLargeCode = "result_too_large"
+
+type resultTooLarge struct {
+	Code     string `json:"code"`
+	Message  string `json:"message"`
+	Bytes    int    `json:"bytes"`
+	MaxBytes int    `json:"max_bytes"`
+}
+
+// oversizedResult records the size of one result and returns the refusal for
+// an output over its audience's budget.
+func oversizedResult(ctx context.Context, toolName string, audience Audience, output any) (*mcp.CallToolResult, bool) {
+	encoded, err := json.Marshal(output)
+	if err != nil {
+		return nil, false
+	}
+	limit := maxResultBytes(audience)
+	refused := len(encoded) > limit
+	recordToolResultSize(ctx, toolName, audience, len(encoded), refused)
+	if !refused {
+		return nil, false
+	}
+	content, err := json.Marshal(resultTooLarge{
+		Code:     resultTooLargeCode,
+		Message:  toolName + " found more than one result can carry. Call it again with a smaller limit, a shorter time window, or a narrower filter.",
+		Bytes:    len(encoded),
+		MaxBytes: limit,
+	})
+	if err != nil {
+		content = []byte(`{"code":"` + resultTooLargeCode + `"}`)
+	}
+	//nolint:exhaustruct_v5 // An error result carries only its content.
+	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(content)}}, IsError: true}, true
+}

@@ -54,10 +54,6 @@ var ErrChatListInvalid = errors.New("invalid platform mcp chat list")
 // rather than served with a count that no longer means what it says.
 var errChatListDuplicateRow = errors.New("platform mcp chat list returned a chat more than once")
 
-// chatListLimitations is stated on every page so a caller never mistakes the
-// listing for a transcript reader or an export.
-const chatListLimitations = "Metadata only: chat titles, messages, prompts, tool inputs and outputs are never returned; read a transcript in the dashboard. Without chat:read on the project the listing covers only the caller's own chats and the agent-only chats (no human participant) of agents they currently own, and no filter widens it. The window selects chats by activity: a chat is listed when its last message is at or after the window start and it was created at or before the window end, newest activity first. A cursor pins the window it was minted for, so later pages walk the same interval. Identities are masked and user references expire and are bound to this session and project. risk_findings_count counts live findings under enabled policies; excluded and dismissed findings are not counted. Every count is in chats: one row per chat, total_matches counts chats, and at most 500 chats can be walked per listing. A chat several assistants worked in reports the assistant the listing was narrowed to, otherwise its most recently active one. total_matches is the count at the time of this page and can change between pages."
-
 // chatMetadataReader is the pair of chat queries the listing reads through, so
 // unit tests can model the read without a database.
 type chatMetadataReader interface {
@@ -258,7 +254,6 @@ type ListChatsOutput struct {
 	Chats        []ChatSummary `json:"chats"`
 	TotalMatches int           `json:"total_matches"`
 	NextCursor   string        `json:"next_cursor,omitempty"`
-	Limitations  string        `json:"limitations"`
 }
 
 // chatList is one validated listing: the normalized filters and the window
@@ -400,7 +395,6 @@ func (s *ChatMetadataService) List(ctx context.Context, principal Principal, inp
 		Chats:        []ChatSummary{},
 		TotalMatches: 0,
 		NextCursor:   "",
-		Limitations:  chatListLimitations,
 	}
 	switch {
 	case len(rows) > 0:

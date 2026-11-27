@@ -60,6 +60,9 @@ const (
 // maxPluginPageSize bounds one page of plugin inventory.
 const maxPluginPageSize = 50
 
+// defaultPluginPageSize is the page an omitted limit asks for.
+const defaultPluginPageSize = defaultPageSize
+
 // maxPluginMembers bounds every membership list returned by plugin reads. A
 // plugin or organization larger than this is reported truncated rather than
 // allowing an unbounded MCP result.
@@ -220,7 +223,7 @@ type ListPluginsInput struct {
 	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
 	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
 	ProjectID string `json:"-"`
-	Limit     int    `json:"limit,omitempty" jsonschema:"maximum number of plugins to return; server clamps this to 50"`
+	Limit     int    `json:"limit,omitempty" jsonschema:"maximum number of plugins to return; defaults to 20 and is capped at 50"`
 	Cursor    string `json:"cursor,omitempty" jsonschema:"opaque cursor from a previous list_plugins result"`
 }
 
@@ -703,7 +706,7 @@ func (s *PluginsService) ListPlugins(ctx context.Context, principal Principal, i
 	}
 	// An omitted or non-positive limit asks for the default page rather than
 	// one row, which is what clamping alone would produce.
-	limit := maxPluginPageSize
+	limit := defaultPluginPageSize
 	if input.Limit > 0 {
 		limit = min(input.Limit, maxPluginPageSize)
 	}

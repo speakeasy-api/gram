@@ -150,3 +150,29 @@ func TestSignalEvidenceRejectsMismatchedCallerContext(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, h.engine.calls)
 }
+
+func TestSignalAnalyticsDefaultsToAnAgentSizedSeries(t *testing.T) {
+	t.Parallel()
+	h := newAnalyticsTestHarness(t, feature.EvaluationDisabled, allowAnalyticsBudget)
+	h.service.signalFeatures = signalAnalyticsFeatures(true)
+	sensor, signal := uuid.NewString(), uuid.NewString()
+	h.engine.result = &analytics.QueryResult{Dataset: "signals", Plan: "signals.canonical_final", Rows: []analytics.Row{
+		{"time_bucket": "2026-01-01T00:00:00Z", "observed": true, "matched_messages": int64(2)},
+		{"time_bucket": "2026-01-01T01:00:00Z", "observed": false, "matched_messages": int64(0)},
+		{"time_bucket": "2026-01-01T02:00:00Z", "observed": false, "matched_messages": int64(0)},
+	}, SignalResult: &analytics.SignalResult{Metadata: analytics.SignalMetadata{Exact: true, SeriesComplete: true}}}
+
+	args := fmt.Sprintf(`{"project_slug":%q,"dataset":"signals",%s,"grain":"auto","signal_query":{"selection":{"sensor_id":%q,"signal_id":%q,"threshold":0.5}}}`, h.project.Slug, analyticsTestWindow, sensor, signal)
+	raw, err := h.invoke(t, runAnalyticsQueryToolName, args)
+	require.NoError(t, err)
+	out, ok := raw.(RunAnalyticsQueryOutput)
+	require.True(t, ok)
+	require.Equal(t, agentSignalPoints, h.engine.request.SignalQuery.Points, "an omitted budget gets the agent default, not the chart default")
+	require.Len(t, out.Rows, 1, "zero-filled buckets are left out")
+	require.Equal(t, 2, out.EmptyBucketsOmitted)
+
+	explicit := fmt.Sprintf(`{"project_slug":%q,"dataset":"signals",%s,"grain":"auto","signal_query":{"selection":{"sensor_id":%q,"signal_id":%q,"threshold":0.5},"points":900}}`, h.project.Slug, analyticsTestWindow, sensor, signal)
+	_, err = h.invoke(t, runAnalyticsQueryToolName, explicit)
+	require.NoError(t, err)
+	require.Equal(t, 900, h.engine.request.SignalQuery.Points, "an explicit budget is kept")
+}

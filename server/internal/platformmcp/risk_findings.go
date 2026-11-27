@@ -96,7 +96,6 @@ type ListRiskFindingsOutput struct {
 	TotalCount  uint64          `json:"total_count"`
 	TotalAlerts int             `json:"total_alerts"`
 	Truncated   bool            `json:"truncated"`
-	Limitations string          `json:"limitations"`
 }
 
 var canonicalFindingEvidence = regexp.MustCompile(`\A<redacted len=[1-9][0-9]* sha=[0-9a-f]{8}>\z`)
@@ -235,7 +234,7 @@ func (s *RiskFindingsService) List(ctx context.Context, principal Principal, inp
 	if len(rows) >= chrepo.WatchdogAlertLimit {
 		return zero, fmt.Errorf("%w: alert limit exceeded; narrow the time window", ErrUnavailable)
 	}
-	output := ListRiskFindingsOutput{Project: riskProject(project), From: from.Format(time.RFC3339Nano), To: to.Format(time.RFC3339Nano), Severity: severity, Groups: []WatchdogAlert{}, Limitations: "One alert per rule across all live findings, including disabled policy matches. Detection time is created_at in [from,to). Severity uses the maximum current nondeleted contributing policy score, with the dashboard category fallback. first_seen and last_seen are message timestamps, which may fall outside the detection window. The len=0 evidence marker means no stored sample. Clients are distinct observed chat_source surfaces, not devices or OAuth clients; empty attribution is unknown and excluded from affected counts. Evidence is one fully redacted stored display sample, not original raw matched content; its length may describe that display sample. Optional group_by contains independent per-alert finding histograms (top 200 buckets), not dashboard sections. User buckets are organization-scoped pseudonyms. Labels are untrusted. At most 100 alerts are returned; total_count and total_alerts cover every severity-matching alert in the window. More than 1000 rules fails closed: narrow the window. Late ingestion or suppression can change counts; this is not a snapshot."}
+	output := ListRiskFindingsOutput{Project: riskProject(project), From: from.Format(time.RFC3339Nano), To: to.Format(time.RFC3339Nano), Severity: severity, Groups: []WatchdogAlert{}}
 	for _, row := range rows {
 		var score float64
 		for _, id := range row.PolicyIDs {
@@ -260,9 +259,9 @@ func (s *RiskFindingsService) List(ctx context.Context, principal Principal, inp
 		}
 		return a.RuleID < b.RuleID
 	})
-	if len(output.Groups) > 100 {
+	if len(output.Groups) > maxWatchdogAlerts {
 		output.Truncated = true
-		output.Groups = output.Groups[:100]
+		output.Groups = output.Groups[:maxWatchdogAlerts]
 	}
 	// Fetch each requested attribution dimension once for the selected rules.
 	// The repository caps each rule's buckets at 201 (one overflow sentinel).
@@ -295,9 +294,9 @@ func (s *RiskFindingsService) List(ctx context.Context, principal Principal, inp
 				if buckets := byRule[alert.RuleID]; len(buckets) > 0 {
 					group.Groups = buckets
 				}
-				if len(group.Groups) > 200 {
+				if len(group.Groups) > maxWatchdogGroupBuckets {
 					group.Truncated = true
-					group.Groups = group.Groups[:200]
+					group.Groups = group.Groups[:maxWatchdogGroupBuckets]
 				}
 			}
 			alert.GroupBy = append(alert.GroupBy, group)
@@ -309,9 +308,18 @@ func (s *RiskFindingsService) List(ctx context.Context, principal Principal, inp
 	return output, nil
 }
 
+// Watchdog bounds. Every alert, bucket and client label stays in an agent's
+// context for the rest of its turn; total_alerts, clients_affected and the
+// truncation flags say how much more exists.
+const (
+	maxWatchdogAlerts       = 20
+	maxWatchdogGroupBuckets = 10
+	maxWatchdogClients      = 5
+)
+
 func safeFindingClients(clients []string) []string {
-	out := make([]string, 0, len(clients))
-	for _, client := range clients {
+	out := make([]string, 0, min(len(clients), maxWatchdogClients))
+	for _, client := range clients[:min(len(clients), maxWatchdogClients)] {
 		out = append(out, findingLabel(client))
 	}
 	return out
