@@ -2070,7 +2070,9 @@ SELECT tool_selection, expires_at,
 FROM user_sessions
 WHERE user_session_issuer_id = @user_session_issuer_id
   AND jti = @jti
-  AND deleted IS FALSE;
+  AND deleted IS FALSE
+  AND (session_absolute_expires_at IS NULL OR session_absolute_expires_at > clock_timestamp())
+  AND (session_inactivity_timeout IS NULL OR COALESCE(last_used_at, created_at) + session_inactivity_timeout > clock_timestamp());
 
 -- name: GetUserSessionPrincipalCredentialByJTI :one
 -- Authoritative serve-path lookup for an agent session's immutable credential
@@ -2081,7 +2083,9 @@ FROM user_sessions
 WHERE user_session_issuer_id = @user_session_issuer_id
   AND jti = @jti
   AND deleted IS FALSE
-  AND expires_at > clock_timestamp();
+  AND expires_at > clock_timestamp()
+  AND (session_absolute_expires_at IS NULL OR session_absolute_expires_at > clock_timestamp())
+  AND (session_inactivity_timeout IS NULL OR COALESCE(last_used_at, created_at) + session_inactivity_timeout > clock_timestamp());
 
 -- name: GetLatestLiveUserSessionToolSelection :one
 -- Reauth prefill: the identified subject's newest live restrictive policy
@@ -2425,7 +2429,10 @@ INSERT INTO user_sessions (
     refresh_token_hash,
     refresh_expires_at,
     expires_at,
+    session_inactivity_timeout,
+    session_absolute_expires_at,
     tool_selection,
+    last_used_at,
     resource,
     sign_in_id,
     credential_id
@@ -2443,7 +2450,10 @@ SELECT
     @refresh_token_hash,
     @refresh_expires_at,
     @expires_at,
+    sqlc.narg('session_inactivity_timeout'),
+    sqlc.narg('session_absolute_expires_at'),
     @tool_selection,
+    sqlc.narg('last_used_at'),
     sqlc.narg('resource'),
     (SELECT sign_in.id FROM sign_in),
     sqlc.narg('credential_id')
@@ -4162,6 +4172,19 @@ VALUES (@organization_id, @workload_issuer_id, @subject, @agent_id);
 INSERT INTO workload_identity_admissions (organization_id, project_id, workload_issuer_id, subject, name)
 VALUES (@organization_id, sqlc.narg(project_id), @workload_issuer_id, @subject, @name)
 RETURNING id;
+
+-- name: SetUserSessionIssuerInactivityTimeoutFixture :exec
+UPDATE user_session_issuers
+SET session_inactivity_timeout = @session_inactivity_timeout
+WHERE id = @id AND project_id = @project_id;
+
+-- name: SetUserSessionLifetimeFixture :exec
+UPDATE user_sessions
+SET created_at = @created_at,
+    last_used_at = @last_used_at,
+    session_inactivity_timeout = @session_inactivity_timeout,
+    session_absolute_expires_at = @session_absolute_expires_at
+WHERE jti = @jti AND project_id = @project_id;
 
 -- name: WithdrawWorkloadAdmissionFixture :exec
 UPDATE workload_identity_admissions SET deleted_at = clock_timestamp() WHERE id = @id;

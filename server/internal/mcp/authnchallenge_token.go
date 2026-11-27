@@ -132,15 +132,18 @@ type userSessionRefreshReplayPayload struct {
 }
 
 type mintSessionParams struct {
-	Audience               string
-	AuthorizationExpiresAt *time.Time
-	AuthorizerUserID       pgtype.Text
-	BaseURL                string
-	DelegatedGrants        []byte
-	DelegatedGrantsVersion pgtype.Int4
-	DesiredSessionDuration *time.Duration
-	Replayable             bool
-	Policy                 sessionIssuancePolicy
+	Audience                 string
+	AuthorizationExpiresAt   *time.Time
+	SessionAbsoluteExpiresAt *time.Time
+	SessionInactivityTimeout pgtype.Interval
+	LastUsedAt               pgtype.Timestamptz
+	AuthorizerUserID         pgtype.Text
+	BaseURL                  string
+	DelegatedGrants          []byte
+	DelegatedGrantsVersion   pgtype.Int4
+	DesiredSessionDuration   *time.Duration
+	Replayable               bool
+	Policy                   sessionIssuancePolicy
 	// SignInID links the session to the sign-in that authorized it.
 	SignInID uuid.NullUUID
 	// CredentialID continues an existing credential, as refresh rotation does;
@@ -737,23 +740,26 @@ func (s *Service) handleTokenJWTBearerGrant(
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	minted, err := s.mintSession(authorizationCtx, endpoint, clientRow, usersessions_repo.New(dbtx), mintSessionParams{
-		Audience:               canonicalResource,
-		AuthorizationExpiresAt: nil,
-		AuthorizerUserID:       pgtype.Text{String: "", Valid: false},
-		BaseURL:                baseURL,
-		DelegatedGrants:        nil,
-		DelegatedGrantsVersion: pgtype.Int4{Int32: 0, Valid: false},
-		DesiredSessionDuration: nil,
-		Replayable:             false,
-		Policy:                 sessionIssuancePolicyResourceScoped,
-		SignInID:               uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		CredentialID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		Subject:                result.Subject,
-		ToolSelection:          nil,
-		UpstreamClientPicks:    upstreamPicks,
-		AuthClientPicks:        authClientPicks,
-		DeferredServerIDs:      deferred,
-		Catalog:                nil,
+		Audience:                 canonicalResource,
+		AuthorizationExpiresAt:   nil,
+		SessionAbsoluteExpiresAt: nil,
+		SessionInactivityTimeout: pgtype.Interval{Microseconds: 0, Days: 0, Months: 0, Valid: false},
+		LastUsedAt:               pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: 0, Valid: false},
+		AuthorizerUserID:         pgtype.Text{String: "", Valid: false},
+		BaseURL:                  baseURL,
+		DelegatedGrants:          nil,
+		DelegatedGrantsVersion:   pgtype.Int4{Int32: 0, Valid: false},
+		DesiredSessionDuration:   nil,
+		Replayable:               false,
+		Policy:                   sessionIssuancePolicyResourceScoped,
+		SignInID:                 uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		CredentialID:             uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Subject:                  result.Subject,
+		ToolSelection:            nil,
+		UpstreamClientPicks:      upstreamPicks,
+		AuthClientPicks:          authClientPicks,
+		DeferredServerIDs:        deferred,
+		Catalog:                  nil,
 	}, logger)
 	if err != nil {
 		// The issuer was retired after the assertion was checked.
@@ -1109,23 +1115,26 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 	t.Consumed()
 
 	minted, err := s.mintSession(ctx, endpoint, clientRow, admissionQueries, mintSessionParams{
-		Audience:               audience,
-		AuthorizationExpiresAt: nil,
-		AuthorizerUserID:       authorizerUserID,
-		BaseURL:                baseURL,
-		DelegatedGrants:        delegatedGrants,
-		DelegatedGrantsVersion: delegatedGrantsVersion,
-		DesiredSessionDuration: desiredSessionDuration,
-		Replayable:             false,
-		Policy:                 policy,
-		SignInID:               grantSignInID(grant),
-		CredentialID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		Subject:                subject,
-		ToolSelection:          toolSelection,
-		UpstreamClientPicks:    grant.UpstreamClientPicks,
-		AuthClientPicks:        grant.AuthClientPicks,
-		DeferredServerIDs:      nil,
-		Catalog:                catalog,
+		Audience:                 audience,
+		AuthorizationExpiresAt:   nil,
+		SessionAbsoluteExpiresAt: nil,
+		SessionInactivityTimeout: pgtype.Interval{Microseconds: 0, Days: 0, Months: 0, Valid: false},
+		LastUsedAt:               pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: 0, Valid: false},
+		AuthorizerUserID:         authorizerUserID,
+		BaseURL:                  baseURL,
+		DelegatedGrants:          delegatedGrants,
+		DelegatedGrantsVersion:   delegatedGrantsVersion,
+		DesiredSessionDuration:   desiredSessionDuration,
+		Replayable:               false,
+		Policy:                   policy,
+		SignInID:                 grantSignInID(grant),
+		CredentialID:             uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Subject:                  subject,
+		ToolSelection:            toolSelection,
+		UpstreamClientPicks:      grant.UpstreamClientPicks,
+		AuthClientPicks:          grant.AuthClientPicks,
+		DeferredServerIDs:        nil,
+		Catalog:                  catalog,
 	}, logger)
 	if err != nil {
 		// Almost all errors here occur before the 200 is written — issuer
@@ -1588,7 +1597,34 @@ func (s *Service) rotateRefreshToken(
 		return published, refuseInboundRefresh(ctx, tracker, r, writeErr, "refresh_token_client_mismatch", mcpconnectionattempts.Subject(&oldSession.SubjectUrn))
 	}
 
-	if !oldSession.RefreshExpiresAt.Valid || !oldSession.RefreshExpiresAt.Time.After(time.Now()) {
+	refreshNow := time.Now()
+	issuer, err := txRepo.GetUserSessionIssuerByID(ctx, usersessions_repo.GetUserSessionIssuerByIDParams{
+		ID:             endpoint.UserSessionIssuerID,
+		ProjectID:      endpoint.ProjectID,
+		OrganizationID: endpoint.OrganizationID,
+	})
+	if err != nil {
+		return true, oops.E(oops.CodeUnexpected, err, "load current session issuer policy").LogError(ctx, logger)
+	}
+	if currentTimeout, ok := conv.PGIntervalToDuration(issuer.SessionInactivityTimeout); ok && currentTimeout > 0 {
+		savedTimeout, savedOK := conv.PGIntervalToDuration(oldSession.SessionInactivityTimeout)
+		if !savedOK || savedTimeout <= 0 || currentTimeout < savedTimeout {
+			oldSession.SessionInactivityTimeout = issuer.SessionInactivityTimeout
+		}
+	}
+	absoluteExpiresAt := oldSession.RefreshExpiresAt
+	if oldSession.SessionAbsoluteExpiresAt.Valid {
+		absoluteExpiresAt = oldSession.SessionAbsoluteExpiresAt
+	}
+	if currentDuration, ok := conv.PGIntervalToDuration(issuer.SessionDuration); ok && currentDuration > 0 {
+		currentDeadline := refreshNow.Add(currentDuration)
+		if !absoluteExpiresAt.Valid || currentDeadline.Before(absoluteExpiresAt.Time) {
+			absoluteExpiresAt = pgtype.Timestamptz{Time: currentDeadline, InfinityModifier: pgtype.Finite, Valid: true}
+			oldSession.SessionAbsoluteExpiresAt = absoluteExpiresAt
+		}
+	}
+	authorizationExpiresAt, expirationReason, expirationDescription := ingressSessionExpiration(oldSession, refreshNow)
+	if expirationReason != "" {
 		if err := dbtx.Commit(ctx); err != nil {
 			return false, oops.E(oops.CodeUnexpected, err, "commit expired refresh token revocation").LogError(ctx, logger)
 		}
@@ -1602,19 +1638,17 @@ func (s *Service) rotateRefreshToken(
 			replayKey,
 			clientRow.ID,
 			&oldSession.SubjectUrn,
-			"refresh_token_expired",
-			"refresh_token has expired",
+			expirationReason,
+			expirationDescription,
 			logger,
 		)
-		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_expired")
-		writeErr := writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "refresh_token has expired")
-		return published, refuseInboundRefresh(ctx, tracker, r, writeErr, "refresh_token_expired", mcpconnectionattempts.Subject(&oldSession.SubjectUrn))
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", expirationReason)
+		writeErr := writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", expirationDescription)
+		return published, refuseInboundRefresh(ctx, tracker, r, writeErr, expirationReason, mcpconnectionattempts.Subject(&oldSession.SubjectUrn))
 	}
 
-	// Session length is an absolute authorization lifetime. Rotation carries
-	// that deadline forward verbatim; it never opens a fresh authorization
-	// window merely because the client exchanged its refresh token.
-	authorizationExpiresAt := oldSession.RefreshExpiresAt.Time
+	// Rotation carries the absolute deadline and last real activity forward;
+	// exchanging a refresh token does not extend either expiration window.
 	// Tool selection rides refresh slides verbatim; reject malformed or
 	// cross-endpoint policies before consuming the refresh transaction.
 	oldSelection, perr := toolfilter.ParseSessionPolicy(oldSession.ToolSelection)
@@ -1655,8 +1689,16 @@ func (s *Service) rotateRefreshToken(
 		return true, oops.E(oops.CodeUnexpected, err, "select session issuance policy").LogError(ctx, logger)
 	}
 	minted, err := s.mintSession(ctx, endpoint, clientRow, txRepo, mintSessionParams{
-		Audience:               audience,
-		AuthorizationExpiresAt: &authorizationExpiresAt,
+		Audience:                 audience,
+		AuthorizationExpiresAt:   &authorizationExpiresAt,
+		SessionAbsoluteExpiresAt: &absoluteExpiresAt.Time,
+		SessionInactivityTimeout: oldSession.SessionInactivityTimeout,
+		LastUsedAt: func() pgtype.Timestamptz {
+			if oldSession.LastUsedAt.Valid {
+				return oldSession.LastUsedAt
+			}
+			return oldSession.CreatedAt
+		}(),
 		AuthorizerUserID:       oldSession.AuthorizerUserID,
 		BaseURL:                baseURL,
 		DelegatedGrants:        oldSession.DelegatedGrants,
@@ -2200,6 +2242,40 @@ func (s *Service) mintUserSessionAccessToken(params mintUserSessionAccessTokenPa
 // authorization lifetime.
 const accessTokenLifetime = 1 * time.Hour
 
+func ingressSessionExpiration(session usersessions_repo.UserSession, now time.Time) (time.Time, string, string) {
+	absoluteExpiresAt := session.RefreshExpiresAt
+	if session.SessionAbsoluteExpiresAt.Valid {
+		absoluteExpiresAt = session.SessionAbsoluteExpiresAt
+	}
+	if !absoluteExpiresAt.Valid || !absoluteExpiresAt.Time.After(now) {
+		return absoluteExpiresAt.Time, "refresh_token_expired", "refresh_token has expired"
+	}
+
+	if session.SessionInactivityTimeout.Valid {
+		inactivityTimeout, ok := conv.PGIntervalToDuration(session.SessionInactivityTimeout)
+		lastActivityAt := session.CreatedAt.Time
+		if session.LastUsedAt.Valid {
+			lastActivityAt = session.LastUsedAt.Time
+		}
+		if !ok || inactivityTimeout <= 0 || !lastActivityAt.Add(inactivityTimeout).After(now) {
+			return absoluteExpiresAt.Time, "session_inactivity_expired", "session has expired due to inactivity"
+		}
+	}
+
+	deadline := absoluteExpiresAt.Time
+	if session.SessionInactivityTimeout.Valid {
+		inactivityTimeout, ok := conv.PGIntervalToDuration(session.SessionInactivityTimeout)
+		lastActivityAt := session.CreatedAt.Time
+		if session.LastUsedAt.Valid {
+			lastActivityAt = session.LastUsedAt.Time
+		}
+		if ok && inactivityTimeout > 0 && lastActivityAt.Add(inactivityTimeout).Before(deadline) {
+			deadline = lastActivityAt.Add(inactivityTimeout)
+		}
+	}
+	return deadline, "", ""
+}
+
 // mintSession applies a typed issuance policy, mints a new access-token JWT
 // (HS256), and persists a fresh user_sessions row through queries.
 // Issuer-scoped sessions also receive an opaque refresh token. Refresh rotation
@@ -2281,28 +2357,31 @@ func (s *Service) mintSession(
 		return nil, oops.E(oops.CodeUnexpected, err, "build issuer URL").LogError(ctx, logger)
 	}
 	return s.issueSession(ctx, clientRow, queries, sessionIssuance{
-		UserSessionIssuerID:    endpoint.UserSessionIssuerID,
-		ProjectID:              endpoint.ProjectID,
-		OrganizationID:         endpoint.OrganizationID,
-		Issuer:                 issuerURL,
-		Audience:               audience,
-		Resource:               resource,
-		Refreshable:            refreshable,
-		StoresRefreshHash:      true,
-		Subject:                params.Subject,
-		AuthorizerUserID:       params.AuthorizerUserID,
-		DelegatedGrants:        params.DelegatedGrants,
-		DelegatedGrantsVersion: params.DelegatedGrantsVersion,
-		ToolSelection:          params.ToolSelection,
-		SignInID:               params.SignInID,
-		CredentialID:           params.CredentialID,
-		AuthorizationExpiresAt: params.AuthorizationExpiresAt,
-		DesiredSessionDuration: params.DesiredSessionDuration,
-		Replayable:             params.Replayable,
-		UpstreamClientPicks:    params.UpstreamClientPicks,
-		AuthClientPicks:        params.AuthClientPicks,
-		DeferredServerIDs:      params.DeferredServerIDs,
-		Catalog:                params.Catalog,
+		UserSessionIssuerID:      endpoint.UserSessionIssuerID,
+		ProjectID:                endpoint.ProjectID,
+		OrganizationID:           endpoint.OrganizationID,
+		Issuer:                   issuerURL,
+		Audience:                 audience,
+		Resource:                 resource,
+		Refreshable:              refreshable,
+		StoresRefreshHash:        true,
+		Subject:                  params.Subject,
+		AuthorizerUserID:         params.AuthorizerUserID,
+		DelegatedGrants:          params.DelegatedGrants,
+		DelegatedGrantsVersion:   params.DelegatedGrantsVersion,
+		ToolSelection:            params.ToolSelection,
+		SignInID:                 params.SignInID,
+		CredentialID:             params.CredentialID,
+		AuthorizationExpiresAt:   params.AuthorizationExpiresAt,
+		SessionAbsoluteExpiresAt: params.SessionAbsoluteExpiresAt,
+		SessionInactivityTimeout: params.SessionInactivityTimeout,
+		LastUsedAt:               params.LastUsedAt,
+		DesiredSessionDuration:   params.DesiredSessionDuration,
+		Replayable:               params.Replayable,
+		UpstreamClientPicks:      params.UpstreamClientPicks,
+		AuthClientPicks:          params.AuthClientPicks,
+		DeferredServerIDs:        params.DeferredServerIDs,
+		Catalog:                  params.Catalog,
 	}, logger)
 }
 
@@ -2362,9 +2441,16 @@ type sessionIssuance struct {
 	// upstream client choices are recorded at issuance.
 	CredentialID uuid.NullUUID
 
-	// AuthorizationExpiresAt carries a rotated authorization's deadline
+	// AuthorizationExpiresAt carries a rotated authorization's absolute deadline
 	// forward. Nil starts a new authorization.
 	AuthorizationExpiresAt *time.Time
+
+	SessionAbsoluteExpiresAt *time.Time
+
+	// SessionInactivityTimeout and LastUsedAt carry a rotated authorization's
+	// inactivity window forward. A new authorization copies its issuer setting.
+	SessionInactivityTimeout pgtype.Interval
+	LastUsedAt               pgtype.Timestamptz
 
 	// DesiredSessionDuration bounds a new authorization, itself bounded by the
 	// issuer's session_duration. Nil means the issuer's.
@@ -2423,6 +2509,7 @@ func (s *Service) issueSession(
 		}
 		deadline := now.Add(authorizationLifetime)
 		issuance.AuthorizationExpiresAt = &deadline
+		issuance.SessionInactivityTimeout = issuer.SessionInactivityTimeout
 	}
 	authorizationLifetime := issuance.AuthorizationExpiresAt.Sub(now)
 	if authorizationLifetime <= 0 {
@@ -2484,11 +2571,28 @@ func (s *Service) issueSession(
 		RefreshTokenHash:       refreshTokenHash,
 		ExpiresAt:              pgtype.Timestamptz{Time: accessExpiresAt, InfinityModifier: 0, Valid: true},
 		RefreshExpiresAt:       pgtype.Timestamptz{Time: *issuance.AuthorizationExpiresAt, InfinityModifier: 0, Valid: true},
-		ToolSelection:          issuance.ToolSelection,
-		Resource:               conv.ToPGTextEmpty(issuance.Resource),
-		SignInID:               issuance.SignInID,
-		SignInUserID:           signInUserID(issuance),
-		CredentialID:           issuance.CredentialID,
+		SessionInactivityTimeout: func() pgtype.Interval {
+			if issuance.Refreshable {
+				return issuance.SessionInactivityTimeout
+			}
+			return pgtype.Interval{Microseconds: 0, Days: 0, Months: 0, Valid: false}
+		}(),
+		SessionAbsoluteExpiresAt: func() pgtype.Timestamptz {
+			if !issuance.Refreshable {
+				return pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
+			}
+			deadline := issuance.AuthorizationExpiresAt
+			if issuance.SessionAbsoluteExpiresAt != nil {
+				deadline = issuance.SessionAbsoluteExpiresAt
+			}
+			return pgtype.Timestamptz{Time: *deadline, InfinityModifier: pgtype.Finite, Valid: true}
+		}(),
+		LastUsedAt:    issuance.LastUsedAt,
+		ToolSelection: issuance.ToolSelection,
+		Resource:      conv.ToPGTextEmpty(issuance.Resource),
+		SignInID:      issuance.SignInID,
+		SignInUserID:  signInUserID(issuance),
+		CredentialID:  issuance.CredentialID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
