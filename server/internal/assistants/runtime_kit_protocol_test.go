@@ -52,9 +52,9 @@ func TestKitProtocolPromptDeliveryCapability(t *testing.T) {
 		name, raw, mode string
 		want            bool
 	}{
-		{"queue and steer", `{"capabilities":{"session":{"prompt":{"delivery":{"steer":{},"queue":{}}}}}}`, kitPromptDeliverySteer, true},
+		{"steer with another mode", `{"capabilities":{"session":{"prompt":{"delivery":{"steer":{},"queue":{}}}}}}`, kitPromptDeliverySteer, true},
 		{"steer only", `{"capabilities":{"session":{"prompt":{"delivery":{"steer":{}}}}}}`, kitPromptDeliverySteer, true},
-		{"queue only", `{"capabilities":{"session":{"prompt":{"delivery":{"queue":{}}}}}}`, kitPromptDeliverySteer, false},
+		{"other mode only", `{"capabilities":{"session":{"prompt":{"delivery":{"queue":{}}}}}}`, kitPromptDeliverySteer, false},
 		{"absent delivery", `{"capabilities":{"_meta":{"kit/session/status":{}}}}`, kitPromptDeliverySteer, false},
 		{"null mode", `{"capabilities":{"session":{"prompt":{"delivery":{"steer":null}}}}}`, kitPromptDeliverySteer, false},
 		{"wrong type", `{"capabilities":{"session":{"prompt":{"delivery":{"steer":true}}}}}`, kitPromptDeliverySteer, false},
