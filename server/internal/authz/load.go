@@ -11,6 +11,7 @@ import (
 // LoadGrants loads and normalizes grants for the given organization and
 // principals. The result is exactly the stored grant set: no defaults are
 // synthesized, so a role edit that removes a grant takes effect immediately.
+// A grant stored under a renamed scope is read as its new name.
 func LoadGrants(ctx context.Context, db accessrepo.DBTX, organizationID string, principals []urn.Principal) ([]Grant, error) {
 	if organizationID == "" {
 		return nil, fmt.Errorf("organization id is required")
@@ -35,12 +36,12 @@ func LoadGrants(ctx context.Context, db accessrepo.DBTX, organizationID string, 
 		if err != nil {
 			return nil, fmt.Errorf("unmarshal grant selector: %w", err)
 		}
-		grantRows = append(grantRows, Grant{
+		grantRows = append(grantRows, CanonicalGrant(Grant{
 			PrincipalUrn: row.PrincipalUrn.String(),
 			Scope:        Scope(row.Scope),
 			Selector:     selectors,
 			Inferred:     row.Inferred,
-		})
+		}))
 	}
 
 	return grantRows, nil

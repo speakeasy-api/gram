@@ -363,14 +363,19 @@ var legacyIndependentMCPBlocks = []authz.Scope{
 	authz.ScopeMCPBlockedConnect,
 }
 
+// runtimeGrants is the only reader of a stored policy that resolves renamed
+// scopes. Requested, Effective and the closure check keep the names as
+// stored, because a stored policy is never rewritten and is compared byte
+// for byte when it is re-encoded.
 func runtimeGrants(version DelegatedPolicyVersion, effective []DelegatedPolicyGrant) []authz.Grant {
 	grants := make([]authz.Grant, 0, len(effective))
-	for _, grant := range effective {
+	for _, stored := range effective {
+		grant := authz.CanonicalGrant(authz.Grant{PrincipalUrn: "", Scope: stored.Scope, Selector: cloneSelector(stored.Selector), Inferred: false})
 		definition, known := runtimeScopeDefinitions[grant.Scope]
 		if !known || definition.lifecycle != RuntimeScopeLifecycleActive || definition.safeSince == 0 || definition.safeSince > RuntimeScopeRegistryVersion(version) {
 			continue
 		}
-		grants = append(grants, authz.Grant{PrincipalUrn: "", Scope: grant.Scope, Selector: cloneSelector(grant.Selector), Inferred: false})
+		grants = append(grants, grant)
 	}
 	return grants
 }

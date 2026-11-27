@@ -260,6 +260,30 @@ type Registry struct {
 	// Retired lists scope names that no longer exist. They stay reserved so
 	// stored policies holding them still parse, and must never be reused.
 	Retired []Scope
+	// Renamed lists stored scope names that now mean another declared scope.
+	// A grant stored under the old name is read as the new one, so the
+	// rename ships before the data migration that rewrites the stored rows.
+	// When an entry is dropped, after one release, its From moves to Retired.
+	Renamed []ScopeRename
+}
+
+// ScopeRename reads a grant stored under From as a grant of To.
+//
+// The grant's selector moves with it: its resource_kind becomes To's kind,
+// and every other key is kept. Only reads go through a rename. Writes use
+// To, so between the deploy and the data migration a role can hold both
+// names, and removing To leaves a stored From row in place until the
+// migration rewrites it.
+type ScopeRename struct {
+	From Scope
+	To   Scope
+	// WildcardResource rewrites the stored resource id to the wildcard. It is
+	// for a scope that moves from the organization onto a type inside a
+	// project, where the stored resource id is the organization's and no
+	// check on the new type names it. A grant is already bounded to its
+	// organization, so the wildcard keeps the same reach, and a project_id
+	// the grant was limited to is kept.
+	WildcardResource bool
 }
 
 type RootPermission struct {

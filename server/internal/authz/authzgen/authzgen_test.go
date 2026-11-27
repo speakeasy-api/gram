@@ -57,6 +57,23 @@ func TestRender_RejectsNameCollisions(t *testing.T) {
 	require.ErrorContains(t, err, "both render as ScopeOrgReadX")
 }
 
+// The definitions rename nothing yet, so the table is rendered from a copy
+// that does.
+func TestRenderTables_WritesRenames(t *testing.T) {
+	t.Parallel()
+
+	model := registry.Definitions
+	model.Renamed = []registry.ScopeRename{
+		{From: "org:old_read", To: "org:read", WildcardResource: false},
+		{From: "org:old_hooks", To: "project:read", WildcardResource: true},
+	}
+	require.NoError(t, model.Validate())
+	source, err := renderTables(model)
+	require.NoError(t, err)
+	require.Contains(t, string(source), `"org:old_hooks": {To: "project:read", WildcardResource: true},`)
+	require.Contains(t, string(source), `"org:old_read":  {To: "org:read", WildcardResource: false},`)
+}
+
 func TestRender_RejectsScopesThatAreNotIdentifiers(t *testing.T) {
 	t.Parallel()
 

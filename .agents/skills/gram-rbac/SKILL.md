@@ -103,6 +103,8 @@ A typed id proves an id is well formed, not that the resource is the caller's. T
 6. Assess Platform MCP (`maintaining-platform-mcp`) and Command K (`maintaining-command-palette`) if the permission gates a user-facing capability.
 7. `mise run lint:server`, `mise run test:server ./internal/authz/... ./internal/access/...`, and `aube run -F dashboard test src/hooks/useRBAC` (includes the server-cases parity test).
 
+To rename a scope, declare the new permission, remove the old one and add a `registry.Renamed` entry from the old name to the new one, then ship the data migration that rewrites the stored rows. Code that reads stored grant rows goes through `authz.CanonicalGrant`; a new reader must too. "Renaming a scope" in `docs/rbac.md` lists what reads through the rename and what does not.
+
 The invariant suite (`authz/registry_invariants_test.go`) checks every permission automatically: implications hold, nothing else is satisfied, and blocks win. Do not add per-scope tests for those properties.
 
 ## Agents

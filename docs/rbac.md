@@ -279,6 +279,14 @@ A scope is sensitive when granting it exposes other members' private activity (`
 - **Assignment.** Changing a member's roles previews what the new roles add that the member did not have, and asks for confirmation when any of it is sensitive. The grant dialog opened from an access request previews a role that gives sensitive access before assigning it.
 - **Audit log.** `access_role:create`, `access_role:update` and `access_member:update_role` rows carry `sensitive_scopes_added` in their metadata: the sensitive scopes the change newly satisfies, computed by `authz.SensitiveScopesAdded` over the implication closure of the grants before and after. Adding `org:admin` to a holder of `org:read` records `org:admin`; widening `chat:read` to `chat:write` records `chat:write` alone; a change that adds nothing sensitive writes no metadata, so older rows and plain changes look alike. The audit log page shows the scopes on the row.
 
+#### Renaming a scope
+
+A stored scope string lives in role, user and agent grants, temporary grants and stored delegated policies, so a rename cannot be a code change alone. `registry.Registry.Renamed` lists each old name with the declared scope it now means, and `mise run gen:authz` writes it into `scopeRenames`. `authz.CanonicalGrant` reads a grant stored under an old name as a grant of the new one: the scope changes, the selector's `resource_kind` becomes the new scope's kind, and every other key stays. `WildcardResource` also replaces the stored resource id with `*`, for a scope that moves from the organization onto a type inside a project, where the stored id is the organization's.
+
+The readers that call it are `LoadGrants` (every evaluation), the role views (`GrantsForRole`, `PatchRoleGrantsTx`'s result, `ScopeCoverageTx`), the agent policy loader and a stored delegated policy's runtime grants. A stored delegated policy is never rewritten: its `requested` and `effective` lists keep the old name, and only the grants it hands the engine use the new one, so the new scope must be agent-safe from a version no later than the policies that hold the old name.
+
+Only reads go through a rename. Writes, the API scope enums and the catalogue know only the new name. Until the rename's data migration rewrites the stored rows, a role can show the new name while the row still holds the old one, and removing the grant leaves that row in place; the queries that filter on a scope string (`DeletePrincipalWildcardGrants`, `ListPrincipalGrantsByResource*`), pending access requests and recorded challenges see only what is stored. So a rename ships in this order: the rename entry and the code that uses the new name, then the data migration, rerun until it finds no old name. One release later the entry is removed and the old name moves to `Retired`, so it is never reused.
+
 ### Grant
 
 A grant gives a principal a scope for some resource selector.
