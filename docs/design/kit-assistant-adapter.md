@@ -36,17 +36,21 @@ records are not equivalent to the empty sentinel.
 
 ## Inference and MCP authority
 
-MCP and inference use the same externally projected, short-lived assertion file.
-Kit exchanges it independently for each resource through its generic workload
-configuration. Inference uses RFC 7523 at `/oauth/usi/<ISSUER_ID>/token`, with
-`resource=urn:speakeasy:inference` and the exact `project_id`; completion uses the
-returned bearer. No API-key record or client secret is bootstrapped.
+- **Deployed ATE runtimes**: sandboxes hold no Speakeasy credentials or
+  assertion files. `mcp.json` uses a direct-bearer placeholder and inference
+  targets the OpenAI-compatible gateway endpoint; the platform egress proxy
+  replaces the `Authorization` header with the actor's signed workload JWT.
+- **Local Docker runtimes (`--environment=local` only)**: MCP and inference use
+  the same externally projected, short-lived assertion file. Kit exchanges it
+  independently for each resource through its generic workload configuration.
+  Inference uses RFC 7523 at `/oauth/usi/<ISSUER_ID>/token`, with
+  `resource=urn:speakeasy:inference` and the exact `project_id`; completion uses
+  the returned bearer. No API-key record or client secret is bootstrapped.
 
 One workload issuer is shared within the project/cluster trust boundary. Each
-runtime generation has an exact subject admission assigned to the assistant's
-existing agent. Owner and agent inference permission remain mandatory. Retirement
-revokes that admission; restore receives a fresh projected token, never a token
-copied from rootfs or a snapshot.
+runtime generation (or ATE thread actor) has an exact subject admission assigned
+to the assistant's existing agent. Owner and agent inference permission remain
+mandatory. Retirement revokes that admission.
 
 The control plane binds verified issuer/subject identity to persisted runtime
 metadata. Kit's completion body `user` field selects only an existing ACP session

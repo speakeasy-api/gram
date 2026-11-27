@@ -46,7 +46,10 @@ func (k *KitLocalRuntimeBackend) PrepareRuntimeSwitch(ctx context.Context, assis
 		if row.AssistantID != assistant.ID || row.ProjectID != assistant.ProjectID {
 			return result, fmt.Errorf("%w: kit switch row belongs to another assistant", errRuntimeSwitchUnavailable)
 		}
-		if row.State != runtimeStateActive && row.State != runtimeStateStopped && row.State != runtimeStateFailed {
+		if row.State == runtimeStateFailed {
+			return result, fmt.Errorf("%w: cannot certify settlement of failed kit local runtime", errRuntimeSwitchUnavailable)
+		}
+		if row.State != runtimeStateActive && row.State != runtimeStateStopped {
 			return result, errRuntimeSwitchBusy
 		}
 		containers, err := k.ownedThreadContainers(ctx, row)

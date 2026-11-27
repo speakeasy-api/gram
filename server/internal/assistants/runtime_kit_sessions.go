@@ -139,16 +139,6 @@ func loadKitSessionBinding(ctx context.Context, queries *assistantrepo.Queries, 
 }
 
 func (s *ServiceCore) beginKitRuntimeTransaction(ctx context.Context, projectID, assistantID, runtimeID uuid.UUID) (pgx.Tx, *assistantrepo.Queries, error) {
-	return s.beginKitRuntimeAuthorityTransaction(ctx, projectID, assistantID, runtimeID, false)
-}
-
-// Lifecycle control can inspect a stopped guest to settle or restart it, but
-// that credential is not permission to append sessions or accept callbacks.
-func (s *ServiceCore) beginKitRuntimeControlTransaction(ctx context.Context, projectID, assistantID, runtimeID uuid.UUID) (pgx.Tx, *assistantrepo.Queries, error) {
-	return s.beginKitRuntimeAuthorityTransaction(ctx, projectID, assistantID, runtimeID, true)
-}
-
-func (s *ServiceCore) beginKitRuntimeAuthorityTransaction(ctx context.Context, projectID, assistantID, runtimeID uuid.UUID, control bool) (pgx.Tx, *assistantrepo.Queries, error) {
 	if projectID == uuid.Nil || assistantID == uuid.Nil || runtimeID == uuid.Nil {
 		return nil, nil, ErrKitRuntimeBinding
 	}
@@ -161,12 +151,7 @@ func (s *ServiceCore) beginKitRuntimeAuthorityTransaction(ctx context.Context, p
 		_ = tx.Rollback(ctx)
 		return nil, nil, fmt.Errorf("lock Kit runtime authority: %w", err)
 	}
-	if control {
-		_, err = queries.GetKitRuntimeControlAuthority(ctx, assistantrepo.GetKitRuntimeControlAuthorityParams{ProjectID: projectID, AssistantID: assistantID, RuntimeID: runtimeID})
-	} else {
-		_, err = queries.GetLiveKitRuntimeAuthority(ctx, assistantrepo.GetLiveKitRuntimeAuthorityParams{ProjectID: projectID, AssistantID: assistantID, RuntimeID: runtimeID})
-	}
-	if err != nil {
+	if _, err := queries.GetLiveKitRuntimeAuthority(ctx, assistantrepo.GetLiveKitRuntimeAuthorityParams{ProjectID: projectID, AssistantID: assistantID, RuntimeID: runtimeID}); err != nil {
 		_ = tx.Rollback(ctx)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil, ErrKitRuntimeBinding

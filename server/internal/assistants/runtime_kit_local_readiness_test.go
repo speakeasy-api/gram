@@ -62,20 +62,40 @@ func TestWaitKitLocalHelperRetriesTransient503AndValidatesInitVersion(t *testing
 
 func TestKitLocalPrepareThreadStopsContainerOnHelperFailure(t *testing.T) {
 	t.Parallel()
-	k, engine, r, _ := kitLocalFixture(t)
-	ensured, err := k.Ensure(t.Context(), r)
-	require.NoError(t, err)
-	r.BackendMetadataJSON = ensured.BackendMetadataJSON
+	for _, tc := range []struct {
+		name           string
+		readyStatus    int
+		bootstrapFail  bool
+		appReadyStatus int
+		wantErr        string
+	}{
+		{name: "readyz-500", readyStatus: http.StatusInternalServerError, appReadyStatus: http.StatusOK, wantErr: "wait for kit local init helper"},
+		{name: "bootstrap-500", readyStatus: http.StatusOK, bootstrapFail: true, appReadyStatus: http.StatusOK, wantErr: "kit local bootstrap rejected"},
+		{name: "app-readyz-500", readyStatus: http.StatusOK, appReadyStatus: http.StatusInternalServerError, wantErr: "wait for kit local ACP server"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			k, engine, r, _ := kitLocalFixture(t)
+			ensured, err := k.Ensure(t.Context(), r)
+			require.NoError(t, err)
+			r.BackendMetadataJSON = ensured.BackendMetadataJSON
 
-	engine.newHelper = func(t *testing.T) *fakeKitLocalInitHelper {
-		h := newFakeKitLocalInitHelper(t)
-		h.appReadyStatus = http.StatusInternalServerError
-		return h
+			engine.newHelper = func(t *testing.T) *fakeKitLocalInitHelper {
+				t.Helper()
+				h := newFakeKitLocalInitHelper(t)
+				h.readyStatus = tc.readyStatus
+				h.appReadyStatus = tc.appReadyStatus
+				if tc.bootstrapFail {
+					h.bootstrapStatus = http.StatusInternalServerError
+				}
+				return h
+			}
+			threadID := uuid.New()
+			err = k.RunTurn(t.Context(), r, runTurnRequest{ThreadID: threadID})
+			require.ErrorContains(t, err, tc.wantErr)
+			name, _ := kitLocalThreadNames(r, threadID)
+			require.False(t, engine.containers[name].Running)
+			require.Contains(t, engine.calls, "stop")
+		})
 	}
-	threadID := uuid.New()
-	err = k.RunTurn(t.Context(), r, runTurnRequest{ThreadID: threadID})
-	require.ErrorContains(t, err, "wait for kit local ACP server")
-	name, _ := kitLocalThreadNames(r, threadID)
-	require.False(t, engine.containers[name].Running)
-	require.Contains(t, engine.calls, "stop")
 }

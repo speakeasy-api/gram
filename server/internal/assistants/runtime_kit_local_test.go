@@ -26,23 +26,25 @@ import (
 )
 
 type fakeKitLocalInitHelper struct {
-	mu             sync.Mutex
-	server         *httptest.Server
-	port           int
-	started        bool
-	bootstrapCalls int
-	lastPayload    kitATEBootstrapRequest
-	readyStatus    int
-	appReadyStatus int
-	versionHeader  string
+	mu              sync.Mutex
+	server          *httptest.Server
+	port            int
+	started         bool
+	bootstrapCalls  int
+	lastPayload     kitATEBootstrapRequest
+	readyStatus     int
+	bootstrapStatus int
+	appReadyStatus  int
+	versionHeader   string
 }
 
 func newFakeKitLocalInitHelper(t *testing.T) *fakeKitLocalInitHelper {
 	t.Helper()
 	h := &fakeKitLocalInitHelper{
-		readyStatus:    http.StatusOK,
-		appReadyStatus: http.StatusOK,
-		versionHeader:  strconv.Itoa(ateInitWireVersion),
+		readyStatus:     http.StatusOK,
+		bootstrapStatus: http.StatusNoContent,
+		appReadyStatus:  http.StatusOK,
+		versionHeader:   strconv.Itoa(ateInitWireVersion),
 	}
 	h.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h.mu.Lock()
@@ -58,6 +60,10 @@ func newFakeKitLocalInitHelper(t *testing.T) *fakeKitLocalInitHelper {
 			w.WriteHeader(http.StatusOK)
 			_ = json.NewEncoder(w).Encode(map[string]bool{"started": h.started})
 		case r.Method == http.MethodPost && r.URL.Path == "/bootstrap":
+			if h.bootstrapStatus != http.StatusNoContent {
+				w.WriteHeader(h.bootstrapStatus)
+				return
+			}
 			if h.started {
 				w.WriteHeader(http.StatusConflict)
 				return
@@ -699,22 +705,50 @@ func TestKitLocalImageMismatchRejected(t *testing.T) {
 
 func TestKitLocalStopRetiredRevokesWorkload(t *testing.T) {
 	t.Parallel()
-	backend, engine, r, _ := kitLocalFixture(t)
+	backend, engine, r, protocol := kitLocalFixture(t)
 	admitted, err := backend.Ensure(t.Context(), r)
 	require.NoError(t, err)
 	r.BackendMetadataJSON = admitted.BackendMetadataJSON
-	require.NoError(t, backend.RunTurn(t.Context(), r, runTurnRequest{ThreadID: uuid.New()}))
+	threadID := uuid.New()
+	require.NoError(t, backend.RunTurn(t.Context(), r, runTurnRequest{ThreadID: threadID}))
 	fenced := false
 	backend.config.Fence = func(context.Context, assistantRuntimeRecord) error {
 		fenced = true
 		return nil
 	}
+	db, err := assistantsInfra.CloneTestDatabase(t, "kit_local_stop_close")
+	require.NoError(t, err)
+	tx := testenv.BeginTx(t, t.Context(), db)
+	defer func() { _ = tx.Rollback(t.Context()) }()
+	r.LifecycleTx = tx
 	require.NoError(t, backend.Stop(t.Context(), r))
 	require.False(t, fenced, "non-retired idle stop preserves workload admission")
+	require.Equal(t, []uuid.UUID{threadID}, protocol.closedThreads, "non-retired stop with lifecycle lock closes native thread session")
+	r.LifecycleTx = nil
 	r.Retired = true
 	require.NoError(t, backend.Stop(t.Context(), r))
 	require.True(t, fenced, "retired stop revokes workload admission")
 	for _, info := range engine.containers {
 		require.False(t, info.Running)
 	}
+}
+
+func TestKitLocalLegacySingleContainerMetadataTriggersUnrecoverableReplacement(t *testing.T) {
+	t.Parallel()
+	backend, _, r, _ := kitLocalFixture(t)
+	legacy, err := json.Marshal(map[string]any{
+		"project_id":      r.ProjectID,
+		"runtime_version": 3,
+		"runtime_id":      r.ID,
+		"assistant_id":    r.AssistantID,
+		"generation":      backend.config.CompatibilityGeneration,
+		"container_name":  "gram-kit-legacy",
+		"home_volume":     "gram-kit-legacy-home",
+		"container_id":    "legacy-id",
+	})
+	require.NoError(t, err)
+	r.BackendMetadataJSON = legacy
+	_, err = backend.Ensure(t.Context(), r)
+	require.ErrorIs(t, err, errKitRuntimeUnrecoverable)
+	require.NoError(t, backend.Reap(t.Context(), r))
 }

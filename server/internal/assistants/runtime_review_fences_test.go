@@ -21,6 +21,7 @@ func TestReviewLocalReadinessFailureStopsStartedIncarnation(t *testing.T) {
 	require.NoError(t, err)
 	r.BackendMetadataJSON = ensured.BackendMetadataJSON
 	engine.newHelper = func(t *testing.T) *fakeKitLocalInitHelper {
+		t.Helper()
 		h := newFakeKitLocalInitHelper(t)
 		h.appReadyStatus = http.StatusInternalServerError
 		return h

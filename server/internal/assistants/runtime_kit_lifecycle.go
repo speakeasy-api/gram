@@ -124,7 +124,7 @@ func (s *ServiceCore) sweepIdleKitRuntimes(ctx context.Context, now time.Time) i
 				}
 				attempted++
 				rowCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-				if s.retireLeftoverKitRuntime(rowCtx, rec) {
+				if err := s.retireLeftoverKitRuntime(rowCtx, rec); err == nil {
 					stopped++
 				}
 				cancel()
@@ -242,7 +242,9 @@ func (s *ServiceCore) sweepIdleLocalKitRuntime(ctx context.Context, capability k
 
 // retireLeftoverKitRuntime cleanly logs, revokes workload admission for, and
 // terminally retires a Kit runtime row referencing the removed GKE backend.
-func (s *ServiceCore) retireLeftoverKitRuntime(ctx context.Context, record assistantRuntimeRecord) bool {
+// Fails closed if workload revocation or row retirement fails so a replacement
+// runtime is never admitted while old workload authority remains live.
+func (s *ServiceCore) retireLeftoverKitRuntime(ctx context.Context, record assistantRuntimeRecord) error {
 	s.logger.WarnContext(ctx, "retiring leftover Kit runtime referencing removed backend",
 		attr.SlogAssistantID(record.AssistantID.String()),
 		attr.SlogProjectID(record.ProjectID.String()),
@@ -254,15 +256,16 @@ func (s *ServiceCore) retireLeftoverKitRuntime(ctx context.Context, record assis
 			attr.SlogAssistantRuntimeID(record.ID.String()),
 			attr.SlogError(err),
 		)
+		return fmt.Errorf("revoke leftover Kit runtime workload: %w", err)
 	}
 	if err := s.stopRuntimeRecord(ctx, record.ProjectID, record.ID, runtimeStateFailed); err != nil {
 		s.logger.WarnContext(ctx, "mark leftover Kit runtime retired failed",
 			attr.SlogAssistantRuntimeID(record.ID.String()),
 			attr.SlogError(err),
 		)
-		return false
+		return fmt.Errorf("mark leftover Kit runtime retired: %w", err)
 	}
-	return true
+	return nil
 }
 
 // sweepATEThreadActors paginates live running rows in assistant_ate_actors

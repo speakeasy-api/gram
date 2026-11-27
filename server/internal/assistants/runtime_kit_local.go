@@ -299,8 +299,11 @@ func (k *KitLocalRuntimeBackend) parseMetadata(r assistantRuntimeRecord) (kitLoc
 	if err := json.Unmarshal(r.BackendMetadataJSON, &m); err != nil {
 		return zero, false, fmt.Errorf("decode kit local metadata: %w", err)
 	}
-	if m.RuntimeVersion != 3 || m.RuntimeID != r.ID || m.ProjectID != r.ProjectID || m.AssistantID != r.AssistantID || m.Generation != k.config.CompatibilityGeneration || m.ImageID == "" {
+	if m.RuntimeVersion != 3 || m.RuntimeID != r.ID || m.ProjectID != r.ProjectID || m.AssistantID != r.AssistantID || m.Generation != k.config.CompatibilityGeneration {
 		return zero, false, fmt.Errorf("kit local saved metadata does not match runtime authority")
+	}
+	if m.ImageID == "" {
+		return zero, false, fmt.Errorf("%w: legacy single-container kit local metadata requires replacement", errKitRuntimeUnrecoverable)
 	}
 	return m, true, nil
 }
@@ -687,7 +690,7 @@ func (k *KitLocalRuntimeBackend) ownedThreadContainers(ctx context.Context, r as
 	}
 	names, err := k.engine.ListKitContainers(ctx, r.ID.String())
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("list kit local containers: %w", err)
 	}
 	out := make([]kitLocalOwnedContainer, 0, len(names))
 	for _, name := range names {
@@ -728,7 +731,10 @@ func (k *KitLocalRuntimeBackend) closeRunningThreadSession(ctx context.Context, 
 	if !ok {
 		return nil
 	}
-	return closer.CloseNativeThreadSession(ctx, r, entry.threadID)
+	if err := closer.CloseNativeThreadSession(ctx, r, entry.threadID); err != nil {
+		return fmt.Errorf("close native kit thread session: %w", err)
+	}
+	return nil
 }
 
 func (k *KitLocalRuntimeBackend) CheckpointIdleRuntime(ctx context.Context, r assistantRuntimeRecord) error {
@@ -830,13 +836,41 @@ func (k *KitLocalRuntimeBackend) Reap(ctx context.Context, r assistantRuntimeRec
 }
 
 func (k *KitLocalRuntimeBackend) reap(ctx context.Context, r assistantRuntimeRecord) error {
-	containers, err := k.ownedThreadContainers(ctx, r)
-	if err != nil {
-		return err
+	_, _, metaErr := k.parseMetadata(r)
+	legacySingleContainer := errors.Is(metaErr, errKitRuntimeUnrecoverable)
+	if metaErr != nil && !legacySingleContainer {
+		return metaErr
+	}
+	var containers []kitLocalOwnedContainer
+	var legacyContainerIDs []string
+	if legacySingleContainer {
+		names, err := k.engine.ListKitContainers(ctx, r.ID.String())
+		if err != nil {
+			return fmt.Errorf("list legacy kit local containers: %w", err)
+		}
+		for _, name := range names {
+			info, err := k.engine.InspectKit(ctx, name)
+			if errors.Is(err, errLocalContainerNotFound) {
+				continue
+			}
+			if err != nil {
+				return fmt.Errorf("inspect legacy kit container: %w", err)
+			}
+			if info.Labels["gram.ai/assistant-id"] != r.AssistantID.String() || info.Labels["gram.ai/project-id"] != r.ProjectID.String() || info.Labels["gram.ai/runtime-lineage"] != r.ID.String() {
+				return fmt.Errorf("legacy kit local container ownership mismatch")
+			}
+			legacyContainerIDs = append(legacyContainerIDs, info.ID)
+		}
+	} else {
+		var err error
+		containers, err = k.ownedThreadContainers(ctx, r)
+		if err != nil {
+			return err
+		}
 	}
 	volumes, err := k.engine.ListKitVolumes(ctx, r.ID.String())
 	if err != nil {
-		return err
+		return fmt.Errorf("list kit local volumes: %w", err)
 	}
 	for _, volume := range volumes {
 		labels, err := k.engine.InspectKitVolume(ctx, volume)
@@ -846,13 +880,22 @@ func (k *KitLocalRuntimeBackend) reap(ctx context.Context, r assistantRuntimeRec
 		if err != nil {
 			return fmt.Errorf("inspect kit HOME volume before reap: %w", err)
 		}
-		if err := k.checkLabels(r, labels, uuid.Nil); err != nil {
+		if legacySingleContainer {
+			if labels["gram.ai/assistant-id"] != r.AssistantID.String() || labels["gram.ai/project-id"] != r.ProjectID.String() || labels["gram.ai/runtime-lineage"] != r.ID.String() {
+				return fmt.Errorf("legacy kit local volume ownership mismatch")
+			}
+		} else if err := k.checkLabels(r, labels, uuid.Nil); err != nil {
 			return err
 		}
 	}
 	if k.config.Fence != nil {
 		if err := k.config.Fence(ctx, r); err != nil {
 			return err
+		}
+	}
+	for _, id := range legacyContainerIDs {
+		if err := k.engine.Remove(ctx, id); err != nil {
+			return fmt.Errorf("remove legacy kit container: %w", err)
 		}
 	}
 	for _, entry := range containers {

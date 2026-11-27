@@ -2541,6 +2541,7 @@ func (s *ServiceCore) reapStoppedRuntimeRow(ctx context.Context, record assistan
 				attr.SlogAssistantRuntimeID(record.ID.String()),
 				attr.SlogError(err),
 			)
+			return false
 		}
 	} else if err := s.runtime.ReapStoppedMachine(ctx, record); err != nil {
 		s.logger.WarnContext(ctx, "reap stopped runtime machine failed",
@@ -2594,6 +2595,7 @@ func (s *ServiceCore) reapRuntimeRow(ctx context.Context, record assistantRuntim
 				attr.SlogAssistantRuntimeID(record.ID.String()),
 				attr.SlogError(err),
 			)
+			return false
 		}
 	} else if err := s.runtime.Reap(ctx, record); err != nil {
 		s.logger.WarnContext(ctx, "reap runtime backend failed",
@@ -3292,7 +3294,9 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 	}
 
 	if isRetiredKitBackend(runtimeRecord) {
-		s.retireLeftoverKitRuntime(ctx, runtimeRecord)
+		if err := s.retireLeftoverKitRuntime(ctx, runtimeRecord); err != nil {
+			return ProcessThreadEventsResult{}, err
+		}
 		return ProcessThreadEventsResult{
 			AssistantID:         assistant.ID,
 			WarmUntil:           time.Time{},

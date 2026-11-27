@@ -206,13 +206,19 @@ func (s *ServiceCore) finishRuntimeSwitchRetirement(ctx context.Context, runtime
 				attr.SlogAssistantRuntimeBackend(runtime.Backend),
 			)
 		}
-		if err := s.revokeKitWorkload(ctx, s.db, runtime); err != nil && s.logger != nil {
-			s.logger.WarnContext(ctx, "revoke leftover Kit runtime workload during switch retirement failed",
-				attr.SlogAssistantRuntimeID(runtime.ID.String()),
-				attr.SlogError(err),
-			)
+		if err := s.revokeKitWorkload(ctx, s.db, runtime); err != nil {
+			if s.logger != nil {
+				s.logger.WarnContext(ctx, "revoke leftover Kit runtime workload during switch retirement failed",
+					attr.SlogAssistantRuntimeID(runtime.ID.String()),
+					attr.SlogError(err),
+				)
+			}
+			return fmt.Errorf("revoke leftover Kit runtime workload during switch retirement: %w", err)
 		}
-		return assistantrepo.New(s.db).CompleteRuntimeSwitchRetirement(ctx, assistantrepo.CompleteRuntimeSwitchRetirementParams{ID: runtime.ID, ProjectID: runtime.ProjectID})
+		if err := assistantrepo.New(s.db).CompleteRuntimeSwitchRetirement(ctx, assistantrepo.CompleteRuntimeSwitchRetirementParams{ID: runtime.ID, ProjectID: runtime.ProjectID}); err != nil {
+			return fmt.Errorf("complete leftover Kit switch retirement: %w", err)
+		}
+		return nil
 	}
 	if kitProductionRuntime(runtime.RuntimeVersion, runtime.Backend) {
 		return s.kitATELifecycle(ctx, runtime, func(ctx context.Context, locked assistantRuntimeRecord) error {
