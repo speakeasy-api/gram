@@ -80,7 +80,8 @@ func TestEveryChatMessageWriteQueryIsGuarded(t *testing.T) {
 // update a protected field or a transcript.
 func writeQueries(sql string) []string {
 	var names []string
-	for _, block := range strings.Split(sql, "\n-- name: ")[1:] {
+	// The leading newline lets a file's first query split like the rest.
+	for _, block := range strings.Split("\n"+sql, "\n-- name: ")[1:] {
 		fields := strings.Fields(block)
 		if len(fields) == 0 {
 			continue

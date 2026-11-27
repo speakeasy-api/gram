@@ -23,69 +23,54 @@ const (
 	testenvRepoPkgPath         = "github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
+// testsOnly marks a query that only test files may call.
+const testsOnly = ""
+
 // chatMessageWriteQueries maps each sqlc package to the generated queries
-// that write chat_messages or its transcript tables, and the one package
-// allowed to call them. An empty allowed package means test files only. A
-// test in internal/chat/transcriptstore checks this list against every SQL
-// file, so a new write query fails CI until it is listed here.
-var chatMessageWriteQueries = map[string]struct {
-	allowed string
-	queries map[string]bool
-}{
+// that write chat_messages' protected fields or its transcript tables, and,
+// per query, the one package allowed to call it. testsOnly means test files
+// only. A test in internal/chat/transcriptstore checks this list against
+// every SQL file, so a new write query fails CI until it is listed here.
+var chatMessageWriteQueries = map[string]map[string]string{
 	chatRepoPkgPath: {
-		allowed: chatPkgPath,
-		queries: map[string]bool{
-			"CreateChatMessage":              true,
-			"UpsertCorrelatedChatMessage":    true,
-			"CreateExternalChatMessage":      true,
-			"CreateChatMessageReturningID":   true,
-			"CreateChatMessageWithToolCalls": true,
-			"SeedChatMessage":                true,
-			"SeedChatMessageContent":         true,
-			"SeedChatMessageWithSource":      true,
-			"SeedChatTranscriptMessage":      true,
-		},
+		"CreateChatMessage":              chatPkgPath,
+		"UpsertCorrelatedChatMessage":    chatPkgPath,
+		"CreateExternalChatMessage":      chatPkgPath,
+		"CreateChatMessageReturningID":   testsOnly,
+		"CreateChatMessageWithToolCalls": testsOnly,
+		"SeedChatMessage":                testsOnly,
+		"SeedChatMessageContent":         testsOnly,
+		"SeedChatMessageWithSource":      testsOnly,
+		"SeedChatTranscriptMessage":      testsOnly,
 	},
 	transcriptStoreRepoPkgPath: {
-		allowed: transcriptStorePkgPath,
-		queries: map[string]bool{
-			"WriteChatMessage":      true,
-			"Capture":               true,
-			"UpdateMessageMetadata": true,
-			"DeleteToolCallIDs":     true,
-			"InsertToolCallIDs":     true,
-		},
+		"WriteChatMessage":      transcriptStorePkgPath,
+		"Capture":               transcriptStorePkgPath,
+		"UpdateMessageMetadata": transcriptStorePkgPath,
+		"DeleteToolCallIDs":     transcriptStorePkgPath,
+		"InsertToolCallIDs":     transcriptStorePkgPath,
 	},
 	transcriptFixturesPkgPath: {
-		allowed: "",
-		queries: map[string]bool{
-			"CreateMessage":     true,
-			"ChangeContent":     true,
-			"ReplaceCiphertext": true,
-			"ChangeNotes":       true,
-			"RaceContent":       true,
-			"RaceRawContent":    true,
-			"SetJSONField":      true,
-			"SetStorageError":   true,
-			"InsertTranscript":  true,
-			"SetToolCalls":      true,
-			"MakeLegacyCopy":    true,
-		},
+		"CreateMessage":     testsOnly,
+		"ChangeContent":     testsOnly,
+		"ReplaceCiphertext": testsOnly,
+		"ChangeNotes":       testsOnly,
+		"RaceContent":       testsOnly,
+		"RaceRawContent":    testsOnly,
+		"SetJSONField":      testsOnly,
+		"SetStorageError":   testsOnly,
+		"InsertTranscript":  testsOnly,
+		"SetToolCalls":      testsOnly,
+		"MakeLegacyCopy":    testsOnly,
 	},
 	riskRepoPkgPath: {
-		allowed: "",
-		queries: map[string]bool{
-			"CreateChatMessageForTest":              true,
-			"CreateChatMessageWithToolCallsForTest": true,
-			"CreateJudgeWindowMessageForTest":       true,
-		},
+		"CreateChatMessageForTest":              testsOnly,
+		"CreateChatMessageWithToolCallsForTest": testsOnly,
+		"CreateJudgeWindowMessageForTest":       testsOnly,
 	},
 	testenvRepoPkgPath: {
-		allowed: "",
-		queries: map[string]bool{
-			"InsertChatMessage":                   true,
-			"SeedCapturedAgentChatMessageFixture": true,
-		},
+		"InsertChatMessage":                   testsOnly,
+		"SeedCapturedAgentChatMessageFixture": testsOnly,
 	},
 }
 
@@ -117,12 +102,12 @@ func newNoDirectChatMessageInsertAnalyzer(rule noDirectChatMessageInsertSettings
 					return
 				}
 
-				guard, ok := chatMessageWriteQueries[called.Pkg().Path()]
-				if !ok || !guard.queries[called.Name()] {
+				allowed, ok := chatMessageWriteQueries[called.Pkg().Path()][called.Name()]
+				if !ok {
 					return
 				}
 
-				if pass.Pkg.Path() == guard.allowed {
+				if allowed != testsOnly && pass.Pkg.Path() == allowed {
 					return
 				}
 

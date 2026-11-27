@@ -17,3 +17,5 @@ func (q *Queries) CreateExternalChatMessage(_ context.Context, _ CreateChatMessa
 }
 
 func (q *Queries) GetChat(_ context.Context) error { return nil }
+
+func (q *Queries) SeedChatMessage(_ context.Context) error { return nil }

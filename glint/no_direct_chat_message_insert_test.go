@@ -13,5 +13,6 @@ func TestNoDirectChatMessageInsert(t *testing.T) {
 	analysistest.Run(t, testdata, newNoDirectChatMessageInsertAnalyzer(noDirectChatMessageInsertSettings{}),
 		"github.com/speakeasy-api/gram/server/internal/hooks",
 		"github.com/speakeasy-api/gram/server/internal/chat",
+		"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore",
 	)
 }
