@@ -385,6 +385,45 @@ func (q *Queries) CancelPendingAssistantThreadEvents(ctx context.Context, arg Ca
 	return result.RowsAffected(), nil
 }
 
+const cancelProcessingAssistantThreadEvent = `-- name: CancelProcessingAssistantThreadEvent :execrows
+UPDATE assistant_thread_events
+SET
+  status = $1,
+  processed_at = clock_timestamp(),
+  last_error = NULL,
+  updated_at = clock_timestamp()
+WHERE id = $2
+  AND project_id = $3
+  AND status = $4
+  AND attempts = $5
+  AND deleted IS FALSE
+`
+
+type CancelProcessingAssistantThreadEventParams struct {
+	CancelledStatus  string
+	EventID          uuid.UUID
+	ProjectID        uuid.UUID
+	ProcessingStatus string
+	ClaimedAttempt   int64
+}
+
+// Settles a claimed mid-turn steer that was withdrawn before Kit inserted it
+// (via ACP $/cancel_request during a turn interrupt) without advancing the
+// thread's skill snapshot.
+func (q *Queries) CancelProcessingAssistantThreadEvent(ctx context.Context, arg CancelProcessingAssistantThreadEventParams) (int64, error) {
+	result, err := q.db.Exec(ctx, cancelProcessingAssistantThreadEvent,
+		arg.CancelledStatus,
+		arg.EventID,
+		arg.ProjectID,
+		arg.ProcessingStatus,
+		arg.ClaimedAttempt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const claimAssistantMCPOAuthClientRegistration = `-- name: ClaimAssistantMCPOAuthClientRegistration :execrows
 INSERT INTO assistant_mcp_oauth_clients AS clients (
   project_id,
@@ -1960,6 +1999,30 @@ func (q *Queries) GetProjectName(ctx context.Context, projectID uuid.UUID) (stri
 	var name string
 	err := row.Scan(&name)
 	return name, err
+}
+
+const hasPendingAssistantThreadEvent = `-- name: HasPendingAssistantThreadEvent :one
+SELECT EXISTS (
+  SELECT 1
+  FROM assistant_thread_events
+  WHERE project_id = $1
+    AND assistant_thread_id = $2
+    AND deleted IS FALSE
+    AND status = $3
+)::boolean AS has_pending
+`
+
+type HasPendingAssistantThreadEventParams struct {
+	ProjectID     uuid.UUID
+	ThreadID      uuid.UUID
+	PendingStatus string
+}
+
+func (q *Queries) HasPendingAssistantThreadEvent(ctx context.Context, arg HasPendingAssistantThreadEventParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasPendingAssistantThreadEvent, arg.ProjectID, arg.ThreadID, arg.PendingStatus)
+	var has_pending bool
+	err := row.Scan(&has_pending)
+	return has_pending, err
 }
 
 const hasPendingKitInterruptRequest = `-- name: HasPendingKitInterruptRequest :one

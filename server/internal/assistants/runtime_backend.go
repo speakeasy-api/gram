@@ -42,6 +42,27 @@ type runTurnRequest struct {
 	// reconcile newly attached or detached servers into a live thread
 	// without re-running the full thread bootstrap.
 	MCPServers []runtimeMCPServer
+
+	// NextSteerEvent, when non-nil and the Kit gateway advertises
+	// capabilities.session.prompt.delivery.steer, claims and prepares newly
+	// arrived pending events on the same thread for mid-turn delivery.
+	NextSteerEvent func(ctx context.Context) (kitSteerTurn, bool, error)
+}
+
+// kitSteerTurn carries a single thread event claimed while a Kit turn is
+// already running so it can be inserted with ACP delivery="steer".
+type kitSteerTurn struct {
+	EventID                uuid.UUID
+	EventAttempt           int
+	CanonicalUserMessageID uuid.UUID
+	IdempotencyKey         string
+	SourceInstructions     string
+	Prompt                 string
+	InputParts             []runtimeContentPart
+	// OnOutcome is called once when Kit either acknowledges prompt insertion
+	// (inserted=true) or withdraws the held prompt before insertion via
+	// $/cancel_request (inserted=false, withdrawn=true).
+	OnOutcome func(inserted, withdrawn bool)
 }
 
 type RuntimeBackend interface {

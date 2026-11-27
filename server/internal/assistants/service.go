@@ -3356,7 +3356,8 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 		turnCtx := withAssistantLogEvent(ctx, event)
 		s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "turn_start", "assistant turn started", "INFO", nil)
 
-		stopLeaseHeartbeat := s.startProcessingLeaseHeartbeat(turnCtx, thread.ProjectID, runtimeRecord.ID, event.ID)
+		absorbed := newAbsorbedTurnEvents(event)
+		stopLeaseHeartbeat := s.startProcessingLeaseHeartbeat(turnCtx, thread.ProjectID, runtimeRecord.ID, absorbed.eventIDs)
 		// Reset on the first claim, not on enqueue (the previous turn may
 		// still be running) or retry (the frames belong to this same turn).
 		if thread.SourceKind == sourceKindDashboard && event.Attempts == 1 {
@@ -3366,16 +3367,30 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 				s.logger.WarnContext(turnCtx, "reset assistant turn replay", attr.SlogError(err))
 			}
 		}
-		currentSkillSnapshot, runErr := s.processEventTurnWithProtocol(turnCtx, thread, assistant, runtimeRecord, event, protocol)
+		runErr := s.processEventTurnWithProtocol(turnCtx, thread, assistant, runtimeRecord, absorbed, protocol)
 		stopLeaseHeartbeat()
+		events := absorbed.snapshot()
 		if runErr != nil {
-			s.logger.WarnContext(ctx, "assistant turn failed",
-				attr.SlogAssistantThreadID(thread.ID.String()),
-				attr.SlogAssistantEventID(event.ID.String()),
-				attr.SlogAssistantAttempt(event.Attempts),
-				attr.SlogError(runErr),
-			)
-			s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "turn_failed", "assistant turn failed", "ERROR", runErr)
+			for i := range events {
+				ev := events[i]
+				if ev.withdrawn {
+					// Already withdrawn via $/cancel_request before Kit inserted
+					// it; settle as cancelled so a later transport retry does not
+					// re-deliver an event the user stopped.
+					cancelCtx, stopCancel := context.WithTimeout(context.WithoutCancel(ctx), teardownCapCleanupTimeout)
+					_, _ = s.cancelProcessingEvent(cancelCtx, thread.ProjectID, ev.event.ID, ev.event.Attempts)
+					stopCancel()
+					continue
+				}
+				evCtx := withAssistantLogEvent(ctx, ev.event)
+				s.logger.WarnContext(ctx, "assistant turn failed",
+					attr.SlogAssistantThreadID(thread.ID.String()),
+					attr.SlogAssistantEventID(ev.event.ID.String()),
+					attr.SlogAssistantAttempt(ev.event.Attempts),
+					attr.SlogError(runErr),
+				)
+				s.emitAssistantTelemetry(evCtx, assistant, thread, &runtimeRecord, &ev.event, "turn_failed", "assistant turn failed", "ERROR", runErr)
+			}
 
 			if kitProductionRuntime(runtimeRecord.RuntimeVersion, runtimeRecord.Backend) &&
 				(errors.Is(runErr, ErrRuntimeUnhealthy) || errors.Is(runErr, ErrHistoryCorrupted) || errors.Is(runErr, errKitRuntimeUnrecoverable)) {
@@ -3395,16 +3410,21 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 				}
 			}
 
-			teardownExhausted := errors.Is(runErr, ErrRuntimeUnhealthy) && event.Attempts >= maxRuntimeTeardowns
+			anyTeardownExhausted := false
+			for i := range events {
+				if !events[i].withdrawn && errors.Is(runErr, ErrRuntimeUnhealthy) && events[i].event.Attempts >= maxRuntimeTeardowns {
+					anyTeardownExhausted = true
+				}
+			}
 			outcome := turnErrorBucket(runErr)
-			if teardownExhausted {
+			if anyTeardownExhausted {
 				outcome = turnOutcomeRuntimeUnhealthyExhausted
 			}
 			s.recordTurnClassification(turnCtx, assistant.ID, thread.ID, outcome)
 
 			// Runtime-level failure (dead VM, connection refused, missing
-			// state). Tear down the runtime row and leave the event in
-			// 'processing' — do NOT reset it to 'pending', or the outer
+			// state). Tear down the runtime row and leave non-exhausted events in
+			// 'processing' — do NOT reset them to 'pending', or the outer
 			// workflow retry will hammer the dead VM with duplicate turns.
 			// A reaper reclaims stuck 'processing' events after a grace
 			// window so they flow through cleanly under a fresh VM.
@@ -3415,19 +3435,26 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 				// it forever. Still request admission afterwards: the failed
 				// event is no longer claimable, but any other pending event on
 				// the thread must get a fresh runtime rather than sit idle.
-				if teardownExhausted {
-					s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "event_terminal", "assistant event exceeded runtime teardown limit", "ERROR", runErr)
-					// Each step gets its own detached budget so a slow best-effort
-					// runtime Stop cannot starve the two writes that actually break
-					// the loop: failEvent makes the event terminal, and
-					// stopRuntimeRecord frees the per-thread runtime slot so the
-					// re-admission below reserves a fresh VM instead of redispatching
-					// onto this dead one.
-					failCtx, cancelFail := context.WithTimeout(context.WithoutCancel(ctx), teardownCapCleanupTimeout)
-					err := s.failEvent(failCtx, thread.ProjectID, event.ID, fmt.Errorf("exceeded %d runtime teardowns: %w", maxRuntimeTeardowns, runErr))
-					cancelFail()
-					if err != nil {
-						return ProcessThreadEventsResult{}, err
+				if anyTeardownExhausted {
+					for i := range events {
+						ev := events[i]
+						if ev.withdrawn || ev.event.Attempts < maxRuntimeTeardowns {
+							continue
+						}
+						evCtx := withAssistantLogEvent(ctx, ev.event)
+						s.emitAssistantTelemetry(evCtx, assistant, thread, &runtimeRecord, &ev.event, "event_terminal", "assistant event exceeded runtime teardown limit", "ERROR", runErr)
+						// Each step gets its own detached budget so a slow best-effort
+						// runtime Stop cannot starve the two writes that actually break
+						// the loop: failEvent makes the event terminal, and
+						// stopRuntimeRecord frees the per-thread runtime slot so the
+						// re-admission below reserves a fresh VM instead of redispatching
+						// onto this dead one.
+						failCtx, cancelFail := context.WithTimeout(context.WithoutCancel(ctx), teardownCapCleanupTimeout)
+						err := s.failEvent(failCtx, thread.ProjectID, ev.event.ID, fmt.Errorf("exceeded %d runtime teardowns: %w", maxRuntimeTeardowns, runErr))
+						cancelFail()
+						if err != nil {
+							return ProcessThreadEventsResult{}, err
+						}
 					}
 					stopCtx, cancelStop := context.WithTimeout(context.WithoutCancel(ctx), teardownCapCleanupTimeout)
 					_ = s.runtime.Stop(stopCtx, runtimeRecord)
@@ -3466,7 +3493,7 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 
 			// First-attempt history corruption: write a trimmed generation,
 			// tear the runtime down so the next admit /configures with it,
-			// and re-pend the event. Further attempts fall through to the
+			// and re-pend the events. Further attempts fall through to the
 			// terminal-fail branch so persistent corruption can't loop.
 			if errors.Is(runErr, ErrHistoryCorrupted) && event.Attempts <= 1 {
 				if healErr := s.selfHealCorruptHistory(ctx, thread.ChatID, thread.ProjectID, thread.AssistantID); healErr != nil {
@@ -3475,9 +3502,16 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 						attr.SlogAssistantEventID(event.ID.String()),
 						attr.SlogError(healErr),
 					)
-					s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "event_terminal", "assistant self-heal failed", "ERROR", healErr)
-					if err := s.failEvent(ctx, thread.ProjectID, event.ID, fmt.Errorf("self-heal failed: %w", healErr)); err != nil {
-						return ProcessThreadEventsResult{}, err
+					for i := range events {
+						ev := events[i]
+						if ev.withdrawn {
+							continue
+						}
+						evCtx := withAssistantLogEvent(ctx, ev.event)
+						s.emitAssistantTelemetry(evCtx, assistant, thread, &runtimeRecord, &ev.event, "event_terminal", "assistant self-heal failed", "ERROR", healErr)
+						if err := s.failEvent(ctx, thread.ProjectID, ev.event.ID, fmt.Errorf("self-heal failed: %w", healErr)); err != nil {
+							return ProcessThreadEventsResult{}, err
+						}
 					}
 					warmUntil := time.Now().UTC().Add(time.Duration(assistant.WarmTTLSeconds) * time.Second)
 					if err := s.setRuntimeActive(ctx, thread.ProjectID, runtimeRecord.ID, warmUntil); err != nil {
@@ -3496,8 +3530,14 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 				s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "event_self_heal", "assistant history self-heal applied", "WARN", runErr)
 				_ = s.runtime.Stop(ctx, runtimeRecord)
 				_ = s.stopRuntimeRecord(ctx, thread.ProjectID, runtimeRecord.ID, runtimeStateStopped)
-				if err := s.resetEventToPending(ctx, thread.ProjectID, event.ID, runErr); err != nil {
-					return ProcessThreadEventsResult{}, err
+				for i := range events {
+					ev := events[i]
+					if ev.withdrawn {
+						continue
+					}
+					if err := s.resetEventToPending(ctx, thread.ProjectID, ev.event.ID, runErr); err != nil {
+						return ProcessThreadEventsResult{}, err
+					}
 				}
 				return ProcessThreadEventsResult{
 					AssistantID:         assistant.ID,
@@ -3515,18 +3555,25 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 			// message, OpenRouter rate limit, etc), or a live runtime
 			// returned a deterministic 4xx. The runtime is fine —
 			// replaying the same input would just reproduce it, so terminally
-			// fail the event and keep the VM warm. Request admission so any
+			// fail the events and keep the VM warm. Request admission so any
 			// other pending event on the thread is drained on the warm runtime
-			// instead of waiting out the warm timer; the failed event is no
-			// longer claimable, so this cannot loop on it.
+			// instead of waiting out the warm timer; the failed events are no
+			// longer claimable, so this cannot loop on them.
 			if errors.Is(runErr, ErrTurnIdentity) || errors.Is(runErr, ErrCompletionFailed) || errors.Is(runErr, ErrHistoryCorrupted) {
 				message := "assistant event failed at completion provider"
 				if errors.Is(runErr, ErrTurnIdentity) {
 					message = "assistant event identity rejected"
 				}
-				s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "event_terminal", message, "ERROR", runErr)
-				if err := s.failEvent(ctx, thread.ProjectID, event.ID, runErr); err != nil {
-					return ProcessThreadEventsResult{}, err
+				for i := range events {
+					ev := events[i]
+					if ev.withdrawn {
+						continue
+					}
+					evCtx := withAssistantLogEvent(ctx, ev.event)
+					s.emitAssistantTelemetry(evCtx, assistant, thread, &runtimeRecord, &ev.event, "event_terminal", message, "ERROR", runErr)
+					if err := s.failEvent(ctx, thread.ProjectID, ev.event.ID, runErr); err != nil {
+						return ProcessThreadEventsResult{}, err
+					}
 				}
 				warmUntil := time.Now().UTC().Add(time.Duration(assistant.WarmTTLSeconds) * time.Second)
 				if err := s.setRuntimeActive(ctx, thread.ProjectID, runtimeRecord.ID, warmUntil); err != nil {
@@ -3543,33 +3590,27 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 				}, nil
 			}
 
-			// Terminal failure after maxEventAttempts — stop retrying this
-			// event. The warm runtime stays up for subsequent events.
-			if event.Attempts >= maxEventAttempts && !errors.Is(runErr, ErrRuntimeInvocationBusy) {
-				s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "event_terminal", "assistant event exceeded max attempts", "ERROR", runErr)
-				if err := s.failEvent(ctx, thread.ProjectID, event.ID, fmt.Errorf("exceeded %d attempts: %w", maxEventAttempts, runErr)); err != nil {
+			// Per-event retry budget: terminally fail events that exhausted
+			// maxEventAttempts and requeue any remaining events for retry.
+			requeuedAny := false
+			for i := range events {
+				ev := events[i]
+				if ev.withdrawn {
+					continue
+				}
+				evCtx := withAssistantLogEvent(ctx, ev.event)
+				if ev.event.Attempts >= maxEventAttempts && !errors.Is(runErr, ErrRuntimeInvocationBusy) {
+					s.emitAssistantTelemetry(evCtx, assistant, thread, &runtimeRecord, &ev.event, "event_terminal", "assistant event exceeded max attempts", "ERROR", runErr)
+					if err := s.failEvent(ctx, thread.ProjectID, ev.event.ID, fmt.Errorf("exceeded %d attempts: %w", maxEventAttempts, runErr)); err != nil {
+						return ProcessThreadEventsResult{}, err
+					}
+					continue
+				}
+				s.emitAssistantTelemetry(evCtx, assistant, thread, &runtimeRecord, &ev.event, "event_requeued", "assistant event requeued for retry", "WARN", runErr)
+				if err := s.resetEventToPending(ctx, thread.ProjectID, ev.event.ID, runErr); err != nil {
 					return ProcessThreadEventsResult{}, err
 				}
-				warmUntil := time.Now().UTC().Add(time.Duration(assistant.WarmTTLSeconds) * time.Second)
-				if err := s.setRuntimeActive(ctx, thread.ProjectID, runtimeRecord.ID, warmUntil); err != nil {
-					return ProcessThreadEventsResult{}, err
-				}
-				return ProcessThreadEventsResult{
-					AssistantID:         assistant.ID,
-					WarmUntil:           warmUntil,
-					WarmTTLSeconds:      assistant.WarmTTLSeconds,
-					RuntimeActive:       true,
-					RetryAdmission:      false,
-					ProcessedAnyEvent:   processedAny,
-					BootstrappedRuntime: bootstrappedRuntime,
-				}, nil
-			}
-			// Transient turn-level failure (LLM 5xx, MCP blip) — reset event,
-			// keep the warm runtime, let the coordinator re-kick on the next
-			// admit cycle, after AssistantThreadWorkflow's durable admission backoff.
-			s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "event_requeued", "assistant event requeued for retry", "WARN", runErr)
-			if err := s.resetEventToPending(ctx, thread.ProjectID, event.ID, runErr); err != nil {
-				return ProcessThreadEventsResult{}, err
+				requeuedAny = true
 			}
 			warmUntil := time.Now().UTC().Add(time.Duration(assistant.WarmTTLSeconds) * time.Second)
 			if err := s.setRuntimeActive(ctx, thread.ProjectID, runtimeRecord.ID, warmUntil); err != nil {
@@ -3580,29 +3621,59 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 				WarmUntil:           warmUntil,
 				WarmTTLSeconds:      assistant.WarmTTLSeconds,
 				RuntimeActive:       true,
-				RetryAdmission:      true,
+				RetryAdmission:      requeuedAny,
 				ProcessedAnyEvent:   processedAny,
 				BootstrappedRuntime: bootstrappedRuntime,
 			}, nil
 		}
 
-		completed, err := s.completeEvent(ctx, thread.ProjectID, event.ID, event.Attempts, event.SkillSetSnapshot, currentSkillSnapshot, event.Attempts == 1)
-		if err != nil {
-			return ProcessThreadEventsResult{}, err
+		// Settle every event absorbed into this turn in FIFO order.
+		claimedSnapshot := event.SkillSetSnapshot
+		for i := range events {
+			ev := events[i]
+			evCtx := withAssistantLogEvent(ctx, ev.event)
+			if ev.withdrawn {
+				cancelled, err := s.cancelProcessingEvent(ctx, thread.ProjectID, ev.event.ID, ev.event.Attempts)
+				if err != nil {
+					return ProcessThreadEventsResult{}, err
+				}
+				if !cancelled {
+					return ProcessThreadEventsResult{
+						AssistantID:         assistant.ID,
+						WarmUntil:           runtimeRecord.WarmUntil.Time,
+						WarmTTLSeconds:      assistant.WarmTTLSeconds,
+						RuntimeActive:       true,
+						RetryAdmission:      true,
+						ProcessedAnyEvent:   processedAny,
+						BootstrappedRuntime: bootstrappedRuntime,
+					}, nil
+				}
+				s.emitAssistantTelemetry(evCtx, assistant, thread, &runtimeRecord, &ev.event, "event_completed", "assistant event cancelled before insertion", "INFO", nil)
+				processedAny = true
+				continue
+			}
+			allowAdvance := ev.event.Attempts == 1
+			completed, err := s.completeEvent(ctx, thread.ProjectID, ev.event.ID, ev.event.Attempts, claimedSnapshot, ev.currentSkillSnapshot, allowAdvance)
+			if err != nil {
+				return ProcessThreadEventsResult{}, err
+			}
+			if !completed {
+				return ProcessThreadEventsResult{
+					AssistantID:         assistant.ID,
+					WarmUntil:           runtimeRecord.WarmUntil.Time,
+					WarmTTLSeconds:      assistant.WarmTTLSeconds,
+					RuntimeActive:       true,
+					RetryAdmission:      true,
+					ProcessedAnyEvent:   processedAny,
+					BootstrappedRuntime: bootstrappedRuntime,
+				}, nil
+			}
+			if allowAdvance && ev.currentSkillSnapshot != nil {
+				claimedSnapshot = ev.currentSkillSnapshot
+			}
+			s.emitAssistantTelemetry(evCtx, assistant, thread, &runtimeRecord, &ev.event, "event_completed", "assistant event completed", "INFO", nil)
+			processedAny = true
 		}
-		if !completed {
-			return ProcessThreadEventsResult{
-				AssistantID:         assistant.ID,
-				WarmUntil:           runtimeRecord.WarmUntil.Time,
-				WarmTTLSeconds:      assistant.WarmTTLSeconds,
-				RuntimeActive:       true,
-				RetryAdmission:      true,
-				ProcessedAnyEvent:   processedAny,
-				BootstrappedRuntime: bootstrappedRuntime,
-			}, nil
-		}
-		s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "event_completed", "assistant event completed", "INFO", nil)
-		processedAny = true
 	}
 
 	warmUntil := time.Now().UTC().Add(time.Duration(assistant.WarmTTLSeconds) * time.Second)
@@ -3620,38 +3691,121 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 	}, nil
 }
 
-func (s *ServiceCore) processEventTurnWithProtocol(
+type absorbedTurnEvent struct {
+	event                assistantThreadEventRecord
+	currentSkillSnapshot []byte
+	inserted             bool
+	withdrawn            bool
+}
+
+type absorbedTurnEvents struct {
+	mu     sync.Mutex
+	events []absorbedTurnEvent
+}
+
+func newAbsorbedTurnEvents(initial assistantThreadEventRecord) *absorbedTurnEvents {
+	return &absorbedTurnEvents{
+		mu: sync.Mutex{},
+		events: []absorbedTurnEvent{{
+			event:                initial,
+			currentSkillSnapshot: nil,
+			inserted:             false,
+			withdrawn:            false,
+		}},
+	}
+}
+
+func (a *absorbedTurnEvents) setInitialSnapshot(snapshot []byte) {
+	a.mu.Lock()
+	a.events[0].currentSkillSnapshot = snapshot
+	a.mu.Unlock()
+}
+
+func (a *absorbedTurnEvents) add(ev assistantThreadEventRecord, snapshot []byte) int {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	idx := len(a.events)
+	a.events = append(a.events, absorbedTurnEvent{
+		event:                ev,
+		currentSkillSnapshot: snapshot,
+		inserted:             false,
+		withdrawn:            false,
+	})
+	return idx
+}
+
+func (a *absorbedTurnEvents) setOutcome(idx int, inserted, withdrawn bool) {
+	a.mu.Lock()
+	if idx >= 0 && idx < len(a.events) {
+		a.events[idx].inserted = inserted
+		a.events[idx].withdrawn = withdrawn
+	}
+	a.mu.Unlock()
+}
+
+func (a *absorbedTurnEvents) eventIDs() []uuid.UUID {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	ids := make([]uuid.UUID, len(a.events))
+	for i := range a.events {
+		ids[i] = a.events[i].event.ID
+	}
+	return ids
+}
+
+func (a *absorbedTurnEvents) snapshot() []absorbedTurnEvent {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	out := make([]absorbedTurnEvent, len(a.events))
+	copy(out, a.events)
+	return out
+}
+
+type preparedEventPrompt struct {
+	prompt                 string
+	inputParts             []runtimeContentPart
+	sourceInstructions     string
+	canonicalUserMessageID uuid.UUID
+	currentSkillSnapshot   []byte
+	identity               turnIdentity
+}
+
+func (s *ServiceCore) prepareEventPrompt(
 	ctx context.Context,
 	thread assistantThreadRecord,
 	assistant assistantRecord,
 	runtime assistantRuntimeRecord,
 	event assistantThreadEventRecord,
-	protocol runtimeProtocol,
-) ([]byte, error) {
+	resolveIdentity bool,
+) (preparedEventPrompt, error) {
+	var out preparedEventPrompt
 	skills, err := s.loadAssistantSkills(ctx, assistant.ProjectID, []uuid.UUID{assistant.ID})
 	if err != nil {
-		return nil, err
+		return out, err
 	}
 	currentSnapshot := newAssistantSkillSetSnapshot(skills[assistant.ID])
 	currentSnapshotBytes, err := marshalAssistantSkillSetSnapshot(currentSnapshot)
 	if err != nil {
-		return nil, fmt.Errorf("marshal current assistant skill snapshot: %w", err)
+		return out, fmt.Errorf("marshal current assistant skill snapshot: %w", err)
 	}
+	out.currentSkillSnapshot = currentSnapshotBytes
 	notice := ""
 	if event.SkillSetSnapshot != nil {
 		claimedSnapshot, err := decodeAssistantSkillSetSnapshot(event.SkillSetSnapshot)
 		if err != nil {
-			return nil, err
+			return out, err
 		}
 		notice = renderAssistantSkillSetChange(claimedSnapshot, currentSnapshot)
 	}
 
-	mcpServers := s.currentRuntimeMCPServers(ctx, assistant)
-
-	identity, err := s.resolveTurnIdentity(ctx, assistant, thread, event)
-	if err != nil {
-		return nil, err
+	if resolveIdentity {
+		identity, err := s.resolveTurnIdentity(ctx, assistant, thread, event)
+		if err != nil {
+			return out, err
+		}
+		out.identity = identity
 	}
+
 	prompt := ""
 	var inputParts []runtimeContentPart
 	if mcpAuthPrompt, ok := decodeMCPAuthTurn(ctx, s.logger, event); ok {
@@ -3659,19 +3813,21 @@ func (s *ServiceCore) processEventTurnWithProtocol(
 	} else {
 		adapter, err := getSourceAdapter(thread.SourceKind)
 		if err != nil {
-			return nil, err
+			return out, err
 		}
 		prompt, err = adapter.DecodeTurn(event)
 		if err != nil {
-			return nil, fmt.Errorf("decode assistant turn: %w", err)
+			return out, fmt.Errorf("decode assistant turn: %w", err)
 		}
-		senderLine, err := s.speakeasySenderContextLine(ctx, thread, identity)
-		if err != nil {
-			return nil, err
-		}
-		prompt, err = insertAssistantEnvironmentChange(prompt, senderLine)
-		if err != nil {
-			return nil, err
+		if resolveIdentity {
+			senderLine, err := s.speakeasySenderContextLine(ctx, thread, out.identity)
+			if err != nil {
+				return out, err
+			}
+			prompt, err = insertAssistantEnvironmentChange(prompt, senderLine)
+			if err != nil {
+				return out, err
+			}
 		}
 		// Best-effort: files attached to the triggering message ride along as
 		// vision/text content. Failures degrade to the metadata-only turn.
@@ -3684,52 +3840,135 @@ func (s *ServiceCore) processEventTurnWithProtocol(
 	}
 	prompt, err = insertAssistantEnvironmentChange(prompt, notice)
 	if err != nil {
-		return nil, err
+		return out, err
 	}
-	var turnToken string
-	if identity.AgentBacked {
-		turnToken, err = s.mintTurnCredential(ctx, assistant, thread, event, identity)
-	} else {
-		turnToken, err = s.MintThreadScopedRuntimeToken(assistant, thread.ID, identity.UserID)
-	}
-	if err != nil {
-		return nil, err
-	}
-	var canonicalUserMessageID uuid.UUID
-	var sourceInstructions string
+	out.prompt = prompt
+	out.inputParts = inputParts
+
 	if runtime.RuntimeVersion == 3 {
-		sourceInstructions, err = composeInstructions("", thread, nil, s.connectionLinkPrefix())
+		sourceInstructions, err := composeInstructions("", thread, nil, s.connectionLinkPrefix())
 		if err != nil {
-			return nil, err
+			return out, err
 		}
+		out.sourceInstructions = sourceInstructions
 		ids, err := assistantrepo.New(s.db).ResolveKitCurrentUserMessage(ctx, assistantrepo.ResolveKitCurrentUserMessageParams{ProjectID: assistant.ProjectID, AssistantID: assistant.ID, EventID: event.ID})
 		if err != nil {
-			return nil, fmt.Errorf("resolve canonical Kit input: %w", err)
+			return out, fmt.Errorf("resolve canonical Kit input: %w", err)
 		}
 		if len(ids) > 1 {
-			return nil, fmt.Errorf("ambiguous canonical Kit input")
+			return out, fmt.Errorf("ambiguous canonical Kit input")
 		}
 		if len(ids) == 1 {
-			canonicalUserMessageID = ids[0]
+			out.canonicalUserMessageID = ids[0]
 		}
 	}
+	return out, nil
+}
+
+func (s *ServiceCore) processEventTurnWithProtocol(
+	ctx context.Context,
+	thread assistantThreadRecord,
+	assistant assistantRecord,
+	runtime assistantRuntimeRecord,
+	absorbed *absorbedTurnEvents,
+	protocol runtimeProtocol,
+) error {
+	event := absorbed.snapshot()[0].event
+	prepared, err := s.prepareEventPrompt(ctx, thread, assistant, runtime, event, true)
+	if err != nil {
+		return err
+	}
+	absorbed.setInitialSnapshot(prepared.currentSkillSnapshot)
+
+	mcpServers := s.currentRuntimeMCPServers(ctx, assistant)
+
+	var turnToken string
+	if prepared.identity.AgentBacked {
+		turnToken, err = s.mintTurnCredential(ctx, assistant, thread, event, prepared.identity)
+	} else {
+		turnToken, err = s.MintThreadScopedRuntimeToken(assistant, thread.ID, prepared.identity.UserID)
+	}
+	if err != nil {
+		return err
+	}
+
+	var nextSteerEvent func(context.Context) (kitSteerTurn, bool, error)
+	if runtime.RuntimeVersion == 3 {
+		nextSteerEvent = func(steerCtx context.Context) (kitSteerTurn, bool, error) {
+			var zero kitSteerTurn
+			hasPending, err := assistantrepo.New(s.db).HasPendingAssistantThreadEvent(steerCtx, assistantrepo.HasPendingAssistantThreadEventParams{
+				ProjectID:     thread.ProjectID,
+				ThreadID:      thread.ID,
+				PendingStatus: eventStatusPending,
+			})
+			if err != nil {
+				return zero, false, fmt.Errorf("check pending assistant thread events: %w", err)
+			}
+			if !hasPending {
+				return zero, false, nil
+			}
+			ev, claimed, err := s.claimRuntimeEvent(steerCtx, runtime, thread.ID)
+			if err != nil {
+				if errors.Is(err, errRuntimeAuthorityRetired) {
+					return zero, false, nil
+				}
+				return zero, false, err
+			}
+			if !claimed {
+				return zero, false, nil
+			}
+			evCtx := withAssistantLogEvent(steerCtx, ev)
+			s.emitAssistantTelemetry(evCtx, assistant, thread, &runtime, &ev, "turn_start", "assistant turn steered", "INFO", nil)
+			// Only Speakeasy Slack threads attach a verified sender context line
+			// to the prompt; Kit authentication is runtime-bound workload identity
+			// and never gates or defers a steered event by sender.
+			steerPrepared, prepErr := s.prepareEventPrompt(evCtx, thread, assistant, runtime, ev, thread.SourceKind == sourceKindSpeakeasySlack)
+			if prepErr != nil {
+				// Preparation errors belong to the newly claimed event; settle
+				// or requeue it without disrupting the already-running turn.
+				if errors.Is(prepErr, ErrTurnIdentity) {
+					s.emitAssistantTelemetry(evCtx, assistant, thread, &runtime, &ev, "event_terminal", "assistant event identity rejected", "ERROR", prepErr)
+					_ = s.failEvent(evCtx, thread.ProjectID, ev.ID, prepErr)
+				} else {
+					s.emitAssistantTelemetry(evCtx, assistant, thread, &runtime, &ev, "event_requeued", "assistant steered event requeued for retry", "WARN", prepErr)
+					_ = s.resetEventToPending(evCtx, thread.ProjectID, ev.ID, prepErr)
+				}
+				return zero, false, nil
+			}
+			idx := absorbed.add(ev, steerPrepared.currentSkillSnapshot)
+			return kitSteerTurn{
+				EventID:                ev.ID,
+				EventAttempt:           ev.Attempts,
+				CanonicalUserMessageID: steerPrepared.canonicalUserMessageID,
+				IdempotencyKey:         ev.ID.String(),
+				SourceInstructions:     steerPrepared.sourceInstructions,
+				Prompt:                 steerPrepared.prompt,
+				InputParts:             steerPrepared.inputParts,
+				OnOutcome: func(inserted, withdrawn bool) {
+					absorbed.setOutcome(idx, inserted, withdrawn)
+				},
+			}, true, nil
+		}
+	}
+
 	if err := protocol.RunTurn(ctx, runtime, runTurnRequest{
 		EventID:                event.ID,
 		EventAttempt:           event.Attempts,
-		CanonicalUserMessageID: canonicalUserMessageID,
-		SourceInstructions:     sourceInstructions,
+		CanonicalUserMessageID: prepared.canonicalUserMessageID,
+		SourceInstructions:     prepared.sourceInstructions,
 		Model:                  assistant.Model,
 		ReasoningEffort:        assistant.ReasoningEffort,
 		ThreadID:               thread.ID,
 		IdempotencyKey:         event.ID.String(),
 		AuthToken:              turnToken,
-		Prompt:                 prompt,
-		InputParts:             inputParts,
+		Prompt:                 prepared.prompt,
+		InputParts:             prepared.inputParts,
 		MCPServers:             mcpServers,
+		NextSteerEvent:         nextSteerEvent,
 	}); err != nil {
-		return nil, fmt.Errorf("run assistant turn: %w", err)
+		return fmt.Errorf("run assistant turn: %w", err)
 	}
-	return currentSnapshotBytes, nil
+	return nil
 }
 
 // currentRuntimeMCPServers builds the MCP server set the runner should be
@@ -3787,7 +4026,7 @@ func (s *ServiceCore) startProcessingLeaseHeartbeat(
 	ctx context.Context,
 	projectID uuid.UUID,
 	runtimeID uuid.UUID,
-	eventID uuid.UUID,
+	eventIDs func() []uuid.UUID,
 ) func() {
 	hbCtx, cancel := context.WithCancel(ctx)
 	go func() {
@@ -3799,12 +4038,14 @@ func (s *ServiceCore) startProcessingLeaseHeartbeat(
 			case <-hbCtx.Done():
 				return
 			case <-ticker.C:
-				if err := s.touchProcessingLease(hbCtx, projectID, runtimeID, eventID); err != nil && hbCtx.Err() == nil {
-					s.logger.WarnContext(hbCtx, "refresh assistant processing lease failed",
-						attr.SlogAssistantRuntimeID(runtimeID.String()),
-						attr.SlogAssistantEventID(eventID.String()),
-						attr.SlogError(err),
-					)
+				for _, eventID := range eventIDs() {
+					if err := s.touchProcessingLease(hbCtx, projectID, runtimeID, eventID); err != nil && hbCtx.Err() == nil {
+						s.logger.WarnContext(hbCtx, "refresh assistant processing lease failed",
+							attr.SlogAssistantRuntimeID(runtimeID.String()),
+							attr.SlogAssistantEventID(eventID.String()),
+							attr.SlogError(err),
+						)
+					}
 				}
 			}
 		}
@@ -4676,6 +4917,20 @@ func (s *ServiceCore) completeEvent(ctx context.Context, projectID, eventID uuid
 		return false, fmt.Errorf("complete assistant thread event: %w", err)
 	}
 	return completed, nil
+}
+
+func (s *ServiceCore) cancelProcessingEvent(ctx context.Context, projectID, eventID uuid.UUID, claimedAttempt int) (bool, error) {
+	rows, err := assistantrepo.New(s.db).CancelProcessingAssistantThreadEvent(ctx, assistantrepo.CancelProcessingAssistantThreadEventParams{
+		CancelledStatus:  eventStatusCancelled,
+		EventID:          eventID,
+		ProjectID:        projectID,
+		ProcessingStatus: eventStatusProcessing,
+		ClaimedAttempt:   int64(claimedAttempt),
+	})
+	if err != nil {
+		return false, fmt.Errorf("cancel processing assistant thread event: %w", err)
+	}
+	return rows > 0, nil
 }
 
 // recordTurnClassification counts a failed turn by its classifyTurnError
