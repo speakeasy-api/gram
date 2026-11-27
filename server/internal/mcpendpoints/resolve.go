@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
@@ -18,6 +19,8 @@ import (
 	metamcp_visibility "github.com/speakeasy-api/gram/server/internal/metamcp/visibility"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/orgserving"
 	projects_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -142,6 +145,21 @@ func Resolve(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, input R
 		return ResolutionResult{}, oops.E(oops.CodeUnexpected, err, "load mcp endpoint project").LogError(ctx, logger)
 	}
 	if input.ExpectedOrganization != "" && project.OrganizationID != input.ExpectedOrganization {
+		return deniedResult(&endpoint, nil, nil, networkaccess.ModePrivateOnly), nil
+	}
+
+	// A disabled or non-whitelisted organization has none of its MCP servers
+	// served. The endpoint still owns its address, so this is an
+	// authoritative denial rather than a miss.
+	organization, err := orgrepo.New(db).GetOrganizationMetadata(ctx, project.OrganizationID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return deniedResult(&endpoint, nil, nil, networkaccess.ModePrivateOnly), nil
+	case err != nil:
+		return ResolutionResult{}, oops.E(oops.CodeUnexpected, err, "load mcp endpoint organization").LogError(ctx, logger)
+	}
+	if refusal := orgserving.Check(organization); refusal != orgserving.RefusalNone {
+		logger.InfoContext(ctx, "mcp endpoint organization is not served", attr.SlogOrganizationID(organization.ID), attr.SlogReason(string(refusal)))
 		return deniedResult(&endpoint, nil, nil, networkaccess.ModePrivateOnly), nil
 	}
 
