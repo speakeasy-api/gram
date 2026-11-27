@@ -62,6 +62,10 @@ type channelsContextPreparer interface {
 	PrepareContext(context.Context, authn.Identity) (context.Context, error)
 }
 
+// errChannelsOrganizationDisabled refuses Channels admission into a disabled
+// organization.
+var errChannelsOrganizationDisabled = errors.New("this organization is disabled, please reach out to support@speakeasy.com for more information")
+
 // channelsAdmission binds only verified identities to fresh organization policy.
 // Native agent/workload credentials are not admitted by this OAuth surface.
 type channelsAdmission struct {
@@ -89,6 +93,12 @@ func (a channelsAdmission) PrepareContext(ctx context.Context, identity authn.Id
 	organization, err := organizationsrepo.New(a.db).GetOrganizationMetadata(ctx, identity.OrganizationID)
 	if err != nil {
 		return ctx, fmt.Errorf("load channels organization: %w", err)
+	}
+	// Admission reruns on every request and SSE reconciliation, so disabling
+	// the organization closes Channels on the next one, including for a user
+	// whose session is active in another organization.
+	if organization.DisabledAt.Valid {
+		return ctx, errChannelsOrganizationDisabled
 	}
 	project, err := projectsrepo.New(a.db).GetProjectByIDAndOrganizationID(ctx, projectsrepo.GetProjectByIDAndOrganizationIDParams{ID: identity.ProjectID, OrganizationID: identity.OrganizationID})
 	if err != nil {

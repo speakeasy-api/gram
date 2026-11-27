@@ -32,6 +32,11 @@ type Config struct {
 
 	// SigningSecrets contains the current secret and unexpired rotation overlap.
 	SigningSecrets []string
+
+	// OrganizationDisabled reports that the owning organization is disabled.
+	// Signed requests are then denied without evaluation, including when the
+	// administrator selected allow-on-webhook-failure in Anthropic.
+	OrganizationDisabled bool
 }
 
 // ConfigResolver resolves a random endpoint identifier to its trusted binding.
@@ -133,6 +138,15 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid webhook signature", http.StatusUnauthorized)
 		return
 	}
+	// Checked after the signature, so only Anthropic learns the organization
+	// is disabled. Expected on every request while it stays disabled, so this
+	// is not logged as an error.
+	if h.config.OrganizationDisabled {
+		h.logger.InfoContext(r.Context(), "deny Anthropic inference hook for disabled organization",
+			attr.SlogOrganizationID(h.config.OrganizationID), attr.SlogReason("organization_disabled"))
+		h.writeVerdict(r.Context(), w, denyVerdict(organizationDisabledDenyReason))
+		return
+	}
 	var frame Frame
 	if err := json.Unmarshal(body, &frame); err != nil {
 		http.Error(w, "invalid prompt frame", http.StatusBadRequest)
@@ -161,8 +175,12 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		verdict = denyVerdict(unavailableDenyReason)
 	}
 	verdict.DenyReason = string([]rune(verdict.DenyReason)[:min(len([]rune(verdict.DenyReason)), 500)])
+	h.writeVerdict(r.Context(), w, verdict)
+}
+
+func (h *handler) writeVerdict(ctx context.Context, w http.ResponseWriter, verdict Verdict) {
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(verdict); err != nil {
-		h.logger.ErrorContext(r.Context(), "write Anthropic inference verdict", attr.SlogError(fmt.Errorf("encode verdict: %w", err)))
+		h.logger.ErrorContext(ctx, "write Anthropic inference verdict", attr.SlogError(fmt.Errorf("encode verdict: %w", err)))
 	}
 }
