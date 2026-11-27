@@ -2103,7 +2103,7 @@ func (q *Queries) ListChatMessageParticipants(ctx context.Context, arg ListChatM
 }
 
 const listChatMessages = `-- name: ListChatMessages :many
-SELECT id, seq, chat_id, project_id, role, content, content_raw, content_asset_url, model, message_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, storage_error, user_id, external_user_id, external_message_id, origin, user_agent, ip_address, source, tool_call_id, tool_urn, tool_outcome, tool_outcome_notes, tool_call_summaries, content_hash, generation, capture_kind, original_message_id, replayed, created_at, risk_analyzed_at, source_updated_at, tool_call_count, content_bytes, content_raw_bytes, tool_calls_bytes FROM chat_messages
+SELECT id, seq, chat_id, project_id, role, content, content_raw, content_asset_url, model, message_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, storage_error, user_id, external_user_id, external_message_id, origin, user_agent, ip_address, source, tool_call_id, tool_urn, tool_outcome, tool_outcome_notes, tool_call_summaries, content_hash, generation, capture_kind, original_message_id, replayed, created_at, risk_analyzed_at, tool_call_count, content_bytes, content_raw_bytes, tool_calls_bytes FROM chat_messages
 WHERE chat_id = $1 AND project_id = $2::uuid
 ORDER BY created_at ASC, seq ASC
 `
@@ -2164,7 +2164,6 @@ func (q *Queries) ListChatMessages(ctx context.Context, arg ListChatMessagesPara
 			&i.Replayed,
 			&i.CreatedAt,
 			&i.RiskAnalyzedAt,
-			&i.SourceUpdatedAt,
 			&i.ToolCallCount,
 			&i.ContentBytes,
 			&i.ContentRawBytes,

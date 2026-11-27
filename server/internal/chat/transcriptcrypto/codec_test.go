@@ -64,7 +64,7 @@ func TestRoundTrip(t *testing.T) {
 	notes := "sensitive outcome"
 	storageError := "sensitive provider error"
 	empty := ""
-	for _, message := range []Message{
+	for _, message := range []ProtectedFields{
 		{StorageError: &storageError, Content: "sensitive content", ContentRaw: json.RawMessage(`[{"text":"private"}]`), ToolCalls: json.RawMessage(`[{"arguments":{"secret":"value"}}]`), ToolOutcomeNotes: &notes, ToolCallSummaries: json.RawMessage(`{"summary":"private"}`)},
 		{},
 		{StorageError: &empty, ContentRaw: json.RawMessage(`null`), ToolCalls: json.RawMessage(`[]`), ToolOutcomeNotes: &empty, ToolCallSummaries: json.RawMessage(`{}`)},
@@ -92,7 +92,7 @@ func TestRejectsCiphertextAndIdentityMismatch(t *testing.T) {
 	t.Parallel()
 	e := newCryptor(t)
 	mid, cid := uuid.New(), uuid.New()
-	ciphertext, err := encrypt(t.Context(), e, testIdentity(mid, cid), Message{Content: "sensitive"})
+	ciphertext, err := encrypt(t.Context(), e, testIdentity(mid, cid), ProtectedFields{Content: "sensitive"})
 	require.NoError(t, err)
 	envelope, err := encryption.ParseEnvelope(ciphertext)
 	require.NoError(t, err)
@@ -117,7 +117,7 @@ func TestRejectsCiphertextAndIdentityMismatch(t *testing.T) {
 			t.Parallel()
 			actual, err := decrypt(t.Context(), e, testIdentity(tc.mid, tc.cid), tc.value)
 			require.Error(t, err)
-			require.Equal(t, Message{}, actual)
+			require.Equal(t, ProtectedFields{}, actual)
 			require.NotContains(t, err.Error(), "sensitive")
 		})
 	}
@@ -127,7 +127,7 @@ func TestRejectsInvalidPayload(t *testing.T) {
 	t.Parallel()
 	e := newCryptor(t)
 	mid, cid := uuid.New(), uuid.New()
-	valid := payload{Version: version, Identity: testIdentity(mid, cid), Message: &Message{Content: "sensitive"}}
+	valid := payload{Version: version, Identity: testIdentity(mid, cid), Message: &ProtectedFields{Content: "sensitive"}}
 	for _, tc := range []struct {
 		name string
 		edit func(*payload)
@@ -149,7 +149,7 @@ func TestRejectsInvalidPayload(t *testing.T) {
 			require.NoError(t, err)
 			actual, err := decrypt(t.Context(), e, testIdentity(mid, cid), ciphertext)
 			require.Error(t, err)
-			require.Equal(t, Message{}, actual)
+			require.Equal(t, ProtectedFields{}, actual)
 			require.NotContains(t, err.Error(), "sensitive")
 		})
 	}
@@ -158,7 +158,7 @@ func TestRejectsInvalidPayload(t *testing.T) {
 		require.NoError(t, err)
 		actual, err := decrypt(t.Context(), e, testIdentity(mid, cid), ciphertext)
 		require.Error(t, err)
-		require.Equal(t, Message{}, actual)
+		require.Equal(t, ProtectedFields{}, actual)
 		require.NotContains(t, err.Error(), "sensitive")
 	}
 }
@@ -167,7 +167,7 @@ func TestEncryptFailure(t *testing.T) {
 	t.Parallel()
 	e := newCryptor(t)
 	mid, cid := uuid.New(), uuid.New()
-	for _, message := range []Message{
+	for _, message := range []ProtectedFields{
 		{ContentRaw: json.RawMessage(`sensitive`)},
 		{ToolCalls: json.RawMessage(`{"sensitive":`)},
 		{ToolCallSummaries: json.RawMessage{}},
@@ -178,19 +178,19 @@ func TestEncryptFailure(t *testing.T) {
 		require.NotContains(t, err.Error(), "sensitive")
 	}
 	for _, ids := range [][2]uuid.UUID{{uuid.Nil, cid}, {mid, uuid.Nil}} {
-		ciphertext, err := encrypt(t.Context(), e, testIdentity(ids[0], ids[1]), Message{})
+		ciphertext, err := encrypt(t.Context(), e, testIdentity(ids[0], ids[1]), ProtectedFields{})
 		require.Error(t, err)
 		require.Empty(t, ciphertext)
 	}
 	e.encryptErr = errors.New("sensitive backend error")
-	ciphertext, err := encrypt(t.Context(), e, testIdentity(mid, cid), Message{Content: "sensitive"})
+	ciphertext, err := encrypt(t.Context(), e, testIdentity(mid, cid), ProtectedFields{Content: "sensitive"})
 	require.Error(t, err)
 	require.Empty(t, ciphertext)
 	require.NotContains(t, err.Error(), "sensitive")
 	e.decryptErr = errors.New("sensitive backend error")
 	actual, err := decrypt(t.Context(), e, testIdentity(mid, cid), "ciphertext")
 	require.Error(t, err)
-	require.Equal(t, Message{}, actual)
+	require.Equal(t, ProtectedFields{}, actual)
 	require.NotContains(t, err.Error(), "sensitive")
 }
 
@@ -210,12 +210,12 @@ func TestConstructorAndZeroValue(t *testing.T) {
 	require.NoError(t, err) // Construction scopes only; it does not access storage.
 	require.NotNil(t, codec.encryptor)
 	for _, codec := range []*Codec{nil, {}} {
-		ciphertext, err := codec.Encrypt(t.Context(), testIdentity(uuid.New(), uuid.New()), Message{})
+		ciphertext, err := codec.Encrypt(t.Context(), testIdentity(uuid.New(), uuid.New()), ProtectedFields{})
 		require.Error(t, err)
 		require.Empty(t, ciphertext)
 		message, err := codec.Decrypt(t.Context(), testIdentity(uuid.New(), uuid.New()), "plaintext")
 		require.Error(t, err)
-		require.Equal(t, Message{}, message)
+		require.Equal(t, ProtectedFields{}, message)
 	}
 }
 
@@ -226,13 +226,13 @@ func TestPreservesErrorClassificationWithoutDetails(t *testing.T) {
 		e.encryptErr = errors.Join(cause, errors.New("sensitive provider detail"))
 		e.decryptErr = e.encryptErr
 		mid, cid := uuid.New(), uuid.New()
-		ciphertext, err := encrypt(t.Context(), e, testIdentity(mid, cid), Message{Content: "sensitive"})
+		ciphertext, err := encrypt(t.Context(), e, testIdentity(mid, cid), ProtectedFields{Content: "sensitive"})
 		require.ErrorIs(t, err, cause)
 		require.Empty(t, ciphertext)
 		require.NotContains(t, err.Error(), "sensitive")
 		message, err := decrypt(t.Context(), e, testIdentity(mid, cid), "ciphertext")
 		require.ErrorIs(t, err, cause)
-		require.Equal(t, Message{}, message)
+		require.Equal(t, ProtectedFields{}, message)
 		require.NotContains(t, err.Error(), "sensitive")
 	}
 }
@@ -247,7 +247,7 @@ func TestRejectsMissingOrNullMessage(t *testing.T) {
 		require.NoError(t, err)
 		message, err := decrypt(t.Context(), e, testIdentity(mid, cid), ciphertext)
 		require.Error(t, err)
-		require.Equal(t, Message{}, message)
+		require.Equal(t, ProtectedFields{}, message)
 	}
 }
 
@@ -255,17 +255,17 @@ func TestProjectBinding(t *testing.T) {
 	t.Parallel()
 	e := newCryptor(t)
 	identity := testIdentity(uuid.New(), uuid.New())
-	ciphertext, err := encrypt(t.Context(), e, identity, Message{Content: "sensitive"})
+	ciphertext, err := encrypt(t.Context(), e, identity, ProtectedFields{Content: "sensitive"})
 	require.NoError(t, err)
 	for _, projectID := range []uuid.UUID{uuid.Nil, uuid.New()} {
 		other := identity
 		other.ProjectID = projectID
 		message, err := decrypt(t.Context(), e, other, ciphertext)
 		require.Error(t, err)
-		require.Equal(t, Message{}, message)
+		require.Equal(t, ProtectedFields{}, message)
 	}
 	identity.ProjectID = uuid.Nil
-	ciphertext, err = encrypt(t.Context(), e, identity, Message{Content: "sensitive"})
+	ciphertext, err = encrypt(t.Context(), e, identity, ProtectedFields{Content: "sensitive"})
 	require.Error(t, err)
 	require.Empty(t, ciphertext)
 }

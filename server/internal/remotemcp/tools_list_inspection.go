@@ -86,21 +86,16 @@ func (i toolsListInspection) requested(list *proxy.ToolsListResponse) bool {
 	return requested
 }
 
-// allowed reports whether the caller may inspect. It probes with
-// [authz.Engine.Evaluate] because being refused only means an ordinary listing;
-// recording a denial would ask admins to grant something nobody needed.
+// allowed reports whether the caller may inspect. It decides without
+// challenges because being refused only means an ordinary listing; recording a
+// denial would ask admins to grant something nobody needed.
 func (i toolsListInspection) allowed(ctx context.Context) (bool, error) {
 	server := authz.MCPServer(authz.MCPServerIDFrom(i.mcpServerID), authz.ProjectIDFrom(i.projectID))
-	for _, check := range []authz.Check{server.Read(), server.Write()} {
-		ok, err := i.authz.Evaluate(ctx, check)
-		if err != nil {
-			return false, fmt.Errorf("authorize tools/list inspection: %w", err)
-		}
-		if ok {
-			return true, nil
-		}
+	decisions, err := i.authz.Decide(authz.WithoutChallenges(ctx), server.Read(), server.Write())
+	if err != nil {
+		return false, fmt.Errorf("authorize tools/list inspection: %w", err)
 	}
-	return false, nil
+	return decisions.Each[0].Allowed || decisions.Each[1].Allowed, nil
 }
 
 // markToolUnavailable returns a copy of tool carrying [ToolUnavailableMetaKey]

@@ -3,15 +3,16 @@ package transcriptstore
 import (
 	"bytes"
 	"encoding/json"
+	"strings"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 // metadata is the plaintext-free description of a message that sealing writes
 // to chat_messages, so readers can count, budget and look up tool calls
-// without reading or decrypting the body. It is derived from the same snapshot
-// that is sealed, and the compare-and-set on source_updated_at keeps the two in
-// step.
+// without reading or decrypting the protected fields. It is derived from the same snapshot
+// that is sealed, in the same transaction, while the message row is locked, so
+// the two always describe the same protected fields.
 type metadata struct {
 	toolCallCount   int32
 	contentBytes    int32
@@ -90,7 +91,8 @@ func toolCallCount(raw []byte, calls []json.RawMessage) int {
 	if err := json.Unmarshal(raw, &inner); err != nil {
 		return 0
 	}
-	switch string(bytes.TrimSpace([]byte(inner))) {
+	// btrim in SQL strips spaces only, so tabs and newlines stay.
+	switch strings.Trim(inner, " ") {
 	case "", "[]", "null":
 		return 0
 	}

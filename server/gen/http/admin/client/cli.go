@@ -3620,6 +3620,83 @@ func BuildBackfillMcpConnectGrantsPayload(adminBackfillMcpConnectGrantsBody stri
 	return v, nil
 }
 
+// BuildGetSecretBackfillsPayload builds the payload for the admin
+// getSecretBackfills endpoint from CLI flags.
+func BuildGetSecretBackfillsPayload(adminGetSecretBackfillsAdminSessionToken string) (*admin.GetSecretBackfillsPayload, error) {
+	var adminSessionToken *string
+	{
+		if adminGetSecretBackfillsAdminSessionToken != "" {
+			adminSessionToken = &adminGetSecretBackfillsAdminSessionToken
+		}
+	}
+	v := &admin.GetSecretBackfillsPayload{}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildRunMarketplaceTokenBackfillPayload builds the payload for the admin
+// runMarketplaceTokenBackfill endpoint from CLI flags.
+func BuildRunMarketplaceTokenBackfillPayload(adminRunMarketplaceTokenBackfillBody string, adminRunMarketplaceTokenBackfillAdminSessionToken string) (*admin.RunMarketplaceTokenBackfillPayload, error) {
+	var err error
+	var body RunMarketplaceTokenBackfillRequestBody
+	{
+		err = json.Unmarshal([]byte(adminRunMarketplaceTokenBackfillBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"organization_id\": \"aa\",\n      \"platform_key_fingerprint\": \"aa\"\n   }'")
+		}
+		if body.OrganizationID != nil {
+			if utf8.RuneCountInString(*body.OrganizationID) < 1 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.organization_id", *body.OrganizationID, utf8.RuneCountInString(*body.OrganizationID), 1, true))
+			}
+		}
+		if utf8.RuneCountInString(body.PlatformKeyFingerprint) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.platform_key_fingerprint", body.PlatformKeyFingerprint, utf8.RuneCountInString(body.PlatformKeyFingerprint), 1, true))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminRunMarketplaceTokenBackfillAdminSessionToken != "" {
+			adminSessionToken = &adminRunMarketplaceTokenBackfillAdminSessionToken
+		}
+	}
+	v := &admin.RunMarketplaceTokenBackfillPayload{
+		OrganizationID:         body.OrganizationID,
+		PlatformKeyFingerprint: body.PlatformKeyFingerprint,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildRunRunnerKeyOrganizationBackfillPayload builds the payload for the
+// admin runRunnerKeyOrganizationBackfill endpoint from CLI flags.
+func BuildRunRunnerKeyOrganizationBackfillPayload(adminRunRunnerKeyOrganizationBackfillBody string, adminRunRunnerKeyOrganizationBackfillAdminSessionToken string) (*admin.RunRunnerKeyOrganizationBackfillPayload, error) {
+	var err error
+	var body RunRunnerKeyOrganizationBackfillRequestBody
+	{
+		err = json.Unmarshal([]byte(adminRunRunnerKeyOrganizationBackfillBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"organization_id\": \"aa\"\n   }'")
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminRunRunnerKeyOrganizationBackfillAdminSessionToken != "" {
+			adminSessionToken = &adminRunRunnerKeyOrganizationBackfillAdminSessionToken
+		}
+	}
+	v := &admin.RunRunnerKeyOrganizationBackfillPayload{
+		OrganizationID: body.OrganizationID,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
 // BuildGetProjectRedeployPreviewPayload builds the payload for the admin
 // getProjectRedeployPreview endpoint from CLI flags.
 func BuildGetProjectRedeployPreviewPayload(adminGetProjectRedeployPreviewOrganizationID string, adminGetProjectRedeployPreviewProjectID string, adminGetProjectRedeployPreviewAdminSessionToken string) (*admin.GetProjectRedeployPreviewPayload, error) {

@@ -28,7 +28,7 @@ func (t *Transcripts) LoadEvaluationMessages(ctx context.Context, db DBTX, param
 	joined := make([]joinedRow, len(rows))
 	for i := range rows {
 		r := &rows[i]
-		joined[i] = joinedRow{body: Body{MessageID: r.ID, Content: &r.Content, ContentRaw: &r.ContentRaw, ToolCalls: &r.ToolCalls, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}, chatID: r.ChatID, ciphertext: r.ShadowCiphertext, current: r.ShadowCurrent, shape: nil}
+		joined[i] = joinedRow{body: ProtectedFieldRefs{MessageID: r.ID, Content: &r.Content, ContentRaw: &r.ContentRaw, ToolCalls: &r.ToolCalls, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}, chatID: r.ChatID, ciphertext: r.ShadowCiphertext, current: r.ShadowCurrent, shape: nil}
 	}
 	if err := t.openJoined(ctx, db, params.ProjectID, joined); err != nil {
 		return nil, err
@@ -57,11 +57,11 @@ func (t *Transcripts) LoadEvaluationHistory(ctx context.Context, db DBTX, params
 	joined := make([]joinedRow, len(rows))
 	for i := range rows {
 		r := &rows[i]
-		var shape func(*transcriptcrypto.Message)
+		var shape func(*transcriptcrypto.ProtectedFields)
 		if r.ContentTooLarge {
 			shape = blankBody
 		}
-		joined[i] = joinedRow{body: Body{MessageID: r.ID, Content: &r.Content, ContentRaw: &r.ContentRaw, ToolCalls: &r.ToolCalls, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}, chatID: params.ChatID, ciphertext: r.ShadowCiphertext, current: r.ShadowCurrent, shape: shape}
+		joined[i] = joinedRow{body: ProtectedFieldRefs{MessageID: r.ID, Content: &r.Content, ContentRaw: &r.ContentRaw, ToolCalls: &r.ToolCalls, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}, chatID: params.ChatID, ciphertext: r.ShadowCiphertext, current: r.ShadowCurrent, shape: shape}
 	}
 	if err := t.openJoined(ctx, db, params.ProjectID, joined); err != nil {
 		return nil, err
@@ -70,7 +70,7 @@ func (t *Transcripts) LoadEvaluationHistory(ctx context.Context, db DBTX, params
 }
 
 // blankBody matches a body the query blanked for being over budget.
-func blankBody(m *transcriptcrypto.Message) {
+func blankBody(m *transcriptcrypto.ProtectedFields) {
 	m.Content = ""
 	m.ContentRaw = nil
 	m.ToolCalls = nil

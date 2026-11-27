@@ -318,15 +318,15 @@ func TestUnenforcedPathsDenyAuthClientChecks(t *testing.T) {
 	require.NoError(t, engine.Require(ctx, Either(own, other)))
 	requireForbidden(t, engine.Require(ctx, Either(shared)))
 
-	allowed, err := engine.Evaluate(ctx, shared)
+	allowed, err := allAllowed(ctx, engine, shared)
 	require.NoError(t, err)
 	require.False(t, allowed)
 
-	ids, err := engine.Filter(ctx, []Check{shared, other})
+	ids, err := allowedIDs(ctx, engine, []Check{shared, other})
 	require.NoError(t, err)
 	require.Equal(t, []string{"toolset_1"}, ids)
 
-	matched, err := engine.FindMatched(ctx, []Check{shared, other})
+	matched, err := allowedEach(ctx, engine, []Check{shared, other})
 	require.NoError(t, err)
 	require.Equal(t, []bool{false, true}, matched)
 }

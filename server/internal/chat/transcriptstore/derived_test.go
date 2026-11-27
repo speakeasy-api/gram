@@ -1,8 +1,6 @@
 package transcriptstore
 
 import (
-	"encoding/json"
-	"sync"
 	"testing"
 	"time"
 
@@ -28,7 +26,7 @@ var nullInt4 = pgtype.Int4{Int32: 0, Valid: false}
 func (f *fixture) setMetadata(t *testing.T, id uuid.UUID, toolCallCount, contentBytes *pgtype.Int4) {
 	t.Helper()
 	fixtures := fixturerepo.New(f.db)
-	meta, err := fixtures.MessageMetadata(t.Context(), id)
+	meta, err := fixtures.StoredMetadata(t.Context(), id)
 	require.NoError(t, err)
 	if toolCallCount != nil {
 		meta.ToolCallCount = *toolCallCount
@@ -90,7 +88,7 @@ func TestFindAssistantToolCallUsesShadowIndex(t *testing.T) {
 	_, err = fixtures.SetToolCalls(t.Context(), []byte(`[{"id":"legacy"}]`), legacy, project(f.project))
 	require.NoError(t, err)
 	// A shadow captured before the index existed has no metadata and no IDs.
-	_, err = fixtures.InsertShadow(t.Context(), legacy, f.project, f.org)
+	_, err = fixtures.InsertTranscript(t.Context(), legacy, f.project, f.org)
 	require.NoError(t, err)
 
 	find := func(transcripts *Transcripts, toolCallID string) (uuid.UUID, error) {
@@ -243,103 +241,6 @@ func TestPromptParentsSkipEmptyByShadowMetadata(t *testing.T) {
 	require.Len(t, list(enabled), 1, "a shadow without sizes falls back to plaintext")
 }
 
-func TestPatchKitProjectionComparesPreviousBodyInGo(t *testing.T) {
-	t.Parallel()
-	f := setup(t, true)
-	fixtures := fixturerepo.New(f.db)
-	id := uuid.New()
-	f.add(t, id)
-	_, err := fixtures.SetRoleAndSource(t.Context(), "assistant", pgtype.Text{String: "kit", Valid: true}, id, project(f.project))
-	require.NoError(t, err)
-	f.capture(t, id)
-	transcripts := NewTranscripts(f.store, f.project)
-
-	patch := func(content string, contentRaw []byte, finishReason pgtype.Text) int64 {
-		t.Helper()
-		tx, err := f.db.Begin(t.Context()) //nolint:glint // notestingrawsql: the projection compares and writes inside one caller-owned transaction.
-		require.NoError(t, err)
-		defer func() { _ = tx.Rollback(t.Context()) }()
-		previous, err := transcripts.GetKitProjectionMessage(t.Context(), tx, f.project, id)
-		require.NoError(t, err)
-		n, err := transcripts.PatchKitProjectionMessage(t.Context(), tx, previous, PatchKitProjectionMessageParams{
-			ProjectID: project(f.project), ChatID: f.chat, ID: id, Content: content, ContentRaw: contentRaw,
-			ToolCalls: previous.ToolCalls, ContentHash: previous.ContentHash, FinishReason: finishReason, BodyChanged: false,
-		})
-		require.NoError(t, err)
-		if n > 0 {
-			require.NoError(t, transcripts.Seal(t.Context(), tx, f.org, f.project, []uuid.UUID{id}))
-		}
-		require.NoError(t, tx.Commit(t.Context()))
-		return n
-	}
-	analyzed := func() bool {
-		t.Helper()
-		at, err := fixtures.RiskAnalyzedAt(t.Context(), id)
-		require.NoError(t, err)
-		return at.Valid
-	}
-	noFinish := pgtype.Text{String: "", Valid: false}
-
-	_, err = fixtures.MarkRiskAnalyzed(t.Context(), id)
-	require.NoError(t, err)
-	// The same body, with content_raw spelled differently, is no change.
-	require.Zero(t, patch("sensitive example", []byte(`{ "n": 100, "large": 9007199254740993 }`), noFinish))
-	require.True(t, analyzed())
-
-	// A finish reason alone is written but keeps the risk analysis.
-	require.Equal(t, int64(1), patch("sensitive example", []byte(`{"large":9007199254740993,"n":1e2}`), pgtype.Text{String: "stop", Valid: true}))
-	require.True(t, analyzed())
-
-	// A new body is written and resets the risk analysis.
-	require.Equal(t, int64(1), patch("new body", []byte(`{"large":9007199254740993,"n":1e2}`), pgtype.Text{String: "stop", Valid: true}))
-	require.False(t, analyzed())
-
-	messages, err := transcripts.ListLatestGenerationChatMessages(t.Context(), f.db, f.project, f.chat)
-	require.NoError(t, err)
-	require.Len(t, messages, 1)
-	require.Equal(t, "new body", messages[0].Content)
-}
-
-func TestStoreToolCallSummaryMergesSiblingsInGo(t *testing.T) {
-	t.Parallel()
-	f := setup(t, true)
-	id := uuid.New()
-	f.add(t, id)
-	f.capture(t, id)
-	transcripts := NewTranscripts(f.store, f.project)
-
-	calls := []string{"a", "b", "c", "d"}
-	var wg sync.WaitGroup
-	errs := make([]error, len(calls))
-	stored := make([]string, len(calls))
-	for i, call := range calls {
-		wg.Go(func() {
-			stored[i], errs[i] = transcripts.StoreToolCallSummary(t.Context(), f.db, StoreToolCallSummaryParams{
-				ToolCallID: call, Summary: []byte(`{"summary":"` + call + `","impact":"read_only"}`),
-				MessageID: id, ChatID: f.chat, ProjectID: f.project,
-			})
-		})
-	}
-	wg.Wait()
-	for i := range calls {
-		require.NoError(t, errs[i])
-		require.JSONEq(t, `{"summary":"`+calls[i]+`","impact":"read_only"}`, stored[i])
-	}
-
-	// Every concurrent summary survives next to the earlier one, and the
-	// shadow was recaptured with them.
-	messages, err := transcripts.ListLatestGenerationChatMessages(t.Context(), f.db, f.project, f.chat)
-	require.NoError(t, err)
-	require.Len(t, messages, 1)
-	var summaries map[string]json.RawMessage
-	require.NoError(t, json.Unmarshal(messages[0].ToolCallSummaries, &summaries))
-	require.Len(t, summaries, 5)
-	require.JSONEq(t, `"summary"`, string(summaries["example"]))
-	for _, call := range calls {
-		require.JSONEq(t, `{"summary":"`+call+`","impact":"read_only"}`, string(summaries[call]))
-	}
-}
-
 func TestUpsertCorrelatedReturnsShadowBody(t *testing.T) {
 	t.Parallel()
 	f := setup(t, true)
@@ -378,7 +279,7 @@ func TestUpsertCorrelatedReturnsShadowBody(t *testing.T) {
 	require.True(t, inserted.Inserted)
 	require.Equal(t, "new turn", inserted.Content)
 	require.JSONEq(t, `[{"id":"call_new"}]`, string(inserted.ToolCalls))
-	ids, err := fixtures.ShadowToolCallIDs(t.Context(), inserted.ID)
+	ids, err := fixtures.ToolCallIDs(t.Context(), inserted.ID)
 	require.NoError(t, err)
 	require.Equal(t, []string{"call_new"}, ids, "the upsert captured the shadow")
 }

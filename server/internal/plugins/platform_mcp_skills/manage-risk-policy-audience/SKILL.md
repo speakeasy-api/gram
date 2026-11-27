@@ -17,9 +17,9 @@ Use the executing client's authenticated Platform MCP connection. Installing thi
 
 ## Remove the authenticated requester
 
-For “remove me,” explain that self-removal and effective exclusion are unavailable pending organization-scoped coordination of audience grants. `remove_self_from_risk_policy` remains discoverable to external organization administrators but always refuses before database transactions or receipt replay. Do not claim that deleting a positive user grant proves the requester is no longer covered.
+For “remove me,” explain that self-removal and effective exclusion are not supported. Do not claim that deleting a positive user grant proves the requester is no longer covered.
 
-Stop without writing. Do not bypass this refusal with `change_risk_policy_audience`, general audience replacement, policy disablement, role or membership changes, a risk exclusion, or reconstruction of Everyone as today's member list. Never infer a human from managed-assistant attribution. A separately requested administrator change to direct positive grants is a different outcome, not a workaround for self-exclusion.
+Stop without writing. Do not work around this with `change_risk_policy_audience`, general audience replacement, policy disablement, role or membership changes, a risk exclusion, or reconstruction of Everyone as today's member list. Never infer a human from managed-assistant attribution. A separately requested administrator change to direct positive grants is a different outcome, not a workaround for self-exclusion.
 
 ## Add or remove direct audience grants
 
@@ -28,7 +28,7 @@ For a separately requested incremental administrator change, use `change_risk_po
 1. Select exact organization user or role principal URNs from trusted administrator selections, not guessed names or emails. Native directory groups are not supported; do not treat a directory group as a role or change directory membership.
 2. Explain the exact additions and removals and obtain explicit confirmation. Removing a direct user grant does not remove role-derived coverage. Removing a role grant changes that role's direct policy grant, not its membership. Never claim the removed user is unaffected by the policy: other roles or broader grants may still cover them.
 3. Refresh `get_risk_policy` for the exact target immediately before writing. Call `change_risk_policy_audience` first with `confirmed: false`: nothing is written, and the `confirmation_required` refusal returns a preview of the policy, its current audience, the additions and removals, and the resulting audience. Show that preview and obtain confirmation of it, then call again with the same input, the same `idempotency_key`, and `confirmed: true`. If the audience changed, preview it and obtain confirmation again. Both calls take the exact `project_slug`, `policy_id`, fresh `expected_version`, stable `idempotency_key`, and both `add_principals` and `remove_principals` arrays. Each list is bounded to 100 user/role URNs; the resulting targeted audience must contain 1–100 principals. Use an empty array for the unchanged side; at least one array must be nonempty. The tool atomically preserves all audience entries outside the delta and unrelated policy settings.
-4. Stop on Everyone audiences, last-principal removal, unsupported principals, duplicate or overlapping deltas, stale versions, and conflicts with current direct grants. This tool does not create an Everyone-except-one audience or effective exclusion. Never use an audience delta to bypass a self-removal refusal. Do not automatically fall back to replacement, policy disablement, or risk exclusion.
+4. Stop on Everyone audiences, last-principal removal, unsupported principals, duplicate or overlapping deltas, stale versions, and conflicts with current direct grants. This tool does not create an Everyone-except-one audience or effective exclusion. Never use an audience delta as a way to remove the requester. Do not automatically fall back to replacement, policy disablement, or risk exclusion.
 
 ## Replace an audience only when explicitly requested
 

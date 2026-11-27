@@ -238,6 +238,7 @@ describe("AppSidebar", () => {
             label: "Tailscale OAuth migration",
             href: "/tailscale-oauth-migration",
           },
+          { label: "Secret backfills", href: "/secret-backfills" },
           {
             label: "Encryption transitions",
             href: "/encryption-transitions",

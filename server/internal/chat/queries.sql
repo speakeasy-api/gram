@@ -1828,6 +1828,7 @@ FROM ancestry ORDER BY root_id, (slack_channel_id IS NULL), depth;
 -- Test fixture: hold the lock an ordinary helper capture takes on its own row.
 SELECT id FROM chats WHERE id = @id AND project_id = @project_id FOR NO KEY UPDATE;
 
+
 -- name: ValidateKitTranscriptBinding :one
 SELECT t.id FROM assistant_threads t
 JOIN assistant_runtimes r ON r.assistant_id = t.assistant_id AND r.project_id = t.project_id

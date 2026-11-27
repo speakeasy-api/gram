@@ -47,6 +47,7 @@ var cardTools = map[string]cardSpec{
 	// MCP servers.
 	"find_mcp":                              {kind: cardKindList, route: "P/mcp", label: "Open MCP servers"},
 	"get_mcp":                               {kind: cardKindDetail, route: "P/mcp/{mcp}", label: "Open MCP server"},
+	listMCPFeedbackToolName:                 {kind: cardKindList, route: "P/mcp/{mcp}/feedback", label: "Open agent feedback"},
 	"get_mcp_readiness":                     {kind: cardKindDetail, route: "P/mcp/{mcp}", label: "Open MCP server"},
 	"get_mcp_access":                        {kind: cardKindDetail, route: "P/mcp/{mcp}/team-access", label: "Open team access"},
 	"get_mcp_client_admission":              {kind: cardKindDetail, route: "P/mcp/{mcp}/settings", label: "Open settings"},
@@ -102,7 +103,6 @@ var cardTools = map[string]cardSpec{
 	"create_risk_policy":                  {kind: cardKindReceipt, route: "P/risk-policies/{policy}", label: "Open policy"},
 	"update_risk_policy":                  {kind: cardKindReceipt, route: "P/risk-policies/{policy}", label: "Open policy"},
 	"change_risk_policy_audience":         {kind: cardKindReceipt, route: "P/risk-policies/{policy}", label: "Open policy"},
-	"remove_self_from_risk_policy":        {kind: cardKindReceipt, route: "P/risk-policies/{policy}", label: "Open policy"},
 	"list_risk_exclusions":                {kind: cardKindList, route: "P/risk-policies", label: "Open risk policies"},
 	"create_risk_exclusion":               {kind: cardKindReceipt, route: "P/risk-policies", label: "Open risk policies"},
 	"update_risk_exclusion":               {kind: cardKindReceipt, route: "P/risk-policies", label: "Open risk policies"},

@@ -118,13 +118,9 @@
   args:
     policy_id: 2d3e4f00-0000-4000-8000-000000000061
     project_slug: default
-- id: risk-remove-self-from-policy
+- id: risk-negative-remove-self-from-policy
   prompt: Take me off the Secrets in chats policy in Default. I don't want my own chats scanned by it.
-  expect: [remove_self_from_risk_policy]
-  allow: [get_risk_policy, list_risk_policies]
-  args:
-    policy_id: 2d3e4f00-0000-4000-8000-000000000061
-    project_slug: default
+  expect: []
 
 # Exclusions.
 - id: risk-create-exclusion-test-key

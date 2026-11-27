@@ -248,11 +248,11 @@ func (s *ChatSearchService) authorize(ctx context.Context, principal Principal, 
 	// Project-wide transcript access still takes the unrestricted grant. It is
 	// evaluated rather than required: a member without it is the expected case
 	// and falls back to their own scope, not a denial worth recording.
-	allowed, err := s.engine.Evaluate(ctx, authz.OrgChats(authz.OrgIDFrom(principal.OrganizationID)).Read(), authz.Chats(authz.ProjectIDOf(project.ID)).Read())
+	decision, err := s.engine.Decide(authz.WithoutChallenges(ctx), authz.OrgChats(authz.OrgIDFrom(principal.OrganizationID)).Read(), authz.Chats(authz.ProjectIDOf(project.ID)).Read())
 	if err != nil {
 		return zero, fmt.Errorf("evaluate chat transcript access: %w", err)
 	}
-	if allowed {
+	if decision.AllAllowed {
 		return chatAccess{project: project, ownUserID: "", ownedAgentIDs: nil}, nil
 	}
 	owned, err := chatrepo.New(s.db).ListOwnedAgentIDs(ctx, chatrepo.ListOwnedAgentIDsParams{
