@@ -170,4 +170,43 @@ describe("RestoreSkillVersionDialog", () => {
     expect(testState.toastSuccess).toHaveBeenCalledOnce();
     expect(screen.queryByText("Restore failed")).toBeNull();
   });
+
+  it("lists the supporting files the version change touches", () => {
+    const meta = (path: string, sha256: string) => ({
+      path,
+      sha256,
+      sizeBytes: 1,
+      contentType: "text/plain",
+    });
+    render(
+      <RestoreSkillVersionDialog
+        skillId="skill_a"
+        version={
+          {
+            ...version,
+            files: [meta("kept.md", "1"), meta("scripts/run.sh", "2")],
+          } as SkillVersion
+        }
+        currentVersion={
+          {
+            id: "version_current",
+            canonicalSha256: "1234567890abcdef",
+            files: [
+              meta("kept.md", "1"),
+              meta("scripts/run.sh", "3"),
+              meta("new.md", "4"),
+            ],
+          } as SkillVersion
+        }
+        direction="backward"
+        onClose={() => {}}
+      />,
+    );
+    expect(
+      screen.getByText("Supporting files also change: 1 removed, 1 changed."),
+    ).toBeTruthy();
+    expect(screen.getByText("new.md")).toBeTruthy();
+    expect(screen.getByText("scripts/run.sh")).toBeTruthy();
+    expect(screen.queryByText("kept.md")).toBeNull();
+  });
 });

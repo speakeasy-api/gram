@@ -13,6 +13,10 @@ import { useParams } from "react-router";
 import { useProject } from "@/contexts/Auth";
 import { useSkillDetailContext } from "./SkillDetailContext";
 import { useState } from "react";
+import { useQueryState } from "nuqs";
+import { SkillFileList, SkillFileViewer } from "./SkillFiles";
+import { manifestByteLength } from "./skill-manifest";
+import { SKILL_MANIFEST_PATH } from "./skill-files";
 
 export default function SkillContent(): JSX.Element {
   const project = useProject();
@@ -20,6 +24,10 @@ export default function SkillContent(): JSX.Element {
   const { skillQueryData } = useSkillDetailContext();
   const { skill, latestVersion } = skillQueryData;
   const [editOpen, setEditOpen] = useState(false);
+  const [fileParam, setFileParam] = useQueryState("file");
+  const files = latestVersion?.files ?? [];
+  const hasFiles = files.length > 0;
+  const selectedFile = files.find((file) => file.path === fileParam);
   const body = latestVersion
     ? stripSkillFrontmatter(latestVersion.content)
     : "";
@@ -42,10 +50,13 @@ export default function SkillContent(): JSX.Element {
       )}
       <SettingsSection>
         <SettingsSection.Header>
-          <SettingsSection.Title>SKILL.md</SettingsSection.Title>
+          <SettingsSection.Title>
+            {hasFiles ? "Skill files" : "SKILL.md"}
+          </SettingsSection.Title>
           <SettingsSection.Description>
-            The current version of this skill's manifest, exactly as agents load
-            it.
+            {hasFiles
+              ? "The current version's manifest and supporting files, exactly as agents load them."
+              : "The current version of this skill's manifest, exactly as agents load it."}
           </SettingsSection.Description>
         </SettingsSection.Header>
         <SettingsSection.Panel>
@@ -53,16 +64,47 @@ export default function SkillContent(): JSX.Element {
             {latestVersion && !latestVersion.specValid && (
               <ValidationErrors errors={latestVersion.validationErrors} />
             )}
-            <div className="overflow-x-auto">
-              {latestVersion ? (
-                <ManifestBody body={body} />
-              ) : (
-                <Text small muted>
-                  Manifest content has not been captured for this observed
-                  skill.
-                </Text>
-              )}
-            </div>
+            {latestVersion && hasFiles ? (
+              <div className="grid gap-6 md:grid-cols-[minmax(0,18rem)_minmax(0,1fr)]">
+                <div className="md:border-r md:pr-4">
+                  <SkillFileList
+                    files={files}
+                    manifestSizeBytes={manifestByteLength(
+                      latestVersion.content,
+                    )}
+                    selectedPath={selectedFile?.path ?? SKILL_MANIFEST_PATH}
+                    onSelect={(path) =>
+                      void setFileParam(
+                        path === SKILL_MANIFEST_PATH ? null : path,
+                      )
+                    }
+                  />
+                </div>
+                {selectedFile ? (
+                  <SkillFileViewer
+                    key={selectedFile.path}
+                    skillId={skill.id}
+                    versionId={latestVersion.id}
+                    file={selectedFile}
+                  />
+                ) : (
+                  <div className="min-w-0 overflow-x-auto">
+                    <ManifestBody body={body} />
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                {latestVersion ? (
+                  <ManifestBody body={body} />
+                ) : (
+                  <Text small muted>
+                    Manifest content has not been captured for this observed
+                    skill.
+                  </Text>
+                )}
+              </div>
+            )}
           </SettingsSection.Body>
           {latestVersion && (
             <SettingsSection.Footer>
@@ -80,7 +122,7 @@ export default function SkillContent(): JSX.Element {
                   level="component"
                 >
                   <Button size="sm" onClick={() => setEditOpen(true)}>
-                    Edit SKILL.md
+                    Edit skill
                   </Button>
                 </RequireScope>
               </SettingsSection.FooterActions>
@@ -125,6 +167,7 @@ export default function SkillContent(): JSX.Element {
           skillId={skillId}
           derivedFromVersionId={latestVersion.id}
           initialContent={latestVersion.content}
+          existingFiles={latestVersion.files}
         />
       )}
     </>
