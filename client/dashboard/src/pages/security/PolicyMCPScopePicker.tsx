@@ -229,6 +229,11 @@ export function PolicyMCPScopePicker({
       .toLocaleLowerCase()
       .includes(search.trim().toLocaleLowerCase()),
   );
+  const nameCounts = new Map<string, number>();
+  for (const server of pickerServers) {
+    const key = server.name.toLocaleLowerCase();
+    nameCounts.set(key, (nameCounts.get(key) ?? 0) + 1);
+  }
   const loading =
     serversQuery.isLoading ||
     gatewaysQuery.isLoading ||
@@ -612,6 +617,12 @@ export function PolicyMCPScopePicker({
                             : value.toolAnnotations.length === 0
                               ? "ALL"
                               : `${ruleTools(server).length}/${server.tools.length}`;
+                  const hasDuplicateName =
+                    (nameCounts.get(server.name.toLocaleLowerCase()) ?? 0) > 1;
+                  const checkboxLabel =
+                    hasDuplicateName && server.slug
+                      ? `${server.name} (${server.slug})`
+                      : server.name;
                   return (
                     <div
                       key={server.id}
@@ -630,7 +641,7 @@ export function PolicyMCPScopePicker({
                       )}
                     >
                       <Checkbox
-                        aria-label={server.name}
+                        aria-label={checkboxLabel}
                         checked={
                           selection.kind === "custom" &&
                           selection.tools.length < server.tools.length
@@ -650,8 +661,15 @@ export function PolicyMCPScopePicker({
                       ) : (
                         <Server className="text-muted-foreground size-4" />
                       )}
-                      <span className="min-w-0 flex-1 truncate text-sm">
-                        {server.name}
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm">
+                          {server.name}
+                        </span>
+                        {hasDuplicateName && server.slug ? (
+                          <span className="text-muted-foreground block truncate font-mono text-[11px]">
+                            {server.slug}
+                          </span>
+                        ) : null}
                       </span>
                       <span className="text-muted-foreground font-mono text-xs">
                         {count}

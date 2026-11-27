@@ -80,6 +80,7 @@ export default function Home(): JSX.Element {
             resourceId={projectId}
             level="page"
           >
+            <h1 className="sr-only">Project Overview</h1>
             <TerminalHomeGrid />
           </RequireScope>
         </Page.Body>
