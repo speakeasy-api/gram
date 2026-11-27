@@ -113,6 +113,8 @@ func configureTranscriptShadow(ctx context.Context, c *cli.Context, db *pgxpool.
 // Catalog reads neither touch transcript payloads nor execute trial inserts.
 // The table is looked up through the connection's search_path, the same way
 // the store's queries resolve it: deployed databases keep it outside public.
+// source_hash is deprecated and nullable, but the store still writes it, so it
+// must exist with its type; NOT NULL is not required.
 // Every omitted NOT NULL column must be supplied by the database. All inferred
 // arbiters must be immediate: PostgreSQL rejects even a redundant deferred one.
 func checkTranscriptShadowSchema(ctx context.Context, db interface {
@@ -124,13 +126,13 @@ WITH sidecar AS (
  SELECT oid FROM pg_catalog.pg_class
  WHERE oid = pg_catalog.to_regclass('chat_message_transcripts')
  AND relkind IN ('r', 'p')
-), required(name, type_oid) AS (
- VALUES ('message_id', 'uuid'::regtype),
-        ('project_id', 'uuid'::regtype),
-        ('organization_id', 'text'::regtype),
-        ('ciphertext', 'text'::regtype),
-        ('source_hash', 'bytea'::regtype),
-        ('updated_at', 'timestamptz'::regtype)
+), required(name, type_oid, must_be_not_null) AS (
+ VALUES ('message_id', 'uuid'::regtype, true),
+        ('project_id', 'uuid'::regtype, true),
+        ('organization_id', 'text'::regtype, true),
+        ('ciphertext', 'text'::regtype, true),
+        ('source_hash', 'bytea'::regtype, false),
+        ('updated_at', 'timestamptz'::regtype, true)
 ), arbiters AS (
  SELECT i.indimmediate, i.indisready
  FROM pg_catalog.pg_index i
@@ -147,7 +149,7 @@ SELECT EXISTS (SELECT 1 FROM sidecar)
   SELECT 1 FROM pg_catalog.pg_attribute a
   JOIN sidecar s ON s.oid = a.attrelid
   WHERE a.attname = r.name AND a.atttypid = r.type_oid
-    AND a.attnotnull AND NOT a.attisdropped
+    AND (a.attnotnull OR NOT r.must_be_not_null) AND NOT a.attisdropped
  ))
  AND NOT EXISTS (
  SELECT 1 FROM pg_catalog.pg_attribute a
