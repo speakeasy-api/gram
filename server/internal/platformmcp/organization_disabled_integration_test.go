@@ -8,6 +8,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
@@ -34,8 +35,7 @@ func TestLiveOrgAdminAuthorizerDeniesDisabledOrganization(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, options, 1)
 
-	_, err = conn.Exec(ctx, `UPDATE organization_metadata SET disabled_at = clock_timestamp() WHERE id = $1`, principal.OrganizationID)
-	require.NoError(t, err)
+	require.NoError(t, testrepo.New(conn).DisableDelegationOrganizationFixture(ctx, principal.OrganizationID))
 
 	require.ErrorIs(t, authorizer.RequireLiveMembership(ctx, principal), ErrForbidden)
 	_, err = authorizer.PrepareExternalContext(ctx, principal)
