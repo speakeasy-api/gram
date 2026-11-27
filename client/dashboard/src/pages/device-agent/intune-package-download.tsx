@@ -4,6 +4,7 @@ import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
 import { useAgentToken } from "@/hooks/useAgentToken";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { clientServerURLOverride } from "@/lib/client-host";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { downloadBlob } from "@/lib/download";
 import { useOrgRoutes } from "@/routes";
@@ -65,6 +66,7 @@ export function IntunePackageDownload({
           orgName,
           autoUpdate,
           revision: configRevision(new Date()),
+          controlPlaneURL: clientServerURLOverride("deviceAgent"),
           version,
           msi,
         });

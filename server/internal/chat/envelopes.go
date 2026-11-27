@@ -9,6 +9,8 @@ import (
 // harnesses prepend to a turn to steer the assistant toward the right channel —
 // e.g. <message-context>…</message-context> from our assistant runtime (which
 // source/surface the turn came from, MCP auth events),
+// <dashboard_context>…</dashboard_context> from the dashboard's Project
+// Assistant (the page and recent activity the user asked from),
 // <notification>…</notification> from Claude Code background tasks, or the
 // <system-reminder>…</system-reminder> blocks Claude Code and Cowork stack in
 // front of a prompt (connected device and folders, timezone, git worktree,
@@ -41,6 +43,7 @@ import (
 var leadingEnvelopeRE = regexp.MustCompile(`(?s)^(?:` +
 	`\s*\[(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun) \d{4}-\d{2}-\d{2} \d{2}:\d{2}(?::\d{2})? [A-Z]{1,5}(?:[+-]\d{1,2}(?::\d{2})?)?\] *` +
 	`|\s*<message-context>.*?</message-context>\s*` +
+	`|\s*<dashboard_context>.*?</dashboard_context>\s*` +
 	`|\s*<notification>.*?</notification>\s*` +
 	`|\s*<system-reminder(?:\s[^>]*)?>.*?</system-reminder>\s*` +
 	"|\\s*Delivery: (?:to send a message, use the `message` tool\\.|Final assistant text is not automatically delivered in this run\\.[^\\n]*|No visible reply is delivered automatically in this run[^\\n]*)\\s*" +
