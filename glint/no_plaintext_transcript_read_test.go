@@ -1,6 +1,7 @@
 package glint
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -130,4 +131,27 @@ func TestSQLInsertsPlaintextTranscript(t *testing.T) {
 	for sql, want := range cases {
 		require.Equal(t, want, sqlInsertsPlaintextTranscript(sql), sql)
 	}
+}
+
+// A dependency read from export data built with -trimpath reports its files
+// by import path. golangci-lint reads one that way when its own results are
+// cached, so the rule must still find the generated SQL on disk; otherwise a
+// cached run sees no plaintext use and reports live allowlist entries as stale.
+func TestTrimmedPathOnDisk(t *testing.T) {
+	t.Parallel()
+
+	const module = "github.com/speakeasy-api/gram/server"
+	src, err := filepath.Abs(filepath.Join(analysistest.TestData(), "src"))
+	require.NoError(t, err)
+	readerDir := filepath.Join(src, filepath.FromSlash(module+"/internal/plaintextread/reader"))
+	repoFile := filepath.Join(src, filepath.FromSlash(module+"/internal/plaintextread/repo/queries.sql.go"))
+	trimmed := module + "/internal/plaintextread/repo/queries.sql.go"
+
+	got := trimmedPathOnDisk(trimmed, module+"/internal/plaintextread/reader", readerDir)
+	require.Equal(t, repoFile, got)
+	require.Equal(t, plaintextTranscriptInsert, parseSqlcQueries(got)["CreateMessage"], "the mapped file is the generated SQL")
+
+	require.Equal(t, repoFile, trimmedPathOnDisk(trimmed, module+"/internal/plaintextread/reader_test", readerDir), "an external test package lives in the same directory")
+	require.Empty(t, trimmedPathOnDisk("example.com/other/repo/queries.sql.go", module+"/internal/plaintextread/reader", readerDir), "another module does not map")
+	require.Empty(t, parseSqlcQueries(trimmed), "the trimmed name alone is not a file, which is how cached runs lost the SQL")
 }
