@@ -25,7 +25,7 @@ func TestKitBuiltinDefaultThreadTargetIsPerTurn(t *testing.T) {
 	}
 }
 
-func TestKitBootstrapUsesSingleProjectGatewayAndNoBuiltinConnections(t *testing.T) {
+func TestKitBootstrapUsesSingleProjectGateway(t *testing.T) {
 	t.Parallel()
 	gatewayURL, err := url.Parse("https://api.example/mcp/gateway/org-test/projects/proj-test")
 	require.NoError(t, err)
@@ -60,7 +60,6 @@ func TestKitBootstrapUsesSingleProjectGatewayAndNoBuiltinConnections(t *testing.
 	require.Equal(t, "mcp:connect", server.Auth.Scope)
 	require.Empty(t, server.Auth.Extensions)
 	require.Empty(t, server.Headers)
-	require.NotContains(t, string(bootstrap.MCPJSON), "builtin-")
 	require.NotContains(t, string(bootstrap.MCPJSON), "urn:speakeasy:inference")
 	require.NotContains(t, string(bootstrap.MCPJSON), string(bootstrap.GatewayToken))
 

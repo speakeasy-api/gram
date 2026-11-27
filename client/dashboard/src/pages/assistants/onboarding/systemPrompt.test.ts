@@ -7,8 +7,8 @@ const snapshot = {
   model: "anthropic/claude-opus-5",
   status: "active",
   instructions: "Help the team.",
-  toolsets: [{ slug: "legacy-tools" }],
-  mcpServers: [{ slug: "legacy-server" }],
+  toolsets: [{ slug: "attached-tools" }],
+  mcpServers: [{ slug: "attached-server" }],
   skills: [],
 };
 
@@ -28,11 +28,11 @@ it("guides Kit assistants through Project Gateway access and built-in Slack setu
   );
   expect(prompt).not.toContain("attach_toolset");
   expect(prompt).not.toContain("attach_mcp_server");
-  expect(prompt).not.toContain("legacy-tools");
-  expect(prompt).not.toContain("legacy-server");
+  expect(prompt).not.toContain("attached-tools");
+  expect(prompt).not.toContain("attached-server");
 });
 
-it("keeps legacy attachment guidance for non-Kit assistants", () => {
+it("includes attachment guidance for Default-runtime assistants", () => {
   const prompt = buildSystemPrompt({
     mode: "edit",
     snapshot,
@@ -40,6 +40,6 @@ it("keeps legacy attachment guidance for non-Kit assistants", () => {
   });
 
   expect(prompt).toContain("attach_toolset");
-  expect(prompt).toContain("legacy-tools");
-  expect(prompt).toContain("legacy-server");
+  expect(prompt).toContain("attached-tools");
+  expect(prompt).toContain("attached-server");
 });
