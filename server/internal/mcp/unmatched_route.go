@@ -39,8 +39,8 @@ const (
 	unmatchedMCPRequestDiscovery unmatchedMCPRequestKind = "discovery"
 
 	// unmatchedMCPRequestTransport is a Streamable HTTP request: a JSON body
-	// POST, or any request carrying the MCP protocol version or session
-	// header.
+	// POST, a GET accepting text/event-stream, or any request carrying the MCP
+	// protocol version or session header.
 	unmatchedMCPRequestTransport unmatchedMCPRequestKind = "transport"
 )
 
@@ -112,7 +112,11 @@ func classifyUnmatchedMCPRequest(r *http.Request) unmatchedMCPRequestKind {
 		}
 	}
 
-	if r.Header.Get(mcpversions.HTTPHeader) != "" || r.Header.Get(proxy.McpSessionIDHeader) != "" {
+	// A GET accepting text/event-stream opens the Streamable HTTP standalone
+	// stream (or an HTTP+SSE transport connection), even without the optional
+	// protocol version and session headers.
+	_, wantsSSE := getServerAccept(r.Header.Get("Accept"))
+	if r.Header.Get(mcpversions.HTTPHeader) != "" || r.Header.Get(proxy.McpSessionIDHeader) != "" || (r.Method == http.MethodGet && wantsSSE) {
 		return unmatchedMCPRequestTransport
 	}
 

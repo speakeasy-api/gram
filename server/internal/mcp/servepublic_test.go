@@ -36,8 +36,8 @@ import (
 // Shared helpers
 // ---------------------------------------------------------------------------
 
-// publicMCPNotFoundMessage is the user-facing message every unknown MCP URL
-// answers with.
+// publicMCPNotFoundMessage is the user-facing message an unknown or denied MCP
+// server slug answers with.
 const publicMCPNotFoundMessage = "mcp server not found: no MCP server is served at this URL. If it was renamed or moved, copy its current URL from the MCP page in the Speakeasy dashboard and update your MCP client configuration"
 
 // makeInitializeBody creates a single JSON-RPC initialize request body.

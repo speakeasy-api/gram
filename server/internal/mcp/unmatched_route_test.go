@@ -95,6 +95,13 @@ func TestUnmatchedMCPRoute_TransportRequestAnswersJSONRPCNotFound(t *testing.T) 
 			headers: map[string]string{mcpversions.HTTPHeader: mcpversions.Version20251125, "Accept": "text/event-stream"},
 		},
 		{
+			name:    "get stream without protocol headers",
+			method:  http.MethodGet,
+			path:    "/mcp/bad-slug/extra",
+			body:    nil,
+			headers: map[string]string{"Accept": "text/event-stream"},
+		},
+		{
 			name:    "delete with session",
 			method:  http.MethodDelete,
 			path:    "/mcp/bad-slug/extra",

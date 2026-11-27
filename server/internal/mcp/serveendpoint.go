@@ -624,6 +624,8 @@ func privateEndpointNamespace(kind string) (mcpendpoints.NamespaceKind, error) {
 //     NOT fall back — this keeps non-issuer-gated remote-backed servers
 //     returning not-found, matching the well-known surface.
 //   - Addressing miss: CodeNotFound.
+//   - Policy denial: CodeNotFound with the same public message as a miss, so
+//     the response does not reveal that the endpoint exists.
 //
 // mcpRouteBase propagates into the resolved endpoint's URL building.
 //
