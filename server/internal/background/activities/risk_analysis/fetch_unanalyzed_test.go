@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	adminrepo "github.com/speakeasy-api/gram/server/internal/admin/repo"
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -144,7 +145,7 @@ func TestFetchUnanalyzed_DisabledOrganizationLeavesMessagesUnanalyzed(t *testing
 	td := seedTestData(t, conn, true)
 	seedMessages(t, conn, td, 2)
 
-	_, err := conn.Exec(t.Context(), "UPDATE organization_metadata SET disabled_at = clock_timestamp() WHERE id = $1", td.orgID)
+	_, err := adminrepo.New(conn).AdminDisableOrganization(t.Context(), td.orgID)
 	require.NoError(t, err)
 
 	activity := risk_analysis.NewFetchUnanalyzed(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn)
@@ -154,7 +155,7 @@ func TestFetchUnanalyzed_DisabledOrganizationLeavesMessagesUnanalyzed(t *testing
 	require.Empty(t, result.MessageIDs)
 	require.Empty(t, result.Policies)
 
-	_, err = conn.Exec(t.Context(), "UPDATE organization_metadata SET disabled_at = NULL WHERE id = $1", td.orgID)
+	_, err = adminrepo.New(conn).AdminEnableOrganization(t.Context(), td.orgID)
 	require.NoError(t, err)
 	result, err = activity.Do(t.Context(), args)
 	require.NoError(t, err)

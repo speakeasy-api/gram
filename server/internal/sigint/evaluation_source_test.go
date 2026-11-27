@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/sigint"
+	adminrepo "github.com/speakeasy-api/gram/server/internal/admin/repo"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -69,12 +70,12 @@ func TestEvaluationMessageBatchScopesAndSplitProjection(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, rows)
 
-	_, err = ti.conn.Exec(ctx, "UPDATE organization_metadata SET disabled_at = clock_timestamp() WHERE id = $1", auth.ActiveOrganizationID)
+	_, err = adminrepo.New(ti.conn).AdminDisableOrganization(ctx, auth.ActiveOrganizationID)
 	require.NoError(t, err)
 	rows, err = source.LoadMessages(ctx, auth.ActiveOrganizationID, project, ids)
 	require.NoError(t, err)
 	require.Empty(t, rows, "a disabled organization's queued messages are not evaluated")
-	_, err = ti.conn.Exec(ctx, "UPDATE organization_metadata SET disabled_at = NULL WHERE id = $1", auth.ActiveOrganizationID)
+	_, err = adminrepo.New(ti.conn).AdminEnableOrganization(ctx, auth.ActiveOrganizationID)
 	require.NoError(t, err)
 
 	require.NoError(t, fixtures.ForceSoftDeleteChat(ctx, chatID))
