@@ -534,12 +534,12 @@ sql:
         omit_unused_structs: true
 
   - schema: [schema.sql, sqlc_retired_columns.sql]
-    queries: ../cmd/tools/migrations/functionsaccessorganization/queries.sql
+    queries: ../internal/secretbackfills/functionsaccessorganization/queries.sql
     engine: postgresql
     gen:
       go:
         package: "functionsaccessorganization"
-        out: "../cmd/tools/migrations/functionsaccessorganization"
+        out: "../internal/secretbackfills/functionsaccessorganization"
         sql_package: "pgx/v5"
         omit_unused_structs: true
 

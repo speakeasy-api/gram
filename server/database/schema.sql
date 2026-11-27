@@ -790,12 +790,15 @@ CREATE TABLE IF NOT EXISTS assets (
 COMMENT ON COLUMN assets.id IS '@access: confidential';
 COMMENT ON COLUMN assets.project_id IS '@access: confidential';
 COMMENT ON COLUMN assets.organization_id IS '@access: confidential';
-COMMENT ON COLUMN assets.name IS '@access: confidential';
-COMMENT ON COLUMN assets.url IS '@access: confidential';
+COMMENT ON COLUMN assets.name IS 'Stored asset name, which includes a content digest for chat attachments.
+@access: restricted';
+COMMENT ON COLUMN assets.url IS 'Storage path for the asset, which includes a content digest for chat attachments.
+@access: restricted';
 COMMENT ON COLUMN assets.kind IS '@access: confidential';
 COMMENT ON COLUMN assets.content_type IS '@access: confidential';
 COMMENT ON COLUMN assets.content_length IS '@access: confidential';
-COMMENT ON COLUMN assets.sha256 IS '@access: confidential';
+COMMENT ON COLUMN assets.sha256 IS 'SHA-256 digest of the stored asset content.
+@access: restricted';
 COMMENT ON COLUMN assets.created_at IS '@access: confidential';
 COMMENT ON COLUMN assets.updated_at IS '@access: confidential';
 COMMENT ON COLUMN assets.deleted_at IS '@access: confidential';
@@ -7183,18 +7186,9 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   -- version rescans and backfills are coordinated outside this field.
   risk_analyzed_at timestamptz,
 
-  -- When content, content_raw, tool_calls, tool_outcome_notes,
-  -- tool_call_summaries or storage_error last changed. Every statement that
-  -- updates one of them lives in transcriptstore and sets this column too, so an
-  -- encrypted transcript is current exactly when it recorded the same value.
-  -- NULL for messages last written before the column existed. The default
-  -- stamps every insert; it is set in its own migration so adding the column
-  -- does not rewrite the table.
-  source_updated_at timestamptz DEFAULT clock_timestamp(),
-
   -- Plaintext-free metadata of the message body, so readers can count, budget
-  -- and filter without reading or decrypting it. Written when the transcript is
-  -- sealed, from the same snapshot. NULL until then.
+  -- and filter without reading or decrypting it. Written in the transaction
+  -- that seals the transcript, from the same body. NULL until then.
   tool_call_count INTEGER,
   content_bytes INTEGER,
   content_raw_bytes INTEGER,
@@ -7265,8 +7259,6 @@ COMMENT ON COLUMN chat_messages.original_message_id IS 'Original source-message 
 COMMENT ON COLUMN chat_messages.replayed IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.created_at IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.risk_analyzed_at IS '@access: confidential';
-COMMENT ON COLUMN chat_messages.source_updated_at IS 'When the message body last changed; set on insert and by every body update.
-@access: confidential';
 COMMENT ON COLUMN chat_messages.tool_call_count IS 'Number of tool calls in tool_calls, 0 when it has none.
 @access: confidential';
 COMMENT ON COLUMN chat_messages.content_bytes IS 'octet_length of content.
@@ -7286,24 +7278,15 @@ CREATE TABLE IF NOT EXISTS chat_message_transcripts (
   project_id UUID NOT NULL,
   organization_id TEXT NOT NULL,
   ciphertext TEXT NOT NULL,
-  -- Deprecated: an unkeyed digest of the plaintext would let anyone guess short
-  -- messages once plaintext is gone. Copies sealed from now on record
-  -- source_updated_at instead and leave this NULL. To be dropped.
+  -- Deprecated: every body update now reseals the transcript in the same
+  -- transaction, so a transcript is always current and needs no freshness
+  -- check. A legacy unkeyed digest of the plaintext: it confirms guessed
+  -- payloads and correlates equal ones without a key, even after key
+  -- destruction, so a row carrying it is plaintext-equivalent. New transcripts
+  -- leave it NULL; backfill reseals the rest, then the column is dropped.
   source_hash BYTEA,
   created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
-
-  -- The chat_messages.source_updated_at this copy was sealed from. The copy is
-  -- current while the two are equal. NULL for copies sealed before the column
-  -- existed, which still carry source_hash.
-  source_updated_at TIMESTAMPTZ,
-
-  -- Deprecated: moved to chat_messages so plaintext-free readers never read
-  -- this table. No longer written. To be dropped.
-  tool_call_count INTEGER,
-  content_bytes INTEGER,
-  content_raw_bytes INTEGER,
-  tool_calls_bytes INTEGER,
 
   CONSTRAINT chat_message_transcripts_pkey PRIMARY KEY (message_id),
   CONSTRAINT chat_message_transcripts_project_id_message_id_fkey FOREIGN KEY (project_id, message_id) REFERENCES chat_messages(project_id, id) ON DELETE CASCADE,
@@ -7320,51 +7303,13 @@ COMMENT ON COLUMN chat_message_transcripts.organization_id IS 'Owning organizati
 @access: confidential';
 COMMENT ON COLUMN chat_message_transcripts.ciphertext IS 'Organization-key encrypted transcript payload.
 @access: opaque-restricted';
-COMMENT ON COLUMN chat_message_transcripts.source_hash IS 'Deprecated unkeyed freshness digest of sensitive transcript fields; NULL for copies sealed with source_updated_at.
+COMMENT ON COLUMN chat_message_transcripts.source_hash IS 'Deprecated: transcripts are resealed with every body update, so no freshness check is needed. Legacy unkeyed digest of sensitive transcript fields; NULL for new transcripts. A row carrying it is plaintext-equivalent until backfill reseals it and the column is dropped.
 @access: opaque-restricted';
-COMMENT ON COLUMN chat_message_transcripts.source_updated_at IS 'The chat_messages.source_updated_at this copy was sealed from.
-@access: confidential';
 COMMENT ON COLUMN chat_message_transcripts.created_at IS '@access: confidential';
 COMMENT ON COLUMN chat_message_transcripts.updated_at IS '@access: confidential';
-COMMENT ON COLUMN chat_message_transcripts.tool_call_count IS 'Deprecated, moved to chat_messages. Number of tool calls in the source message tool_calls, 0 when it has none.
-@access: confidential';
-COMMENT ON COLUMN chat_message_transcripts.content_bytes IS 'Deprecated, moved to chat_messages. octet_length of the source message content.
-@access: confidential';
-COMMENT ON COLUMN chat_message_transcripts.content_raw_bytes IS 'Deprecated, moved to chat_messages. octet_length of the source message content_raw as text, 0 when NULL.
-@access: confidential';
-COMMENT ON COLUMN chat_message_transcripts.tool_calls_bytes IS 'Deprecated, moved to chat_messages. octet_length of the source message tool_calls as text, 0 when NULL.
-@access: confidential';
 
 CREATE INDEX IF NOT EXISTS chat_message_transcripts_project_id_idx ON chat_message_transcripts (project_id);
 CREATE INDEX IF NOT EXISTS chat_message_transcripts_organization_id_idx ON chat_message_transcripts (organization_id);
-
--- Deprecated: superseded by chat_message_tool_call_ids, which keys off
--- chat_messages. Never written. To be dropped.
-CREATE TABLE IF NOT EXISTS chat_message_transcript_tool_calls (
-  message_id UUID NOT NULL,
-  tool_call_id TEXT NOT NULL,
-  chat_id UUID NOT NULL,
-  project_id UUID NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
-
-  CONSTRAINT chat_message_transcript_tool_calls_pkey PRIMARY KEY (message_id, tool_call_id),
-  CONSTRAINT chat_message_transcript_tool_calls_message_id_fkey FOREIGN KEY (message_id) REFERENCES chat_message_transcripts(message_id) ON DELETE CASCADE,
-  -- Binds project_id to the message's own project, so a row cannot name
-  -- another tenant. chat_id is written only from the message by the store.
-  CONSTRAINT chat_message_transcript_tool_calls_project_id_message_id_fkey FOREIGN KEY (project_id, message_id) REFERENCES chat_messages(project_id, id) ON DELETE CASCADE
-);
-
-COMMENT ON COLUMN chat_message_transcript_tool_calls.message_id IS 'Shadowed assistant message that issued the tool call.
-@access: confidential';
-COMMENT ON COLUMN chat_message_transcript_tool_calls.tool_call_id IS 'Provider-issued tool call identifier from the message tool_calls.
-@access: opaque-confidential';
-COMMENT ON COLUMN chat_message_transcript_tool_calls.chat_id IS 'Chat that owns the message.
-@access: confidential';
-COMMENT ON COLUMN chat_message_transcript_tool_calls.project_id IS 'Project that owns the message.
-@access: confidential';
-COMMENT ON COLUMN chat_message_transcript_tool_calls.created_at IS '@access: confidential';
-
-CREATE INDEX IF NOT EXISTS chat_message_transcript_tool_calls_chat_id_tool_call_id_idx ON chat_message_transcript_tool_calls (chat_id, tool_call_id);
 
 -- Provider tool-call IDs of an assistant message, so a tool result can find
 -- the message that issued its call without reading or decrypting tool_calls.
@@ -7500,7 +7445,8 @@ COMMENT ON COLUMN chat_content_parts.id IS '@access: confidential';
 COMMENT ON COLUMN chat_content_parts.chat_id IS '@access: confidential';
 COMMENT ON COLUMN chat_content_parts.project_id IS '@access: confidential';
 COMMENT ON COLUMN chat_content_parts.kind IS '@access: confidential';
-COMMENT ON COLUMN chat_content_parts.content_asset_url IS '@access: confidential';
+COMMENT ON COLUMN chat_content_parts.content_asset_url IS 'Storage path for the content part. Its file name is a digest of the content.
+@access: restricted';
 COMMENT ON COLUMN chat_content_parts.external_id IS '@access: confidential';
 COMMENT ON COLUMN chat_content_parts.parent_chat_message_id IS '@access: confidential';
 COMMENT ON COLUMN chat_content_parts.version IS '@access: confidential';

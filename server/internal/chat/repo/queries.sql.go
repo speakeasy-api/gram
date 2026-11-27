@@ -2103,7 +2103,7 @@ func (q *Queries) ListChatMessageParticipants(ctx context.Context, arg ListChatM
 }
 
 const listChatMessages = `-- name: ListChatMessages :many
-SELECT id, seq, chat_id, project_id, role, content, content_raw, content_asset_url, model, message_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, storage_error, user_id, external_user_id, external_message_id, origin, user_agent, ip_address, source, tool_call_id, tool_urn, tool_outcome, tool_outcome_notes, tool_call_summaries, content_hash, generation, capture_kind, original_message_id, replayed, created_at, risk_analyzed_at, source_updated_at, tool_call_count, content_bytes, content_raw_bytes, tool_calls_bytes FROM chat_messages
+SELECT id, seq, chat_id, project_id, role, content, content_raw, content_asset_url, model, message_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, storage_error, user_id, external_user_id, external_message_id, origin, user_agent, ip_address, source, tool_call_id, tool_urn, tool_outcome, tool_outcome_notes, tool_call_summaries, content_hash, generation, capture_kind, original_message_id, replayed, created_at, risk_analyzed_at, tool_call_count, content_bytes, content_raw_bytes, tool_calls_bytes FROM chat_messages
 WHERE chat_id = $1 AND project_id = $2::uuid
 ORDER BY created_at ASC, seq ASC
 `
@@ -2164,7 +2164,6 @@ func (q *Queries) ListChatMessages(ctx context.Context, arg ListChatMessagesPara
 			&i.Replayed,
 			&i.CreatedAt,
 			&i.RiskAnalyzedAt,
-			&i.SourceUpdatedAt,
 			&i.ToolCallCount,
 			&i.ContentBytes,
 			&i.ContentRawBytes,
@@ -3303,6 +3302,42 @@ func (q *Queries) MarkClaudeTagMessages(ctx context.Context, arg MarkClaudeTagMe
 	return err
 }
 
+const patchKitProjectionFields = `-- name: PatchKitProjectionFields :execrows
+UPDATE chat_messages AS m
+SET content_hash = $1, finish_reason = $2,
+    risk_analyzed_at = CASE WHEN $3::boolean THEN NULL ELSE m.risk_analyzed_at END
+WHERE m.project_id = $4 AND m.chat_id = $5 AND m.id = $6 AND m.source = 'kit'
+  AND ($3::boolean OR m.content_hash IS DISTINCT FROM $1 OR m.finish_reason IS DISTINCT FROM $2)
+`
+
+type PatchKitProjectionFieldsParams struct {
+	ContentHash  []byte
+	FinishReason pgtype.Text
+	BodyChanged  bool
+	ProjectID    uuid.NullUUID
+	ChatID       uuid.UUID
+	ID           uuid.UUID
+}
+
+// The non-body fields of a kit projection patch. The body (content,
+// content_raw, tool_calls) goes through transcriptstore.Transcripts.UpdateBody
+// in the same transaction first, which reports whether it changed; a body
+// change also clears the risk mark so the new body is analyzed again.
+func (q *Queries) PatchKitProjectionFields(ctx context.Context, arg PatchKitProjectionFieldsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, patchKitProjectionFields,
+		arg.ContentHash,
+		arg.FinishReason,
+		arg.BodyChanged,
+		arg.ProjectID,
+		arg.ChatID,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const recordChatSlackChannel = `-- name: RecordChatSlackChannel :exec
 UPDATE chats SET slack_team_id = coalesce(nullif($1::text, ''), slack_team_id),
  slack_channel_name = coalesce(nullif($2::text, ''), CASE WHEN slack_channel_id = $3::text THEN slack_channel_name END),
@@ -4000,6 +4035,25 @@ func (q *Queries) UpdateInferenceMessageAttribution(ctx context.Context, arg Upd
 		arg.ChatID,
 		arg.ProjectID,
 	)
+	return err
+}
+
+const updateToolCallOutcome = `-- name: UpdateToolCallOutcome :exec
+UPDATE chat_messages
+SET tool_outcome = $1
+WHERE id = $2 AND project_id = $3::uuid
+`
+
+type UpdateToolCallOutcomeParams struct {
+	ToolOutcome pgtype.Text
+	ID          uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+// tool_outcome only. The notes are part of the message body, so they go
+// through transcriptstore.Transcripts.UpdateBody in the same transaction.
+func (q *Queries) UpdateToolCallOutcome(ctx context.Context, arg UpdateToolCallOutcomeParams) error {
+	_, err := q.db.Exec(ctx, updateToolCallOutcome, arg.ToolOutcome, arg.ID, arg.ProjectID)
 	return err
 }
 

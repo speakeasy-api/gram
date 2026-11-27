@@ -3,7 +3,7 @@ package orgencryption_test
 import (
 	"context"
 	"errors"
-	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -32,7 +32,9 @@ func transactionService(t *testing.T, ti *testInstance) (*orgencryption.Service,
 	return service, pool
 }
 
-func TestTransactionColdCachesSingleConnection(t *testing.T) {
+// A transaction-bound Encryptor never calls KMS: with a cold process cache it
+// fails, and nothing it reads enters the shared cache.
+func TestTransactionNeverUnwrapsInsideTheTransaction(t *testing.T) {
 	t.Parallel()
 	ti := newTestInstance(t)
 	ti.provision(t)
@@ -45,21 +47,22 @@ func TestTransactionColdCachesSingleConnection(t *testing.T) {
 	encryptor, err := service.ForIn(tx, ti.orgID, useCase)
 	require.NoError(t, err)
 	before := ti.fixture.KMS.Decrypts()
-	for range 3 {
-		require.NoError(t, encryptor.RequireUsable(ctx))
-		ciphertext, err := encryptor.Encrypt(ctx, column, []byte("transaction secret"))
-		require.NoError(t, err)
-		plaintext, err := encryptor.Decrypt(ctx, column, ciphertext)
-		require.NoError(t, err)
-		require.Equal(t, "transaction secret", string(plaintext))
-	}
-	require.Equal(t, before+1, ti.fixture.KMS.Decrypts())
+	require.ErrorIs(t, encryptor.RequireUsable(ctx), orgencryption.ErrKeyNotWarm)
+	_, err = encryptor.Encrypt(ctx, column, []byte("transaction secret"))
+	require.ErrorIs(t, err, orgencryption.ErrKeyNotWarm)
+	require.Equal(t, before, ti.fixture.KMS.Decrypts())
 	require.NoError(t, tx.Rollback(t.Context()))
-	// Transaction-local key material must not populate even a cold shared cache.
-	committed, err := service.For(ti.orgID, useCase)
+
+	require.NoError(t, service.Warm(ctx, ti.orgID, useCase))
+	require.Equal(t, before+1, ti.fixture.KMS.Decrypts(), "Warm unwraps on the pool")
+	warmTx, err := pool.Begin(ctx) //nolint:glint // notestingrawsql: explicit transaction protocol under test
 	require.NoError(t, err)
-	require.NoError(t, committed.RequireUsable(ctx))
-	require.Equal(t, before+2, ti.fixture.KMS.Decrypts())
+	defer rollbackTransaction(t, warmTx)
+	warm, err := service.ForIn(warmTx, ti.orgID, useCase)
+	require.NoError(t, err)
+	_, err = warm.Encrypt(ctx, column, []byte("transaction secret"))
+	require.NoError(t, err)
+	require.Equal(t, before+1, ti.fixture.KMS.Decrypts())
 }
 
 func TestTransactionRollbackDoesNotPublishSuspension(t *testing.T) {
@@ -103,6 +106,33 @@ func TestTransactionIgnoresWarmSharedCaches(t *testing.T) {
 	require.ErrorIs(t, encryptor.RequireUsable(ctx), orgencryption.ErrSuspended)
 }
 
+func TestTransactionReusesWarmSharedDataKey(t *testing.T) {
+	t.Parallel()
+	ti := newTestInstance(t)
+	ti.provision(t)
+	service, pool := transactionService(t, ti)
+	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+	defer cancel()
+	committed, err := service.For(ti.orgID, useCase)
+	require.NoError(t, err)
+	require.NoError(t, committed.RequireUsable(ctx))
+	before := ti.fixture.KMS.Decrypts()
+	for range 3 {
+		tx, err := pool.Begin(ctx) //nolint:glint // notestingrawsql: explicit transaction protocol under test
+		require.NoError(t, err)
+		defer rollbackTransaction(t, tx)
+		encryptor, err := service.ForIn(tx, ti.orgID, useCase)
+		require.NoError(t, err)
+		ciphertext, err := encryptor.Encrypt(ctx, column, []byte("transaction secret"))
+		require.NoError(t, err)
+		plaintext, err := encryptor.Decrypt(ctx, column, ciphertext)
+		require.NoError(t, err)
+		require.Equal(t, "transaction secret", string(plaintext))
+		require.NoError(t, tx.Commit(ctx))
+	}
+	require.Equal(t, before, ti.fixture.KMS.Decrypts(), "transactions reuse the committed DEK instead of unwrapping it again")
+}
+
 func TestTransactionForInValidation(t *testing.T) {
 	t.Parallel()
 	ti := newTestInstance(t)
@@ -132,51 +162,69 @@ func TestTransactionForInValidation(t *testing.T) {
 	}
 }
 
-// canceledUnwrap waits for the caller's cancellation, rather than the service's
-// detached shared-cache flight timeout.
-type canceledUnwrap struct {
-	gcpkms.EncryptionClient
-	finished chan struct{}
-}
-
-func (k *canceledUnwrap) Decrypt(ctx context.Context, _ string, _, _ []byte) ([]byte, error) {
-	<-ctx.Done()
-	close(k.finished)
-	return nil, fmt.Errorf("canceled test unwrap: %w", ctx.Err())
-}
-
-func TestTransactionCancellationWaitsForUnwrapToExit(t *testing.T) {
-	t.Parallel()
-	ti := newTestInstance(t)
-	ti.provision(t)
-	_, pool := transactionService(t, ti)
-	kms := &canceledUnwrap{EncryptionClient: ti.fixture.KMS, finished: make(chan struct{})}
-	service, err := orgencryption.NewService(testenv.NewLogger(t), pool, newIdentity(), func(context.Context, oauth2.TokenSource) (gcpkms.EncryptionClient, error) { return kms, nil }, ti.fixture.Keys)
-	require.NoError(t, err)
-	tx, err := pool.Begin(t.Context()) //nolint:glint // notestingrawsql: explicit transaction protocol under test
-	require.NoError(t, err)
-	defer rollbackTransaction(t, tx)
-	encryptor, err := service.ForIn(tx, ti.orgID, useCase)
-	require.NoError(t, err)
-	ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
-	defer cancel()
-	started := time.Now()
-	require.ErrorIs(t, encryptor.RequireUsable(ctx), context.DeadlineExceeded)
-	require.Less(t, time.Since(started), 3*time.Second)
-	// The unwrap must already have exited when the operation returns: nothing
-	// may keep using the transaction asynchronously after rollback.
-	select {
-	case <-kms.finished:
-	default:
-		t.Fatal("transaction unwrap still running after cancellation")
-	}
-	require.NoError(t, tx.Rollback(t.Context()))
-}
-
 func rollbackTransaction(t *testing.T, tx pgx.Tx) {
 	t.Helper()
 	err := tx.Rollback(t.Context())
 	if !errors.Is(err, pgx.ErrTxClosed) {
 		require.NoError(t, err)
 	}
+}
+
+// Warm leaves the DEK cached with at least warmMargin of life, so the
+// transaction opened right after it still finds the DEK.
+func TestWarmRefreshesAKeyCloseToExpiry(t *testing.T) {
+	t.Parallel()
+	ti := newTestInstance(t)
+	ti.provision(t)
+	service, _ := transactionService(t, ti)
+	active, err := repo.New(ti.conn).GetActiveDataEncryptionKey(t.Context(), repo.GetActiveDataEncryptionKeyParams{OrganizationID: ti.orgID, UseCase: string(useCase)})
+	require.NoError(t, err)
+	before := ti.fixture.KMS.Decrypts()
+
+	require.NoError(t, service.Warm(t.Context(), ti.orgID, useCase))
+	require.NoError(t, service.Warm(t.Context(), ti.orgID, useCase))
+	require.Equal(t, before+1, ti.fixture.KMS.Decrypts(), "a fresh key is reused")
+
+	service.AgeDataKey(active.ID, orgencryption.DataKeyCacheTTL-10*time.Second)
+	require.NoError(t, service.Warm(t.Context(), ti.orgID, useCase))
+	require.Equal(t, before+2, ti.fixture.KMS.Decrypts(), "a key about to expire is unwrapped again")
+}
+
+// failingKMS fails every unwrap once fail is set.
+type failingKMS struct {
+	gcpkms.EncryptionClient
+	fail atomic.Bool
+}
+
+func (k *failingKMS) Decrypt(ctx context.Context, keyName string, ciphertext, aad []byte) ([]byte, error) {
+	if k.fail.Load() {
+		return nil, errors.New("example KMS outage")
+	}
+	return k.EncryptionClient.Decrypt(ctx, keyName, ciphertext, aad) //nolint:wrapcheck // the test stand-in is transparent
+}
+
+// When the early refresh fails, Warm keeps a cached DEK that is still within
+// DataKeyCacheTTL instead of failing the write.
+func TestWarmKeepsAValidKeyWhenTheRefreshFails(t *testing.T) {
+	t.Parallel()
+	ti := newTestInstance(t)
+	ti.provision(t)
+	_, pool := transactionService(t, ti)
+	kms := &failingKMS{EncryptionClient: ti.fixture.KMS, fail: atomic.Bool{}}
+	service, err := orgencryption.NewService(testenv.NewLogger(t), pool, newIdentity(), func(context.Context, oauth2.TokenSource) (gcpkms.EncryptionClient, error) { return kms, nil }, ti.fixture.Keys)
+	require.NoError(t, err)
+	active, err := repo.New(ti.conn).GetActiveDataEncryptionKey(t.Context(), repo.GetActiveDataEncryptionKeyParams{OrganizationID: ti.orgID, UseCase: string(useCase)})
+	require.NoError(t, err)
+	require.NoError(t, service.Warm(t.Context(), ti.orgID, useCase))
+
+	service.AgeDataKey(active.ID, orgencryption.DataKeyCacheTTL-10*time.Second)
+	kms.fail.Store(true)
+	require.NoError(t, service.Warm(t.Context(), ti.orgID, useCase), "the cached key is still valid")
+
+	canceled, cancel := context.WithCancel(t.Context())
+	cancel()
+	require.ErrorIs(t, service.Warm(canceled, ti.orgID, useCase), context.Canceled, "a canceled caller is not told the key is ready")
+
+	service.Forget(ti.orgID)
+	require.ErrorIs(t, service.Warm(t.Context(), ti.orgID, useCase), orgencryption.ErrKeyUnavailable, "with nothing cached the outage fails")
 }

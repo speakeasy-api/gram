@@ -116,18 +116,14 @@ func (s *Service) ListAssistants(ctx context.Context, _ *gen.ListAssistantsPaylo
 	for i, item := range items {
 		checks[i] = authz.Assistant(authz.AssistantIDOf(item.ID), authz.ProjectIDOf(*authCtx.ProjectID)).Read()
 	}
-	allowedIDs, err := s.authz.Filter(ctx, checks)
+	decisions, err := s.authz.Decide(ctx, checks...)
 	if err != nil {
 		return nil, err
 	}
-	allowed := make(map[string]struct{}, len(allowedIDs))
-	for _, id := range allowedIDs {
-		allowed[id] = struct{}{}
-	}
 
-	result := &gen.ListAssistantsResult{Assistants: make([]*types.Assistant, 0, len(allowedIDs))}
-	for _, item := range items {
-		if _, ok := allowed[item.ID.String()]; !ok {
+	result := &gen.ListAssistantsResult{Assistants: make([]*types.Assistant, 0, len(items))}
+	for i, item := range items {
+		if !decisions.Each[i].Allowed {
 			continue
 		}
 		view, err := toHTTPAssistant(item)
@@ -527,11 +523,11 @@ func (s *Service) requireAttachmentAccess(ctx context.Context, projectID uuid.UU
 	if err := s.authz.Require(ctx, connectChecks...); err != nil {
 		return nil, err
 	}
-	writable, err := s.authz.Filter(ctx, writeChecks)
+	decisions, err := s.authz.Decide(ctx, writeChecks...)
 	if err != nil {
 		return nil, err
 	}
-	return idSetPredicate(writable), nil
+	return allowedResources(writeChecks, decisions), nil
 }
 
 // requireRuntimeAvailable rejects requests that need an assistant runtime

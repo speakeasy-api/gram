@@ -10,9 +10,12 @@ import (
 	"net/netip"
 	"testing"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/chatredact"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
 	"github.com/speakeasy-api/gram/server/internal/mcpfeedback"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
@@ -20,6 +23,33 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/requestip"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
+
+// unreachableDatabase is a pool whose every query fails, because nothing
+// listens on port 1.
+const unreachableDatabase = "postgres://feedback@127.0.0.1:1/feedback?connect_timeout=1"
+
+// A server whose serving query says the tool is off is offered nothing
+// without its settings being read: the same recorder fails when it has to
+// read them.
+func TestFeedbackLocalToolsReadNoSettingsForAServerWithTheToolOff(t *testing.T) {
+	t.Parallel()
+
+	pool, err := pgxpool.New(t.Context(), unreachableDatabase)
+	require.NoError(t, err)
+	t.Cleanup(pool.Close)
+
+	recorder := mcpfeedback.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), pool, chatredact.New(), mcpfeedback.Limits{Caller: nil, Server: nil}, "gram-server", nil, mcpfeedback.WithSettingsFreshFor(0))
+	source := feedbackLocalTools(recorder)
+	server := localToolServer{organizationID: "org", projectID: uuid.New(), mcpServerID: uuid.New(), feedbackToolEnabled: false}
+
+	tools, err := source(t.Context(), server)
+	require.NoError(t, err)
+	require.Empty(t, tools)
+
+	server.feedbackToolEnabled = true
+	_, err = source(t.Context(), server)
+	require.Error(t, err)
+}
 
 // A feedback tool may not take a name the gateway answers itself in dynamic
 // mode, so the feedback package's list must name every one of them.

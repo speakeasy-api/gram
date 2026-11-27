@@ -49,6 +49,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/chat/chattitle"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptcrypto"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -701,11 +702,11 @@ func (s *Service) GetWorkUnitsTrend(ctx context.Context, payload *gen.GetWorkUni
 	if enforce, err := s.authz.ShouldEnforce(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to authorize work units trend").LogError(ctx, s.logger)
 	} else if enforce {
-		allowed, err := s.authz.Evaluate(ctx, authz.Chats(authz.ProjectIDFrom(projectID)).Read())
+		decision, err := s.authz.Decide(authz.WithoutChallenges(ctx), authz.Chats(authz.ProjectIDFrom(projectID)).Read())
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to authorize work units trend").LogError(ctx, s.logger)
 		}
-		if !allowed {
+		if !decision.AllAllowed {
 			return nil, oops.C(oops.CodeForbidden)
 		}
 	}
@@ -1089,10 +1090,10 @@ func (s *Service) chatVisibilityScope(ctx context.Context, authCtx *contextvalue
 	// owner-matching, not via chat:read.
 	//
 	// When RBAC is not enforced for the org we must NOT fall through to "see all"
-	// — Evaluate short-circuits to true when enforcement is off, so check
+	// — Decide short-circuits to true when enforcement is off, so check
 	// ShouldEnforce explicitly and treat the disabled case as constrained.
 	//
-	// Use Evaluate rather than Require here: this is a visibility branch, not an
+	// Use Decide rather than Require here: this is a visibility branch, not an
 	// access gate. Members legitimately hold no chat:read grant and fall through
 	// to own-session visibility, so a denial is the expected, non-error outcome.
 	// Require would stamp a chat:read "DENIED" authz challenge on every such
@@ -1103,14 +1104,14 @@ func (s *Service) chatVisibilityScope(ctx context.Context, authCtx *contextvalue
 	if enforce, err := s.authz.ShouldEnforce(ctx); err != nil {
 		s.logger.WarnContext(ctx, "could not determine RBAC enforcement for chat visibility; showing own sessions", attr.SlogError(err))
 	} else if enforce {
-		allowed, err := s.authz.Evaluate(ctx, authz.Chats(authz.ProjectIDOf(*authCtx.ProjectID)).Read())
+		decision, err := s.authz.Decide(authz.WithoutChallenges(ctx), authz.Chats(authz.ProjectIDOf(*authCtx.ProjectID)).Read())
 		if err != nil {
 			// An unsatisfied grant yields (false, nil); a non-nil error is
 			// unexpected. Log it but still serve own sessions rather than
 			// failing the listing.
 			s.logger.WarnContext(ctx, "chat:read visibility check failed for chat listing; showing own sessions", attr.SlogError(err))
 		} else {
-			canReadAllSessions = allowed
+			canReadAllSessions = decision.AllAllowed
 		}
 	}
 
@@ -1172,20 +1173,18 @@ func (s *Service) editableAgentIDs(ctx context.Context, authCtx *contextvalues.A
 	for _, id := range agentIDs {
 		checks = append(checks, agentWriteCheck(id))
 	}
-	allowed, err := s.authz.Filter(ctx, checks)
+	decisions, err := s.authz.Decide(ctx, checks...)
 	if err != nil {
 		// Visibility is never a hard gate: fall back to owned agents.
 		s.logger.WarnContext(ctx, "filter editable agents failed for agent session visibility; showing owned agents only", attr.SlogError(err))
 		return nil, nil
 	}
 
-	editable := make([]uuid.UUID, 0, len(allowed))
-	for _, raw := range allowed {
-		id, err := uuid.Parse(raw)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "parse editable agent id").LogError(ctx, s.logger)
+	editable := make([]uuid.UUID, 0, len(agentIDs))
+	for i, id := range agentIDs {
+		if decisions.Each[i].Allowed {
+			editable = append(editable, id)
 		}
-		editable = append(editable, id)
 	}
 	return editable, nil
 }
@@ -2941,17 +2940,52 @@ func (s *Service) SummarizeToolCall(ctx context.Context, payload *gen.SummarizeT
 		return nil, oops.E(oops.CodeUnexpected, err, "encode tool summary response").LogError(ctx, s.logger)
 	}
 
-	stored, err := s.transcripts.StoreToolCallSummary(ctx, conn, transcriptstore.StoreToolCallSummaryParams{
-		ToolCallID: payload.ToolCallID, Summary: encodedRecord, MessageID: messageID,
-		ChatID: chatID, ProjectID: *authCtx.ProjectID,
+	// The summary is part of the message body, so it goes through UpdateBody,
+	// which writes it to every copy of the body in one transaction. The key
+	// loads before the transaction begins.
+	if err := s.transcripts.Prepare(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "prepare tool call summary transcript").LogError(ctx, s.logger)
+	}
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin tool call summary transaction").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	_, err = s.transcripts.UpdateBody(ctx, tx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, chatID, messageID, func(m *transcriptcrypto.Message) error {
+		summaries, err := setToolCallSummary(m.ToolCallSummaries, payload.ToolCallID, encodedRecord)
+		if err != nil {
+			return err
+		}
+		m.ToolCallSummaries = summaries
+		return nil
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "persist tool call summary").LogError(ctx, s.logger)
 	}
-	if err := json.Unmarshal([]byte(stored), &record); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "decode stored tool summary").LogError(ctx, s.logger)
+	if err := tx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit tool call summary").LogError(ctx, s.logger)
 	}
 	return &gen.SummarizeToolCallResult{Summary: record.Summary, Impact: record.Impact, Cached: false}, nil
+}
+
+// setToolCallSummary sets one call's summary and keeps the summaries of
+// sibling calls carried by the same assistant message.
+func setToolCallSummary(summaries []byte, toolCallID string, summary []byte) ([]byte, error) {
+	merged := map[string]json.RawMessage{}
+	if len(summaries) > 0 {
+		if err := json.Unmarshal(summaries, &merged); err != nil {
+			return nil, fmt.Errorf("decode tool call summaries: %w", err)
+		}
+	}
+	if merged == nil {
+		merged = map[string]json.RawMessage{}
+	}
+	merged[toolCallID] = summary
+	encoded, err := json.Marshal(merged)
+	if err != nil {
+		return nil, fmt.Errorf("encode tool call summaries: %w", err)
+	}
+	return encoded, nil
 }
 
 func findSummarizableToolCall(raw []byte, id string) (summarizableToolCall, error) {

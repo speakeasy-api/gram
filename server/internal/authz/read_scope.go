@@ -63,13 +63,13 @@ func (e *Engine) ResolveReadScope(ctx context.Context, scope Scope, projectID st
 		}
 		return ReadScope{Kind: ReadScopeUnrestricted, UserID: "", UserEmail: "", AgentIDs: nil}, nil
 	}
-	// Evaluate, not Require: a member without the grant is expected, not a
+	// Decide, not Require: a member without the grant is expected, not a
 	// denial to record. It also keeps project-wide reads where RBAC is off.
-	allowed, err := e.Evaluate(ctx, check)
+	allowed, err := e.Decide(WithoutChallenges(ctx), check)
 	if err != nil {
 		return ReadScope{}, oops.E(oops.CodeUnexpected, err, "evaluate read scope")
 	}
-	if allowed {
+	if allowed.AllAllowed {
 		return ReadScope{Kind: ReadScopeUnrestricted, UserID: "", UserEmail: "", AgentIDs: nil}, nil
 	}
 	if e.db == nil {

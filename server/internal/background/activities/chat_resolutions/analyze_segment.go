@@ -11,11 +11,13 @@ import (
 
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptcrypto"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -101,6 +103,19 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 		return fmt.Errorf("failed to analyze segment with LLM: %w", err)
 	}
 
+	// Outcome notes are part of the message body, which may be encrypted, so the
+	// key loads before the transaction below begins, but only when some outcome
+	// will be written. A segment that writes none must not fail on the key.
+	var prepared error
+	for _, tc := range result.ToolCalls {
+		absoluteIndex := args.StartIndex + tc.MessageIndex
+		if absoluteIndex < 0 || absoluteIndex >= len(allMessages) {
+			continue
+		}
+		prepared = a.transcripts.Prepare(ctx, args.OrgID, args.ProjectID)
+		break
+	}
+
 	// Use transaction for atomic updates
 	tx, err := a.db.Begin(ctx)
 	if err != nil {
@@ -114,17 +129,19 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 
 	txRepo := a.repo.WithTx(tx)
 
-	// Update tool call outcomes
+	// Update tool call outcomes. The notes are part of the body, so they are
+	// written below through UpdateBody; the last notes for a message win.
+	var updated []uuid.UUID
+	notes := make(map[uuid.UUID]pgtype.Text)
 	for _, tc := range result.ToolCalls {
 		// Convert relative index to absolute
 		absoluteIndex := args.StartIndex + tc.MessageIndex
 		if absoluteIndex >= 0 && absoluteIndex < len(allMessages) {
 			msgID := allMessages[absoluteIndex].ID
-			if err := a.transcripts.UpdateToolCallOutcome(ctx, tx, transcriptstore.UpdateToolCallOutcomeParams{
-				ID:               msgID,
-				ProjectID:        args.ProjectID,
-				ToolOutcome:      conv.ToPGText(tc.Outcome),
-				ToolOutcomeNotes: conv.ToPGText(tc.Notes),
+			if err := txRepo.UpdateToolCallOutcome(ctx, repo.UpdateToolCallOutcomeParams{
+				ID:          msgID,
+				ProjectID:   args.ProjectID,
+				ToolOutcome: conv.ToPGText(tc.Outcome),
 			}); err != nil {
 				// For a project that keeps shadows, the outcome write and its
 				// shadow recapture run under one savepoint, so a failure
@@ -133,7 +150,29 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 					attr.SlogError(err),
 					attr.SlogMessageID(msgID.String()),
 				)
+				// Continue with other updates
+				continue
 			}
+			if _, seen := notes[msgID]; !seen {
+				updated = append(updated, msgID)
+			}
+			notes[msgID] = conv.ToPGText(tc.Notes)
+		}
+	}
+	if len(updated) > 0 && prepared != nil {
+		return fmt.Errorf("prepare tool call outcome notes: %w", prepared)
+	}
+	for _, msgID := range updated {
+		latest := notes[msgID]
+		_, err := a.transcripts.UpdateBody(ctx, tx, args.OrgID, args.ProjectID, args.ChatID, msgID, func(m *transcriptcrypto.Message) error {
+			m.ToolOutcomeNotes = nil
+			if latest.Valid {
+				m.ToolOutcomeNotes = &latest.String
+			}
+			return nil
+		})
+		if err != nil {
+			return fmt.Errorf("update tool call outcome notes: %w", err)
 		}
 	}
 

@@ -3937,9 +3937,15 @@ func (s *Service) GetOrgMcpServerActivity(ctx context.Context, payload *telem_ge
 	for i, project := range projects {
 		checks[i] = authz.Project(authz.ProjectIDOf(project.ID)).Read()
 	}
-	allowed, err := s.authz.Filter(ctx, checks)
+	decisions, err := s.authz.Decide(ctx, checks...)
 	if err != nil {
 		return nil, err
+	}
+	allowed := make([]uuid.UUID, 0, len(projects))
+	for i, project := range projects {
+		if decisions.Each[i].Allowed {
+			allowed = append(allowed, project.ID)
+		}
 	}
 
 	now := time.Now()
@@ -3947,11 +3953,8 @@ func (s *Service) GetOrgMcpServerActivity(ctx context.Context, payload *telem_ge
 	read := make([]*telem_gen.ProjectMcpServerActivity, len(allowed))
 	g, gctx := errgroup.WithContext(ctx)
 	g.SetLimit(maxConcurrentOrgActivityProjects)
-	for i, id := range allowed {
-		projectID, err := uuid.Parse(id)
-		if err != nil {
-			continue
-		}
+	for i, projectID := range allowed {
+		id := projectID.String()
 		g.Go(func() error {
 			activity, err := s.projectMcpServerActivity(gctx, authCtx.ActiveOrganizationID, projectID, since, since, now)
 			if err != nil {
@@ -4641,12 +4644,14 @@ func filterReadable(ctx context.Context, engine *authz.Engine, checks []authz.Ch
 	if len(checks) == 0 || engine == nil {
 		return readable, nil
 	}
-	allowed, err := engine.Filter(ctx, checks)
+	decisions, err := engine.Decide(ctx, checks...)
 	if err != nil {
 		return nil, fmt.Errorf("filter: %w", err)
 	}
-	for _, id := range allowed {
-		readable[id] = true
+	for i, decision := range decisions.Each {
+		if decision.Allowed {
+			readable[checks[i].ResourceID] = true
+		}
 	}
 	return readable, nil
 }

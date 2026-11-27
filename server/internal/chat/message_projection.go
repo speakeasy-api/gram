@@ -1,15 +1,16 @@
 package chat
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
-	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptcrypto"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 )
 
@@ -24,6 +25,9 @@ func (w *ChatMessageWriter) ProjectMessage(ctx context.Context, projectID, messa
 	if guard == nil || build == nil || messageID == uuid.Nil {
 		return false, fmt.Errorf("projection requires admission guard and message ID")
 	}
+	// A projection the guard refuses or build skips seals nothing, so it
+	// must not fail on the key. Keep the error for a change that seals.
+	prepared := w.PrepareTranscripts(ctx, projectID)
 	tx, err := w.db.Begin(ctx)
 	if err != nil {
 		return false, fmt.Errorf("begin message projection: %w", err)
@@ -70,7 +74,7 @@ func (w *ChatMessageWriter) ProjectMessage(ctx context.Context, projectID, messa
 	var changed int64
 	var organizationID string
 	if exists {
-		changed, err = w.transcripts.PatchKitProjectionMessage(ctx, tx, transcriptstore.PatchKitProjectionMessageParams{ProjectID: uuid.NullUUID{UUID: projectID, Valid: true}, ChatID: write.Params.ChatID, ID: messageID, Content: write.Params.Content, ContentRaw: write.Params.ContentRaw, ToolCalls: write.Params.ToolCalls, ContentHash: write.Params.ContentHash, FinishReason: write.Params.FinishReason})
+		changed, err = w.patchProjection(ctx, tx, projectID, row, write, prepared)
 	} else {
 		changed, err = q.CreateChatMessage(ctx, []repo.CreateChatMessageParams{write.Params})
 		if err == nil && changed > 0 {
@@ -94,12 +98,9 @@ func (w *ChatMessageWriter) ProjectMessage(ctx context.Context, projectID, messa
 	if err != nil {
 		return false, fmt.Errorf("persist projected message: %w", err)
 	}
-	if changed > 0 && w.transcripts.Enabled(projectID) {
-		if organizationID == "" {
-			organizationID, err = q.GetProjectOrganizationID(ctx, projectID)
-			if err != nil {
-				return false, fmt.Errorf("look up projection shadow organization: %w", err)
-			}
+	if !exists && changed > 0 && w.transcripts.Enabled(projectID) {
+		if prepared != nil {
+			return false, prepared
 		}
 		if err := w.sealTranscripts(ctx, tx, organizationID, projectID, []uuid.UUID{messageID}); err != nil {
 			return false, err
@@ -113,4 +114,46 @@ func (w *ChatMessageWriter) ProjectMessage(ctx context.Context, projectID, messa
 		w.notifyMessagesStored(ctx, projectID)
 	}
 	return changed > 0, nil
+}
+
+// patchProjection rewrites an existing kit message in the caller's
+// transaction: content, content_raw and tool_calls through UpdateBody, which
+// keeps every copy of the body in step, then the content hash, finish reason
+// and risk mark in SQL. It returns 1 when anything changed.
+func (w *ChatMessageWriter) patchProjection(ctx context.Context, tx pgx.Tx, projectID uuid.UUID, row repo.ChatMessage, write MessageWrite, prepared error) (int64, error) {
+	q := repo.New(tx)
+	bodyChanged := false
+	if row.Content != write.Params.Content || !bytes.Equal(row.ContentRaw, write.Params.ContentRaw) || !bytes.Equal(row.ToolCalls, write.Params.ToolCalls) {
+		if prepared != nil && w.transcripts.Enabled(projectID) {
+			return 0, prepared
+		}
+		organizationID, err := q.GetProjectOrganizationID(ctx, projectID)
+		if err != nil {
+			return 0, fmt.Errorf("look up projection organization: %w", err)
+		}
+		bodyChanged, err = w.transcripts.UpdateBody(ctx, tx, organizationID, projectID, row.ChatID, row.ID, func(m *transcriptcrypto.Message) error {
+			m.Content = write.Params.Content
+			m.ContentRaw = write.Params.ContentRaw
+			m.ToolCalls = write.Params.ToolCalls
+			return nil
+		})
+		if err != nil {
+			return 0, fmt.Errorf("patch projected message body: %w", err)
+		}
+	}
+	n, err := q.PatchKitProjectionFields(ctx, repo.PatchKitProjectionFieldsParams{
+		ProjectID:    uuid.NullUUID{UUID: projectID, Valid: true},
+		ChatID:       row.ChatID,
+		ID:           row.ID,
+		ContentHash:  write.Params.ContentHash,
+		FinishReason: write.Params.FinishReason,
+		BodyChanged:  bodyChanged,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("patch projected message fields: %w", err)
+	}
+	if bodyChanged || n > 0 {
+		return 1, nil
+	}
+	return 0, nil
 }

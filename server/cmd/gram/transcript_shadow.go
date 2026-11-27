@@ -3,6 +3,7 @@ package gram
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/google/uuid"
@@ -40,7 +41,7 @@ func parseTranscriptShadowProjectIDs(values []string) ([]uuid.UUID, error) {
 // and wires the writer to seal them. Plaintext remains authoritative for every
 // other project; startup never backfills old messages. It returns nil when no
 // project has encrypted transcripts.
-func configureTranscripts(ctx context.Context, c *cli.Context, db *pgxpool.Pool, writer *chat.ChatMessageWriter, orgEncryption orgEncryptionDeps, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider) (*transcriptstore.Transcripts, error) {
+func configureTranscripts(ctx context.Context, c *cli.Context, db *pgxpool.Pool, writer *chat.ChatMessageWriter, orgEncryption orgEncryptionDeps, logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider) (*transcriptstore.Transcripts, error) {
 	var none *transcriptstore.Transcripts
 	values := c.StringSlice(chatTranscriptShadowProjectIDsFlag)
 	if len(values) == 0 {
@@ -82,7 +83,7 @@ func configureTranscripts(ctx context.Context, c *cli.Context, db *pgxpool.Pool,
 		}
 	}
 	// Build the store first: it can fail, and provisioning mints keys.
-	store, err := transcriptstore.New(db, orgEncryption.Service, tracerProvider, meterProvider)
+	store, err := transcriptstore.New(db, orgEncryption.Service, logger, tracerProvider, meterProvider)
 	if err != nil {
 		return none, fmt.Errorf("create chat transcript shadow store: %w", err)
 	}
@@ -93,13 +94,16 @@ func configureTranscripts(ctx context.Context, c *cli.Context, db *pgxpool.Pool,
 	}
 	transcripts := transcriptstore.NewTranscripts(store, projectIDs...)
 	writer.WithTranscripts(transcripts)
+	// Sealing runs inside write transactions: keep the transcript key warm so
+	// a request does not wait for KMS each time the cached key expires.
+	go orgEncryption.Service.KeepWarm(ctx, orgencryption.UseCaseChatTranscripts)
 	return transcripts, nil
 }
 
 // checkTranscriptSchema checks what the store reads and writes: the sidecar
-// and the source_updated_at it records, the chat_messages columns and the
-// source_updated_at default that sealing relies on, and the tool-call ID table with the
-// (message_id, tool_call_id) conflict target its inserts use.
+// and its nullable legacy source_hash, the chat_messages metadata columns, and
+// the tool-call ID table with the (message_id, tool_call_id) conflict target
+// its inserts use.
 // Catalog reads neither touch transcript payloads nor execute trial inserts.
 // Tables are looked up through the connection's search_path, the same way the
 // store's queries resolve them: deployed databases keep them outside public.
@@ -163,39 +167,32 @@ SELECT EXISTS (SELECT 1 FROM sidecar)
  JOIN sidecar s ON s.oid = a.attrelid
  WHERE a.attnum > 0 AND NOT a.attisdropped AND a.attnotnull
    AND NOT a.atthasdef AND a.attgenerated = '' AND a.attidentity = ''
-   AND a.attname NOT IN ('message_id', 'project_id', 'organization_id', 'ciphertext', 'source_updated_at')
+   AND a.attname NOT IN ('message_id', 'project_id', 'organization_id', 'ciphertext')
  )
  AND EXISTS (SELECT 1 FROM arbiters WHERE indimmediate AND indisready)
  AND NOT EXISTS (SELECT 1 FROM arbiters WHERE NOT indimmediate)
  AND NOT EXISTS (
- -- Nullable, but the store writes source_updated_at and reads the legacy
- -- source_hash of copies sealed before it existed.
- SELECT 1 FROM (VALUES ('source_updated_at', 'timestamptz'::regtype), ('source_hash', 'bytea'::regtype)) AS freshness(name, type_oid)
- WHERE NOT EXISTS (
-  SELECT 1 FROM pg_catalog.pg_attribute a
-  JOIN sidecar s ON s.oid = a.attrelid
-  WHERE a.attname = freshness.name AND a.atttypid = freshness.type_oid AND NOT a.attisdropped
- ))
+ -- Resealing clears the legacy source_hash, and reads skip transcripts that
+ -- still carry it, so it must exist and be nullable.
+ SELECT 1 FROM pg_catalog.pg_attribute a
+ JOIN sidecar s ON s.oid = a.attrelid
+ WHERE a.attname = 'source_hash' AND NOT a.attisdropped
+   AND (a.atttypid <> 'bytea'::regtype OR a.attnotnull)
+ )
+ AND EXISTS (
+ SELECT 1 FROM pg_catalog.pg_attribute a
+ JOIN sidecar s ON s.oid = a.attrelid
+ WHERE a.attname = 'source_hash' AND NOT a.attisdropped
+ )
  AND NOT EXISTS (
- -- Sealing writes the metadata to chat_messages and compares source_updated_at.
+ -- Sealing writes the metadata to chat_messages.
  SELECT 1 FROM (VALUES ('tool_call_count', 'integer'::regtype), ('content_bytes', 'integer'::regtype),
-   ('content_raw_bytes', 'integer'::regtype), ('tool_calls_bytes', 'integer'::regtype),
-   ('source_updated_at', 'timestamptz'::regtype)) AS column_needed(name, type_oid)
+   ('content_raw_bytes', 'integer'::regtype), ('tool_calls_bytes', 'integer'::regtype)) AS column_needed(name, type_oid)
  WHERE NOT EXISTS (
   SELECT 1 FROM pg_catalog.pg_attribute a
   JOIN messages m ON m.oid = a.attrelid
   WHERE a.attname = column_needed.name AND a.atttypid = column_needed.type_oid AND NOT a.attisdropped
  ))
- AND EXISTS (
- -- Inserts rely on the column default to stamp source_updated_at, so it must
- -- be clock_timestamp(): no default, or a NULL one, would leave new messages
- -- without a freshness marker.
- SELECT 1 FROM pg_catalog.pg_attribute a
- JOIN messages m ON m.oid = a.attrelid
- JOIN pg_catalog.pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
- WHERE a.attname = 'source_updated_at' AND NOT a.attisdropped
-   AND pg_catalog.pg_get_expr(d.adbin, d.adrelid) = 'clock_timestamp()'
- )
  AND NOT EXISTS (
  SELECT 1 FROM (VALUES ('message_id', 'uuid'::regtype), ('tool_call_id', 'text'::regtype), ('chat_id', 'uuid'::regtype), ('project_id', 'uuid'::regtype)) AS tool_call(name, type_oid)
  WHERE NOT EXISTS (

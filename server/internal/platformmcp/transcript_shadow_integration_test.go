@@ -22,7 +22,7 @@ func newShadowTranscripts(t *testing.T, ctx context.Context, conn *pgxpool.Pool,
 	t.Helper()
 	keys := orgencryptiontest.New(t, conn)
 	require.NoError(t, keys.Provisioner.EnsureUseCase(ctx, organizationID, orgencryption.UseCaseChatTranscripts, orgencryption.SystemActor()))
-	store, err := transcriptstore.New(conn, keys.Service, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t))
+	store, err := transcriptstore.New(conn, keys.Service, testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t))
 	require.NoError(t, err)
 	return store, transcriptstore.NewTranscripts(store, projectID)
 }
