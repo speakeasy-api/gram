@@ -57,7 +57,8 @@ Local Kit uses the exact same Kit protocol path as deployed ATE runtimes:
 - **Per-thread ACP bearer token** derived via HMAC-SHA256 from the runtime's
   encrypted root secret stored in `assistant_kit_gateway_credentials`.
 - **Outbound authentication difference from deployed ATE**: deployed ATE
-  sandboxes hold no Speakeasy credentials and rely on the platform egress
+  sandboxes hold no outbound Speakeasy inference or MCP workload credentials
+  (only the inbound per-thread ACP bearer) and rely on the platform egress
   gateway to inject bearer tokens. Local development has no egress proxy, so
   local containers continue to use an externally projected read-only workload
   assertion file with RFC 7523 token exchange (`provider = "speakeasy"` and

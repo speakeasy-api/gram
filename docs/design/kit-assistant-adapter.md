@@ -36,10 +36,12 @@ records are not equivalent to the empty sentinel.
 
 ## Inference and MCP authority
 
-- **Deployed ATE runtimes**: sandboxes hold no Speakeasy credentials or
-  assertion files. `mcp.json` uses a direct-bearer placeholder and inference
-  targets the OpenAI-compatible gateway endpoint; the platform egress proxy
-  replaces the `Authorization` header with the actor's signed workload JWT.
+- **Deployed ATE runtimes**: sandboxes hold no outbound Speakeasy inference or
+  MCP workload credentials or assertion files (only the inbound per-thread ACP
+  bearer in `.kit/credentials/gateway-token`). `mcp.json` uses a direct-bearer
+  placeholder and inference targets the OpenAI-compatible gateway endpoint; the
+  platform egress proxy replaces the `Authorization` header with the actor's
+  signed workload JWT.
 - **Local Docker runtimes (`--environment=local` only)**: MCP and inference use
   the same externally projected, short-lived assertion file. Kit exchanges it
   independently for each resource through its generic workload configuration.
@@ -171,8 +173,10 @@ yet been prompted starts in a conversation with earlier assistant turns, the
 server adds a notice to its first prompt that earlier messages are unavailable,
 and the turn proceeds. Do not import legacy history into the session.
 
-Deployed ATE sandboxes receive bearer credentials solely via the platform egress
-proxy and hold no Speakeasy credentials inside the sandbox. Local development
-continues to use operator-projected assertions and RFC 7523 token exchange so
-local Docker containers work without an egress proxy; startup validation blocks
-selecting the local backend outside `environment=local`.
+Deployed ATE sandboxes receive outbound inference and MCP bearer credentials
+solely via the platform egress proxy and hold no outbound Speakeasy workload
+credentials inside the sandbox (only the inbound per-thread ACP bearer in
+`.kit/credentials/gateway-token`). Local development continues to use
+operator-projected assertions and RFC 7523 token exchange so local Docker
+containers work without an egress proxy; startup validation blocks selecting
+the local backend outside `environment=local`.
