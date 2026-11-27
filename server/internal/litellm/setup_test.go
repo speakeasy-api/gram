@@ -125,7 +125,7 @@ func newRealTestServiceWithScannerFactory(t *testing.T, scannerFactory func(*pgx
 		chConn,
 		func(context.Context, string) (bool, error) { return true, nil },
 		func(context.Context, string) (bool, error) { return false, nil },
-		telemetry.NewUserInfoResolver(logger, conn, cache.NewRedisCacheAdapter(redisClient)),
+		telemetry.NewUserInfoResolver(logger, conn, testenv.NewEvictableCache(t, redisClient)),
 		telemetry.NewNoopLogPublisher(logger),
 	)
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
@@ -163,7 +163,7 @@ func newRealTestServiceWithScannerFactory(t *testing.T, scannerFactory func(*pgx
 		nil,
 		risk.NewPolicyBypassEvaluator(logger, conn),
 		spendGate,
-		shadowmcp.NewClient(logger, conn, cacheAdapter, serverURL),
+		shadowmcp.NewClient(logger, conn, testenv.NewEvictableCache(t, redisClient), serverURL),
 		chatWriter,
 		nil,
 		nil,

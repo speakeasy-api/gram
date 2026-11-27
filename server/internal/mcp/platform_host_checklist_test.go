@@ -65,7 +65,7 @@ func newPlatformHostMux(t *testing.T, ti *testInstance) (http.Handler, platformH
 		ti.sessionManager,
 		ti.serverURL,
 		ti.siteURL,
-		ti.cacheAdapter,
+		ti.evictableCache,
 		authz.NewEngine(ti.logger, ti.conn, nil, workos.NewStubClient()),
 		ti.audit,
 		nil,

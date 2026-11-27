@@ -210,7 +210,7 @@ func TestAccountTypeCacheRefreshSurvivesCancellationAfterCommit(t *testing.T) {
 	requestCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	redisClient.AddHook(&cancelOnRedisSetHook{cancel: cancel, called: make(chan struct{})})
-	svc.productFeatures = productfeatures.NewClient(testenv.NewLogger(t), testenv.NewTracerProvider(t), db, redisClient)
+	svc.productFeatures = productfeatures.NewClient(testenv.NewLogger(t), testenv.NewTracerProvider(t), db, testenv.NewEvictableCache(t, redisClient))
 	target := "enterprise"
 	_, _ = svc.UpdateOrganization(requestCtx, &gen.UpdateOrganizationPayload{ID: id, AccountType: &target})
 	require.Equal(t, "enterprise", readOrgState(t, ctx, db, id).GramAccountType)

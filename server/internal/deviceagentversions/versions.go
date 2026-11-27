@@ -88,7 +88,10 @@ func (s *Store) Record(ctx context.Context, organizationID, machine, version str
 			return nil
 		}
 	}
-	pipe := s.redis.Pipeline()
+	// One MULTI/EXEC, so neither key is ever left without its expiry: an
+	// eviction policy that only evicts keys with one would otherwise keep a
+	// key that lost its EXPIRE forever.
+	pipe := s.redis.TxPipeline()
 	pipe.HSet(ctx, dayKey(day, organizationID), machine, version)
 	pipe.Expire(ctx, dayKey(day, organizationID), Retention)
 	pipe.SAdd(ctx, orgsKey(day), organizationID)

@@ -256,7 +256,7 @@ func TestLocalFixturesWireEnterpriseSignIn(t *testing.T) {
 			idp.mu.Unlock()
 		}
 		seedLocalPostgres(ctx, t, db, spec)
-		require.NoError(t, RunLocalFixtures(ctx, testenv.NewLogger(t), db, blob, nil, opts))
+		require.NoError(t, RunLocalFixtures(ctx, testenv.NewLogger(t), db, blob, LocalCaches{}, opts))
 
 		server, err := q.GetRemoteMCPServerURLFixture(ctx, s.det("remotemcp-ema-tracker"))
 		require.NoError(t, err)

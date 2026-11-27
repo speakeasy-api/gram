@@ -46,7 +46,7 @@ func (s *Service) consentGatewayPolicy(ctx context.Context, endpoint *ResolvedMc
 		if mode == metamcp.DiscoveryModeCode && !s.codeExecutor.Available() {
 			return nil, oops.E(oops.CodeUnavailable, nil, "gateway code mode is temporarily unavailable; retry shortly")
 		}
-		if mode == metamcp.DiscoveryModeCode && !s.CodeModeAvailable(ctx, endpoint.OrganizationID) {
+		if mode == metamcp.DiscoveryModeCode && !s.consentCodeModeAvailable(ctx, endpoint.OrganizationID) {
 			return nil, oops.E(oops.CodeForbidden, nil, "gateway code mode is not available")
 		}
 	}

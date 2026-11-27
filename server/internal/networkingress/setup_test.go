@@ -134,7 +134,7 @@ func newTestServiceWithRequester(t *testing.T, enabled bool, requester networkin
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, authz.WildcardResource))
 
-	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
+	features := productfeatures.NewClient(logger, tracerProvider, conn, testenv.NewEvictableCache(t, redisClient))
 	admission := networkingress.NewExpansionAdmission(features, true, enabled)
 	enc := testenv.NewEncryptionClient(t)
 	service := networkingress.NewServiceWithPublication(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), enc, audit.NewLogger(), admission, requester, publicationRequester, nil)

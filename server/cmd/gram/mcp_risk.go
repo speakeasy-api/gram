@@ -7,7 +7,6 @@ import (
 	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/redis/go-redis/v9"
 	"github.com/urfave/cli/v2"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
@@ -15,7 +14,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/background"
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
-	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -41,13 +39,15 @@ func newRiskEnforcementDispatcher(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
 	meterProvider metric.MeterProvider,
-	redisClient *redis.Client,
+	stores *redisStores,
 	broker pubSubBroker,
 	features feature.Provider,
 ) (risk.EnforcementDispatcher, func(context.Context) error) {
 	// Failures return an untyped nil so the scanner's nil check sees no dispatcher.
 	inbox, err := enforcereply.New(ctx, logger, tracerProvider, meterProvider, enforcereply.Config{
-		RedisOptions: *redisClient.Options(),
+		RedisOptions: *stores.Ops.Options(),
+		SwitchRole:   stores.OpsSwitchRole,
+		Standalone:   stores.OpsSwitchRole == "",
 		ReplicaID:    "",
 		PollInterval: 0,
 		DrainGate:    nil,
@@ -82,7 +82,7 @@ func newMCPRiskEvaluator(
 	meterProvider metric.MeterProvider,
 	db *pgxpool.Pool,
 	enc *encryption.Client,
-	redisClient *redis.Client,
+	stores *redisStores,
 	features feature.Provider,
 	enforcementDispatcher risk.EnforcementDispatcher,
 	completions gramopenrouter.CompletionClient,
@@ -97,7 +97,7 @@ func newMCPRiskEvaluator(
 	if presidioURL := c.String("presidio-analyzer-url"); presidioURL != "" {
 		piiScanner = ra.NewPresidioClient(presidioURL, tracerProvider, meterProvider, logger)
 	}
-	judgeLimiter := gramopenrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient))
+	judgeLimiter := gramopenrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(stores.Ops))
 	piScanner := promptinjection.NewScanner(logger, newPICascade(logger, tracerProvider, meterProvider, completions, guardianPolicy, provisioner, db).Classify)
 	promptPolicyScanner := promptpolicy.NewScanner(logger, ppopenrouter.New(logger, tracerProvider, meterProvider, completions, judgeLimiter).Evaluate)
 	celEngine, err := celenv.New()
@@ -129,7 +129,7 @@ func newMCPRiskEvaluator(
 		logger,
 		tracerProvider,
 		meterProvider,
-		policycore.NewWithToolAnnotations(db, mcpservers.NewToolDispositionCache(logger, db, cache.NewRedisCacheAdapter(redisClient))),
+		policycore.NewWithToolAnnotations(db, mcpservers.NewToolDispositionCache(logger, db, stores.EvictableCache)),
 		risk.NewMCPPolicyScanner(scanner, shadowMCPClient),
 		publishers.RiskFindings,
 		mcpriskscan.DefaultPolicyConfig,

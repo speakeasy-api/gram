@@ -29,10 +29,18 @@ type Verifier struct {
 	logger   *slog.Logger
 	sessions *SessionStore
 	oidc     *OIDCClient
-	locks    *cache.RedisCacheAdapter
+	locks    AuthCache
 }
 
-func NewVerifier(logger *slog.Logger, sessions *SessionStore, oidc *OIDCClient, locks *cache.RedisCacheAdapter) *Verifier {
+// AuthCache is the auth-role Redis cache the staff dashboard keeps its
+// sessions, login state and refresh leases in.
+type AuthCache interface {
+	cache.Cache
+	cache.RenewableLeaseCache
+	ReleaseLease(ctx context.Context, key, owner string) error
+}
+
+func NewVerifier(logger *slog.Logger, sessions *SessionStore, oidc *OIDCClient, locks AuthCache) *Verifier {
 	return &Verifier{
 		logger:   logger.With(attr.SlogComponent("adminauth")),
 		sessions: sessions,

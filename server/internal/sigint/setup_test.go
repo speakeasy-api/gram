@@ -69,7 +69,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	sessions := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("sigint"), billingClient)
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessions)
 	engine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
+	features := productfeatures.NewClient(logger, tracerProvider, conn, testenv.NewEvictableCache(t, redisClient))
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 

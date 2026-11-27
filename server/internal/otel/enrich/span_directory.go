@@ -21,7 +21,7 @@ type spanDirectory struct {
 	loads     singleflight.Group
 }
 
-func NewSpanDirectory(logger *slog.Logger, replicaDB database.DBTX, cacheImpl cache.Cache) *spanDirectory {
+func NewSpanDirectory(logger *slog.Logger, replicaDB database.DBTX, cacheImpl cache.EvictableCache) *spanDirectory {
 	logger = logger.With(attr.SlogComponent("enrich-directory"))
 	return &spanDirectory{
 		logger:    logger,

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strconv"
 	"time"
 
@@ -63,7 +64,6 @@ type SessionLister interface {
 // Implemented by the identity.Resolver to avoid a circular import.
 type UserResolver interface {
 	HasAccessToOrganization(ctx context.Context, organizationID, userID string) (*Organization, string, bool)
-	IsAdmin(ctx context.Context, userID string) bool
 	GetUserInfo(ctx context.Context, userID string) (*CachedUserInfo, bool, error)
 	InvalidateUserInfoCache(ctx context.Context, userID string) error
 }
@@ -180,11 +180,20 @@ func (s *Manager) Authenticate(ctx context.Context, key string) (context.Context
 		return ctx, nil
 	}
 
-	// HasAccessToOrganization calls GetUserInfo internally, which populates
-	// the user info cache on a miss. We check IsAdmin AFTER this call so the
-	// cache is guaranteed to be warm — avoids a false-negative on cold cache.
-	_, email, ok := s.identity.HasAccessToOrganization(ctx, session.ActiveOrganizationID, session.UserID)
-	authCtx.IsAdmin = validatedSupportAdmin || s.identity.IsAdmin(ctx, session.UserID)
+	// Membership, email and the admin flag all come from one resolved user
+	// info. GetUserInfo falls back to Postgres when the cache misses or fails,
+	// so an evicted or unreachable cache entry cannot turn an admin into a
+	// non-admin.
+	email := ""
+	ok := false
+	if userInfo, _, err := s.identity.GetUserInfo(ctx, session.UserID); err == nil {
+		email = userInfo.Email
+		authCtx.IsAdmin = userInfo.Admin
+		ok = slices.ContainsFunc(userInfo.Organizations, func(org Organization) bool {
+			return org.ID == session.ActiveOrganizationID
+		})
+	}
+	authCtx.IsAdmin = authCtx.IsAdmin || validatedSupportAdmin
 
 	if !ok {
 		// The shared demo org has no membership rows by design — any
@@ -193,12 +202,6 @@ func (s *Manager) Authenticate(ctx context.Context, key string) (context.Context
 		isDemo := session.ActiveOrganizationID == constants.DemoOrganizationID
 		if !isDemo && !validatedSupportAdmin {
 			return ctx, oops.C(oops.CodeForbidden)
-		}
-		// Admin visiting a customer org they don't belong to (or any user in
-		// the demo org) — fall back to cached user info for the email the
-		// auth context needs.
-		if userInfo, _, err := s.identity.GetUserInfo(ctx, session.UserID); err == nil {
-			email = userInfo.Email
 		}
 	}
 

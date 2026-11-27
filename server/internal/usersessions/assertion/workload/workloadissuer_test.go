@@ -109,7 +109,7 @@ func newLiveVerifier(t *testing.T, issuer *devidptest.Instance) *workload.Verifi
 	)
 	require.NoError(t, err)
 
-	guard, err := replay.NewRedisGuard(client, string(testenv.NewCacheSuffix(t, "workload-replay")), assertioncore.ReplayHoldFor(testMaxLifetime))
+	guard, err := replay.NewRedisGuard(client, testenv.TestRedisKeyPrefix+string(testenv.NewCacheSuffix(t, "workload-replay")), assertioncore.ReplayHoldFor(testMaxLifetime))
 	require.NoError(t, err)
 
 	verifier, err := workload.NewVerifier(keys, guard)

@@ -46,5 +46,5 @@ func newProfileFixture(t *testing.T, clone testenv.PostgresDBCloneFunc, scanLoca
 	redisServer := miniredis.RunT(t)
 	redisClient := redis.NewClient(&redis.Options{Addr: redisServer.Addr()})
 	t.Cleanup(func() { require.NoError(t, redisClient.Close()) })
-	return db, productfeatures.NewClient(testenv.NewLogger(t), testenv.NewTracerProvider(t), db, redisClient)
+	return db, productfeatures.NewClient(testenv.NewLogger(t), testenv.NewTracerProvider(t), db, testenv.NewEvictableCache(t, redisClient))
 }

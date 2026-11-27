@@ -31,6 +31,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	"github.com/speakeasy-api/gram/tunnel/redisconn"
+	"golang.org/x/oauth2"
 )
 
 type commandOptions struct {
@@ -80,10 +82,17 @@ func run(ctx context.Context, args []string, input io.Reader, output io.Writer, 
 	if options.apply && options.confirmOrganization != inventory.OrganizationID {
 		return errors.New("writes require -confirm-organization to match the inventory")
 	}
-	if getenv("GRAM_DATABASE_URL") == "" || getenv("GRAM_REDIS_CACHE_ADDR") == "" && getenv("GRAM_DIRECTORY_ROLES_REDIS_URL") == "" || getenv("GRAM_SUPPORT_SESSION_TOKEN") == "" {
+	authAddress := strings.TrimSpace(getenv("GRAM_REDIS_AUTH_ADDR"))
+	fallbackAddress := strings.TrimSpace(getenv("GRAM_REDIS_CACHE_ADDR"))
+	redisURL := getenv("GRAM_DIRECTORY_ROLES_REDIS_URL")
+	if getenv("GRAM_DATABASE_URL") == "" || authAddress == "" && fallbackAddress == "" && redisURL == "" || getenv("GRAM_SUPPORT_SESSION_TOKEN") == "" {
 		return errors.New("database, Redis connection and support-session credentials are required")
 	}
-	databaseConfig, redisConfig, err := parseConnections(getenv("GRAM_DATABASE_URL"), getenv("GRAM_REDIS_CACHE_ADDR"), getenv("GRAM_REDIS_CACHE_PASSWORD"), getenv("GRAM_DIRECTORY_ROLES_REDIS_URL"))
+	databaseConfig, err := parseDatabaseConnection(getenv("GRAM_DATABASE_URL"))
+	if err != nil {
+		return err
+	}
+	redisConfig, err := supportRedisOptions(ctx, getenv, authAddress, fallbackAddress, redisURL)
 	if err != nil {
 		return err
 	}
@@ -122,35 +131,99 @@ func run(ctx context.Context, args []string, input io.Reader, output io.Writer, 
 // Plaintext is permitted only over loopback or local sockets, where the operator
 // owns the endpoint or a protected tunnel. Direct remote connections verify TLS.
 func parseConnections(databaseURL, redisAddress, redisPassword, redisURL string) (*pgxpool.Config, *redis.Options, error) {
+	databaseConfig, err := parseDatabaseConnection(databaseURL)
+	if err != nil {
+		return nil, nil, err
+	}
+	redisConfig, err := parseRedisConnection(redisAddress, redisPassword, redisURL)
+	if err != nil {
+		return nil, nil, err
+	}
+	return databaseConfig, redisConfig, nil
+}
+
+func parseDatabaseConnection(databaseURL string) (*pgxpool.Config, error) {
 	databaseConfig, err := pgxpool.ParseConfig(databaseURL)
 	if err != nil {
-		return nil, nil, errors.New("invalid database configuration")
+		return nil, errors.New("invalid database configuration")
 	}
 	if !localHost(databaseConfig.ConnConfig.Host) && !verifiedTLS(databaseConfig.ConnConfig.TLSConfig) {
-		return nil, nil, errors.New("remote PostgreSQL requires sslmode=verify-full")
+		return nil, errors.New("remote PostgreSQL requires sslmode=verify-full")
 	}
 	// A fallback may only retry the same server, for example with different
 	// TLS settings, so an outage can never redirect writes to another host.
 	for _, fallback := range databaseConfig.ConnConfig.Fallbacks {
 		if fallback.Host != databaseConfig.ConnConfig.Host || fallback.Port != databaseConfig.ConnConfig.Port {
-			return nil, nil, errors.New("PostgreSQL must name a single host; fallbacks to other hosts are not allowed")
+			return nil, errors.New("PostgreSQL must name a single host; fallbacks to other hosts are not allowed")
 		}
 		if !localHost(fallback.Host) && !verifiedTLS(fallback.TLSConfig) {
-			return nil, nil, errors.New("remote PostgreSQL cannot fall back to unverified or plaintext connections")
+			return nil, errors.New("remote PostgreSQL cannot fall back to unverified or plaintext connections")
 		}
 	}
+	return databaseConfig, nil
+}
+
+func supportRedisOptions(ctx context.Context, getenv func(string) string, authAddress, fallbackAddress, redisURL string) (*redis.Options, error) {
+	effectiveAddress := authAddress
+	if effectiveAddress == "" {
+		effectiveAddress = fallbackAddress
+	}
+	// A direct URL names the instance the command will write to, so the move
+	// check compares the Auth target against it.
+	if redisURL != "" {
+		parsed, err := redis.ParseURL(redisURL)
+		if err != nil {
+			return nil, errors.New("invalid Redis configuration")
+		}
+		effectiveAddress = parsed.Addr
+	}
+	if next := strings.TrimSpace(getenv("GRAM_REDIS_AUTH_NEXT_ADDR")); next != "" && next != effectiveAddress {
+		return nil, errors.New("finish the Auth Redis move before running directory roles")
+	}
+	if redisURL != "" || authAddress == "" || authAddress == fallbackAddress {
+		return parseRedisConnection(fallbackAddress, getenv("GRAM_REDIS_CACHE_PASSWORD"), redisURL)
+	}
+	endpoint := redisconn.PasswordEndpoint(authAddress, getenv("GRAM_REDIS_AUTH_PASSWORD"))
+	if mode := strings.TrimSpace(getenv("GRAM_REDIS_AUTH_AUTH_MODE")); mode != "" {
+		endpoint.Auth = redisconn.AuthMode(mode)
+	}
+	endpoint.CACertPEM = getenv("GRAM_REDIS_AUTH_CA_CERT")
+	if err := endpoint.Validate(); err != nil {
+		return nil, fmt.Errorf("configure Auth Redis: %w", err)
+	}
+	host, _, _ := net.SplitHostPort(authAddress)
+	if !localHost(host) && !endpoint.TLS() {
+		return nil, errors.New("remote Auth Redis requires GRAM_REDIS_AUTH_CA_CERT")
+	}
+	var tokens oauth2.TokenSource
+	if endpoint.Auth == redisconn.AuthIAM {
+		var err error
+		tokens, err = redisconn.NewIAMTokenSource(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("initialize Auth Redis credentials: %w", err)
+		}
+	}
+	connector, err := redisconn.NewConnector(endpoint, tokens)
+	if err != nil {
+		return nil, fmt.Errorf("configure Auth Redis connector: %w", err)
+	}
+	return connector.Options(&redis.Options{}), nil
+}
+
+func parseRedisConnection(redisAddress, redisPassword, redisURL string) (*redis.Options, error) {
 	redisConfig := &redis.Options{Addr: redisAddress, Password: redisPassword}
 	if redisURL != "" {
+		var err error
 		redisConfig, err = redis.ParseURL(redisURL)
 		if err != nil {
-			return nil, nil, errors.New("invalid Redis URL")
+			return nil, errors.New("invalid Redis URL")
 		}
 	}
 	host, _, err := net.SplitHostPort(redisConfig.Addr)
 	if redisConfig.Network != "unix" && (err != nil || !localHost(host)) && !verifiedTLS(redisConfig.TLSConfig) {
-		return nil, nil, errors.New("remote Redis requires GRAM_DIRECTORY_ROLES_REDIS_URL with rediss:// and certificate verification")
+		return nil, errors.New("remote Redis requires GRAM_DIRECTORY_ROLES_REDIS_URL with rediss:// and certificate verification")
 	}
-	return databaseConfig, redisConfig, nil
+	return redisConfig, nil
 }
 
 func verifiedTLS(config *tls.Config) bool {

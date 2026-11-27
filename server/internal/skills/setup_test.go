@@ -156,7 +156,7 @@ func newTestServiceWithPublisher(t *testing.T, publisher *capturePublishSignaler
 	ctx = contextvalues.SetAuthContext(ctx, authContext)
 
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
+	features := productfeatures.NewClient(logger, tracerProvider, conn, testenv.NewEvictableCache(t, redisClient))
 	signaler := &captureSuggestionSignaler{signals: nil, err: nil}
 	var publishSignaler skills.PluginPublishSignaler
 	if publisher != nil {

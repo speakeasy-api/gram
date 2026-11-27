@@ -14,6 +14,7 @@ import (
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/redisrole"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -229,7 +230,7 @@ func TestKitTranscriptReplayPatchAndRuntimeFence(t *testing.T) {
 
 	redisClient, err := assistantsInfra.NewRedisClient(t, 0)
 	require.NoError(t, err)
-	stream := chat.NewTurnStream(redisClient)
+	stream := chat.NewTurnStream(redisrole.EvictableClient{Client: redisClient})
 	projector.stream = stream
 	anchor, err := stream.Publish(t.Context(), chatID, chat.TurnFrame{Kind: chat.TurnFrameText, Text: "before"})
 	require.NoError(t, err)

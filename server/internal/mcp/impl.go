@@ -21,7 +21,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -87,6 +86,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/otelpub"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -246,8 +246,14 @@ type Service struct {
 	auditLogger            *audit.Logger
 	platformExtras         []platformtools.ExternalTool
 	platformFeatureChecker platformtools.FeatureChecker
-	platformToolsets       map[string]platformtools.Toolset
-	authnChallengeCache    cache.TypedCacheObject[AuthnChallengeState]
+
+	// authFeatureChecker answers product-feature checks made on sign-in and
+	// consent steps from Postgres, so those steps never wait on the shared
+	// feature cache. Nil falls back to platformFeatureChecker. Set by
+	// SetAuthFeatureChecker.
+	authFeatureChecker  platformtools.FeatureChecker
+	platformToolsets    map[string]platformtools.Toolset
+	authnChallengeCache cache.TypedCacheObject[AuthnChallengeState]
 	// accountSwitchCache marks consent challenges an account switch spent.
 	accountSwitchCache cache.TypedCacheObject[accountSwitchMarker]
 	// Short-lived install codes. Holds a live agent key, so it is
@@ -267,9 +273,11 @@ type Service struct {
 	// userSessionRefreshReplayCache retains the encrypted rotation outcome.
 	userSessionRefreshReplayCache cache.TypedCacheObject[userSessionRefreshReplay]
 
-	// userSessionRefreshReplayCoordination elects the database rotation winner, claims attemptEndMarker and keeps member statuses.
+	// userSessionRefreshReplayCoordination elects the rotation winner and claims attempt-ending markers.
 	userSessionRefreshReplayCoordination cache.Cache
-	sessionPolicyCache                   cache.TypedCacheObject[sessionPolicyEntry]
+	// connectionAttemptCache stores observational deduplication on Operations.
+	connectionAttemptCache cache.Cache
+	sessionPolicyCache     cache.TypedCacheObject[sessionPolicyEntry]
 	// sessionLiveness memoizes Postgres's answer on whether a bearer's session
 	// row is live, so revocation never depends on a Redis entry surviving.
 	sessionLiveness *expirable.LRU[sessionLivenessKey, bool]
@@ -551,7 +559,7 @@ func NewService(
 	serverURL *url.URL,
 	siteURL *url.URL,
 	enc *encryption.Client,
-	cacheImpl cache.Cache,
+	redisRoles RedisRoles,
 	guardianPolicy *guardian.Policy,
 	funcCaller functions.ToolCaller,
 	billingTracker billing.Tracker,
@@ -578,7 +586,6 @@ func NewService(
 	tunnelForwardToken string,
 	tunnelGatewayCIDRs []string,
 	callerAssertions *mcpauthz.Issuer,
-	redisClient *redis.Client,
 	tunnelPublicConfig TunnelPublicConfig,
 	metaRuntimeConfig MetaRuntimeConfig,
 	codeExecutor codemode.Executor,
@@ -599,7 +606,7 @@ func NewService(
 	if err != nil {
 		return nil, fmt.Errorf("initialize ID-JAG store: %w", err)
 	}
-	idJAGValidator, err := newIDJAGValidator(db, redisClient, guardianPolicy, meterProvider, logger, idJAGTrust)
+	idJAGValidator, err := newIDJAGValidator(db, redisRoles.AuthClient, guardianPolicy, meterProvider, logger, idJAGTrust)
 	if err != nil {
 		return nil, fmt.Errorf("initialize ID-JAG validator: %w", err)
 	}
@@ -620,7 +627,7 @@ func NewService(
 		platformtoolsruntime.WithFeatureChecker(platformFeatureChecker),
 	)
 
-	sessionClientInfo := sessionclientinfo.NewStore(redisClient, 0)
+	sessionClientInfo := sessionclientinfo.NewStore(redisRoles.EvictableClient, 0)
 	shutdownDrain := remoteProxyManager.ShutdownDrain()
 	if shutdownDrain == nil {
 		shutdownDrain = shutdowndrain.New()
@@ -670,8 +677,8 @@ func NewService(
 		prepareMandatory:          nil,
 		cimdResolver:              cimd.NewResolver(guardianPolicy, meterProvider, logger),
 		cimdAdmissionMetrics:      admission.NewMetrics(meterProvider, logger),
-		clientAssertionVerifier:   newClientAssertionVerifier(redisClient, guardianPolicy, meterProvider, logger),
-		workloadGrant:             newWorkloadGrant(db, redisClient, guardianPolicy, meterProvider, logger),
+		clientAssertionVerifier:   newClientAssertionVerifier(redisRoles.AuthClient, guardianPolicy, meterProvider, logger),
+		workloadGrant:             newWorkloadGrant(db, redisRoles.AuthClient, guardianPolicy, meterProvider, logger),
 		idJAGValidator:            idJAGValidator,
 		idJAGTrust:                idJAGTrust,
 		aiToolBlockReads:          defaultAIToolBlockReads(),
@@ -681,7 +688,7 @@ func NewService(
 			meterProvider,
 			gateway.ToolCallSourceMCP,
 			enc,
-			cacheImpl,
+			redisRoles.Evictable,
 			guardianPolicy,
 			funcCaller,
 			platformSvc,
@@ -690,7 +697,7 @@ func NewService(
 		oauthRepo:              oauth_repo.New(db),
 		billingTracker:         billingTracker,
 		billingRepository:      billingRepository,
-		toolsetCache:           cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
+		toolsetCache:           cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), redisRoles.Evictable, cache.SuffixNone),
 		telemLogger:            telemLogger,
 		toolCallLogger:         toolCallLogger,
 		vectorToolStore:        vectorToolStore,
@@ -706,49 +713,51 @@ func NewService(
 		auditLogger:            auditLogger,
 		platformExtras:         platformExtras,
 		platformFeatureChecker: platformFeatureChecker,
+		authFeatureChecker:     nil,
 		platformToolsets:       platformToolsets,
 		authnChallengeCache: cache.NewTypedObjectCache[AuthnChallengeState](
 			logger.With(attr.SlogCacheNamespace("authn_challenge")),
-			cacheImpl,
+			redisRoles.Auth,
 			cache.SuffixNone,
 		),
 		accountSwitchCache: cache.NewTypedObjectCache[accountSwitchMarker](
 			logger.With(attr.SlogCacheNamespace("account_switch")),
-			cacheImpl,
+			redisRoles.Auth,
 			cache.SuffixNone,
 		),
 		agentInstallCache: cache.NewTypedObjectCache[agentInstallCode](
 			logger.With(attr.SlogCacheNamespace("agent_install")),
-			cacheImpl,
+			redisRoles.Auth,
 			cache.SuffixNone,
 		),
-		remoteLoginCache:        cache.NewTypedObjectCache[remotesessions.RemoteLoginState](logger.With(attr.SlogCacheNamespace("remote_login")), cacheImpl, cache.SuffixNone),
-		remoteLoginHopCache:     cache.NewTypedObjectCache[remoteLoginHop](logger.With(attr.SlogCacheNamespace("remote_login_hop")), cacheImpl, cache.SuffixNone),
-		connectionRecoveryCache: cache.NewTypedObjectCache[connectionRecovery](logger.With(attr.SlogCacheNamespace("connection_recovery")), cacheImpl, cache.SuffixNone),
+		remoteLoginCache:        cache.NewTypedObjectCache[remotesessions.RemoteLoginState](logger.With(attr.SlogCacheNamespace("remote_login")), redisRoles.Auth, cache.SuffixNone),
+		remoteLoginHopCache:     cache.NewTypedObjectCache[remoteLoginHop](logger.With(attr.SlogCacheNamespace("remote_login_hop")), redisRoles.Auth, cache.SuffixNone),
+		connectionRecoveryCache: cache.NewTypedObjectCache[connectionRecovery](logger.With(attr.SlogCacheNamespace("connection_recovery")), redisRoles.Auth, cache.SuffixNone),
 		browserSession:          nil,
 		userSessionGrantCache: cache.NewTypedObjectCache[UserSessionGrant](
 			logger.With(attr.SlogCacheNamespace("user_session_grant")),
-			cacheImpl,
+			redisRoles.Auth,
 			cache.SuffixNone,
 		),
 		userSessionRefreshReplayCache: cache.NewTypedObjectCache[userSessionRefreshReplay](
 			logger.With(attr.SlogCacheNamespace("user_session_refresh_replay")),
-			cacheImpl,
+			redisRoles.Auth,
 			cache.SuffixNone,
 		),
-		userSessionRefreshReplayCoordination: cacheImpl,
+		userSessionRefreshReplayCoordination: redisRoles.Auth,
+		connectionAttemptCache:               redisRoles.Ops,
 		sessionPolicyCache: cache.NewTypedObjectCache[sessionPolicyEntry](
 			logger.With(attr.SlogCacheNamespace("session_policy")),
-			cacheImpl,
+			redisRoles.Auth,
 			cache.SuffixNone,
 		),
 		sessionLiveness: newSessionLivenessMemo(),
 		consentToolInventoryCache: cache.NewTypedObjectCache[consentToolInventory](
 			logger.With(attr.SlogCacheNamespace("consent_tool_inventory")),
-			cacheImpl,
+			redisRoles.Auth,
 			cache.SuffixNone,
 		),
-		connectionCatalogCache: cacheImpl,
+		connectionCatalogCache: redisRoles.Auth,
 		staleNoAuthLog:         newOnceLog(),
 		staleChoiceConsent:     expirable.NewLRU[string, bool](staleChoiceConsentSize, nil, staleChoiceConsentTTL),
 		codeExecutor:           codeExecutor,
@@ -762,19 +771,39 @@ func NewService(
 		connections:            connections,
 		attemptEndings:         newAttemptEndings(),
 		validationMetrics:      remotesessionmetrics.NewValidation(logger, meterProvider),
-		validationLimiter:      newValidationLimiter(redisClient, meterProvider),
+		validationLimiter:      newValidationLimiter(redisRoles.AuthClient, meterProvider),
 		autoVerifications:      newAutoVerifications(),
-		remoteSessionRecheck:   newRemoteSessionRecheck(metaRuntimeConfig.withDefaults().RecheckInterval, redisClient, meterProvider),
+		remoteSessionRecheck:   newRemoteSessionRecheck(metaRuntimeConfig.withDefaults().RecheckInterval, redisRoles.OpsClient, meterProvider),
 		remoteProxyManager:     remoteProxyManager,
 		shutdownDrain:          shutdownDrain,
 		tunnelManager:          newTunnelManager(tunnelRoutes, tunnelForwardToken, remoteProxyManager, tunnelGatewayCIDRs, callerAssertions),
-		tunnelPublic:           newTunnelPublicRuntime(redisClient, meterProvider, metrics, tunnelPublicConfig),
+		tunnelPublic:           newTunnelPublicRuntime(redisRoles.OpsClient, meterProvider, metrics, tunnelPublicConfig),
 		metaRuntime:            metaRuntimeConfig.withDefaults(),
 	}
 	if remoteChallengeMgr != nil {
 		remoteChallengeMgr.SetTypedAuthorizationValidator(service.ValidateRemoteLoginTypedAuthorization)
 	}
 	return service, nil
+}
+
+// SetAuthFeatureChecker sets the product-feature check that sign-in and
+// consent steps use. It should read the durable feature state rather than the
+// shared feature cache.
+func (s *Service) SetAuthFeatureChecker(checker platformtools.FeatureChecker) {
+	s.authFeatureChecker = checker
+}
+
+// authFeatureEnabled reports whether feature is on for organizationID on a
+// sign-in or consent step. With no checker wired the feature reads as off.
+func (s *Service) authFeatureEnabled(ctx context.Context, organizationID string, feature productfeatures.Feature) bool {
+	checker := s.authFeatureChecker
+	if checker == nil {
+		checker = s.platformFeatureChecker
+	}
+	if checker == nil {
+		return false
+	}
+	return checker(ctx, organizationID, string(feature))
 }
 
 // SetCallbackOrigins pins the IdP callback URLs and assistants' CIMD client

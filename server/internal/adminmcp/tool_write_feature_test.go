@@ -22,7 +22,7 @@ func newFeatureWriterFixture(t *testing.T, f writeFixture) (*featureWriter, *pro
 	t.Cleanup(func() { require.NoError(t, redisContainer.Terminate(context.WithoutCancel(t.Context()))) })
 	redisClient, err := newRedisClient(t, 0)
 	require.NoError(t, err)
-	features := productfeatures.NewClient(testenv.NewLogger(t), testenv.NewTracerProvider(t), f.db, redisClient)
+	features := productfeatures.NewClient(testenv.NewLogger(t), testenv.NewTracerProvider(t), f.db, testenv.NewEvictableCache(t, redisClient))
 	writes := WriteConfig{Enabled: true}
 	return &featureWriter{runner: f.runner, mutator: productfeatures.NewMutator(features, audit.NewLogger()), writes: writes}, features
 }

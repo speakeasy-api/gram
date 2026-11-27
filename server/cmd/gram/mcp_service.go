@@ -22,7 +22,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/billing"
-	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/dataexports"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -111,7 +110,7 @@ type mcpServiceDependencies struct {
 	Tracer         trace.TracerProvider
 	Meter          metric.MeterProvider
 	DB             *pgxpool.Pool
-	Redis          *redis.Client
+	Stores         *redisStores
 	Sessions       *sessions.Manager
 	ChatSessions   *chatsessions.Manager
 	Environment    toolconfig.EnvironmentLoader
@@ -138,25 +137,27 @@ type mcpServiceDependencies struct {
 	Audit                  *audit.Logger
 	PlatformExtras         []platformtools.ExternalTool
 	PlatformFeatureChecker platformtools.FeatureChecker
-	PlatformToolsets       map[string]platformtools.Toolset
-	Identity               mcp.IdentityResolver
-	Challenges             *remotesessions.ChallengeManager
-	ProtectedResources     *protectedresource.Prober
-	CallbackOrigins        remotesessions.CallbackOrigins
-	PlatformHosts          map[string]string
-	CallerAssertions       *mcpauthz.Issuer
-	IssuerGate             *internalsessionissuers.Gate
-	IssuerSigner           *internalsessionissuers.Signer
+	// AuthFeatureChecker answers feature checks on sign-in and consent steps
+	// from Postgres rather than the shared feature cache.
+	AuthFeatureChecker platformtools.FeatureChecker
+	PlatformToolsets   map[string]platformtools.Toolset
+	Identity           mcp.IdentityResolver
+	Challenges         *remotesessions.ChallengeManager
+	ProtectedResources *protectedresource.Prober
+	CallbackOrigins    remotesessions.CallbackOrigins
+	PlatformHosts      map[string]string
+	CallerAssertions   *mcpauthz.Issuer
+	IssuerGate         *internalsessionissuers.Gate
+	IssuerSigner       *internalsessionissuers.Signer
 }
 
 func newMCPService(c *cli.Context, d mcpServiceDependencies) (service *mcp.Service, err error) {
-	cacheImpl := cache.NewRedisCacheAdapter(d.Redis)
 	checkpoint, err := mcptoolexecution.NewCheckpoint(d.DB, mcptoolexecution.DefaultEvaluationTimeout, d.Meter, d.Logger)
 	if err != nil {
 		return nil, fmt.Errorf("initialize mcp tool-execution checkpoint: %w", err)
 	}
 	proxy := remotemcp.NewProxyManager(d.Logger, d.Tracer, d.Meter, d.DB, d.Guardian, d.Authz, d.Posthog, d.Telemetry, d.Billing, d.BillingTracker,
-		mcpservers.NewToolDispositionCache(d.Logger, d.DB, cacheImpl), platformmcp.NewSelectedUseRecorder(d.DB), toolfilter.NewSessionToolWitnessStore(d.Logger, cacheImpl), checkpoint, d.MCPRisk, d.ProtectedResources)
+		mcpservers.NewToolDispositionCache(d.Logger, d.DB, d.Stores.EvictableCache), platformmcp.NewSelectedUseRecorder(d.DB), toolfilter.NewSessionToolWitnessStore(d.Logger, d.Stores.OpsCache), checkpoint, d.MCPRisk, d.ProtectedResources)
 	proxy.TunnelMetrics = d.TunnelMetrics
 	proxy.Connections = d.Connections
 	proxy.MaxStreamAge = c.Duration("stream-max-age")
@@ -166,7 +167,7 @@ func newMCPService(c *cli.Context, d mcpServiceDependencies) (service *mcp.Servi
 			return nil, fmt.Errorf("invalid tunnel gateway CIDR block %q: %w", cidr, err)
 		}
 	}
-	codeExecutor, err := newCodeExecutor(c, d.Logger, d.Guardian, cacheImpl)
+	codeExecutor, err := newCodeExecutor(c, d.Logger, d.Guardian, d.Stores.OpsCache)
 	if err != nil {
 		return nil, fmt.Errorf("initialize code runtime: %w", err)
 	}
@@ -176,14 +177,15 @@ func newMCPService(c *cli.Context, d mcpServiceDependencies) (service *mcp.Servi
 			err = errors.Join(err, releaseCodeExecutor(c.Context, codeExecutor))
 		}
 	}()
-	service, err = mcp.NewService(d.Logger, d.Tracer, d.Meter, d.DB, d.Sessions, d.ChatSessions, d.Environment, d.Posthog, d.Features, d.ServerURL, d.SiteURL, d.Encryption, cacheImpl,
+	service, err = mcp.NewService(d.Logger, d.Tracer, d.Meter, d.DB, d.Sessions, d.ChatSessions, d.Environment, d.Posthog, d.Features, d.ServerURL, d.SiteURL, d.Encryption, d.Stores.mcpRoles(),
 		d.Guardian, d.Functions, d.BillingTracker, d.Billing, d.Telemetry, d.ToolCallLogs, d.TelemetryService, d.RAG, d.Triggers, d.Authz, d.AssistantTokens, d.PrincipalCredentials, d.ShadowMCP, d.Audit, d.PlatformExtras, d.PlatformFeatureChecker, d.PlatformToolsets,
-		d.Identity, usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)), d.Challenges, d.MCPRisk, proxy, route.NewRedis(d.Redis), c.String("tunnel-forward-token"), cidrs, d.CallerAssertions, d.Redis,
+		d.Identity, usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)), d.Challenges, d.MCPRisk, proxy, route.NewRedis(d.Stores.Ops), c.String("tunnel-forward-token"), cidrs, d.CallerAssertions,
 		mcp.TunnelPublicConfig{SessionTTL: 0, LiveSessionCap: c.Int("public-tunnels-live-session-cap"), InitializeRate: ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0}, RequestRate: ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0}, MaxRequestLifetime: 0},
 		mcp.MetaRuntimeConfig{MemberCallTimeout: c.Duration("meta-member-call-timeout"), ValidationTimeout: 0, AutoVerifyWait: 0, RecheckInterval: c.Duration("remote-session-recheck-interval")}, codeExecutor, d.Connections)
 	if err != nil {
 		return nil, fmt.Errorf("initialize MCP service: %w", err)
 	}
+	service.SetAuthFeatureChecker(d.AuthFeatureChecker)
 	service.SetCallbackOrigins(d.CallbackOrigins)
 	service.SetPlatformHosts(d.PlatformHosts)
 	service.SetOpenAIAppsChallengeToken(c.String("openai-apps-challenge-token"))
@@ -192,7 +194,7 @@ func newMCPService(c *cli.Context, d mcpServiceDependencies) (service *mcp.Servi
 	}
 	delegation := remotesessions.NewDelegationService(d.DB, d.Challenges)
 	service.SetFederatedLoginConsumer(mcp.NewFederatedDelegationConsumer(delegation))
-	chainer, err := newIdentityChainer(d.Logger, d.Meter, d.DB, d.Redis, d.Encryption, d.Guardian, d.Challenges, delegation, d.Audit)
+	chainer, err := newIdentityChainer(d.Logger, d.Meter, d.DB, d.Stores, d.Encryption, d.Guardian, d.Challenges, delegation, d.Audit)
 	if err != nil {
 		return nil, err
 	}
@@ -213,14 +215,14 @@ func releaseCodeExecutor(ctx context.Context, executor codemode.Executor) error 
 	return nil
 }
 
-func newIdentityChainer(logger *slog.Logger, meter metric.MeterProvider, db *pgxpool.Pool, redisClient *redis.Client, enc *encryption.Client, policy *guardian.Policy, challenges *remotesessions.ChallengeManager, delegation *remotesessions.DelegationService, auditLogger *audit.Logger) (*identitychaining.Chainer, error) {
+func newIdentityChainer(logger *slog.Logger, meter metric.MeterProvider, db *pgxpool.Pool, stores *redisStores, enc *encryption.Client, policy *guardian.Policy, challenges *remotesessions.ChallengeManager, delegation *remotesessions.DelegationService, auditLogger *audit.Logger) (*identitychaining.Chainer, error) {
 	// Identity-assertion grants are verified against the trusted IdP's keys
 	// under the same fetch budgets as its ID tokens.
-	assertionKeys, err := remotesessions.NewIDTokenKeyResolver(logger, policy, meter, ratelimit.NewRedisStore(redisClient))
+	assertionKeys, err := remotesessions.NewIDTokenKeyResolver(logger, policy, meter, ratelimit.NewRedisStore(stores.Auth))
 	if err != nil {
 		return nil, fmt.Errorf("initialize identity chaining key resolver: %w", err)
 	}
-	chainer := identitychaining.New(logger, db, challenges.UpstreamTokens(), challenges, delegation, assertionKeys, cache.NewRedisCacheAdapter(redisClient))
+	chainer := identitychaining.New(logger, db, challenges.UpstreamTokens(), challenges, delegation, assertionKeys, stores.AuthCache)
 	chainer.SetResourceResolver(challenges.ResolveEMAResource)
 	chainer.SetCachedResourceResolver(challenges.CachedEMAResource)
 	chainer.SetMeterProvider(meter)

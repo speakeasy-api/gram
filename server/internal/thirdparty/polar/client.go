@@ -18,7 +18,6 @@ import (
 	"github.com/polarsource/polar-go/models/apierrors"
 	polarComponents "github.com/polarsource/polar-go/models/components"
 	polarOperations "github.com/polarsource/polar-go/models/operations"
-	"github.com/redis/go-redis/v9"
 	standardwebhooks "github.com/standard-webhooks/standard-webhooks/libraries/go"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
@@ -88,7 +87,7 @@ type Client struct {
 var _ billing.Tracker = (*Client)(nil)
 var _ billing.Repository = (*Client)(nil)
 
-func NewClient(guardianPolicy *guardian.Policy, polarClient *polargo.Polar, bearerToken string, logger *slog.Logger, tracerProvider trace.TracerProvider, redisClient *redis.Client, catalog *Catalog, webhookSecret string) *Client {
+func NewClient(guardianPolicy *guardian.Policy, polarClient *polargo.Polar, bearerToken string, logger *slog.Logger, tracerProvider trace.TracerProvider, sessionsCache cache.Cache, evictableCache cache.EvictableCache, catalog *Catalog, webhookSecret string) *Client {
 	client := guardianPolicy.PooledClient()
 	// Polar serializes /quantities meter queries per-meter on their side, so
 	// during degraded periods individual calls can take well over a minute.
@@ -101,9 +100,9 @@ func NewClient(guardianPolicy *guardian.Policy, polarClient *polargo.Polar, bear
 		httpClient:         client,
 		bearerToken:        bearerToken,
 		catalog:            catalog,
-		customerStateCache: cache.NewTypedObjectCache[PolarCustomerState](logger.With(attr.SlogCacheNamespace("polar-customer-state")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
-		productCache:       cache.NewTypedObjectCache[Product](logger.With(attr.SlogCacheNamespace("polar-product")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
-		periodUsageStorage: cache.NewTypedObjectCache[PolarPeriodUsageState](logger.With(attr.SlogCacheNamespace("polar-period-usage-state")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
+		customerStateCache: cache.NewTypedObjectCache[PolarCustomerState](logger.With(attr.SlogCacheNamespace("polar-customer-state")), evictableCache, cache.SuffixNone),
+		productCache:       cache.NewTypedObjectCache[Product](logger.With(attr.SlogCacheNamespace("polar-product")), evictableCache, cache.SuffixNone),
+		periodUsageStorage: cache.NewTypedObjectCache[PolarPeriodUsageState](logger.With(attr.SlogCacheNamespace("polar-period-usage-state")), sessionsCache, cache.SuffixNone),
 		webhookSecret:      webhookSecret,
 	}
 }
@@ -176,17 +175,19 @@ func (p *Client) ValidateAndParseWebhookEvent(ctx context.Context, payload []byt
 }
 
 func (p *Client) InvalidateBillingCustomerCaches(ctx context.Context, orgID string) error {
-	err := p.customerStateCache.Delete(ctx, PolarCustomerState{OrganizationID: orgID, CustomerState: nil})
-	if err != nil {
-		return fmt.Errorf("failed to delete customer state cache: %w", err)
+	// The two caches live on different Redis roles, so one being unreachable
+	// must not leave the other stale: both deletes are attempted.
+	var errs []error
+	if err := p.customerStateCache.Delete(ctx, PolarCustomerState{OrganizationID: orgID, CustomerState: nil}); err != nil {
+		errs = append(errs, fmt.Errorf("delete customer state cache: %w", err))
 	}
 
 	//nolint:exhaustruct_v5 // only the org id is needed
 	if err := p.periodUsageStorage.Delete(ctx, PolarPeriodUsageState{OrganizationID: orgID}); err != nil {
-		return fmt.Errorf("failed todelete period usage storage: %w", err)
+		errs = append(errs, fmt.Errorf("delete period usage storage: %w", err))
 	}
 
-	return nil
+	return errors.Join(errs...)
 }
 
 func (p *Client) TrackModelUsage(ctx context.Context, event billing.ModelUsageEvent) {

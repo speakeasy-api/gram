@@ -67,7 +67,7 @@ func TestUpdateFeatureCacheUnderLockReturnsStoreFailure(t *testing.T) {
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 	redisClient.AddHook(failRedisSetHook{})
-	client := productfeatures.NewClient(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, redisClient)
+	client := productfeatures.NewClient(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, testenv.NewEvictableCache(t, redisClient))
 
 	lockConn, release, err := client.AcquireFeatureCacheLocks(ctx, "org_cache_store_failure", []productfeatures.Feature{productfeatures.FeatureLogs})
 	require.NoError(t, err)

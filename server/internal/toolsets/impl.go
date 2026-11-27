@@ -93,7 +93,7 @@ func NewService(
 	policy *guardian.Policy,
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
-	cacheAdapter cache.Cache,
+	cacheAdapter cache.EvictableCache,
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
 	temporalEnv *tenv.Environment,

@@ -266,7 +266,7 @@ func TestSpanTransformHandlerClassifiesAndPublishes(t *testing.T) {
 		require.True(t, ok)
 		published = span
 	}).Return(gcp.NewSuccessPublishResult()).Once()
-	handler := NewSpanTransformHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), publisher, newTestDatabase(t), cache.NoopCache)
+	handler := NewSpanTransformHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), publisher, newTestDatabase(t), cache.NoopEvictableCache)
 
 	require.NoError(t, handler.Handle(t.Context(), inbound, gcp.MessageMetadata{}))
 	publisher.AssertExpectations(t)
@@ -316,7 +316,7 @@ func TestSpanTransformHandlerDropsForgedCanonicalColumns(t *testing.T) {
 			published = span
 		}).Return(gcp.NewSuccessPublishResult()).Once()
 		meterProvider := testenv.NewMeterProvider(t)
-		handler := NewSpanTransformHandler(testenv.NewLogger(t), meterProvider, publisher, newTestDatabase(t), cache.NoopCache)
+		handler := NewSpanTransformHandler(testenv.NewLogger(t), meterProvider, publisher, newTestDatabase(t), cache.NoopEvictableCache)
 		require.NoError(t, handler.Handle(t.Context(), inbound, gcp.MessageMetadata{}))
 		require.NotNil(t, published)
 		attributes := make(map[string]*otelv1.Span_AnyValue, len(published.GetAttributes()))
@@ -409,7 +409,7 @@ func TestSpanTransformHandlerDropsProducerSentPipelineKeys(t *testing.T) {
 		published = span
 	}).Return(gcp.NewSuccessPublishResult()).Once()
 	meterProvider := testenv.NewMeterProvider(t)
-	handler := NewSpanTransformHandler(testenv.NewLogger(t), meterProvider, publisher, newTestDatabase(t), cache.NoopCache)
+	handler := NewSpanTransformHandler(testenv.NewLogger(t), meterProvider, publisher, newTestDatabase(t), cache.NoopEvictableCache)
 
 	require.NoError(t, handler.Handle(t.Context(), inbound, gcp.MessageMetadata{}))
 	require.NotNil(t, published)

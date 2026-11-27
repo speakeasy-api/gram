@@ -167,7 +167,7 @@ type Service struct {
 	auth      *auth.Auth
 	authz     *authz.Engine
 	audit     *audit.Logger
-	cache     cache.Cache
+	cache     cache.EvictableCache
 	github    *GitHubConfig
 	serverURL string
 	keyPrefix string
@@ -213,7 +213,7 @@ func NewService(
 	tracerProvider trace.TracerProvider,
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
-	cacheImpl cache.Cache,
+	cacheImpl cache.EvictableCache,
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
 	github *GitHubConfig,

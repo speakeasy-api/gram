@@ -533,15 +533,13 @@ func (p autoRefreshPolicy) IsEnforced() bool {
 // resolveAutoRefreshPolicy reports the organization's automatic-refresh policy.
 // Enforcement wins over the opt-in so an organization that turns on both still
 // gets the stricter behavior, and an unavailable feature checker degrades to
-// disabled rather than silently refreshing connections.
+// disabled rather than silently refreshing connections. It runs on consent and
+// sign-in steps, so it reads the features through authFeatureEnabled.
 func (s *Service) resolveAutoRefreshPolicy(ctx context.Context, organizationID string) autoRefreshPolicy {
-	if s.platformFeatureChecker == nil {
-		return autoRefreshDisabled
-	}
-	if s.platformFeatureChecker(ctx, organizationID, string(productfeatures.FeatureRemoteSessionAutoRefreshEnforced)) {
+	if s.authFeatureEnabled(ctx, organizationID, productfeatures.FeatureRemoteSessionAutoRefreshEnforced) {
 		return autoRefreshEnforced
 	}
-	if s.platformFeatureChecker(ctx, organizationID, string(productfeatures.FeatureRemoteSessionAutoRefresh)) {
+	if s.authFeatureEnabled(ctx, organizationID, productfeatures.FeatureRemoteSessionAutoRefresh) {
 		return autoRefreshUserControlled
 	}
 	return autoRefreshDisabled
@@ -1078,7 +1076,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	}
 
 	gatewayDefaultMode := ""
-	codeModeAvailable := showDiscoveryMode && s.CodeModeAvailable(ctx, endpoint.OrganizationID)
+	codeModeAvailable := showDiscoveryMode && s.consentCodeModeAvailable(ctx, endpoint.OrganizationID)
 	codeModeUnavailable := prefillDiscoveryMode == metamcp.DiscoveryModeCode && !codeModeAvailable
 	if codeModeUnavailable {
 		prefillDiscoveryMode = metamcp.DiscoveryModeProgressive
@@ -1095,7 +1093,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 			gatewayDefaultMode = "Code Mode"
 			// admitMetaGate serves Code Mode gateways as Progressive while the
 			// runtime is off or the organization is not entitled to Code Mode.
-			if !s.CodeModeAvailable(ctx, endpoint.OrganizationID) {
+			if !s.consentCodeModeAvailable(ctx, endpoint.OrganizationID) {
 				gatewayDefaultMode = "Progressive"
 				codeModeUnavailable = true
 			}

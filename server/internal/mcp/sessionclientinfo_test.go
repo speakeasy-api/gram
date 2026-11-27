@@ -11,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/sessionclientinfo"
+	"github.com/speakeasy-api/gram/server/internal/redisrole"
 )
 
 // newClientInfoStore reads the same records the server writes, so these tests
@@ -21,7 +22,7 @@ func newClientInfoStore(t *testing.T) *sessionclientinfo.Store {
 	client, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 
-	return sessionclientinfo.NewStore(client, 0)
+	return sessionclientinfo.NewStore(redisrole.EvictableClient{Client: client}, 0)
 }
 
 // makeInitializeBodyWithClientInfo builds an initialize request reporting a

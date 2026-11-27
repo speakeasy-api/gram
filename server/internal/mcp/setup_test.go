@@ -32,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/redisrole"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientcredentials"
@@ -125,6 +126,7 @@ type testInstance struct {
 	logger              *slog.Logger
 	tracerProvider      trace.TracerProvider
 	cacheAdapter        cache.Cache
+	evictableCache      cache.EvictableCache
 	chatSessionsManager *chatsessions.Manager
 	authnChallengeCache cache.TypedCacheObject[mcp.AuthnChallengeState]
 	enc                 *encryption.Client
@@ -618,16 +620,21 @@ func buildTestMCPService(
 	// PostHog workers that outlive every fixture and accumulate under -count.
 	posthog := posthog.New(ctx, logger, "", "", "")
 	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
-	mcpCache := cache.Cache(cacheAdapter)
+	evictableCache := testenv.NewEvictableCache(t, redisClient)
+	// The service gets enforcing role adapters, as production wires them, so a
+	// family wired to the wrong role fails these tests.
+	authCache := testenv.NewRoleCache(t, redisClient, redisrole.RoleAuth)
+	opsCache := testenv.NewRoleCache(t, redisClient, redisrole.RoleOps)
+	mcpCache := cache.Cache(authCache)
 	if wrapCache != nil {
-		mcpCache = wrapCache(cacheAdapter)
+		mcpCache = wrapCache(authCache)
 	}
 	billingStub := billing.NewStubClient(logger, tracerProvider)
 	devProvisioner := openrouter.NewDevelopment("test-openrouter-key")
 	chatClient := openrouter.NewUnifiedClient(logger, guardianPolicy, devProvisioner, &openrouter.PlatformKeyResolver{Provisioner: devProvisioner}, nil, nil, nil, nil)
 	vectorToolStore := rag.NewToolsetVectorStore(logger, tracerProvider, conn, chatClient)
 	chatSessions := chatsessions.NewManager(logger, redisClient, "test-jwt-secret", sessionManager)
-	featClient := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
+	featClient := productfeatures.NewClient(logger, tracerProvider, conn, evictableCache)
 	logsEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }
 	toolIOLogsEnabled := func(_ context.Context, _ string) (bool, error) { return false, nil }
 	sessionCaptureEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }
@@ -642,7 +649,7 @@ func buildTestMCPService(
 		DevMode:                          false,
 	})
 
-	telemLogger := telemetry.NewLogger(ctx, logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), chConn, logsEnabled, toolIOLogsEnabled, telemetry.NewUserInfoResolver(logger, conn, cacheAdapter), telemetry.NewNoopLogPublisher(testenv.NewLogger(t)))
+	telemLogger := telemetry.NewLogger(ctx, logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), chConn, logsEnabled, toolIOLogsEnabled, telemetry.NewUserInfoResolver(logger, conn, evictableCache), telemetry.NewNoopLogPublisher(testenv.NewLogger(t)))
 	telemService := telemetry.NewService(
 		logger,
 		tracerProvider,
@@ -667,7 +674,7 @@ func buildTestMCPService(
 	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret", sessionManager)
 	principalCredentials := principalcredential.New(callerAssertions, conn)
 	assistantTokens := assistanttokens.New("test-jwt-secret", conn, authzEngine, principalCredentials, cache.NewRedisCacheAdapter(redisClient))
-	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, nil)
+	shadowMCPClient := shadowmcp.NewClient(logger, conn, evictableCache, nil)
 	auditLogger := audit.NewLogger()
 	userSessionSigner := usersessions.NewSigner("test-jwt-secret")
 	idTokenKeys, err := remotesessions.NewIDTokenKeyResolver(logger, guardianPolicy, meterProvider, ratelimit.NewRedisStore(redisClient))
@@ -688,7 +695,7 @@ func buildTestMCPService(
 	mcpToolExecutionCheckpoint, err := mcptoolexecution.NewCheckpoint(conn, mcptoolexecution.DefaultEvaluationTimeout, meterProvider, logger)
 	require.NoError(t, err)
 	scanEvaluator := mcpriskscan.NewNoop(tracerProvider, meterProvider, logger)
-	remoteProxyManager := remotemcp.NewProxyManager(logger, tracerProvider, meterProvider, conn, guardianPolicy, authzEngine, posthog, telemLogger, billingStub, billingStub, mcpservers.NewToolDispositionCache(logger, conn, cacheAdapter), toolcallobserver.NoopSuccessRecorder{}, toolfilter.NewSessionToolWitnessStore(testenv.NewLogger(t), testenv.NewMemoryCache()), mcpToolExecutionCheckpoint, scanEvaluator, protectedResources)
+	remoteProxyManager := remotemcp.NewProxyManager(logger, tracerProvider, meterProvider, conn, guardianPolicy, authzEngine, posthog, telemLogger, billingStub, billingStub, mcpservers.NewToolDispositionCache(logger, conn, evictableCache), toolcallobserver.NoopSuccessRecorder{}, toolfilter.NewSessionToolWitnessStore(testenv.NewLogger(t), testenv.NewMemoryCache()), mcpToolExecutionCheckpoint, scanEvaluator, protectedResources)
 	managedLogsTools := platformtoolsruntime.ManagedAssistantLogsTools(telemService)
 	efficacySignaler := background.NewThrottledSignaler(
 		&background.TemporalSkillEfficacySignaler{TemporalEnv: temporalEnv, Logger: logger},
@@ -727,8 +734,9 @@ func buildTestMCPService(
 	toolCallRecords := &toolCallRecorder{}
 	// Named as in production, so the pipeline derives the same source.
 	toolCallLogs := otelpub.NewLogger(toolCallRecords, resource.NewSchemaless(semconv.ServiceNameKey.String("gram-server")), dialect.GatewayLogScope)
-	svc, err := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, features, serverURL, siteURL, enc, mcpCache, guardianPolicy, funcs, billingStub, billingStub, telemLogger, toolCallLogs, telemService, vectorToolStore, nil, authzEngine, assistantTokens, principalCredentials, shadowMCPClient, auditLogger, assistantSkillTools, featClient.PlatformFeatureCheck, platformToolsets, identityResolver, userSessionSigner, remoteChallengeMgr, scanEvaluator, remoteProxyManager, tunnelRoutes, "", nil, callerAssertions, redisClient, tunnelPublicConfig, metaRuntime, nil, nil)
+	svc, err := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, features, serverURL, siteURL, enc, mcp.RedisRoles{Auth: mcpCache, AuthClient: redisClient, Ops: opsCache, OpsClient: redisClient, Evictable: evictableCache, EvictableClient: redisrole.EvictableClient{Client: redisClient}}, guardianPolicy, funcs, billingStub, billingStub, telemLogger, toolCallLogs, telemService, vectorToolStore, nil, authzEngine, assistantTokens, principalCredentials, shadowMCPClient, auditLogger, assistantSkillTools, featClient.PlatformFeatureCheck, platformToolsets, identityResolver, userSessionSigner, remoteChallengeMgr, scanEvaluator, remoteProxyManager, tunnelRoutes, "", nil, callerAssertions, tunnelPublicConfig, metaRuntime, nil, nil)
 	require.NoError(t, err)
+	svc.SetAuthFeatureChecker(featClient.PlatformFeatureCheckUncached)
 	// Identity chaining runs as in production, so gate tests without bindings
 	// prove it leaves their behavior unchanged.
 	chainer := identitychaining.New(logger, conn, remoteChallengeMgr.UpstreamTokens(), remoteChallengeMgr, remotesessions.NewDelegationService(conn, remoteChallengeMgr), idTokenKeys, cacheAdapter)
@@ -749,6 +757,7 @@ func buildTestMCPService(
 		logger:               logger,
 		tracerProvider:       tracerProvider,
 		cacheAdapter:         cacheAdapter,
+		evictableCache:       evictableCache,
 		chatSessionsManager:  chatSessionsManager,
 		authnChallengeCache:  authnCache,
 		enc:                  enc,

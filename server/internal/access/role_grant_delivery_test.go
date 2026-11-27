@@ -269,7 +269,7 @@ func newRoleDeliveryFixture(t *testing.T) (context.Context, *roleDeliveryFixture
 	github.Test(t)
 	t.Cleanup(func() { github.AssertExpectations(t) })
 	githubConfig := &plugins.GitHubConfig{Client: github, Org: "test-org", InstallationID: 12345}
-	pluginService := plugins.NewService(logger, tracer, ti.conn, sessions, cache.NewRedisCacheAdapter(redis), ti.service.authz, ti.service.audit, githubConfig, "test", "https://example.com", nil, nil, staff.Organization{}, marketplacetokenstest.Tokens(t, ti.conn))
+	pluginService := plugins.NewService(logger, tracer, ti.conn, sessions, testenv.NewEvictableCache(t, redis), ti.service.authz, ti.service.audit, githubConfig, "test", "https://example.com", nil, nil, staff.Organization{}, marketplacetokenstest.Tokens(t, ti.conn))
 	signals := &recordingPublishSignaler{}
 	ti.service.roleMgr = NewRoleManager(logger, ti.conn, ti.roles, ti.service.audit, plugins.PublicationRequests{Enabled: true}, nil).WithPluginPublisher(signals)
 	plugin, err := pluginService.CreatePlugin(ctx, &plugingen.CreatePluginPayload{Name: "Delivery audience", AutoAddServersEnabled: new(true)})

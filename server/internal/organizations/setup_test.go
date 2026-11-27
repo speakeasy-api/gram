@@ -313,7 +313,7 @@ func newTestOrganizationsServiceWithOptions(t *testing.T, featureStub orgFeature
 
 	trialNotifier := &fakeTrialNotifier{}
 	posthog := &fakeOnboardingTelemetry{}
-	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
+	features := productfeatures.NewClient(logger, tracerProvider, conn, testenv.NewEvictableCache(t, redisClient))
 	featureChecker := featureStub
 	if useRealFeatures {
 		featureChecker = features

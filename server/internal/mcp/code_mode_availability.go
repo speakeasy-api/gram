@@ -22,6 +22,16 @@ func (s *Service) CodeModeAvailable(ctx context.Context, organizationID string) 
 	return s.platformFeatureChecker(ctx, organizationID, string(productfeatures.FeatureCodeMode))
 }
 
+// consentCodeModeAvailable is CodeModeAvailable for consent pages: it reads
+// the entitlement through authFeatureEnabled, so the page never waits on the
+// shared feature cache.
+func (s *Service) consentCodeModeAvailable(ctx context.Context, organizationID string) bool {
+	if !s.codeExecutor.Available() || organizationID == "" {
+		return false
+	}
+	return s.authFeatureEnabled(ctx, organizationID, productfeatures.FeatureCodeMode)
+}
+
 // CodeExecutor returns the code runtime this service owns, so Platform MCP can
 // run Code Mode programs on the same coordinator and limits.
 func (s *Service) CodeExecutor() codemode.Executor {

@@ -81,7 +81,7 @@ func TestMutatorSetFeature_RefreshesCacheAfterRequestCancellation(t *testing.T) 
 		OrganizationID: organizationID, FeatureName: string(productfeatures.FeatureLogs),
 	})
 	require.NoError(t, err)
-	reader := productfeatures.NewClient(testenv.NewLogger(t), testenv.NewTracerProvider(t), ti.conn, ti.redisClient)
+	reader := productfeatures.NewClient(testenv.NewLogger(t), testenv.NewTracerProvider(t), ti.conn, testenv.NewEvictableCache(t, ti.redisClient))
 	enabled, err := reader.IsFeatureEnabled(baseCtx, organizationID, productfeatures.FeatureLogs)
 	require.NoError(t, err)
 	require.True(t, enabled)

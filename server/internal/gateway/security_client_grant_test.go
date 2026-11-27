@@ -26,7 +26,7 @@ func runSecurity(t *testing.T, policy *guardian.Policy, security []*HTTPToolSecu
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "https://api.example/resource", nil)
 	w := httptest.NewRecorder()
 	var status int
-	ok := processSecurity(t.Context(), testenv.NewLogger(t), policy, req, w, &status, newTestToolDescriptor(), &HTTPToolCallPlan{Security: security}, testenv.NewMemoryCache(), env, "https://api.example", tm.HTTPLogAttributes{})
+	ok := processSecurity(t.Context(), testenv.NewLogger(t), policy, req, w, &status, newTestToolDescriptor(), &HTTPToolCallPlan{Security: security}, testenv.NewEvictableMemoryCache(), env, "https://api.example", tm.HTTPLogAttributes{})
 	return ok, status, w, report
 }
 

@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/redisrole"
 )
 
 // Fixed local-only material. These are deliberately well-known constants, not
@@ -79,6 +80,16 @@ type LocalFixturesOptions struct {
 	MockMCPURL string
 }
 
+// LocalCaches are the Redis clients whose entries the local fixtures clear.
+// A nil client is skipped.
+type LocalCaches struct {
+	// Auth holds the cached user info.
+	Auth *redis.Client
+
+	// Evictable holds the cached product features.
+	Evictable redisrole.EvictableClient
+}
+
 // RunLocalFixtures adds everything the local development organization needs on
 // top of the seeded data, none of which belongs in the shared demo org:
 //
@@ -103,7 +114,7 @@ type LocalFixturesOptions struct {
 // registry entries, platform assets, and system roles are global.
 // Call it only after Run has completed with LocalSpec: the seed deletes and
 // recreates the org's memberships, so adopting you has to come after it.
-func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, blob assets.BlobStore, cache *redis.Client, opts LocalFixturesOptions) error {
+func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, blob assets.BlobStore, caches LocalCaches, opts LocalFixturesOptions) error {
 	spec := LocalSpec()
 	logger = logger.With(attr.SlogComponent("demoseed.local"), attr.SlogOrganizationID(spec.OrgID))
 
@@ -258,7 +269,7 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 	}
 
 	warnOnStaleOverrides(ctx, logger, opts.ObservedEnv, apiKey)
-	bustLocalCaches(ctx, logger, cache, spec.OrgID, dev.ID)
+	bustLocalCaches(ctx, logger, caches, spec.OrgID, dev.ID)
 
 	if err := connectLocalSlack(ctx, logger, db, spec.OrgID, dev, opts.Slack); err != nil {
 		return err
@@ -348,15 +359,23 @@ func resolveDeveloper(ctx context.Context, email string) (developer, error) {
 // bustLocalCaches drops the cached entitlement and user-info entries the
 // fixtures just invalidated. Best effort: a stale cache only means a running
 // server needs a restart, so a failure is logged rather than returned.
-func bustLocalCaches(ctx context.Context, logger *slog.Logger, cache *redis.Client, orgID, userID string) {
-	if cache == nil {
+//
+// Keys are built through the owning packages' key functions rather than
+// assembled by hand: redis.Del matches exactly, so a key that is even one
+// character off deletes nothing and reports success. Typed caches store an
+// entry under its key plus ":" and the (empty) suffix. User info and features
+// live on different roles, so each is deleted through its own client.
+func bustLocalCaches(ctx context.Context, logger *slog.Logger, caches LocalCaches, orgID, userID string) {
+	if caches.Auth != nil {
+		if err := caches.Auth.Del(ctx, typedCacheKey(sessions.UserInfoCacheKey(userID))).Err(); err != nil {
+			logger.WarnContext(ctx, "could not clear the local user info cache; restart the server if access looks stale", attr.SlogError(err))
+		}
+	}
+	if caches.Evictable.Client == nil {
 		return
 	}
 
-	// Built through the owning packages' key functions rather than assembled
-	// by hand: redis.Del matches exactly, so a key that is even one character
-	// off deletes nothing and reports success.
-	keys := []string{sessions.UserInfoCacheKey(userID)}
+	var keys []string
 	for _, feature := range []productfeatures.Feature{
 		productfeatures.FeatureLogs,
 		productfeatures.FeatureToolIOLogs,
@@ -367,11 +386,17 @@ func bustLocalCaches(ctx context.Context, logger *slog.Logger, cache *redis.Clie
 		productfeatures.FeatureSSO,
 		productfeatures.FeatureSCIM,
 	} {
-		keys = append(keys, productfeatures.FeatureCacheKey(orgID, feature))
+		keys = append(keys, typedCacheKey(productfeatures.FeatureCacheKey(orgID, feature)))
 	}
-	if err := cache.Del(ctx, keys...).Err(); err != nil {
+	if err := caches.Evictable.Del(ctx, keys...).Err(); err != nil {
 		logger.WarnContext(ctx, "could not clear the local feature cache; restart the server if entitlements look stale", attr.SlogError(err))
 	}
+}
+
+// typedCacheKey returns the Redis key under which a typed cache with no
+// suffix (cache.SuffixNone, as the server wires these caches) stores key.
+func typedCacheKey(key string) string {
+	return key + ":"
 }
 
 // Existing system-role grant sets are intentionally not backfilled. Give the

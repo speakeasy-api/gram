@@ -40,7 +40,7 @@ func newSignalAuthoringFixture(t *testing.T) (context.Context, signalAuthoringFi
 	redis, err := platformMCPInfra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 
-	features := productfeatures.NewClient(logger, tracer, db, redis)
+	features := productfeatures.NewClient(logger, tracer, db, testenv.NewEvictableCache(t, redis))
 	require.NoError(t, features.SetFeatureEnabled(t.Context(), principal.OrganizationID, productfeatures.FeatureSignalsIntelligence, true))
 	engine := authz.NewEngine(logger, db, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	management := sigint.NewService(logger, tracer, db, &sessions.Manager{}, engine, audit.NewLogger(), features)

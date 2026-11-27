@@ -186,7 +186,7 @@ func TestManualSubscriptionActivationRetriesPostCommitFailure(t *testing.T) {
 	require.NoError(t, err)
 	redisClient.AddHook(failAccountTypeCacheSetHook{})
 	originalFeatures := svc.productFeatures
-	svc.productFeatures = productfeatures.NewClient(testenv.NewLogger(t), testenv.NewTracerProvider(t), db, redisClient)
+	svc.productFeatures = productfeatures.NewClient(testenv.NewLogger(t), testenv.NewTracerProvider(t), db, testenv.NewEvictableCache(t, redisClient))
 	require.NoError(t, authz.SeedSystemRoleGrants(ctx, db, id))
 	payload := &gen.SetStripeSubscriptionPayload{OrganizationID: id, StripeSubscriptionID: "sub_cache_retry"}
 	_, err = svc.SetStripeSubscription(ctx, payload)

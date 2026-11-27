@@ -56,7 +56,7 @@ func TestProductFeaturesService_RequestedOrganizationIsolation(t *testing.T) {
 	}))
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
-	client := productfeatures.NewClient(testenv.NewLogger(t), testenv.NewTracerProvider(t), ti.conn, redisClient)
+	client := productfeatures.NewClient(testenv.NewLogger(t), testenv.NewTracerProvider(t), ti.conn, testenv.NewEvictableCache(t, redisClient))
 	activeEnabled, err := client.IsFeatureEnabled(ctx, activeOrganizationID, productfeatures.FeatureLogs)
 	require.NoError(t, err)
 	require.True(t, activeEnabled)
@@ -103,7 +103,7 @@ func TestProductFeaturesService_RemoteSessionPolicyTargetsRequestedOrganization(
 	require.NoError(t, err)
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
-	featureClient := productfeatures.NewClient(testenv.NewLogger(t), testenv.NewTracerProvider(t), ti.conn, redisClient)
+	featureClient := productfeatures.NewClient(testenv.NewLogger(t), testenv.NewTracerProvider(t), ti.conn, testenv.NewEvictableCache(t, redisClient))
 
 	for _, tc := range []struct {
 		policy            string

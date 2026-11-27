@@ -99,6 +99,7 @@ type testInstance struct {
 	sessionManager *sessions.Manager
 	envEntries     *environments.EnvironmentEntries
 	redisCache     *cache.RedisCacheAdapter
+	evictableCache *cache.EvictableRedisAdapter
 	tunnelRoutes   *route.RouteTable
 	features       *productfeatures.Client
 }
@@ -145,6 +146,7 @@ func newTestServiceWithConfig(t *testing.T, cfg testServiceConfig) (context.Cont
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 	redisCache := cache.NewRedisCacheAdapter(redisClient)
+	evictableCache := testenv.NewEvictableCache(t, redisClient)
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
@@ -163,7 +165,7 @@ func newTestServiceWithConfig(t *testing.T, cfg testServiceConfig) (context.Cont
 		tunnels = tunnelrouting.NewHTTPClient(tunnelRoutes, "test-forward-token", guardianPolicy, []string{"127.0.0.0/8"})
 	}
 
-	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
+	features := productfeatures.NewClient(logger, tracerProvider, conn, evictableCache)
 	prober := protectedresource.NewProber(conn, guardianPolicy)
 	if cfg.noProber {
 		prober = nil
@@ -194,6 +196,7 @@ func newTestServiceWithConfig(t *testing.T, cfg testServiceConfig) (context.Cont
 		sessionManager: sessionManager,
 		envEntries:     envEntries,
 		redisCache:     redisCache,
+		evictableCache: evictableCache,
 		tunnelRoutes:   tunnelRoutes,
 		features:       features,
 	}

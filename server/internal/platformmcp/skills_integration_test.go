@@ -592,7 +592,7 @@ func newSkillsVerticalFixture(t *testing.T, ctx context.Context, name string, op
 	tracerProvider := testenv.NewTracerProvider(t)
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billing.NewStubClient(logger, tracerProvider))
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
+	features := productfeatures.NewClient(logger, tracerProvider, conn, testenv.NewEvictableCache(t, redisClient))
 	siteURL, err := url.Parse("https://app.getgram.test")
 	require.NoError(t, err)
 	skills := skillsservice.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, features, audit.NewLogger(), nil, nil, siteURL)

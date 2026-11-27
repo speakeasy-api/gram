@@ -7,7 +7,6 @@ import (
 	"net/url"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/redis/go-redis/v9"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -56,7 +55,7 @@ func parseSiteURL(raw string) (*url.URL, error) {
 	return siteURL, nil
 }
 
-func newServerIdentity(ctx context.Context, c *cli.Context, logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, redisClient *redis.Client, guardianPolicy *guardian.Policy) (*serverIdentity, error) {
+func newServerIdentity(ctx context.Context, c *cli.Context, logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, stores *redisStores, guardianPolicy *guardian.Policy) (*serverIdentity, error) {
 	siteURL, err := parseSiteURL(c.String("site-url"))
 	if err != nil {
 		return nil, err
@@ -75,7 +74,7 @@ func newServerIdentity(ctx context.Context, c *cli.Context, logger *slog.Logger,
 	if err != nil {
 		return nil, err
 	}
-	billingRepo, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, guardianPolicy, redisClient, posthogClient, stripeClient, db, c)
+	billingRepo, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, guardianPolicy, stores, posthogClient, stripeClient, db, c)
 	if err != nil {
 		return nil, err
 	}
@@ -93,11 +92,11 @@ func newServerIdentity(ctx context.Context, c *cli.Context, logger *slog.Logger,
 		MeterProvider: otel.GetMeterProvider(),
 		Enabled:       signins.EvidenceGate(db, featureFlags),
 	})
-	productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
+	productFeatures := productfeatures.NewClient(logger, tracerProvider, db, stores.EvictableCache)
 
 	growth := growthsignals.NewEmitter(logger, posthogClient, growthsignals.NewDatabaseEnricher(db), siteURL)
-	resolver := identity.NewResolver(logger, tracerProvider, cache.NewRedisCacheAdapter(redisClient), c.String("idp-base-url"), c.String("idp-client-id"), idpClient, workosClient, orgrepo.New(db), userrepo.New(db), pylonClient, posthogClient, growth, cache.SuffixNone)
-	manager := sessions.NewManager(logger, tracerProvider, db, redisClient, cache.SuffixNone, idpClient, billingRepo, resolver)
+	resolver := identity.NewResolver(logger, tracerProvider, stores.AuthCache, c.String("idp-base-url"), c.String("idp-client-id"), idpClient, workosClient, orgrepo.New(db), userrepo.New(db), pylonClient, posthogClient, growth, cache.SuffixNone)
+	manager := sessions.NewManager(logger, tracerProvider, db, stores.Auth, cache.SuffixNone, idpClient, billingRepo, resolver)
 	manager.SetFlags(featureFlags)
-	return &serverIdentity{Posthog: posthogClient, Features: featureFlags, WorkOS: workosClient, WorkOSAvailable: available, Stripe: stripeClient, Billing: billingRepo, BillingTracker: billingTracker, ProductFeatures: productFeatures, SiteURL: siteURL, Growth: growth, Identity: resolver, Sessions: manager, ChatSessions: chatsessions.NewManager(logger, redisClient, c.String(usersessions.JWTSigningKeyFlag), manager)}, nil
+	return &serverIdentity{Posthog: posthogClient, Features: featureFlags, WorkOS: workosClient, WorkOSAvailable: available, Stripe: stripeClient, Billing: billingRepo, BillingTracker: billingTracker, ProductFeatures: productFeatures, SiteURL: siteURL, Growth: growth, Identity: resolver, Sessions: manager, ChatSessions: chatsessions.NewManager(logger, stores.Auth, c.String(usersessions.JWTSigningKeyFlag), manager)}, nil
 }

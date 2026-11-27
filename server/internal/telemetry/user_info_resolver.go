@@ -79,7 +79,7 @@ type UserInfoResolver struct {
 	cache  cache.TypedCacheObject[cachedUserInfoSnapshot]
 }
 
-func NewUserInfoResolver(logger *slog.Logger, db *pgxpool.Pool, cacheImpl cache.Cache) *UserInfoResolver {
+func NewUserInfoResolver(logger *slog.Logger, db *pgxpool.Pool, cacheImpl cache.EvictableCache) *UserInfoResolver {
 	return &UserInfoResolver{
 		logger: logger.With(attr.SlogComponent("user_info_resolver")),
 		db:     db,

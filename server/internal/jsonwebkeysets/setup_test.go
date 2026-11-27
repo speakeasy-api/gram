@@ -214,7 +214,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	auditLogger := audit.NewLogger()
-	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
+	features := productfeatures.NewClient(logger, tracerProvider, conn, testenv.NewEvictableCache(t, redisClient))
 	// A stub resolver, not gcpauth.NewResolver: minting resolves Speakeasy's own
 	// identity to screen the impersonation target, so the real resolver would
 	// make this package depend on ambient cloud credentials. All three services

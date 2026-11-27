@@ -125,6 +125,7 @@ func TestGatewayConsentListingFailures(t *testing.T) {
 				require.Len(t, outcomes, 1)
 				require.Equal(t, tc.status, outcomes[0].Status)
 				require.Equal(t, tc.label, outcomes[0].Label)
+				require.NoError(t, ti.service.DrainConnectionEndings(ctx))
 			}
 			require.Equal(t, []string{happenedReason(tc.reason)}, discoveryReasons(rec), "a reload writes no second row")
 			for _, row := range rec.Rows() {
@@ -231,6 +232,7 @@ func TestGatewayConsentSavedKeyBesideASignIn(t *testing.T) {
 	require.Len(t, outcomes, 1)
 	require.Equal(t, "not_connected", outcomes[0].Status)
 	require.Equal(t, "Not connected", outcomes[0].Label)
+	require.NoError(t, ti.service.DrainConnectionEndings(ctx))
 	require.Equal(t, []string{mcpconnectionattempts.CodeNeedsSignIn.String()}, discoveryReasons(rec))
 	require.NotContains(t, page, "rejected its saved sign-in details")
 }

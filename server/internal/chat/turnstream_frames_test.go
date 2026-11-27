@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/chat"
+	"github.com/speakeasy-api/gram/server/internal/redisrole"
 )
 
 // The turn stream is what lets the dashboard stop polling, so the properties
@@ -19,7 +20,7 @@ func newTurnStream(t *testing.T) *chat.TurnStream {
 	t.Helper()
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
-	return chat.NewTurnStream(redisClient)
+	return chat.NewTurnStream(redisrole.EvictableClient{Client: redisClient})
 }
 
 func textFrame(text string) chat.TurnFrame {
@@ -170,7 +171,7 @@ func TestTurnStreamSubscribeStopsAtTerminalFrame(t *testing.T) {
 func TestTurnStreamPublishIsInertWithoutRedis(t *testing.T) {
 	t.Parallel()
 
-	stream := chat.NewTurnStream(nil)
+	stream := chat.NewTurnStream(redisrole.EvictableClient{Client: nil})
 	require.Nil(t, stream)
 
 	cursor, err := stream.Publish(t.Context(), uuid.New(), textFrame("ignored"))

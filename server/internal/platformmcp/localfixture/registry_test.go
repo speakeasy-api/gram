@@ -42,7 +42,7 @@ func TestRegistryHTTPServesReviewedCatalogContract(t *testing.T) {
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
 		registryPolicy,
-		cache.NoopCache,
+		cache.NoopEvictableCache,
 	)
 
 	catalog := platformmcp.NewRegistryCatalog(registryClient, []platformmcp.CatalogDescriptor{config.CatalogDescriptor()})
@@ -88,7 +88,7 @@ func TestDynamicRegistryCatalogReloadsServerOwnedDescriptors(t *testing.T) {
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
 		registryPolicy,
-		cache.NoopCache,
+		cache.NoopEvictableCache,
 	)
 
 	loads := 0
@@ -128,7 +128,7 @@ func TestRegistryCatalogSearchFailsClosedWhenAnySourceIsUnavailable(t *testing.T
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
 		registryPolicy,
-		cache.NoopCache,
+		cache.NoopEvictableCache,
 	)
 
 	unavailable := platformmcp.BrowserCatalogDescriptor(externalmcp.Registry{

@@ -155,8 +155,17 @@ type WorkerOptions struct {
 	BillingTracker    billing.Tracker
 	BillingRepository billing.Repository
 	StripeClient      stripeclient.Client
-	RedisClient       *redis.Client
-	CacheAdapter      cache.Cache
+	// AuthRedis holds sign-in epochs and the rate limits charged on
+	// remote-session sign-in paths.
+	AuthRedis *redis.Client
+	// OpsRedis holds the judge rate limits.
+	OpsRedis *redis.Client
+	// AuthCache holds remote-session refresh state, cached user info and
+	// revoked chat tokens.
+	AuthCache cache.Cache
+	// OpsCache holds job locks, alert dedupe, attribution claims, quarantine
+	// and spend gates.
+	OpsCache          cache.Cache
 	EmailService      *email.Service
 	PosthogClient     *posthog.Posthog
 	FunctionsDeployer functions.Deployer
@@ -289,13 +298,15 @@ func ForDeploymentProcessing(
 		BillingRepository:              nil,
 		StripeClient:                   nil,
 		RagService:                     nil,
-		RedisClient:                    nil,
+		AuthRedis:                      nil,
+		OpsRedis:                       nil,
 		PosthogClient:                  nil,
 		TelemetryLogger:                nil,
 		MeterReadConn:                  nil,
 		TelemetryRepo:                  nil,
 		TriggersApp:                    nil,
-		CacheAdapter:                   nil,
+		AuthCache:                      nil,
+		OpsCache:                       nil,
 		IssuerMetadataRefresher:        nil,
 		EmailService:                   nil,
 		AssistantsCore:                 nil,
@@ -389,7 +400,8 @@ func NewTemporalWorker(
 		BillingTracker:                 nil,
 		BillingRepository:              nil,
 		StripeClient:                   nil,
-		RedisClient:                    nil,
+		AuthRedis:                      nil,
+		OpsRedis:                       nil,
 		PosthogClient:                  nil,
 		FunctionsDeployer:              nil,
 		FunctionsVersion:               "",
@@ -398,7 +410,8 @@ func NewTemporalWorker(
 		MeterReadConn:                  nil,
 		TelemetryRepo:                  nil,
 		TriggersApp:                    nil,
-		CacheAdapter:                   nil,
+		AuthCache:                      nil,
+		OpsCache:                       nil,
 		IssuerMetadataRefresher:        nil,
 		RemoteSessionAssertionSigner:   nil,
 		Connections:                    nil,
@@ -456,7 +469,8 @@ func NewTemporalWorker(
 			BillingTracker:                 conv.Default(o.BillingTracker, opts.BillingTracker),
 			BillingRepository:              conv.Default(o.BillingRepository, opts.BillingRepository),
 			StripeClient:                   conv.Default(o.StripeClient, opts.StripeClient),
-			RedisClient:                    conv.Default(o.RedisClient, opts.RedisClient),
+			AuthRedis:                      conv.Default(o.AuthRedis, opts.AuthRedis),
+			OpsRedis:                       conv.Default(o.OpsRedis, opts.OpsRedis),
 			PosthogClient:                  conv.Default(o.PosthogClient, opts.PosthogClient),
 			FunctionsDeployer:              conv.Default(o.FunctionsDeployer, opts.FunctionsDeployer),
 			FunctionsVersion:               conv.Default(o.FunctionsVersion, opts.FunctionsVersion),
@@ -466,7 +480,8 @@ func NewTemporalWorker(
 			MeterReadConn:                  conv.Default(o.MeterReadConn, opts.MeterReadConn),
 			TelemetryRepo:                  conv.Default(o.TelemetryRepo, opts.TelemetryRepo),
 			TriggersApp:                    conv.Default(o.TriggersApp, opts.TriggersApp),
-			CacheAdapter:                   conv.Default(o.CacheAdapter, opts.CacheAdapter),
+			AuthCache:                      conv.Default(o.AuthCache, opts.AuthCache),
+			OpsCache:                       conv.Default(o.OpsCache, opts.OpsCache),
 			IssuerMetadataRefresher:        conv.Default(o.IssuerMetadataRefresher, opts.IssuerMetadataRefresher),
 			RemoteSessionAssertionSigner:   conv.Default(o.RemoteSessionAssertionSigner, opts.RemoteSessionAssertionSigner),
 			Connections:                    conv.Default(o.Connections, opts.Connections),
@@ -531,18 +546,18 @@ func NewTemporalWorker(
 		logger.ErrorContext(context.Background(), "build CEL engine for risk activities", attr.SlogError(celErr))
 	}
 
-	judgeRateLimiter := openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(opts.RedisClient))
+	judgeRateLimiter := openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(opts.OpsRedis))
 
 	// Identity capture is best effort: without a policy the sweep stores no identity.
 	idTokenVerifier := remotesessions.NoIDTokenVerifier()
 	var remoteSessionEnricher *remotesessions.SessionEnricher
 	if opts.GuardianPolicy != nil {
-		if idTokenKeys, err := remotesessions.NewIDTokenKeyResolver(logger, opts.GuardianPolicy, meterProvider, ratelimit.NewRedisStore(opts.RedisClient)); err != nil {
+		if idTokenKeys, err := remotesessions.NewIDTokenKeyResolver(logger, opts.GuardianPolicy, meterProvider, ratelimit.NewRedisStore(opts.AuthRedis)); err != nil {
 			logger.ErrorContext(context.Background(), "build id token key resolver for the refresh sweep", attr.SlogError(err))
 		} else {
 			idTokenVerifier = remotesessions.NewIDTokenVerifier(idTokenKeys)
 			remoteSessionEnricher = remotesessions.NewSessionEnricher(logger, opts.EncryptionClient, opts.GuardianPolicy, idTokenKeys,
-				ratelimit.New(ratelimit.NewRedisStore(opts.RedisClient), "remote_session_enrichment", remotesessions.EnrichmentRate, ratelimit.WithMetrics(meterProvider)), opts.TunnelHTTPClient, opts.IssuerMetadataRefresher)
+				ratelimit.New(ratelimit.NewRedisStore(opts.AuthRedis), "remote_session_enrichment", remotesessions.EnrichmentRate, ratelimit.WithMetrics(meterProvider)), opts.TunnelHTTPClient, opts.IssuerMetadataRefresher)
 		}
 	}
 
@@ -590,7 +605,8 @@ func NewTemporalWorker(
 		opts.MeterReadConn,
 		opts.TelemetryRepo,
 		opts.TriggersApp,
-		opts.CacheAdapter,
+		opts.AuthCache,
+		opts.OpsCache,
 		opts.EmailService,
 		opts.AssistantsCore,
 		opts.PIScanner,
@@ -614,7 +630,7 @@ func NewTemporalWorker(
 		opts.RemoteSessionAssertionSigner,
 		opts.Connections,
 		opts.StartupSeeds,
-		signInEpochs(opts.RedisClient),
+		signInEpochs(opts.AuthRedis),
 		opts.ServerURL,
 		opts.StaffOrganization,
 	)

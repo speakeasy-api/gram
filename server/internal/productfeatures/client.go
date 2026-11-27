@@ -10,7 +10,6 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -28,7 +27,7 @@ type Client struct {
 	featureCache cache.TypedCacheObject[FeatureCache]
 }
 
-func NewClient(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, redisClient *redis.Client) *Client {
+func NewClient(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, cacheImpl cache.EvictableCache) *Client {
 	logger = logger.With(attr.SlogComponent("productfeatures"))
 
 	return &Client{
@@ -36,7 +35,7 @@ func NewClient(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgx
 		logger:       logger,
 		db:           db,
 		repo:         repo.New(db),
-		featureCache: cache.NewTypedObjectCache[FeatureCache](logger.With(attr.SlogCacheNamespace("productfeature")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
+		featureCache: cache.NewTypedObjectCache[FeatureCache](logger.With(attr.SlogCacheNamespace("productfeature")), cacheImpl, cache.SuffixNone),
 	}
 }
 
@@ -123,6 +122,23 @@ func (c *Client) PlatformFeatureCheck(ctx context.Context, organizationID string
 	enabled, err := c.IsFeatureEnabled(ctx, organizationID, Feature(feature))
 	if err != nil {
 		c.logger.ErrorContext(ctx, "platform tool feature check failed",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(organizationID),
+			attr.SlogProductFeatureName(feature),
+		)
+		return false
+	}
+	return enabled
+}
+
+// PlatformFeatureCheckUncached is PlatformFeatureCheck reading the durable
+// feature state directly, for sign-in and consent steps that must not depend
+// on the shared feature cache being reachable. Errors, including a canceled
+// request, degrade to "disabled" and are logged.
+func (c *Client) PlatformFeatureCheckUncached(ctx context.Context, organizationID string, feature string) bool {
+	enabled, err := c.IsFeatureEnabledUncached(ctx, organizationID, Feature(feature))
+	if err != nil {
+		c.logger.ErrorContext(ctx, "uncached platform feature check failed",
 			attr.SlogError(err),
 			attr.SlogOrganizationID(organizationID),
 			attr.SlogProductFeatureName(feature),

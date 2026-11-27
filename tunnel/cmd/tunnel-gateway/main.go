@@ -18,6 +18,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
+	"golang.org/x/oauth2"
 
 	"github.com/speakeasy-api/gram/tunnel/gateway"
 	"github.com/speakeasy-api/gram/tunnel/redisconn"
@@ -61,20 +62,21 @@ func main() {
 		os.Exit(2)
 	}
 
-	routes, err := buildRouteStore(logger)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	routes, err := buildRouteStore(ctx, logger)
 	if err != nil {
 		logger.ErrorContext(context.Background(), "tunnel-gateway route store init failed", slog.Any("error", err))
 		os.Exit(2)
 	}
-	keys, err := buildKeyResolver(context.Background())
+	keys, err := buildKeyResolver(ctx)
 	if err != nil {
 		logger.ErrorContext(context.Background(), "tunnel-gateway key resolver init failed", slog.Any("error", err))
 		os.Exit(2)
 	}
 	defer keys.Close()
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 	collector, stopMetrics := startMetrics(ctx, logger)
 
 	gw, err := gateway.New(gateway.Config{
@@ -164,21 +166,49 @@ func serveHTTP(ctx context.Context, errCh chan<- error, logger *slog.Logger, nam
 	errCh <- nil
 }
 
-func buildRouteStore(logger *slog.Logger) (route.Store, error) {
-	addr := strings.TrimSpace(os.Getenv("TUNNEL_REDIS_ADDR"))
-	if addr == "" {
-		return nil, errors.New("TUNNEL_REDIS_ADDR is required")
+func buildRouteStore(ctx context.Context, logger *slog.Logger) (route.Store, error) {
+	current := redisconn.EndpointFromEnv("GRAM_REDIS_OPS_")
+	next := redisconn.EndpointFromEnv("GRAM_REDIS_OPS_NEXT_")
+	fallbackAddr := strings.TrimSpace(os.Getenv("TUNNEL_REDIS_ADDR"))
+	if current.Addr == fallbackAddr {
+		current = redisconn.Endpoint{}
 	}
-	client, err := redisswitch.NewClient(context.Background(), logger, &redis.Options{}, redisswitch.Binding{
-		Role:    redisswitch.DefaultRole,
-		Current: redisconn.PasswordEndpoint(addr, os.Getenv("TUNNEL_REDIS_PASSWORD")),
-		Next:    redisswitch.NextFromEnv(),
-		Tokens:  nil,
+	role := redisswitch.RoleOps
+	if current.Addr != "" {
+		if err := current.Validate(); err != nil {
+			return nil, fmt.Errorf("configure tunnel route Redis: %w", err)
+		}
+	}
+	if current.Addr == "" {
+		if fallbackAddr == "" {
+			return nil, errors.New("GRAM_REDIS_OPS_ADDR or TUNNEL_REDIS_ADDR is required")
+		}
+		current = redisconn.PasswordEndpoint(fallbackAddr, os.Getenv("TUNNEL_REDIS_PASSWORD"))
+		if next.Addr == "" {
+			role = redisswitch.DefaultRole
+			next = redisswitch.NextFromEnv()
+		}
+	}
+
+	var tokens oauth2.TokenSource
+	if current.Auth == redisconn.AuthIAM || (next.Addr != "" && next.Addr != current.Addr && next.Auth == redisconn.AuthIAM) {
+		var err error
+		tokens, err = redisconn.NewIAMTokenSource(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("initialize tunnel route Redis credentials: %w", err)
+		}
+	}
+
+	client, err := redisswitch.NewClient(ctx, logger, &redis.Options{}, redisswitch.Binding{
+		Role:    role,
+		Current: current,
+		Next:    next,
+		Tokens:  tokens,
 	})
 	if err != nil {
 		return nil, err
 	}
-	logger.InfoContext(context.Background(), "tunnel-gateway using redis route store", slog.String("addr", addr))
+	logger.InfoContext(ctx, "tunnel-gateway using redis route store", slog.String("addr", current.Addr))
 	return route.NewRedis(client), nil
 }
 

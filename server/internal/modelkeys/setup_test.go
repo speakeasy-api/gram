@@ -146,7 +146,7 @@ func newTestServiceWithRedisDB(t *testing.T, redisDB int) (context.Context, *tes
 	keys := testenv.NewAIProviderKeys(t, conn)
 
 	provisioner := &stubProvisioner{platformKey: "platform-key", usageErr: nil, usageCalls: 0}
-	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
+	features := productfeatures.NewClient(logger, tracerProvider, conn, testenv.NewEvictableCache(t, redisClient))
 
 	svc := modelkeys.NewService(
 		logger,

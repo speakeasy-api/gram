@@ -17,6 +17,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -91,6 +92,17 @@ func PasswordEndpoint(addr, password string) Endpoint {
 		auth = AuthNone
 	}
 	return Endpoint{Addr: addr, Auth: auth, Password: password, CACertPEM: "", ServerName: ""}
+}
+
+// EndpointFromEnv reads the address, credentials and CA for a Redis endpoint.
+// The prefix includes the final underscore.
+func EndpointFromEnv(prefix string) Endpoint {
+	endpoint := PasswordEndpoint(strings.TrimSpace(os.Getenv(prefix+"ADDR")), os.Getenv(prefix+"PASSWORD"))
+	if auth := strings.TrimSpace(os.Getenv(prefix + "AUTH_MODE")); auth != "" {
+		endpoint.Auth = AuthMode(auth)
+	}
+	endpoint.CACertPEM = os.Getenv(prefix + "CA_CERT")
+	return endpoint
 }
 
 // TLS reports whether connections to the endpoint are encrypted.

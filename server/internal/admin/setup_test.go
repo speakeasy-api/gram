@@ -96,8 +96,8 @@ func newTestAdminServiceOnDB(t *testing.T, conn *pgxpool.Pool) (context.Context,
 		trial:            trialemails.NoopNotifier{},
 		sessions:         sessions,
 		loginStates:      cache.NewTypedObjectCache[LoginState](logger, adminCache, cache.SuffixNone),
-		HookClientsCache: NewHookClientsCache(logger, adminCache, nil, nil),
-		productFeatures:  productfeatures.NewClient(logger, tracerProvider, conn, redisClient),
+		HookClientsCache: NewHookClientsCache(logger, testenv.NewEvictableCache(t, redisClient), nil, nil),
+		productFeatures:  productfeatures.NewClient(logger, tracerProvider, conn, testenv.NewEvictableCache(t, redisClient)),
 	}
 	svc.oidc = newTestOIDCClient(t, userinfoOK("sub-admin", "operator@example.com"))
 	svc.verifier = NewVerifier(logger, sessions, svc.oidc, adminCache)

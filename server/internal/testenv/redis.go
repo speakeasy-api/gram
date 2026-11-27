@@ -56,6 +56,7 @@ func newRedisClientFunc(container *tcr.RedisContainer) RedisClientFunc {
 			WriteTimeout: 1 * time.Second,
 			Protocol:     2,
 		})
+		client.AddHook(newUnclassifiedKeyCheck(t))
 
 		var pingErr error
 		for attempt := range 10 {

@@ -20,6 +20,9 @@ type recordingCache struct {
 	deletes []string
 }
 
+// EvictableRole lets the fake stand in for the evictable cache.
+func (*recordingCache) EvictableRole() {}
+
 func (c *recordingCache) Set(_ context.Context, key string, _ any, _ time.Duration) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()

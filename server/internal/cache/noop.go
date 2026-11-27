@@ -13,6 +13,17 @@ type noopCache struct{}
 var _ Cache = (*noopCache)(nil)
 var _ LeaseCache = (*noopCache)(nil)
 
+// NoopEvictableCache is NoopCache for code that takes the evictable-role
+// cache.
+var NoopEvictableCache EvictableCache = &noopEvictableCache{noopCache: noopCache{}}
+
+type noopEvictableCache struct {
+	noopCache
+}
+
+// EvictableRole implements [EvictableCache].
+func (*noopEvictableCache) EvictableRole() {}
+
 // Delete implements [Cache].
 func (s *noopCache) Delete(ctx context.Context, key string) error {
 	return nil

@@ -16,11 +16,14 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/localaccounts"
 	localrepo "github.com/speakeasy-api/gram/server/internal/localaccounts/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/redisrole"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
+	metricnoop "go.opentelemetry.io/otel/metric/noop"
 	"go.opentelemetry.io/otel/trace/noop"
 )
 
@@ -130,14 +133,17 @@ func runAccountState(ctx context.Context, r accountStateRequest) (any, error) {
 	if err = localaccounts.CheckWorkflows(preflight, config); err != nil {
 		return nil, fmt.Errorf("check account workflows: %w", err)
 	}
-	cacheAddress := config.RedisAddress
+	// Product features live on the evictable role. A local stack keeps every
+	// role on its one Redis, the address the safety fence above has checked.
+	cacheAddress, cachePassword := config.RedisAddress, os.Getenv("GRAM_REDIS_CACHE_PASSWORD")
 	cacheHost, cachePort, _ := net.SplitHostPort(cacheAddress)
 	if cacheHost == "localhost" {
 		cacheAddress = net.JoinHostPort("127.0.0.1", cachePort)
 	}
-	cache := redis.NewClient(&redis.Options{Addr: cacheAddress, Password: os.Getenv("GRAM_REDIS_CACHE_PASSWORD"), DialTimeout: 3 * time.Second, ReadTimeout: 3 * time.Second, WriteTimeout: 3 * time.Second, MaxRetries: -1})
-	defer o11y.NoLogDefer(cache.Close)
-	features := productfeatures.NewClient(slog.Default(), noop.NewTracerProvider(), db, cache)
+	cacheClient := redis.NewClient(&redis.Options{Addr: cacheAddress, Password: cachePassword, DialTimeout: 3 * time.Second, ReadTimeout: 3 * time.Second, WriteTimeout: 3 * time.Second, MaxRetries: -1})
+	defer o11y.NoLogDefer(cacheClient.Close)
+	featureCache := cache.NewEvictableRedisAdapter(redisrole.EvictableClient{Client: cacheClient}, redisrole.NewGuard(slog.Default(), metricnoop.NewMeterProvider(), redisrole.GuardReport))
+	features := productfeatures.NewClient(slog.Default(), noop.NewTracerProvider(), db, featureCache)
 	action := func(ctx context.Context) (localaccounts.Result, error) {
 		ctx, cancel := context.WithTimeout(ctx, 45*time.Second)
 		defer cancel()

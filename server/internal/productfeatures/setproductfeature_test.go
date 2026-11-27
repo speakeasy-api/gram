@@ -440,7 +440,7 @@ func TestProductFeaturesClient_IsFeatureEnabled(t *testing.T) {
 			testenv.NewLogger(t),
 			testenv.NewTracerProvider(t),
 			ti.conn,
-			redisClient,
+			testenv.NewEvictableCache(t, redisClient),
 		)
 
 		isEnabled, err := client.IsFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureLogs)
@@ -471,7 +471,7 @@ func TestProductFeaturesClient_IsFeatureEnabled(t *testing.T) {
 			testenv.NewLogger(t),
 			testenv.NewTracerProvider(t),
 			ti.conn,
-			redisClient,
+			testenv.NewEvictableCache(t, redisClient),
 		)
 
 		isEnabled, err := client.IsFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureLogs)
@@ -495,7 +495,7 @@ func TestProductFeaturesClient_IsFeatureEnabled(t *testing.T) {
 			testenv.NewLogger(t),
 			testenv.NewTracerProvider(t),
 			ti.conn,
-			redisClient,
+			testenv.NewEvictableCache(t, redisClient),
 		)
 
 		// First call should hit database and cache the result
@@ -521,7 +521,7 @@ func TestProductFeaturesClient_IsFeatureEnabled(t *testing.T) {
 			testenv.NewLogger(t),
 			testenv.NewTracerProvider(t),
 			ti.conn,
-			redisClient,
+			testenv.NewEvictableCache(t, redisClient),
 		)
 
 		// This client should also get the cached false value
@@ -545,7 +545,7 @@ func TestProductFeaturesClient_IsFeatureEnabled(t *testing.T) {
 			testenv.NewLogger(t),
 			testenv.NewTracerProvider(t),
 			ti.conn,
-			redisClient,
+			testenv.NewEvictableCache(t, redisClient),
 		)
 
 		// Enable the feature
@@ -588,7 +588,7 @@ func TestProductFeaturesClient_IsFeatureEnabledUncachedReturnsCancellation(t *te
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
 		ti.conn,
-		redisClient,
+		testenv.NewEvictableCache(t, redisClient),
 	)
 
 	canceled, cancel := context.WithCancel(ctx)
@@ -596,6 +596,39 @@ func TestProductFeaturesClient_IsFeatureEnabledUncachedReturnsCancellation(t *te
 	enabled, err := client.IsFeatureEnabledUncached(canceled, authCtx.ActiveOrganizationID, productfeatures.FeatureLogs)
 	require.False(t, enabled)
 	require.ErrorIs(t, err, context.Canceled)
+}
+
+// The uncached platform check answers from Postgres, so a stale cache entry
+// (or an unreachable cache) does not decide a sign-in step.
+func TestProductFeaturesClient_PlatformFeatureCheckUncachedIgnoresTheCache(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestProductFeaturesService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	redisClient, err := infra.NewRedisClient(t, 1)
+	require.NoError(t, err)
+	client := productfeatures.NewClient(
+		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		ti.conn,
+		testenv.NewEvictableCache(t, redisClient),
+	)
+	orgID := authCtx.ActiveOrganizationID
+	feature := string(productfeatures.FeatureRemoteSessionAutoRefresh)
+
+	// Cache the disabled state, then enable the feature behind the cache.
+	require.False(t, client.PlatformFeatureCheck(ctx, orgID, feature))
+	_, err = repo.New(ti.conn).EnableFeature(ctx, repo.EnableFeatureParams{OrganizationID: orgID, FeatureName: feature})
+	require.NoError(t, err)
+
+	require.False(t, client.PlatformFeatureCheck(ctx, orgID, feature), "the cached check still reads the stale entry")
+	require.True(t, client.PlatformFeatureCheckUncached(ctx, orgID, feature))
+
+	canceled, cancel := context.WithCancel(ctx)
+	cancel()
+	require.False(t, client.PlatformFeatureCheckUncached(canceled, orgID, feature), "a check that cannot complete reads as disabled")
 }
 
 func TestProductFeaturesClient_SkillsAlwaysEnabled(t *testing.T) {
@@ -611,7 +644,7 @@ func TestProductFeaturesClient_SkillsAlwaysEnabled(t *testing.T) {
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
 		ti.conn,
-		redisClient,
+		testenv.NewEvictableCache(t, redisClient),
 	)
 	client.UpdateFeatureCache(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureSkills, false)
 

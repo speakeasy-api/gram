@@ -43,7 +43,7 @@ func TestLogTransformHandlerNormalizesEnrichesAndPublishes(t *testing.T) {
 		require.True(t, ok)
 		published = record
 	}).Return(gcp.NewSuccessPublishResult()).Once()
-	handler := NewLogTransformHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), publisher, newTestDatabase(t), cache.NoopCache)
+	handler := NewLogTransformHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), publisher, newTestDatabase(t), cache.NoopEvictableCache)
 
 	err := handler.Handle(t.Context(), inbound, gcp.MessageMetadata{})
 
@@ -150,7 +150,7 @@ func TestMaxSizeLogRecordFitsRelayExportAfterFullEnrichment(t *testing.T) {
 		require.True(t, ok)
 		published = record
 	}).Return(gcp.NewSuccessPublishResult()).Once()
-	handler := NewLogTransformHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), publisher, newTestDatabase(t), cache.NoopCache)
+	handler := NewLogTransformHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), publisher, newTestDatabase(t), cache.NoopEvictableCache)
 
 	err := handler.Handle(t.Context(), inbound, gcp.MessageMetadata{})
 
@@ -216,7 +216,7 @@ func TestLogTransformHandlerDropsForgedCanonicalColumns(t *testing.T) {
 			published = record
 		}).Return(gcp.NewSuccessPublishResult()).Once()
 		meterProvider := testenv.NewMeterProvider(t)
-		handler := NewLogTransformHandler(testenv.NewLogger(t), meterProvider, publisher, newTestDatabase(t), cache.NoopCache)
+		handler := NewLogTransformHandler(testenv.NewLogger(t), meterProvider, publisher, newTestDatabase(t), cache.NoopEvictableCache)
 		require.NoError(t, handler.Handle(t.Context(), inbound, gcp.MessageMetadata{}))
 		require.NotNil(t, published)
 		attributes := make(map[string]*otelv1.LogRecord_AnyValue, len(published.GetAttributes()))
@@ -324,7 +324,7 @@ func TestLogTransformHandlerDropsProducerSentPipelineKeys(t *testing.T) {
 		published = record
 	}).Return(gcp.NewSuccessPublishResult()).Once()
 	meterProvider := testenv.NewMeterProvider(t)
-	handler := NewLogTransformHandler(testenv.NewLogger(t), meterProvider, publisher, newTestDatabase(t), cache.NoopCache)
+	handler := NewLogTransformHandler(testenv.NewLogger(t), meterProvider, publisher, newTestDatabase(t), cache.NoopEvictableCache)
 
 	require.NoError(t, handler.Handle(t.Context(), inbound, gcp.MessageMetadata{}))
 	require.NotNil(t, published)
@@ -377,7 +377,7 @@ func TestLogTransformHandlerCarriesProvenanceSourceAndGatesConnectionKeys(t *tes
 				require.True(t, ok)
 				published = record
 			}).Return(gcp.NewSuccessPublishResult()).Once()
-			handler := NewLogTransformHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), publisher, newTestDatabase(t), cache.NoopCache)
+			handler := NewLogTransformHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), publisher, newTestDatabase(t), cache.NoopEvictableCache)
 
 			require.NoError(t, handler.Handle(t.Context(), inbound, gcp.MessageMetadata{}))
 			require.NotNil(t, published)
@@ -440,7 +440,7 @@ func TestNearLimitPromptStillFitsRelayExportAfterEnrichment(t *testing.T) {
 		published = record
 	}).Return(gcp.NewSuccessPublishResult()).Once()
 	meterProvider := testenv.NewMeterProvider(t)
-	handler := NewLogTransformHandler(testenv.NewLogger(t), meterProvider, publisher, newTestDatabase(t), cache.NoopCache)
+	handler := NewLogTransformHandler(testenv.NewLogger(t), meterProvider, publisher, newTestDatabase(t), cache.NoopEvictableCache)
 
 	require.NoError(t, handler.Handle(t.Context(), inbound, gcp.MessageMetadata{}))
 	require.NotNil(t, published)

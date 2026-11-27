@@ -1,6 +1,8 @@
 package cache_test
 
 import (
+	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -85,6 +87,152 @@ func TestTypedCacheObjectGetAndDeleteMarking(t *testing.T) {
 	won, err := adapter.Add(t.Context(), "marker", time.Minute)
 	require.NoError(t, err)
 	require.False(t, won, "the marker was set with the consume")
+}
+
+// listEntry is a list element shaped like the structs real callers append.
+type listEntry struct {
+	Value string
+}
+
+// recordedCommand is one command a client sent and whether Redis ran it.
+type recordedCommand struct {
+	name string
+	args []any
+	ok   bool
+}
+
+// commandRecorder records every command a client sends and its outcome, with
+// the commands of a pipeline or transaction recorded one by one. The
+// connection handshake (HELLO, CLIENT SETINFO) is not recorded.
+type commandRecorder struct {
+	mu       sync.Mutex
+	commands []recordedCommand
+}
+
+func (h *commandRecorder) DialHook(next redis.DialHook) redis.DialHook {
+	return next
+}
+
+func (h *commandRecorder) ProcessHook(next redis.ProcessHook) redis.ProcessHook {
+	return func(ctx context.Context, cmd redis.Cmder) error {
+		err := next(ctx, cmd)
+		h.record(cmd, err)
+		return err
+	}
+}
+
+func (h *commandRecorder) ProcessPipelineHook(next redis.ProcessPipelineHook) redis.ProcessPipelineHook {
+	return func(ctx context.Context, cmds []redis.Cmder) error {
+		err := next(ctx, cmds)
+		for _, cmd := range cmds {
+			h.record(cmd, cmd.Err())
+		}
+		return err
+	}
+}
+
+func (h *commandRecorder) record(cmd redis.Cmder, err error) {
+	if cmd.Name() == "hello" || cmd.Name() == "client" {
+		return
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.commands = append(h.commands, recordedCommand{name: cmd.Name(), args: cmd.Args(), ok: err == nil})
+}
+
+func (h *commandRecorder) sent() []recordedCommand {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return append([]recordedCommand(nil), h.commands...)
+}
+
+func newListAppendAdapter(t *testing.T) (*cache.RedisCacheAdapter, *miniredis.Miniredis, *commandRecorder) {
+	t.Helper()
+	mr := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { require.NoError(t, client.Close()) })
+	recorder := &commandRecorder{mu: sync.Mutex{}, commands: nil}
+	client.AddHook(recorder)
+	return cache.NewRedisCacheAdapter(client), mr, recorder
+}
+
+func TestListAppendSetsExpiryInTheSameCommand(t *testing.T) {
+	t.Parallel()
+
+	adapter, mr, recorder := newListAppendAdapter(t)
+
+	require.NoError(t, adapter.ListAppend(t.Context(), "list", listEntry{Value: "first"}, time.Hour))
+
+	require.Equal(t, time.Hour, mr.TTL("list"), "a new list gets its expiry")
+	// Script.Run tries EVALSHA first and falls back to EVAL when the script is
+	// not loaded yet, so one or two commands are sent, but exactly one runs: a
+	// script over the list with both the value and the expiry.
+	var ran []recordedCommand
+	for _, cmd := range recorder.sent() {
+		require.Contains(t, []string{"evalsha", "eval"}, cmd.name, "the append and its expiry go to Redis as one script")
+		if cmd.ok {
+			ran = append(ran, cmd)
+		}
+	}
+	require.Len(t, ran, 1, "exactly one script runs")
+	// EVAL script|sha numkeys key value ttl
+	require.Len(t, ran[0].args, 6)
+	require.Equal(t, 1, ran[0].args[2])
+	require.Equal(t, "list", ran[0].args[3])
+	require.Equal(t, time.Hour.Milliseconds(), ran[0].args[5], "the expiry travels with the append")
+
+	var got []listEntry
+	require.NoError(t, adapter.ListRange(t.Context(), "list", 0, -1, &got))
+	require.Equal(t, []listEntry{{Value: "first"}}, got)
+}
+
+func TestListAppendKeepsAnExistingExpiry(t *testing.T) {
+	t.Parallel()
+
+	adapter, mr, _ := newListAppendAdapter(t)
+
+	require.NoError(t, adapter.ListAppend(t.Context(), "list", listEntry{Value: "first"}, 10*time.Minute))
+	mr.FastForward(4 * time.Minute)
+	require.NoError(t, adapter.ListAppend(t.Context(), "list", listEntry{Value: "second"}, time.Hour))
+
+	require.Equal(t, 6*time.Minute, mr.TTL("list"), "appending does not extend the list's life")
+
+	var got []listEntry
+	require.NoError(t, adapter.ListRange(t.Context(), "list", 0, -1, &got))
+	require.Equal(t, []listEntry{{Value: "first"}, {Value: "second"}}, got)
+}
+
+func TestListAppendGivesAListWithoutExpiryOne(t *testing.T) {
+	t.Parallel()
+
+	adapter, mr, _ := newListAppendAdapter(t)
+
+	_, err := mr.Push("list", "written-without-expiry")
+	require.NoError(t, err)
+	require.Zero(t, mr.TTL("list"))
+
+	require.NoError(t, adapter.ListAppend(t.Context(), "list", "next", time.Hour))
+	require.Equal(t, time.Hour, mr.TTL("list"))
+}
+
+func TestListAppendWithoutTTLSetsNoExpiry(t *testing.T) {
+	t.Parallel()
+
+	adapter, mr, _ := newListAppendAdapter(t)
+
+	require.NoError(t, adapter.ListAppend(t.Context(), "list", "first", 0))
+	require.True(t, mr.Exists("list"))
+	require.Zero(t, mr.TTL("list"))
+}
+
+func TestListAppendRoundsASubMillisecondTTLUp(t *testing.T) {
+	t.Parallel()
+
+	adapter, mr, _ := newListAppendAdapter(t)
+
+	require.NoError(t, adapter.ListAppend(t.Context(), "list", "first", time.Microsecond))
+	require.True(t, mr.Exists("list"), "a tiny lifetime must not delete the list it was meant to expire")
+	require.Equal(t, time.Millisecond, mr.TTL("list"))
 }
 
 func TestTypedCacheObjectInvalidMarkerLifetimePreservesValue(t *testing.T) {

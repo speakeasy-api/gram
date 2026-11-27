@@ -9,12 +9,12 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/redis/go-redis/v9"
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/redisrole"
 	"github.com/urfave/cli/v2"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -46,7 +46,7 @@ func assistantKitRuntimeFlags() []cli.Flag {
 	}
 }
 
-func installKitLocalRuntimeFromCLI(logger *slog.Logger, c *cli.Context, core *assistants.ServiceCore, db *pgxpool.Pool, auditLogger *audit.Logger, redisClient *redis.Client, serverURL *url.URL) error {
+func installKitLocalRuntimeFromCLI(logger *slog.Logger, c *cli.Context, core *assistants.ServiceCore, db *pgxpool.Pool, auditLogger *audit.Logger, evictable redisrole.EvictableClient, serverURL *url.URL) error {
 	if c.String("assistant-kit-image") == "" {
 		return nil
 	}
@@ -113,7 +113,7 @@ func installKitLocalRuntimeFromCLI(logger *slog.Logger, c *cli.Context, core *as
 		PersistedMCP: base.Provider != assistants.RuntimeProviderLocal,
 		Environment:  c.String("environment"), Image: c.String("assistant-kit-image"), ExtraCACertFile: c.String("assistant-runtime-local-ca-file"),
 		Origin: &url.URL{Scheme: "https", Host: "ai.speakeasy.com"}, Network: c.String("assistant-kit-network"), AllowInsecureInference: false,
-		MCPResource: resource, MCPIssuer: issuer, MCPUserSessionIssuerID: issuerID, TurnStream: chat.NewTurnStream(redisClient),
+		MCPResource: resource, MCPIssuer: issuer, MCPUserSessionIssuerID: issuerID, TurnStream: chat.NewTurnStream(evictable),
 		WorkloadJWKSURL:       c.String("assistant-kit-workload-jwks-url"),
 		WorkloadIssuerURL:     c.String("assistant-kit-workload-issuer"),
 		WorkloadSubject:       c.String("assistant-kit-workload-subject"),
