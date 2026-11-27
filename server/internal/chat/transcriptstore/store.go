@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"math/big"
 	"reflect"
+	"slices"
 	"sort"
 	"time"
 
@@ -114,10 +115,12 @@ func (s *Store) Prepare(ctx context.Context, organizationID string) error {
 
 // Capture seals each message's transcript from its plaintext row, as shadow
 // mode does: an existing transcript is replaced, and the metadata and
-// tool-call IDs are measured again. It uses the caller's transaction and never
+// tool-call IDs are measured again. It is the same lock, prepare and finish
+// steps as an update, with the metadata as the only column written, since the
+// row already holds its fields. It uses the caller's transaction and never
 // calls KMS: run Prepare before opening it. The caller must roll back on
 // error; a batch is not an independently committed unit. IDs are
-// deduplicated and sorted.
+// deduplicated and locked in sorted order.
 func (s *Store) Capture(ctx context.Context, db repo.DBTX, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID) error {
 	if len(messageIDs) == 0 {
 		return nil
@@ -129,17 +132,23 @@ func (s *Store) Capture(ctx context.Context, db repo.DBTX, organizationID string
 		return err
 	}
 	return p.observe(ctx, "transcriptstore.Capture", captureMetrics, len(messageIDs), func(ctx context.Context) (int, error) {
-		ids := append([]uuid.UUID(nil), messageIDs...)
-		sort.Slice(ids, func(i, j int) bool { return bytes.Compare(ids[i][:], ids[j][:]) < 0 })
-		for i, id := range ids {
-			if i > 0 && id == ids[i-1] {
-				continue
-			}
-			row, err := lockChatMessage(ctx, p.q, organizationID, projectID, id)
-			if err != nil {
+		rows, err := p.lockAll(ctx, messageIDs)
+		if err != nil {
+			return 0, err
+		}
+		fields := make([]transcriptcrypto.ProtectedFields, len(rows))
+		for i, row := range rows {
+			fields[i] = protectedFieldsOf(row)
+		}
+		writes, err := p.prepare(ctx, fields)
+		if err != nil {
+			return 0, err
+		}
+		for i, row := range rows {
+			if err := p.writeMetadata(ctx, row.ID, writes[i].meta); err != nil {
 				return 0, err
 			}
-			if err := p.reseal(ctx, row.ChatMessage); err != nil {
+			if err := p.finish(ctx, row.ChatID, row.ID, writes[i]); err != nil {
 				return 0, err
 			}
 		}
@@ -147,18 +156,33 @@ func (s *Store) Capture(ctx context.Context, db repo.DBTX, organizationID string
 	})
 }
 
-// reseal seals a locked row from its own columns, which already hold the
-// fields in the text form Postgres stores, and measures its metadata again.
-func (p *protector) reseal(ctx context.Context, row repo.ChatMessage) error {
-	fields := protectedFieldsOf(row)
-	w := write{stored: fields, sealed: fields, meta: metadataOf(fields.Content, fields.ContentRaw, fields.ToolCalls)}
+// lockAll locks each message once, in sorted ID order, so two batches over
+// the same messages cannot deadlock.
+func (p *protector) lockAll(ctx context.Context, messageIDs []uuid.UUID) ([]repo.ChatMessage, error) {
+	ids := append([]uuid.UUID(nil), messageIDs...)
+	sort.Slice(ids, func(i, j int) bool { return bytes.Compare(ids[i][:], ids[j][:]) < 0 })
+	ids = slices.Compact(ids)
+	rows := make([]repo.ChatMessage, len(ids))
+	for i, id := range ids {
+		row, err := lockChatMessage(ctx, p.q, p.organizationID, p.projectID, id)
+		if err != nil {
+			return nil, err
+		}
+		rows[i] = row.ChatMessage
+	}
+	return rows, nil
+}
+
+// writeMetadata stores a locked row's metadata when its protected fields are
+// already in place; inserts and updates write it with the row instead.
+func (p *protector) writeMetadata(ctx context.Context, messageID uuid.UUID, meta metadata) error {
 	n, err := p.q.UpdateMessageMetadata(ctx, repo.UpdateMessageMetadataParams{
-		MessageID:       row.ID,
+		MessageID:       messageID,
 		ProjectID:       p.projectID,
-		ToolCallCount:   w.meta.toolCallCount,
-		ContentBytes:    w.meta.contentBytes,
-		ContentRawBytes: w.meta.contentRawBytes,
-		ToolCallsBytes:  w.meta.toolCallsBytes,
+		ToolCallCount:   meta.toolCallCount,
+		ContentBytes:    meta.contentBytes,
+		ContentRawBytes: meta.contentRawBytes,
+		ToolCallsBytes:  meta.toolCallsBytes,
 	})
 	if err != nil {
 		return safe(err)
@@ -166,7 +190,7 @@ func (p *protector) reseal(ctx context.Context, row repo.ChatMessage) error {
 	if n != 1 {
 		return ErrNotFound
 	}
-	return p.finish(ctx, row.ChatID, row.ID, w)
+	return nil
 }
 
 // UpdateChatMessage is the shadow-mode message update with a trace span and
@@ -729,31 +753,26 @@ func (s *Store) Backfill(ctx context.Context, organizationID string, projectID, 
 	if organizationID == "" || projectID == uuid.Nil || limit < 1 || limit > 500 {
 		return Page{}, ErrInvalid
 	}
-	if err := s.Prepare(ctx, organizationID); err != nil {
-		return Page{}, err
-	}
-	tx, err := s.db.Begin(ctx)
+	page := Page{After: after, Count: 0, More: false}
+	prepare := func(ctx context.Context) error { return s.Prepare(ctx, organizationID) }
+	err := inTx(ctx, s.db, prepare, func(tx pgx.Tx) error {
+		ids, err := repo.New(tx).Backfill(ctx, repo.BackfillParams{ProjectID: project(projectID), OrganizationID: organizationID, AfterID: after, PageLimit: limit + 1})
+		if err != nil {
+			return safe(err)
+		}
+		page.More = len(ids) > int(limit)
+		ids = ids[:min(len(ids), int(limit))]
+		if err := s.Capture(ctx, tx, organizationID, projectID, ids); err != nil {
+			return err
+		}
+		page.Count = len(ids)
+		if len(ids) > 0 {
+			page.After = ids[len(ids)-1]
+		}
+		return nil
+	})
 	if err != nil {
-		return Page{}, safe(err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	ids, err := repo.New(tx).Backfill(ctx, repo.BackfillParams{ProjectID: project(projectID), OrganizationID: organizationID, AfterID: after, PageLimit: limit + 1})
-	if err != nil {
-		return Page{}, safe(err)
-	}
-	more := len(ids) > int(limit)
-	if more {
-		ids = ids[:limit]
-	}
-	if err = s.Capture(ctx, tx, organizationID, projectID, ids); err != nil {
 		return Page{}, err
-	}
-	if err = tx.Commit(ctx); err != nil {
-		return Page{}, safe(err)
-	}
-	page := Page{After: after, Count: len(ids), More: more}
-	if len(ids) > 0 {
-		page.After = ids[len(ids)-1]
 	}
 	return page, nil
 }

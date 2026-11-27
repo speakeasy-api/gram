@@ -289,7 +289,14 @@ type Beginner interface {
 // calls KMS while the transaction is open, and a key that will not load fails
 // the call before anything is written. An error from fn rolls back.
 func (t *Transcripts) InTx(ctx context.Context, db Beginner, organizationID string, projectID uuid.UUID, fn func(pgx.Tx) error) error {
-	if err := t.Prepare(ctx, organizationID, projectID); err != nil {
+	prepare := func(ctx context.Context) error { return t.Prepare(ctx, organizationID, projectID) }
+	return inTx(ctx, db, prepare, fn)
+}
+
+// inTx loads the key with prepare, then runs fn in a new transaction on db
+// and commits it. Every transaction that writes protected fields opens here.
+func inTx(ctx context.Context, db Beginner, prepare func(context.Context) error, fn func(pgx.Tx) error) error {
+	if err := prepare(ctx); err != nil {
 		return err
 	}
 	tx, err := db.Begin(ctx)
