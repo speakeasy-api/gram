@@ -112,16 +112,20 @@ func (p *protector) finish(ctx context.Context, chatID, messageID uuid.UUID, w w
 }
 
 // observe runs op in a span named name and records it in the metrics pick
-// chooses, as count messages. In plaintext mode it only runs op.
-func (p *protector) observe(ctx context.Context, name string, pick func(*storeMetrics) operationMetrics, count int, op func(context.Context) error) error {
+// chooses. count is the messages op was given; op returns how many it wrote.
+// In plaintext mode it only runs op.
+func (p *protector) observe(ctx context.Context, name string, pick func(*storeMetrics) operationMetrics, count int, op func(context.Context) (int, error)) error {
 	return p.store.observe(ctx, name, pick, p.organizationID, p.projectID, count, op)
 }
 
 // observe runs op in a span named name and records its duration, outcome and
-// message count in the metrics pick chooses. A nil store only runs op.
-func (s *Store) observe(ctx context.Context, name string, pick func(*storeMetrics) operationMetrics, organizationID string, projectID uuid.UUID, count int, op func(context.Context) error) error {
+// message count in the metrics pick chooses. A call that wrote nothing and
+// failed nothing, such as a retried import, is not recorded. A nil store only
+// runs op.
+func (s *Store) observe(ctx context.Context, name string, pick func(*storeMetrics) operationMetrics, organizationID string, projectID uuid.UUID, count int, op func(context.Context) (int, error)) error {
 	if s == nil {
-		return op(ctx)
+		_, err := op(ctx)
+		return err
 	}
 	ctx, span := s.tracer.Start(ctx, name, trace.WithAttributes(
 		attr.ProjectID(projectID.String()),
@@ -131,9 +135,11 @@ func (s *Store) observe(ctx context.Context, name string, pick func(*storeMetric
 	defer span.End()
 
 	start := time.Now()
-	err := op(ctx)
+	written, err := op(ctx)
 	result := classify(err)
-	pick(s.metrics).record(ctx, projectID, count, time.Since(start), result)
+	if written > 0 || err != nil {
+		pick(s.metrics).record(ctx, projectID, count, time.Since(start), result)
+	}
 
 	span.SetAttributes(attr.Outcome(result))
 	if err != nil {
@@ -154,19 +160,24 @@ func (t *Transcripts) InsertChatMessages(ctx context.Context, db chatrepo.DBTX, 
 	if len(params) == 0 {
 		return 0, nil
 	}
+	for _, r := range params {
+		if r.ProjectID != projectID {
+			return 0, fmt.Errorf("%w: a message belongs to another project", ErrInvalid)
+		}
+	}
 	p, err := t.protector(ctx, db, organizationID, projectID)
 	if err != nil {
 		return 0, err
 	}
 	var n int64
-	err = p.observe(ctx, "transcriptstore.Capture", captureMetrics, len(params), func(ctx context.Context) error {
+	err = p.observe(ctx, "transcriptstore.Capture", captureMetrics, len(params), func(ctx context.Context) (int, error) {
 		fields := make([]transcriptcrypto.ProtectedFields, len(params))
 		for i, r := range params {
 			fields[i] = insertedFields(r.Content, r.ContentRaw, r.ToolCalls, r.StorageError)
 		}
 		writes, err := p.prepare(ctx, fields)
 		if err != nil {
-			return err
+			return 0, err
 		}
 		rows := make([]repo.InsertChatMessagesParams, len(params))
 		for i, r := range params {
@@ -174,14 +185,14 @@ func (t *Transcripts) InsertChatMessages(ctx context.Context, db chatrepo.DBTX, 
 		}
 		n, err = p.q.InsertChatMessages(ctx, rows)
 		if err != nil {
-			return fmt.Errorf("create chat messages: %w", err)
+			return 0, fmt.Errorf("create chat messages: %w", err)
 		}
 		for i, r := range params {
 			if err := p.finish(ctx, r.ChatID, r.ID, writes[i]); err != nil {
-				return err
+				return 0, err
 			}
 		}
-		return nil
+		return len(params), nil
 	})
 	if err != nil {
 		return 0, err
@@ -193,25 +204,31 @@ func (t *Transcripts) InsertChatMessages(ctx context.Context, db chatrepo.DBTX, 
 // same external message ID is already in the chat. It reports whether it
 // inserted.
 func (t *Transcripts) InsertExternalChatMessage(ctx context.Context, db chatrepo.DBTX, organizationID string, projectID uuid.UUID, params chatrepo.CreateExternalChatMessageParams) (bool, error) {
+	if params.ProjectID != projectID {
+		return false, fmt.Errorf("%w: the message belongs to another project", ErrInvalid)
+	}
 	p, err := t.protector(ctx, db, organizationID, projectID)
 	if err != nil {
 		return false, err
 	}
 	inserted := false
-	err = p.observe(ctx, "transcriptstore.Capture", captureMetrics, 1, func(ctx context.Context) error {
+	err = p.observe(ctx, "transcriptstore.Capture", captureMetrics, 1, func(ctx context.Context) (int, error) {
 		writes, err := p.prepare(ctx, []transcriptcrypto.ProtectedFields{insertedFields(params.Content, params.ContentRaw, params.ToolCalls, params.StorageError)})
 		if err != nil {
-			return err
+			return 0, err
 		}
 		id, err := p.q.InsertExternalChatMessage(ctx, externalRow(params, writes[0]))
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil
+			return 0, nil
 		}
 		if err != nil {
-			return fmt.Errorf("create external chat message: %w", err)
+			return 0, fmt.Errorf("create external chat message: %w", err)
 		}
 		inserted = true
-		return p.finish(ctx, params.ChatID, id, writes[0])
+		if err := p.finish(ctx, params.ChatID, id, writes[0]); err != nil {
+			return 0, err
+		}
+		return 1, nil
 	})
 	if err != nil {
 		return false, err
@@ -228,30 +245,36 @@ func (t *Transcripts) InsertExternalChatMessage(ctx context.Context, db chatrepo
 // columns.
 func (t *Transcripts) UpsertCorrelatedChatMessage(ctx context.Context, db chatrepo.DBTX, organizationID string, projectID uuid.UUID, params chatrepo.UpsertCorrelatedChatMessageParams) (chatrepo.UpsertCorrelatedChatMessageRow, bool, error) {
 	var stored chatrepo.UpsertCorrelatedChatMessageRow
+	if params.ProjectID != projectID {
+		return stored, false, fmt.Errorf("%w: the message belongs to another project", ErrInvalid)
+	}
 	p, err := t.protector(ctx, db, organizationID, projectID)
 	if err != nil {
 		return stored, false, err
 	}
 	found := false
-	err = p.observe(ctx, "transcriptstore.Capture", captureMetrics, 1, func(ctx context.Context) error {
+	err = p.observe(ctx, "transcriptstore.Capture", captureMetrics, 1, func(ctx context.Context) (int, error) {
 		writes, err := p.prepare(ctx, []transcriptcrypto.ProtectedFields{insertedFields(params.Content, params.ContentRaw, params.ToolCalls, params.StorageError)})
 		if err != nil {
-			return err
+			return 0, err
 		}
 		row, err := p.q.UpsertCorrelatedChatMessage(ctx, correlatedRow(params, writes[0]))
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil
+			return 0, nil
 		}
 		if err != nil {
-			return fmt.Errorf("upsert correlated chat message: %w", err)
+			return 0, fmt.Errorf("upsert correlated chat message: %w", err)
 		}
 		found = true
 		stored = chatrepo.UpsertCorrelatedChatMessageRow(row)
 		if !row.Inserted {
-			return nil
+			return 0, nil
 		}
 		stored.Content, stored.ToolCalls = params.Content, params.ToolCalls
-		return p.finish(ctx, params.ChatID, row.ID, writes[0])
+		if err := p.finish(ctx, params.ChatID, row.ID, writes[0]); err != nil {
+			return 0, err
+		}
+		return 1, nil
 	})
 	if err != nil {
 		return stored, false, err

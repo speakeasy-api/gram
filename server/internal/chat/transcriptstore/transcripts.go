@@ -279,6 +279,11 @@ func (t *Transcripts) Open(ctx context.Context, organizationID string, projectID
 // OpenRows is Open for a page of rows of any sqlc row type. targetOf maps a
 // row to its target.
 func OpenRows[T any](ctx context.Context, t *Transcripts, organizationID string, projectID uuid.UUID, rows []T, targetOf func(*T) OpenTarget) error {
+	// Plaintext reads build no targets. This is Open's read mode, so a reader
+	// opens transcripts another process sealed for a flag-enabled organization.
+	if len(rows) == 0 || t.readMode(ctx, projectID) == ModePlaintext {
+		return nil
+	}
 	targets := make([]OpenTarget, len(rows))
 	for i := range rows {
 		targets[i] = targetOf(&rows[i])

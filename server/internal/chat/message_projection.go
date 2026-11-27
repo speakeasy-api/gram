@@ -44,7 +44,8 @@ func (w *ChatMessageWriter) ProjectMessage(ctx context.Context, projectID, messa
 }
 
 // projectMessage is ProjectMessage inside its transaction. It returns how many
-// rows changed and the write it applied.
+// rows changed and the write build produced, which was applied only when that
+// count is above zero.
 func (w *ChatMessageWriter) projectMessage(ctx context.Context, tx pgx.Tx, projectID, messageID uuid.UUID,
 	guard func(context.Context, pgx.Tx) error,
 	build func(*repo.ChatMessage) (MessageWrite, bool, error),

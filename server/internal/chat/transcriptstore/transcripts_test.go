@@ -484,3 +484,18 @@ func (f *fixture) insert(t *testing.T, transcripts *Transcripts, id uuid.UUID) r
 	require.NoError(t, err)
 	return row.ChatMessage
 }
+
+// An insert seals and measures under its own project, so a row that names
+// another project is refused before anything is written.
+func TestInsertRefusesAnotherProjectsMessage(t *testing.T) {
+	t.Parallel()
+	f := setup(t, true)
+	transcripts := NewTranscripts(f.store, f.project)
+	other := chatrepo.CreateChatMessageParams{ID: uuid.New(), ChatID: f.chat, Role: "user", ProjectID: uuid.New(), Content: "EXAMPLE"}
+	_, err := transcripts.InsertChatMessages(t.Context(), f.db, f.org, f.project, []chatrepo.CreateChatMessageParams{other})
+	require.ErrorIs(t, err, ErrInvalid)
+	_, err = transcripts.InsertExternalChatMessage(t.Context(), f.db, f.org, f.project, chatrepo.CreateExternalChatMessageParams{ID: uuid.New(), ChatID: f.chat, Role: "user", ProjectID: uuid.New(), Content: "EXAMPLE"})
+	require.ErrorIs(t, err, ErrInvalid)
+	_, _, err = transcripts.UpsertCorrelatedChatMessage(t.Context(), f.db, f.org, f.project, chatrepo.UpsertCorrelatedChatMessageParams{ID: uuid.New(), ChatID: f.chat, Role: "user", ProjectID: uuid.New(), Content: "EXAMPLE"})
+	require.ErrorIs(t, err, ErrInvalid)
+}

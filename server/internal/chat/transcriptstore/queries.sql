@@ -96,8 +96,8 @@ LEFT JOIN chat_message_transcripts t ON t.message_id = m.id AND t.project_id = c
 WHERE c.project_id = @project_id AND p.organization_id = @organization_id;
 
 -- name: LoadMany :many
--- Every message in the project, with its current transcript or an empty
--- ciphertext when it has none. Legacy transcripts that still carry
+-- Each requested message in the project, with its current transcript or an
+-- empty ciphertext when it has none. Legacy transcripts that still carry
 -- source_hash read as missing, as in Load.
 SELECT m.id, m.chat_id, m.content, m.content_raw, m.tool_calls,
        m.tool_outcome_notes, m.tool_call_summaries, m.storage_error,

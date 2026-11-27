@@ -465,8 +465,8 @@ type LoadManyRow struct {
 	Ciphertext        string
 }
 
-// Every message in the project, with its current transcript or an empty
-// ciphertext when it has none. Legacy transcripts that still carry
+// Each requested message in the project, with its current transcript or an
+// empty ciphertext when it has none. Legacy transcripts that still carry
 // source_hash read as missing, as in Load.
 func (q *Queries) LoadMany(ctx context.Context, arg LoadManyParams) ([]LoadManyRow, error) {
 	rows, err := q.db.Query(ctx, loadMany, arg.MessageIds, arg.ProjectID, arg.OrganizationID)

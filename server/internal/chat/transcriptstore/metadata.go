@@ -11,8 +11,9 @@ import (
 // metadata is the plaintext-free description of a message that every write
 // stores in chat_messages, in every mode, so readers can count, budget and
 // look up tool calls without reading or decrypting the protected fields. It is
-// measured from the same value the write stores and seals, in the same
-// statement as the row, so the two always describe the same protected fields.
+// measured from the protected fields the write seals (the full value, even in
+// encrypted mode where the columns are written empty) and written in the same
+// statement as the row, so it always describes that value.
 type metadata struct {
 	toolCallCount   int32
 	contentBytes    int32

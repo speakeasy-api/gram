@@ -128,7 +128,7 @@ func (s *Store) Capture(ctx context.Context, db repo.DBTX, organizationID string
 	if err != nil {
 		return err
 	}
-	return p.observe(ctx, "transcriptstore.Capture", captureMetrics, len(messageIDs), func(ctx context.Context) error {
+	return p.observe(ctx, "transcriptstore.Capture", captureMetrics, len(messageIDs), func(ctx context.Context) (int, error) {
 		ids := append([]uuid.UUID(nil), messageIDs...)
 		sort.Slice(ids, func(i, j int) bool { return bytes.Compare(ids[i][:], ids[j][:]) < 0 })
 		for i, id := range ids {
@@ -137,13 +137,13 @@ func (s *Store) Capture(ctx context.Context, db repo.DBTX, organizationID string
 			}
 			row, err := lockChatMessage(ctx, p.q, organizationID, projectID, id)
 			if err != nil {
-				return err
+				return 0, err
 			}
 			if err := p.reseal(ctx, row.ChatMessage); err != nil {
-				return err
+				return 0, err
 			}
 		}
-		return nil
+		return len(messageIDs), nil
 	})
 }
 
@@ -203,10 +203,11 @@ func (p *protector) update(ctx context.Context, chatID, messageID uuid.UUID, app
 		return false, ErrInvalid
 	}
 	changed := false
-	err := p.observe(ctx, "transcriptstore.UpdateChatMessage", updateMetrics, 1, func(ctx context.Context) error {
+	// Every update counts, changed or not, as one checked message.
+	err := p.observe(ctx, "transcriptstore.UpdateChatMessage", updateMetrics, 1, func(ctx context.Context) (int, error) {
 		var err error
 		changed, err = p.updateRow(ctx, chatID, messageID, apply)
-		return err
+		return 1, err
 	})
 	return changed, err
 }
