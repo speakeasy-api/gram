@@ -18565,7 +18565,7 @@ COMMENT ON COLUMN assistant_ate_actors.workload_binding_json IS 'Serialized work
 COMMENT ON COLUMN assistant_ate_actors.warm_until IS 'Deadline after which an idle running actor is eligible for synchronous suspend.
 @access: confidential';
 COMMENT ON COLUMN assistant_ate_actors.initiating_user_id IS 'WorkOS user ID of the human who initiated this thread, or NULL for userless or unrecorded actors. Immutable after insert.
-@access: confidential';
+@access: confidential-pii';
 COMMENT ON COLUMN assistant_ate_actors.initiating_user_resolution IS 'How initiating_user_id was resolved at thread actor creation (Go constants are canonical; defaults to not_recorded for pre-existing rows). Immutable after insert.
 @access: confidential';
 COMMENT ON COLUMN assistant_ate_actors.created_at IS '@access: confidential';
