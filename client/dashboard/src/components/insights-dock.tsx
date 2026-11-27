@@ -1340,12 +1340,15 @@ export function InsightsProvider({
   // Bump the runtime key so a fresh conversation opens, then queue the prompt
   // for the bridge to append once the new runtime mounts. Nonce defeats
   // reference-equality skipping when the same chart is clicked twice in a row.
-  const handleSendPrompt = useCallback((text: string) => {
-    setRuntimeKey((k) => k + 1);
-    setPendingPrompt({ text, nonce: Date.now() });
-    // Sending always drops into the live conversation, never the history list.
-    setHistoryView(false);
-  }, []);
+  const handleSendPrompt = useCallback(
+    (text: string, options?: { newConversation?: boolean }) => {
+      if (options?.newConversation !== false) setRuntimeKey((k) => k + 1);
+      setPendingPrompt({ text, nonce: Date.now() });
+      // Sending always drops into the live conversation, never the history list.
+      setHistoryView(false);
+    },
+    [],
+  );
 
   // Docked-pill "Continue chat": reopen the recent conversation as its own
   // full page. Navigating (rather than reopening the dock panel) loads the
@@ -1415,6 +1418,9 @@ export function InsightsProvider({
   // chat id from the server on the first send.
   const handleStartFresh = useCallback(() => {
     setRuntimeKey((k) => k + 1);
+    // A prompt still waiting on the old conversation must not land in the
+    // new one.
+    setPendingPrompt(null);
     setHistoryView(false);
   }, []);
 
@@ -1876,20 +1882,27 @@ function PendingPromptBridge({
   const isThreadReady = useAuiState(
     ({ thread }) => !thread.isLoading && !thread.isDisabled,
   );
+  const isRunning = useAuiState(({ thread }) => thread.isRunning);
   const firedNonceRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!pending || !isThreadReady) return;
+    // A new prompt interrupts a running reply, like the composer's stop
+    // button; the effect runs again once the run has stopped.
+    if (isRunning) {
+      thread.cancelRun();
+      return;
+    }
     if (firedNonceRef.current === pending.nonce) return;
-    firedNonceRef.current = pending.nonce;
 
-    const { text } = pending;
+    const { text, nonce } = pending;
 
     // On a cold open the main thread is a placeholder (assistant-ui's
     // EMPTY_THREAD_CORE) until the remote thread-list runtime binds the real
     // thread core. The placeholder reports isLoading/isDisabled false but
     // throws on append, so a throw here means nothing was sent — leave the
-    // prompt queued and retry on the next runtime event. A successful append
+    // prompt queued (nonce unmarked) and retry on the next runtime event. A
+    // successful append
     // marks `done` immediately and never retries: the optimistic message lands
     // asynchronously, so a post-append "did it land?" check races and
     // re-appending duplicates the send.
@@ -1897,6 +1910,7 @@ function PendingPromptBridge({
 
     const finish = () => {
       done = true;
+      firedNonceRef.current = nonce;
       onConsume();
     };
 
@@ -1919,7 +1933,7 @@ function PendingPromptBridge({
     return () => {
       done = true;
     };
-  }, [pending, isThreadReady, thread, onConsume]);
+  }, [pending, isThreadReady, isRunning, thread, onConsume]);
 
   return null;
 }
