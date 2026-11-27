@@ -55,6 +55,7 @@ func newApp() *cli.App {
 			newIntentPoliciesImportCommand(),
 			newAppSeedCommand(),
 			newReplaySessionObservationsCommand(),
+			newTranscriptShadowBackfillCommand(),
 			newAdminSeedCommand(),
 			newCustomerUsageSeedCommand(),
 			newAccountStateCommand(),

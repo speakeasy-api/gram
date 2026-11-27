@@ -2,6 +2,7 @@ package transcriptstore
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -11,6 +12,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptcrypto"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore/repo"
 )
+
+// ErrNotEnabled means the project does not have encrypted transcripts, so it
+// has nothing to backfill or measure. Sealing copies for such a project would
+// leave encrypted copies that go stale on its next write.
+var ErrNotEnabled = errors.New("project does not have encrypted transcripts")
 
 // Transcripts is the one entry point for the protected fields of chat messages. It owns
 // the decision a caller would otherwise repeat: whether a project has encrypted
@@ -72,6 +78,36 @@ func (t *Transcripts) Prepare(ctx context.Context, organizationID string, projec
 		return fmt.Errorf("prepare encrypted chat transcript: %w", err)
 	}
 	return nil
+}
+
+// Backfill seals one page of the project's existing messages after the
+// cursor, with the same metadata as a live insert. The page commits whole or
+// not at all: on error nothing is sealed and the cursor does not advance, so
+// the caller resumes from the same cursor. It returns ErrNotEnabled for a
+// project that does not have encrypted transcripts.
+func (t *Transcripts) Backfill(ctx context.Context, organizationID string, projectID, after uuid.UUID, limit int32) (Page, error) {
+	if !t.Enabled(projectID) {
+		return Page{After: after, Count: 0, More: false}, ErrNotEnabled
+	}
+	page, err := t.store.Backfill(ctx, organizationID, projectID, after, limit)
+	if err != nil {
+		return page, fmt.Errorf("backfill encrypted transcripts: %w", err)
+	}
+	return page, nil
+}
+
+// Progress reports how many of the project's messages have current encrypted
+// transcripts. It returns ErrNotEnabled for a project that does not have
+// encrypted transcripts.
+func (t *Transcripts) Progress(ctx context.Context, organizationID string, projectID uuid.UUID) (Progress, error) {
+	if !t.Enabled(projectID) {
+		return Progress{Current: 0, Waiting: 0, Unattributed: 0}, ErrNotEnabled
+	}
+	progress, err := t.store.Progress(ctx, organizationID, projectID)
+	if err != nil {
+		return progress, fmt.Errorf("read encrypted transcript coverage: %w", err)
+	}
+	return progress, nil
 }
 
 // Mode is how a project stores protected fields.

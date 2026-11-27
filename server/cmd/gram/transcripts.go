@@ -42,6 +42,26 @@ func parseTranscriptShadowProjectIDs(values []string) ([]uuid.UUID, error) {
 // project has encrypted transcripts.
 func configureTranscripts(ctx context.Context, c *cli.Context, db *pgxpool.Pool, writer *chat.ChatMessageWriter, orgEncryption orgEncryptionDeps, logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider) (*transcriptstore.Transcripts, error) {
 	var none *transcriptstore.Transcripts
+	// Check the writer before newTranscripts provisions any key.
+	if writer == nil && len(c.StringSlice(chatTranscriptShadowProjectIDsFlag)) > 0 {
+		return none, fmt.Errorf("encrypted chat transcripts require a writer")
+	}
+	transcripts, err := newTranscripts(ctx, c, db, orgEncryption, logger, tracerProvider, meterProvider)
+	if err != nil || transcripts == nil {
+		return none, err
+	}
+	writer.WithTranscripts(transcripts)
+	// Sealing runs inside write transactions: keep the transcript key warm so
+	// a request does not wait for KMS each time the cached key expires.
+	go orgEncryption.Service.KeepWarm(ctx, orgencryption.UseCaseChatTranscripts)
+	return transcripts, nil
+}
+
+// newTranscripts builds Transcripts for the projects with encrypted
+// transcripts and provisions each of their organizations' keys. It returns
+// nil when no project has encrypted transcripts.
+func newTranscripts(ctx context.Context, c *cli.Context, db *pgxpool.Pool, orgEncryption orgEncryptionDeps, logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider) (*transcriptstore.Transcripts, error) {
+	var none *transcriptstore.Transcripts
 	values := c.StringSlice(chatTranscriptShadowProjectIDsFlag)
 	if len(values) == 0 {
 		// An explicitly supplied blank must not silently disable the feature.
@@ -57,8 +77,8 @@ func configureTranscripts(ctx context.Context, c *cli.Context, db *pgxpool.Pool,
 	if orgEncryption.Service == nil || orgEncryption.Provisioner == nil {
 		return none, fmt.Errorf("chat transcript shadow mode requires organization encryption service and provisioner")
 	}
-	if db == nil || writer == nil {
-		return none, fmt.Errorf("chat transcript shadow mode requires database and writer")
+	if db == nil {
+		return none, fmt.Errorf("encrypted chat transcripts require a database")
 	}
 	queries := chatrepo.New(db)
 	organizations := make([]string, 0, len(projectIDs))
@@ -87,10 +107,5 @@ func configureTranscripts(ctx context.Context, c *cli.Context, db *pgxpool.Pool,
 			return none, fmt.Errorf("provision chat transcript encryption: %w", err)
 		}
 	}
-	transcripts := transcriptstore.NewTranscripts(store, projectIDs...)
-	writer.WithTranscripts(transcripts)
-	// Sealing runs inside write transactions: keep the transcript key warm so
-	// a request does not wait for KMS each time the cached key expires.
-	go orgEncryption.Service.KeepWarm(ctx, orgencryption.UseCaseChatTranscripts)
-	return transcripts, nil
+	return transcriptstore.NewTranscripts(store, projectIDs...), nil
 }

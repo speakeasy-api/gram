@@ -133,6 +133,41 @@ func TestTranscriptsGateByProject(t *testing.T) {
 	require.Equal(t, "sensitive example", opened.Content)
 }
 
+func TestTranscriptsBackfillGatesByProjectAndFillsMetadata(t *testing.T) {
+	t.Parallel()
+	f := setup(t, true)
+	id := uuid.New()
+	f.add(t, id)
+	fixtures := fixturerepo.New(f.db)
+
+	var none *Transcripts
+	_, err := none.Backfill(t.Context(), f.org, f.project, uuid.Nil, 10)
+	require.ErrorIs(t, err, ErrNotEnabled)
+	_, err = none.Progress(t.Context(), f.org, f.project)
+	require.ErrorIs(t, err, ErrNotEnabled)
+
+	other := NewTranscripts(f.store, uuid.New())
+	_, err = other.Backfill(t.Context(), f.org, f.project, uuid.Nil, 10)
+	require.ErrorIs(t, err, ErrNotEnabled)
+	_, err = fixtures.MessageMetadata(t.Context(), id)
+	require.Error(t, err, "a project off the list backfills nothing")
+
+	enabled := NewTranscripts(f.store, f.project)
+	page, err := enabled.Backfill(t.Context(), f.org, f.project, uuid.Nil, 10)
+	require.NoError(t, err)
+	require.Equal(t, Page{After: id, Count: 1, More: false}, page)
+	meta, err := fixtures.MessageMetadata(t.Context(), id)
+	require.NoError(t, err)
+	require.Equal(t, pgtype.Int4{Int32: 1, Valid: true}, meta.ToolCallCount, "backfill fills metadata like a live capture")
+	ids, err := fixtures.ToolCallIDs(t.Context(), id)
+	require.NoError(t, err)
+	require.Equal(t, []string{"example"}, ids)
+
+	progress, err := enabled.Progress(t.Context(), f.org, f.project)
+	require.NoError(t, err)
+	require.Equal(t, Progress{Current: 1, Waiting: 0, Unattributed: 0}, progress)
+}
+
 type openRow struct {
 	id           uuid.UUID
 	content      string

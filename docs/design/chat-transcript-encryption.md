@@ -16,6 +16,15 @@ Legacy transcripts with an unkeyed `source_hash` read as missing until `Backfill
 
 `chat.transcript_shadow.read.messages` and `.update.checks` count every outcome.
 
+## Backfill
+
+`gram transcript-shadow-backfill --project-id <PROJECT_ID>` reports coverage (`current`, `waiting`, `unattributed`). Add `--apply --confirm-environment "$GRAM_ENVIRONMENT"` to seal. Run it from a server pod: it builds the same `Transcripts` as server startup and seals through `Transcripts.Backfill`, so each message gets the same metadata and `chat_message_tool_call_ids` rows as a live insert.
+
+- It refuses a project off the allowlist (`ErrNotEnabled`): that project seals nothing new and its updates leave transcripts stale.
+- Each page (default 200, at most 500) commits whole or not at all and reseals every message in it, which clears `source_hash`.
+- A run that stops early prints a `--after` cursor to resume from. Start each new sweep from the zero cursor to cover messages inserted below the last one.
+- `waiting` counts messages with no transcript or only a legacy one; it does not authenticate ciphertext. `unattributed` messages carry a project other than their chat's; backfill skips them until their ownership is repaired. A project is covered at `waiting=0` and `unattributed=0`.
+
 ## Rollout
 
 1. Deploy with an empty allowlist.
