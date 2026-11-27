@@ -142,7 +142,7 @@ func validateKitBootstrap(b KitLocalBootstrap) error {
 
 // kitLocalBootstrapPayload builds the versioned kit-ate-init wire v2 payload for
 // a local thread container, delivering bootstrap files and non-secret env vars
-// over the loopback init endpoint instead of docker cp.
+// over the loopback init endpoint.
 func kitLocalBootstrapPayload(b KitLocalBootstrap, extraEnv map[string]string) ([]byte, error) {
 	if err := validateKitLocalBootstrap(b); err != nil {
 		return nil, err

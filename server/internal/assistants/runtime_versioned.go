@@ -257,9 +257,9 @@ func (v *versionedRuntimeBackend) PrepareRuntimeSwitch(ctx context.Context, assi
 	}
 	for _, row := range rows {
 		if isRetiredKitBackend(row) {
-			// Leftover rows referencing the removed Kit GKE backend have no
-			// live backend to settle; let finishRuntimeSwitchRetirement revoke
-			// their workload admission and clear them.
+			// Rows whose Kit backend this server cannot serve have no live
+			// backend to settle; let finishRuntimeSwitchRetirement revoke their
+			// workload admission and clear them.
 			continue
 		}
 		source, err := v.route(row)

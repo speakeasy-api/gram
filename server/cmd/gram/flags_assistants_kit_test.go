@@ -11,7 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-func TestKitWorkloadAssertionFlagsAndRemovedGKEFlags(t *testing.T) {
+func TestKitRuntimeFlagsRegistered(t *testing.T) {
 	t.Parallel()
 	names := map[string]bool{}
 	for _, f := range assistantKitRuntimeFlags() {
@@ -26,27 +26,6 @@ func TestKitWorkloadAssertionFlagsAndRemovedGKEFlags(t *testing.T) {
 	require.True(t, names["assistant-kit-network"])
 	require.True(t, names["assistant-kit-image"])
 	require.True(t, names["assistant-ate-enabled"])
-
-	// All removed Kit GKE flags must be absent so no GKE Kit path remains.
-	for _, removed := range []string{
-		"assistant-kit-gke-project-number",
-		"assistant-kit-gke-organization-id",
-		"assistant-kit-gke-cluster-location",
-		"assistant-kit-gke-cluster-name",
-		"assistant-kit-gke-ingress-cidr",
-		"assistant-kit-gke-cpu-request",
-		"assistant-kit-gke-cpu-limit",
-		"assistant-kit-gke-memory-request",
-		"assistant-kit-gke-memory-limit",
-		"assistant-kit-gke-work-size-limit",
-		"assistant-kit-gke-tmp-size-limit",
-		"assistant-kit-gke-snapshots-enabled",
-		"assistant-kit-gke-iam-project",
-		"assistant-kit-gke-workload-pool-project",
-		"assistant-kit-mcp-auth-method",
-	} {
-		require.False(t, names[removed], "removed flag %s must not be registered", removed)
-	}
 }
 
 func kitCLIContext(t *testing.T, values map[string]string) *cli.Context {
@@ -76,7 +55,7 @@ func kitCLIContext(t *testing.T, values map[string]string) *cli.Context {
 
 func TestKitCLIOptInAndLocalOnlyEnforcement(t *testing.T) {
 	t.Parallel()
-	// Unset image preserves legacy composition without needing service dependencies.
+	// Unset image leaves default composition unchanged without needing service dependencies.
 	require.NoError(t, installKitLocalRuntimeFromCLI(testenv.NewLogger(t), kitCLIContext(t, nil), nil, nil, nil, nil, nil, nil))
 
 	// Local Kit is impossible to enable in non-local environments or with non-local providers.

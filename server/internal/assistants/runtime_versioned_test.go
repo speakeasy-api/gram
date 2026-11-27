@@ -57,25 +57,3 @@ func TestVersionedRuntimeNeverFallsBackForUnconfiguredKit(t *testing.T) {
 	require.Error(t, backend.Stop(t.Context(), record))
 	require.Zero(t, legacy.stopCount)
 }
-
-func TestVersionedRuntimeClassifiesRetiredKitGKEBackend(t *testing.T) {
-	t.Parallel()
-	legacy := &stubRuntimeBackend{name: runtimeBackendGKE}
-	kit := &readyKitBackend{stubRuntimeBackend: &stubRuntimeBackend{name: runtimeBackendATE}}
-	backend := &versionedRuntimeBackend{legacy: legacy, kit: kit}
-	record := testRuntimeRecord(runtimeBackendGKE)
-	record.RuntimeVersion = 3
-	_, err := backend.Ensure(t.Context(), record)
-	require.ErrorIs(t, err, errKitRetiredBackend)
-	require.ErrorIs(t, backend.RunTurn(t.Context(), record, runTurnRequest{}), errKitRetiredBackend)
-	require.ErrorIs(t, backend.Reap(t.Context(), record), errKitRetiredBackend)
-	require.Zero(t, legacy.runTurnCount)
-	require.Zero(t, kit.runTurnCount)
-
-	// Runtime switch treats leftover retired Kit GKE rows as settled so the
-	// assistant can switch cleanly and schedule workload revocation cleanup.
-	ready, err := backend.PrepareRuntimeSwitch(t.Context(), assistantRecord{}, []assistantRuntimeRecord{record}, 2)
-	require.NoError(t, err)
-	require.True(t, ready.Settled)
-	require.True(t, ready.DestinationReady)
-}

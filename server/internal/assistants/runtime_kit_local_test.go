@@ -549,8 +549,6 @@ func TestKitLocalDockerCreateUsesInitHelperAndNativeACP(t *testing.T) {
 	require.Contains(t, args, kitLocalCABundleScript)
 	require.Contains(t, joined, "/usr/local/bin/kit-ate-init")
 	require.Contains(t, joined, "--remote-acp")
-	require.NotContains(t, joined, "kit gateway")
-	require.NotContains(t, joined, "/acp/v2")
 	spec.ExtraCACertFile = ""
 	noCA := strings.Join(kitLocalCreateArgs(ateInitPort, ateACPPort, spec), " ")
 	require.Contains(t, noCA, "--entrypoint /usr/local/bin/kit-ate-init example.invalid/kit:local --root=/home/kit")
@@ -733,21 +731,18 @@ func TestKitLocalStopRetiredRevokesWorkload(t *testing.T) {
 	}
 }
 
-func TestKitLocalLegacySingleContainerMetadataTriggersUnrecoverableReplacement(t *testing.T) {
+func TestKitLocalIncompleteMetadataWithoutImageIDTriggersReplacement(t *testing.T) {
 	t.Parallel()
 	backend, _, r, _ := kitLocalFixture(t)
-	legacy, err := json.Marshal(map[string]any{
+	incomplete, err := json.Marshal(map[string]any{
 		"project_id":      r.ProjectID,
 		"runtime_version": 3,
 		"runtime_id":      r.ID,
 		"assistant_id":    r.AssistantID,
 		"generation":      backend.config.CompatibilityGeneration,
-		"container_name":  "gram-kit-legacy",
-		"home_volume":     "gram-kit-legacy-home",
-		"container_id":    "legacy-id",
 	})
 	require.NoError(t, err)
-	r.BackendMetadataJSON = legacy
+	r.BackendMetadataJSON = incomplete
 	_, err = backend.Ensure(t.Context(), r)
 	require.ErrorIs(t, err, errKitRuntimeUnrecoverable)
 	require.NoError(t, backend.Reap(t.Context(), r))

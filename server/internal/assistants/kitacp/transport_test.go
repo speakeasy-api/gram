@@ -476,12 +476,11 @@ func TestDialClosesConnectionWhenStreamAttachFails(t *testing.T) {
 func TestTransportRejectsNonExactEndpoints(t *testing.T) {
 	t.Parallel()
 	for _, endpoint := range []string{
-		"http://example.com/acp", "http://example.com/acp/v2", "https://example.com/acp/v2", "http://localhost/acp/v2",
-		"http://192.0.2.1/acp", "http://[2001:db8::1]/acp",
-		"http://example.com/", "http://example.com/acp/", "http://example.com/acp/v2/",
+		"http://example.com/acp", "http://192.0.2.1/acp", "http://[2001:db8::1]/acp",
+		"https://example.com/", "https://example.com/acp/", "https://example.com/acp/other",
 		"http://example.com/acp?", "http://example.com/acp?x=1", "http://example.com/acp#",
 		"http://example.com/acp#fragment", "http://user@example.com/acp", "ftp://example.com/acp",
-		"http://example.com/%61cp", "http://example.com/acp%2fv2", "http://example.com/acp/v3",
+		"https://example.com/%61cp", "https://example.com/acp%2fother",
 	} {
 		t.Run(endpoint, func(t *testing.T) {
 			t.Parallel()

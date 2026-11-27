@@ -36,9 +36,6 @@ func TestKitLifecycleCapabilityIsProductionOnly(t *testing.T) {
 	r.Backend = runtimeBackendLocal
 	_, err = kitIdleCheckpointCapability(b, r)
 	require.Error(t, err)
-	r.Backend = runtimeBackendGKE
-	_, err = kitIdleCheckpointCapability(b, r)
-	require.Error(t, err)
 	r.Backend, r.RuntimeVersion = runtimeBackendATE, 2
 	_, err = kitIdleCheckpointCapability(b, r)
 	require.Error(t, err)
@@ -142,16 +139,38 @@ func TestKitLifecycleNewAssistantSelectionOnly(t *testing.T) {
 	require.EqualValues(t, 2, row.RuntimeVersion)
 }
 
-func TestLeftoverKitGKERowRetiresCleanlyInTurnAndReaper(t *testing.T) {
+func TestUnservableKitRuntimeBackendRetiresAndReplacesCleanly(t *testing.T) {
 	t.Parallel()
+
+	t.Run("router refuses execution and settles switch", func(t *testing.T) {
+		t.Parallel()
+		v2Backend := &stubRuntimeBackend{name: runtimeBackendGKE}
+		v3Backend := &readyKitBackend{stubRuntimeBackend: &stubRuntimeBackend{name: runtimeBackendATE}}
+		router := &versionedRuntimeBackend{legacy: v2Backend, kit: v3Backend}
+
+		record := testRuntimeRecord(runtimeBackendGKE)
+		record.RuntimeVersion = 3
+		_, err := router.Ensure(t.Context(), record)
+		require.ErrorIs(t, err, errKitRetiredBackend)
+		require.ErrorIs(t, router.RunTurn(t.Context(), record, runTurnRequest{}), errKitRetiredBackend)
+		require.ErrorIs(t, router.Reap(t.Context(), record), errKitRetiredBackend)
+		require.Zero(t, v2Backend.runTurnCount)
+		require.Zero(t, v3Backend.runTurnCount)
+
+		ready, err := router.PrepareRuntimeSwitch(t.Context(), assistantRecord{}, []assistantRuntimeRecord{record}, 2)
+		require.NoError(t, err)
+		require.True(t, ready.Settled)
+		require.True(t, ready.DestinationReady)
+	})
+
 	t.Run("turn dispatch retires and requests re-admission", func(t *testing.T) {
 		t.Parallel()
-		conn, err := assistantsInfra.CloneTestDatabase(t, "kit_leftover_turn")
+		conn, err := assistantsInfra.CloneTestDatabase(t, "kit_unservable_turn")
 		require.NoError(t, err)
 		project, assistant, _, thread := insertAssistantFixture(t, conn)
 		q := assistantrepo.New(conn)
 		require.NoError(t, q.SetAssistantDesiredRuntimeVersionForTest(t.Context(), assistantrepo.SetAssistantDesiredRuntimeVersionForTestParams{RuntimeVersion: 3, AssistantID: assistant, ProjectID: project}))
-		runtimeID := insertActiveV2RuntimeRow(t, conn, project, assistant, thread, runtimeBackendGKE, runtimeStateActive, `{"sandbox_name":"legacy-gke-sandbox"}`)
+		runtimeID := insertActiveV2RuntimeRow(t, conn, project, assistant, thread, runtimeBackendGKE, runtimeStateActive, `{"sandbox":"unservable-backend"}`)
 
 		var logs bytes.Buffer
 		core := newProvisioningCore(t, conn)
@@ -163,7 +182,7 @@ func TestLeftoverKitGKERowRetiresCleanlyInTurnAndReaper(t *testing.T) {
 
 		res, err := core.ProcessThreadEvents(t.Context(), project, thread)
 		require.NoError(t, err)
-		require.True(t, res.RetryAdmission, "leftover Kit GKE row must cleanly trigger re-admission on the active backend")
+		require.True(t, res.RetryAdmission, "unservable runtime row must trigger re-admission on the active backend")
 		require.False(t, res.RuntimeActive)
 		require.Contains(t, logs.String(), "retiring leftover Kit runtime referencing removed backend")
 
@@ -173,14 +192,14 @@ func TestLeftoverKitGKERowRetiresCleanlyInTurnAndReaper(t *testing.T) {
 		require.True(t, row.Deleted)
 	})
 
-	t.Run("reaper and idle sweep terminally clear leftover Kit GKE rows", func(t *testing.T) {
+	t.Run("idle sweep and reapers terminally clear row", func(t *testing.T) {
 		t.Parallel()
-		conn, err := assistantsInfra.CloneTestDatabase(t, "kit_leftover_reaper")
+		conn, err := assistantsInfra.CloneTestDatabase(t, "kit_unservable_reaper")
 		require.NoError(t, err)
 		project, assistant, _, thread := insertAssistantFixture(t, conn)
 		q := assistantrepo.New(conn)
 		require.NoError(t, q.SetAssistantDesiredRuntimeVersionForTest(t.Context(), assistantrepo.SetAssistantDesiredRuntimeVersionForTestParams{RuntimeVersion: 3, AssistantID: assistant, ProjectID: project}))
-		runtimeID := insertActiveV2RuntimeRow(t, conn, project, assistant, thread, runtimeBackendGKE, runtimeStateActive, `{"sandbox_name":"legacy-gke-sandbox"}`)
+		runtimeID := insertActiveV2RuntimeRow(t, conn, project, assistant, thread, runtimeBackendGKE, runtimeStateActive, `{"sandbox":"unservable-backend"}`)
 
 		var logs bytes.Buffer
 		core := newProvisioningCore(t, conn)
@@ -190,7 +209,6 @@ func TestLeftoverKitGKERowRetiresCleanlyInTurnAndReaper(t *testing.T) {
 			kit:    &readyKitBackend{stubRuntimeBackend: &stubRuntimeBackend{name: runtimeBackendATE}},
 		}
 
-		// Idle sweep retires an active leftover Kit GKE row cleanly.
 		stopped := core.sweepIdleKitRuntimes(t.Context(), time.Now())
 		require.EqualValues(t, 1, stopped)
 		require.Contains(t, logs.String(), "retiring leftover Kit runtime referencing removed backend")
@@ -200,7 +218,6 @@ func TestLeftoverKitGKERowRetiresCleanlyInTurnAndReaper(t *testing.T) {
 		require.Equal(t, runtimeStateFailed, row.State)
 		require.True(t, row.Deleted)
 
-		// Stopped-machine reaper marks the retired row reaped without error-looping.
 		rec := assistantRuntimeRecord{
 			ID:                  row.ID,
 			AssistantThreadID:   row.AssistantThreadID,
@@ -216,7 +233,6 @@ func TestLeftoverKitGKERowRetiresCleanlyInTurnAndReaper(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, runtimeStateReaped, row.State)
 
-		// Delete-assistant reap path also terminates cleanly without calling removed backend.
 		require.True(t, core.reapRuntimeRow(t.Context(), rec))
 	})
 }

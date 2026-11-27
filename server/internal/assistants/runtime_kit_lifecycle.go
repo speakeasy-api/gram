@@ -90,7 +90,7 @@ func kitLocalBackend(backend RuntimeBackend) *KitLocalRuntimeBackend {
 }
 
 // sweepIdleKitRuntimes drives nonterminal idle stops for Kit runtimes:
-//   - retires any leftover Kit GKE rows cleanly so they never error-loop,
+//   - retires any Kit rows whose backend this server cannot serve,
 //   - stops idle per-thread local Docker Kit containers (and full local runtimes past warm_until),
 //   - suspends idle or draining ATE thread actors via assistant_ate_actors.
 func (s *ServiceCore) sweepIdleKitRuntimes(ctx context.Context, now time.Time) int64 {
@@ -240,9 +240,9 @@ func (s *ServiceCore) sweepIdleLocalKitRuntime(ctx context.Context, capability k
 	return stopped, nil
 }
 
-// retireLeftoverKitRuntime cleanly logs, revokes workload admission for, and
-// terminally retires a Kit runtime row referencing the removed GKE backend.
-// Fails closed if workload revocation or row retirement fails so a replacement
+// retireLeftoverKitRuntime logs, revokes workload admission for, and terminally
+// retires a Kit runtime row whose backend this server cannot serve. Fails
+// closed if workload revocation or row retirement fails so a replacement
 // runtime is never admitted while old workload authority remains live.
 func (s *ServiceCore) retireLeftoverKitRuntime(ctx context.Context, record assistantRuntimeRecord) error {
 	s.logger.WarnContext(ctx, "retiring leftover Kit runtime referencing removed backend",

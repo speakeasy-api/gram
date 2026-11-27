@@ -195,8 +195,8 @@ func TestDisabledRuntimeBackendRefusesKitRowsOnLegacyGKE(t *testing.T) {
 	require.NoError(t, backend.Reap(t.Context(), legacy))
 	require.Equal(t, 1, gke.reapCount)
 
-	// Kit rows on the removed GKE backend are classified as retired rather than
-	// reaped by the legacy Default GKE backend.
+	// Kit (v3) rows are never routed to the Default (v2) backend even when they
+	// share a backend name.
 	kit := testRuntimeRecord(runtimeBackendGKE)
 	kit.RuntimeVersion = 3
 	require.ErrorIs(t, backend.Reap(t.Context(), kit), errKitRetiredBackend)

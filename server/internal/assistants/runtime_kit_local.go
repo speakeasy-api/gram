@@ -303,7 +303,7 @@ func (k *KitLocalRuntimeBackend) parseMetadata(r assistantRuntimeRecord) (kitLoc
 		return zero, false, fmt.Errorf("kit local saved metadata does not match runtime authority")
 	}
 	if m.ImageID == "" {
-		return zero, false, fmt.Errorf("%w: legacy single-container kit local metadata requires replacement", errKitRuntimeUnrecoverable)
+		return zero, false, fmt.Errorf("%w: kit local metadata missing image_id requires replacement", errKitRuntimeUnrecoverable)
 	}
 	return m, true, nil
 }
@@ -837,16 +837,16 @@ func (k *KitLocalRuntimeBackend) Reap(ctx context.Context, r assistantRuntimeRec
 
 func (k *KitLocalRuntimeBackend) reap(ctx context.Context, r assistantRuntimeRecord) error {
 	_, _, metaErr := k.parseMetadata(r)
-	legacySingleContainer := errors.Is(metaErr, errKitRuntimeUnrecoverable)
-	if metaErr != nil && !legacySingleContainer {
+	missingImageID := errors.Is(metaErr, errKitRuntimeUnrecoverable)
+	if metaErr != nil && !missingImageID {
 		return metaErr
 	}
 	var containers []kitLocalOwnedContainer
-	var legacyContainerIDs []string
-	if legacySingleContainer {
+	var lineageContainerIDs []string
+	if missingImageID {
 		names, err := k.engine.ListKitContainers(ctx, r.ID.String())
 		if err != nil {
-			return fmt.Errorf("list legacy kit local containers: %w", err)
+			return fmt.Errorf("list kit local containers: %w", err)
 		}
 		for _, name := range names {
 			info, err := k.engine.InspectKit(ctx, name)
@@ -854,12 +854,12 @@ func (k *KitLocalRuntimeBackend) reap(ctx context.Context, r assistantRuntimeRec
 				continue
 			}
 			if err != nil {
-				return fmt.Errorf("inspect legacy kit container: %w", err)
+				return fmt.Errorf("inspect kit local container: %w", err)
 			}
 			if info.Labels["gram.ai/assistant-id"] != r.AssistantID.String() || info.Labels["gram.ai/project-id"] != r.ProjectID.String() || info.Labels["gram.ai/runtime-lineage"] != r.ID.String() {
-				return fmt.Errorf("legacy kit local container ownership mismatch")
+				return fmt.Errorf("kit local container ownership mismatch")
 			}
-			legacyContainerIDs = append(legacyContainerIDs, info.ID)
+			lineageContainerIDs = append(lineageContainerIDs, info.ID)
 		}
 	} else {
 		var err error
@@ -880,9 +880,9 @@ func (k *KitLocalRuntimeBackend) reap(ctx context.Context, r assistantRuntimeRec
 		if err != nil {
 			return fmt.Errorf("inspect kit HOME volume before reap: %w", err)
 		}
-		if legacySingleContainer {
+		if missingImageID {
 			if labels["gram.ai/assistant-id"] != r.AssistantID.String() || labels["gram.ai/project-id"] != r.ProjectID.String() || labels["gram.ai/runtime-lineage"] != r.ID.String() {
-				return fmt.Errorf("legacy kit local volume ownership mismatch")
+				return fmt.Errorf("kit local volume ownership mismatch")
 			}
 		} else if err := k.checkLabels(r, labels, uuid.Nil); err != nil {
 			return err
@@ -893,9 +893,9 @@ func (k *KitLocalRuntimeBackend) reap(ctx context.Context, r assistantRuntimeRec
 			return err
 		}
 	}
-	for _, id := range legacyContainerIDs {
+	for _, id := range lineageContainerIDs {
 		if err := k.engine.Remove(ctx, id); err != nil {
-			return fmt.Errorf("remove legacy kit container: %w", err)
+			return fmt.Errorf("remove kit local container: %w", err)
 		}
 	}
 	for _, entry := range containers {

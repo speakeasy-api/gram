@@ -27,11 +27,11 @@ func TestKitNativeProtocolEndpoints(t *testing.T) {
 	}{
 		{"http://localhost/acp", true},
 		{"http://127.0.0.1/acp", true}, {"http://[::1]/acp", true},
-		{"https://remote.example/acp", true}, {"https://remote.example/acp/v2", false},
-		{"http://remote.example/acp", false}, {"http://remote.example/acp/v2", false},
-		{"http://192.0.2.1/acp", false}, {"http://[2001:db8::1]/acp", false}, {"https://localhost/acp/v2", false},
-		{"http://localhost/acp/v2", false}, {"https://localhost/acp", true},
-		{"http://localhost/acp/", false}, {"http://localhost/acp/v2/", false},
+		{"https://remote.example/acp", true}, {"https://remote.example/acp/extra", false},
+		{"http://remote.example/acp", false},
+		{"http://192.0.2.1/acp", false}, {"http://[2001:db8::1]/acp", false},
+		{"https://localhost/acp", true},
+		{"http://localhost/acp/", false},
 		{"http://localhost/acp?", false}, {"http://localhost/acp?x=1", false},
 		{"http://localhost/acp#fragment", false}, {"http://localhost/%61cp", false},
 		{"http://user@localhost/acp", false}, {"ftp://localhost/acp", false},
@@ -187,7 +187,7 @@ func TestKitNativeProtocolConfidentialTransport(t *testing.T) {
 		valid    bool
 	}{
 		{"http://actor.example:8081/acp", true},
-		{"http://actor.example:8081/acp/v2", false},
+		{"http://actor.example:8081/acp/extra", false},
 		{"http://foreign.example:8081/acp", false},
 		{"http://actor.example:8082/acp", false},
 		{"http://actor.example/acp", false},
