@@ -595,3 +595,55 @@ func TestRecordSkillRead_IsNilSafe(t *testing.T) {
 	empty := &Metrics{}
 	empty.RecordSkillRead(t.Context(), SurfacePlatform, SkillOriginEmbedded)
 }
+
+func TestRecordGatewayAdmission(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name          string
+		admitted      bool
+		refusalReason string
+		wantOutcome   string
+	}{
+		{name: "refused", refusalReason: "project_scope_mismatch", wantOutcome: "refused"},
+		{name: "admitted", admitted: true, wantOutcome: "admitted"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			reader := sdkmetric.NewManualReader()
+			meter := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test")
+			m := NewMetrics(meter, testenv.NewLogger(t))
+			m.RecordGatewayAdmission(t.Context(), "workload", "project", tc.admitted, tc.refusalReason)
+			got := collectMetric(t, reader, InstrumentMCPGatewayAdmission)
+			sum, ok := got.Data.(metricdata.Sum[int64])
+			require.True(t, ok)
+			require.Len(t, sum.DataPoints, 1)
+			require.EqualValues(t, 1, sum.DataPoints[0].Value)
+			metricdatatest.AssertHasAttributes(t, got,
+				attr.McpGatewayCallerKind("workload"),
+				attr.McpGatewayType("project"),
+				attr.Outcome(tc.wantOutcome),
+			)
+			if tc.admitted {
+				_, hasRefusalReason := sum.DataPoints[0].Attributes.Value(attr.McpGatewayRefusalReason("").Key)
+				require.False(t, hasRefusalReason)
+			} else {
+				metricdatatest.AssertHasAttributes(t, got,
+					attr.McpGatewayRefusalReason(tc.refusalReason),
+				)
+			}
+		})
+	}
+}
+
+func TestRecordAgentGatewayRequest(t *testing.T) {
+	t.Parallel()
+	reader := sdkmetric.NewManualReader()
+	meter := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test")
+	m := NewMetrics(meter, testenv.NewLogger(t))
+	m.RecordAgentGatewayRequest(t.Context(), "org_test", "00000000-0000-0000-0000-000000000001")
+	got := collectMetric(t, reader, InstrumentMCPAgentGatewayRequest)
+	metricdatatest.AssertHasAttributes(t, got,
+		attr.OrganizationID("org_test"),
+		attr.AgentID("00000000-0000-0000-0000-000000000001"),
+	)
+}
