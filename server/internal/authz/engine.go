@@ -127,6 +127,10 @@ func (e *Engine) PrepareContext(ctx context.Context) (context.Context, error) {
 		return ctx, nil
 	}
 
+	if err := e.requireOrganizationEnabled(ctx, authCtx.ActiveOrganizationID); err != nil {
+		return ctx, err
+	}
+
 	if mode, hasMode := contextvalues.APIKeyAuthorization(ctx); hasMode {
 		switch mode {
 		case contextvalues.APIKeyAuthorizationModeLegacy:
