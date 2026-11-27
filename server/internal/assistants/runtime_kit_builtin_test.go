@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/stretchr/testify/require"
 )
 
@@ -26,60 +25,49 @@ func TestKitBuiltinDefaultThreadTargetIsPerTurn(t *testing.T) {
 	}
 }
 
-func TestKitBuiltinConnectionsUseSeparateResourceBoundWorkloadTokens(t *testing.T) {
+func TestKitBootstrapUsesSingleProjectGatewayAndNoBuiltinConnections(t *testing.T) {
 	t.Parallel()
-	base, err := url.Parse("https://api.example")
+	gatewayURL, err := url.Parse("https://api.example/mcp/gateway/org-test/projects/proj-test")
 	require.NoError(t, err)
 	bootstrap := kitTestWorkloadBootstrap()
-	slugs := []string{platformtools.AssistantsPlatformToolsetSlug, platformtools.PlatformMCPReadToolsetSlug}
-	connections := kitBuiltinMCPConnections(base, bootstrap.Workload.Identity.ProjectID, slugs)
-	config := KitLocalCompositionConfig{mcpConnections: connections}
-	bootstrap.MCPJSON, err = kitCompositionMCP(config, bootstrap.Workload)
+	bootstrap.MCPJSON, err = kitCompositionMCP(gatewayURL, bootstrap.Workload)
 	require.NoError(t, err)
 	require.NoError(t, validateKitBootstrap(bootstrap))
+
 	var parsed struct {
 		Servers map[string]struct {
+			Type    string            `json:"type"`
 			URL     string            `json:"url"`
 			Headers map[string]string `json:"headers"`
 			Auth    struct {
+				Type          string            `json:"type"`
 				Resource      string            `json:"resource"`
 				TokenEndpoint string            `json:"tokenEndpoint"`
+				Scope         string            `json:"scope"`
 				Extensions    map[string]string `json:"extensions"`
 			} `json:"auth"`
 		} `json:"mcpServers"`
 	}
 	require.NoError(t, json.Unmarshal(bootstrap.MCPJSON, &parsed))
-	require.Len(t, parsed.Servers, len(slugs))
-	for _, slug := range slugs {
-		server := parsed.Servers["builtin-"+slug]
-		require.Equal(t, platformtools.PlatformToolsetURL(base, slug), server.URL)
-		require.Equal(t, server.URL, server.Auth.Resource)
-		require.Equal(t, bootstrap.Workload.Audience+"/token", server.Auth.TokenEndpoint)
-		require.Equal(t, map[string]string{"project_id": bootstrap.Workload.Identity.ProjectID.String()}, server.Auth.Extensions)
-		require.Empty(t, server.Headers)
-	}
+	require.Len(t, parsed.Servers, 1, "Kit must have exactly one MCP entry: project-gateway")
+	server, ok := parsed.Servers[kitProjectGatewayServerName]
+	require.True(t, ok)
+	require.Equal(t, "streamable-http", server.Type)
+	require.Equal(t, gatewayURL.String(), server.URL)
+	require.Equal(t, "workload_identity", server.Auth.Type)
+	require.Equal(t, gatewayURL.String(), server.Auth.Resource)
+	require.Equal(t, bootstrap.Workload.Audience+"/token", server.Auth.TokenEndpoint)
+	require.Equal(t, "mcp:connect", server.Auth.Scope)
+	require.Empty(t, server.Auth.Extensions)
+	require.Empty(t, server.Headers)
+	require.NotContains(t, string(bootstrap.MCPJSON), "builtin-")
 	require.NotContains(t, string(bootstrap.MCPJSON), "urn:speakeasy:inference")
 	require.NotContains(t, string(bootstrap.MCPJSON), string(bootstrap.GatewayToken))
-	// A different project in deployment-provided exchange parameters is not a
-	// valid bootstrap for this workload identity.
-	config.mcpConnections[0].ProjectID = uuid.New()
-	bootstrap.MCPJSON, err = kitCompositionMCP(config, bootstrap.Workload)
+
+	// Backend-agnostic composition allows non-workload-identity backends (e.g.
+	// ATE proxy placeholder headers) to build the exact same single gateway
+	// entry without GKE/jwtBearer fields.
+	headerOnly, err := kitProjectGatewayMCPJSON(gatewayURL, map[string]string{"Authorization": "Bearer ${PLACEHOLDER}"}, nil)
 	require.NoError(t, err)
-	require.ErrorContains(t, validateKitBootstrap(bootstrap), "workload project")
-	// Dropping the project binding from a built-in is not a valid bootstrap.
-	config.mcpConnections[0].ProjectID = uuid.Nil
-	bootstrap.MCPJSON, err = kitCompositionMCP(config, bootstrap.Workload)
-	require.NoError(t, err)
-	require.ErrorContains(t, validateKitBootstrap(bootstrap), "workload project")
-	// Attached connections bind their project through the endpoint instead.
-	attached, err := url.Parse("https://api.example/mcp/attached")
-	require.NoError(t, err)
-	config.mcpConnections = []kitMCPConnection{{Name: "attached-server", Resource: attached, Environment: ""}}
-	bootstrap.MCPJSON, err = kitCompositionMCP(config, bootstrap.Workload)
-	require.NoError(t, err)
-	require.NoError(t, validateKitBootstrap(bootstrap))
-	config.mcpConnections[0].ProjectID = bootstrap.Workload.Identity.ProjectID
-	bootstrap.MCPJSON, err = kitCompositionMCP(config, bootstrap.Workload)
-	require.NoError(t, err)
-	require.ErrorContains(t, validateKitBootstrap(bootstrap), "must not carry extensions")
+	require.JSONEq(t, `{"mcpServers":{"project-gateway":{"type":"streamable-http","url":"https://api.example/mcp/gateway/org-test/projects/proj-test","headers":{"Authorization":"Bearer ${PLACEHOLDER}"}}}}`, string(headerOnly))
 }

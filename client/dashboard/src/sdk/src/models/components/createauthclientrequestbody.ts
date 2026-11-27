@@ -19,6 +19,7 @@ export const CreateAuthClientRequestBodyClientType = {
   ServiceAccount: "service_account",
   StaticCredential: "static_credential",
   PassThrough: "pass_through",
+  SlackApp: "slack_app",
 } as const;
 /**
  * How the client authenticates upstream.

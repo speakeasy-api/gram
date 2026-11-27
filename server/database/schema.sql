@@ -2581,65 +2581,6 @@ CREATE INDEX IF NOT EXISTS environments_project_id_lower_name_idx
 ON environments (project_id, lower(name))
 WHERE deleted IS FALSE;
 
-CREATE TABLE IF NOT EXISTS trigger_instances (
-  id uuid NOT NULL DEFAULT generate_uuidv7(),
-  organization_id TEXT NOT NULL,
-  project_id uuid NOT NULL,
-  definition_slug TEXT NOT NULL CHECK (definition_slug <> '' AND CHAR_LENGTH(definition_slug) <= 60),
-  name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 120),
-  environment_id uuid,
-  target_kind TEXT NOT NULL CHECK (target_kind <> '' AND CHAR_LENGTH(target_kind) <= 60),
-  target_ref TEXT NOT NULL CHECK (target_ref <> '' AND CHAR_LENGTH(target_ref) <= 255),
-  target_display TEXT NOT NULL CHECK (target_display <> '' AND CHAR_LENGTH(target_display) <= 255),
-  config_json JSONB NOT NULL DEFAULT '{}'::jsonb,
-  status TEXT NOT NULL DEFAULT 'active',
-
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  deleted_at timestamptz,
-  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
-
-  CONSTRAINT trigger_instances_pkey PRIMARY KEY (id),
-  CONSTRAINT trigger_instances_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
-  CONSTRAINT trigger_instances_environment_id_fkey FOREIGN KEY (environment_id) REFERENCES environments (id) ON DELETE SET NULL
-);
-
-COMMENT ON COLUMN trigger_instances.id IS '@access: confidential';
-COMMENT ON COLUMN trigger_instances.organization_id IS '@access: confidential';
-COMMENT ON COLUMN trigger_instances.project_id IS '@access: confidential';
-COMMENT ON COLUMN trigger_instances.definition_slug IS '@access: confidential';
-COMMENT ON COLUMN trigger_instances.name IS '@access: confidential';
-COMMENT ON COLUMN trigger_instances.environment_id IS '@access: confidential';
-COMMENT ON COLUMN trigger_instances.target_kind IS '@access: confidential';
-COMMENT ON COLUMN trigger_instances.target_ref IS '@access: confidential';
-COMMENT ON COLUMN trigger_instances.target_display IS '@access: confidential';
-COMMENT ON COLUMN trigger_instances.config_json IS '@access: opaque-restricted';
-COMMENT ON COLUMN trigger_instances.status IS '@access: confidential';
-COMMENT ON COLUMN trigger_instances.created_at IS '@access: confidential';
-COMMENT ON COLUMN trigger_instances.updated_at IS '@access: confidential';
-COMMENT ON COLUMN trigger_instances.deleted_at IS '@access: confidential';
-COMMENT ON COLUMN trigger_instances.deleted IS '@access: confidential';
-
-CREATE UNIQUE INDEX IF NOT EXISTS trigger_instances_organization_project_id_key
-ON trigger_instances (organization_id, project_id, id);
-
-CREATE INDEX IF NOT EXISTS trigger_instances_project_id_idx
-ON trigger_instances (project_id, created_at DESC)
-WHERE deleted IS FALSE;
-
-CREATE INDEX IF NOT EXISTS trigger_instances_environment_id_idx
-ON trigger_instances (environment_id)
-WHERE deleted IS FALSE;
-
-CREATE UNIQUE INDEX IF NOT EXISTS trigger_instances_dashboard_target_uniq
-ON trigger_instances (project_id, target_ref)
-WHERE definition_slug = 'dashboard' AND status = 'active' AND deleted IS FALSE;
-
--- One Speakeasy Slack app trigger routes to each managed assistant.
-CREATE UNIQUE INDEX IF NOT EXISTS trigger_instances_speakeasy_slack_target_uniq
-ON trigger_instances (project_id, target_ref)
-WHERE definition_slug = 'speakeasy_slack' AND status = 'active' AND deleted IS FALSE;
-
 -- trigger_thread_routes records how events on one external conversation (a
 -- trigger correlation id such as a Slack thread) reach a trigger target:
 -- whether the target is subscribed to it, and which of the target's
@@ -5367,6 +5308,175 @@ WHERE deleted IS FALSE AND project_id IS NULL;
 CREATE INDEX IF NOT EXISTS workload_issuers_tags_gin
 ON workload_issuers USING gin (tags)
 WHERE deleted IS FALSE;
+
+CREATE TABLE IF NOT EXISTS mcp_auth_clients (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  -- NULL for a client shared across the organization's projects.
+  project_id uuid,
+  -- Project or organization owner, for scope-checked foreign keys.
+  attachment_scope TEXT GENERATED ALWAYS AS (
+    CASE WHEN project_id IS NOT NULL THEN 'project:' || project_id::text
+         ELSE 'organization:' || organization_id END
+  ) STORED,
+  -- remote_session, service_account, static_credential, pass_through, ema or
+  -- slack_app; validated in application code.
+  client_type TEXT NOT NULL CHECK (client_type <> ''),
+  -- backfill (created from existing configuration) or admin; validated in
+  -- application code.
+  source TEXT NOT NULL CHECK (source <> ''),
+  name TEXT NOT NULL CHECK (name <> ''),
+  enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  -- NULL for clients the backfill created from existing configuration.
+  created_by_user_id TEXT,
+  -- The OAuth registration behind remote_session, service_account and ema
+  -- clients; NULL for static_credential, pass_through and slack_app.
+  remote_session_client_id uuid,
+  -- The registration's attachment_scope, copied by the writer and pinned to
+  -- the registration by a composite foreign key.
+  client_attachment_scope TEXT,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT mcp_auth_clients_pkey PRIMARY KEY (id),
+  CONSTRAINT mcp_auth_clients_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT mcp_auth_clients_project_tenant_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT mcp_auth_clients_client_scope_fkey FOREIGN KEY (remote_session_client_id, client_attachment_scope) REFERENCES remote_session_clients (id, attachment_scope) ON DELETE CASCADE,
+  -- A registration, when named, is in the client's project or organization,
+  -- or platform-global. Which types need one is validated in application code.
+  CONSTRAINT mcp_auth_clients_registration_check CHECK (
+    (remote_session_client_id IS NULL) = (client_attachment_scope IS NULL)
+    AND (client_attachment_scope IS NULL
+         OR client_attachment_scope IN (attachment_scope, 'organization:' || organization_id, 'global'))
+  )
+);
+
+COMMENT ON COLUMN mcp_auth_clients.id IS '@access: confidential';
+COMMENT ON COLUMN mcp_auth_clients.organization_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_auth_clients.project_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_auth_clients.attachment_scope IS '@access: confidential';
+COMMENT ON COLUMN mcp_auth_clients.client_type IS '@access: confidential';
+COMMENT ON COLUMN mcp_auth_clients.source IS '@access: confidential';
+COMMENT ON COLUMN mcp_auth_clients.name IS '@access: opaque-confidential';
+COMMENT ON COLUMN mcp_auth_clients.enabled IS '@access: confidential';
+COMMENT ON COLUMN mcp_auth_clients.created_by_user_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_auth_clients.remote_session_client_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_auth_clients.client_attachment_scope IS '@access: confidential';
+COMMENT ON COLUMN mcp_auth_clients.created_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_auth_clients.updated_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_auth_clients.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_auth_clients.deleted IS '@access: confidential';
+
+-- FK target for mcp_server_auth_clients.
+CREATE UNIQUE INDEX IF NOT EXISTS mcp_auth_clients_attachment_scope_key
+ON mcp_auth_clients (id, attachment_scope);
+
+-- FK target for mcp_auth_client_headers and trigger_instances.
+CREATE UNIQUE INDEX IF NOT EXISTS mcp_auth_clients_organization_key
+ON mcp_auth_clients (id, organization_id);
+
+-- FK target for the GitHub App service-account subtype.
+CREATE UNIQUE INDEX IF NOT EXISTS mcp_auth_clients_type_organization_key
+ON mcp_auth_clients (id, client_type, organization_id);
+
+-- FK target for mcp_auth_client_emas, pinning its type, registration and
+-- organization.
+CREATE UNIQUE INDEX IF NOT EXISTS mcp_auth_clients_type_registration_key
+ON mcp_auth_clients (id, client_type, remote_session_client_id, organization_id);
+
+-- One live backfilled client per organization, registration and type, so
+-- the backfill finds rather than duplicates; a platform-global registration
+-- gets one per organization. Admin-created clients may share a registration.
+CREATE UNIQUE INDEX IF NOT EXISTS mcp_auth_clients_remote_session_registration_key
+ON mcp_auth_clients (organization_id, remote_session_client_id)
+WHERE client_type = 'remote_session' AND source = 'backfill' AND deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS mcp_auth_clients_service_account_registration_key
+ON mcp_auth_clients (organization_id, remote_session_client_id)
+WHERE client_type = 'service_account' AND source = 'backfill' AND deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS mcp_auth_clients_registration_idx
+ON mcp_auth_clients (organization_id, remote_session_client_id)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS mcp_auth_clients_organization_id_idx
+ON mcp_auth_clients (organization_id)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS mcp_auth_clients_project_id_idx
+ON mcp_auth_clients (project_id)
+WHERE deleted IS FALSE;
+
+CREATE TABLE IF NOT EXISTS trigger_instances (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  definition_slug TEXT NOT NULL CHECK (definition_slug <> '' AND CHAR_LENGTH(definition_slug) <= 60),
+  name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 120),
+  environment_id uuid,
+  auth_client_id uuid,
+  target_kind TEXT NOT NULL CHECK (target_kind <> '' AND CHAR_LENGTH(target_kind) <= 60),
+  target_ref TEXT NOT NULL CHECK (target_ref <> '' AND CHAR_LENGTH(target_ref) <= 255),
+  target_display TEXT NOT NULL CHECK (target_display <> '' AND CHAR_LENGTH(target_display) <= 255),
+  config_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+  status TEXT NOT NULL DEFAULT 'active',
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT trigger_instances_pkey PRIMARY KEY (id),
+  CONSTRAINT trigger_instances_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT trigger_instances_environment_id_fkey FOREIGN KEY (environment_id) REFERENCES environments (id) ON DELETE SET NULL,
+  -- Atlas drops the SET NULL column list; preserve it in migrations.
+  -- Mutual exclusion with environment_id is enforced in application code so
+  -- clearing auth_client_id never exposes stale environment credentials.
+  CONSTRAINT trigger_instances_auth_client_fkey FOREIGN KEY (auth_client_id, organization_id) REFERENCES mcp_auth_clients (id, organization_id) ON DELETE SET NULL (auth_client_id)
+);
+
+COMMENT ON COLUMN trigger_instances.id IS '@access: confidential';
+COMMENT ON COLUMN trigger_instances.organization_id IS '@access: confidential';
+COMMENT ON COLUMN trigger_instances.project_id IS '@access: confidential';
+COMMENT ON COLUMN trigger_instances.definition_slug IS '@access: confidential';
+COMMENT ON COLUMN trigger_instances.name IS '@access: confidential';
+COMMENT ON COLUMN trigger_instances.environment_id IS '@access: confidential';
+COMMENT ON COLUMN trigger_instances.auth_client_id IS '@access: confidential';
+COMMENT ON COLUMN trigger_instances.target_kind IS '@access: confidential';
+COMMENT ON COLUMN trigger_instances.target_ref IS '@access: confidential';
+COMMENT ON COLUMN trigger_instances.target_display IS '@access: confidential';
+COMMENT ON COLUMN trigger_instances.config_json IS '@access: opaque-restricted';
+COMMENT ON COLUMN trigger_instances.status IS '@access: confidential';
+COMMENT ON COLUMN trigger_instances.created_at IS '@access: confidential';
+COMMENT ON COLUMN trigger_instances.updated_at IS '@access: confidential';
+COMMENT ON COLUMN trigger_instances.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN trigger_instances.deleted IS '@access: confidential';
+
+CREATE UNIQUE INDEX IF NOT EXISTS trigger_instances_organization_project_id_key
+ON trigger_instances (organization_id, project_id, id);
+
+CREATE INDEX IF NOT EXISTS trigger_instances_project_id_idx
+ON trigger_instances (project_id, created_at DESC)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS trigger_instances_environment_id_idx
+ON trigger_instances (environment_id)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS trigger_instances_auth_client_id_idx
+ON trigger_instances (auth_client_id, organization_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS trigger_instances_dashboard_target_uniq
+ON trigger_instances (project_id, target_ref)
+WHERE definition_slug = 'dashboard' AND status = 'active' AND deleted IS FALSE;
+
+-- One Speakeasy Slack app trigger routes to each managed assistant.
+CREATE UNIQUE INDEX IF NOT EXISTS trigger_instances_speakeasy_slack_target_uniq
+ON trigger_instances (project_id, target_ref)
+WHERE definition_slug = 'speakeasy_slack' AND status = 'active' AND deleted IS FALSE;
 
 -- This is mapping history, not a workloads entity. Admissions and assignments
 -- remain authoritative. Subjects are exact and stable for the original durable
@@ -10781,79 +10891,6 @@ ON mcp_server_remote_session_clients (project_id);
 -- mcp_auth_client_emas. A pass_through client forwards only the request
 -- headers it names. Nothing reads these yet; the existing outbound
 -- configuration stays authoritative until cutover.
-CREATE TABLE IF NOT EXISTS mcp_auth_clients (
-  id uuid NOT NULL DEFAULT generate_uuidv7(),
-  organization_id TEXT NOT NULL,
-  -- NULL for a client shared across the organization's projects.
-  project_id uuid,
-  -- Project or organization owner, for scope-checked foreign keys.
-  attachment_scope TEXT GENERATED ALWAYS AS (
-    CASE WHEN project_id IS NOT NULL THEN 'project:' || project_id::text
-         ELSE 'organization:' || organization_id END
-  ) STORED,
-  -- remote_session, service_account, static_credential, pass_through or ema;
-  -- validated in application code.
-  client_type TEXT NOT NULL CHECK (client_type <> ''),
-  -- backfill (created from existing configuration) or admin; validated in
-  -- application code.
-  source TEXT NOT NULL CHECK (source <> ''),
-  name TEXT NOT NULL CHECK (name <> ''),
-  enabled BOOLEAN NOT NULL DEFAULT TRUE,
-  -- NULL for clients the backfill created from existing configuration.
-  created_by_user_id TEXT,
-  -- The OAuth registration behind remote_session, service_account and ema
-  -- clients; NULL for static_credential and pass_through.
-  remote_session_client_id uuid,
-  -- The registration's attachment_scope, copied by the writer and pinned to
-  -- the registration by a composite foreign key.
-  client_attachment_scope TEXT,
-
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  deleted_at timestamptz,
-  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
-
-  CONSTRAINT mcp_auth_clients_pkey PRIMARY KEY (id),
-  CONSTRAINT mcp_auth_clients_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT mcp_auth_clients_project_tenant_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE,
-  CONSTRAINT mcp_auth_clients_client_scope_fkey FOREIGN KEY (remote_session_client_id, client_attachment_scope) REFERENCES remote_session_clients (id, attachment_scope) ON DELETE CASCADE,
-  -- A registration, when named, is in the client's project or organization,
-  -- or platform-global. Which types need one is validated in application code.
-  CONSTRAINT mcp_auth_clients_registration_check CHECK (
-    (remote_session_client_id IS NULL) = (client_attachment_scope IS NULL)
-    AND (client_attachment_scope IS NULL
-         OR client_attachment_scope IN (attachment_scope, 'organization:' || organization_id, 'global'))
-  )
-);
-
-COMMENT ON COLUMN mcp_auth_clients.id IS '@access: confidential';
-COMMENT ON COLUMN mcp_auth_clients.organization_id IS '@access: confidential';
-COMMENT ON COLUMN mcp_auth_clients.project_id IS '@access: confidential';
-COMMENT ON COLUMN mcp_auth_clients.attachment_scope IS '@access: confidential';
-COMMENT ON COLUMN mcp_auth_clients.client_type IS '@access: confidential';
-COMMENT ON COLUMN mcp_auth_clients.source IS '@access: confidential';
-COMMENT ON COLUMN mcp_auth_clients.name IS '@access: opaque-confidential';
-COMMENT ON COLUMN mcp_auth_clients.enabled IS '@access: confidential';
-COMMENT ON COLUMN mcp_auth_clients.created_by_user_id IS '@access: confidential';
-COMMENT ON COLUMN mcp_auth_clients.remote_session_client_id IS '@access: confidential';
-COMMENT ON COLUMN mcp_auth_clients.client_attachment_scope IS '@access: confidential';
-COMMENT ON COLUMN mcp_auth_clients.created_at IS '@access: confidential';
-COMMENT ON COLUMN mcp_auth_clients.updated_at IS '@access: confidential';
-COMMENT ON COLUMN mcp_auth_clients.deleted_at IS '@access: confidential';
-COMMENT ON COLUMN mcp_auth_clients.deleted IS '@access: confidential';
-
--- FK target for mcp_server_auth_clients.
-CREATE UNIQUE INDEX IF NOT EXISTS mcp_auth_clients_attachment_scope_key
-ON mcp_auth_clients (id, attachment_scope);
-
--- FK target for mcp_auth_client_headers.
-CREATE UNIQUE INDEX IF NOT EXISTS mcp_auth_clients_organization_key
-ON mcp_auth_clients (id, organization_id);
-
--- FK target for the GitHub App service-account subtype.
-CREATE UNIQUE INDEX IF NOT EXISTS mcp_auth_clients_type_organization_key
-ON mcp_auth_clients (id, client_type, organization_id);
-
 -- Customer-owned app credentials; generated installation tokens are never stored here.
 CREATE TABLE IF NOT EXISTS mcp_auth_client_github_apps (
   auth_client_id uuid PRIMARY KEY,
@@ -10883,34 +10920,6 @@ COMMENT ON COLUMN mcp_auth_client_github_apps.credential_version IS '@access: co
 COMMENT ON COLUMN mcp_auth_client_github_apps.client_type IS '@access: confidential';
 COMMENT ON COLUMN mcp_auth_client_github_apps.created_at IS '@access: confidential';
 COMMENT ON COLUMN mcp_auth_client_github_apps.updated_at IS '@access: confidential';
-
--- FK target for mcp_auth_client_emas, pinning its type, registration and
--- organization.
-CREATE UNIQUE INDEX IF NOT EXISTS mcp_auth_clients_type_registration_key
-ON mcp_auth_clients (id, client_type, remote_session_client_id, organization_id);
-
--- One live backfilled client per organization, registration and type, so
--- the backfill finds rather than duplicates; a platform-global registration
--- gets one per organization. Admin-created clients may share a registration.
-CREATE UNIQUE INDEX IF NOT EXISTS mcp_auth_clients_remote_session_registration_key
-ON mcp_auth_clients (organization_id, remote_session_client_id)
-WHERE client_type = 'remote_session' AND source = 'backfill' AND deleted IS FALSE;
-
-CREATE UNIQUE INDEX IF NOT EXISTS mcp_auth_clients_service_account_registration_key
-ON mcp_auth_clients (organization_id, remote_session_client_id)
-WHERE client_type = 'service_account' AND source = 'backfill' AND deleted IS FALSE;
-
-CREATE INDEX IF NOT EXISTS mcp_auth_clients_registration_idx
-ON mcp_auth_clients (organization_id, remote_session_client_id)
-WHERE deleted IS FALSE;
-
-CREATE INDEX IF NOT EXISTS mcp_auth_clients_organization_id_idx
-ON mcp_auth_clients (organization_id)
-WHERE deleted IS FALSE;
-
-CREATE INDEX IF NOT EXISTS mcp_auth_clients_project_id_idx
-ON mcp_auth_clients (project_id)
-WHERE deleted IS FALSE;
 
 -- Headers an auth client sends upstream, same shape as remote_mcp_server_headers.
 -- Exactly one of value and value_from_request_header is set; the writer

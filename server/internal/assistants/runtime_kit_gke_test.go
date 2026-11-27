@@ -3,6 +3,7 @@ package assistants
 import (
 	"context"
 	"errors"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -27,17 +28,23 @@ func kitGKEInput() KitGKEProvisionInput {
 	if err != nil {
 		panic(err)
 	}
+	workload := &KitWorkloadBinding{MCPProjectGateway: true, IssuerID: uuid.New(), Subject: "spiffe://agents.global.org-987654321.system.id.goog/resources/container/projects/123456789/locations/us-central1/clusters/test-cluster/ns/kit-test/sa/kit-workload-test", ServiceAccount: "kit-workload-test", Audience: "https://example.invalid/oauth"}
+	gatewayURL, _ := url.Parse("https://api.example/mcp/gateway/org-test/projects/proj-test")
+	mcpJSON, err := kitCompositionMCP(gatewayURL, workload)
+	if err != nil {
+		panic(err)
+	}
 	return KitGKEProvisionInput{
 		KitGKEIdentityConfig: KitGKEIdentityConfig{ProjectNumber: "123456789", OrganizationID: "987654321", ClusterLocation: "us-central1", ClusterName: "test-cluster"},
 		TLSCertificate:       cert, TLSPrivateKey: key,
 		Model: "test-model", InferenceEndpoint: "https://example.invalid/inference",
-		Workload:               &KitWorkloadBinding{IssuerID: uuid.New(), Subject: "spiffe://agents.global.org-987654321.system.id.goog/resources/container/projects/123456789/locations/us-central1/clusters/test-cluster/ns/kit-test/sa/kit-workload-test", ServiceAccount: "kit-workload-test", Audience: "https://example.invalid/oauth"},
+		Workload:               workload,
 		WorkloadServiceAccount: "kit-workload-test", WorkloadAudience: "https://example.invalid/oauth",
 		CheckpointMarker: []byte("11111111-1111-4111-8111-111111111111"),
 		Identity:         KitGKEIdentity{Namespace: "kit-test", AssistantID: "assistant-test", Lineage: "lineage-one", CompatibilityGeneration: "generation-one"},
 		Name:             "kit-test-runtime", Image: "example.invalid/kit@sha256:" + strings.Repeat("a", 64), IngressCIDR: "10.1.0.0/16", GuestPort: 8080,
 		Command: []string{"/usr/local/bin/kit"}, Args: func() []string { _, args := KitGatewayCommand(8080); return args }(),
-		AgentsMD: []byte("caller instructions"), MCPJSON: []byte(`{"mcpServers":{}}`), GatewayToken: []byte("test-token"),
+		AgentsMD: []byte("caller instructions"), MCPJSON: mcpJSON, GatewayToken: []byte("test-token"),
 		WorkSizeLimit: "1Gi", TmpSizeLimit: "128Mi",
 		Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("100m"), corev1.ResourceMemory: resource.MustParse("128Mi")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1"), corev1.ResourceMemory: resource.MustParse("1Gi")}},
 	}

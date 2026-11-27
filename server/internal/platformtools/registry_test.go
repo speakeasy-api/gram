@@ -11,6 +11,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/platformtools/logs"
+	platformslack "github.com/speakeasy-api/gram/server/internal/platformtools/slack"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -150,5 +151,27 @@ func TestPlatformToolsetIdentityIsStableAndDistinct(t *testing.T) {
 	assistantsID := platformtools.PlatformToolsetID(platformtools.AssistantsPlatformToolsetSlug)
 	require.Equal(t, assistantsID, platformtools.PlatformToolsetID(platformtools.AssistantsPlatformToolsetSlug))
 	require.NotEqual(t, assistantsID, platformtools.PlatformToolsetID(platformtools.PlatformMCPReadToolsetSlug))
+	require.NotEqual(t, assistantsID, platformtools.PlatformToolsetID(platformtools.AssistantSlackPlatformToolsetSlug))
+	require.NotEqual(t, platformtools.PlatformToolsetID(platformtools.SpeakeasySlackPlatformToolsetSlug), platformtools.PlatformToolsetID(platformtools.AssistantSlackPlatformToolsetSlug))
+	require.Equal(t, "8142a254-e580-54b7-9dae-7151efe642bf", platformtools.PlatformToolsetID(platformtools.AssistantSlackPlatformToolsetSlug).String(), "assistant-slack PlatformToolsetID must stay pinned for dashboard onboarding")
 	require.Equal(t, "Speakeasy assistant tools", platformtools.PlatformToolsetName(platformtools.AssistantsPlatformToolsetSlug))
+	require.Equal(t, "Speakeasy assistant Slack", platformtools.PlatformToolsetName(platformtools.AssistantSlackPlatformToolsetSlug))
+}
+
+func TestAssistantSlackToolsCoverEverySlackPlatformTool(t *testing.T) {
+	t.Parallel()
+
+	want := map[string]struct{}{}
+	for _, desc := range platformtools.ListPlatformTools() {
+		if desc.SourceSlug == "slack" {
+			want[desc.ToolURN().String()] = struct{}{}
+		}
+	}
+	require.NotEmpty(t, want)
+
+	got := map[string]struct{}{}
+	for _, tool := range platformslack.NewAssistantSlackTools(nil, nil, nil, nil, nil) {
+		got[tool.Descriptor().ToolURN().String()] = struct{}{}
+	}
+	require.Equal(t, want, got, "assistant-slack built-in must cover every tools:platform:slack:* tool")
 }

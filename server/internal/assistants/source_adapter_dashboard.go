@@ -40,13 +40,20 @@ func (dashboardAdapter) ThreadContext(sourceRefJSON []byte) (string, error) {
 	return b.String(), nil
 }
 
-func (dashboardAdapter) OutputChannelGuidance() string {
+func (d dashboardAdapter) OutputChannelGuidance() string {
+	return d.OutputChannelGuidanceForMode(MCPDeliveryPerServer, nil)
+}
+
+func (dashboardAdapter) OutputChannelGuidanceForMode(mode MCPDeliveryMode, _ []string) string {
+	authLine := "When relaying an \"assistant_mcp_auth_required\" AuthURL, render it as a clickable Markdown link in your reply (e.g. `[Authorize](<AuthURL>)`) — the dashboard reader IS the owner, no tool call is needed.\n"
+	if mode.IsGateway() {
+		authLine = ""
+	}
 	return `## Dashboard output preferences
 
 You are answering a Speakeasy user in the web dashboard's side panel. Your reply text is shown to the user directly — just answer in Markdown, conversationally and concisely; prefer compact tables and short summaries over long prose. This is an analyst's side panel, not a chat app.
 
-When relaying an "assistant_mcp_auth_required" AuthURL, render it as a clickable Markdown link in your reply (e.g. ` + "`[Authorize](<AuthURL>)`" + `) — the dashboard reader IS the owner, no tool call is needed.
-When relaying a genuine "Connection required" or "Reconnect required" link, render it as a clickable Markdown link only when the reader is the person this turn acts for, the one who sent its message. Otherwise do not show the link; tell them, without it, to open Speakeasy and connect the named server.
+` + authLine + `When relaying a genuine "Connection required" or "Reconnect required" link, render it as a clickable Markdown link only when the reader is the person this turn acts for, the one who sent its message. Otherwise do not show the link; tell them, without it, to open Speakeasy and connect the named server.
 
 ## Linking entities
 

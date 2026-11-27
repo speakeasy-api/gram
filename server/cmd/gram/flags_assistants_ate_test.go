@@ -75,7 +75,7 @@ func TestATEStartupValidationAndDisabledProvider(t *testing.T) {
 
 	t.Run("disabled ATE preserves default path", func(t *testing.T) {
 		t.Parallel()
-		err := installKitLocalRuntimeFromCLI(testenv.NewLogger(t), kitCLIContext(t, nil), nil, nil, nil, nil, serverURL)
+		err := installKitLocalRuntimeFromCLI(testenv.NewLogger(t), kitCLIContext(t, nil), nil, nil, nil, nil, serverURL, nil)
 		require.NoError(t, err)
 	})
 
@@ -86,7 +86,7 @@ func TestATEStartupValidationAndDisabledProvider(t *testing.T) {
 			"assistant-runtime-provider": assistants.RuntimeProviderDisabled,
 			"assistant-ate-enabled":      "true",
 		})
-		err := installKitLocalRuntimeFromCLI(testenv.NewLogger(t), c, nil, nil, nil, nil, serverURL)
+		err := installKitLocalRuntimeFromCLI(testenv.NewLogger(t), c, nil, nil, nil, nil, serverURL, nil)
 		require.NoError(t, err)
 	})
 
@@ -97,7 +97,7 @@ func TestATEStartupValidationAndDisabledProvider(t *testing.T) {
 			"assistant-ate-enabled": "true",
 		})
 		require.Panics(t, func() {
-			_ = installKitLocalRuntimeFromCLI(testenv.NewLogger(t), c, nil, nil, nil, nil, serverURL)
+			_ = installKitLocalRuntimeFromCLI(testenv.NewLogger(t), c, nil, nil, nil, nil, serverURL, nil)
 		})
 	})
 
@@ -120,7 +120,7 @@ func TestATEStartupValidationAndDisabledProvider(t *testing.T) {
 			"assistant-ate-template":          "kit-v1",
 		})
 		require.Panics(t, func() {
-			_ = installKitLocalRuntimeFromCLI(testenv.NewLogger(t), c, &assistants.ServiceCore{}, nil, nil, redis.NewClient(&redis.Options{Addr: "127.0.0.1:0"}), serverURL)
+			_ = installKitLocalRuntimeFromCLI(testenv.NewLogger(t), c, &assistants.ServiceCore{}, nil, nil, redis.NewClient(&redis.Options{Addr: "127.0.0.1:0"}), serverURL, nil)
 		})
 	})
 
@@ -147,7 +147,7 @@ func TestATEStartupValidationAndDisabledProvider(t *testing.T) {
 			}
 			c := kitCLIContext(t, flags)
 			require.Panics(t, func() {
-				_ = installKitLocalRuntimeFromCLI(testenv.NewLogger(t), c, &assistants.ServiceCore{}, nil, nil, redis.NewClient(&redis.Options{Addr: "127.0.0.1:0"}), serverURL)
+				_ = installKitLocalRuntimeFromCLI(testenv.NewLogger(t), c, &assistants.ServiceCore{}, nil, nil, redis.NewClient(&redis.Options{Addr: "127.0.0.1:0"}), serverURL, nil)
 			}, selector)
 		}
 	})
@@ -172,7 +172,7 @@ func TestATEStartupValidationAndDisabledProvider(t *testing.T) {
 		})
 		// Reaches ServiceCore.InstallKitATERuntime (does not panic on inv.Require
 		// and does not fail on any environment == "dev" gate).
-		err := installKitLocalRuntimeFromCLI(testenv.NewLogger(t), c, &assistants.ServiceCore{}, nil, nil, redis.NewClient(&redis.Options{Addr: "127.0.0.1:0"}), serverURL)
+		err := installKitLocalRuntimeFromCLI(testenv.NewLogger(t), c, &assistants.ServiceCore{}, nil, nil, redis.NewClient(&redis.Options{Addr: "127.0.0.1:0"}), serverURL, nil)
 		require.ErrorContains(t, err, "ATE requires guarded HTTP")
 	})
 }

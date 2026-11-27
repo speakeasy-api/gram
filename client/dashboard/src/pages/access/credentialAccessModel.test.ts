@@ -188,7 +188,7 @@ describe("saving", () => {
     const next = splitCredentialRow([allowAll], { kind: "all" }, clients);
     const { add, remove } = credentialRuleChanges([allowAll], next);
     expect(remove).toEqual([allowAll]);
-    expect(add).toHaveLength(5);
+    expect(add).toHaveLength(6);
   });
 
   it("keeps the person's edits and follows the store for everything else", () => {

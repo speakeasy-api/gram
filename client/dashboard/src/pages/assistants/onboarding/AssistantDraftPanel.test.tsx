@@ -8,12 +8,16 @@ import { AssistantDraftPanel } from "./AssistantDraftPanel";
 const state = vi.hoisted(() => ({
   tab: "overview",
   assistantId: "assistant" as string | null,
+  runtimeVersion: 2,
+  agentId: "agent-1" as string | undefined,
   canWrite: true,
   setReasoningEffort: vi.fn(),
 }));
 beforeEach(() => {
   state.tab = "overview";
   state.assistantId = "assistant";
+  state.runtimeVersion = 2;
+  state.agentId = "agent-1";
   state.canWrite = true;
   state.setReasoningEffort.mockReset();
 });
@@ -57,6 +61,8 @@ vi.mock("./useAssistantDraft", async () => {
           id: "assistant",
           name: "Example assistant",
           instructions: "",
+          runtimeVersion: state.runtimeVersion,
+          agentId: state.agentId,
         },
       };
     },
@@ -71,8 +77,13 @@ vi.mock("./AssistantUpstreamCredentials", () => ({
 vi.mock("./AssistantOverviewSettings", () => ({
   AssistantOverviewSettings: () => null,
 }));
+vi.mock("./AssistantKitMCPAccess", () => ({
+  AssistantKitMCPAccess: ({ agentId }: { agentId?: string }) => (
+    <div>Kit MCP access ({agentId ?? "none"})</div>
+  ),
+}));
 vi.mock("./AssistantMCPServersSection", () => ({
-  AssistantMCPServersSection: () => null,
+  AssistantMCPServersSection: () => <div>Legacy MCP servers</div>,
 }));
 vi.mock("./AssistantSkillsSection", () => ({
   AssistantSkillsSection: () => null,
@@ -143,4 +154,16 @@ it("disables the onboarding selector without write permission", () => {
       }) as HTMLButtonElement
     ).disabled,
   ).toBe(true);
+});
+
+it("shows Kit MCP access on Overview for Kit assistants and legacy attachments otherwise", () => {
+  renderPanel();
+  expect(screen.getByText("Legacy MCP servers")).toBeTruthy();
+  expect(screen.queryByText(/Kit MCP access/)).toBeNull();
+
+  cleanup();
+  state.runtimeVersion = 3;
+  renderPanel();
+  expect(screen.getByText("Kit MCP access (agent-1)")).toBeTruthy();
+  expect(screen.queryByText("Legacy MCP servers")).toBeNull();
 });

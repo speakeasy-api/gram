@@ -42,10 +42,22 @@ type SpeakeasySlackTokens interface {
 	ProjectBotToken(ctx context.Context, organizationID string, projectID uuid.UUID) (string, error)
 }
 
+// SlackAppCredentialLoader loads decrypted credentials from one slack_app typed
+// auth client bound to a trigger instance.
+type SlackAppCredentialLoader interface {
+	LoadSlackAppCredentials(ctx context.Context, organizationID string, projectID uuid.UUID, authClientID uuid.UUID) (map[string]string, error)
+}
+
 // SetSpeakeasySlackTokens wires the token source for Speakeasy Slack app
 // turns.
 func (s *ServiceCore) SetSpeakeasySlackTokens(tokens SpeakeasySlackTokens) {
 	s.speakeasySlack = tokens
+}
+
+// SetSlackAppCredentials wires the slack_app typed auth client loader used for
+// Slack triggers that reference an auth client instead of a project environment.
+func (s *ServiceCore) SetSlackAppCredentials(loader SlackAppCredentialLoader) {
+	s.slackAppCreds = loader
 }
 
 // speakeasySlackRouted reports whether a connected workspace routes the
@@ -92,7 +104,7 @@ func (s *ServiceCore) SetSlackImageInlining(envLoader toolconfig.EnvironmentLoad
 // message-context block already tells the model the files exist and that the
 // Slack platform tools can reach them.
 func (s *ServiceCore) slackTurnImageParts(ctx context.Context, thread assistantThreadRecord, event assistantThreadEventRecord) []runtimeContentPart {
-	if s.envLoader == nil || s.slackImages == nil || !event.TriggerInstanceID.Valid {
+	if (s.envLoader == nil && s.slackAppCreds == nil && s.speakeasySlack == nil) || s.slackImages == nil || !event.TriggerInstanceID.Valid {
 		return nil
 	}
 
@@ -140,7 +152,24 @@ func (s *ServiceCore) slackTriggerToken(ctx context.Context, thread assistantThr
 		}
 		return token, nil
 	}
-	if !instance.EnvironmentID.Valid {
+	if instance.AuthClientID.Valid {
+		// Auth-client-backed Slack triggers read exclusively from their
+		// slack_app auth client and fail closed if it is deleted, disabled, or
+		// unconfigured — never falling back to a project environment.
+		if s.slackAppCreds == nil {
+			return "", fmt.Errorf("slack_app credential loader not configured for turn image inlining")
+		}
+		creds, err := s.slackAppCreds.LoadSlackAppCredentials(ctx, instance.OrganizationID, instance.ProjectID, instance.AuthClientID.UUID)
+		if err != nil {
+			return "", fmt.Errorf("load slack_app auth client for turn image inlining: %w", err)
+		}
+		token, err := slackapi.TokenFromEnv(slackapi.TokenPreferBot, toolconfig.CIEnvFrom(creds))
+		if err != nil {
+			return "", nil
+		}
+		return token, nil
+	}
+	if !instance.EnvironmentID.Valid || s.envLoader == nil {
 		return "", nil
 	}
 	envMap, err := s.envLoader.Load(ctx, thread.ProjectID, toolconfig.ID(instance.EnvironmentID.UUID))

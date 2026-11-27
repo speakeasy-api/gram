@@ -37,6 +37,7 @@ const (
 	AuthClientTypeStaticCredential = "static_credential" //nolint:gosec // client type name, not a credential
 	AuthClientTypePassThrough      = "pass_through"
 	AuthClientTypeEMA              = "ema"
+	AuthClientTypeSlackApp         = "slack_app"
 )
 
 // Disposition values matching MCP tool annotation hint names (snake_case, no _hint suffix).
