@@ -5,13 +5,15 @@ package components
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/speakeasy-api/gram/hooks/sdk/internal/utils"
 )
 
-// UploadSkillContentPayloadSchemaVersion - Contract version.
+// UploadSkillContentPayloadSchemaVersion - Contract version. hook.skill-content.v2 adds the skill's supporting files.
 type UploadSkillContentPayloadSchemaVersion string
 
 const (
 	UploadSkillContentPayloadSchemaVersionHookSkillContentV1 UploadSkillContentPayloadSchemaVersion = "hook.skill-content.v1"
+	UploadSkillContentPayloadSchemaVersionHookSkillContentV2 UploadSkillContentPayloadSchemaVersion = "hook.skill-content.v2"
 )
 
 func (e UploadSkillContentPayloadSchemaVersion) ToPointer() *UploadSkillContentPayloadSchemaVersion {
@@ -24,6 +26,8 @@ func (e *UploadSkillContentPayloadSchemaVersion) UnmarshalJSON(data []byte) erro
 	}
 	switch v {
 	case "hook.skill-content.v1":
+		fallthrough
+	case "hook.skill-content.v2":
 		*e = UploadSkillContentPayloadSchemaVersion(v)
 		return nil
 	default:
@@ -35,10 +39,23 @@ func (e *UploadSkillContentPayloadSchemaVersion) UnmarshalJSON(data []byte) erro
 type UploadSkillContentPayload struct {
 	// Raw UTF-8 skill manifest content. The server rejects content whose UTF-8 encoding exceeds 65,536 bytes.
 	Content string `json:"content"`
+	// Supporting files of the skill directory, excluding SKILL.md. Only accepted with schema_version hook.skill-content.v2; at most 100 files, 5 MiB per file and 10 MiB in total.
+	Files []SkillContentFile `json:"files,omitzero"`
 	// Lowercase SHA-256 of the raw content.
 	RawSha256 string `json:"raw_sha256"`
-	// Contract version.
+	// Contract version. hook.skill-content.v2 adds the skill's supporting files.
 	SchemaVersion UploadSkillContentPayloadSchemaVersion `json:"schema_version"`
+}
+
+func (u UploadSkillContentPayload) MarshalJSON() ([]byte, error) {
+	return utils.MarshalJSON(u, "", false)
+}
+
+func (u *UploadSkillContentPayload) UnmarshalJSON(data []byte) error {
+	if err := utils.UnmarshalJSON(data, &u, "", false, nil); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (u *UploadSkillContentPayload) GetContent() string {
@@ -46,6 +63,13 @@ func (u *UploadSkillContentPayload) GetContent() string {
 		return ""
 	}
 	return u.Content
+}
+
+func (u *UploadSkillContentPayload) GetFiles() []SkillContentFile {
+	if u == nil {
+		return nil
+	}
+	return u.Files
 }
 
 func (u *UploadSkillContentPayload) GetRawSha256() string {
