@@ -50,42 +50,13 @@ const (
 	challengeResolutionTemporaryGrant = "temporary_grant"
 )
 
-// temporaryGrantScopes are the scopes that can be given temporarily: the
-// read, use and manage permissions an onboarding or investigation needs.
-// org:admin is left out: it authorizes role, member and audience changes, so a
-// temporary holder could turn it into permanent access before it expires.
-// Blocklist scopes only withdraw access. mcp:auth is provisioned through auth
-// client audiences and its backfill. Risk policy, plugin, inference, agent
-// credential and machine scopes are left out because other subsystems derive
-// standing configuration from who holds them, which an expiring row would
-// leave stale.
-var temporaryGrantScopes = []authz.Scope{
-	authz.ScopeOrgRead,
-	authz.ScopeProjectRead,
-	authz.ScopeProjectWrite,
-	authz.ScopeMCPRead,
-	authz.ScopeMCPWrite,
-	authz.ScopeMCPConnect,
-	authz.ScopeEnvironmentRead,
-	authz.ScopeEnvironmentWrite,
-	authz.ScopeSkillRead,
-	authz.ScopeSkillWrite,
-	authz.ScopeAssistantRead,
-	authz.ScopeAssistantWrite,
-	authz.ScopeChatRead,
-	authz.ScopeChatWrite,
-	authz.ScopeLogRead,
-	authz.ScopeAgentRead,
-	authz.ScopeWorkloadRead,
-}
-
 // temporaryGrantRow is the shape every temporary grant query returns. The
 // per-query row types sqlc generates are identical and convert to it.
 type temporaryGrantRow = repo.ListTemporaryGrantsRow
 
 // ValidateTemporaryGrantScope reports whether scope can be given temporarily.
 func ValidateTemporaryGrantScope(scope authz.Scope) error {
-	if !slices.Contains(temporaryGrantScopes, scope) {
+	if !authz.AllowsTemporaryAccess(scope) {
 		return fmt.Errorf("scope %q cannot be given temporarily", scope)
 	}
 	return nil

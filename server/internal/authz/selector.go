@@ -109,7 +109,7 @@ func legacyResourceKindForScope(scope Scope) string {
 	case "remote-mcp":
 		return ResourceKindMCP
 	}
-	if declaredResourceKinds[prefix] && prefix != ResourceKindMCPAuthClient {
+	if slices.Contains(resourceKinds, prefix) && prefix != ResourceKindMCPAuthClient {
 		return prefix
 	}
 	return ResourceKindWildcard
@@ -325,6 +325,18 @@ func (s Selector) MarshalJSON() ([]byte, error) {
 // Dispositions lists every disposition a tool call can carry, sorted.
 func Dispositions() []string {
 	return slices.Sorted(maps.Keys(validDispositions))
+}
+
+// AuthClientTypes lists every auth client type an mcp:auth grant can name,
+// sorted.
+func AuthClientTypes() []string {
+	return slices.Sorted(maps.Keys(validAuthClientTypes))
+}
+
+// ResourceKinds lists the resource kinds grants and checks can name, in the
+// order the registry declares them.
+func ResourceKinds() []string {
+	return slices.Clone(resourceKinds)
 }
 
 // DispositionFromHints classifies a tool by its annotation hints into the one

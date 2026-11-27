@@ -4,6 +4,7 @@ import (
 	. "goa.design/goa/v3/dsl"
 
 	"github.com/speakeasy-api/gram/server/design/security"
+	"github.com/speakeasy-api/gram/server/design/shared"
 )
 
 func attachmentScopeEnum() {
@@ -211,7 +212,7 @@ var AdminMcpServerHealthAuthClient = Type("AdminMcpServerHealthAuthClient", func
 
 	Attribute("id", String, "Auth client id.", func() { Format(FormatUUID) })
 	Attribute("client_type", String, "How the client authenticates upstream.", func() {
-		Enum("remote_session", "service_account", "static_credential", "pass_through", "ema")
+		shared.AuthClientTypeEnum()
 	})
 	Attribute("source", String, "backfill when created from existing configuration, admin when an administrator created it.", func() {
 		Enum("backfill", "admin")

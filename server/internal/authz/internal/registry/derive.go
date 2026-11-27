@@ -25,12 +25,13 @@ const (
 // CatalogEntry is the presentation of one grantable scope. The generator
 // writes each as an authz.ScopeEntry, field for field.
 type CatalogEntry struct {
-	Scope        Scope
-	Label        string
-	Category     ScopeCategory
-	ResourceType string
-	Description  string
-	Sensitivity  Sensitivity
+	Scope           Scope
+	Label           string
+	Category        ScopeCategory
+	ResourceType    string
+	Description     string
+	Sensitivity     Sensitivity
+	TemporaryAccess bool
 }
 
 // ScopeAgentEligibility is one scope's agent eligibility. The generator
@@ -287,18 +288,20 @@ func (r Registry) DeriveCatalog() []CatalogEntry {
 	entries := make([]CatalogEntry, 0)
 	for _, s := range r.Scopes() {
 		entry := CatalogEntry{
-			Scope:        s.Scope,
-			Label:        s.Permission.Label,
-			Category:     s.Type.CategoryFor(s.Permission),
-			ResourceType: string(s.Type.Kind),
-			Description:  s.Permission.Description,
-			Sensitivity:  s.Permission.Sensitivity,
+			Scope:           s.Scope,
+			Label:           s.Permission.Label,
+			Category:        s.Type.CategoryFor(s.Permission),
+			ResourceType:    string(s.Type.Kind),
+			Description:     s.Permission.Description,
+			Sensitivity:     s.Permission.Sensitivity,
+			TemporaryAccess: s.Permission.TemporaryAccess,
 		}
 		if s.Block {
 			block, _ := s.Permission.Block()
 			entry.Label = "Exception: " + lowerFirst(s.Permission.Label)
 			entry.Description = "Store exceptions for " + block.Subject + "."
 			entry.Sensitivity = SensitivityNone
+			entry.TemporaryAccess = false
 		}
 		entries = append(entries, entry)
 	}

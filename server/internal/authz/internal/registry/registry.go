@@ -232,6 +232,16 @@ type Permission struct {
 	Description string
 	Sensitivity Sensitivity
 	Agent       AgentEligibility
+	// TemporaryAccess says an administrator may give this scope for a limited
+	// time, and a member may ask for it that way. org:admin is left out: it
+	// authorizes role, member and audience changes, so a temporary holder could
+	// turn it into permanent access before it expires. mcp:auth is provisioned
+	// through auth client audiences. Risk policy, plugin, inference, agent
+	// credential, workload:write and device agent scopes are left out because
+	// other subsystems derive standing configuration from who holds them,
+	// which an expiring grant would leave stale. Blocks only withdraw access
+	// and never take it.
+	TemporaryAccess bool
 }
 
 // ResourceType declares a kind of resource and every permission on it.

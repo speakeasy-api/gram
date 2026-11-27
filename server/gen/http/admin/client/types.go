@@ -99632,8 +99632,8 @@ func ValidateAdminMcpServerHealthAuthClientResponseBody(body *AdminMcpServerHeal
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
 	if body.ClientType != nil {
-		if !(*body.ClientType == "remote_session" || *body.ClientType == "service_account" || *body.ClientType == "static_credential" || *body.ClientType == "pass_through" || *body.ClientType == "ema") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_type", *body.ClientType, []any{"remote_session", "service_account", "static_credential", "pass_through", "ema"}))
+		if !(*body.ClientType == "ema" || *body.ClientType == "pass_through" || *body.ClientType == "remote_session" || *body.ClientType == "service_account" || *body.ClientType == "static_credential") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_type", *body.ClientType, []any{"ema", "pass_through", "remote_session", "service_account", "static_credential"}))
 		}
 	}
 	if body.Source != nil {

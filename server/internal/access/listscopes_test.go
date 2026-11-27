@@ -1,9 +1,6 @@
 package access
 
 import (
-	"os"
-	"path/filepath"
-	"regexp"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -136,47 +133,6 @@ func TestService_ListScopes(t *testing.T) {
 	}
 	for _, scope := range []authz.Scope{authz.ScopeOrgAdmin, authz.ScopeOrgRead, authz.ScopeChatRead, authz.ScopeAgentWrite, authz.ScopeRiskPolicyBypass, authz.ScopePluginBlockedWrite} {
 		require.False(t, bySlug[string(scope)].AgentEligible, scope)
-	}
-}
-
-// The scope enums come from the authz catalogue, but a category or sensitivity
-// the catalogue emits and the design does not declare still makes generated
-// clients reject the whole listScopes response.
-func TestService_ListScopes_CategoriesAndSensitivitiesAreInTheDesignEnum(t *testing.T) {
-	t.Parallel()
-
-	design, err := os.ReadFile(filepath.Join("..", "..", "design", "access", "design.go"))
-	require.NoError(t, err)
-	// Other types declare a "category" too; only ScopeDefinition's counts.
-	scopeModel := regexp.MustCompile(`(?s)Type\("ScopeDefinition".*?\n\}\)`).Find(design)
-	require.NotNil(t, scopeModel, "could not find the ScopeDefinition type in the access design")
-
-	declaredEnum := func(attribute string) map[string]bool {
-		block := regexp.MustCompile(`(?s)Attribute\("` + attribute + `".*?Enum\((.*?)\)`).FindSubmatch(scopeModel)
-		require.NotNil(t, block, "could not find the %s enum in the access design", attribute)
-		declared := make(map[string]bool)
-		for _, quoted := range regexp.MustCompile(`"([^"]+)"`).FindAllSubmatch(block[1], -1) {
-			declared[string(quoted[1])] = true
-		}
-		require.NotEmpty(t, declared)
-		return declared
-	}
-	categories := declaredEnum("category")
-	sensitivities := declaredEnum("sensitivity")
-
-	for _, category := range authz.ScopeCategories {
-		require.True(t, categories[string(category)], "category %q is not declared in the design", category)
-	}
-
-	ctx, ti := newTestAccessService(t)
-	result, err := ti.service.ListScopes(ctx, &gen.ListScopesPayload{})
-	require.NoError(t, err)
-
-	for _, scope := range result.Scopes {
-		require.True(t, categories[scope.Category], "scope %q has category %q, which the design does not declare", scope.Slug, scope.Category)
-		if scope.Sensitivity != nil {
-			require.True(t, sensitivities[*scope.Sensitivity], "scope %q has sensitivity %q, which the design does not declare", scope.Slug, *scope.Sensitivity)
-		}
 	}
 }
 

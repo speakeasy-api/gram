@@ -8,7 +8,7 @@ import (
 )
 
 func clientTypeEnum() {
-	Enum("remote_session", "service_account", "static_credential", "pass_through", "ema")
+	shared.AuthClientTypeEnum()
 }
 
 func upstreamAuthStatusEnum() {

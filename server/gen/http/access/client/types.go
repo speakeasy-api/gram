@@ -33815,18 +33815,18 @@ func ValidateSelectorResponseBody(body *SelectorResponseBody) (err error) {
 		err = goa.MergeErrors(err, goa.MissingFieldError("resource_id", "body"))
 	}
 	if body.ResourceKind != nil {
-		if !(*body.ResourceKind == "project" || *body.ResourceKind == "mcp" || *body.ResourceKind == "org" || *body.ResourceKind == "environment" || *body.ResourceKind == "skill" || *body.ResourceKind == "assistant" || *body.ResourceKind == "risk_policy" || *body.ResourceKind == "chat" || *body.ResourceKind == "inference" || *body.ResourceKind == "agent" || *body.ResourceKind == "workload" || *body.ResourceKind == "mcp_auth_client" || *body.ResourceKind == "*") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_kind", *body.ResourceKind, []any{"project", "mcp", "org", "environment", "skill", "assistant", "risk_policy", "chat", "inference", "agent", "workload", "mcp_auth_client", "*"}))
+		if !(*body.ResourceKind == "org" || *body.ResourceKind == "chat" || *body.ResourceKind == "project" || *body.ResourceKind == "mcp" || *body.ResourceKind == "mcp_auth_client" || *body.ResourceKind == "environment" || *body.ResourceKind == "skill" || *body.ResourceKind == "assistant" || *body.ResourceKind == "risk_policy" || *body.ResourceKind == "inference" || *body.ResourceKind == "agent" || *body.ResourceKind == "workload" || *body.ResourceKind == "*") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_kind", *body.ResourceKind, []any{"org", "chat", "project", "mcp", "mcp_auth_client", "environment", "skill", "assistant", "risk_policy", "inference", "agent", "workload", "*"}))
 		}
 	}
 	if body.ClientType != nil {
-		if !(*body.ClientType == "remote_session" || *body.ClientType == "service_account" || *body.ClientType == "static_credential" || *body.ClientType == "pass_through" || *body.ClientType == "ema" || *body.ClientType == "*") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_type", *body.ClientType, []any{"remote_session", "service_account", "static_credential", "pass_through", "ema", "*"}))
+		if !(*body.ClientType == "ema" || *body.ClientType == "pass_through" || *body.ClientType == "remote_session" || *body.ClientType == "service_account" || *body.ClientType == "static_credential" || *body.ClientType == "*") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_type", *body.ClientType, []any{"ema", "pass_through", "remote_session", "service_account", "static_credential", "*"}))
 		}
 	}
 	if body.Disposition != nil {
-		if !(*body.Disposition == "read_only" || *body.Disposition == "destructive" || *body.Disposition == "idempotent" || *body.Disposition == "open_world" || *body.Disposition == "unannotated") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.disposition", *body.Disposition, []any{"read_only", "destructive", "idempotent", "open_world", "unannotated"}))
+		if !(*body.Disposition == "destructive" || *body.Disposition == "idempotent" || *body.Disposition == "open_world" || *body.Disposition == "read_only" || *body.Disposition == "unannotated") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.disposition", *body.Disposition, []any{"destructive", "idempotent", "open_world", "read_only", "unannotated"}))
 		}
 	}
 	if body.ServerURL != nil {
@@ -33854,17 +33854,17 @@ func ValidateRoleGrantRequestBody(body *RoleGrantRequestBody) (err error) {
 // ValidateSelectorRequestBody runs the validations defined on
 // SelectorRequestBody
 func ValidateSelectorRequestBody(body *SelectorRequestBody) (err error) {
-	if !(body.ResourceKind == "project" || body.ResourceKind == "mcp" || body.ResourceKind == "org" || body.ResourceKind == "environment" || body.ResourceKind == "skill" || body.ResourceKind == "assistant" || body.ResourceKind == "risk_policy" || body.ResourceKind == "chat" || body.ResourceKind == "inference" || body.ResourceKind == "agent" || body.ResourceKind == "workload" || body.ResourceKind == "mcp_auth_client" || body.ResourceKind == "*") {
-		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_kind", body.ResourceKind, []any{"project", "mcp", "org", "environment", "skill", "assistant", "risk_policy", "chat", "inference", "agent", "workload", "mcp_auth_client", "*"}))
+	if !(body.ResourceKind == "org" || body.ResourceKind == "chat" || body.ResourceKind == "project" || body.ResourceKind == "mcp" || body.ResourceKind == "mcp_auth_client" || body.ResourceKind == "environment" || body.ResourceKind == "skill" || body.ResourceKind == "assistant" || body.ResourceKind == "risk_policy" || body.ResourceKind == "inference" || body.ResourceKind == "agent" || body.ResourceKind == "workload" || body.ResourceKind == "*") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_kind", body.ResourceKind, []any{"org", "chat", "project", "mcp", "mcp_auth_client", "environment", "skill", "assistant", "risk_policy", "inference", "agent", "workload", "*"}))
 	}
 	if body.ClientType != nil {
-		if !(*body.ClientType == "remote_session" || *body.ClientType == "service_account" || *body.ClientType == "static_credential" || *body.ClientType == "pass_through" || *body.ClientType == "ema" || *body.ClientType == "*") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_type", *body.ClientType, []any{"remote_session", "service_account", "static_credential", "pass_through", "ema", "*"}))
+		if !(*body.ClientType == "ema" || *body.ClientType == "pass_through" || *body.ClientType == "remote_session" || *body.ClientType == "service_account" || *body.ClientType == "static_credential" || *body.ClientType == "*") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_type", *body.ClientType, []any{"ema", "pass_through", "remote_session", "service_account", "static_credential", "*"}))
 		}
 	}
 	if body.Disposition != nil {
-		if !(*body.Disposition == "read_only" || *body.Disposition == "destructive" || *body.Disposition == "idempotent" || *body.Disposition == "open_world" || *body.Disposition == "unannotated") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.disposition", *body.Disposition, []any{"read_only", "destructive", "idempotent", "open_world", "unannotated"}))
+		if !(*body.Disposition == "destructive" || *body.Disposition == "idempotent" || *body.Disposition == "open_world" || *body.Disposition == "read_only" || *body.Disposition == "unannotated") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.disposition", *body.Disposition, []any{"destructive", "idempotent", "open_world", "read_only", "unannotated"}))
 		}
 	}
 	if body.ServerURL != nil {
@@ -34324,8 +34324,8 @@ func ValidateScopeDefinitionResponseBody(body *ScopeDefinitionResponseBody) (err
 		}
 	}
 	if body.ResourceType != nil {
-		if !(*body.ResourceType == "org" || *body.ResourceType == "project" || *body.ResourceType == "mcp" || *body.ResourceType == "environment" || *body.ResourceType == "skill" || *body.ResourceType == "assistant" || *body.ResourceType == "risk_policy" || *body.ResourceType == "chat" || *body.ResourceType == "inference" || *body.ResourceType == "agent" || *body.ResourceType == "workload" || *body.ResourceType == "mcp_auth_client") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_type", *body.ResourceType, []any{"org", "project", "mcp", "environment", "skill", "assistant", "risk_policy", "chat", "inference", "agent", "workload", "mcp_auth_client"}))
+		if !(*body.ResourceType == "org" || *body.ResourceType == "chat" || *body.ResourceType == "project" || *body.ResourceType == "mcp" || *body.ResourceType == "mcp_auth_client" || *body.ResourceType == "environment" || *body.ResourceType == "skill" || *body.ResourceType == "assistant" || *body.ResourceType == "risk_policy" || *body.ResourceType == "inference" || *body.ResourceType == "agent" || *body.ResourceType == "workload") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_type", *body.ResourceType, []any{"org", "chat", "project", "mcp", "mcp_auth_client", "environment", "skill", "assistant", "risk_policy", "inference", "agent", "workload"}))
 		}
 	}
 	if body.Category != nil {
@@ -34940,8 +34940,8 @@ func ValidateResourceAudienceEntryResponseBody(body *ResourceAudienceEntryRespon
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_ids[*]", e, goa.FormatUUID))
 	}
 	for _, e := range body.Dispositions {
-		if !(e == "read_only" || e == "destructive" || e == "idempotent" || e == "open_world" || e == "unannotated") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.dispositions[*]", e, []any{"read_only", "destructive", "idempotent", "open_world", "unannotated"}))
+		if !(e == "destructive" || e == "idempotent" || e == "open_world" || e == "read_only" || e == "unannotated") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.dispositions[*]", e, []any{"destructive", "idempotent", "open_world", "read_only", "unannotated"}))
 		}
 	}
 	return
@@ -34954,8 +34954,8 @@ func ValidateSetResourceAudienceEntryRequestBody(body *SetResourceAudienceEntryR
 		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.level", body.Level, []any{"use", "view", "manage", "blocked", "blocked_view", "blocked_manage"}))
 	}
 	for _, e := range body.Dispositions {
-		if !(e == "read_only" || e == "destructive" || e == "idempotent" || e == "open_world" || e == "unannotated") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.dispositions[*]", e, []any{"read_only", "destructive", "idempotent", "open_world", "unannotated"}))
+		if !(e == "destructive" || e == "idempotent" || e == "open_world" || e == "read_only" || e == "unannotated") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.dispositions[*]", e, []any{"destructive", "idempotent", "open_world", "read_only", "unannotated"}))
 		}
 	}
 	return
@@ -35053,8 +35053,8 @@ func ValidateExplainedAccessRuleResponseBody(body *ExplainedAccessRuleResponseBo
 		}
 	}
 	for _, e := range body.Dispositions {
-		if !(e == "read_only" || e == "destructive" || e == "idempotent" || e == "open_world" || e == "unannotated") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.dispositions[*]", e, []any{"read_only", "destructive", "idempotent", "open_world", "unannotated"}))
+		if !(e == "destructive" || e == "idempotent" || e == "open_world" || e == "read_only" || e == "unannotated") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.dispositions[*]", e, []any{"destructive", "idempotent", "open_world", "read_only", "unannotated"}))
 		}
 	}
 	if body.Effect != nil {
@@ -35116,8 +35116,8 @@ func ValidateExplainedCredentialAccessResponseBody(body *ExplainedCredentialAcce
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.auth_client_id", *body.AuthClientID, goa.FormatUUID))
 	}
 	if body.ClientType != nil {
-		if !(*body.ClientType == "remote_session" || *body.ClientType == "service_account" || *body.ClientType == "static_credential" || *body.ClientType == "pass_through" || *body.ClientType == "ema") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_type", *body.ClientType, []any{"remote_session", "service_account", "static_credential", "pass_through", "ema"}))
+		if !(*body.ClientType == "ema" || *body.ClientType == "pass_through" || *body.ClientType == "remote_session" || *body.ClientType == "service_account" || *body.ClientType == "static_credential") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_type", *body.ClientType, []any{"ema", "pass_through", "remote_session", "service_account", "static_credential"}))
 		}
 	}
 	for _, e := range body.Rules {

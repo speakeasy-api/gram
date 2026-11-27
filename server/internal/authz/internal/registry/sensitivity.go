@@ -22,3 +22,10 @@ const (
 	// change what every role can do.
 	SensitivityDestructiveAdmin Sensitivity = "destructive_admin"
 )
+
+// Sensitivities lists every reason a scope can deserve a warning.
+var Sensitivities = []Sensitivity{
+	SensitivityConversations,
+	SensitivityToolLogs,
+	SensitivityDestructiveAdmin,
+}

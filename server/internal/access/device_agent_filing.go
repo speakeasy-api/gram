@@ -61,9 +61,9 @@ type RequestableProject struct {
 func (s *Service) RequestablePermissions(ctx context.Context, organizationID string, grants []authz.Grant) ([]RequestablePermission, error) {
 	var projects []projectsrepo.Project
 	projectsLoaded := false
-	out := make([]RequestablePermission, 0, len(temporaryGrantScopes))
+	out := make([]RequestablePermission, 0)
 	for _, entry := range authz.ScopeCatalog() {
-		if !slices.Contains(temporaryGrantScopes, entry.Scope) {
+		if !entry.TemporaryAccess {
 			continue
 		}
 		if authz.GrantsCoverEveryResource(grants, entry.Scope) {

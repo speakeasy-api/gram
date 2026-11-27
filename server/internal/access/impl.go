@@ -396,7 +396,7 @@ func scopeDefinition(entry authz.ScopeEntry) *gen.ScopeDefinition {
 		AgentEligible: agentEligible,
 		// Mirrors createTemporaryGrant's own check, so the dashboard offers
 		// temporary access only where the API accepts it.
-		TemporaryGrantable: ValidateTemporaryGrantScope(entry.Scope) == nil,
+		TemporaryGrantable: entry.TemporaryAccess,
 		ExclusionScope:     exclusionScope,
 		Sensitive:          entry.Sensitive(),
 		Sensitivity:        sensitivity,

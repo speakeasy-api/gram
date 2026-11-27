@@ -282,9 +282,9 @@ func TestListScopes_ReportsTemporaryGrantable(t *testing.T) {
 	require.True(t, grantable[string(authz.ScopeChatRead)])
 	require.True(t, grantable[string(authz.ScopeLogRead)])
 	require.False(t, grantable[string(authz.ScopeOrgAdmin)])
-	for _, scope := range temporaryGrantScopes {
-		if _, listed := grantable[string(scope)]; listed {
-			require.True(t, grantable[string(scope)], "%s can be given temporarily", scope)
+	for _, scope := range authz.TemporaryAccessScopeNames() {
+		if _, listed := grantable[scope]; listed {
+			require.True(t, grantable[scope], "%s can be given temporarily", scope)
 		}
 	}
 }
