@@ -327,8 +327,10 @@ var validDispositions = map[string]bool{
 
 // systemRoleScopes lists the scopes each built-in role is seeded with.
 var systemRoleScopes = map[string][]Scope{
-	"admin":  {"channels:connect", "channels:admin", "org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "mcp:auth", "environment:read", "environment:write", "skill:read", "skill:write", "assistant:read", "assistant:write", "plugin:write", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:write", "memory:read", "memory:write"},
-	"member": {"org:read", "project:read", "mcp:read", "mcp:connect", "mcp:auth", "skill:read", "assistant:read", "workload:read"},
+	"admin":           {"channels:connect", "channels:admin", "org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "mcp:auth", "environment:read", "environment:write", "skill:read", "skill:write", "assistant:read", "assistant:write", "plugin:write", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:write", "memory:read", "memory:write"},
+	"member":          {"org:read", "project:read", "mcp:read", "mcp:connect", "mcp:auth", "skill:read", "assistant:read", "workload:read"},
+	"standard_admin":  {"channels:connect", "channels:admin", "org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "mcp:auth", "environment:read", "environment:write", "skill:read", "skill:write", "assistant:read", "assistant:write", "plugin:write", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:write", "memory:read", "memory:write"},
+	"standard_member": {"org:read", "project:read", "mcp:read", "mcp:connect", "mcp:auth", "skill:read", "assistant:read", "workload:read"},
 }
 
 // agentEligibilityByScope is the agent eligibility of every scope the registry

@@ -692,53 +692,59 @@ var Definitions = Registry{
 		},
 	},
 	SystemRoles: map[string][]Scope{
-		SystemRoleAdmin: {
-			"channels:connect",
-			"channels:admin",
-			// channels:read_all is deliberately not a default; see its
-			// permission.
-			"org:read",
-			"org:admin",
-			"project:read",
-			"project:write",
-			"mcp:read",
-			"mcp:write",
-			"mcp:connect",
-			"mcp:auth",
-			"environment:read",
-			"environment:write",
-			"skill:read",
-			"skill:write",
-			"assistant:read",
-			"assistant:write",
-			"plugin:write",
-			"agent:read",
-			"agent:write",
-			"agent:authorize",
-			"agent:transfer",
-			"workload:read",
-			"workload:write",
-			// Admins turn team memory on and curate it. Members need an
-			// explicit grant.
-			"memory:read",
-			"memory:write",
-			// chat:* and log:read are deliberately not defaults for any role:
-			// transcripts and raw tool logs must be granted explicitly.
-		},
-		SystemRoleMember: {
-			"org:read",
-			"project:read",
-			"mcp:read",
-			"mcp:connect",
-			"mcp:auth",
-			"skill:read",
-			"assistant:read",
-			"workload:read",
-			// environment:read is not a member default: environment values
-			// include secrets.
-		},
+		SystemRoleAdmin:          defaultAdminScopes,
+		SystemRoleMember:         defaultMemberScopes,
+		SystemRoleStandardAdmin:  defaultAdminScopes,
+		SystemRoleStandardMember: defaultMemberScopes,
 	},
 	Retired: []Scope{"mcp_approval:read", "mcp_approval:decide"},
+}
+
+var defaultAdminScopes = []Scope{
+	"channels:connect",
+	"channels:admin",
+	// channels:read_all is deliberately not a default; see its
+	// permission.
+	"org:read",
+	"org:admin",
+	"project:read",
+	"project:write",
+	"mcp:read",
+	"mcp:write",
+	"mcp:connect",
+	"mcp:auth",
+	"environment:read",
+	"environment:write",
+	"skill:read",
+	"skill:write",
+	"assistant:read",
+	"assistant:write",
+	"plugin:write",
+	"agent:read",
+	"agent:write",
+	"agent:authorize",
+	"agent:transfer",
+	"workload:read",
+	"workload:write",
+	// Admins turn team memory on and curate it. Members need an
+	// explicit grant.
+	"memory:read",
+	"memory:write",
+	// chat:* and log:read are deliberately not defaults for any role:
+	// transcripts and raw tool logs must be granted explicitly.
+}
+
+var defaultMemberScopes = []Scope{
+	"org:read",
+	"project:read",
+	"mcp:read",
+	"mcp:connect",
+	"mcp:auth",
+	"skill:read",
+	"assistant:read",
+	"workload:read",
+	// environment:read is not a member default: environment values
+	// include secrets.
 }
 
 // serverDimensions limit a risk policy bypass or block to one server. Evaluate

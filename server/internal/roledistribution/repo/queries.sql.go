@@ -89,7 +89,11 @@ const listActiveOrganizationRoleURNsPage = `-- name: ListActiveOrganizationRoleU
 WITH active_roles AS (
   SELECT 'role:global:' || id::text AS role_urn
   FROM global_roles
-  WHERE deleted IS FALSE AND workos_deleted IS FALSE
+  WHERE deleted IS FALSE
+    AND workos_deleted IS FALSE
+    -- Keep Speakeasy-local built-in roles out of automatic role-plugin
+    -- bootstrap while they are hidden from organizations.
+    AND workos_slug NOT IN ('super_admin', 'standard_admin', 'standard_member')
   UNION ALL
   SELECT 'role:organization:' || id::text
   FROM organization_roles

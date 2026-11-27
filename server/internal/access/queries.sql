@@ -344,6 +344,43 @@ FROM global_roles
 WHERE deleted_at IS NULL
 ORDER BY workos_slug;
 
+-- name: ListGlobalRoleSlugsByIDs :many
+SELECT id, workos_slug
+FROM global_roles
+WHERE id = ANY(@ids::uuid[])
+  AND deleted IS FALSE
+  AND workos_deleted IS FALSE;
+
+-- name: EnsureLocalGlobalRole :exec
+-- Upserts a Speakeasy-local built-in role into global_roles without emitting
+-- role distribution fanout requests.
+INSERT INTO global_roles (
+    workos_slug,
+    workos_name,
+    workos_description,
+    workos_created_at,
+    workos_updated_at,
+    workos_last_event_id
+) VALUES (
+    @workos_slug,
+    @workos_name,
+    @workos_description,
+    @workos_created_at,
+    @workos_updated_at,
+    NULL
+)
+ON CONFLICT (workos_slug) DO UPDATE SET
+    workos_name = EXCLUDED.workos_name,
+    workos_description = EXCLUDED.workos_description,
+    workos_updated_at = EXCLUDED.workos_updated_at,
+    deleted_at = NULL,
+    workos_deleted_at = NULL,
+    updated_at = clock_timestamp()
+WHERE global_roles.workos_name IS DISTINCT FROM EXCLUDED.workos_name
+   OR global_roles.workos_description IS DISTINCT FROM EXCLUDED.workos_description
+   OR global_roles.deleted_at IS NOT NULL
+   OR global_roles.workos_deleted_at IS NOT NULL;
+
 -- name: UpsertGlobalRoleWithRequests :one
 -- Upsert an environment-level role. WorkOS sync callers pass an event ID;
 -- local/bootstrap callers pass NULL so an existing WorkOS event cursor is preserved.
@@ -523,6 +560,9 @@ WITH active_roles AS (
   FROM global_roles
   WHERE deleted IS FALSE
     AND workos_deleted IS FALSE
+    -- Keep Speakeasy-local built-in roles hidden from org listings until
+    -- per-org rollout gating and locking are in place.
+    AND workos_slug NOT IN ('super_admin', 'standard_admin', 'standard_member')
   UNION ALL
   SELECT id, workos_slug, workos_name, workos_description, workos_created_at, workos_updated_at, 'organization'::text AS role_kind
   FROM organization_roles
@@ -1075,10 +1115,13 @@ profiles AS (
     AND (d.user_id = active_users.user_id OR (d.user_id IS NULL AND LOWER(d.email) = LOWER(active_users.email)))
   ORDER BY active_users.user_id, (d.user_id = active_users.user_id) DESC NULLS LAST, d.workos_updated_at DESC, d.id
 )
-SELECT user_id, ('user:' || user_id)::text AS principal_urn
+SELECT user_id, ('user:' || user_id)::text AS principal_urn, ''::text AS global_role_slug
 FROM active_users
 UNION
-SELECT active_users.user_id, ora.role_urn::text AS principal_urn
+SELECT
+  active_users.user_id,
+  ora.role_urn::text AS principal_urn,
+  COALESCE(global_roles.workos_slug, '')::text AS global_role_slug
 FROM active_users
 JOIN organization_role_assignments AS ora ON ora.user_id = active_users.user_id
 LEFT JOIN organization_roles
@@ -1094,11 +1137,23 @@ WHERE ora.organization_id = @organization_id
   AND ora.deleted_at IS NULL
   AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) IS NOT NULL
 UNION
-SELECT profiles.user_id, drm.role_urn::text AS principal_urn
+SELECT
+  profiles.user_id,
+  drm.role_urn::text AS principal_urn,
+  COALESCE(global_roles.workos_slug, '')::text AS global_role_slug
 FROM profiles
 JOIN directory_role_mappings AS drm
   ON drm.organization_id = @organization_id
   AND drm.deleted IS FALSE
+LEFT JOIN organization_roles
+  ON drm.role_urn = 'role:organization:' || organization_roles.id::text
+  AND organization_roles.organization_id = drm.organization_id
+  AND organization_roles.deleted IS FALSE
+  AND organization_roles.workos_deleted IS FALSE
+LEFT JOIN global_roles
+  ON drm.role_urn = 'role:global:' || global_roles.id::text
+  AND global_roles.deleted IS FALSE
+  AND global_roles.workos_deleted IS FALSE
 WHERE (
     (
       drm.source_kind = 'group'
@@ -1120,23 +1175,7 @@ WHERE (
       AND profiles.attributes ->> drm.attribute_key = drm.attribute_value
     )
   )
-  AND (
-    EXISTS (
-      SELECT 1
-      FROM organization_roles AS r
-      WHERE drm.role_urn = 'role:organization:' || r.id::text
-        AND r.organization_id = drm.organization_id
-        AND r.deleted IS FALSE
-        AND r.workos_deleted IS FALSE
-    )
-    OR EXISTS (
-      SELECT 1
-      FROM global_roles AS g
-      WHERE drm.role_urn = 'role:global:' || g.id::text
-        AND g.deleted IS FALSE
-        AND g.workos_deleted IS FALSE
-    )
-  );
+  AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) IS NOT NULL;
 
 -- name: ListOrganizationRoleAssignmentRecordsByWorkosUser :many
 SELECT
@@ -1458,6 +1497,13 @@ WITH user_grants AS (
       'mcp:connect', 'mcp:read', 'mcp:write',
       'mcp:blocked_connect', 'mcp:blocked_read', 'mcp:blocked_write'
     )
+  UNION ALL
+  SELECT
+    standard_scope AS scope,
+    jsonb_build_object('resource_kind', 'mcp', 'resource_id', '*') AS selectors,
+    FALSE AS direct
+  FROM unnest(@standard_role_scopes::text[]) AS standard_scope
+  WHERE standard_scope IN ('mcp:connect', 'mcp:read', 'mcp:write')
 ), servers AS (
   SELECT ms.id, ms.name, ms.slug, ms.project_id, p.slug AS project_slug
   FROM mcp_servers ms
@@ -1550,6 +1596,13 @@ WITH user_grants AS (
       'skill:read', 'skill:write',
       'skill:blocked_read', 'skill:blocked_write'
     )
+  UNION ALL
+  SELECT
+    standard_scope AS scope,
+    jsonb_build_object('resource_kind', 'skill', 'resource_id', '*') AS selectors,
+    FALSE AS direct
+  FROM unnest(@standard_role_scopes::text[]) AS standard_scope
+  WHERE standard_scope IN ('skill:read', 'skill:write')
 ), candidate_skills AS (
   SELECT s.id, s.name, s.display_name, s.project_id, p.slug AS project_slug
   FROM skills s

@@ -149,7 +149,7 @@ func (r *RoleManager) GetRoleByIDTx(ctx context.Context, tx pgx.Tx, gramOrgID, i
 	if err != nil {
 		return nil, err
 	}
-	grants, err := authz.PatchRoleGrantsTx(ctx, tx, gramOrgID, role.Slug, role.PrincipalURN, nil, nil)
+	grants, err := authz.GrantsForRoleTx(ctx, tx, gramOrgID, role.PrincipalURN)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load grants for role").LogError(ctx, r.logger)
 	}
@@ -532,7 +532,10 @@ func (r *RoleManager) UpdateRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID, wo
 		return RoleUpdateResult{}, RoleReconciliation{}, err
 	}
 
-	currentGrants, err := authz.PatchRoleGrantsTx(ctx, tx, gramOrgID, currentRole.Slug, currentRole.PrincipalURN, nil, nil)
+	if err := authz.LockRolePrincipalGrants(ctx, tx, gramOrgID, currentRole.PrincipalURN); err != nil {
+		return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "lock grants for role update").LogError(ctx, r.logger)
+	}
+	currentGrants, err := authz.GrantsForRoleTx(ctx, tx, gramOrgID, currentRole.PrincipalURN)
 	if err != nil {
 		return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "load grants for role update").LogError(ctx, r.logger)
 	}

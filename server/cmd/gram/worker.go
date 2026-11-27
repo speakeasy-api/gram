@@ -741,6 +741,9 @@ func newWorkerCommand() *cli.Command {
 
 			ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, completionsClient)
 
+			if err := authz.EnsureLocalBuiltInGlobalRoles(ctx, db); err != nil {
+				return fmt.Errorf("ensure local built-in global roles: %w", err)
+			}
 			if err := externalmcp.EnsureNativeCatalogSource(ctx, db); err != nil {
 				return fmt.Errorf("ensure native catalog source: %w", err)
 			}

@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type RoleGrant struct {
@@ -304,23 +305,26 @@ func flattenRoleGrants(grants []*RoleGrant) ([]roleGrantRow, error) {
 	return rows, nil
 }
 
-func GrantsForRole(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, orgID string, rolePrincipalURN string) ([]*ScopedGrant, error) {
+// GrantsForRoleTx loads effective grants for a single role principal using dbtx,
+// merging stored grants with standard role grants.
+func GrantsForRoleTx(ctx context.Context, dbtx repo.DBTX, orgID string, rolePrincipalURN string) ([]*ScopedGrant, error) {
 	principal, err := parseRolePrincipalURN(rolePrincipalURN)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "parse role principal").LogError(ctx, logger)
+		return nil, fmt.Errorf("parse role principal: %w", err)
 	}
 
-	rows, err := repo.New(db).GetPrincipalGrants(ctx, repo.GetPrincipalGrantsParams{
-		OrganizationID: orgID,
-		PrincipalUrns:  []string{principal.String()},
-	})
+	grants, err := LoadGrants(ctx, dbtx, orgID, []urn.Principal{principal})
+	if err != nil {
+		return nil, fmt.Errorf("list grants for role: %w", err)
+	}
+
+	return GrantsToScopedGrants(grants), nil
+}
+
+func GrantsForRole(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, orgID string, rolePrincipalURN string) ([]*ScopedGrant, error) {
+	scoped, err := GrantsForRoleTx(ctx, db, orgID, rolePrincipalURN)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list grants for role").LogError(ctx, logger)
-	}
-
-	scoped, err := scopedGrantsFromGrantRows(rows)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "unmarshal grant selector").LogError(ctx, logger)
 	}
 
 	return scoped, nil
@@ -337,11 +341,11 @@ type ScopeCoverage struct {
 	Resources []string
 }
 
-// ScopeCoverageTx reads, in one query, which scopes each principal holds
-// grants for, whether any of those grants names every resource, and which
-// resources the others name. It reads inside the caller's transaction so a
-// membership change can be compared with the state it replaces. Principals
-// without grants have no entry.
+// ScopeCoverageTx reads which scopes each principal holds grants for, whether
+// any of those grants names every resource, and which resources the others
+// name. It merges stored principal_grants with standard role grants inside the
+// caller's transaction so a membership change can be compared with the state it
+// replaces. Principals without grants have no entry.
 func ScopeCoverageTx(ctx context.Context, dbtx repo.DBTX, orgID string, principalURNs []string) (map[string][]ScopeCoverage, error) {
 	if len(principalURNs) == 0 {
 		return nil, nil
@@ -353,19 +357,17 @@ func ScopeCoverageTx(ctx context.Context, dbtx repo.DBTX, orgID string, principa
 	if err != nil {
 		return nil, fmt.Errorf("list grants for principals: %w", err)
 	}
+	standardGrants, err := LoadStandardRoleGrants(ctx, dbtx, principalURNs)
+	if err != nil {
+		return nil, err
+	}
 	type key struct {
 		principal string
 		scope     Scope
 	}
-	index := make(map[key]int, len(rows))
+	index := make(map[key]int, len(rows)+len(standardGrants))
 	coverage := make(map[string][]ScopeCoverage)
-	for _, row := range rows {
-		selector, err := SelectorFromRow(row.Selectors)
-		if err != nil {
-			return nil, err
-		}
-		principal := row.PrincipalUrn.String()
-		scope := Scope(row.Scope)
+	record := func(principal string, scope Scope, selector Selector) {
 		held := coverage[principal]
 		at, ok := index[key{principal, scope}]
 		if !ok {
@@ -379,6 +381,16 @@ func ScopeCoverageTx(ctx context.Context, dbtx repo.DBTX, orgID string, principa
 			held[at].Resources = append(held[at].Resources, selector.Key())
 		}
 		coverage[principal] = held
+	}
+	for _, row := range rows {
+		selector, err := SelectorFromRow(row.Selectors)
+		if err != nil {
+			return nil, err
+		}
+		record(row.PrincipalUrn.String(), Scope(row.Scope), selector)
+	}
+	for _, grant := range standardGrants {
+		record(grant.PrincipalUrn, grant.Scope, grant.Selector)
 	}
 	return coverage, nil
 }

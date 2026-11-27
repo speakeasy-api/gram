@@ -1933,19 +1933,26 @@ func (s *Service) ListIdentityAccess(ctx context.Context, payload *gen.ListIdent
 		principalURNs = append(principalURNs, p.String())
 	}
 
+	standardRoleScopes, err := authz.StandardRoleScopesFor(ctx, s.db, principals)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve standard role scopes").LogError(ctx, logger)
+	}
+
 	q := repo.New(s.db)
 
 	serverRows, err := q.ListAccessibleMCPServersForUser(ctx, repo.ListAccessibleMCPServersForUserParams{
-		OrganizationID: ac.ActiveOrganizationID,
-		PrincipalUrns:  principalURNs,
+		OrganizationID:     ac.ActiveOrganizationID,
+		PrincipalUrns:      principalURNs,
+		StandardRoleScopes: standardRoleScopes,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list accessible MCP servers").LogError(ctx, logger)
 	}
 
 	skillRows, err := q.ListAccessibleSkillsForUser(ctx, repo.ListAccessibleSkillsForUserParams{
-		OrganizationID: ac.ActiveOrganizationID,
-		PrincipalUrns:  principalURNs,
+		OrganizationID:     ac.ActiveOrganizationID,
+		PrincipalUrns:      principalURNs,
+		StandardRoleScopes: standardRoleScopes,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list accessible skills").LogError(ctx, logger)

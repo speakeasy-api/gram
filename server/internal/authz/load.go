@@ -9,8 +9,11 @@ import (
 )
 
 // LoadGrants loads and normalizes grants for the given organization and
-// principals. The result is exactly the stored grant set: no defaults are
-// synthesized, so a role edit that removes a grant takes effect immediately.
+// principals. Stored grants come from principal_grants; standard roles
+// (standard_admin, standard_member) contribute their canonical grants from
+// registry.Definitions alongside any stored non-role grants (such as risk
+// policies). Other roles synthesize no defaults, so a role edit that removes a
+// grant takes effect immediately.
 func LoadGrants(ctx context.Context, db accessrepo.DBTX, organizationID string, principals []urn.Principal) ([]Grant, error) {
 	if organizationID == "" {
 		return nil, fmt.Errorf("organization id is required")
@@ -21,6 +24,21 @@ func LoadGrants(ctx context.Context, db accessrepo.DBTX, organizationID string, 
 		return nil, err
 	}
 
+	grantRows, err := loadStoredGrants(ctx, db, organizationID, principalURNs)
+	if err != nil {
+		return nil, err
+	}
+
+	standardGrants, err := LoadStandardRoleGrants(ctx, db, principalURNs)
+	if err != nil {
+		return nil, err
+	}
+	grantRows = append(grantRows, standardGrants...)
+
+	return grantRows, nil
+}
+
+func loadStoredGrants(ctx context.Context, db accessrepo.DBTX, organizationID string, principalURNs []string) ([]Grant, error) {
 	rows, err := accessrepo.New(db).GetPrincipalGrants(ctx, accessrepo.GetPrincipalGrantsParams{
 		OrganizationID: organizationID,
 		PrincipalUrns:  principalURNs,
@@ -42,7 +60,6 @@ func LoadGrants(ctx context.Context, db accessrepo.DBTX, organizationID string, 
 			Inferred:     row.Inferred,
 		})
 	}
-
 	return grantRows, nil
 }
 
@@ -80,6 +97,8 @@ func LoadUserGrants(ctx context.Context, db accessrepo.DBTX, organizationID stri
 	// A shared role can apply to several users, but another user's direct or
 	// role grants must never become part of a user's runtime permission cap.
 	principalUsers := map[string][]string{AllUsersPrincipal().String(): uniqueIDs}
+	standardRoleSlugs := make(map[string]string)
+	var standardRoleURNs []string
 	for _, row := range rows {
 		principal, err := urn.ParsePrincipal(row.PrincipalUrn)
 		if err != nil {
@@ -88,12 +107,23 @@ func LoadUserGrants(ctx context.Context, db accessrepo.DBTX, organizationID stri
 		key := principal.String()
 		if _, ok := principalUsers[key]; !ok {
 			principals = append(principals, principal)
+			if IsStandardRole(row.GlobalRoleSlug) {
+				standardRoleSlugs[key] = row.GlobalRoleSlug
+				standardRoleURNs = append(standardRoleURNs, key)
+			}
 		}
 		principalUsers[key] = append(principalUsers[key], row.UserID)
 	}
-	grants, err := LoadGrants(ctx, db, organizationID, principals)
+	principalURNs, err := principalURNStrings(principals)
 	if err != nil {
 		return nil, err
+	}
+	grants, err := loadStoredGrants(ctx, db, organizationID, principalURNs)
+	if err != nil {
+		return nil, err
+	}
+	for _, roleURN := range standardRoleURNs {
+		grants = append(grants, StandardRoleGrants(roleURN, standardRoleSlugs[roleURN])...)
 	}
 	for _, grant := range grants {
 		for _, userID := range principalUsers[grant.PrincipalUrn] {
