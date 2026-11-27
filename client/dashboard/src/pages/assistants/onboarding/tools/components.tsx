@@ -9,7 +9,7 @@ import { cn, firstPartyHosts } from "@/lib/utils";
 import type { ToolCallMessagePartProps } from "@assistant-ui/react";
 import { Icon } from "@/components/ui/Icon";
 import { Check, Copy, ExternalLink, Shuffle, Sparkles } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAssistantDraft } from "../useAssistantDraft";
 import {
   GENERIC_PERSONALITIES,
@@ -278,15 +278,26 @@ export function RequestSlackCredentialsComponent({
   const settled = !isPending;
   const r = result as SlackCredentialsResult | undefined;
 
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+  const isPendingRef = useRef(isPending);
+  isPendingRef.current = isPending;
+  const unmountedRef = useRef(false);
+
   useEffect(() => {
-    if (!isPending) return;
+    unmountedRef.current = false;
     return () => {
-      draft.resolvePending(toolCallId, {
-        success: false,
-        cancelled: true,
+      unmountedRef.current = true;
+      queueMicrotask(() => {
+        if (unmountedRef.current && isPendingRef.current) {
+          draftRef.current.resolvePending(toolCallId, {
+            success: false,
+            cancelled: true,
+          });
+        }
       });
     };
-  }, [draft, toolCallId, isPending]);
+  }, [toolCallId]);
 
   if (settled && r?.saved) {
     const savedKeys = r.saved_keys ?? [];

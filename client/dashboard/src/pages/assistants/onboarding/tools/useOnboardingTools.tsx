@@ -2254,7 +2254,7 @@ export function buildAssistantTools(
         g.scope === "mcp:connect" &&
         g.selector?.resourceKind === "mcp" &&
         g.selector?.resourceId === ASSISTANT_SLACK_TOOLSET_ID &&
-        (!g.selector?.projectId || g.selector.projectId === deps.projectId),
+        g.selector?.projectId === deps.projectId,
     );
     if (!hasConnect) {
       await sdk.agents.createPolicyGrant({
@@ -2518,22 +2518,24 @@ export function buildAssistantTools(
         const { auth_client_id, keys } = rawArgs as RequestSlackCredentialsArgs;
         const toolCallId = ctx.toolCallId ?? "";
 
-        let authClientId = auth_client_id;
-        if (!authClientId) {
-          const assistantId = live.id ?? draft.assistantId;
-          const existing = assistantId
-            ? await findAssistantSlackAuthClient(
-                assistantId,
-                draft.assistant?.agentId,
-              )
-            : undefined;
-          authClientId = existing?.id;
-        }
-        if (!authClientId) {
+        const assistantId = live.id ?? draft.assistantId;
+        const linked = assistantId
+          ? await findAssistantSlackAuthClient(
+              assistantId,
+              draft.assistant?.agentId,
+            )
+          : undefined;
+        if (!linked) {
           return errResult(
             "No Slack app credential record is linked to this assistant yet. Run propose_slack_setup first.",
           );
         }
+        if (auth_client_id && auth_client_id !== linked.id) {
+          return errResult(
+            "The requested Slack credential record does not belong to this assistant.",
+          );
+        }
+        const authClientId = linked.id;
 
         type FormResult = {
           success: boolean;
@@ -2566,9 +2568,9 @@ export function buildAssistantTools(
         const resolvedClientId = authClientId;
         return serialize(async () => {
           try {
-            const current = await sdk.authClients
-              .get({ id: resolvedClientId })
-              .catch(() => null);
+            const current = await sdk.authClients.get({
+              id: resolvedClientId,
+            });
             const entered = new Map<string, string>();
             for (const [k, rawVal] of Object.entries(userInput.values ?? {})) {
               const trimmed = String(rawVal ?? "").trim();

@@ -213,13 +213,14 @@ func migrateOneAssistantSlack(
 		return nil, fmt.Errorf("list assistant Slack toolsets: %w", err)
 	}
 
-	var legacyTriggers []repo.AdminListAssistantSlackTriggersRow
-	var migratedTriggers []repo.AdminListAssistantSlackTriggersRow
+	var envTriggers []repo.AdminListAssistantSlackTriggersRow
+	var linkedTriggers []repo.AdminListAssistantSlackTriggersRow
 	for _, trig := range triggers {
+		if trig.EnvironmentID.Valid || !trig.AuthClientID.Valid {
+			envTriggers = append(envTriggers, trig)
+		}
 		if trig.AuthClientID.Valid {
-			migratedTriggers = append(migratedTriggers, trig)
-		} else {
-			legacyTriggers = append(legacyTriggers, trig)
+			linkedTriggers = append(linkedTriggers, trig)
 		}
 	}
 
@@ -230,8 +231,8 @@ func migrateOneAssistantSlack(
 		}
 	}
 
-	// Check whether the assistant's agent already owns a slack_app client even
-	// when no trigger exists (outbound-only Slack assistant).
+	// Check whether the assistant's agent already owns a live, enabled slack_app
+	// client even when no trigger exists (outbound-only Slack assistant).
 	var existingAgentClientID uuid.NullUUID
 	if row.AgentID.Valid {
 		foundID, findErr := q.AdminFindAgentSlackAuthClient(ctx, repo.AdminFindAgentSlackAuthClientParams{
@@ -280,20 +281,34 @@ func migrateOneAssistantSlack(
 
 	// 1. Collect Slack secrets from every legacy environment referenced by this
 	// assistant's Slack triggers or attached Slack toolsets.
-	envSecrets, err := collectAssistantSlackEnvSecrets(ctx, q, enc, organizationID, row.ProjectID, legacyTriggers, toolsets)
+	envSecrets, err := collectAssistantSlackEnvSecrets(ctx, q, enc, organizationID, row.ProjectID, envTriggers, toolsets)
 	if err != nil {
 		return nil, err
 	}
 
-	// 2. Reuse an existing slack_app auth client for this assistant (from a
-	// migrated trigger or the agent's existing mcp:auth grant) or create a new one.
+	// 2. Reuse a single live, enabled slack_app auth client in scope (preferring
+	// a valid trigger-linked client, otherwise the agent's existing slack_app
+	// client) or create a new one. All triggers and mcp:auth grants for this
+	// assistant are consolidated onto this one client so ResolveForCaller never
+	// encounters multiple authorized slack_app clients.
 	authClients := authclientsrepo.New(savepoint)
 	var authClientID uuid.UUID
 	var authClientName string
-	switch {
-	case len(migratedTriggers) > 0:
-		authClientID = migratedTriggers[0].AuthClientID.UUID
-	case existingAgentClientID.Valid:
+	for _, trig := range linkedTriggers {
+		candidate, getErr := authClients.GetSlackAppAuthClientInScope(ctx, authclientsrepo.GetSlackAppAuthClientInScopeParams{
+			ID:             trig.AuthClientID.UUID,
+			OrganizationID: organizationID,
+			ProjectID:      uuid.NullUUID{UUID: row.ProjectID, Valid: true},
+		})
+		if getErr == nil && candidate.Enabled {
+			authClientID = candidate.ID
+			break
+		}
+		if getErr != nil && !errors.Is(getErr, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("validate linked slack_app auth client %s: %w", trig.AuthClientID.UUID, getErr)
+		}
+	}
+	if authClientID == uuid.Nil && existingAgentClientID.Valid {
 		authClientID = existingAgentClientID.UUID
 	}
 
@@ -365,11 +380,15 @@ func migrateOneAssistantSlack(
 		changed = true
 	}
 
-	// 4. Repoint every legacy environment-backed Slack trigger to auth_client_id
-	// and clear environment_id so hard-deleting the auth client can never fall
-	// back to stale environment credentials.
+	// 4. Repoint every Slack trigger that still has environment_id set, lacks
+	// auth_client_id, or points at a different client onto authClientID and
+	// clear environment_id so hard-deleting the auth client can never fall back
+	// to stale environment credentials.
 	var triggersRepointed int64
-	for _, trig := range legacyTriggers {
+	for _, trig := range triggers {
+		if trig.AuthClientID.Valid && trig.AuthClientID.UUID == authClientID && !trig.EnvironmentID.Valid {
+			continue
+		}
 		updated, err := q.AdminRepointSlackTriggerToAuthClient(ctx, repo.AdminRepointSlackTriggerToAuthClientParams{
 			AuthClientID:   uuid.NullUUID{UUID: authClientID, Valid: true},
 			ID:             trig.ID,
@@ -696,6 +715,50 @@ func ensureAssistantSlackAgentGrants(
 			},
 		}); err != nil {
 			return 0, fmt.Errorf("audit agent grant %s: %w", grant.Scope, err)
+		}
+		added++
+	}
+
+	// Revoke any extra slack_app mcp:auth grants on other clients so
+	// ResolveForCaller sees exactly one authorized slack_app client.
+	slackAuthGrants, err := repo.New(tx).AdminListAgentSlackAuthClientGrants(ctx, repo.AdminListAgentSlackAuthClientGrantsParams{
+		OrganizationID: organizationID,
+		AgentID:        agentID,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("list agent slack_app auth grants: %w", err)
+	}
+	for _, extra := range slackAuthGrants {
+		if extra.AuthClientID == authClientID {
+			continue
+		}
+		_, err := agents.DeleteAgentPolicyGrant(ctx, agentrepo.DeleteAgentPolicyGrantParams{
+			OrganizationID: organizationID,
+			AgentID:        agentID,
+			GrantID:        extra.GrantID,
+		})
+		if errors.Is(err, pgx.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return 0, fmt.Errorf("revoke extra slack_app auth grant %s: %w", extra.GrantID, err)
+		}
+		if err := auditLogger.LogAgentPolicyGrant(ctx, tx, audit.LogAgentPolicyGrantEvent{
+			OrganizationID:   organizationID,
+			AgentURN:         agentURN,
+			Actor:            actor,
+			ActorDisplayName: displayName,
+			Action:           audit.ActionAgentPolicyGrantDelete,
+			Name:             "",
+			Before: &audit.AgentPolicyGrantSnapshot{
+				ID:       extra.GrantID,
+				Scope:    string(authz.ScopeMCPAuth),
+				Effect:   "allow",
+				Selector: authz.AuthClientSelector(extra.AuthClientID.String(), ""),
+			},
+			After: nil,
+		}); err != nil {
+			return 0, fmt.Errorf("audit extra slack_app auth grant revoke %s: %w", extra.GrantID, err)
 		}
 		added++
 	}

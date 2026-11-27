@@ -142,6 +142,7 @@ function makeDeps(overrides?: {
       authClientsGet,
       authClientsSetHeaders,
       agentsCreatePolicyGrant,
+      triggersList,
       triggersCreate,
       toolsetsCreate,
       toolsetsUpdateBySlug,
@@ -236,6 +237,17 @@ describe("Slack onboarding tools", () => {
           },
         }),
     });
+    spies.triggersList.mockResolvedValueOnce({
+      triggers: [
+        {
+          id: "trig-slack-1",
+          definitionSlug: "slack",
+          targetKind: "assistant",
+          targetRef: "asst-1",
+          authClientId: "client-slack-1",
+        },
+      ],
+    });
     const tools = buildAssistantTools(deps);
     const result = await asExecutable(tools.request_slack_credentials).execute(
       {
@@ -262,6 +274,62 @@ describe("Slack onboarding tools", () => {
     });
     expect(spies.environmentsCreate).not.toHaveBeenCalled();
     expect(spies.environmentsUpdateBySlug).not.toHaveBeenCalled();
+  });
+
+  it("rejects an explicit auth_client_id that does not belong to the assistant and propagates authClients.get errors", async () => {
+    const { deps, spies } = makeDeps({
+      pendingSubmit: (_id, resolve) =>
+        resolve({
+          success: true,
+          values: { SLACK_BOT_TOKEN: "xoxb-new-token" },
+        }),
+    });
+    spies.triggersList.mockResolvedValue({
+      triggers: [
+        {
+          id: "trig-slack-1",
+          definitionSlug: "slack",
+          targetKind: "assistant",
+          targetRef: "asst-1",
+          authClientId: "client-slack-1",
+        },
+      ],
+    });
+    const tools = buildAssistantTools(deps);
+
+    const mismatch = await asExecutable(
+      tools.request_slack_credentials,
+    ).execute(
+      {
+        auth_client_id: "client-other-assistant",
+        keys: [{ name: "SLACK_BOT_TOKEN", sensitive: true }],
+      },
+      { toolCallId: "tc-mismatch" },
+    );
+    expect(mismatch.ok).toBe(false);
+    expect(String(mismatch.error)).toContain("does not belong");
+    expect(spies.authClientsSetHeaders).not.toHaveBeenCalled();
+
+    spies.authClientsGet
+      .mockResolvedValueOnce({
+        id: "client-slack-1",
+        clientType: "slack_app",
+        name: "Mina Slack",
+        headers: [],
+      })
+      .mockRejectedValueOnce(new Error("transient read failure"));
+    const readFail = await asExecutable(
+      tools.request_slack_credentials,
+    ).execute(
+      {
+        auth_client_id: "client-slack-1",
+        keys: [{ name: "SLACK_BOT_TOKEN", sensitive: true }],
+      },
+      { toolCallId: "tc-readfail" },
+    );
+    expect(readFail.ok).toBe(false);
+    expect(String(readFail.error)).toContain("transient read failure");
+    expect(spies.authClientsSetHeaders).not.toHaveBeenCalled();
   });
 
   it("returns a clear upfront permission message without rendering a card when caller lacks org:admin", async () => {

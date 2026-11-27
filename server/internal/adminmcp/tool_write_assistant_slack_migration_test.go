@@ -103,6 +103,7 @@ func TestAssistantSlackMigrationAppliesAndIsIdempotent(t *testing.T) {
 	gotA, err := triggerrepo.New(f.db).GetTriggerInstanceByIDPublic(t.Context(), trigA)
 	require.NoError(t, err)
 	require.True(t, gotA.AuthClientID.Valid)
+	require.Equal(t, *receipt.Results[0].AuthClientID, gotA.AuthClientID.UUID.String())
 	require.False(t, gotA.EnvironmentID.Valid)
 
 	gotB, err := triggerrepo.New(f.db).GetTriggerInstanceByIDPublic(t.Context(), trigB)

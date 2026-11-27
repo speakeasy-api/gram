@@ -51,6 +51,7 @@ export const CLIENT_TYPES = [
   "static_credential",
   "pass_through",
   "ema",
+  "slack_app",
 ] as const;
 
 type StatusPresentation = {

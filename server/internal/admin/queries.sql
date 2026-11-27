@@ -1743,8 +1743,9 @@ WHERE ee.environment_id = @environment_id
 ORDER BY ee.name;
 
 -- name: AdminFindAgentSlackAuthClient :one
--- Finds an existing live slack_app auth client in the assistant's project (or
--- org-shared) that the assistant's backing agent already holds mcp:auth on.
+-- Finds an existing live, enabled slack_app auth client in the assistant's
+-- project (or org-shared) that the assistant's backing agent already holds
+-- mcp:auth on.
 SELECT ac.id
 FROM mcp_auth_clients ac
 JOIN principal_grants pg
@@ -1757,9 +1758,27 @@ JOIN principal_grants pg
 WHERE ac.organization_id = @organization_id
   AND (ac.project_id = @project_id OR ac.project_id IS NULL)
   AND ac.client_type = 'slack_app'
+  AND ac.enabled IS TRUE
   AND ac.deleted IS FALSE
 ORDER BY ac.created_at, ac.id
 LIMIT 1;
+
+-- name: AdminListAgentSlackAuthClientGrants :many
+-- Lists all mcp:auth policy grants held by an agent targeting slack_app auth
+-- clients in the organization so migration can consolidate onto one client.
+SELECT
+    pg.id AS grant_id,
+    ac.id AS auth_client_id
+FROM principal_grants pg
+JOIN mcp_auth_clients ac
+  ON ac.organization_id = pg.organization_id
+ AND ac.id::text = pg.selectors->>'resource_id'
+ AND ac.client_type = 'slack_app'
+WHERE pg.organization_id = @organization_id
+  AND pg.principal_urn = concat('agent:', @agent_id::uuid)
+  AND pg.scope = 'mcp:auth'
+  AND pg.selectors->>'resource_kind' = 'mcp_auth_client'
+ORDER BY pg.id;
 
 -- name: AdminRepointSlackTriggerToAuthClient :one
 UPDATE trigger_instances
@@ -1795,8 +1814,8 @@ WHERE assistant_id = @assistant_id
 
 -- name: AdminCountToolsetExternalReferences :one
 -- Counts live references to a hosted toolset / MCP server across assistants,
--- plugins, meta MCP servers, and Slack apps so migration only soft-deletes
--- toolsets that nothing else uses.
+-- plugins, meta MCP servers, Slack apps, and offered auth clients so migration
+-- only soft-deletes toolsets that nothing else uses.
 SELECT (
     (SELECT count(*) FROM assistant_mcp_servers ams
      JOIN assistants a ON a.id = ams.assistant_id AND a.deleted IS FALSE
@@ -1806,5 +1825,8 @@ SELECT (
     + (SELECT count(*) FROM meta_mcp_server_members m
        WHERE m.mcp_server_id = @mcp_server_id AND m.project_id = @project_id AND m.deleted IS FALSE)
     + (SELECT count(*) FROM slack_app_toolsets sat
+       JOIN slack_apps sa ON sa.id = sat.slack_app_id AND sa.deleted IS FALSE
        WHERE sat.toolset_id = @toolset_id)
+    + (SELECT count(*) FROM mcp_server_auth_clients msac
+       WHERE msac.mcp_server_id = @mcp_server_id AND msac.project_id = @project_id AND msac.deleted IS FALSE)
 )::bigint AS ref_count;

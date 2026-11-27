@@ -340,7 +340,10 @@ SELECT (
     + (SELECT count(*) FROM meta_mcp_server_members m
        WHERE m.mcp_server_id = $1 AND m.project_id = $2 AND m.deleted IS FALSE)
     + (SELECT count(*) FROM slack_app_toolsets sat
+       JOIN slack_apps sa ON sa.id = sat.slack_app_id AND sa.deleted IS FALSE
        WHERE sat.toolset_id = $3)
+    + (SELECT count(*) FROM mcp_server_auth_clients msac
+       WHERE msac.mcp_server_id = $1 AND msac.project_id = $2 AND msac.deleted IS FALSE)
 )::bigint AS ref_count
 `
 
@@ -351,8 +354,8 @@ type AdminCountToolsetExternalReferencesParams struct {
 }
 
 // Counts live references to a hosted toolset / MCP server across assistants,
-// plugins, meta MCP servers, and Slack apps so migration only soft-deletes
-// toolsets that nothing else uses.
+// plugins, meta MCP servers, Slack apps, and offered auth clients so migration
+// only soft-deletes toolsets that nothing else uses.
 func (q *Queries) AdminCountToolsetExternalReferences(ctx context.Context, arg AdminCountToolsetExternalReferencesParams) (int64, error) {
 	row := q.db.QueryRow(ctx, adminCountToolsetExternalReferences, arg.McpServerID, arg.ProjectID, arg.ToolsetID)
 	var ref_count int64
@@ -485,6 +488,7 @@ JOIN principal_grants pg
 WHERE ac.organization_id = $2
   AND (ac.project_id = $3 OR ac.project_id IS NULL)
   AND ac.client_type = 'slack_app'
+  AND ac.enabled IS TRUE
   AND ac.deleted IS FALSE
 ORDER BY ac.created_at, ac.id
 LIMIT 1
@@ -496,8 +500,9 @@ type AdminFindAgentSlackAuthClientParams struct {
 	ProjectID      uuid.NullUUID
 }
 
-// Finds an existing live slack_app auth client in the assistant's project (or
-// org-shared) that the assistant's backing agent already holds mcp:auth on.
+// Finds an existing live, enabled slack_app auth client in the assistant's
+// project (or org-shared) that the assistant's backing agent already holds
+// mcp:auth on.
 func (q *Queries) AdminFindAgentSlackAuthClient(ctx context.Context, arg AdminFindAgentSlackAuthClientParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, adminFindAgentSlackAuthClient, arg.AgentID, arg.OrganizationID, arg.ProjectID)
 	var id uuid.UUID
@@ -1184,6 +1189,54 @@ func (q *Queries) AdminInsertPrincipalGrantFixture(ctx context.Context, arg Admi
 		arg.CreatedAt,
 	)
 	return err
+}
+
+const adminListAgentSlackAuthClientGrants = `-- name: AdminListAgentSlackAuthClientGrants :many
+SELECT
+    pg.id AS grant_id,
+    ac.id AS auth_client_id
+FROM principal_grants pg
+JOIN mcp_auth_clients ac
+  ON ac.organization_id = pg.organization_id
+ AND ac.id::text = pg.selectors->>'resource_id'
+ AND ac.client_type = 'slack_app'
+WHERE pg.organization_id = $1
+  AND pg.principal_urn = concat('agent:', $2::uuid)
+  AND pg.scope = 'mcp:auth'
+  AND pg.selectors->>'resource_kind' = 'mcp_auth_client'
+ORDER BY pg.id
+`
+
+type AdminListAgentSlackAuthClientGrantsParams struct {
+	OrganizationID string
+	AgentID        uuid.UUID
+}
+
+type AdminListAgentSlackAuthClientGrantsRow struct {
+	GrantID      uuid.UUID
+	AuthClientID uuid.UUID
+}
+
+// Lists all mcp:auth policy grants held by an agent targeting slack_app auth
+// clients in the organization so migration can consolidate onto one client.
+func (q *Queries) AdminListAgentSlackAuthClientGrants(ctx context.Context, arg AdminListAgentSlackAuthClientGrantsParams) ([]AdminListAgentSlackAuthClientGrantsRow, error) {
+	rows, err := q.db.Query(ctx, adminListAgentSlackAuthClientGrants, arg.OrganizationID, arg.AgentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListAgentSlackAuthClientGrantsRow
+	for rows.Next() {
+		var i AdminListAgentSlackAuthClientGrantsRow
+		if err := rows.Scan(&i.GrantID, &i.AuthClientID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const adminListAssistantAgentNames = `-- name: AdminListAssistantAgentNames :many

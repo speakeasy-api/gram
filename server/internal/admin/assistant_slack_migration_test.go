@@ -307,6 +307,14 @@ func TestMigrateOrganizationAssistantSlack(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.True(t, hasGrant)
+	hasGrant, err = assistantrepo.New(db).HasAssistantSlackPlatformGrant(t.Context(), assistantrepo.HasAssistantSlackPlatformGrantParams{
+		OrganizationID: org.id,
+		ProjectID:      org.project,
+		AssistantID:    uuid.NullUUID{UUID: noSlack, Valid: true},
+		ToolsetID:      platformtools.PlatformToolsetID(platformtools.AssistantSlackPlatformToolsetSlug).String(),
+	})
+	require.NoError(t, err)
+	require.False(t, hasGrant)
 
 	// Verify trigger repointed: auth_client_id set, environment_id cleared, config preserved.
 	gotTrig, err := triggerrepo.New(db).GetTriggerInstanceByIDPublic(t.Context(), dedicatedTrig.ID)
