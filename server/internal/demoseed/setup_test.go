@@ -12,6 +12,7 @@ import (
 	"context"
 	"log"
 	"os"
+	"sync"
 	"testing"
 
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -19,8 +20,15 @@ import (
 
 var infra *testenv.Environment
 
+// otherTenantWrites keeps tests that write non-demo ClickHouse rows out of TestDemoSeedSafety,
+// which fingerprints every non-demo row in the shared test database.
+var otherTenantWrites sync.RWMutex
+
 // testAssistantIssuerURL stands in for the deployment's signing issuer origin.
 const testAssistantIssuerURL = "https://issuer.demoseed.test"
+
+// testServerURL stands in for the deployment's own URL (GRAM_SERVER_URL).
+const testServerURL = "https://speakeasy.demoseed.test"
 
 func TestMain(m *testing.M) {
 	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{

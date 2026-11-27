@@ -9,6 +9,7 @@ import { useProjectNavRoutes } from "./useProjectNavRoutes";
 const testState = vi.hoisted(() => ({
   projectId: "project_a",
   orgMemoryEnabled: false,
+  assistantsAvailable: true,
   featureFlags: {} as Record<string, FeatureFlagResult>,
   productFeatures: {
     isSuccess: true,
@@ -29,6 +30,10 @@ vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "organization_a" }),
 }));
 
+vi.mock("./useAssistantsAvailability", () => ({
+  useAssistantsAvailable: () => testState.assistantsAvailable,
+}));
+
 vi.mock("./useOrgMemoryDeveloperToggle", () => ({
   useOrgMemoryDeveloperToggle: () => [testState.orgMemoryEnabled, vi.fn()],
 }));
@@ -46,6 +51,7 @@ function unavailableFeatureFlag(
 beforeEach(() => {
   testState.projectId = "project_a";
   testState.orgMemoryEnabled = false;
+  testState.assistantsAvailable = true;
   testState.productFeatures = {
     isSuccess: true,
     data: { signalsIntelligenceEnabled: false },
@@ -53,6 +59,7 @@ beforeEach(() => {
   testState.featureFlags = {
     [FEATURE_FLAGS.channels]: unavailableFeatureFlag("loading"),
     [FEATURE_FLAGS.explore]: unavailableFeatureFlag("loading"),
+    [FEATURE_FLAGS.intentPolicies]: unavailableFeatureFlag("loading"),
   };
 });
 
@@ -128,7 +135,7 @@ describe("useProjectNavRoutes", () => {
     ).toBeTruthy();
   });
 
-  it("uses the selected project's read grant for MCP Sessions", () => {
+  it("uses the selected project's read grant for MCP Sign-in", () => {
     const { result, rerender } = renderNav();
     const sessions = () =>
       result.current.find(
@@ -140,6 +147,19 @@ describe("useProjectNavRoutes", () => {
     rerender();
     expect(sessions()?.resourceId).toBe("project_b");
   });
+
+  it.each(["enabled", "disabled"] as const)(
+    "never marks MCP Sign-in as beta with connection health %s",
+    (status) => {
+      testState.featureFlags[FEATURE_FLAGS.mcpConnectionHealth] = { status };
+      const { result } = renderNav();
+      const sessions = result.current.find(
+        (entry) => entry.route.href() === routes.mcpSessions.href(),
+      );
+      expect(sessions).toBeTruthy();
+      expect(sessions?.route.stage).toBeUndefined();
+    },
+  );
 
   it("keeps Agent Sessions discoverable for members who can read their own history", () => {
     const { result } = renderNav();
@@ -171,7 +191,7 @@ describe("useProjectNavRoutes", () => {
       routes.mcpSessions.href(),
       routes.remoteIdentityProviders.href(),
     ]);
-    expect(navRoutes.indexOf(routes.playground.href())).toBeLessThan(
+    expect(navRoutes.indexOf(routes.mcp.href())).toBeLessThan(
       navRoutes.indexOf(routes.riskEvents.href()),
     );
     expect(navRoutes.indexOf(routes.policyCenter.href())).toBeLessThan(
@@ -179,13 +199,29 @@ describe("useProjectNavRoutes", () => {
     );
   });
 
-  it("leaves Shadow AI and Shadow MCP out of nav; they live in Guardrails", () => {
+  it("lists Shadow MCP after Guardrails, and keeps Shadow AI out", () => {
     const { result } = renderNav();
 
     const titles = result.current.map((entry) => entry.route.title);
+    expect(titles.indexOf("Shadow MCP")).toBe(titles.indexOf("Guardrails") + 1);
     expect(titles).not.toContain("Shadow AI");
-    expect(titles).not.toContain("Shadow MCP");
-    expect(titles).toContain("Guardrails");
+    expect(
+      result.current.find((entry) => entry.route.title === "Shadow MCP")?.scope,
+    ).toEqual(["org:admin"]);
+  });
+
+  it("lists Intent-based policies only when the org rollout flag is on", () => {
+    expect(
+      renderNav().result.current.map((entry) => entry.route.title),
+    ).not.toContain("Intent-based policies");
+
+    testState.featureFlags[FEATURE_FLAGS.intentPolicies] = {
+      status: "enabled",
+    };
+    const entry = renderNav().result.current.find(
+      (e) => e.route.title === "Intent-based policies",
+    );
+    expect(entry?.scope).toEqual(["chat:read"]);
   });
 
   it("leaves Approval Requests out of nav", () => {
@@ -232,6 +268,7 @@ describe("useProjectNavRoutes", () => {
       testState.featureFlags = {
         [FEATURE_FLAGS.channels]: unavailableFeatureFlag(status),
         [FEATURE_FLAGS.explore]: unavailableFeatureFlag(status),
+        [FEATURE_FLAGS.intentPolicies]: unavailableFeatureFlag(status),
       };
 
       const { result } = renderNav();
@@ -240,6 +277,7 @@ describe("useProjectNavRoutes", () => {
       expect(navRoutes).toContain(routes.assistants.href());
       expect(navRoutes).toContain(routes.watchdog.href());
       expect(navRoutes).not.toContain(routes.explore.href());
+      expect(navRoutes).not.toContain(routes.intentPolicies.href());
       expect(navRoutes).toContain(routes.deployments.href());
       expect(navRoutes).toContain(routes.riskEvents.href());
     },
@@ -274,6 +312,7 @@ describe("useProjectNavRoutes", () => {
     testState.featureFlags = {
       [FEATURE_FLAGS.channels]: { status: "enabled" },
       [FEATURE_FLAGS.explore]: { status: "enabled" },
+      [FEATURE_FLAGS.intentPolicies]: { status: "enabled" },
     };
 
     const { result } = renderNav();
@@ -284,6 +323,7 @@ describe("useProjectNavRoutes", () => {
     expect(navRoutes).toContain(routes.explore.href());
     expect(navRoutes).toContain(routes.deployments.href());
     expect(navRoutes).toContain(routes.riskEvents.href());
+    expect(navRoutes).toContain(routes.intentPolicies.href());
   });
 
   it("uses assistant read on the active project for assistant surfaces", () => {
@@ -309,5 +349,14 @@ describe("useProjectNavRoutes", () => {
         }),
       ]),
     );
+  });
+  it("hides the Project Assistant and Assistants on a deployment without assistants", () => {
+    testState.assistantsAvailable = false;
+    const { result } = renderNav();
+    const navRoutes = result.current.map((entry) => entry.route.href());
+
+    expect(navRoutes).not.toContain(routes.chat.href());
+    expect(navRoutes).not.toContain(routes.assistants.href());
+    expect(navRoutes).toContain(routes.home.href());
   });
 });

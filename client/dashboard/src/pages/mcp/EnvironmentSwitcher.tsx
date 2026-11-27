@@ -202,9 +202,7 @@ export function EnvironmentSwitcher({
 
             {/* Save button */}
             <Button onClick={onSaveAll} variant="primary" size="xs">
-              <Button.Text>
-                {hasExistingConfigs ? "Save" : "Save Configuration"}
-              </Button.Text>
+              <Button.Text>Save</Button.Text>
             </Button>
           </>
         ) : (

@@ -63,7 +63,9 @@ export type McpServer = {
    */
   id: string;
   /**
-   * The slug of an older Speakeasy-hosted address of this hosted server: its legacy custom-domain address, which the Speakeasy domain also answers under the same access rules. Absent when a platform endpoint or another alias holds that slug.
+   * Deprecated: always absent.
+   *
+   * @deprecated field: Always absent; use platform_endpoint_slug instead.
    */
   legacyPlatformSlug?: string | undefined;
   /**
@@ -94,6 +96,10 @@ export type McpServer = {
    * The ID of the remote MCP server used as the backend
    */
   remoteMcpServerId?: string | undefined;
+  /**
+   * When an admin marked the upstream provider's manual setup guide as done. Absent while it is not done.
+   */
+  setupGuideCompletedAt?: Date | undefined;
   /**
    * A URL-safe, project-unique slug derived server-side from the name and ID
    */
@@ -163,6 +169,9 @@ export const McpServer$inboundSchema: z.ZodMiniType<McpServer, unknown> = z
       primary_endpoint_url: z.optional(z.string()),
       project_id: z.string(),
       remote_mcp_server_id: z.optional(z.string()),
+      setup_guide_completed_at: z.optional(
+        z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+      ),
       slug: z.optional(z.string()),
       tool_variations_group_id: z.optional(z.string()),
       toolset: z.optional(McpServerToolsetSummary$inboundSchema),
@@ -188,6 +197,7 @@ export const McpServer$inboundSchema: z.ZodMiniType<McpServer, unknown> = z
         "primary_endpoint_url": "primaryEndpointUrl",
         "project_id": "projectId",
         "remote_mcp_server_id": "remoteMcpServerId",
+        "setup_guide_completed_at": "setupGuideCompletedAt",
         "tool_variations_group_id": "toolVariationsGroupId",
         "toolset_id": "toolsetId",
         "tunneled_mcp_server_id": "tunneledMcpServerId",

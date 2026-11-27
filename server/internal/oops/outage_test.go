@@ -272,6 +272,24 @@ func TestErrHandlersAnswerInfrastructureFailureAsOutage(t *testing.T) {
 	require.Equal(t, oautherr.CodeTemporarilyUnavailable, body.Code)
 }
 
+// A 503 that waiting won't fix gets no Retry-After on any route.
+func TestErrHandlersLeaveUnpacedUnavailableWithoutRetryAfter(t *testing.T) {
+	t.Parallel()
+
+	for name, wrap := range map[string]func(*slog.Logger, func(http.ResponseWriter, *http.Request) error) http.Handler{
+		"mcp": oops.MCPErrHandle, "oauth": oops.OAuthErrHandle, "auth": oops.AuthErrHandle, "browser": oops.BrowserErrHandle,
+	} {
+		w := httptest.NewRecorder()
+		wrap(testenv.NewLogger(t), func(http.ResponseWriter, *http.Request) error {
+			return oops.E(oops.CodeUnavailable, errors.New("address"), "fix the address").Unpaced()
+		}).ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/", nil))
+		require.Equal(t, http.StatusServiceUnavailable, w.Code, name)
+		require.Empty(t, w.Header().Get("Retry-After"), name)
+	}
+	require.False(t, oops.E(oops.CodeUnavailable, nil, "fix the address").Unpaced().IsTemporary(t.Context()), "waiting won't fix it")
+	require.True(t, oops.E(oops.CodeUnavailable, nil, "down").IsTemporary(t.Context()))
+}
+
 // Chat, webhooks, instance execution and admin keep their own retry contract.
 func TestErrHandleLeavesStoreFailuresAlone(t *testing.T) {
 	t.Parallel()

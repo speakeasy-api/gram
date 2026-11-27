@@ -118,7 +118,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { format } from "date-fns";
+import { format } from "date-fns/format";
 import { Bot, Settings } from "lucide-react";
 import { DateGroupHeader } from "@/components/auditlogs/feed";
 import { groupByLocalDay, pinnedDayAt } from "./toolLogDayGroups";
@@ -226,6 +226,7 @@ export function LogsTools({
     customRange,
     setDateRangeParam,
     setCustomRangeParam,
+    setCalendarRangeParam,
     setRangeFromBrush,
     clearCustomRange,
     selectedRoleIds,
@@ -1158,6 +1159,7 @@ export function LogsTools({
             customRange={customRange}
             onDateRangeChange={setDateRangeParam}
             onCustomRangeChange={setCustomRangeParam}
+            onCalendarRangeChange={setCalendarRangeParam}
             onClearCustomRange={clearCustomRange}
             projectSlug={projectSlug}
             serverNameMappings={serverNameMappings}
@@ -1358,6 +1360,7 @@ function LogsToolsContent({
   customRange,
   onDateRangeChange,
   onCustomRangeChange,
+  onCalendarRangeChange,
   onClearCustomRange,
   projectSlug,
   serverNameMappings,
@@ -1422,6 +1425,8 @@ function LogsToolsContent({
   customRange: { from: Date; to: Date } | null;
   onDateRangeChange: (preset: DateRangePreset) => void;
   onCustomRangeChange: (from: Date, to: Date, label?: string) => void;
+  /** A calendar pick: `to` is the final selected day, inclusive. */
+  onCalendarRangeChange: (from: Date, to: Date) => void;
   onClearCustomRange: () => void;
   projectSlug?: string;
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
@@ -1717,11 +1722,12 @@ function LogsToolsContent({
                 // The badge is a fixed-width slot for "1w" or "3mo". A brushed
                 // range arrives with a full "11 Sept, 7:28 - 16 Sept, 1:28"
                 // label, which bursts it; the picker falls back to "Custom"
-                // without one, and the field beside it already spells the
-                // range out.
+                // without one, and the field beside it spells the range out,
+                // times included.
                 customRangeLabel={null}
                 onPresetChange={(preset) => onDateRangeChange(preset)}
                 onCustomRangeChange={onCustomRangeChange}
+                onCalendarRangeChange={onCalendarRangeChange}
                 onClearCustomRange={onClearCustomRange}
                 projectSlug={projectSlug}
                 className="bg-card shrink-0"

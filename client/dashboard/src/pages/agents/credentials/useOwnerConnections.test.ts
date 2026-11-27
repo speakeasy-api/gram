@@ -6,7 +6,12 @@ import { useOwnerConnections } from "./useOwnerConnections";
 import type { InventoryServer } from "./useServerInventory";
 
 const mocks = vi.hoisted(() => {
-  const personalClient = { clientType: "remote_session", enabled: true };
+  const personalClient = {
+    clientType: "remote_session",
+    enabled: true,
+    personal: true,
+    remoteSessionClientId: "client_other",
+  };
   return {
     refetch: vi.fn(),
     personalClient,
@@ -16,12 +21,17 @@ const mocks = vi.hoisted(() => {
     auth: new Map<string, { data?: unknown; isError?: boolean }>(),
     clients: [] as unknown[],
     sessions: [] as unknown[],
-    enforcement: "legacy" as string,
+    // The registrations the runtime requires of each server; every issuer
+    // registration when left unset.
+    required: undefined as string[] | undefined,
+    // The agent's attachments, read when editing.
+    bindings: [] as unknown[],
+    // Set when reading the agent's attachments fails.
+    bindingsError: undefined as Error | undefined,
+    // Set when reading the viewer's own sessions fails.
+    sessionsError: false,
   };
 });
-vi.mock("@/hooks/useUpstreamAuthEnforcement", () => ({
-  useUpstreamAuthEnforcement: () => mocks.enforcement,
-}));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org_example" }),
   useSession: () => ({ user: { id: "user_example" } }),
@@ -43,6 +53,25 @@ vi.mock("@tanstack/react-query", () => ({
           }),
           refetch: mocks.refetch,
         };
+      if (queryKey[1] === "required")
+        return {
+          data: {
+            requiredClientIds:
+              mocks.required ??
+              (mocks.clients as Array<{ id: string }>).map((c) => c.id),
+          },
+          refetch: mocks.refetch,
+        };
+      if (queryKey[1] === "bindings")
+        return mocks.bindingsError
+          ? {
+              isError: true,
+              error: mocks.bindingsError,
+              refetch: mocks.refetch,
+            }
+          : { data: { items: mocks.bindings }, refetch: mocks.refetch };
+      if (queryKey[1] === "sessions" && mocks.sessionsError)
+        return { isError: true, refetch: mocks.refetch };
       return {
         data: queryKey[1] === "clients" ? mocks.clients : mocks.sessions,
         refetch: mocks.refetch,
@@ -55,7 +84,10 @@ afterEach(() => {
   mocks.auth.clear();
   mocks.clients = [];
   mocks.sessions = [];
-  mocks.enforcement = "legacy";
+  mocks.required = undefined;
+  mocks.bindings = [];
+  mocks.bindingsError = undefined;
+  mocks.sessionsError = false;
 });
 
 // The org-wide issuer lists a personal sign-in that belongs to another server.
@@ -64,6 +96,7 @@ const server = {
   id: "server_example",
   projectSlug: "default",
   issuerId: "issuer_example",
+  kind: "Remote",
 } as InventoryServer;
 
 it("treats a server whose own auth offers only a shared credential as shared", () => {
@@ -87,7 +120,11 @@ it("still asks for a connection when the server offers each person's sign-in", (
   });
   const { result } = renderHook(() => useOwnerConnections([server], true));
   const connection = result.current.byServer.get(server.id);
-  expect(connection).toEqual({ status: "missing" });
+  expect(connection).toEqual({
+    status: "missing",
+    signIns: [otherServersSignIn],
+    connected: 0,
+  });
   expect(connectionSelectable(connection)).toBe(false);
 });
 
@@ -136,6 +173,59 @@ it("shows a shared server as needing no assignment when editing", () => {
   });
 });
 
+describe("a member server of a team gateway", () => {
+  // The person signed in through the gateway's issuer; the member server's own
+  // issuer binds the same client.
+  const memberSignIn = { id: "client_member", credentialOwner: "subject" };
+  const viaGateway = {
+    id: "session_gateway",
+    remoteSessionClientId: "client_member",
+    userSessionIssuerId: "issuer_gateway",
+    subjectUrn: "user:user_example",
+    accessExpiresAt: new Date(Date.now() + 3_600_000),
+    hasRefreshToken: true,
+    scopes: [],
+  };
+  beforeEach(() => {
+    mocks.clients = [memberSignIn];
+    mocks.sessions = [viaGateway];
+    mocks.auth.set(server.id, {
+      data: {
+        status: "configured",
+        clients: [
+          {
+            clientType: "remote_session",
+            enabled: true,
+            personal: true,
+            remoteSessionClientId: "client_member",
+          },
+        ],
+      },
+    });
+  });
+
+  it("counts the gateway-made connection without an issuer link", () => {
+    const { result } = renderHook(() => useOwnerConnections([server], true));
+    expect(result.current.byServer.get(server.id)).toEqual({
+      status: "ready",
+      sessions: [viaGateway],
+    });
+  });
+
+  it("does not count a gateway-made connection for a client the server does not bind", () => {
+    mocks.sessions = [
+      { ...viaGateway, remoteSessionClientId: "client_elsewhere" },
+    ];
+    {
+      const { result } = renderHook(() => useOwnerConnections([server], true));
+      expect(result.current.byServer.get(server.id)).toMatchObject({
+        status: "missing",
+        connected: 0,
+      });
+    }
+  });
+});
+
 describe("a server sharing an org-wide issuer with another server", () => {
   // The issuer binds the other server's registration; this server's own
   // auth client signs in through its own.
@@ -162,8 +252,7 @@ describe("a server sharing an org-wide issuer with another server", () => {
     });
   });
 
-  it("asks for the server's own sign-in when upstream auth is enforced", () => {
-    mocks.enforcement = "enforced";
+  it("asks for the server's own sign-in without an issuer link", () => {
     const { result } = renderHook(() => useOwnerConnections([server], true));
     expect(result.current.byServer.get(server.id)).toEqual({
       status: "ready",
@@ -171,26 +260,17 @@ describe("a server sharing an org-wide issuer with another server", () => {
     });
   });
 
-  it("asks for the issuer's sign-in when it is not, as the issuer routes the call", () => {
-    const { result } = renderHook(() => useOwnerConnections([server], true));
-    expect(result.current.byServer.get(server.id)).toEqual({
-      status: "missing",
-    });
-  });
-
-  it("falls back to the issuer while the server's setup is incomplete", () => {
-    mocks.enforcement = "enforced";
+  it("reports repair needed while the server's setup is incomplete", () => {
     mocks.auth.set(server.id, {
       data: { status: "setup_incomplete", clients: [] },
     });
     const { result } = renderHook(() => useOwnerConnections([server], true));
     expect(result.current.byServer.get(server.id)).toEqual({
-      status: "missing",
+      status: "setup-required",
     });
   });
 
-  it("falls back to the issuer when its personal sign-in names no registration", () => {
-    mocks.enforcement = "enforced";
+  it("reports repair needed when its personal sign-in names no registration", () => {
     mocks.auth.set(server.id, {
       data: {
         status: "configured",
@@ -199,16 +279,63 @@ describe("a server sharing an org-wide issuer with another server", () => {
     });
     const { result } = renderHook(() => useOwnerConnections([server], true));
     expect(result.current.byServer.get(server.id)).toEqual({
-      status: "missing",
+      status: "setup-required",
     });
   });
 
-  it("keeps the server checking until enforcement is known", () => {
-    mocks.enforcement = "loading";
+  it("is ready with one of the server's own sign-ins", () => {
+    mocks.auth.set(server.id, {
+      data: {
+        status: "configured",
+        clients: [
+          ownSignIn,
+          { ...ownSignIn, remoteSessionClientId: "client_second" },
+        ],
+      },
+    });
     const { result } = renderHook(() => useOwnerConnections([server], true));
     expect(result.current.byServer.get(server.id)).toEqual({
-      status: "checking",
+      status: "ready",
+      sessions: [ownSession],
     });
+  });
+
+  it("keeps an assignment ready and another one lost its session", () => {
+    mocks.auth.set(server.id, {
+      data: {
+        status: "configured",
+        clients: [
+          ownSignIn,
+          { ...ownSignIn, remoteSessionClientId: "client_second" },
+        ],
+      },
+    });
+    mocks.bindings = [
+      {
+        id: "binding_own",
+        remoteSessionClientId: "client_own",
+        remoteSession: ownSession,
+      },
+      { id: "binding_gone", remoteSessionClientId: "client_second" },
+    ];
+    const { result } = renderHook(() =>
+      useOwnerConnections([server], true, "agent_example"),
+    );
+    expect(result.current.assignedByServer?.get(server.id)).toEqual({
+      status: "ready",
+      sessions: [ownSession],
+    });
+  });
+
+  it("keeps every issuer registration for a hosted server", () => {
+    const hosted = { ...server, kind: "Hosted" } as InventoryServer;
+    mocks.clients = [
+      otherServersSignIn,
+      { id: "client_own", credentialOwner: "subject" },
+    ];
+    mocks.required = ["client_own"];
+    const { result } = renderHook(() => useOwnerConnections([hosted], true));
+    expect(result.current.byServer.get(hosted.id)?.status).toBe("missing");
   });
 });
 
@@ -226,7 +353,10 @@ it("keeps focus refreshes in flight until all owner reads finish", async () => {
     .mockReturnValueOnce(clientsPending)
     .mockResolvedValue(undefined);
   renderHook(() => {
-    const connections = useOwnerConnections([server], true);
+    const connections = useOwnerConnections(
+      [{ ...server, kind: "Hosted" }],
+      true,
+    );
     useOAuthPopup(connections.refetch);
   });
   fireEvent(window, new Event("focus"));
@@ -247,5 +377,61 @@ it("keeps focus refreshes in flight until all owner reads finish", async () => {
   expect(mocks.refetch).toHaveBeenCalledTimes(4);
   await act(async () => {
     await Promise.resolve();
+  });
+});
+
+describe("an agent whose attachments the viewer may not read", () => {
+  const ownSignIn = { id: "client_own", credentialOwner: "subject" };
+  const httpError = (statusCode: number) =>
+    Object.assign(new Error("request failed"), { statusCode });
+
+  it("marks the agent's connection as not visible, and still reads the viewer's own", () => {
+    mocks.auth.set(server.id, {
+      data: {
+        status: "configured",
+        clients: [
+          { ...mocks.personalClient, remoteSessionClientId: ownSignIn.id },
+        ],
+      },
+    });
+    mocks.bindingsError = httpError(403);
+    const { result } = renderHook(() =>
+      useOwnerConnections([server], true, "agent_example"),
+    );
+    expect(result.current.byServer.get(server.id)).toEqual({
+      status: "missing",
+      signIns: [ownSignIn],
+      connected: 0,
+    });
+    expect(result.current.assignedByServer?.get(server.id)).toEqual({
+      status: "forbidden",
+    });
+  });
+
+  it("keeps a failed read of the viewer's own connection an error", () => {
+    mocks.bindingsError = httpError(403);
+    mocks.auth.set(server.id, {
+      data: { status: "configured", clients: [mocks.personalClient] },
+    });
+    mocks.sessionsError = true;
+    const { result } = renderHook(() =>
+      useOwnerConnections([server], true, "agent_example"),
+    );
+    expect(result.current.byServer.get(server.id)).toEqual({ status: "error" });
+    expect(result.current.assignedByServer?.get(server.id)).toEqual({
+      status: "error",
+    });
+  });
+
+  it("still reports a failed read that is not a refusal as an error", () => {
+    mocks.clients = [ownSignIn];
+    mocks.bindingsError = httpError(500);
+    const { result } = renderHook(() =>
+      useOwnerConnections([server], true, "agent_example"),
+    );
+    expect(result.current.byServer.get(server.id)).toEqual({ status: "error" });
+    expect(result.current.assignedByServer?.get(server.id)).toEqual({
+      status: "error",
+    });
   });
 });

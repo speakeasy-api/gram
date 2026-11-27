@@ -3,6 +3,7 @@ package gram
 import (
 	"encoding/base64"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/url"
 
@@ -45,11 +46,16 @@ func assistantKitRuntimeFlags() []cli.Flag {
 	}, assistantATERuntimeFlags()...)
 }
 
-func installKitLocalRuntimeFromCLI(c *cli.Context, core *assistants.ServiceCore, db *pgxpool.Pool, auditLogger *audit.Logger, redisClient *redis.Client, serverURL *url.URL) error {
-	if err := assistants.ValidateKitATEPreview(c.String("environment"), c.Bool("assistant-ate-enabled"), c.String("assistant-ate-preview-id")); err != nil {
-		return fmt.Errorf("validate assistant ATE preview: %w", err)
-	}
+func installKitLocalRuntimeFromCLI(logger *slog.Logger, c *cli.Context, core *assistants.ServiceCore, db *pgxpool.Pool, auditLogger *audit.Logger, redisClient *redis.Client, serverURL *url.URL) error {
 	if c.Bool("assistant-ate-enabled") {
+		base, err := assistantRuntimeConfigFromCLI(c, serverURL)
+		if err != nil {
+			return err
+		}
+		if base.Provider == assistants.RuntimeProviderDisabled {
+			logger.WarnContext(c.Context, "ignoring ATE Kit settings: the assistant runtime provider is disabled")
+			return nil
+		}
 		return installKitATERuntimeFromCLI(c, core, redisClient, serverURL)
 	}
 	if c.String("assistant-kit-image") == "" {
@@ -58,6 +64,12 @@ func installKitLocalRuntimeFromCLI(c *cli.Context, core *assistants.ServiceCore,
 	base, err := assistantRuntimeConfigFromCLI(c, serverURL)
 	if err != nil {
 		return err
+	}
+	// Partitions can share Kit settings while one of them runs with
+	// assistants off, so the settings are ignored rather than rejected.
+	if base.Provider == assistants.RuntimeProviderDisabled {
+		logger.WarnContext(c.Context, "ignoring Kit settings: the assistant runtime provider is disabled")
+		return nil
 	}
 	if base.Provider == assistants.RuntimeProviderLocal && c.String("environment") != "local" {
 		return fmt.Errorf("local Kit requires the local environment")

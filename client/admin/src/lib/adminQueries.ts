@@ -10,8 +10,11 @@ import {
   type QueryKey,
 } from "@tanstack/react-query";
 import {
+  getHooksReleaseProgress,
+  getHooksRollout,
   getOrganization,
   getOrganizationChatAnalysisSettings,
+  getOrganizationHooksRollout,
   getOrganizationStats,
   getInferenceSpendHistory,
   getPaygBillingSummary,
@@ -21,6 +24,7 @@ import {
   listOrganizationMembers,
   listOrganizationProjects,
   listOrganizationAssistants,
+  listAssistantMigrationOrganizations,
   listOrganizations,
   listUsers,
   listUserOrganizations,
@@ -29,6 +33,7 @@ import {
   type AdminInferenceSpendMonth,
   type AdminOrganization,
   type AdminOrganizationChatAnalysisSettings,
+  type AdminOrganizationHooksRollout,
   type AdminProjectDetail,
   type AdminPaygBillingSummary,
   type AdminStripeSubscription,
@@ -125,6 +130,38 @@ export function organizationChatAnalysisSettingsQuery(
     ] as const,
     queryFn: () => getOrganizationChatAnalysisSettings(organizationID),
   });
+}
+
+// The platform-wide state, and every organization's state, change together
+// when the default pin moves, so a write invalidates both prefixes.
+export const hooksRolloutQuery = queryOptions({
+  queryKey: ["gram-admin-hooks-rollout"] as const,
+  queryFn: getHooksRollout,
+});
+
+export const hooksReleaseProgressQuery = queryOptions({
+  queryKey: ["gram-admin-hooks-release-progress"] as const,
+  queryFn: getHooksReleaseProgress,
+});
+
+const ORGANIZATION_HOOKS_ROLLOUT_KEY = "gram-admin-organization-hooks-rollout";
+
+export function organizationHooksRolloutQuery(
+  organizationID: string,
+): AdminQuery<
+  AdminOrganizationHooksRollout,
+  readonly ["gram-admin-organization-hooks-rollout", string]
+> {
+  return queryOptions({
+    queryKey: [ORGANIZATION_HOOKS_ROLLOUT_KEY, organizationID] as const,
+    queryFn: () => getOrganizationHooksRollout(organizationID),
+  });
+}
+
+export function invalidateHooksRollout(qc: QueryClient): void {
+  void qc.invalidateQueries({ queryKey: hooksRolloutQuery.queryKey });
+  void qc.invalidateQueries({ queryKey: [ORGANIZATION_HOOKS_ROLLOUT_KEY] });
+  void qc.invalidateQueries({ queryKey: hooksReleaseProgressQuery.queryKey });
 }
 
 export function organizationProjectsQuery(
@@ -438,4 +475,14 @@ export function adminListCustomDomainsQuery(
   request: AdminListCustomDomainsRequest = {},
 ): ReturnType<typeof createAdminListCustomDomainsQuery> {
   return createAdminListCustomDomainsQuery(request);
+}
+
+export function assistantMigrationOrganizationsQuery(): AdminQuery<
+  Awaited<ReturnType<typeof listAssistantMigrationOrganizations>>,
+  readonly ["admin", "assistant-migration-organizations"]
+> {
+  return queryOptions({
+    queryKey: ["admin", "assistant-migration-organizations"] as const,
+    queryFn: listAssistantMigrationOrganizations,
+  });
 }

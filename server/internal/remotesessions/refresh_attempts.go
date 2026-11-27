@@ -32,7 +32,7 @@ func (s *RefreshService) recordRefresh(
 	err error,
 ) (standalone, step bool) {
 	// Nobody can act on an unreadable sign-in while its access token still serves or no person is present.
-	if errors.Is(err, errStoredTokenUnreadable) && (trigger == remotesessionmetrics.RefreshTriggerScheduled || readStoredTokens(s.enc, sess, time.Now()).usable) {
+	if errors.Is(err, errStoredTokenUnreadable) && (trigger == remotesessionmetrics.RefreshTriggerScheduled || !readStoredTokens(ctx, s.tokens, sess, time.Now()).needsSignIn()) {
 		return false, false
 	}
 	what, ok := refreshHappened(outcome, client, err)
@@ -51,6 +51,10 @@ func (s *RefreshService) recordRefresh(
 		mcpconnectionattempts.Subject(&sess.SubjectUrn),
 		mcpconnectionattempts.Detail(string(trigger)),
 		attribution.client,
+	}
+	// Our own decryption failed, not the provider.
+	if what == mcpconnectionattempts.CodeStoredSignInUnreadable {
+		opts = append(opts, mcpconnectionattempts.FailedElsewhere())
 	}
 	_, failed := what.(mcpconnectionattempts.Code)
 	if !attribution.attempt.IsZero() {
@@ -134,6 +138,9 @@ func refreshHappened(outcome remotesessionmetrics.RefreshOutcome, client remotes
 	case remotesessionmetrics.RefreshOutcomeRateLimited:
 		return mcpconnectionattempts.CodeProviderRateLimited, true
 	case remotesessionmetrics.RefreshOutcomeUnreachable:
+		if code, ok := mcpconnectionattempts.AddressHappened(err, client.TunneledMcpServerID.Valid); ok {
+			return code, true
+		}
 		return mcpconnectionattempts.CodeProviderUnreachable, true
 	case remotesessionmetrics.RefreshOutcomeInternalError:
 		if errors.Is(err, errStoredTokenUnreadable) {

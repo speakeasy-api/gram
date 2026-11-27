@@ -17,8 +17,6 @@ export { ChatComposer } from "@/elements/components/ChatComposer";
 export { focusChatComposer } from "@/elements/lib/composerFocus";
 export { ChatHistory } from "@/elements/components/ChatHistory";
 export { ActiveChatTitle } from "@/elements/components/ActiveChatTitle";
-export { ShareButton } from "@/elements/components/ShareButton";
-export type { ShareButtonProps } from "@/elements/components/ShareButton";
 export { ToolFallback } from "@/elements/components/assistant-ui/tool-fallback";
 export { MessageContent } from "@/elements/components/MessageContent";
 export type { MessageContentProps } from "@/elements/components/MessageContent";
@@ -58,9 +56,6 @@ export type {
 export { defineFrontendTool } from "./lib/tools";
 export type { FrontendTool } from "./lib/tools";
 
-// Error Tracking
-export { trackError } from "./lib/errorTracking";
-export type { ErrorContext } from "./lib/errorTracking";
 export {
   CREDITS_EXHAUSTED_MESSAGE,
   describeStreamError,
@@ -81,7 +76,6 @@ export type {
   ElementsConfig,
   ElementsTransportContext,
   ElementsTransportFactory,
-  ErrorTrackingConfigOption,
   GetSessionFn,
   HistoryConfig,
   LinkResolver,

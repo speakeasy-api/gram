@@ -6,6 +6,39 @@ import { SetupContext } from "./setup-context";
 import { ConnectionTask } from "./ConnectionTask";
 
 afterEach(cleanup);
+it("returns Okta connection failures to the selected correction step", async () => {
+  const { default: userEvent } = await import("@testing-library/user-event");
+  const user = userEvent.setup();
+  const dispatch = vi.fn<() => void>();
+  const state = initialState("okta");
+  render(
+    <SetupContext
+      value={{
+        s: state,
+        dispatch,
+        live: connectionFixture(dispatch, {
+          error: "Couldn’t connect Okta.",
+          errorStep: "test",
+        }),
+      }}
+    >
+      <ConnectionTask />
+    </SetupContext>,
+  );
+  for (const [name, step] of [
+    ["Review organization", "organization"],
+    ["Review app settings", "app"],
+    ["Review scopes and assignments", "permissions"],
+    ["Review credentials", "credentials"],
+  ]) {
+    await user.click(screen.getByRole("button", { name }));
+    expect(dispatch).toHaveBeenLastCalledWith({
+      type: "goto",
+      step,
+      correction: true,
+    });
+  }
+});
 describe("connection action errors", () => {
   it.each(["signin", "test"] as const)(
     "keeps a live %s failure in its own action row",

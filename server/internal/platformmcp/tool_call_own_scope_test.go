@@ -16,7 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// fixedIdentityGate folds every organization, standing in for the rollout flag.
+// fixedIdentityGate folds every organization.
 type fixedIdentityGate struct{}
 
 func (fixedIdentityGate) CanonicalOrgFor(_ context.Context, orgID string) string {

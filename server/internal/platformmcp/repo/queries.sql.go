@@ -2000,7 +2000,7 @@ SELECT
     ingress.custom_domain_id,
     ingress.enabled,
     ingress.identity_required,
-    (ingress.credentials_encrypted IS NOT NULL)::boolean AS credentials_configured,
+    (ingress.credentials_encrypted IS NOT NULL OR ingress.credentials_org_encrypted IS NOT NULL)::boolean AS credentials_configured,
     ingress.status,
     ingress.dns_name,
     ingress.last_error,
@@ -2333,28 +2333,6 @@ func (q *Queries) GetPlatformMCPCatalogRegistrationForLifecycle(ctx context.Cont
 		&i.Deleted,
 	)
 	return i, err
-}
-
-const getPlatformMCPCatalogRegistrationProject = `-- name: GetPlatformMCPCatalogRegistrationProject :one
-SELECT project_id
-FROM platform_mcp_catalog_registrations
-WHERE id = $1
-  AND organization_id = $2
-  AND deleted IS FALSE
-`
-
-type GetPlatformMCPCatalogRegistrationProjectParams struct {
-	ID             uuid.UUID
-	OrganizationID string
-}
-
-// The project a live registration belongs to, so a caller can name the
-// server it added by registration ID alone.
-func (q *Queries) GetPlatformMCPCatalogRegistrationProject(ctx context.Context, arg GetPlatformMCPCatalogRegistrationProjectParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, getPlatformMCPCatalogRegistrationProject, arg.ID, arg.OrganizationID)
-	var project_id uuid.UUID
-	err := row.Scan(&project_id)
-	return project_id, err
 }
 
 const getPlatformMCPConnectionForUpdate = `-- name: GetPlatformMCPConnectionForUpdate :one
@@ -2922,9 +2900,9 @@ const getPlatformMCPLifecycle = `-- name: GetPlatformMCPLifecycle :one
 WITH default_project AS (
     SELECT id
     FROM projects
-    WHERE organization_id = $1
-      AND slug = 'default'
-      AND deleted IS FALSE
+    WHERE projects.organization_id = $1
+      AND projects.slug = 'default'
+      AND projects.deleted IS FALSE
     LIMIT 1
 )
 SELECT
@@ -3199,6 +3177,7 @@ SELECT
     p.description,
     p.auto_created,
     p.auto_sync_enabled,
+    p.auto_add_servers_enabled,
     COALESCE(p.is_default, FALSE) AS is_default,
     (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
     (
@@ -3263,6 +3242,7 @@ type GetPlatformMCPPluginInventoryItemRow struct {
 	Description             pgtype.Text
 	AutoCreated             bool
 	AutoSyncEnabled         pgtype.Bool
+	AutoAddServersEnabled   bool
 	IsDefault               bool
 	ServerCount             int64
 	SkillCount              int64
@@ -3283,6 +3263,7 @@ func (q *Queries) GetPlatformMCPPluginInventoryItem(ctx context.Context, arg Get
 		&i.Description,
 		&i.AutoCreated,
 		&i.AutoSyncEnabled,
+		&i.AutoAddServersEnabled,
 		&i.IsDefault,
 		&i.ServerCount,
 		&i.SkillCount,
@@ -3716,6 +3697,96 @@ func (q *Queries) GetPlatformMCPServer(ctx context.Context, arg GetPlatformMCPSe
 	return i, err
 }
 
+const getPlatformMCPServerProject = `-- name: GetPlatformMCPServerProject :one
+SELECT m.project_id
+FROM mcp_servers AS m
+JOIN projects AS project
+  ON project.id = m.project_id
+ AND project.organization_id = $1
+ AND project.deleted IS FALSE
+WHERE m.id = $2
+  AND m.deleted IS FALSE
+`
+
+type GetPlatformMCPServerProjectParams struct {
+	OrganizationID string
+	McpServerID    uuid.UUID
+}
+
+// The live project a live MCP server belongs to, so a caller can name a
+// server by its ID alone.
+func (q *Queries) GetPlatformMCPServerProject(ctx context.Context, arg GetPlatformMCPServerProjectParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getPlatformMCPServerProject, arg.OrganizationID, arg.McpServerID)
+	var project_id uuid.UUID
+	err := row.Scan(&project_id)
+	return project_id, err
+}
+
+const getPlatformMCPServerRegistrationForCaller = `-- name: GetPlatformMCPServerRegistrationForCaller :one
+SELECT
+    m.id AS mcp_server_id,
+    COALESCE(registration.id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_id,
+    COALESCE(
+        registration.user_id = $1
+        OR (registration.user_id IS NULL AND created_connection.subject_urn = $2),
+        FALSE
+    )::boolean AS added_by_caller
+FROM mcp_servers AS m
+JOIN projects AS project
+  ON project.id = m.project_id
+ AND project.organization_id = $3
+ AND project.deleted IS FALSE
+LEFT JOIN LATERAL (
+    SELECT registration.id, registration.user_id, registration.connection_id
+    FROM platform_mcp_catalog_registrations AS registration
+    WHERE registration.organization_id = $3
+      AND registration.project_id = m.project_id
+      AND registration.mcp_server_id = m.id
+      AND registration.deleted IS FALSE
+    ORDER BY registration.created_at DESC, registration.id DESC
+    LIMIT 1
+) AS registration ON TRUE
+LEFT JOIN platform_mcp_connections AS created_connection
+  ON created_connection.id = registration.connection_id
+ AND created_connection.organization_id = $3
+WHERE m.id = $4
+  AND m.project_id = $5
+  AND m.deleted IS FALSE
+`
+
+type GetPlatformMCPServerRegistrationForCallerParams struct {
+	UserID         pgtype.Text
+	SubjectUrn     string
+	OrganizationID string
+	McpServerID    uuid.UUID
+	ProjectID      uuid.UUID
+}
+
+type GetPlatformMCPServerRegistrationForCallerRow struct {
+	McpServerID    uuid.UUID
+	RegistrationID uuid.UUID
+	AddedByCaller  bool
+}
+
+// The Platform setup record behind an MCP server named by its ID: the newest
+// live registration of that server, as GetPlatformMCPInventoryItem picks it.
+// registration_id is the nil UUID when the server was not added through
+// Platform setup. added_by_caller applies the same ownership rule as
+// GetPlatformMCPCatalogRegistrationForLifecycle, so a refusal can say the
+// server belongs to another member instead of calling it unknown.
+func (q *Queries) GetPlatformMCPServerRegistrationForCaller(ctx context.Context, arg GetPlatformMCPServerRegistrationForCallerParams) (GetPlatformMCPServerRegistrationForCallerRow, error) {
+	row := q.db.QueryRow(ctx, getPlatformMCPServerRegistrationForCaller,
+		arg.UserID,
+		arg.SubjectUrn,
+		arg.OrganizationID,
+		arg.McpServerID,
+		arg.ProjectID,
+	)
+	var i GetPlatformMCPServerRegistrationForCallerRow
+	err := row.Scan(&i.McpServerID, &i.RegistrationID, &i.AddedByCaller)
+	return i, err
+}
+
 const getPlatformMCPServerToolExposure = `-- name: GetPlatformMCPServerToolExposure :one
 SELECT
     t.id AS toolset_id,
@@ -3732,7 +3803,7 @@ SELECT
     -- The project predicate is load-bearing, not tidiness. mcp_servers.
     -- toolset_id has no composite constraint pairing it with project_id, so a
     -- server in another project can front this toolset. Each id here is
-    -- authorized with authz.MCPCheck(ScopeMCPWrite, id, <this project>), and
+    -- authorized with authz.MCPServer(id, <this project>).Write(), and
     -- that check injects the project as a selector dimension so a
     -- project-scoped grant matches — which means a project-wide mcp:write in
     -- THIS project would wave through a server id belonging to another one.
@@ -5340,7 +5411,7 @@ JOIN projects
   AND projects.deleted IS FALSE
 JOIN plugin_github_connections gc
   ON gc.project_id = p.project_id
-  AND gc.marketplace_token IS NOT NULL
+  AND (gc.marketplace_token_hash IS NOT NULL OR gc.marketplace_token IS NOT NULL)
 WHERE p.project_id = $1
   AND p.organization_id = $2
   AND p.deleted IS FALSE
@@ -5411,47 +5482,6 @@ func (q *Queries) ListPlatformMCPAssignedPluginInventory(ctx context.Context, ar
 			&i.RepositoryConnected,
 			&i.Published,
 		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listPlatformMCPCatalogRegistrationsByRemoteMcpServer = `-- name: ListPlatformMCPCatalogRegistrationsByRemoteMcpServer :many
-SELECT id, user_session_issuer_id
-FROM platform_mcp_catalog_registrations
-WHERE remote_mcp_server_id = $1
-  AND organization_id = $2
-  AND project_id = $3
-  AND deleted IS FALSE
-ORDER BY id
-`
-
-type ListPlatformMCPCatalogRegistrationsByRemoteMcpServerParams struct {
-	RemoteMcpServerID uuid.NullUUID
-	OrganizationID    string
-	ProjectID         uuid.UUID
-}
-
-type ListPlatformMCPCatalogRegistrationsByRemoteMcpServerRow struct {
-	ID                  uuid.UUID
-	UserSessionIssuerID uuid.NullUUID
-}
-
-func (q *Queries) ListPlatformMCPCatalogRegistrationsByRemoteMcpServer(ctx context.Context, arg ListPlatformMCPCatalogRegistrationsByRemoteMcpServerParams) ([]ListPlatformMCPCatalogRegistrationsByRemoteMcpServerRow, error) {
-	rows, err := q.db.Query(ctx, listPlatformMCPCatalogRegistrationsByRemoteMcpServer, arg.RemoteMcpServerID, arg.OrganizationID, arg.ProjectID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListPlatformMCPCatalogRegistrationsByRemoteMcpServerRow
-	for rows.Next() {
-		var i ListPlatformMCPCatalogRegistrationsByRemoteMcpServerRow
-		if err := rows.Scan(&i.ID, &i.UserSessionIssuerID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -6224,6 +6254,7 @@ SELECT
     p.description,
     p.auto_created,
     p.auto_sync_enabled,
+    p.auto_add_servers_enabled,
     COALESCE(p.is_default, FALSE) AS is_default,
     (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
     (
@@ -6292,6 +6323,7 @@ type ListPlatformMCPPluginInventoryRow struct {
 	Description             pgtype.Text
 	AutoCreated             bool
 	AutoSyncEnabled         pgtype.Bool
+	AutoAddServersEnabled   bool
 	IsDefault               bool
 	ServerCount             int64
 	SkillCount              int64
@@ -6332,6 +6364,7 @@ func (q *Queries) ListPlatformMCPPluginInventory(ctx context.Context, arg ListPl
 			&i.Description,
 			&i.AutoCreated,
 			&i.AutoSyncEnabled,
+			&i.AutoAddServersEnabled,
 			&i.IsDefault,
 			&i.ServerCount,
 			&i.SkillCount,
@@ -6371,8 +6404,6 @@ SELECT
     COALESCE(ps.mcp_server_id, ps.meta_mcp_server_id) AS target_id,
     (COALESCE(t.id, s.id, gateway.id) IS NOT NULL)::boolean AS target_resolved,
     COALESCE(ep.slug, gateway_ep.slug, '')::text AS mcp_slug,
-    -- legacyalias: drop with AIM-670.
-    t.id AS alias_toolset_id,
     COALESCE(s.visibility <> 'disabled', gateway.visibility <> 'disabled', FALSE)::boolean AS enabled,
     membership_version.value AS membership_version
 FROM plugin_servers ps
@@ -6439,7 +6470,6 @@ type ListPlatformMCPPluginMembershipsRow struct {
 	TargetID          uuid.NullUUID
 	TargetResolved    bool
 	McpSlug           string
-	AliasToolsetID    uuid.NullUUID
 	Enabled           bool
 	MembershipVersion string
 }
@@ -6475,7 +6505,6 @@ func (q *Queries) ListPlatformMCPPluginMemberships(ctx context.Context, arg List
 			&i.TargetID,
 			&i.TargetResolved,
 			&i.McpSlug,
-			&i.AliasToolsetID,
 			&i.Enabled,
 			&i.MembershipVersion,
 		); err != nil {
@@ -6497,8 +6526,6 @@ SELECT
     ps.sort_order,
     (ps.meta_mcp_server_id IS NOT NULL)::boolean AS gateway_backed,
     COALESCE(ep.slug, gateway_ep.slug, '')::text AS mcp_slug,
-    -- legacyalias: drop with AIM-670.
-    t.id AS alias_toolset_id,
     COALESCE(s.visibility <> 'disabled', gateway.visibility <> 'disabled', FALSE)::boolean AS enabled
 FROM plugin_servers ps
 JOIN plugins p
@@ -6508,10 +6535,6 @@ LEFT JOIN mcp_servers s
   ON s.id = ps.mcp_server_id
   AND s.project_id = p.project_id
   AND s.deleted IS FALSE
-LEFT JOIN toolsets t
-  ON t.id = (CASE WHEN s.toolset_id = s.id THEN s.id END)
-  AND t.project_id = p.project_id
-  AND t.deleted IS FALSE
 LEFT JOIN meta_mcp_servers gateway
   ON gateway.id = ps.meta_mcp_server_id
   AND gateway.project_id = p.project_id
@@ -6546,20 +6569,17 @@ type ListPlatformMCPPluginServersParams struct {
 }
 
 type ListPlatformMCPPluginServersRow struct {
-	ID             uuid.UUID
-	DisplayName    string
-	Policy         string
-	SortOrder      int32
-	GatewayBacked  bool
-	McpSlug        string
-	AliasToolsetID uuid.NullUUID
-	Enabled        bool
+	ID            uuid.UUID
+	DisplayName   string
+	Policy        string
+	SortOrder     int32
+	GatewayBacked bool
+	McpSlug       string
+	Enabled       bool
 }
 
 // Member-facing compatibility projection. It deliberately omits membership and
 // backend IDs, which are administrative identity and must not cross this path.
-// A canonical wrapper with no endpoint falls back to its toolset's legacy alias,
-// which the caller reads through legacyalias for alias_toolset_id.
 func (q *Queries) ListPlatformMCPPluginServers(ctx context.Context, arg ListPlatformMCPPluginServersParams) ([]ListPlatformMCPPluginServersRow, error) {
 	rows, err := q.db.Query(ctx, listPlatformMCPPluginServers,
 		arg.PluginID,
@@ -6581,7 +6601,6 @@ func (q *Queries) ListPlatformMCPPluginServers(ctx context.Context, arg ListPlat
 			&i.SortOrder,
 			&i.GatewayBacked,
 			&i.McpSlug,
-			&i.AliasToolsetID,
 			&i.Enabled,
 		); err != nil {
 			return nil, err
@@ -7587,6 +7606,63 @@ func (q *Queries) LockPlatformMCPCatalogRegistration(ctx context.Context, arg Lo
 	return err
 }
 
+const lockPlatformMCPCatalogResourceOffers = `-- name: LockPlatformMCPCatalogResourceOffers :many
+SELECT m.id AS mcp_server_id, ac.remote_session_client_id
+FROM mcp_servers AS m
+JOIN projects AS p ON p.id = m.project_id AND p.organization_id = $1 AND p.deleted IS FALSE
+JOIN mcp_server_auth_clients AS offer ON offer.mcp_server_id = m.id AND offer.project_id = m.project_id
+  AND offer.organization_id = p.organization_id AND offer.deleted IS FALSE
+JOIN mcp_auth_clients AS ac ON ac.id = offer.auth_client_id AND ac.organization_id = offer.organization_id
+  AND (ac.project_id IS NULL OR ac.project_id = offer.project_id)
+  AND ac.deleted IS FALSE AND ac.enabled AND ac.client_type = 'remote_session'
+WHERE m.project_id = $2
+  AND m.remote_mcp_server_id = $3
+  AND m.deleted IS FALSE AND m.visibility <> 'disabled'
+  AND EXISTS (
+    SELECT 1 FROM platform_mcp_catalog_registrations AS r
+    WHERE r.mcp_server_id = m.id AND r.project_id = m.project_id
+      AND r.organization_id = p.organization_id AND r.remote_mcp_server_id = m.remote_mcp_server_id
+      AND r.user_session_issuer_id = m.user_session_issuer_id
+      AND r.status = 'registered' AND r.deleted IS FALSE
+  )
+ORDER BY m.id, offer.auth_client_id
+FOR SHARE OF offer
+`
+
+type LockPlatformMCPCatalogResourceOffersParams struct {
+	OrganizationID    string
+	ProjectID         uuid.UUID
+	RemoteMcpServerID uuid.NullUUID
+}
+
+type LockPlatformMCPCatalogResourceOffersRow struct {
+	McpServerID           uuid.UUID
+	RemoteSessionClientID uuid.NullUUID
+}
+
+// A stale registration cannot claim a resource through a different MCP server
+// or a server that has moved to another source or sign-in. Hold the offer
+// link while claiming/writing display so an explicit detach cannot interleave.
+func (q *Queries) LockPlatformMCPCatalogResourceOffers(ctx context.Context, arg LockPlatformMCPCatalogResourceOffersParams) ([]LockPlatformMCPCatalogResourceOffersRow, error) {
+	rows, err := q.db.Query(ctx, lockPlatformMCPCatalogResourceOffers, arg.OrganizationID, arg.ProjectID, arg.RemoteMcpServerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LockPlatformMCPCatalogResourceOffersRow
+	for rows.Next() {
+		var i LockPlatformMCPCatalogResourceOffersRow
+		if err := rows.Scan(&i.McpServerID, &i.RemoteSessionClientID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockPlatformMCPConnectionAuthorization = `-- name: LockPlatformMCPConnectionAuthorization :exec
 SELECT pg_advisory_xact_lock(
     hashtextextended(
@@ -7986,14 +8062,14 @@ WITH anchor AS (
       AND cm.chat_id = $4 AND cm.project_id = $1
     ORDER BY cm.seq DESC LIMIT 1
 ), preceding AS (
-    SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.tool_call_summaries, cm.content_hash, cm.generation, cm.capture_kind, cm.original_message_id, cm.replayed, cm.created_at, cm.risk_analyzed_at FROM chat_messages cm, anchor a
+    SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.tool_call_summaries, cm.content_hash, cm.generation, cm.capture_kind, cm.original_message_id, cm.replayed, cm.created_at, cm.risk_analyzed_at, cm.tool_call_count, cm.content_bytes, cm.content_raw_bytes, cm.tool_calls_bytes FROM chat_messages cm, anchor a
      WHERE cm.chat_id = $4 AND cm.project_id = $1 AND cm.seq < a.seq
      ORDER BY cm.seq DESC LIMIT $5::integer
 ), following AS (
-    SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.tool_call_summaries, cm.content_hash, cm.generation, cm.capture_kind, cm.original_message_id, cm.replayed, cm.created_at, cm.risk_analyzed_at FROM chat_messages cm, anchor a
+    SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.tool_call_summaries, cm.content_hash, cm.generation, cm.capture_kind, cm.original_message_id, cm.replayed, cm.created_at, cm.risk_analyzed_at, cm.tool_call_count, cm.content_bytes, cm.content_raw_bytes, cm.tool_calls_bytes FROM chat_messages cm, anchor a
      WHERE cm.chat_id = $4 AND cm.project_id = $1 AND cm.seq >= a.seq
      ORDER BY cm.seq ASC LIMIT $6::integer
-), neighbors AS (SELECT id, seq, chat_id, project_id, role, content, content_raw, content_asset_url, model, message_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, storage_error, user_id, external_user_id, external_message_id, origin, user_agent, ip_address, source, tool_call_id, tool_urn, tool_outcome, tool_outcome_notes, tool_call_summaries, content_hash, generation, capture_kind, original_message_id, replayed, created_at, risk_analyzed_at FROM preceding UNION ALL SELECT id, seq, chat_id, project_id, role, content, content_raw, content_asset_url, model, message_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, storage_error, user_id, external_user_id, external_message_id, origin, user_agent, ip_address, source, tool_call_id, tool_urn, tool_outcome, tool_outcome_notes, tool_call_summaries, content_hash, generation, capture_kind, original_message_id, replayed, created_at, risk_analyzed_at FROM following)
+), neighbors AS (SELECT id, seq, chat_id, project_id, role, content, content_raw, content_asset_url, model, message_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, storage_error, user_id, external_user_id, external_message_id, origin, user_agent, ip_address, source, tool_call_id, tool_urn, tool_outcome, tool_outcome_notes, tool_call_summaries, content_hash, generation, capture_kind, original_message_id, replayed, created_at, risk_analyzed_at, tool_call_count, content_bytes, content_raw_bytes, tool_calls_bytes FROM preceding UNION ALL SELECT id, seq, chat_id, project_id, role, content, content_raw, content_asset_url, model, message_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, storage_error, user_id, external_user_id, external_message_id, origin, user_agent, ip_address, source, tool_call_id, tool_urn, tool_outcome, tool_outcome_notes, tool_call_summaries, content_hash, generation, capture_kind, original_message_id, replayed, created_at, risk_analyzed_at, tool_call_count, content_bytes, content_raw_bytes, tool_calls_bytes FROM following)
 SELECT n.id, n.seq, n.created_at, n.role, n.generation,
        COALESCE(CASE WHEN octet_length(n.source) <= 512 THEN n.source END, '')::text AS source,
        COALESCE(CASE WHEN octet_length(n.user_id) <= 512 THEN n.user_id END, '')::text AS user_id,
@@ -8617,7 +8693,7 @@ JOIN projects
   AND projects.deleted IS FALSE
 JOIN plugin_github_connections gc
   ON gc.project_id = p.project_id
-  AND gc.marketplace_token IS NOT NULL
+  AND (gc.marketplace_token_hash IS NOT NULL OR gc.marketplace_token IS NOT NULL)
 WHERE p.project_id = $1
   AND p.organization_id = $2
   AND p.deleted IS FALSE

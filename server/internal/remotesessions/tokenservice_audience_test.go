@@ -117,7 +117,7 @@ func setupRefreshFixtureWithHandler(t *testing.T, slugSuffix string, audience pg
 
 	secretCiphertext, err := enc.Encrypt([]byte("aud-secret"))
 	require.NoError(t, err)
-	client, err := q.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+	client, err := q.CreateRemoteSessionClientFixture(ctx, repo.CreateRemoteSessionClientFixtureParams{
 		ProjectID:               conv.ToNullUUID(*authCtx.ProjectID),
 		OrganizationID:          conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
 		RemoteSessionIssuerID:   issuer.ID,
@@ -131,11 +131,7 @@ func setupRefreshFixtureWithHandler(t *testing.T, slugSuffix string, audience pg
 	})
 	require.NoError(t, err)
 
-	err = q.AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: client.ID,
-		UserSessionIssuerID:   userIssuer,
-	})
-	require.NoError(t, err)
+	placeClientForSignIn(t, ctx, ti.conn, client.ID, userIssuer)
 
 	subject := urn.NewUserSubject("refresh-subject-" + slugSuffix)
 	seedExpiredRemoteSession(t, ctx, ti, enc, subject, userIssuer, client.ID)

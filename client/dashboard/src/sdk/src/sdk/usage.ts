@@ -3,7 +3,6 @@
  */
 
 import { usageCancelStripeSubscription } from "../funcs/usageCancelStripeSubscription.js";
-import { usageCreateCheckout } from "../funcs/usageCreateCheckout.js";
 import { usageCreateCustomerSession } from "../funcs/usageCreateCustomerSession.js";
 import { usageCreateStripeCheckout } from "../funcs/usageCreateStripeCheckout.js";
 import { usageCreateStripePortalSession } from "../funcs/usageCreateStripePortalSession.js";
@@ -39,10 +38,6 @@ import {
   CancelStripeSubscriptionRequest,
   CancelStripeSubscriptionSecurity,
 } from "../models/operations/cancelstripesubscription.js";
-import {
-  CreateCheckoutRequest,
-  CreateCheckoutSecurity,
-} from "../models/operations/createcheckout.js";
 import {
   CreateCustomerSessionRequest,
   CreateCustomerSessionSecurity,
@@ -126,25 +121,6 @@ export class Usage extends ClientSDK {
     options?: RequestOptions,
   ): Promise<StripeSubscription> {
     return unwrapAsync(usageCancelStripeSubscription(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * createCheckout usage
-   *
-   * @remarks
-   * Create a checkout link for upgrading to the business plan
-   */
-  async createCheckout(
-    request?: CreateCheckoutRequest | undefined,
-    security?: CreateCheckoutSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<string> {
-    return unwrapAsync(usageCreateCheckout(
       this,
       request,
       security,

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -13,6 +14,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
+
+// AttemptHostSQL leaves out a listing row's host, which is its member's, not the attempt's provider.
+const AttemptHostSQL = `if(step = 'discovery_member', '', provider_host)`
 
 // attemptEndingColumns are the columns that decide how an attempt ended, plus its
 // provider (the one on the ending row, else the earliest) and weight. They reduce an
@@ -30,9 +34,9 @@ const attemptEndingColumns = `
 	toString(argMax((step, reason), (event_time, step, reason)).2) AS last_reason,
 	max(event_time) AS last_at,
 	ifNull(nullIf(if(countIf(is_final) > 0,
-			argMinIf(provider_host, (event_time, step, outcome, reason, provider_host), is_final),
-			argMax(provider_host, (event_time, step, reason, provider_host))), ''),
-		argMinIf(provider_host, (event_time, provider_host), provider_host != '')) AS provider,
+			argMinIf(` + AttemptHostSQL + `, (event_time, step, outcome, reason, ` + AttemptHostSQL + `), is_final),
+			argMax(` + AttemptHostSQL + `, (event_time, step, reason, ` + AttemptHostSQL + `))), ''),
+		argMinIf(` + AttemptHostSQL + `, (event_time, ` + AttemptHostSQL + `), ` + AttemptHostSQL + ` != '')) AS provider,
 	toUInt64(max(repeats)) + 1 AS weight`
 
 // attemptColumns reduces an attempt's rows to one AttemptSummary.
@@ -51,6 +55,9 @@ const attemptColumns = attemptEndingColumns + `,
 		groupUniqArray(server_id), groupUniqArray(member_id), groupUniqArray(auth_client_id),
 		groupUniqArray(remote_session_issuer_id), groupUniqArray(user_session_issuer_id),
 		groupUniqArray(remote_session_client_id))))) AS touched`
+
+// fixCandidates keeps reduced attempts that ended connected or carry a reason.
+const fixCandidates = `(has_final AND (final_outcome = '` + string(OutcomeConnected) + `' OR final_reason != '')) OR (NOT has_final AND last_reason != '')`
 
 // ExcludedOrganizations are left out of cross-organization reads: the demo organization's attempts are made up.
 func ExcludedOrganizations() []string {
@@ -85,6 +92,17 @@ type AttemptFilter struct {
 	// PeopleFailingBefore is the exclusive end of PeopleFailingFrom's range.
 	PeopleFailingBefore time.Time
 
+	// PeopleProjectID, PeopleIssuerID and PeopleIssuerServerIDs, when set, narrow the people
+	// to those failing in one project and on one provider's servers, the provider itself, or
+	// rows stamped with it. Their other attempts are still read: they can show a part working.
+	PeopleProjectID uuid.UUID
+
+	// PeopleIssuerID is the provider the people must have failed on, or any when nil.
+	PeopleIssuerID uuid.UUID
+
+	// PeopleIssuerServerIDs are the servers and gateways attached to PeopleIssuerID now.
+	PeopleIssuerServerIDs []string
+
 	// FixCandidatesOnly keeps only attempts that ended connected or carry a reason: the
 	// successes that can fix a failure and the failures that show it was not fixed yet.
 	// It applies after the attempt is reduced, so it keeps every attempt End can call
@@ -114,18 +132,29 @@ func (f AttemptFilter) where() (string, []any, error) {
 		conds, args = append(conds, "server_id = ?"), append(args, f.ServerID)
 	}
 	if !f.PeopleFailingFrom.IsZero() {
-		conds = append(conds, `(organization_id, subject_urn) IN (
-		SELECT organization_id, subject_urn FROM `+eventsTable+`
-		WHERE attempt_started_at >= fromUnixTimestamp64Nano(?) AND attempt_started_at < fromUnixTimestamp64Nano(?)
-			AND subject_urn != ''
-			AND attempt_id IN (
-				SELECT attempt_id FROM `+eventsTable+`
-				WHERE attempt_started_at >= fromUnixTimestamp64Nano(?) AND attempt_started_at < fromUnixTimestamp64Nano(?) AND reason != ''))`)
 		from, before := f.PeopleFailingFrom.UnixNano(), f.PeopleFailingBefore.UnixNano()
-		args = append(args, from, before, from, before)
+		window, windowArgs := "attempt_started_at >= fromUnixTimestamp64Nano(?) AND attempt_started_at < fromUnixTimestamp64Nano(?)", []any{from, before}
+		if f.OrganizationID != "" {
+			window, windowArgs = window+" AND organization_id = ?", append(windowArgs, f.OrganizationID)
+		}
+		failing, failingArgs := window, slices.Clone(windowArgs)
+		if f.PeopleProjectID != uuid.Nil {
+			failing, failingArgs = failing+" AND project_id = ?", append(failingArgs, f.PeopleProjectID)
+		}
+		failingAttempts, failingAttemptArgs := failing+" AND reason != ''", slices.Clone(failingArgs)
+		if f.PeopleIssuerID != uuid.Nil {
+			issuer := f.PeopleIssuerID.String()
+			failingAttempts += ` AND attempt_id IN (SELECT attempt_id FROM ` + EventsTable + ` WHERE ` + failing + ` AND (has(?, server_id) OR server_id = ? OR user_session_issuer_id = ?))`
+			failingAttemptArgs = append(append(failingAttemptArgs, failingArgs...), nonNilStrings(f.PeopleIssuerServerIDs), issuer, issuer)
+		}
+		conds = append(conds, `(organization_id, subject_urn) IN (
+		SELECT organization_id, subject_urn FROM `+EventsTable+`
+		WHERE `+window+` AND subject_urn != ''
+			AND attempt_id IN (SELECT attempt_id FROM `+EventsTable+` WHERE `+failingAttempts+`))`)
+		args = append(append(args, windowArgs...), failingAttemptArgs...)
 		// A row without the person still belongs to the attempt, so select whole attempts.
 		inner := strings.Join(conds, " AND ")
-		return `attempt_id IN (SELECT attempt_id FROM ` + eventsTable + ` WHERE ` + inner + `) AND ` + strings.Join(conds[:2], " AND "), append(args, f.StartedFrom.UnixNano(), f.StartedBefore.UnixNano()), nil
+		return `attempt_id IN (SELECT attempt_id FROM ` + EventsTable + ` WHERE ` + inner + `) AND ` + strings.Join(conds[:2], " AND "), append(args, f.StartedFrom.UnixNano(), f.StartedBefore.UnixNano()), nil
 	}
 	return strings.Join(conds, " AND "), args, nil
 }
@@ -138,9 +167,9 @@ func ReadAttempts(ctx context.Context, ch driver.Conn, filter AttemptFilter, eac
 	}
 	having := ""
 	if filter.FixCandidatesOnly {
-		having = ` HAVING (has_final AND (final_outcome = '` + string(OutcomeConnected) + `' OR final_reason != '')) OR (NOT has_final AND last_reason != '')`
+		having = ` HAVING ` + fixCandidates
 	}
-	rows, err := ch.Query(ctx, `SELECT`+attemptColumns+` FROM `+eventsTable+` WHERE `+where+` GROUP BY organization_id, attempt_id`+having, args...)
+	rows, err := ch.Query(ctx, `SELECT`+attemptColumns+` FROM `+EventsTable+` WHERE `+where+` GROUP BY organization_id, attempt_id`+having, args...)
 	if err != nil {
 		return fmt.Errorf("query attempts: %w", err)
 	}
@@ -157,4 +186,11 @@ func ReadAttempts(ctx context.Context, ch driver.Conn, filter AttemptFilter, eac
 		return fmt.Errorf("read attempt rows: %w", err)
 	}
 	return nil
+}
+
+func nonNilStrings(values []string) []string {
+	if values == nil {
+		return []string{}
+	}
+	return values
 }

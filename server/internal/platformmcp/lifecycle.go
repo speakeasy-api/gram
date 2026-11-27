@@ -1,4 +1,4 @@
-//nolint:exhaustruct // Generated repository parameter types intentionally use documented zero-value optional fields.
+//nolint:exhaustruct_v5 // Generated repository parameter types intentionally use documented zero-value optional fields.
 package platformmcp
 
 import (
@@ -365,7 +365,7 @@ func (s *RegistrationStore) ProbeProviderReadiness(ctx context.Context, principa
 		if len(generic) == 0 || generic[0] == nil {
 			return Readiness{}, ErrProviderAdapterUnavailable
 		}
-		result, err = generic[0].ProbeCatalogReadiness(ctx, principal, projectID, registrationID, registration.RemoteMcpServerID.UUID, registration.UserSessionIssuerID.UUID, connectionID, generation)
+		result, err = generic[0].ProbeCatalogReadiness(ctx, principal, projectID, registrationID, registration.McpServerID.UUID, registration.RemoteMcpServerID.UUID, registration.UserSessionIssuerID.UUID, connectionID, generation)
 	} else {
 		adapter, adapterErr := adapters.Get(registration.CatalogProvider)
 		if adapterErr != nil {

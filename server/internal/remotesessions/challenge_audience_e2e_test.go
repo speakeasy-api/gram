@@ -95,7 +95,7 @@ func TestBuildAuthorizationUrl_AudienceResolution(t *testing.T) {
 
 			userIssuer := createUserSessionIssuer(t, ctx, ti.conn, "usi-aud-"+slugSuffix)
 
-			client, err := q.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+			client, err := q.CreateRemoteSessionClientFixture(ctx, repo.CreateRemoteSessionClientFixtureParams{
 				ProjectID:               conv.ToNullUUID(*authCtx.ProjectID),
 				OrganizationID:          conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
 				RemoteSessionIssuerID:   issuer.ID,
@@ -109,11 +109,7 @@ func TestBuildAuthorizationUrl_AudienceResolution(t *testing.T) {
 			})
 			require.NoError(t, err)
 
-			err = q.AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-				RemoteSessionClientID: client.ID,
-				UserSessionIssuerID:   userIssuer,
-			})
-			require.NoError(t, err)
+			placeClientForSignIn(t, ctx, ti.conn, client.ID, userIssuer)
 
 			clients, err := mgr.ListClients(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuer)
 			require.NoError(t, err)

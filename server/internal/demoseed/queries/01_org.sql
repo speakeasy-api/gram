@@ -300,6 +300,15 @@ SELECT @org_id::text, f
 FROM unnest(@features::text[]) AS f
 ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING;
 
+-- name: OrgBackdateLogsFeature :exec
+-- Logs count as on from before the seeded connection events, so their problems are read.
+UPDATE organization_features
+SET created_at = @since::timestamptz
+WHERE organization_id = @org_id::text
+  AND feature_name = 'logs'
+  AND deleted IS FALSE
+  AND created_at > @since::timestamptz;
+
 -- name: OrgInsertGatewayDisabledFeature :exec
 -- Start with access review required, preserving an explicit opt-in on reseed.
 INSERT INTO organization_features (organization_id, feature_name)
@@ -428,7 +437,7 @@ SELECT count(*) FROM custom_domains WHERE organization_id = @org_id
  AND dns_target_token IS NOT NULL AND dns_checked_at = health_checked_at;
 
 -- name: OrgPlantCustomDomainDependents :one
--- Test fixture: both SET NULL references must disappear before domain deletion.
+-- Test fixture: the SET NULL reference must disappear before domain deletion.
 WITH target AS MATERIALIZED (
   SELECT d.id AS domain_id, m.id AS meta_id, m.project_id, d.organization_id
   FROM custom_domains d
@@ -440,11 +449,5 @@ WITH target AS MATERIALIZED (
   INSERT INTO mcp_endpoints (project_id, custom_domain_id, meta_mcp_server_id, slug, is_domain_root)
   SELECT project_id, domain_id, meta_id, 'reseed-domain-root', TRUE FROM target
   RETURNING id
-), tools AS (
-  INSERT INTO toolsets (organization_id, project_id, name, slug, mcp_slug, custom_domain_id)
-  SELECT organization_id, project_id, 'Reseed domain ordering', 'reseed-domain-' || kind,
-    'reseed-' || md5(organization_id), CASE WHEN kind = 'custom' THEN domain_id ELSE NULL END
-  FROM target CROSS JOIN (VALUES ('custom'), ('shared')) AS variants(kind)
-  RETURNING id
 )
-SELECT ((SELECT count(*) FROM endpoint) + (SELECT count(*) FROM tools))::integer AS planted;
+SELECT (SELECT count(*) FROM endpoint)::integer AS planted;

@@ -1,0 +1,10 @@
+{
+  "hook_event_name": "pre_tool",
+  "session_id": "vibe-session-1",
+  "parent_session_id": null,
+  "transcript_path": "/tmp/vibe-sessions/vibe-session-1.jsonl",
+  "cwd": "/tmp/vibe-project",
+  "tool_name": "mcp_linear.create_issue",
+  "tool_call_id": "call_43",
+  "tool_input": { "title": "bug: flaky test", "team": "core" }
+}

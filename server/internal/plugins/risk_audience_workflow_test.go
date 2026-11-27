@@ -17,7 +17,7 @@ func TestGeneratePlatformMCPRiskAudienceWorkflow(t *testing.T) {
 	require.Equal(t, workflow, files["agent-plugins/speakeasy/"+path])
 	text := string(workflow)
 	cursor := 0
-	for _, name := range []string{"list_projects", "list_risk_policies", "get_risk_policy", "remove_self_from_risk_policy", "change_risk_policy_audience", "get_risk_policy", "change_risk_policy_audience", "update_risk_policy", "get_risk_policy"} {
+	for _, name := range []string{"list_projects", "list_risk_policies", "get_risk_policy", "change_risk_policy_audience", "get_risk_policy", "change_risk_policy_audience", "update_risk_policy", "get_risk_policy"} {
 		token := "`" + name + "`"
 		index := strings.Index(text[cursor:], token)
 		require.NotEqual(t, -1, index, "%s must appear in workflow order", name)
@@ -26,11 +26,10 @@ func TestGeneratePlatformMCPRiskAudienceWorkflow(t *testing.T) {
 	for _, guardrail := range []string{
 		"external OAuth connection",
 		"Stop without writing",
-		"organization-scoped coordination",
-		"always refuses",
-		"Do not bypass this refusal",
-		"before database transactions or receipt replay",
+		"self-removal and effective exclusion are not supported",
+		"Do not work around this",
 		"obtain confirmation again",
+		"`confirmed: false`",
 		"`confirmed: true`",
 		"stable `idempotency_key`",
 		"`confirm: true`",
@@ -39,11 +38,12 @@ func TestGeneratePlatformMCPRiskAudienceWorkflow(t *testing.T) {
 		"`remove_principals`",
 		"Native directory groups are not supported",
 		"Removing a direct user grant does not remove role-derived coverage",
-		"Never use an audience delta to bypass a self-removal refusal",
+		"Never use an audience delta as a way to remove the requester",
 		"atomically preserves all audience entries outside the delta",
 		"historical commit, not current state",
 	} {
 		require.Contains(t, text, guardrail)
 	}
 	require.NotContains(t, text, "Gram")
+	require.NotContains(t, text, "remove_self_from_risk_policy")
 }

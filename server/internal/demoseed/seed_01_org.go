@@ -6,14 +6,19 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
 	"github.com/speakeasy-api/gram/server/internal/sigint/evaluation"
 )
+
+// logsOnLead backdates the seeded logs feature past the 30 days of seeded connection events.
+const logsOnLead = 31 * 24 * time.Hour
 
 // orgStep is one ordered statement of the org phase.
 type orgStep struct {
@@ -257,11 +262,11 @@ func (s *seeder) orgPurge(ctx context.Context) error {
 		{"delete seeded direct user grants", func() error {
 			return s.q.OrgDeleteGrantsByID(ctx, repo.OrgDeleteGrantsByIDParams{
 				OrgID: org,
-				Ids: []uuid.UUID{
+				Ids: append([]uuid.UUID{
 					s.det("github-direct-grant"), s.det("github-wildcard-grant"),
 					s.det("inference-owner-grant"),
 					s.det("auth-client-github-token-use"), s.det("auth-client-github-token-block"),
-				},
+				}, s.globalToolBlockIDs()...),
 			})
 		}},
 		// Workload trust is organization-scoped: an organization-tier issuer or
@@ -390,10 +395,18 @@ func (s *seeder) orgFeaturesAndUsers(ctx context.Context) error {
 	// authz.ShouldEnforce is false and chatVisibilityScope falls back to
 	// own-sessions-only, hiding every seeded chat (owned by the seeded users).
 	if err := s.q.OrgInsertFeatures(ctx, repo.OrgInsertFeaturesParams{
-		OrgID:    org,
-		Features: []string{"logs", "tool_io_logs", "session_capture", "skills", "rbac", "signals_intelligence"},
+		OrgID: org,
+		// upstream_auth_enforced: the seeded org runs on typed upstream auth, so
+		// the demo and local orgs do not exercise the legacy resolver. The seed
+		// sets the feature directly, skipping the admin enable endpoint's audit
+		// record and blocker checks (see docs/rbac.md); upstreamAuthReadiness
+		// fails the run if the typed auth it records is incomplete.
+		Features: []string{"logs", "tool_io_logs", "session_capture", "skills", "rbac", "signals_intelligence", "upstream_auth_enforced"},
 	}); err != nil {
 		return fmt.Errorf("insert demo features: %w", err)
+	}
+	if err := s.q.OrgBackdateLogsFeature(ctx, repo.OrgBackdateLogsFeatureParams{OrgID: org, Since: conv.ToPGTimestamptz(s.now.Add(-logsOnLead))}); err != nil {
+		return fmt.Errorf("backdate demo logs feature: %w", err)
 	}
 	// Require access review on first seed, but retain an administrator's opt-in.
 	if err := s.q.OrgInsertGatewayDisabledFeature(ctx, org); err != nil {

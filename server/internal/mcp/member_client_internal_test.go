@@ -18,6 +18,7 @@ import (
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -85,7 +86,9 @@ func memberClientFixture(t *testing.T, endpoint string) (*Service, memberProxyBu
 	tp := testenv.NewTracerProvider(t)
 	policy, err := guardian.NewUnsafePolicy(tp, nil)
 	require.NoError(t, err)
-	return &Service{guardianPolicy: policy}, func(context.Context) (*proxy.Proxy, error) {
+	return &Service{
+		aiCatalog:      aivendorstest.NewStore(),
+		guardianPolicy: policy}, func(context.Context) (*proxy.Proxy, error) {
 		return &proxy.Proxy{
 			GuardianPolicy: policy, Logger: testenv.NewLogger(t), Tracer: tp.Tracer("test"),
 			NonStreamingTimeout: 5 * time.Second, StreamingTimeout: 5 * time.Second,
@@ -133,8 +136,9 @@ func TestMemberClientPreservesRichToolResult(t *testing.T) {
 			defer cancel()
 			session, _, err := service.connectMetaMember(ctx, testenv.NewLogger(t), build, time.Second)
 			require.NoError(t, err)
-			got, err := callMemberTool(ctx, session, &sdk.CallToolParams{Name: "ping"})
+			got, isError, err := callMemberTool(ctx, session, &sdk.CallToolParams{Name: "ping"})
 			require.NoError(t, err)
+			require.True(t, isError, "the SDK's own decode of the result reports isError")
 			require.NoError(t, session.Close())
 			require.Equal(t, result, string(got)) //nolint:testifylint // JSONEq converts numbers to float64 and would hide precision loss.
 		})
@@ -265,7 +269,7 @@ func TestMemberClientResultCaptureHonorsRejection(t *testing.T) {
 	session, _, err := service.connectMetaMember(ctx, testenv.NewLogger(t), guardedBuild, time.Second)
 	require.NoError(t, err)
 	invocation := &metaCodeInvocation{dispatched: false, rejected: false, message: "", credential: false}
-	raw, err := callMemberTool(context.WithValue(ctx, metaCodeInvocationKey{}, invocation), session, &sdk.CallToolParams{Name: "ping"})
+	raw, _, err := callMemberTool(context.WithValue(ctx, metaCodeInvocationKey{}, invocation), session, &sdk.CallToolParams{Name: "ping"})
 	require.Error(t, err)
 	rpcErr, ok := errors.AsType[*jsonrpc.Error](err)
 	require.True(t, ok)
@@ -290,7 +294,7 @@ func TestMemberClientMarksMembersOwnRefusal(t *testing.T) {
 	session, _, err := service.connectMetaMember(ctx, testenv.NewLogger(t), build, time.Second)
 	require.NoError(t, err)
 	invocation := &metaCodeInvocation{dispatched: false, rejected: false, message: "", credential: false}
-	_, err = callMemberTool(context.WithValue(ctx, metaCodeInvocationKey{}, invocation), session, &sdk.CallToolParams{Name: "missing"})
+	_, _, err = callMemberTool(context.WithValue(ctx, metaCodeInvocationKey{}, invocation), session, &sdk.CallToolParams{Name: "missing"})
 	require.Error(t, err)
 	require.True(t, invocation.rejected)
 	require.NoError(t, session.Close())
@@ -346,8 +350,9 @@ func TestMemberClientCapturesFinalMultiRoundTripResult(t *testing.T) {
 	defer cancel()
 	session, _, err := service.connectMetaMember(ctx, testenv.NewLogger(t), build, time.Second)
 	require.NoError(t, err)
-	got, err := callMemberTool(ctx, session, &sdk.CallToolParams{Name: "ping"})
+	got, isError, err := callMemberTool(ctx, session, &sdk.CallToolParams{Name: "ping"})
 	require.NoError(t, err)
+	require.False(t, isError)
 	require.NoError(t, session.Close())
 	require.Equal(t, final, string(got)) //nolint:testifylint // JSONEq converts numbers to float64 and would hide precision loss.
 	mu.Lock()
@@ -439,20 +444,25 @@ func TestMemberClientFailureClassifiesUnansweredExchanges(t *testing.T) {
 func TestMemberClientFailureRetriesOnlyTransportFailuresARetryCanChange(t *testing.T) {
 	t.Parallel()
 
+	const noAnswer = `server "fixture" did not answer: upstream unreachable or timed out`
 	for name, tc := range map[string]struct {
 		err       error
 		retryable bool
+		text      string
 	}{
-		"connection reset": {err: &net.OpError{Op: "read", Net: "tcp", Err: syscall.ECONNRESET}, retryable: true},
-		"i/o timeout":      {err: &net.OpError{Op: "read", Net: "tcp", Err: os.ErrDeadlineExceeded}, retryable: false},
-		"blocked address":  {err: fmt.Errorf("dial member: %w", guardian.ErrBlockedIP), retryable: false},
+		"connection reset": {err: &net.OpError{Op: "read", Net: "tcp", Err: syscall.ECONNRESET}, retryable: true, text: noAnswer},
+		"i/o timeout":      {err: &net.OpError{Op: "read", Net: "tcp", Err: os.ErrDeadlineExceeded}, retryable: false, text: noAnswer},
+		"blocked address":  {err: fmt.Errorf("dial member: %w", guardian.ErrBlockedIP), retryable: false, text: `server "fixture" can't connect: its address is a private or internal one that Speakeasy can't reach. Waiting won't fix this. Ask your administrator to fix the server's address.`},
+		"no such host":     {err: &net.OpError{Op: "dial", Net: "tcp", Err: &net.DNSError{Err: "no such host", Name: "member.example.invalid", IsNotFound: true}}, retryable: false, text: `server "fixture" can't connect: its address doesn't exist. Waiting won't fix this. Ask your administrator to fix the server's address.`},
+		"lookup failing":   {err: &net.OpError{Op: "dial", Net: "tcp", Err: &net.DNSError{Err: "server misbehaving", Name: "member.example.com", IsTemporary: true}}, retryable: true, text: noAnswer},
+		"lookup timeout":   {err: &net.OpError{Op: "dial", Net: "tcp", Err: &net.DNSError{Err: "timeout", Name: "member.example.com", IsTimeout: true, IsTemporary: true}}, retryable: false, text: noAnswer},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			attempt := newMemberAttempt(nil)
-			attempt.recordFailure(true, false, tc.err)
+			attempt.recordFailure(true, false, false, tc.err)
 			got := memberClientFailure(t.Context(), testenv.NewLogger(t), attempt, memberDial{}, metaMember{slug: "fixture"}, tc.err)
-			require.EqualError(t, got, `server "fixture" did not answer: upstream unreachable or timed out`)
+			require.EqualError(t, got, tc.text)
 			failure, ok := errors.AsType[memberDiscoveryError](got)
 			require.True(t, ok, "%v", got)
 			require.Equal(t, tc.retryable, failure.retryable)
@@ -645,7 +655,7 @@ func TestMemberClientTunneledDeadlineNeedsAForward(t *testing.T) {
 			attempt := newMemberAttempt(build)
 			ctx, cancel := context.WithTimeout(context.WithValue(t.Context(), memberAttemptKey{}, attempt), 300*time.Millisecond)
 			defer cancel()
-			_, err = callMemberTool(ctx, session, &sdk.CallToolParams{Name: "ping"})
+			_, _, err = callMemberTool(ctx, session, &sdk.CallToolParams{Name: "ping"})
 			require.Error(t, err)
 			require.Equal(t, tc.forward, attempt.forwarded())
 

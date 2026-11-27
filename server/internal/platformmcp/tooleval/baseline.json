@@ -19,7 +19,37 @@
         "runs": 3
       }
     },
+    "access-assistant-reasoning-before-kit": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "access-assistant-reasoning-high": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "access-assistant-reasoning-none": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "access-assistant-reasoning-preview-kit-off": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
     "access-assistant-runtime": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "access-assistant-runtime-preserve-reasoning": {
       "progressive": {
         "passes": 3,
         "runs": 3
@@ -69,7 +99,7 @@
     },
     "access-inbound-ema-trust-add": {
       "progressive": {
-        "passes": 2,
+        "passes": 3,
         "runs": 3
       }
     },
@@ -153,7 +183,7 @@
     },
     "access-my-access-all": {
       "progressive": {
-        "passes": 2,
+        "passes": 3,
         "runs": 3
       }
     },
@@ -339,7 +369,7 @@
     },
     "mcp-connection-settings-github-auth": {
       "progressive": {
-        "passes": 1,
+        "passes": 0,
         "runs": 3
       }
     },
@@ -361,12 +391,6 @@
         "runs": 3
       }
     },
-    "mcp-describe-linear-tools": {
-      "progressive": {
-        "passes": 1,
-        "runs": 3
-      }
-    },
     "mcp-disable-github-incident": {
       "progressive": {
         "passes": 0,
@@ -382,12 +406,6 @@
     "mcp-enable-linear": {
       "progressive": {
         "passes": 3,
-        "runs": 3
-      }
-    },
-    "mcp-execute-linear-issue": {
-      "progressive": {
-        "passes": 2,
         "runs": 3
       }
     },
@@ -439,12 +457,6 @@
         "runs": 3
       }
     },
-    "mcp-list-my-servers": {
-      "progressive": {
-        "passes": 0,
-        "runs": 3
-      }
-    },
     "mcp-my-org-gateway": {
       "progressive": {
         "passes": 0,
@@ -460,12 +472,6 @@
     "mcp-my-review-status": {
       "progressive": {
         "passes": 3,
-        "runs": 3
-      }
-    },
-    "mcp-my-servers-crm-lookup": {
-      "progressive": {
-        "passes": 0,
         "runs": 3
       }
     },
@@ -571,19 +577,13 @@
         "runs": 3
       }
     },
-    "mcp-search-my-tools-pr": {
-      "progressive": {
-        "passes": 0,
-        "runs": 3
-      }
-    },
     "mcp-set-address-linear-slug": {
       "progressive": {
         "passes": 3,
         "runs": 3
       }
     },
-    "mcp-setup-handoff-sentry": {
+    "mcp-setup-handoff-linear": {
       "progressive": {
         "passes": 3,
         "runs": 3
@@ -807,7 +807,7 @@
     },
     "obs-linear-users-today": {
       "progressive": {
-        "passes": 1,
+        "passes": 3,
         "runs": 3
       }
     },
@@ -1231,6 +1231,12 @@
         "runs": 3
       }
     },
+    "risk-negative-remove-self-from-policy": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
     "risk-pause-data-export": {
       "progressive": {
         "passes": 3,
@@ -1246,12 +1252,6 @@
     "risk-preview-sensor-match": {
       "progressive": {
         "passes": 3,
-        "runs": 3
-      }
-    },
-    "risk-remove-self-from-policy": {
-      "progressive": {
-        "passes": 0,
         "runs": 3
       }
     },
@@ -1359,7 +1359,7 @@
     },
     "session-continue-by-id": {
       "progressive": {
-        "passes": 0,
+        "passes": 3,
         "runs": 3
       }
     },
@@ -1431,7 +1431,7 @@
     },
     "skill-link-to-github-mcp": {
       "progressive": {
-        "passes": 0,
+        "passes": 3,
         "runs": 3
       }
     },

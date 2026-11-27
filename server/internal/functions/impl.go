@@ -18,31 +18,34 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/functions/server"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/functions/repo"
+	"github.com/speakeasy-api/gram/server/internal/functions/runnerkeys"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 type Service struct {
-	tracer      trace.Tracer
-	logger      *slog.Logger
-	db          *pgxpool.Pool
-	enc         *encryption.Client
+	tracer trace.Tracer
+	logger *slog.Logger
+	db     *pgxpool.Pool
+	keys   *runnerkeys.Keys
+
+	// tigrisStore holds function code for Fly.io runners. It is nil when the
+	// deployment runs with the disabled Functions provider.
 	tigrisStore *assets.TigrisStore
 }
 
 var _ gen.Auther = (*Service)(nil)
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, enc *encryption.Client, tigrisStore *assets.TigrisStore) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, keys *runnerkeys.Keys, tigrisStore *assets.TigrisStore) *Service {
 	logger = logger.With(attr.SlogComponent("functions"))
 
 	return &Service{
 		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/functions"),
 		logger:      logger,
 		db:          db,
-		enc:         enc,
+		keys:        keys,
 		tigrisStore: tigrisStore,
 	}
 }
@@ -58,7 +61,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 }
 
 func (s *Service) JWTAuth(ctx context.Context, token string, scheme *security.JWTScheme) (context.Context, error) {
-	return jwtAuth(ctx, s.logger, s.db, s.enc, token, scheme)
+	return jwtAuth(ctx, s.logger, s.db, s.keys, token, scheme)
 }
 
 func (s *Service) GetSignedAssetURL(ctx context.Context, p *gen.GetSignedAssetURLPayload) (*gen.GetSignedAssetURLResult, error) {
@@ -99,6 +102,12 @@ func (s *Service) GetSignedAssetURL(ctx context.Context, p *gen.GetSignedAssetUR
 	parsed, err := url.Parse(tu)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to parse function asset url").LogError(ctx, logger)
+	}
+
+	// Checked after authentication and the asset lookup, so only an
+	// authenticated runner learns how the deployment is configured.
+	if s.tigrisStore == nil {
+		return nil, oops.E(oops.CodeNotImplemented, ErrFunctionsDisabled, "%s", ErrFunctionsDisabled.Error()).LogWarn(ctx, logger)
 	}
 
 	signed, err := s.tigrisStore.PresignRead(ctx, parsed.Path, 10*time.Minute)

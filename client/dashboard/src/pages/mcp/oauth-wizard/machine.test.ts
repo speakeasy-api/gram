@@ -14,9 +14,7 @@ import { oauthWizardMachine } from "./machine";
 import {
   authServerOrigin,
   parseScopes,
-  pickAuthMethodFromList,
   type Context,
-  type DiscoveredOAuth,
   type Input,
 } from "./machine-types";
 import {
@@ -24,8 +22,6 @@ import {
   type DiscoverExternalOAuthInput,
   type DiscoverExternalOAuthOutput,
   type ProvisionUserSessionInput,
-  type RegisterClientInput,
-  type RegisterClientOutput,
 } from "./services";
 
 // ---------------------------------------------------------------------------
@@ -42,15 +38,7 @@ const VALID_PROXY_METADATA = {
 
 const VALID_EXTERNAL_METADATA_JSON = JSON.stringify(VALID_PROXY_METADATA);
 
-const DISCOVERED_2_1: DiscoveredOAuth = {
-  slug: "discovered-slug",
-  name: "Discovered",
-  version: "2.1",
-  metadata: VALID_PROXY_METADATA,
-};
-
 const baseInput: Input = {
-  discovered: null,
   toolsetId: "toolset-1",
   toolsetSlug: "ts",
   toolsetName: "Toolset",
@@ -80,25 +68,6 @@ function happyServices() {
     })),
     provisionUserSession: fromPromise<void, ProvisionUserSessionInput>(
       async () => {},
-    ),
-    registerClient: fromPromise<RegisterClientOutput, RegisterClientInput>(
-      async () => ({
-        clientId: "auto-cid",
-        clientSecret: "auto-secret",
-        tokenAuthMethod: "client_secret_basic",
-        registration: {},
-      }),
-    ),
-  };
-}
-
-function servicesWithRegisterFailure() {
-  return {
-    ...happyServices(),
-    registerClient: fromPromise<RegisterClientOutput, RegisterClientInput>(
-      async () => {
-        throw new Error("DCR boom");
-      },
     ),
   };
 }
@@ -171,13 +140,11 @@ describe("parseScopes", () => {
 
 function withExternal(over: Partial<Context["external"]> = {}): Context {
   return {
-    discovered: null,
     external: {
       issuerUrl: "https://example.com",
       metadataJson: VALID_EXTERNAL_METADATA_JSON,
       verifiedMetadata: null,
       jsonError: null,
-      prefilled: false,
       ...over,
     },
     proxy: {
@@ -190,11 +157,9 @@ function withExternal(over: Partial<Context["external"]> = {}): Context {
       environmentSlug: "",
       clientId: "",
       clientSecret: "",
-      prefilled: false,
     },
     envSlug: null,
     error: null,
-    autoRegistering: false,
     result: null,
     toolsetId: "",
     toolsetSlug: "",
@@ -216,7 +181,6 @@ function withProxy(over: Partial<Context["proxy"]> = {}): Context {
       environmentSlug: "",
       clientId: "id",
       clientSecret: "secret",
-      prefilled: false,
       ...over,
     },
   };
@@ -376,46 +340,11 @@ describe("oauthWizardMachine — path selection", () => {
     expect(actor.getSnapshot().matches({ proxy: "metadata" })).toBe(true);
   });
 
-  it("SELECT_PROXY pre-fills proxy form from discovered metadata", () => {
-    const actor = makeActor({ ...baseInput, discovered: DISCOVERED_2_1 });
-    actor.start();
-    actor.send({ type: "SELECT_PROXY" });
-    const { proxy } = actor.getSnapshot().context;
-    expect(proxy.slug).toBe("discovered-slug");
-    expect(proxy.authorizationEndpoint).toBe(
-      VALID_PROXY_METADATA.authorization_endpoint,
-    );
-    expect(proxy.scopes).toBe("read, write");
-    expect(proxy.prefilled).toBe(true);
-  });
-
   it("SELECT_EXTERNAL moves to external.source", () => {
     const actor = makeActor(baseInput);
     actor.start();
     actor.send({ type: "SELECT_EXTERNAL" });
     expect(actor.getSnapshot().matches({ external: "source" })).toBe(true);
-  });
-
-  it("SELECT_EXTERNAL prefills metadata JSON when discovered version is 2.1", () => {
-    const actor = makeActor({ ...baseInput, discovered: DISCOVERED_2_1 });
-    actor.start();
-    actor.send({ type: "SELECT_EXTERNAL" });
-    const { external } = actor.getSnapshot().context;
-    expect(external).not.toHaveProperty("slug");
-    expect(external.prefilled).toBe(true);
-    expect(JSON.parse(external.metadataJson)).toEqual(VALID_PROXY_METADATA);
-  });
-
-  it("SELECT_EXTERNAL does not prefill when discovered version is not 2.1", () => {
-    const actor = makeActor({
-      ...baseInput,
-      discovered: { ...DISCOVERED_2_1, version: "1.0" },
-    });
-    actor.start();
-    actor.send({ type: "SELECT_EXTERNAL" });
-    const { external } = actor.getSnapshot().context;
-    expect(external).not.toHaveProperty("slug");
-    expect(external.prefilled).toBe(false);
   });
 });
 
@@ -518,7 +447,7 @@ describe("oauthWizardMachine — provisioning failure", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Machine — external happy path and APPLY_DISCOVERED
+// Machine — external happy path
 // ---------------------------------------------------------------------------
 
 describe("oauthWizardMachine - external happy path", () => {
@@ -655,249 +584,6 @@ describe("oauthWizardMachine - external happy path", () => {
     expect(actor.getSnapshot().matches({ external: "gramHosted" })).toBe(true);
     expect(actor.getSnapshot().context.external.jsonError).toBe(
       "Invalid JSON format",
-    );
-  });
-});
-// Machine — manual proxy path always prompts for credentials
-// ---------------------------------------------------------------------------
-
-describe("oauthWizardMachine — manual proxy path skips auto-register chooser", () => {
-  const inputWithDiscovered: Input = {
-    ...baseInput,
-    discovered: DISCOVERED_2_1,
-  };
-
-  it("NEXT from metadata routes directly to credentials even when registration_endpoint is discovered", () => {
-    const actor = makeActor(inputWithDiscovered);
-    actor.start();
-    actor.send({ type: "SELECT_PROXY" });
-    fillProxyForm(actor);
-    actor.send({ type: "NEXT" });
-    const snap = actor.getSnapshot();
-    expect(snap.matches({ proxy: "credentials" })).toBe(true);
-    expect(snap.context.autoRegistering).toBe(false);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Machine — zero-click auto-configure from path selection
-// ---------------------------------------------------------------------------
-
-describe("oauthWizardMachine — auto-configure from path selection", () => {
-  const inputWithDiscovered: Input = {
-    ...baseInput,
-    discovered: DISCOVERED_2_1,
-  };
-
-  it("SELECT_PROXY_AUTO transitions to proxy.registering with prefilled proxy and autoRegistering=true", () => {
-    const actor = makeActor(inputWithDiscovered);
-    actor.start();
-    actor.send({ type: "SELECT_PROXY_AUTO" });
-    const snap = actor.getSnapshot();
-    expect(snap.matches({ proxy: "registering" })).toBe(true);
-    expect(snap.context.autoRegistering).toBe(true);
-    expect(snap.context.proxy.slug).toBe("discovered-slug");
-    expect(snap.context.proxy.authorizationEndpoint).toBe(
-      VALID_PROXY_METADATA.authorization_endpoint,
-    );
-    expect(snap.context.proxy.tokenEndpoint).toBe(
-      VALID_PROXY_METADATA.token_endpoint,
-    );
-    expect(snap.context.proxy.scopes).toBe("read, write");
-    expect(snap.context.proxy.prefilled).toBe(true);
-  });
-
-  it("walks pathSelection → registering → submitting → result.success without touching metadata or autoRegisterChoice", async () => {
-    const actor = makeActor(inputWithDiscovered);
-    actor.start();
-    actor.send({ type: "SELECT_PROXY_AUTO" });
-
-    await waitFor(actor, (s) => s.matches({ result: "success" }), {
-      timeout: 1000,
-    });
-
-    const snap = actor.getSnapshot();
-    expect(snap.context.proxy.clientId).toBe("auto-cid");
-    expect(snap.context.proxy.clientSecret).toBe("auto-secret");
-    expect(snap.context.result?.success).toBe(true);
-  });
-
-  it("keeps using the upstream DCR path when auto-configuring", async () => {
-    const actor = makeActor(inputWithDiscovered);
-    actor.start();
-    actor.send({ type: "SELECT_PROXY_AUTO" });
-
-    expect(actor.getSnapshot().matches({ proxy: "registering" })).toBe(true);
-
-    await waitFor(actor, (s) => s.matches({ result: "success" }), {
-      timeout: 1000,
-    });
-
-    const snap = actor.getSnapshot();
-    expect(snap.context.result?.message).toContain("user sessions");
-  });
-
-  it("registerClient failure routes to autoRegisterFailed", async () => {
-    const actor = makeActor(inputWithDiscovered, servicesWithRegisterFailure());
-    actor.start();
-    actor.send({ type: "SELECT_PROXY_AUTO" });
-
-    await waitFor(actor, (s) => s.matches({ proxy: "autoRegisterFailed" }), {
-      timeout: 1000,
-    });
-
-    expect(actor.getSnapshot().context.error).toContain("DCR boom");
-  });
-
-  it("provisionUserSession failure lands on autoRegisterFailed (does not drop into manual creds form)", async () => {
-    const actor = makeActor(
-      inputWithDiscovered,
-      servicesWithProvisionFailure(),
-    );
-    actor.start();
-    actor.send({ type: "SELECT_PROXY_AUTO" });
-
-    await waitFor(actor, (s) => s.matches({ proxy: "autoRegisterFailed" }), {
-      timeout: 1000,
-    });
-
-    expect(actor.getSnapshot().context.error).toContain("provision boom");
-  });
-
-  it("SELECT_PROXY_AUTO is a no-op when no discovered metadata (UI hides the card in this case)", () => {
-    const actor = makeActor(baseInput);
-    actor.start();
-    actor.send({ type: "SELECT_PROXY_AUTO" });
-    expect(actor.getSnapshot().matches("pathSelection")).toBe(true);
-  });
-
-  it("SELECT_PROXY_AUTO is a no-op when registration_endpoint missing (UI hides the card in this case)", () => {
-    const { registration_endpoint: _omit, ...metadataWithoutRegistration } =
-      VALID_PROXY_METADATA;
-    const actor = makeActor({
-      ...baseInput,
-      discovered: {
-        ...DISCOVERED_2_1,
-        metadata: metadataWithoutRegistration,
-      },
-    });
-    actor.start();
-    actor.send({ type: "SELECT_PROXY_AUTO" });
-    expect(actor.getSnapshot().matches("pathSelection")).toBe(true);
-  });
-
-  it("SELECT_PROXY_AUTO proceeds to proxy.registering even when scopes_supported missing (scopes are optional)", () => {
-    const { scopes_supported: _omit, ...metadataWithoutScopes } =
-      VALID_PROXY_METADATA;
-    const actor = makeActor({
-      ...baseInput,
-      discovered: {
-        ...DISCOVERED_2_1,
-        metadata: metadataWithoutScopes,
-      },
-    });
-    actor.start();
-    actor.send({ type: "SELECT_PROXY_AUTO" });
-    const snap = actor.getSnapshot();
-    expect(snap.matches({ proxy: "registering" })).toBe(true);
-    expect(snap.context.autoRegistering).toBe(true);
-    expect(snap.context.proxy.scopes).toBe("");
-  });
-
-  it("auto-select picks the preferred token endpoint auth method from discovery (basic > post > none)", () => {
-    const actor = makeActor({
-      ...baseInput,
-      discovered: {
-        ...DISCOVERED_2_1,
-        metadata: {
-          ...VALID_PROXY_METADATA,
-          token_endpoint_auth_methods_supported: ["client_secret_post", "none"],
-        },
-      },
-    });
-    actor.start();
-    actor.send({ type: "SELECT_PROXY_AUTO" });
-    expect(actor.getSnapshot().context.proxy.tokenAuthMethod).toBe(
-      "client_secret_post",
-    );
-  });
-
-  it("auto-select falls back to client_secret_basic when discovery advertises no methods", () => {
-    const actor = makeActor(inputWithDiscovered);
-    actor.start();
-    actor.send({ type: "SELECT_PROXY_AUTO" });
-    expect(actor.getSnapshot().context.proxy.tokenAuthMethod).toBe(
-      "client_secret_basic",
-    );
-  });
-
-  it("forwards the auto-selected token endpoint auth method into the DCR call", async () => {
-    let captured: RegisterClientInput | null = null;
-    const services = {
-      ...happyServices(),
-      registerClient: fromPromise<RegisterClientOutput, RegisterClientInput>(
-        async ({ input }) => {
-          captured = input;
-          return {
-            clientId: "auto-cid",
-            clientSecret: "auto-secret",
-            tokenAuthMethod: null,
-            registration: {},
-          };
-        },
-      ),
-    };
-    const actor = makeActor(
-      {
-        ...baseInput,
-        discovered: {
-          ...DISCOVERED_2_1,
-          metadata: {
-            ...VALID_PROXY_METADATA,
-            token_endpoint_auth_methods_supported: ["client_secret_post"],
-          },
-        },
-      },
-      services,
-    );
-    actor.start();
-    actor.send({ type: "SELECT_PROXY_AUTO" });
-
-    await waitFor(actor, (s) => s.matches({ result: "success" }), {
-      timeout: 1000,
-    });
-
-    expect(captured).not.toBeNull();
-    expect(captured!.tokenAuthMethod).toBe("client_secret_post");
-    // Issuer origin is derived from the discovered endpoints so the service
-    // can run live RFC 8414 discovery to recover the real supported methods.
-    expect(captured!.issuer).toBe("https://example.com");
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Auth-method helpers
-// ---------------------------------------------------------------------------
-
-describe("pickAuthMethodFromList", () => {
-  it("prefers client_secret_basic > client_secret_post > none", () => {
-    expect(
-      pickAuthMethodFromList([
-        "none",
-        "client_secret_post",
-        "client_secret_basic",
-      ]),
-    ).toBe("client_secret_basic");
-    expect(pickAuthMethodFromList(["none", "client_secret_post"])).toBe(
-      "client_secret_post",
-    );
-    expect(pickAuthMethodFromList(["none"])).toBe("none");
-  });
-
-  it("falls back to client_secret_basic when empty or unrecognized", () => {
-    expect(pickAuthMethodFromList([])).toBe("client_secret_basic");
-    expect(pickAuthMethodFromList(["private_key_jwt", "tls_client_auth"])).toBe(
-      "client_secret_basic",
     );
   });
 });

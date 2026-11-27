@@ -12,7 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const getActiveIngressByAttestor = `-- name: GetActiveIngressByAttestor :one
+const getActiveIngressesByDNSName = `-- name: GetActiveIngressesByDNSName :many
 SELECT
     id,
     organization_id,
@@ -20,18 +20,14 @@ SELECT
     dns_name,
     identity_required
 FROM network_ingresses
-WHERE attestor_namespace = $1
-  AND attestor_service_account = $2
+WHERE dns_name = $1::text
+  AND runtime = 'gateway'
   AND enabled IS TRUE
   AND deleted IS FALSE
+LIMIT 2
 `
 
-type GetActiveIngressByAttestorParams struct {
-	AttestorNamespace      string
-	AttestorServiceAccount string
-}
-
-type GetActiveIngressByAttestorRow struct {
+type GetActiveIngressesByDNSNameRow struct {
 	ID               uuid.UUID
 	OrganizationID   string
 	Provider         string
@@ -39,17 +35,33 @@ type GetActiveIngressByAttestorRow struct {
 	IdentityRequired bool
 }
 
-func (q *Queries) GetActiveIngressByAttestor(ctx context.Context, arg GetActiveIngressByAttestorParams) (GetActiveIngressByAttestorRow, error) {
-	row := q.db.QueryRow(ctx, getActiveIngressByAttestor, arg.AttestorNamespace, arg.AttestorServiceAccount)
-	var i GetActiveIngressByAttestorRow
-	err := row.Scan(
-		&i.ID,
-		&i.OrganizationID,
-		&i.Provider,
-		&i.DnsName,
-		&i.IdentityRequired,
-	)
-	return i, err
+// Resolves the ingress a tailnet gateway pod is proxying for from the request
+// Host. Only gateway-runtime ingresses are eligible; callers fail closed
+// unless exactly one row matches.
+func (q *Queries) GetActiveIngressesByDNSName(ctx context.Context, dnsName string) ([]GetActiveIngressesByDNSNameRow, error) {
+	rows, err := q.db.Query(ctx, getActiveIngressesByDNSName, dnsName)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetActiveIngressesByDNSNameRow
+	for rows.Next() {
+		var i GetActiveIngressesByDNSNameRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.Provider,
+			&i.DnsName,
+			&i.IdentityRequired,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getIngressServingState = `-- name: GetIngressServingState :one
@@ -58,8 +70,7 @@ SELECT
     provider,
     dns_name,
     identity_required,
-    attestor_namespace,
-    attestor_service_account,
+    runtime,
     enabled,
     deleted
 FROM network_ingresses
@@ -73,14 +84,13 @@ type GetIngressServingStateParams struct {
 }
 
 type GetIngressServingStateRow struct {
-	OrganizationID         string
-	Provider               string
-	DnsName                pgtype.Text
-	IdentityRequired       bool
-	AttestorNamespace      string
-	AttestorServiceAccount string
-	Enabled                bool
-	Deleted                bool
+	OrganizationID   string
+	Provider         string
+	DnsName          pgtype.Text
+	IdentityRequired bool
+	Runtime          pgtype.Text
+	Enabled          bool
+	Deleted          bool
 }
 
 func (q *Queries) GetIngressServingState(ctx context.Context, arg GetIngressServingStateParams) (GetIngressServingStateRow, error) {
@@ -91,8 +101,7 @@ func (q *Queries) GetIngressServingState(ctx context.Context, arg GetIngressServ
 		&i.Provider,
 		&i.DnsName,
 		&i.IdentityRequired,
-		&i.AttestorNamespace,
-		&i.AttestorServiceAccount,
+		&i.Runtime,
 		&i.Enabled,
 		&i.Deleted,
 	)

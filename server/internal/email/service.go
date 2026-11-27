@@ -15,8 +15,8 @@ import (
 // from transport failures.
 var ErrEmptyRecipient = errors.New("email: recipient is required")
 
-// ErrUnregisteredTemplate is returned when the deployment has no Loops ID for
-// the supplied template key.
+// ErrUnregisteredTemplate is returned when the provider cannot resolve the
+// supplied template key.
 var ErrUnregisteredTemplate = errors.New("email: template has no configured transactional ID")
 
 // Service is the application-facing facade for sending transactional emails.
@@ -24,8 +24,7 @@ var ErrUnregisteredTemplate = errors.New("email: template has no configured tran
 // swap providers without touching feature code.
 type Service struct {
 	logger  *slog.Logger
-	sender  loops.Client
-	ids     TemplateIDs
+	send    func(context.Context, string, string, Template) error
 	enabled bool
 }
 
@@ -36,15 +35,26 @@ type Service struct {
 func NewService(logger *slog.Logger, sender loops.Client, ids TemplateIDs, enabled bool) *Service {
 	return &Service{
 		logger:  logger.With(attr.SlogComponent("email")),
-		sender:  sender,
-		ids:     ids,
 		enabled: enabled,
+		send: func(ctx context.Context, recipient, idempotencyKey string, template Template) error {
+			id := ids[template.Key()]
+			if id == "" {
+				return fmt.Errorf("%w: %q", ErrUnregisteredTemplate, template.Key())
+			}
+			if err := sender.SendTransactional(ctx, loops.SendTransactionalInput{
+				TransactionalID: string(id), Email: recipient, DataVariables: template.Variables(),
+				AddToAudience: template.AddToAudience(), IdempotencyKey: idempotencyKey,
+			}); err != nil {
+				return fmt.Errorf("send Loops template %q: %w", id, err)
+			}
+			return nil
+		},
 	}
 }
 
 // Send dispatches a transactional email rendered from the supplied template.
 // The template carries strongly typed variables and a stable key resolved
-// against the deployment's environment-specific Loops IDs.
+// by the selected provider.
 func (s *Service) Send(ctx context.Context, recipient string, template Template) error {
 	return s.SendIdempotent(ctx, recipient, "", template)
 }
@@ -59,21 +69,8 @@ func (s *Service) SendIdempotent(ctx context.Context, recipient string, idempote
 		return nil
 	}
 
-	key := template.Key()
-	id := s.ids[key]
-	if id == "" {
-		return fmt.Errorf("%w: %q", ErrUnregisteredTemplate, key)
+	if err := s.send(ctx, recipient, idempotencyKey, template); err != nil {
+		return fmt.Errorf("send email %q: %w", template.Key(), err)
 	}
-
-	if err := s.sender.SendTransactional(ctx, loops.SendTransactionalInput{
-		TransactionalID: string(id),
-		Email:           recipient,
-		DataVariables:   template.Variables(),
-		AddToAudience:   template.AddToAudience(),
-		IdempotencyKey:  idempotencyKey,
-	}); err != nil {
-		return fmt.Errorf("send email %q: %w", id, err)
-	}
-
 	return nil
 }

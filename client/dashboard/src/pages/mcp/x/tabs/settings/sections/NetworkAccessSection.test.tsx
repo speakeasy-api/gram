@@ -664,19 +664,18 @@ describe("NetworkAccessSection", () => {
           .getByRole("link", { name: "Talk to our team about upgrading" })
           .getAttribute("href"),
       ).toBe("https://www.speakeasy.com/book-demo");
-      fireEvent.click(
-        screen.getByRole("combobox", { name: "Network access mode" }),
-      );
+      // Public is the only choice, so the picker is locked and the upsell
+      // is the one next step: no organization settings link beside it.
       expect(
         screen
-          .getByRole("option", { name: /Public and private/ })
-          .getAttribute("data-disabled"),
-      ).toBe("");
+          .getByRole("combobox", { name: "Network access mode" })
+          .hasAttribute("disabled"),
+      ).toBe(true);
       expect(
-        screen
-          .getByRole("option", { name: /Private only/ })
-          .getAttribute("data-disabled"),
-      ).toBe("");
+        screen.queryByRole("link", {
+          name: "Configure organization network access",
+        }),
+      ).toBeNull();
     },
   );
 
@@ -1005,7 +1004,7 @@ describe("NetworkAccessSection", () => {
 
     expect(
       screen.getByText(
-        "In Server URL, add a Hosted Address so clients can reach this server through your private network.",
+        "In Server URL, add a hosted address so clients can reach this server through your private network.",
       ),
     ).toBeTruthy();
     fireEvent.click(
@@ -1028,7 +1027,7 @@ describe("NetworkAccessSection", () => {
 
     expect(
       screen.getByText(
-        "In Server URL, add a Custom Address on the domain configured for your private network so clients can reach this server through your private network.",
+        "In Server URL, add a custom address on the domain configured for your private network so clients can reach this server through your private network.",
       ),
     ).toBeTruthy();
   });
@@ -1217,7 +1216,7 @@ describe("NetworkAccessSection", () => {
     );
     expect(
       screen.getByText(
-        "In Gateway URL, add a Hosted Address so clients can reach this gateway through your private network.",
+        "In Gateway URL, add a hosted address so clients can reach this gateway through your private network.",
       ),
     ).toBeTruthy();
     fireEvent.click(

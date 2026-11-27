@@ -243,6 +243,7 @@ func (s *Service) HandleConnectionRecovery(w http.ResponseWriter, r *http.Reques
 	t.Consumed()
 	t.With(mcpconnectionattempts.Subject(&subject))
 	authorizationURL, err := s.remoteChallengeMgr.BuildAuthorizationUrl(ctx, remotesessions.ParentChallenge{
+		HostedPlacement:     nil,
 		TypedAuthorization:  typedAuthorization,
 		ConnectionPopup:     false,
 		ID:                  login.ID,
@@ -286,17 +287,9 @@ func (s *Service) HandleConnectionRecovery(w http.ResponseWriter, r *http.Reques
 	return nil
 }
 
-// connectionRecoveryTypedLogin is what a link's login carries where typed auth
-// clients are enforced: the exact offer the link names, which authorizes the
-// login in place of a user session issuer link, and the server's upstream
-// resource, falling back to its offers when absent. Elsewhere it returns nil and no resource,
-// and the login relies on the link. A refused login returns remotesessions.ErrTypedAuthorizationDenied
-// here, before the person signs in to the provider, as it would at the callback.
+// connectionRecoveryTypedLogin revalidates the exact offer the recovery link
+// names before sending the browser upstream. It never falls back to a sign-in link.
 func (s *Service) connectionRecoveryTypedLogin(ctx context.Context, recovery connectionRecovery, loginID string, subject urn.SessionSubject) (*remotesessions.TypedAuthorization, string, error) {
-	enforced, err := s.consentAuthChoicesEnforced(ctx, recovery.OrganizationID)
-	if err != nil || !enforced {
-		return nil, "", err
-	}
 	authorization := &remotesessions.TypedAuthorization{
 		OrganizationID:        recovery.OrganizationID,
 		ProjectID:             recovery.ProjectID,
@@ -305,7 +298,7 @@ func (s *Service) connectionRecoveryTypedLogin(ctx context.Context, recovery con
 		RemoteSessionClientID: recovery.RegistrationID,
 		Subject:               subject,
 	}
-	//nolint:exhaustruct // Validate only authorization before minting the full OAuth state.
+	//nolint:exhaustruct_v5 // Validate only authorization before minting the full OAuth state.
 	state := remotesessions.RemoteLoginState{
 		TypedAuthorization:    authorization,
 		ParentChallengeID:     loginID,
@@ -319,16 +312,12 @@ func (s *Service) connectionRecoveryTypedLogin(ctx context.Context, recovery con
 	if err := s.ValidateRemoteLoginTypedAuthorization(ctx, state); err != nil {
 		return nil, "", err
 	}
-	if recovery.UpstreamResource != "" {
-		return authorization, recovery.UpstreamResource, nil
-	}
-	offered, err := s.typedOfferedRegistrations(ctx, recovery.OrganizationID, []uuid.UUID{recovery.McpServerID})
-	if err != nil {
-		return nil, "", err
-	}
-	resource, err := s.remoteChallengeMgr.ResourceForClientAtUpstream(ctx, recovery.OrganizationID, recovery.RegistrationID, offered[recovery.McpServerID], recovery.UpstreamResource)
+	resource, err := s.typedLoginResource(ctx, authorization)
 	if err != nil {
 		return nil, "", fmt.Errorf("derive connection resource: %w", err)
+	}
+	if recovery.UpstreamResource != "" && recovery.UpstreamResource != resource {
+		return nil, "", remotesessions.ErrTypedAuthorizationChanged
 	}
 	return authorization, resource, nil
 }
@@ -439,7 +428,7 @@ func (s *Service) verifyConnectionRecoveryCompletion(r *http.Request, remote rem
 	authed, err := s.connectionRecoverySession(ctx, r, login)
 	switch {
 	case errors.Is(err, errRecoveryNotSignedIn):
-		authed = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{ActiveOrganizationID: login.OrganizationID, UserID: login.UserID}) //nolint:exhaustruct // the person the server-held login names, for their own permission check
+		authed = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{ActiveOrganizationID: login.OrganizationID, UserID: login.UserID}) //nolint:exhaustruct_v5 // the person the server-held login names, for their own permission check
 	case err != nil:
 		return true, err
 	}
@@ -519,7 +508,7 @@ func (s *Service) connectionRecoveryAccess(ctx context.Context, authed context.C
 	// The server's current offer decides, as for a consent pick: the client
 	// must still be associated, enabled and on the link's registration, and
 	// the person allowed to use it.
-	res, err := s.resolveAuthClientChoiceForConsent(authed, recovery.OrganizationID, recovery.McpServerID, recovery.ProjectID, recovery.AuthClientID, urn.NewUserSubject(recovery.UserID))
+	res, err := s.resolveAuthClientChoiceForConsent(withTypedConsentAuth(authed), recovery.OrganizationID, recovery.McpServerID, recovery.ProjectID, recovery.AuthClientID, urn.NewUserSubject(recovery.UserID))
 	if err != nil {
 		return fmt.Errorf("resolve connection client: %w", err)
 	}

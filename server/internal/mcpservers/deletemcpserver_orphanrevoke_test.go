@@ -1,6 +1,6 @@
 // Pins the DeleteMcpServer arm of the issuer-delete cascade: when the deleted
-// server's issuer held a client's only live binding, the client's sessions are
-// tombstoned in the same transaction and revoked upstream post-commit.
+// server's issuer is the grant's source and no surviving typed choice needs
+// it, sessions are tombstoned in the transaction and revoked after commit.
 
 package mcpservers_test
 
@@ -99,7 +99,7 @@ func TestDeleteMcpServer_RevokesOrphanedClientSessions(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	client, err := q.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+	client, err := q.CreateRemoteSessionClientFixture(ctx, remotesessionsrepo.CreateRemoteSessionClientFixtureParams{
 		ProjectID:               conv.ToNullUUID(*authCtx.ProjectID),
 		OrganizationID:          conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
 		RemoteSessionIssuerID:   remoteIssuer.ID,
@@ -114,17 +114,14 @@ func TestDeleteMcpServer_RevokesOrphanedClientSessions(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: client.ID,
-		UserSessionIssuerID:   issuerID,
-	}))
+	// The grant records its downstream issuer directly; no issuer-client pair is needed.
 
 	accessEnc, err := enc.Encrypt([]byte("orphan-revoke-access"))
 	require.NoError(t, err)
 	refreshEnc, err := enc.Encrypt([]byte("orphan-revoke-refresh"))
 	require.NoError(t, err)
 
-	_, err = q.UpsertRemoteSession(ctx, remotesessionsrepo.UpsertRemoteSessionParams{
+	_, err = q.UpsertRemoteSessionFixture(ctx, remotesessionsrepo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:             urn.NewUserSubject("orphan-revoke-subject"),
 		UserSessionIssuerID:    issuerID,
 		RemoteSessionClientID:  client.ID,

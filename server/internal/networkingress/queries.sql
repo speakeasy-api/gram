@@ -17,6 +17,8 @@ WHERE id = @id
 SELECT pg_advisory_xact_lock(hashtextextended('network-ingress:' || @organization_id::text, 0));
 
 -- name: CreateNetworkIngress :one
+-- Creates the ingress without credentials. The caller stores them with
+-- ingresscredentials.Credentials.Set in the same transaction.
 INSERT INTO network_ingresses (
     id,
     organization_id,
@@ -26,10 +28,10 @@ INSERT INTO network_ingresses (
     custom_domain_id,
     enabled,
     identity_required,
-    credentials_encrypted,
     attestor_namespace,
     attestor_service_account,
-    provider_resources
+    provider_resources,
+    runtime
 ) VALUES (
     @id,
     @organization_id,
@@ -39,10 +41,10 @@ INSERT INTO network_ingresses (
     sqlc.narg('custom_domain_id'),
     @enabled,
     @identity_required,
-    @credentials_encrypted,
     @attestor_namespace,
     @attestor_service_account,
-    @provider_resources
+    @provider_resources,
+    sqlc.narg('runtime')
 )
 RETURNING *;
 
@@ -87,6 +89,7 @@ WHERE organization_id = @organization_id
   AND deleted IS TRUE
   AND (
     credentials_encrypted IS NOT NULL
+    OR credentials_org_encrypted IS NOT NULL
     OR provider_resources <> '{}'::jsonb
   )
 ORDER BY deleted_at DESC, id DESC
@@ -123,17 +126,6 @@ SET
       WHEN (@update_hostname::boolean OR @update_identity_required::boolean OR @update_enabled::boolean) THEN NULL
       ELSE last_error
     END,
-    updated_at = clock_timestamp()
-WHERE organization_id = @organization_id
-  AND deleted IS FALSE
-RETURNING *;
-
--- name: RotateNetworkIngressCredentials :one
-UPDATE network_ingresses
-SET
-    credentials_encrypted = @credentials_encrypted,
-    status = 'pending',
-    last_error = NULL,
     updated_at = clock_timestamp()
 WHERE organization_id = @organization_id
   AND deleted IS FALSE
@@ -244,7 +236,7 @@ SELECT id, organization_id, provider, deleted_at
 FROM network_ingresses
 WHERE id > @after_id::uuid
   AND (
-    (deleted IS TRUE AND (credentials_encrypted IS NOT NULL OR provider_resources <> '{}'::jsonb))
+    (deleted IS TRUE AND (credentials_encrypted IS NOT NULL OR credentials_org_encrypted IS NOT NULL OR provider_resources <> '{}'::jsonb))
     OR (deleted IS FALSE AND (
       health_checked_at IS NULL
       OR health_checked_at < @stale_before::timestamptz
@@ -270,15 +262,16 @@ SET provider_resources = @provider_resources::jsonb
 WHERE id = @id
   AND organization_id = @organization_id;
 
--- name: ClearDeletedNetworkIngressResources :execrows
--- AIS-611 calls this only after every persisted provider resource is confirmed
--- absent. Clearing both fields is the replacement-create release boundary.
-UPDATE network_ingresses
-SET
-    credentials_encrypted = NULL,
-    provider_resources = '{}'::jsonb,
-    last_error = NULL,
-    updated_at = clock_timestamp()
-WHERE id = @id
+-- name: GetNetworkIngressCertificateFailure :one
+-- The message of the most recently seen gateway slot that holds no valid TLS
+-- certificate because a request failed. The gateway writes it, naming the
+-- cause and when it retries.
+SELECT last_error
+FROM network_ingress_nodes
+WHERE network_ingress_id = @network_ingress_id
   AND organization_id = @organization_id
-  AND deleted IS TRUE;
+  AND retired_at IS NULL
+  AND status = 'awaiting_certificate'
+  AND last_error IS NOT NULL
+ORDER BY last_seen_at DESC NULLS LAST
+LIMIT 1;

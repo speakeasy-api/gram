@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -21,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -179,7 +179,7 @@ func (s *Service) GetNewClientCallbackURL(ctx context.Context, _ *gen.GetNewClie
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -228,7 +228,7 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 
@@ -280,15 +280,6 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 		return nil, err
 	}
 
-	var secretCiphertext pgtype.Text
-	if hasSecret {
-		encrypted, encErr := s.enc.Encrypt([]byte(*payload.ClientSecret))
-		if encErr != nil {
-			return nil, oops.E(oops.CodeUnexpected, encErr, "encrypt client secret").LogError(ctx, logger)
-		}
-		secretCiphertext = conv.ToPGText(encrypted)
-	}
-
 	callbackBaseURL, err := s.newClientCallbackBaseURL(ctx, authCtx.ActiveOrganizationID, owner)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "resolve organization callback origin").LogError(ctx, logger)
@@ -328,6 +319,7 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 	}
 
 	legacyCallbackURL := false
+	var secretTemplate *clientTemplate
 	if templateID.Valid {
 		template, err := loadClientTemplate(ctx, txRepo, *authCtx.ProjectID, authCtx.ActiveOrganizationID, templateID.UUID, issuerID, clientID)
 		if err == nil {
@@ -337,7 +329,7 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 			return nil, identityOopsError(err, "read template remote session client").LogError(ctx, logger)
 		}
 		if !hasSecret {
-			secretCiphertext = template.secretEncrypted
+			secretTemplate = &template
 			if payload.ClientSecretExpiresAt == nil {
 				provenance.clientSecretExpiresAt = template.clientSecretExpiresAt
 			}
@@ -355,7 +347,6 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 		OrganizationID:                  conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
 		RemoteSessionIssuerID:           issuerID,
 		ClientID:                        clientID,
-		ClientSecretEncrypted:           secretCiphertext,
 		ClientIDIssuedAt:                provenance.clientIDIssuedAt,
 		ClientSecretExpiresAt:           provenance.clientSecretExpiresAt,
 		TokenEndpointAuthMethod:         conv.PtrToPGText(authMethod),
@@ -373,6 +364,21 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 		return nil, oops.E(oops.CodeUnexpected, err, "create remote session client").LogError(ctx, logger)
 	}
 
+	switch {
+	case hasSecret:
+		created, err = s.secrets.Set(ctx, dbtx, created.ID, clientOwner(created), []byte(*payload.ClientSecret), provenance.clientSecretExpiresAt)
+	case secretTemplate != nil:
+		var copied bool
+		var row repo.RemoteSessionClient
+		row, copied, err = s.secrets.Copy(ctx, dbtx, secretTemplate.owner, secretTemplate.secret, created.ID, clientOwner(created), provenance.clientSecretExpiresAt)
+		if copied {
+			created = row
+		}
+	}
+	if err != nil {
+		return nil, clientSecretWriteError(ctx, logger, err)
+	}
+
 	return s.finalizeClientCreate(ctx, logger, dbtx, txRepo, *authCtx, scope, created, userIssuerIDs, templateID)
 }
 
@@ -388,7 +394,7 @@ func (s *Service) CreateCimd(ctx context.Context, payload *gen.CreateCimdPayload
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 
@@ -529,11 +535,9 @@ func (s *Service) validateNewClientIssuers(
 	return issuer, nil
 }
 
-// finalizeClientCreate binds a freshly created client to each
-// user_session_issuer, synchronizes its associations and typed state, records
-// the create audit event, commits the
-// transaction, and returns the API view. Shared by the manual and CIMD create
-// paths, which differ only in how the row is inserted.
+// finalizeClientCreate captures unambiguous server placements before recording
+// the audit snapshot and returning the same issuer inventory as a detail read.
+// Manual and CIMD creation share this transaction flow.
 func (s *Service) finalizeClientCreate(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -545,16 +549,16 @@ func (s *Service) finalizeClientCreate(
 	userIssuerIDs []uuid.UUID,
 	templateID uuid.NullUUID,
 ) (*types.RemoteSessionClient, error) {
-	for _, userIssuerID := range userIssuerIDs {
-		if err := txRepo.AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-			RemoteSessionClientID: created.ID,
-			UserSessionIssuerID:   userIssuerID,
-		}); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to attach remote session client to user session issuer").LogError(ctx, logger)
-		}
+	if err := scope.resync(ctx, dbtx, *authCtx.ProjectID, userIssuerIDs, created.ID); err != nil {
+		return nil, bindingSyncError(ctx, logger, err)
 	}
-
-	snapshot, err := mv.BuildRemoteSessionClientView(created, userIssuerIDs)
+	placed, err := txRepo.GetRemoteSessionClientByID(ctx, repo.GetRemoteSessionClientByIDParams{
+		ID: created.ID, ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "read created remote session client placements").LogError(ctx, logger)
+	}
+	snapshot, err := mv.BuildRemoteSessionClientView(created, placed.UserSessionIssuerIds)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvariantViolation, err, "build remote session client view").LogError(ctx, logger)
 	}
@@ -588,17 +592,11 @@ func (s *Service) finalizeClientCreate(
 		return nil, oops.E(oops.CodeUnexpected, err, "log remote session client creation").LogError(ctx, logger)
 	}
 
-	// A successful binding write must include its captured associations and
-	// typed state. On failure the caller rolls back the entire DB mutation.
-	if err := scope.resync(ctx, dbtx, *authCtx.ProjectID, userIssuerIDs, created.ID); err != nil {
-		return nil, bindingSyncError(ctx, logger, err)
-	}
-
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
-	view, err := s.clientView(created, userIssuerIDs)
+	view, err := s.clientView(created, placed.UserSessionIssuerIds)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvariantViolation, err, "build remote session client view").LogError(ctx, logger)
 	}
@@ -612,7 +610,7 @@ func (s *Service) UpdateRemoteSessionClient(ctx context.Context, payload *gen.Up
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 
@@ -661,9 +659,8 @@ func (s *Service) UpdateRemoteSessionClient(ctx context.Context, payload *gen.Up
 		return nil, oops.E(oops.CodeUnexpected, err, "get remote session client").LogError(ctx, logger)
 	}
 
-	// Issuer attachments are managed through attachUserSessionIssuer /
-	// detachUserSessionIssuer, so an update never changes them; the same set
-	// frames both the before and after views.
+	// An update never changes issuer attachments; the same set frames both
+	// the before and after views.
 	beforeView, err := mv.BuildRemoteSessionClientView(existing.RemoteSessionClient, existing.UserSessionIssuerIds)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvariantViolation, err, "build remote session client view").LogError(ctx, logger)
@@ -673,16 +670,9 @@ func (s *Service) UpdateRemoteSessionClient(ctx context.Context, payload *gen.Up
 		return nil, err
 	}
 
-	var secretCiphertext pgtype.Text
-	if payload.ClientSecret != nil && *payload.ClientSecret != "" {
-		encrypted, encErr := s.enc.Encrypt([]byte(*payload.ClientSecret))
-		if encErr != nil {
-			return nil, oops.E(oops.CodeUnexpected, encErr, "encrypt client secret").LogError(ctx, logger)
-		}
-		secretCiphertext = conv.ToPGText(encrypted)
-	}
+	newSecret := payload.ClientSecret != nil && *payload.ClientSecret != ""
 
-	if err := requireSelfClientCredential(updatedClientCredentialState(existing.RemoteSessionClient, payload.TokenEndpointAuthMethod, secretCiphertext.Valid, payload.LegacyCallbackURL)); err != nil {
+	if err := requireSelfClientCredential(updatedClientCredentialState(existing.RemoteSessionClient, payload.TokenEndpointAuthMethod, newSecret, payload.LegacyCallbackURL)); err != nil {
 		return nil, err
 	}
 
@@ -702,8 +692,6 @@ func (s *Service) UpdateRemoteSessionClient(ctx context.Context, payload *gen.Up
 	updated, err := txRepo.UpdateRemoteSessionClient(ctx, repo.UpdateRemoteSessionClientParams{
 		ClientID:                        newClientID,
 		DisplayName:                     updatedDisplayName(payload.DisplayName),
-		ClientSecretEncrypted:           secretCiphertext,
-		ClientSecretExpiresAt:           pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		TokenEndpointAuthMethod:         conv.PtrToPGText(payload.TokenEndpointAuthMethod),
 		TokenEndpointAuthAudienceFormat: conv.PtrToPGText(payload.TokenEndpointAuthAudienceFormat),
 		Scope:                           payload.Scope,
@@ -718,6 +706,15 @@ func (s *Service) UpdateRemoteSessionClient(ctx context.Context, payload *gen.Up
 			return nil, oops.E(oops.CodeNotFound, err, "remote session client not found").LogError(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "update remote session client").LogError(ctx, logger)
+	}
+
+	// A replaced secret takes no expiry: the update carries none, and keeping
+	// the old secret's deadline would flag the new secret as expired.
+	if newSecret {
+		updated, err = s.secrets.Set(ctx, dbtx, updated.ID, clientOwner(updated), []byte(*payload.ClientSecret), pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false})
+		if err != nil {
+			return nil, clientSecretWriteError(ctx, logger, err)
+		}
 	}
 
 	// Sessions obtained through the old client_id hold tokens the issuer bound
@@ -768,7 +765,7 @@ func (s *Service) ListRemoteSessionClients(ctx context.Context, payload *gen.Lis
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -822,7 +819,7 @@ func (s *Service) GetRemoteSessionClient(ctx context.Context, payload *gen.GetRe
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -853,296 +850,6 @@ func (s *Service) GetRemoteSessionClient(ctx context.Context, payload *gen.GetRe
 	return view, nil
 }
 
-// AttachUserSessionIssuer records a remote_session_client / user_session_issuer
-// binding in the join table. The pairing is rejected when another client is
-// already bound to the same user_session_issuer for this client's
-// remote_session_issuer.
-func (s *Service) AttachUserSessionIssuer(ctx context.Context, payload *gen.AttachUserSessionIssuerPayload) (*types.RemoteSessionClient, error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
-		return nil, err
-	}
-
-	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
-
-	clientID, err := uuid.Parse(payload.ID)
-	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid remote_session_client id").LogError(ctx, logger)
-	}
-
-	userIssuerID, err := uuid.Parse(payload.UserSessionIssuerID)
-	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid user_session_issuer_id").LogError(ctx, logger)
-	}
-
-	dbtx, err := s.db.Begin(ctx)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
-	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
-
-	// Capture and typed synchronization share this transaction. Acquire the
-	// complete writer scope before issuer/client locks or binding mutations.
-	scope, err := lockBindingWriteScope(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, clientID, []uuid.UUID{userIssuerID})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "lock client binding writer scope").LogError(ctx, logger)
-	}
-
-	txRepo := repo.New(dbtx)
-
-	// Resolve the client (the project's own or an organization-level client in
-	// the project's org) so a project admin can attach an org-level client to
-	// their own user_session_issuer.
-	existing, err := txRepo.GetRemoteSessionClientByID(ctx, repo.GetRemoteSessionClientByIDParams{
-		ID:             clientID,
-		ProjectID:      *authCtx.ProjectID,
-		OrganizationID: authCtx.ActiveOrganizationID,
-	})
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeNotFound, err, "remote session client not found").LogError(ctx, logger)
-		}
-		return nil, oops.E(oops.CodeUnexpected, err, "get remote session client").LogError(ctx, logger)
-	}
-
-	if err := lockUserSessionIssuersForClientBinding(ctx, logger, dbtx, txRepo, *authCtx.ProjectID, authCtx.ActiveOrganizationID, []uuid.UUID{userIssuerID}); err != nil {
-		return nil, err
-	}
-	if err := s.refuseOrgWideAttachment(ctx, logger, txRepo, *authCtx, userIssuerID, clientID, true); err != nil {
-		return nil, err
-	}
-
-	// Exclude this client so re-attaching an existing binding is a no-op.
-	if err := s.guardSingleClientPerRemoteIssuer(ctx, logger, txRepo, authCtx.ActiveOrganizationID, *authCtx.ProjectID, userIssuerID, existing.RemoteSessionClient.RemoteSessionIssuerID, clientID); err != nil {
-		return nil, err
-	}
-
-	if err := txRepo.AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: clientID,
-		UserSessionIssuerID:   userIssuerID,
-	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "attach remote session client to user session issuer").LogError(ctx, logger)
-	}
-
-	return s.commitClientAttachmentChange(ctx, logger, dbtx, txRepo, *authCtx, scope, clientID, []uuid.UUID{userIssuerID}, func(ctx context.Context, dbtx pgx.Tx) error {
-		return s.auditLogger.LogRemoteSessionClientAttachUserSessionIssuer(ctx, dbtx, audit.LogRemoteSessionClientUserSessionIssuerAttachmentEvent{
-			OrganizationID:         authCtx.ActiveOrganizationID,
-			ProjectID:              *authCtx.ProjectID,
-			Actor:                  urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-			ActorDisplayName:       authCtx.Email,
-			ActorSlug:              nil,
-			RemoteSessionClientURN: urn.NewRemoteSessionClient(clientID),
-			ClientID:               existing.RemoteSessionClient.ClientID,
-			UserSessionIssuerURN:   urn.NewUserSessionIssuer(userIssuerID),
-		})
-	})
-}
-
-// DetachUserSessionIssuer removes a remote_session_client / user_session_issuer
-// binding from the join table. Detaching a binding that does not exist is a
-// no-op.
-func (s *Service) DetachUserSessionIssuer(ctx context.Context, payload *gen.DetachUserSessionIssuerPayload) (*types.RemoteSessionClient, error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
-		return nil, err
-	}
-
-	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
-
-	clientID, err := uuid.Parse(payload.ID)
-	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid remote_session_client id").LogError(ctx, logger)
-	}
-
-	userIssuerID, err := uuid.Parse(payload.UserSessionIssuerID)
-	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid user_session_issuer_id").LogError(ctx, logger)
-	}
-
-	dbtx, err := s.db.Begin(ctx)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
-	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
-
-	// Capture and typed synchronization share this transaction. Acquire the
-	// complete writer scope before issuer/client locks or binding mutations.
-	scope, err := lockBindingWriteScope(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, clientID, []uuid.UUID{userIssuerID})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "lock client binding writer scope").LogError(ctx, logger)
-	}
-
-	txRepo := repo.New(dbtx)
-
-	// Resolve the client (the project's own or an organization-level client in
-	// the project's org) before mutating the project-agnostic join table, so a
-	// project admin can detach an org-level client from their own
-	// user_session_issuer.
-	existing, err := txRepo.GetRemoteSessionClientByID(ctx, repo.GetRemoteSessionClientByIDParams{
-		ID:             clientID,
-		ProjectID:      *authCtx.ProjectID,
-		OrganizationID: authCtx.ActiveOrganizationID,
-	})
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeNotFound, err, "remote session client not found").LogError(ctx, logger)
-		}
-		return nil, oops.E(oops.CodeUnexpected, err, "get remote session client").LogError(ctx, logger)
-	}
-
-	if err := s.refuseOrgWideAttachment(ctx, logger, txRepo, *authCtx, userIssuerID, clientID, false); err != nil {
-		return nil, err
-	}
-
-	// Lock in preparation's user-issuer -> client order. The scoped lock
-	// rechecks client ownership after waiting; the issuer remains locked, and
-	// the mutation repeats both tenant predicates rather than trusting IDs.
-	locked, err := txRepo.LockEMAClient(ctx, repo.LockEMAClientParams{ID: clientID, ProjectID: conv.ToNullUUID(*authCtx.ProjectID), OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID)})
-	if err != nil {
-		return nil, lifecycleLockError(err)
-	}
-	existing.RemoteSessionClient = locked
-	removed, err := txRepo.DetachProjectRemoteSessionClientFromUserSessionIssuer(ctx, repo.DetachProjectRemoteSessionClientFromUserSessionIssuerParams{
-		ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID,
-		RemoteSessionClientID: clientID,
-		UserSessionIssuerID:   userIssuerID,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "detach remote session client from user session issuer").LogError(ctx, logger)
-	}
-	if removed > 0 {
-		// A conflict rolls back the tentative removal with the transaction.
-		projectID := *authCtx.ProjectID
-		if !locked.ProjectID.Valid {
-			// An organization client can have a shared organization issuer link.
-			// Protect every project using that association, not only the caller.
-			projectID = uuid.Nil
-		}
-		if err := guardEMABindingsForClientUserIssuer(ctx, txRepo, authCtx.ActiveOrganizationID, projectID, clientID, userIssuerID); err != nil {
-			return nil, err
-		}
-	}
-
-	return s.commitClientAttachmentChange(ctx, logger, dbtx, txRepo, *authCtx, scope, clientID, []uuid.UUID{userIssuerID}, func(ctx context.Context, dbtx pgx.Tx) error {
-		return s.auditLogger.LogRemoteSessionClientDetachUserSessionIssuer(ctx, dbtx, audit.LogRemoteSessionClientUserSessionIssuerAttachmentEvent{
-			OrganizationID:         authCtx.ActiveOrganizationID,
-			ProjectID:              *authCtx.ProjectID,
-			Actor:                  urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-			ActorDisplayName:       authCtx.Email,
-			ActorSlug:              nil,
-			RemoteSessionClientURN: urn.NewRemoteSessionClient(clientID),
-			ClientID:               existing.RemoteSessionClient.ClientID,
-			UserSessionIssuerURN:   urn.NewUserSessionIssuer(userIssuerID),
-		})
-	})
-}
-
-// refuseOrgWideAttachment refuses a project-scoped attach or detach of an
-// organization-level client on an organization-level user session issuer by a
-// caller without organization admin: that binding is shared by every project's
-// servers on the issuer.
-func (s *Service) refuseOrgWideAttachment(ctx context.Context, logger *slog.Logger, q *repo.Queries, authCtx contextvalues.AuthContext, userIssuerID, clientID uuid.UUID, attaching bool) error {
-	// Scope and lock the issuer before checking the binding, even for a no-op.
-	// Attach also holds the owner advisory lock; the row lock serializes both
-	// paths against organization detach and preserves issuer-before-client order.
-	if _, err := q.LockProjectUserIssuerForDetach(ctx, repo.LockProjectUserIssuerForDetachParams{
-		ID: userIssuerID, ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID,
-	}); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, logger)
-		}
-		return oops.E(oops.CodeUnexpected, err, "get user session issuer").LogError(ctx, logger)
-	}
-	// Re-read after acquiring the lock: the pre-lock snapshot may describe a
-	// no-op that is now an organization-wide change.
-	client, err := q.GetRemoteSessionClientByID(ctx, repo.GetRemoteSessionClientByIDParams{
-		ID: clientID, ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID,
-	})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return oops.E(oops.CodeNotFound, err, "remote session client not found").LogError(ctx, logger)
-	}
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "get remote session client").LogError(ctx, logger)
-	}
-	if slices.Contains(client.UserSessionIssuerIds, userIssuerID) == attaching {
-		return nil // Re-attaching or detaching a missing binding is a no-op.
-	}
-	issuer, err := q.GetUserSessionIssuerForProject(ctx, repo.GetUserSessionIssuerForProjectParams{
-		ID:             userIssuerID,
-		ProjectID:      *authCtx.ProjectID,
-		OrganizationID: authCtx.ActiveOrganizationID,
-	})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, logger)
-	}
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "get user session issuer").LogError(ctx, logger)
-	}
-	orgAdmin, err := s.actorIsOrganizationAdmin(ctx, authCtx.ActiveOrganizationID)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "check organization admin access").LogError(ctx, logger)
-	}
-	if err := refuseOrgWideBinding(!issuer.ProjectID.Valid, orgAdmin, client.RemoteSessionClient.ProjectID); err != nil {
-		return identityOopsError(err, "attach remote session client").LogError(ctx, logger)
-	}
-	return nil
-}
-
-// commitClientAttachmentChange re-reads a client after an attach/detach, records
-// the supplied attachment audit event and synchronizes derived state in the
-// same transaction, commits, and
-// returns the after view. auditFn lets each caller emit the right action
-// (attach vs detach) while the re-read/commit stays shared.
-func (s *Service) commitClientAttachmentChange(
-	ctx context.Context,
-	logger *slog.Logger,
-	dbtx pgx.Tx,
-	txRepo *repo.Queries,
-	authCtx contextvalues.AuthContext,
-	scope bindingWriteScope,
-	clientID uuid.UUID,
-	touchedUserIssuerIDs []uuid.UUID,
-	auditFn func(ctx context.Context, dbtx pgx.Tx) error,
-) (*types.RemoteSessionClient, error) {
-	updated, err := txRepo.GetRemoteSessionClientByID(ctx, repo.GetRemoteSessionClientByIDParams{
-		ID:             clientID,
-		ProjectID:      *authCtx.ProjectID,
-		OrganizationID: authCtx.ActiveOrganizationID,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "get remote session client").LogError(ctx, logger)
-	}
-
-	afterView, err := s.clientView(updated.RemoteSessionClient, updated.UserSessionIssuerIds)
-	if err != nil {
-		return nil, oops.E(oops.CodeInvariantViolation, err, "build remote session client view").LogError(ctx, logger)
-	}
-
-	if err := auditFn(ctx, dbtx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "log remote session client attachment change").LogError(ctx, logger)
-	}
-
-	// A successful binding write must include its captured associations and
-	// typed state. On failure the caller rolls back the entire DB mutation.
-	if err := scope.resync(ctx, dbtx, *authCtx.ProjectID, touchedUserIssuerIDs, clientID); err != nil {
-		return nil, bindingSyncError(ctx, logger, err)
-	}
-
-	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
-	}
-
-	return afterView, nil
-}
-
 // DeleteRemoteSessionClient soft-deletes a client and cascades the soft-delete
 // to the upstream-token rows pointing at it in the same transaction. The FK
 // has ON DELETE CASCADE, but since we soft-delete the parent, dependent rows
@@ -1153,7 +860,7 @@ func (s *Service) DeleteRemoteSessionClient(ctx context.Context, payload *gen.De
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return err
 	}
 
@@ -1172,17 +879,17 @@ func (s *Service) DeleteRemoteSessionClient(ctx context.Context, payload *gen.De
 
 	txRepo := repo.New(dbtx)
 
-	// The bindings and associations are read before the writer scope, which
-	// has to name every project the deletion re-decides and be held before any
-	// row lock. The resync checks the scope still covers them.
-	scopeIssuerIDs, err := txRepo.ListUserSessionIssuersBoundToProjectClient(ctx, repo.ListUserSessionIssuersBoundToProjectClientParams{
-		RemoteSessionClientID: clientID,
-		ProjectID:             conv.ToNullUUID(*authCtx.ProjectID),
-	})
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "list user session issuers bound to client").LogError(ctx, logger)
+	// Check project ownership before discovering or locking a registration's
+	// potentially organization-wide writer scope.
+	if _, err := txRepo.GetProjectOwnedRegistrationForDelete(ctx, repo.GetProjectOwnedRegistrationForDeleteParams{ID: clientID, ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID}); errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	} else if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "check registration ownership").LogError(ctx, logger)
 	}
-	scope, err := lockBindingWriteScope(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, clientID, scopeIssuerIDs)
+
+	// Lock the projects and registration gates of actual association/offer
+	// writers, before locking the registration and checking for scope growth.
+	associationScope, err := upstreamclients.LockClientAssociationScope(ctx, dbtx, authCtx.ActiveOrganizationID, clientID, []uuid.UUID{*authCtx.ProjectID})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "lock client deletion writer scope").LogError(ctx, logger)
 	}
@@ -1199,6 +906,10 @@ func (s *Service) DeleteRemoteSessionClient(ctx context.Context, payload *gen.De
 		return oops.E(oops.CodeUnexpected, err, "lock project remote session client").LogError(ctx, logger)
 	}
 
+	stamps, err := ReadClientBindingServers(ctx, dbtx, authCtx.ActiveOrganizationID, clientID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "read registration server scope").LogError(ctx, logger)
+	}
 	if err := guardEMABindingsForClient(ctx, txRepo, authCtx.ActiveOrganizationID, *authCtx.ProjectID, clientID); err != nil {
 		return err
 	}
@@ -1214,29 +925,8 @@ func (s *Service) DeleteRemoteSessionClient(ctx context.Context, payload *gen.De
 		return oops.E(oops.CodeUnexpected, err, "delete remote session client").LogError(ctx, logger)
 	}
 
-	// Read the bindings before the purge removes them, so the resync knows
-	// which issuers to recompute.
-	boundUserIssuerIDs, err := txRepo.ListUserSessionIssuersBoundToProjectClient(ctx, repo.ListUserSessionIssuersBoundToProjectClientParams{
-		RemoteSessionClientID: clientID,
-		ProjectID:             conv.ToNullUUID(*authCtx.ProjectID),
-	})
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "list user session issuers bound to client").LogError(ctx, logger)
-	}
-
-	if err := txRepo.DeleteUserSessionIssuerAttachmentsForRemoteSessionClient(
-		ctx,
-		repo.DeleteUserSessionIssuerAttachmentsForRemoteSessionClientParams{
-			RemoteSessionClientID: deleted.ID,
-			ProjectID:             conv.ToNullUUID(*authCtx.ProjectID),
-		},
-	); err != nil {
-		return oops.E(
-			oops.CodeUnexpected,
-			err,
-			"failed to delete user session issuer attachments for remote session client %s",
-			deleted.ID,
-		).LogError(ctx, logger)
+	if err := txRepo.RetirePrincipalAttachmentsForDeletedRegistration(ctx, repo.RetirePrincipalAttachmentsForDeletedRegistrationParams{ID: deleted.ID, OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID), ProjectID: conv.ToNullUUID(*authCtx.ProjectID)}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "retire principal attachments for deleted client").LogError(ctx, logger)
 	}
 
 	cascaded, err := txRepo.SoftDeleteRemoteSessionsByClientID(ctx, deleted.ID)
@@ -1258,7 +948,15 @@ func (s *Service) DeleteRemoteSessionClient(ctx context.Context, payload *gen.De
 
 	// The deleted client's associations and the typed links derived from them
 	// go with it, in every project that used it.
-	if err := scope.resync(ctx, dbtx, *authCtx.ProjectID, boundUserIssuerIDs, uuid.Nil); err != nil {
+	// Prune rechecks the same association/offer discovery under the client
+	// lock, before deriving stamps in any of those projects.
+	if err := associationScope.PruneInLockedTransaction(ctx, dbtx); err != nil {
+		return bindingSyncError(ctx, logger, err)
+	}
+	if err := txRepo.RetireOffersForDeletedRegistration(ctx, repo.RetireOffersForDeletedRegistrationParams{ID: deleted.ID, OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID), ProjectID: conv.ToNullUUID(*authCtx.ProjectID)}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "retire typed offers for deleted client").LogError(ctx, logger)
+	}
+	if err := stamps.Derive(ctx, dbtx); err != nil {
 		return bindingSyncError(ctx, logger, err)
 	}
 

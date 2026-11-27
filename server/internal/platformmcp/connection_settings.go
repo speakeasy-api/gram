@@ -12,8 +12,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/speakeasy-api/gram/server/internal/authclients"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
+	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 )
 
@@ -25,7 +25,9 @@ const (
 )
 
 type GetMCPConnectionSettingsInput struct {
-	ProjectID  string                          `json:"project_id" jsonschema:"project ID that owns the target"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID  string                          `json:"-"`
 	TargetKind MCPConnectionSettingsTargetKind `json:"target_kind" jsonschema:"exact target type: mcp_server or gateway"`
 	TargetID   string                          `json:"target_id" jsonschema:"ID of the exact MCP server or gateway"`
 }
@@ -76,6 +78,14 @@ type MCPUpstreamAuthentication struct {
 	Clients              []MCPUpstreamAuthClient `json:"clients"`
 }
 
+// MCPGatewayMemberSignIn reports the member's own upstream configuration,
+// not a sign-in, access grant, or credential on the gateway itself.
+type MCPGatewayMemberSignIn struct {
+	MCPID  string `json:"mcp_id"`
+	Name   string `json:"name"`
+	Status string `json:"status"`
+}
+
 type MCPConnectionSettings struct {
 	// DiscoveryMode is a gateway's stored default discovery mode. A connection
 	// records the default at consent and keeps it until it reconnects.
@@ -91,21 +101,20 @@ type MCPConnectionSettings struct {
 	// available and the organization has Code Mode.
 	CodeModeAvailable *bool `json:"code_mode_available,omitempty"`
 
-	ProjectID   string                          `json:"project_id"`
-	TargetKind  MCPConnectionSettingsTargetKind `json:"target_kind"`
-	TargetID    string                          `json:"target_id"`
-	Name        string                          `json:"name"`
-	Visibility  string                          `json:"visibility"`
-	NetworkMode string                          `json:"network_mode"`
-	Version     string                          `json:"version"`
-	Endpoints   []MCPConnectionEndpoint         `json:"endpoints"`
-	// LegacyPlatformSlug is an older Speakeasy-hosted address of a hosted server: its custom-domain alias, which the
-	// Speakeasy domain also serves.
-	LegacyPlatformSlug string                          `json:"legacy_platform_slug,omitempty"`
-	Ingress            *MCPConnectionIngress           `json:"ingress,omitempty"`
-	PluginMemberships  []MCPConnectionPluginMembership `json:"plugin_memberships"`
+	ProjectID         string                          `json:"project_id"`
+	TargetKind        MCPConnectionSettingsTargetKind `json:"target_kind"`
+	TargetID          string                          `json:"target_id"`
+	Name              string                          `json:"name"`
+	Visibility        string                          `json:"visibility"`
+	NetworkMode       string                          `json:"network_mode"`
+	Version           string                          `json:"version"`
+	Endpoints         []MCPConnectionEndpoint         `json:"endpoints"`
+	Ingress           *MCPConnectionIngress           `json:"ingress,omitempty"`
+	PluginMemberships []MCPConnectionPluginMembership `json:"plugin_memberships"`
 	// UpstreamAuthentication is set for MCP servers, not gateways.
 	UpstreamAuthentication *MCPUpstreamAuthentication `json:"upstream_authentication,omitempty"`
+	// GatewayMemberSignIn is present on gateway reads, including an empty list.
+	GatewayMemberSignIn *[]MCPGatewayMemberSignIn `json:"gateway_member_sign_in,omitempty"`
 }
 
 // CodeModeAvailability reports whether an organization can use Code Mode now:
@@ -143,6 +152,67 @@ func (s *MCPConnectionSettingsService) Get(ctx context.Context, principal Princi
 	return s.get(ctx, s.db, s.queries, principal, input)
 }
 
+// readWithGatewayMemberSignIn enriches the read tool without changing snapshots
+// used to preview or commit address and network mutations.
+func (s *MCPConnectionSettingsService) readWithGatewayMemberSignIn(ctx context.Context, principal Principal, input GetMCPConnectionSettingsInput) (MCPConnectionSettings, error) {
+	settings, err := s.Get(ctx, principal, input)
+	if err != nil || input.TargetKind != MCPConnectionSettingsGateway {
+		return settings, err
+	}
+	members, err := s.gatewayMemberSignIn(ctx, principal, uuid.MustParse(settings.ProjectID), uuid.MustParse(settings.TargetID))
+	if err != nil {
+		return MCPConnectionSettings{}, err
+	}
+	settings.GatewayMemberSignIn = &members
+	return settings, nil
+}
+
+func (s *MCPConnectionSettingsService) gatewayMemberSignIn(ctx context.Context, principal Principal, projectID, gatewayID uuid.UUID) ([]MCPGatewayMemberSignIn, error) {
+	grants, ok := authz.GrantsFromContext(ctx)
+	if !ok {
+		return nil, ErrUnavailable
+	}
+	members, err := metamcprepo.New(s.db).ListServableMetaMCPMembers(ctx, metamcprepo.ListServableMetaMCPMembersParams{MetaMcpServerID: gatewayID, ProjectID: projectID})
+	if err != nil {
+		return nil, fmt.Errorf("list proxied gateway members: %w: %w", ErrUnavailable, err)
+	}
+	readable := make([]MCPGatewayMemberSignIn, 0, len(members))
+	ids := make([]uuid.UUID, 0, len(members))
+	for _, member := range members {
+		if member.McpServerToolsetID.Valid || member.McpServerUnproxiedMcpServerID.Valid || member.McpServerSlug.String == "" || (!member.McpServerRemoteMcpServerID.Valid && !member.McpServerTunneledMcpServerID.Valid) {
+			continue
+		}
+		allowed, err := authz.GrantsAuthorize(grants, authz.MCPServer(authz.MCPServerIDOf(member.McpServerID), authz.ProjectIDOf(projectID)).Read())
+		if err != nil {
+			return nil, fmt.Errorf("authorize gateway member sign-in status: %w", err)
+		}
+		if !allowed {
+			continue
+		}
+		name := member.McpServerName.String
+		if name == "" {
+			name = member.McpServerSlug.String
+		}
+		ids = append(ids, member.McpServerID)
+		readable = append(readable, MCPGatewayMemberSignIn{MCPID: member.McpServerID.String(), Name: name, Status: ""})
+	}
+	if len(ids) == 0 {
+		return readable, nil
+	}
+	statuses, err := authclients.ReadServerAuthenticationStatuses(ctx, s.db, principal.OrganizationID, projectID, ids)
+	if err != nil {
+		return nil, fmt.Errorf("read gateway member sign-in statuses: %w: %w", ErrUnavailable, err)
+	}
+	result := make([]MCPGatewayMemberSignIn, 0, len(readable))
+	for i, member := range readable {
+		if status, ok := statuses[ids[i]]; ok {
+			member.Status = status
+			result = append(result, member)
+		}
+	}
+	return result, nil
+}
+
 // GetInTx returns the settings snapshot through the caller transaction. Version
 // covers network mode and endpoint IDs, slugs, and domain IDs. It deliberately
 // excludes ingress observations, domain names, membership, and root selection.
@@ -158,18 +228,18 @@ func (s *MCPConnectionSettingsService) get(ctx context.Context, db platformrepo.
 		return MCPConnectionSettings{}, ErrUnavailable
 	}
 	projectID, err := uuid.Parse(input.ProjectID)
-	if err != nil {
+	if err != nil || projectID == uuid.Nil {
 		return MCPConnectionSettings{}, ErrMCPConnectionSettingsInvalid
 	}
 	targetID, err := uuid.Parse(input.TargetID)
-	if err != nil || (input.TargetKind != MCPConnectionSettingsMCPServer && input.TargetKind != MCPConnectionSettingsGateway) {
+	if err != nil || targetID == uuid.Nil || (input.TargetKind != MCPConnectionSettingsMCPServer && input.TargetKind != MCPConnectionSettingsGateway) {
 		return MCPConnectionSettings{}, ErrMCPConnectionSettingsInvalid
 	}
 	grants, ok := authz.GrantsFromContext(ctx)
 	if !ok {
 		return MCPConnectionSettings{}, ErrUnavailable
 	}
-	admin, err := authz.GrantsAuthorize(grants, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: principal.OrganizationID, Dimensions: nil})
+	admin, err := authz.GrantsAuthorize(grants, authz.Org(authz.OrgIDFrom(principal.OrganizationID)).Admin())
 	if err != nil {
 		return MCPConnectionSettings{}, fmt.Errorf("authorize MCP connection settings admin: %w", err)
 	}
@@ -177,7 +247,7 @@ func (s *MCPConnectionSettingsService) get(ctx context.Context, db platformrepo.
 		return MCPConnectionSettings{}, ErrMCPConnectionSettingsNotFound
 	}
 	if input.TargetKind == MCPConnectionSettingsMCPServer {
-		allowed, err := authz.GrantsAuthorize(grants, authz.MCPCheck(authz.ScopeMCPRead, targetID.String(), projectID.String()))
+		allowed, err := authz.GrantsAuthorize(grants, authz.MCPServer(authz.MCPServerIDOf(targetID), authz.ProjectIDOf(projectID)).Read())
 		if err != nil {
 			return MCPConnectionSettings{}, fmt.Errorf("authorize MCP connection settings target: %w", err)
 		}
@@ -214,7 +284,7 @@ func (s *MCPConnectionSettingsService) get(ctx context.Context, db platformrepo.
 		ProjectID: projectID.String(), TargetKind: input.TargetKind, TargetID: targetID.String(),
 		Name: row.Name, Visibility: row.Visibility, NetworkMode: row.NetworkMode, DiscoveryMode: row.DiscoveryMode,
 		EffectiveDiscoveryMode: "", CodeModeAvailable: nil,
-		Version: "", Endpoints: endpoints, LegacyPlatformSlug: "", Ingress: ingress, PluginMemberships: memberships, UpstreamAuthentication: nil,
+		Version: "", Endpoints: endpoints, Ingress: ingress, PluginMemberships: memberships, UpstreamAuthentication: nil, GatewayMemberSignIn: nil,
 	}
 	if input.TargetKind == MCPConnectionSettingsMCPServer {
 		upstream, err := upstreamAuthentication(ctx, db, principal.OrganizationID, targetID)
@@ -222,11 +292,6 @@ func (s *MCPConnectionSettingsService) get(ctx context.Context, db platformrepo.
 			return MCPConnectionSettings{}, err
 		}
 		settings.UpstreamAuthentication = upstream
-		legacy, err := legacyalias.PlatformServedSlugs(ctx, db, principal.OrganizationID, []uuid.UUID{projectID}, []uuid.UUID{targetID})
-		if err != nil {
-			return MCPConnectionSettings{}, fmt.Errorf("list legacy platform alias: %w", err)
-		}
-		settings.LegacyPlatformSlug = legacy[targetID]
 	}
 	if input.TargetKind == MCPConnectionSettingsGateway {
 		available := s.codeModeAvailable != nil && s.codeModeAvailable(ctx, principal.OrganizationID)

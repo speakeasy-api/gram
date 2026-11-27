@@ -1,23 +1,27 @@
 package mcp_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	authclientsrepo "github.com/speakeasy-api/gram/server/internal/authclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/authenforcement"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -126,9 +130,15 @@ func requireReconnect(t *testing.T, resp *httptest.ResponseRecorder, err error, 
 	require.Contains(t, resp.Header().Get("WWW-Authenticate"), "/.well-known/oauth-protected-resource/mcp/"+slug)
 }
 
+func requireAuthClientSetup(t *testing.T, resp *httptest.ResponseRecorder, err error) {
+	t.Helper()
+	require.Contains(t, requireOopsCode(t, err, oops.CodeFailedPrecondition), "Ask your administrator to finish setting up its sign-in")
+	require.Empty(t, resp.Header().Get("WWW-Authenticate"))
+}
+
 // Two remote servers share one user session issuer but use different upstream
 // clients. Each forwards only its own client's credential, a server issued
-// after the credential fails closed into reconnect, and a server needing no
+// after issuance requires sign-in setup, and a server needing no
 // upstream authentication calls anonymously.
 func TestUpstreamClientSelection_DirectServersSharingAnIssuer(t *testing.T) {
 	t.Parallel()
@@ -142,8 +152,8 @@ func TestUpstreamClientSelection_DirectServersSharingAnIssuer(t *testing.T) {
 	linear, _ := createRemoteMcpEndpoint(t, ctx, f.ti.conn, f.projectID, linearUpstream.url, linearSlug, "public", sharedIssuerID)
 	notion, _ := createRemoteMcpEndpoint(t, ctx, f.ti.conn, f.projectID, notionUpstream.url, notionSlug, "public", sharedIssuerID)
 
-	linearClient := createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "sel-linear", "", []uuid.UUID{sharedIssuerID})
-	notionClient := createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "sel-notion", "", []uuid.UUID{sharedIssuerID})
+	linearClient := createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "sel-linear", "")
+	notionClient := createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "sel-notion", "")
 	f.associate(t, ctx, linear.ID, linearClient)
 	f.associate(t, ctx, notion.ID, notionClient)
 
@@ -151,6 +161,8 @@ func TestUpstreamClientSelection_DirectServersSharingAnIssuer(t *testing.T) {
 	insertQualifiedRemoteSessionToken(t, ctx, f.ti, sharedIssuerID, linearClient, subject, "token-linear", linearUpstream.url)
 	insertQualifiedRemoteSessionToken(t, ctx, f.ti, sharedIssuerID, notionClient, subject, "token-notion", notionUpstream.url)
 
+	linearAuthClient := seedTypedSessionClient(t, ctx, f.ti, f.orgID, f.projectID, linear.ID, linearClient, authz.AuthClientTypeRemoteSession, subject)
+	notionAuthClient := seedTypedSessionClient(t, ctx, f.ti, f.orgID, f.projectID, notion.ID, notionClient, authz.AuthClientTypeRemoteSession, subject)
 	linearBearer := f.issue(t, ctx, linearSlug, sharedIssuerID, subject)
 	notionBearer := f.issue(t, ctx, notionSlug, sharedIssuerID, subject)
 
@@ -173,12 +185,15 @@ func TestUpstreamClientSelection_DirectServersSharingAnIssuer(t *testing.T) {
 	mirror, _ := createRemoteMcpEndpoint(t, ctx, f.ti.conn, f.projectID, mirrorUpstream.url, mirrorSlug, "public", sharedIssuerID)
 	f.associate(t, ctx, mirror.ID, linearClient)
 	insertQualifiedRemoteSessionToken(t, ctx, f.ti, sharedIssuerID, linearClient, subject, "token-linear", linearUpstream.url)
+	require.NoError(t, authclientbackfill.New(f.ti.conn).SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{ProjectID: f.projectID, OrganizationID: f.orgID, McpServerID: mirror.ID, AuthClientID: linearAuthClient, Source: "admin"}))
 	mirrorBearer := f.issue(t, ctx, mirrorSlug, sharedIssuerID, subject)
 	_, err = upstreamclientsrepo.New(f.ti.conn).DetachMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.DetachMCPServerRemoteSessionClientParams{
 		McpServerID:           mirror.ID,
 		RemoteSessionClientID: linearClient,
 		ProjectID:             f.projectID,
 	})
+	require.NoError(t, err)
+	_, err = authclientsrepo.New(f.ti.conn).DetachAuthClientFromServer(ctx, authclientsrepo.DetachAuthClientFromServerParams{AuthClientID: linearAuthClient, McpServerID: mirror.ID, OrganizationID: f.orgID})
 	require.NoError(t, err)
 	resp, err = callTool(t, f.ti, mirrorSlug, mirrorBearer, "ping")
 	requireReconnect(t, resp, err, mirrorSlug)
@@ -199,14 +214,14 @@ func TestUpstreamClientSelection_DirectServersSharingAnIssuer(t *testing.T) {
 	anonymousUpstream.requireToolCallAuth(t, "")
 
 	// A credential issued before a server was configured has no choice for
-	// it, and is asked to reconnect rather than given a guessed client.
+	// it, and asks for setup rather than using a guessed client.
 	githubUpstream := newRecordingUpstream(t, "ping")
 	githubSlug := "sel-github-" + uuid.NewString()[:8]
 	github, _ := createRemoteMcpEndpoint(t, ctx, f.ti.conn, f.projectID, githubUpstream.url, githubSlug, "public", sharedIssuerID)
 	f.associate(t, ctx, github.ID, linearClient)
 	staleBearer := linearBearer
 	resp, err = callTool(t, f.ti, githubSlug, staleBearer, "ping")
-	requireReconnect(t, resp, err, githubSlug)
+	requireAuthClientSetup(t, resp, err)
 	require.Zero(t, githubUpstream.requestCount(), "a missing choice never reaches the upstream")
 
 	// Detaching the chosen client makes the choice unusable; serving does not
@@ -217,30 +232,31 @@ func TestUpstreamClientSelection_DirectServersSharingAnIssuer(t *testing.T) {
 		ProjectID:             f.projectID,
 	})
 	require.NoError(t, err)
+	_, err = authclientsrepo.New(f.ti.conn).DetachAuthClientFromServer(ctx, authclientsrepo.DetachAuthClientFromServerParams{AuthClientID: notionAuthClient, McpServerID: notion.ID, OrganizationID: f.orgID})
+	require.NoError(t, err)
 	f.associate(t, ctx, notion.ID, linearClient)
 	before := notionUpstream.requestCount()
 	resp, err = callTool(t, f.ti, notionSlug, notionBearer, "ping")
 	requireReconnect(t, resp, err, notionSlug)
 	require.Equal(t, before, notionUpstream.requestCount())
 
-	// Unbinding the chosen client from the issuer, though it stays associated
-	// with the server, also asks for a reconnection rather than serving.
-	_, err = remotesessions_repo.New(f.ti.conn).DetachProjectRemoteSessionClientFromUserSessionIssuer(ctx, remotesessions_repo.DetachProjectRemoteSessionClientFromUserSessionIssuerParams{
-		RemoteSessionClientID: linearClient,
-		UserSessionIssuerID:   sharedIssuerID,
-		ProjectID:             f.projectID,
-		OrganizationID:        f.orgID,
-	})
-	require.NoError(t, err)
-	before = linearUpstream.requestCount()
+	// Changing a sibling server does not revoke the selected typed offer.
+	beforeLinear := linearUpstream.requestCount()
 	resp, err = callTool(t, f.ti, linearSlug, linearBearer, "ping")
-	requireReconnect(t, resp, err, linearSlug)
-	require.Equal(t, before, linearUpstream.requestCount())
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.Code)
+	var callAuth []string
+	for _, req := range linearUpstream.journal()[beforeLinear:] {
+		if req.rpcMethod == "tools/call" {
+			callAuth = append(callAuth, req.authorization)
+		}
+	}
+	require.Equal(t, []string{"Bearer token-linear"}, callAuth)
 }
 
 // An anonymous session is served through its recorded choices like any other
 // session: its chosen client forwards its own connection, and a server
-// configured after it was issued asks it to reconnect rather than serving
+// configured after it was issued asks for sign-in setup rather than serving
 // through the issuer's clients.
 func TestUpstreamClientSelection_AnonymousSessionFollowsItsChoices(t *testing.T) {
 	t.Parallel()
@@ -250,10 +266,11 @@ func TestUpstreamClientSelection_AnonymousSessionFollowsItsChoices(t *testing.T)
 	upstream := newRecordingUpstream(t, "ping")
 	slug := "sel-anon-chosen-" + uuid.NewString()[:8]
 	server, _ := createRemoteMcpEndpoint(t, ctx, f.ti.conn, f.projectID, upstream.url, slug, "public", issuerID)
-	client := createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "sel-anon", "", []uuid.UUID{issuerID})
+	client := createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "sel-anon", "")
 	f.associate(t, ctx, server.ID, client)
 
 	subject := urn.NewAnonymousSubject("sel-anon-" + uuid.NewString())
+	seedTypedSessionClient(t, ctx, f.ti, f.orgID, f.projectID, server.ID, client, authz.AuthClientTypeRemoteSession, subject)
 	insertQualifiedRemoteSessionToken(t, ctx, f.ti, issuerID, client, subject, "token-anon", upstream.url)
 	bearer := f.issue(t, ctx, slug, issuerID, subject)
 
@@ -268,7 +285,7 @@ func TestUpstreamClientSelection_AnonymousSessionFollowsItsChoices(t *testing.T)
 	f.associate(t, ctx, later.ID, client)
 	insertQualifiedRemoteSessionToken(t, ctx, f.ti, issuerID, client, subject, "token-anon", laterUpstream.url)
 	resp, err = callTool(t, f.ti, laterSlug, bearer, "ping")
-	requireReconnect(t, resp, err, laterSlug)
+	requireAuthClientSetup(t, resp, err)
 	require.Zero(t, laterUpstream.requestCount(), "a missing choice never reaches the upstream")
 }
 
@@ -288,14 +305,16 @@ func TestUpstreamClientSelection_GatewayMembers(t *testing.T) {
 	memberA := seedMetaMemberWithUpstream(t, ctx, f.ti.conn, f.projectID, meta.ID, "Member A", "member-a", 0, upstreamA.url)
 	memberB := seedMetaMemberWithUpstream(t, ctx, f.ti.conn, f.projectID, meta.ID, "Member B", "member-b", 1, upstreamB.url)
 
-	clientA := createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "sel-meta-a", "", []uuid.UUID{sharedIssuerID})
-	clientB := createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "sel-meta-b", "", []uuid.UUID{sharedIssuerID})
+	clientA := createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "sel-meta-a", "")
+	clientB := createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "sel-meta-b", "")
 	f.associate(t, ctx, memberA, clientA)
 	f.associate(t, ctx, memberB, clientB)
 
 	subject := createTestUser(t, ctx, f.ti, "sel-meta-user-"+uuid.NewString())
 	insertQualifiedRemoteSessionToken(t, ctx, f.ti, sharedIssuerID, clientA, subject, "token-member-a", upstreamA.url)
 	insertQualifiedRemoteSessionToken(t, ctx, f.ti, sharedIssuerID, clientB, subject, "token-member-b", upstreamB.url)
+	seedTypedSessionClient(t, ctx, f.ti, f.orgID, f.projectID, memberA, clientA, authz.AuthClientTypeRemoteSession, subject)
+	seedTypedSessionClient(t, ctx, f.ti, f.orgID, f.projectID, memberB, clientB, authz.AuthClientTypeRemoteSession, subject)
 	bearer := f.issue(t, ctx, metaSlug, sharedIssuerID, subject)
 
 	text, isError := metaToolResultText(t, executeMetaTool(t, f.ti, metaSlug, bearer, "member-a--ping"))
@@ -311,7 +330,7 @@ func TestUpstreamClientSelection_GatewayMembers(t *testing.T) {
 	f.associate(t, ctx, memberC, clientA)
 	text, isError = metaToolResultText(t, executeMetaTool(t, f.ti, metaSlug, bearer, "member-c--ping"))
 	require.True(t, isError, "a member without a choice must not be served: %s", text)
-	require.Contains(t, text, "signed in to again")
+	require.Contains(t, text, "no sign-in set up yet")
 	require.Zero(t, upstreamC.requestCount())
 
 	text, isError = metaToolResultText(t, executeMetaTool(t, f.ti, metaSlug, bearer, "member-a--ping"))
@@ -330,8 +349,10 @@ func TestUpstreamClientSelection_ConsentOffersOnlyTheServersOwnClients(t *testin
 		return server.ID
 	})
 	fx.ti.service.manual = true
-	own := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "sel-own", "", []uuid.UUID{fx.shared})
-	createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "sel-sibling", "", []uuid.UUID{fx.shared})
+	own := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "sel-own", "")
+	sibling := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "sel-sibling", "")
+	siblingServer, _ := createRemoteMcpEndpoint(t, ctx, fx.ti.conn, fx.projectID, "https://sibling-client.example.com/mcp", "sel-sibling-"+uuid.NewString()[:8], "public", fx.shared)
+	seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, siblingServer.ID, sibling, "remote_session")
 
 	n, err := upstreamclientsrepo.New(fx.ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{
 		OrganizationID:        fx.orgID,
@@ -342,7 +363,9 @@ func TestUpstreamClientSelection_ConsentOffersOnlyTheServersOwnClients(t *testin
 	require.NoError(t, err)
 	require.Equal(t, int64(1), n)
 
-	// With one client left to offer, consent goes straight to it.
+	seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, serverID, own, "remote_session")
+	seedMetaMemberConnectGrant(t, ctx, fx.ti.conn, fx.orgID, serverID)
+	// With one typed offer, consent goes straight to it.
 	code, html, location := render(t, fx)
 	require.Equal(t, http.StatusSeeOther, code, html)
 	require.NotNil(t, location)
@@ -360,12 +383,14 @@ func TestUpstreamClientSelection_ServerOfferingSeveralClientsServesThePickedOne(
 	upstream := newRecordingUpstream(t, "ping")
 	slug := "sel-choice-" + uuid.NewString()[:8]
 	server, _ := createRemoteMcpEndpoint(t, ctx, f.ti.conn, f.projectID, upstream.url, slug, "public", issuerID)
-	first := createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "sel-first", "", []uuid.UUID{issuerID})
-	second := createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "sel-second", "", []uuid.UUID{issuerID})
+	first := createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "sel-first", "")
+	second := createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "sel-second", "")
 	f.associate(t, ctx, server.ID, first)
 	f.associate(t, ctx, server.ID, second)
 
 	picked := createTestUser(t, ctx, f.ti, "sel-picked-"+uuid.NewString())
+	seedTypedSessionClient(t, ctx, f.ti, f.orgID, f.projectID, server.ID, first, authz.AuthClientTypeRemoteSession, picked)
+	seedTypedSessionClient(t, ctx, f.ti, f.orgID, f.projectID, server.ID, second, authz.AuthClientTypeRemoteSession, picked)
 	insertQualifiedRemoteSessionToken(t, ctx, f.ti, issuerID, first, picked, "token-first", upstream.url)
 	insertQualifiedRemoteSessionToken(t, ctx, f.ti, issuerID, second, picked, "token-second", upstream.url)
 	resp, err := callTool(t, f.ti, slug, f.issuePicked(t, ctx, slug, issuerID, picked, map[uuid.UUID]uuid.UUID{server.ID: second}), "ping")
@@ -392,7 +417,7 @@ func TestUpstreamClientSelection_RecordsTypedConsentPicks(t *testing.T) {
 	oauthServer, _ := createRemoteMcpEndpoint(t, ctx, f.ti.conn, f.projectID, newRecordingUpstream(t, "ping").url, "typed-oauth-"+uuid.NewString()[:8], "public", issuerID)
 	headerServer, _ := createRemoteMcpEndpoint(t, ctx, f.ti.conn, f.projectID, newRecordingUpstream(t, "ping").url, "typed-header-"+uuid.NewString()[:8], "public", issuerID)
 	// Registered for the project, but bound to no sign-in.
-	registration := createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "typed-unbound", "", nil)
+	registration := createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "typed-unbound", "")
 
 	fixtures := authclientbackfill.New(f.ti.conn)
 	seed := func(serverID uuid.UUID, clientType string, registration uuid.NullUUID) uuid.UUID {
@@ -462,4 +487,71 @@ func TestUpstreamClientSelection_EmptyScopeRecordsNothing(t *testing.T) {
 	n, err = q.RecordUpstreamClientSelections(ctx, params)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, n, "the empty scope, rather than an ineligible server, prevented recording")
+}
+
+// Recording choices locks the servers it records in UUID order before
+// anything else, the order EMA writers lock a project's servers FOR UPDATE.
+// Waiting on the lowest server, it holds none of the others, so a writer
+// walking the rest never waits on it and the two cannot deadlock.
+func TestUpstreamClientSelection_RecordingLocksServersInWriterOrder(t *testing.T) {
+	t.Parallel()
+	ctx, f := newSelectionFixture(t)
+
+	issuerID := createUserSessionIssuer(t, ctx, f.ti.conn, f.projectID)
+	clientA := createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "sel-order-a", "")
+	clientB := createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "sel-order-b", "")
+	servers := make([]uuid.UUID, 0, 4)
+	for i := range 4 {
+		server, _ := createRemoteMcpEndpoint(t, ctx, f.ti.conn, f.projectID, "https://sel-order.example.com/mcp", "sel-order-"+uuid.NewString()[:8], "public", issuerID)
+		client := clientA
+		if i%2 == 1 {
+			client = clientB
+		}
+		f.associate(t, ctx, server.ID, client)
+		servers = append(servers, server.ID)
+	}
+	slices.SortFunc(servers, func(a, b uuid.UUID) int { return bytes.Compare(a[:], b[:]) })
+
+	subject := createTestUser(t, ctx, f.ti, "sel-order-user-"+uuid.NewString())
+	jti := uuid.NewString()
+	persistTestUserSession(t, f.ti, issuerID, subject, jti)
+	q := usersessions_repo.New(f.ti.conn)
+	session, err := q.GetUserSessionPolicyByJTI(ctx, usersessions_repo.GetUserSessionPolicyByJTIParams{UserSessionIssuerID: issuerID, Jti: jti})
+	require.NoError(t, err)
+
+	writer, err := f.ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: transaction boundary holds the SQLc-taken server locks
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = writer.Rollback(context.WithoutCancel(ctx)) })
+	writerPID, err := testrepo.New(writer).BackendPIDFixture(ctx)
+	require.NoError(t, err)
+	writerLocks := authclientbackfill.New(writer)
+	require.NoError(t, writerLocks.LockEMAPreparationServer(ctx, authclientbackfill.LockEMAPreparationServerParams{ServerID: servers[0], OrganizationID: f.orgID}))
+
+	recorded := make(chan error, 1)
+	go func() {
+		_, err := q.RecordUpstreamClientSelections(ctx, usersessions_repo.RecordUpstreamClientSelectionsParams{
+			UserSessionIssuerID: issuerID,
+			CredentialKind:      upstreamclients.CredentialKindUserSession,
+			CredentialID:        session.CredentialID,
+			Source:              upstreamclients.SelectionSourceIssuance,
+			PickedMcpServerIds:  []uuid.UUID{},
+			PickedClientIds:     []uuid.UUID{},
+			PickedAuthClientIds: nil,
+		})
+		recorded <- err
+	}()
+	require.Eventually(t, func() bool {
+		blocked, err := testrepo.New(f.ti.conn).IsQueryBlockedByFixture(ctx, testrepo.IsQueryBlockedByFixtureParams{
+			QueryPattern: "%name: RecordUpstreamClientSelections %",
+			HolderPid:    writerPID,
+		})
+		return err == nil && blocked
+	}, 10*time.Second, 10*time.Millisecond, "recording never waited on the lowest server")
+
+	for _, id := range servers[1:] {
+		_, err = writerLocks.ProbeServerLockFixture(ctx, id)
+		require.NoError(t, err, "recording holds a higher server while it waits on the lowest")
+	}
+	require.NoError(t, writer.Commit(ctx))
+	require.NoError(t, <-recorded)
 }

@@ -25,6 +25,11 @@ export type StatTileProps = {
   icon?: IconName;
   /** Replaces the icon with a spinner while cached data refreshes in the background. */
   isRefreshing?: boolean;
+  /**
+   * Keeps the label and shimmers only the figure, so the tile reads as
+   * "loading" rather than missing while its data is on the way.
+   */
+  isLoading?: boolean;
   invertDelta?: boolean;
   thresholds?: ThresholdConfig;
   comparisonLabel?: string;
@@ -67,6 +72,7 @@ export function StatTile(props: StatTileProps): JSX.Element {
     format = "compact",
     icon,
     isRefreshing = false,
+    isLoading = false,
     invertDelta = false,
     thresholds,
     comparisonLabel,
@@ -136,20 +142,25 @@ export function StatTile(props: StatTileProps): JSX.Element {
     </span>
   );
 
+  // Beside the figure the comparison only fits a quarter-width tile without
+  // wrapping when it is the bare percentage, so a tile with no caption of its
+  // own carries "vs previous period" as its caption instead.
+  const comparisonAsCaption = showDelta && !!comparisonLabel && !subtext;
   const deltaNode = showDelta ? (
     <>
       {isPositive ? "+" : "-"}
       {delta.toFixed(1)}%
-      {comparisonLabel && (
+      {comparisonLabel && !comparisonAsCaption && (
         <span className="text-muted"> {comparisonLabel}</span>
       )}
     </>
   ) : undefined;
 
+  const caption = comparisonAsCaption ? comparisonLabel : subtext;
   const description =
-    subtext || link ? (
+    caption || link ? (
       <span className="flex items-center justify-between gap-2">
-        <span className="text-muted-foreground">{subtext}</span>
+        <span className="text-muted-foreground">{caption}</span>
         {link && (
           <Link
             to={link}
@@ -167,24 +178,36 @@ export function StatTile(props: StatTileProps): JSX.Element {
     <UiMetricCard
       size="sm"
       label={label}
-      value={displayValue ?? formatValue(value)}
+      value={
+        isLoading ? (
+          <Skeleton className="h-[34px] w-20" label={`Loading ${title}`} />
+        ) : (
+          (displayValue ?? formatValue(value))
+        )
+      }
       tone={tone ?? getValueTone(value, thresholds)}
-      delta={deltaNode}
+      delta={isLoading ? undefined : deltaNode}
       deltaTone={isGood ? "success" : "destructive"}
-      description={description}
+      description={isLoading ? undefined : description}
     />
   );
 }
 
 /**
- * Loading placeholder shaped like a value-only StatTile — same padding, gap
- * and line heights, so the group doesn't shift when the figures land.
+ * Loading placeholder shaped like a StatTile — same padding, gap and line
+ * heights, so the group doesn't shift when the figures land. Value-only by
+ * default; `caption` adds the line a tile with a subtext carries.
  */
-export function StatTileSkeleton(): JSX.Element {
+export function StatTileSkeleton({
+  caption = false,
+}: {
+  caption?: boolean;
+} = {}): JSX.Element {
   return (
     <div className="bg-card flex min-w-0 flex-1 flex-col gap-4 p-6">
       <Skeleton className="h-[14.3px] w-24" />
       <Skeleton className="h-[34px] w-20" />
+      {caption && <Skeleton className="h-[17.9px] w-36 max-w-full" />}
     </div>
   );
 }

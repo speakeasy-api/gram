@@ -65,6 +65,7 @@ import { useProductTier } from "@/hooks/useProductTier";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useRegisterDomainMutation } from "@gram/client/react-query/registerDomain";
+import { useReconcileDomainMutation } from "@gram/client/react-query/reconcileDomain";
 import { useRootMcpEndpointMutation } from "@/hooks/useRootMcpEndpoint";
 import { useRootMcpServers } from "@gram/client/react-query/rootMcpServers";
 import { useUpdateDomainMutation } from "@gram/client/react-query/updateDomain";
@@ -750,6 +751,17 @@ function OrgDomainsInner() {
     },
   });
 
+  const reconcileDomainMutation = useReconcileDomainMutation({
+    onSuccess: async () => {
+      await invalidateAllListDomains(queryClient);
+      toast.success("Custom domain reconciliation started");
+    },
+    onError: async (error) => {
+      await invalidateAllListDomains(queryClient);
+      toast.error(error.message || "Failed to reconcile custom domain");
+    },
+  });
+
   const checkDomainHealthMutation = useCheckDomainHealthMutation({
     onSuccess: async () => {
       await invalidateAllListDomains(queryClient);
@@ -862,12 +874,15 @@ function OrgDomainsInner() {
   };
 
   useEffect(() => {
-    if (!domain?.isUpdating) return;
-    const interval = setInterval(() => {
-      void domainRefetch();
-    }, 30000);
+    if (!domain?.isUpdating && !domain?.isReconciling) return;
+    const interval = setInterval(
+      () => {
+        void domainRefetch();
+      },
+      domain.isReconciling ? 2000 : 30000,
+    );
     return () => clearInterval(interval);
-  }, [domain?.isUpdating, domainRefetch]);
+  }, [domain?.isReconciling, domain?.isUpdating, domainRefetch]);
 
   useEffect(() => {
     document.title = `${title} | Speakeasy`;
@@ -911,7 +926,22 @@ function OrgDomainsInner() {
                   </Text>
                   {domain.isUpdating ? (
                     <SimpleTooltip tooltip="Waiting for your DNS records to propagate and verify. This can take several hours with some providers; we re-check every few minutes (at most every 5 minutes apart) for up to 24 hours.">
-                      <Spinner className="mr-0 text-blue-500" />
+                      <Spinner
+                        aria-label="Verifying domain"
+                        className="mr-0 text-blue-500"
+                      />
+                    </SimpleTooltip>
+                  ) : reconcileDomainMutation.isPending ||
+                    domain.isReconciling ? (
+                    <SimpleTooltip tooltip="Applying the latest domain configuration.">
+                      <Spinner
+                        aria-label="Applying domain configuration"
+                        className="mr-0 text-blue-500"
+                      />
+                    </SimpleTooltip>
+                  ) : domain.reconciliationStatus === "failed" ? (
+                    <SimpleTooltip tooltip="The latest reconciliation failed">
+                      <AlertTriangle className="h-4 w-4 text-amber-500" />
                     </SimpleTooltip>
                   ) : showCustomDomainAutoDisabled(domain) ? (
                     <SimpleTooltip tooltip="This domain was disabled after failing health checks for over a week">
@@ -930,6 +960,23 @@ function OrgDomainsInner() {
                       <X className="h-4 w-4 stroke-3 text-red-500" />
                     </SimpleTooltip>
                   )}
+                  <Text
+                    variant="body"
+                    className="text-muted-foreground text-xs"
+                  >
+                    {domain.isUpdating
+                      ? "Verifying domain"
+                      : reconcileDomainMutation.isPending ||
+                          domain.isReconciling
+                        ? "Applying domain configuration"
+                        : domain.reconciliationStatus === "reconciled"
+                          ? "Reconciled"
+                          : domain.reconciliationStatus === "failed"
+                            ? "Reconciliation failed"
+                            : domain.verified
+                              ? "Domain verified and active"
+                              : "Verification required"}
+                  </Text>
                 </Stack>
                 <Text
                   variant="body"
@@ -1001,6 +1048,28 @@ function OrgDomainsInner() {
                         }}
                       >
                         {domain.isUpdating ? "Check now" : "Reverify"}
+                      </Button>
+                    )}
+                    {domain.verified && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        disabled={
+                          reconcileDomainMutation.isPending ||
+                          domain.isReconciling
+                        }
+                        onClick={() =>
+                          reconcileDomainMutation.mutate({
+                            security: { sessionHeaderGramSession: "" },
+                          })
+                        }
+                      >
+                        {reconcileDomainMutation.isPending ||
+                        domain.isReconciling
+                          ? "Applying..."
+                          : domain.reconciliationStatus === "failed"
+                            ? "Retry reconciliation"
+                            : "Reconcile now"}
                       </Button>
                     )}
                     <Button

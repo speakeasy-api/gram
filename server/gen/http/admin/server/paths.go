@@ -32,11 +32,6 @@ func GetOrganizationFeaturesAdminPath() string {
 	return "/admin/organization.features"
 }
 
-// SetOrganizationProviderSetupAdminPath returns the URL path to the admin service setOrganizationProviderSetup HTTP endpoint.
-func SetOrganizationProviderSetupAdminPath() string {
-	return "/admin/organization.providerSetup"
-}
-
 // SetOrganizationFeatureAdminPath returns the URL path to the admin service setOrganizationFeature HTTP endpoint.
 func SetOrganizationFeatureAdminPath() string {
 	return "/admin/organization.features"
@@ -537,6 +532,21 @@ func BackfillMcpConnectGrantsAdminPath() string {
 	return "/admin/mcpConnectGrants.backfill"
 }
 
+// GetSecretBackfillsAdminPath returns the URL path to the admin service getSecretBackfills HTTP endpoint.
+func GetSecretBackfillsAdminPath() string {
+	return "/admin/secretBackfills.get"
+}
+
+// RunMarketplaceTokenBackfillAdminPath returns the URL path to the admin service runMarketplaceTokenBackfill HTTP endpoint.
+func RunMarketplaceTokenBackfillAdminPath() string {
+	return "/admin/secretBackfills.runMarketplaceTokens"
+}
+
+// RunRunnerKeyOrganizationBackfillAdminPath returns the URL path to the admin service runRunnerKeyOrganizationBackfill HTTP endpoint.
+func RunRunnerKeyOrganizationBackfillAdminPath() string {
+	return "/admin/secretBackfills.runRunnerKeyOrganizations"
+}
+
 // GetProjectRedeployPreviewAdminPath returns the URL path to the admin service getProjectRedeployPreview HTTP endpoint.
 func GetProjectRedeployPreviewAdminPath() string {
 	return "/admin/project.redeployPreview"
@@ -602,6 +612,16 @@ func StartMemoryEvalRunAdminPath() string {
 	return "/admin/memoryEval.start"
 }
 
+// ListAssistantOrganizationsAdminPath returns the URL path to the admin service listAssistantOrganizations HTTP endpoint.
+func ListAssistantOrganizationsAdminPath() string {
+	return "/admin/assistants.organizations"
+}
+
+// RepairOrganizationAssistantAgentNamesAdminPath returns the URL path to the admin service repairOrganizationAssistantAgentNames HTTP endpoint.
+func RepairOrganizationAssistantAgentNamesAdminPath() string {
+	return "/admin/organization.repairAssistantAgentNames"
+}
+
 // ListOrganizationAssistantsAdminPath returns the URL path to the admin service listOrganizationAssistants HTTP endpoint.
 func ListOrganizationAssistantsAdminPath() string {
 	return "/admin/organization.assistants"
@@ -615,4 +635,74 @@ func MigrateOrganizationAssistantIdentitiesAdminPath() string {
 // MigrateOrganizationAssistantsToKitAdminPath returns the URL path to the admin service migrateOrganizationAssistantsToKit HTTP endpoint.
 func MigrateOrganizationAssistantsToKitAdminPath() string {
 	return "/admin/organization.migrateAssistantsToKit"
+}
+
+// GetHooksRolloutAdminPath returns the URL path to the admin service getHooksRollout HTTP endpoint.
+func GetHooksRolloutAdminPath() string {
+	return "/admin/hooksRollout.get"
+}
+
+// GetHooksReleaseProgressAdminPath returns the URL path to the admin service getHooksReleaseProgress HTTP endpoint.
+func GetHooksReleaseProgressAdminPath() string {
+	return "/admin/hooksRollout.progress"
+}
+
+// SetHooksRolloutDefaultAdminPath returns the URL path to the admin service setHooksRolloutDefault HTTP endpoint.
+func SetHooksRolloutDefaultAdminPath() string {
+	return "/admin/hooksRollout.setDefault"
+}
+
+// GetOrganizationHooksRolloutAdminPath returns the URL path to the admin service getOrganizationHooksRollout HTTP endpoint.
+func GetOrganizationHooksRolloutAdminPath() string {
+	return "/admin/organization.hooksRollout"
+}
+
+// SetOrganizationHooksRolloutAdminPath returns the URL path to the admin service setOrganizationHooksRollout HTTP endpoint.
+func SetOrganizationHooksRolloutAdminPath() string {
+	return "/admin/organization.setHooksRollout"
+}
+
+// ClearOrganizationHooksRolloutAdminPath returns the URL path to the admin service clearOrganizationHooksRollout HTTP endpoint.
+func ClearOrganizationHooksRolloutAdminPath() string {
+	return "/admin/organization.clearHooksRollout"
+}
+
+// ListTailscaleOAuthMigrationAdminPath returns the URL path to the admin service listTailscaleOAuthMigration HTTP endpoint.
+func ListTailscaleOAuthMigrationAdminPath() string {
+	return "/admin/tailscaleOAuthMigration.organizations"
+}
+
+// RunTailscaleOAuthMigrationStepAdminPath returns the URL path to the admin service runTailscaleOAuthMigrationStep HTTP endpoint.
+func RunTailscaleOAuthMigrationStepAdminPath() string {
+	return "/admin/tailscaleOAuthMigration.run"
+}
+
+// GetOrganizationEncryptionAdminPath returns the URL path to the admin service getOrganizationEncryption HTTP endpoint.
+func GetOrganizationEncryptionAdminPath() string {
+	return "/admin/organizationEncryption.get"
+}
+
+// ListOrganizationEncryptionTransitionsAdminPath returns the URL path to the admin service listOrganizationEncryptionTransitions HTTP endpoint.
+func ListOrganizationEncryptionTransitionsAdminPath() string {
+	return "/admin/organizationEncryption.listTransitions"
+}
+
+// EnrollOrganizationEncryptionAdminPath returns the URL path to the admin service enrollOrganizationEncryption HTTP endpoint.
+func EnrollOrganizationEncryptionAdminPath() string {
+	return "/admin/organizationEncryption.enroll"
+}
+
+// RollbackOrganizationEncryptionAdminPath returns the URL path to the admin service rollbackOrganizationEncryption HTTP endpoint.
+func RollbackOrganizationEncryptionAdminPath() string {
+	return "/admin/organizationEncryption.rollback"
+}
+
+// RunOrganizationEncryptionAdminPath returns the URL path to the admin service runOrganizationEncryption HTTP endpoint.
+func RunOrganizationEncryptionAdminPath() string {
+	return "/admin/organizationEncryption.run"
+}
+
+// FinalizeOrganizationEncryptionAdminPath returns the URL path to the admin service finalizeOrganizationEncryption HTTP endpoint.
+func FinalizeOrganizationEncryptionAdminPath() string {
+	return "/admin/organizationEncryption.finalize"
 }

@@ -130,6 +130,10 @@ var frozenCodes = []string{
 	"upstream_credential_not_chosen",
 	"sign_in_method_not_accepted",
 	"credential_choice_invalid",
+	"address_not_allowed",
+	"address_not_found",
+	"unmanaged_account",
+	"gateway_machine_access_disabled",
 }
 
 // frozenResults pins each result's stored name, append-only like the codes.
@@ -286,6 +290,7 @@ func TestCatalog_MessagesHoldOnEverySite(t *testing.T) {
 		{CodeProviderOAuthInvalidScope, WhoAdmin, []string{"access"}, []string{"permissions"}},
 		{CodeConsentNotApproved, WhoPerson, []string{"needs your approval"}, []string{"have not approved"}},
 		{CodeNeedsSignIn, WhoPerson, []string{"need to sign in"}, []string{"yet"}},
+		{CodeInvalidRemoteSession, WhoPerson, []string{"usable connection", "connect to the service", "choose another connection"}, []string{"reconnect to the service.", "missing or has expired"}},
 		{CodeCIMDAdmissionDenied, WhoAdmin, []string{"this way", "allowed"}, []string{"allowed list", "your organization"}},
 		{CodeCatalogTooLarge, WhoAdmin, []string{"too large", "if you can"}, []string{"gateway"}},
 		{CodeAssertionInvalid, WhoApp, []string{"the app"}, []string{"sign-in setup"}},
@@ -374,4 +379,19 @@ func TestDefine_RefusesADuplicateName(t *testing.T) {
 	meaning, ok := MeaningOf(CodeCanceled.String())
 	require.True(t, ok)
 	require.Equal(t, OutcomeDeclined, meaning.Outcome)
+}
+
+func TestCatalog_EveryCodeHasAnAdministratorSentenceInTheThirdPerson(t *testing.T) {
+	t.Parallel()
+	require.Len(t, adminMeanings, len(catalog))
+	for _, code := range Codes() {
+		meaning, ok := MeaningOf(code)
+		require.True(t, ok, code)
+		require.NotEmpty(t, meaning.WhatHappenedForAdmin, code)
+		for _, text := range []string{meaning.WhatHappenedForAdmin, meaning.Technical} {
+			for _, word := range strings.FieldsFunc(strings.ToLower(text), func(r rune) bool { return r < 'a' || r > 'z' }) {
+				require.NotContains(t, []string{"i", "me", "my", "mine", "myself", "we", "us", "our", "ours", "ourselves", "you", "your", "yours", "yourself", "yourselves"}, word, code)
+			}
+		}
+	}
 }

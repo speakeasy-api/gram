@@ -11,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -34,16 +35,17 @@ func TestRefresh_UnreadableSnapshotRereadStoreFailure(t *testing.T) {
 	pool, err := pgxpool.New(t.Context(), "postgres://speakeasy@127.0.0.1:1/unreachable?connect_timeout=1")
 	require.NoError(t, err)
 	t.Cleanup(pool.Close)
-	s := &RefreshService{enc: testenv.NewEncryptionClient(t)}
+	enc := testenv.NewEncryptionClient(t)
+	s := &RefreshService{enc: enc, tokens: upstreamtokens.WithoutOrganizationEncryption(testenv.NewLogger(t), pool, enc)}
 	sess := remotesessions_repo.RemoteSession{
 		ID: uuid.New(), SubjectUrn: urn.NewUserSubject("store-down"), RemoteSessionClientID: uuid.New(),
-		AccessTokenEncrypted: "not-ciphertext",
 	}
+	sess.AccessTokenEncrypted.String, sess.AccessTokenEncrypted.Valid = "not-ciphertext", true
 	sess.RefreshTokenEncrypted.String, sess.RefreshTokenEncrypted.Valid = "not-ciphertext", true
 	sess.UpdatedAt.Time, sess.UpdatedAt.Valid = time.Now(), true
 	attempted := sess
 
-	_, _, _, err = s.refresh(t.Context(), remotesessions_repo.New(pool), sess, "", &attempted)
+	_, _, _, err = s.refresh(t.Context(), remotesessions_repo.New(pool), sess, "", &attempted, RefreshAttribution{})
 	require.Error(t, err)
 	require.False(t, StoredTokenUnreadable(err), "a store outage is not a decrypt failure")
 	require.True(t, oops.IsInfrastructureFailure(err), "error: %v", err)

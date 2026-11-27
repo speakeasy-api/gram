@@ -18,7 +18,7 @@ export function AuthenticationSetupActions({
         </Text>
         <div className="flex flex-wrap items-center justify-center gap-2">
           <Button variant="secondary" onClick={onStartManual}>
-            <Button.Text>Configure Manually</Button.Text>
+            <Button.Text>Configure manually</Button.Text>
           </Button>
           {additionalAction}
         </div>

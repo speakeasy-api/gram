@@ -79,7 +79,7 @@ func (s *Service) resolveOrgQueryScope(ctx context.Context, from, to string, pro
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return scope, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Read()); err != nil {
 		return scope, err
 	}
 
@@ -143,7 +143,7 @@ func (s *Service) query(ctx context.Context, payload *telem_gen.QueryPayload, wi
 		topN = defaultQueryTopN
 	}
 
-	interval := calculateInterval(timeStart, timeEnd)
+	interval := CalculateInterval(timeStart, timeEnd)
 	if payload.GranularitySeconds != nil && *payload.GranularitySeconds > 0 {
 		interval = *payload.GranularitySeconds
 	}
@@ -160,27 +160,9 @@ func (s *Service) query(ctx context.Context, payload *telem_gen.QueryPayload, wi
 	}
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 
-	// Fold mode: canonical serves folded identities from the identity_map;
-	// shadow serves literal results and logs how the folded variant would
-	// differ; off keeps the Postgres-side per-request identity expansion.
-	var foldIdentities, shadowFold bool
-	if queryTouchesEmail(groupBy, filters) {
-		foldIdentities, shadowFold = s.canonicalIdentityMode(ctx, authCtx.ActiveOrganizationID)
-	}
-	// Shadow must replay the exact query fold mode would run: the original
-	// request filters, folded in-query. Cloned before the Postgres expansion
-	// below mutates the elements — feeding already-expanded aliases into the
-	// fold would mask Postgres-ahead/map-lag divergence.
-	var shadowFilters []repo.AttributeMetricsFilter
-	if shadowFold {
-		shadowFilters = slices.Clone(filters)
-	}
-	if !foldIdentities {
-		filters = s.expandEmployeeEmailFilters(ctx, authCtx.ActiveOrganizationID, filters)
-	}
-
+	// Email filters and group-bys serve folded identities from the identity_map.
 	canonicalOrg := ""
-	if foldIdentities {
+	if queryTouchesEmail(groupBy, filters) {
 		canonicalOrg = authCtx.ActiveOrganizationID
 	}
 	// IncludeDimensionValues defaults to true only via HTTP decoding; in-process
@@ -247,14 +229,6 @@ func (s *Service) query(ctx context.Context, payload *telem_gen.QueryPayload, wi
 		return nil, oops.E(oops.CodeUnexpected, err, "error running analytics query")
 	}
 
-	// The skill-version path reads raw telemetry through its own builders;
-	// shadow only validates the aggregate fold it will actually replace.
-	if shadowFold && !useSkillVersions {
-		shadowParams := params
-		shadowParams.Filters = shadowFilters
-		s.shadowCompareCanonicalFold(ctx, authCtx.ActiveOrganizationID, shadowParams, tableRows)
-	}
-
 	return buildQueryResult(groupBy, interval, timeStart, timeEnd, topN, tableRows, tsRows), nil
 }
 
@@ -319,11 +293,11 @@ func (s *Service) QueryTumDetails(ctx context.Context, payload *telem_gen.QueryT
 		dayRows []repo.TumBreakdownDayBucket
 		dimRows = make([][]repo.TumBreakdownDimDayBucket, len(tumBreakdownDims))
 	)
-	// The email breakdown folds to canonical identities when the org is on
-	// the fold; every other dimension and all totals are unaffected.
+	// The email breakdown folds to canonical identities; every other
+	// dimension and all totals are unaffected.
 	canonicalOrg := ""
 	if authCtx, _ := contextvalues.GetAuthContext(ctx); authCtx != nil {
-		canonicalOrg = s.canonicalOrgFor(ctx, authCtx.ActiveOrganizationID)
+		canonicalOrg = authCtx.ActiveOrganizationID
 	}
 
 	eg, egCtx := errgroup.WithContext(ctx)
@@ -469,7 +443,7 @@ func (s *Service) ListSessions(ctx context.Context, payload *telem_gen.ListSessi
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -534,16 +508,8 @@ func (s *Service) ListSessions(ctx context.Context, payload *telem_gen.ListSessi
 		}
 		filters = append(filters, repo.AttributeMetricsFilter{Dimension: f.Dimension, Values: f.Values})
 	}
-	var foldIdentities bool
-	if queryTouchesEmail("", filters) {
-		foldIdentities, _ = s.canonicalIdentityMode(ctx, authCtx.ActiveOrganizationID)
-	}
-	if !foldIdentities {
-		filters = s.expandEmployeeEmailFilters(ctx, authCtx.ActiveOrganizationID, filters)
-	}
-
 	canonicalOrg := ""
-	if foldIdentities {
+	if queryTouchesEmail("", filters) {
 		canonicalOrg = authCtx.ActiveOrganizationID
 	}
 	params := repo.ListSessionsParams{
@@ -628,26 +594,30 @@ func (s *Service) ListSessions(ctx context.Context, payload *telem_gen.ListSessi
 }
 
 // chatReadableProjects returns the projects whose session rows the caller may
-// see. Evaluate rather than Require: an org reader without chat:read is the
+// see. Decide rather than Require: an org reader without chat:read is the
 // expected case, not a denial to record, and RBAC off keeps every project.
 func (s *Service) chatReadableProjects(ctx context.Context, orgID string, projectIDs []string) ([]string, error) {
 	// An organization-wide grant reads every project at once.
-	allowed, err := s.authz.Evaluate(ctx, authz.ChatReadCheck(orgID))
+	orgDecision, err := s.authz.Decide(authz.WithoutChallenges(ctx), authz.OrgChats(authz.OrgIDFrom(orgID)).Read())
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "evaluate chat read access")
 	}
-	if allowed {
+	if orgDecision.AllAllowed {
 		return projectIDs, nil
 	}
 
+	checks := make([]authz.Check, len(projectIDs))
+	for i, projectID := range projectIDs {
+		checks[i] = authz.Chats(authz.ProjectIDFrom(projectID)).Read()
+	}
+	decisions, err := s.authz.Decide(authz.WithoutChallenges(ctx), checks...)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "evaluate chat read access")
+	}
 	readable := make([]string, 0, len(projectIDs))
-	for _, projectID := range projectIDs {
-		allowed, err := s.authz.Evaluate(ctx, authz.ChatReadCheck(projectID))
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "evaluate chat read access")
-		}
-		if allowed {
-			readable = append(readable, projectID)
+	for i, decision := range decisions.Each {
+		if decision.Allowed {
+			readable = append(readable, projectIDs[i])
 		}
 	}
 	return readable, nil

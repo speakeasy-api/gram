@@ -2,6 +2,7 @@ package dialect
 
 import (
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/genaiconv"
 )
 
@@ -18,6 +19,7 @@ type SpanDialect interface {
 	// answer is not read from the record.
 	Provider(span *otelv1.InboundSpan) (key string, val string, err error)
 	Surface(span *otelv1.InboundSpan) (key string, val string, err error)
+	Identity(span *otelv1.InboundSpan) (key string, val aivendors.Identity, err error)
 
 	// What the record is, in agent vocabulary. Every answer names the
 	// attribute it came from; an empty key means the producer did not say.

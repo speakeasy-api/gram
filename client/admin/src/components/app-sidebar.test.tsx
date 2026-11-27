@@ -227,10 +227,21 @@ describe("AppSidebar", () => {
           { label: "Signup offers", href: "/signup-offers" },
           { label: "Steps", href: "/onboarding-steps" },
           { label: "Use Cases & Playbooks", href: "/onboarding-playbooks" },
+          { label: "Hooks rollout", href: "/hooks-rollout" },
           { label: "Remote Session Issuers", href: "/remote-session-issuers" },
+          { label: "Assistants", href: "/assistants" },
           {
             label: "Upstream OAuth migration",
             href: "/upstream-oauth-migration",
+          },
+          {
+            label: "Tailscale OAuth migration",
+            href: "/tailscale-oauth-migration",
+          },
+          { label: "Secret backfills", href: "/secret-backfills" },
+          {
+            label: "Encryption transitions",
+            href: "/encryption-transitions",
           },
           { label: "Platform credentials", href: "/platform-credentials" },
           { label: "Custom domains", href: "/custom-domains" },

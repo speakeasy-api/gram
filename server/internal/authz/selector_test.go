@@ -1,63 +1,51 @@
 package authz
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
+	"log/slog"
+	"maps"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
-func TestSelector_Matches_wildcardGrantMatchesAnything(t *testing.T) {
-	t.Parallel()
-
-	grant := Selector{"resource_id": "*"}
-	require.True(t, grant.Matches(Selector{"resource_id": "proj_123"}))
-	require.True(t, grant.Matches(Selector{"resource_id": "anything"}))
-	require.True(t, grant.Matches(Selector{"resource_id": "*"}))
-}
-
-func TestSelector_Matches_emptyGrantMatchesAnything(t *testing.T) {
-	t.Parallel()
-
-	// Defensive: empty selector still matches (no keys to fail on).
-	grant := Selector{}
-	require.True(t, grant.Matches(Selector{"resource_id": "proj_123"}))
-	require.True(t, grant.Matches(Selector{}))
-}
-
-func TestSelector_Matches_exactKeyMatch(t *testing.T) {
+// A grant key the check does not carry never matches: absence is not
+// permission.
+func TestSelector_StrictMatches_missingKeyNeverMatches(t *testing.T) {
 	t.Parallel()
 
 	grant := Selector{"resource_id": "proj_123"}
-	require.True(t, grant.Matches(Selector{"resource_id": "proj_123"}))
-	require.False(t, grant.Matches(Selector{"resource_id": "proj_456"}))
+	require.False(t, grant.StrictMatches(Selector{}))
+	require.False(t, grant.StrictMatches(Selector{"other_key": "proj_123"}))
 }
 
-func TestSelector_Matches_grantKeyMissingInCheckSkipped(t *testing.T) {
+// A scope the registry does not declare, such as a retired one still stored
+// in an old policy, keeps the kind its prefix has always meant. Declared
+// scopes are pinned by the generated tables and the decision snapshot.
+func TestResourceKindForScope_undeclaredScopesFallBackToTheirPrefix(t *testing.T) {
 	t.Parallel()
 
-	// When a key exists in the grant but not in the check, it's skipped —
-	// the check isn't constraining that dimension.
-	grant := Selector{"resource_id": "proj_123"}
-	require.True(t, grant.Matches(Selector{}))
-	require.True(t, grant.Matches(Selector{"other_key": "proj_123"}))
-}
-
-func TestSelector_Matches_multipleKeys(t *testing.T) {
-	t.Parallel()
-
-	grant := Selector{"resource_id": "proj_123", "tool_id": "tool_abc"}
-	require.True(t, grant.Matches(Selector{"resource_id": "proj_123", "tool_id": "tool_abc"}))
-	require.False(t, grant.Matches(Selector{"resource_id": "proj_123", "tool_id": "tool_xyz"}))
-	// Check without tool_id — not constraining that dimension, so grant matches.
-	require.True(t, grant.Matches(Selector{"resource_id": "proj_123"}))
-}
-
-func TestSelector_Matches_nilGrantMatchesAnything(t *testing.T) {
-	t.Parallel()
-
-	var grant Selector
-	require.True(t, grant.Matches(Selector{"resource_id": "proj_123"}))
+	for _, tc := range []struct {
+		scope Scope
+		want  string
+	}{
+		{"plugin:retired", ResourceKindProject},
+		{"log:retired", ResourceKindProject},
+		{"remote-mcp:read", ResourceKindMCP},
+		{"skill:retired", ResourceKindSkill},
+		{"mcp_auth_client:x", ResourceKindWildcard},
+		{"unknown:read", ResourceKindWildcard},
+	} {
+		t.Run(string(tc.scope), func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, ResourceKindForScope(tc.scope))
+		})
+	}
 }
 
 func TestSelector_ResourceID_present(t *testing.T) {
@@ -195,82 +183,6 @@ func TestSelector_UnmarshalJSON(t *testing.T) {
 	require.Equal(t, "t1", s["tool_id"])
 }
 
-func TestResourceKindForScope_buildScopes(t *testing.T) {
-	t.Parallel()
-
-	require.Equal(t, "project", ResourceKindForScope(ScopeProjectRead))
-	require.Equal(t, "project", ResourceKindForScope(ScopeProjectBlockedRead))
-	require.Equal(t, "project", ResourceKindForScope(ScopeProjectWrite))
-	require.Equal(t, "project", ResourceKindForScope(ScopeProjectBlockedWrite))
-}
-
-func TestResourceKindForScope_mcpScopes(t *testing.T) {
-	t.Parallel()
-
-	require.Equal(t, "mcp", ResourceKindForScope(ScopeMCPRead))
-	require.Equal(t, "mcp", ResourceKindForScope(ScopeMCPBlockedRead))
-	require.Equal(t, "mcp", ResourceKindForScope(ScopeMCPWrite))
-	require.Equal(t, "mcp", ResourceKindForScope(ScopeMCPBlockedWrite))
-	require.Equal(t, "mcp", ResourceKindForScope(ScopeMCPConnect))
-	require.Equal(t, "mcp", ResourceKindForScope(ScopeMCPBlockedConnect))
-}
-
-func TestResourceKindForScope_remoteMCPScopes(t *testing.T) {
-	t.Parallel()
-
-	require.Equal(t, "mcp", ResourceKindForScope(Scope("remote-mcp:read")))
-	require.Equal(t, "mcp", ResourceKindForScope(Scope("remote-mcp:write")))
-	require.Equal(t, "mcp", ResourceKindForScope(Scope("remote-mcp:connect")))
-}
-
-func TestResourceKindForScope_orgScopes(t *testing.T) {
-	t.Parallel()
-
-	require.Equal(t, "org", ResourceKindForScope(ScopeOrgRead))
-	require.Equal(t, "org", ResourceKindForScope(ScopeOrgBlockedRead))
-	require.Equal(t, "org", ResourceKindForScope(ScopeOrgAdmin))
-	require.Equal(t, "org", ResourceKindForScope(ScopeOrgBlockedAdmin))
-}
-
-func TestResourceKindForScope_rootScope(t *testing.T) {
-	t.Parallel()
-
-	require.Equal(t, "*", ResourceKindForScope(ScopeRoot))
-}
-
-func TestResourceKindForScope_riskPolicyScope(t *testing.T) {
-	t.Parallel()
-
-	require.Equal(t, ResourceKindRiskPolicy, ResourceKindForScope(ScopeRiskPolicyEvaluate))
-	require.Equal(t, ResourceKindRiskPolicy, ResourceKindForScope(ScopeRiskPolicyBypass))
-}
-
-func TestResourceKindForScope_environmentScopes(t *testing.T) {
-	t.Parallel()
-
-	require.Equal(t, ResourceKindEnvironment, ResourceKindForScope(ScopeEnvironmentRead))
-	require.Equal(t, ResourceKindEnvironment, ResourceKindForScope(ScopeEnvironmentBlockedRead))
-	require.Equal(t, ResourceKindEnvironment, ResourceKindForScope(ScopeEnvironmentWrite))
-	require.Equal(t, ResourceKindEnvironment, ResourceKindForScope(ScopeEnvironmentBlockedWrite))
-}
-
-func TestResourceKindForScope_skillScopes(t *testing.T) {
-	t.Parallel()
-
-	require.Equal(t, ResourceKindSkill, ResourceKindForScope(ScopeSkillRead))
-	require.Equal(t, ResourceKindSkill, ResourceKindForScope(ScopeSkillBlockedRead))
-	require.Equal(t, ResourceKindSkill, ResourceKindForScope(ScopeSkillWrite))
-	require.Equal(t, ResourceKindSkill, ResourceKindForScope(ScopeSkillBlockedWrite))
-}
-
-func TestResourceKindForScope_agentScopes(t *testing.T) {
-	t.Parallel()
-
-	for _, scope := range []Scope{ScopeAgentRead, ScopeAgentWrite, ScopeAgentAuthorize, ScopeAgentTransfer} {
-		require.Equal(t, ResourceKindAgent, ResourceKindForScope(scope))
-	}
-}
-
 func TestValidateSelector_agentRequiresAgentResourceKind(t *testing.T) {
 	t.Parallel()
 
@@ -282,15 +194,6 @@ func TestValidateSelector_agentRequiresAgentResourceKind(t *testing.T) {
 		SelectorKeyResourceKind: ResourceKindProject,
 		SelectorKeyResourceID:   "0196cbd1-9328-74e7-b7bb-6e5357565573",
 	}), `requires resource_kind="agent"`)
-}
-
-func TestResourceKindForScope_assistantScopes(t *testing.T) {
-	t.Parallel()
-
-	require.Equal(t, ResourceKindAssistant, ResourceKindForScope(ScopeAssistantRead))
-	require.Equal(t, ResourceKindAssistant, ResourceKindForScope(ScopeAssistantBlockedRead))
-	require.Equal(t, ResourceKindAssistant, ResourceKindForScope(ScopeAssistantWrite))
-	require.Equal(t, ResourceKindAssistant, ResourceKindForScope(ScopeAssistantBlockedWrite))
 }
 
 func TestValidateSelector_assistantUsesProjectIDWithAssistantResourceKind(t *testing.T) {
@@ -338,68 +241,6 @@ func TestNewGrant_combinesScopeAndSelector(t *testing.T) {
 	g := NewGrant(ScopeMCPConnect, "tool_a")
 	require.Equal(t, ScopeMCPConnect, g.Scope)
 	require.Equal(t, Selector{"resource_kind": "mcp", "resource_id": "tool_a"}, g.Selector)
-}
-
-func TestSelector_Matches_resourceKindMismatchFails(t *testing.T) {
-	t.Parallel()
-
-	grant := Selector{"resource_kind": "project", "resource_id": "proj_123"}
-	require.False(t, grant.Matches(Selector{"resource_kind": "mcp", "resource_id": "proj_123"}))
-}
-
-func TestSelector_Matches_resourceKindWildcardMatchesAny(t *testing.T) {
-	t.Parallel()
-
-	grant := Selector{"resource_kind": "*", "resource_id": "*"}
-	require.True(t, grant.Matches(Selector{"resource_kind": "project", "resource_id": "proj_123"}))
-	require.True(t, grant.Matches(Selector{"resource_kind": "mcp", "resource_id": "tool_a"}))
-}
-
-func TestSelector_Matches_dispositionGrantMatchesConnectionCheck(t *testing.T) {
-	t.Parallel()
-
-	// A disposition-scoped grant matches a connection-level check that
-	// doesn't specify disposition (check isn't constraining that dimension).
-	grant := Selector{"resource_kind": "mcp", "resource_id": "*", "disposition": "read_only"}
-	check := Selector{"resource_kind": "mcp", "resource_id": "toolsetA"}
-	require.True(t, grant.Matches(check))
-}
-
-func TestSelector_Matches_projectScopedGrantMatchesSameProject(t *testing.T) {
-	t.Parallel()
-
-	// A project-scoped MCP grant matches any server in that project.
-	grant := Selector{"resource_kind": "mcp", "resource_id": "*", "project_id": "proj_123"}
-	check := Selector{"resource_kind": "mcp", "resource_id": "server_456", "project_id": "proj_123"}
-	require.True(t, grant.Matches(check))
-}
-
-func TestSelector_Matches_projectScopedGrantDeniesDifferentProject(t *testing.T) {
-	t.Parallel()
-
-	grant := Selector{"resource_kind": "mcp", "resource_id": "*", "project_id": "proj_123"}
-	check := Selector{"resource_kind": "mcp", "resource_id": "server_456", "project_id": "proj_789"}
-	require.False(t, grant.Matches(check))
-}
-
-func TestSelector_Matches_projectScopedGrantMatchesConnectionWithoutProjectID(t *testing.T) {
-	t.Parallel()
-
-	// A project-scoped grant still matches checks that don't carry project_id
-	// (dimension skipped), matching the disposition behavior.
-	grant := Selector{"resource_kind": "mcp", "resource_id": "*", "project_id": "proj_123"}
-	check := Selector{"resource_kind": "mcp", "resource_id": "server_456"}
-	require.True(t, grant.Matches(check))
-}
-
-func TestSelector_Matches_serverGrantStillMatchesWithProjectDimension(t *testing.T) {
-	t.Parallel()
-
-	// Existing server-level grants remain backward-compatible when checks
-	// carry the new project_id dimension.
-	grant := Selector{"resource_kind": "mcp", "resource_id": "server_456"}
-	check := Selector{"resource_kind": "mcp", "resource_id": "server_456", "project_id": "proj_123"}
-	require.True(t, grant.Matches(check))
 }
 
 func TestValidateSelector_mcpProjectIDAllowed(t *testing.T) {
@@ -457,33 +298,17 @@ func TestSelector_Matches_riskPolicyServerURL(t *testing.T) {
 	t.Parallel()
 
 	grant := Selector{"resource_kind": "risk_policy", "resource_id": "policy_123", "server_url": "https://api.example.com"}
-	require.True(t, grant.Matches(Selector{"resource_kind": "risk_policy", "resource_id": "policy_123", "server_url": "https://api.example.com"}))
-	require.False(t, grant.Matches(Selector{"resource_kind": "risk_policy", "resource_id": "policy_123", "server_url": "https://api.other.com"}))
+	require.True(t, grant.StrictMatches(Selector{"resource_kind": "risk_policy", "resource_id": "policy_123", "server_url": "https://api.example.com"}))
+	require.False(t, grant.StrictMatches(Selector{"resource_kind": "risk_policy", "resource_id": "policy_123", "server_url": "https://api.other.com"}))
 }
 
 func TestMCPCheck_injectsProjectID(t *testing.T) {
 	t.Parallel()
 
-	check := MCPCheck(ScopeMCPRead, "server_456", "proj_123")
+	check := MCPServer(MCPServerIDFrom("server_456"), ProjectIDFrom("proj_123")).Read()
 	require.Equal(t, ScopeMCPRead, check.Scope)
 	require.Equal(t, "server_456", check.ResourceID)
 	require.Equal(t, "proj_123", check.Dimensions[SelectorKeyProjectID])
-}
-
-func TestMCPCheck_emptyProjectIDOmitsDimension(t *testing.T) {
-	t.Parallel()
-
-	check := MCPCheck(ScopeMCPRead, "server_456", "")
-	require.Nil(t, check.Dimensions)
-}
-
-func TestSelector_Matches_dispositionGrantDeniesWrongDisposition(t *testing.T) {
-	t.Parallel()
-
-	// When the check specifies a disposition, it must match the grant's.
-	grant := Selector{"resource_kind": "mcp", "resource_id": "*", "disposition": "read_only"}
-	require.True(t, grant.Matches(Selector{"resource_kind": "mcp", "resource_id": "toolsetA", "disposition": "read_only"}))
-	require.False(t, grant.Matches(Selector{"resource_kind": "mcp", "resource_id": "toolsetA", "disposition": "destructive"}))
 }
 
 func TestValidateSelector_ProjectBoundsHooksIngestOnly(t *testing.T) {
@@ -507,7 +332,274 @@ func TestHooksIngestCheck_MatchesOnlyItsProjectBound(t *testing.T) {
 	bounded := []Grant{NewGrantWithSelector(ScopeOrgHooksIngest, selector)}
 	unbounded := []Grant{NewGrant(ScopeOrgHooksIngest, "org-123")}
 
-	require.True(t, GrantsSatisfy(bounded, HooksIngestCheck("org-123", "project-1")))
-	require.False(t, GrantsSatisfy(bounded, HooksIngestCheck("org-123", "project-2")))
-	require.True(t, GrantsSatisfy(unbounded, HooksIngestCheck("org-123", "project-2")), "a grant naming no project covers every project")
+	require.True(t, GrantsSatisfy(bounded, Org(OrgIDFrom("org-123")).HooksIngest(ProjectIDFrom("project-1"))))
+	require.False(t, GrantsSatisfy(bounded, Org(OrgIDFrom("org-123")).HooksIngest(ProjectIDFrom("project-2"))))
+	require.True(t, GrantsSatisfy(unbounded, Org(OrgIDFrom("org-123")).HooksIngest(ProjectIDFrom("project-2"))), "a grant naming no project covers every project")
+}
+
+func TestGrantsContainSelectorWildcards(t *testing.T) {
+	t.Parallel()
+	broad := NewGrant(ScopeMCPConnect, "*")
+	candidate := NewSelector(ScopeMCPConnect, "*")
+	require.True(t, GrantsContainSelector([]Grant{broad}, ScopeMCPConnect, candidate))
+	require.False(t, GrantsContainSelector([]Grant{NewGrant(ScopeMCPConnect, "one-server")}, ScopeMCPConnect, candidate))
+	require.False(t, GrantsContainSelector([]Grant{NewGrant(ScopeMCPWrite, "*")}, ScopeMCPConnect, candidate), "mcp:write does not contain mcp:connect")
+	broad.Selector[SelectorKeyTool] = "allowed-tool"
+	require.False(t, GrantsContainSelector([]Grant{broad}, ScopeMCPConnect, candidate))
+	candidate[SelectorKeyTool] = "allowed-tool"
+	require.True(t, GrantsContainSelector([]Grant{broad}, ScopeMCPConnect, candidate))
+	candidate[SelectorKeyTool] = "other-tool"
+	require.False(t, GrantsContainSelector([]Grant{broad}, ScopeMCPConnect, candidate))
+	// Delegation support must not relax runtime's concrete-resource requirement.
+	_, err := GrantsAuthorize([]Grant{broad}, mcpCheck(ScopeMCPConnect, "*", "example-project"))
+	require.ErrorIs(t, err, ErrInvalidCheck)
+}
+
+// A tool or disposition limit is saved on connect rules and connect blocks
+// only. Viewing or managing a server names no tool.
+func TestValidateSelector_LimitsAreForConnectOnly(t *testing.T) {
+	t.Parallel()
+
+	limits := map[string]string{SelectorKeyTool: "search", SelectorKeyDisposition: DispositionReadOnly}
+	for key, value := range limits {
+		for _, scope := range []Scope{ScopeMCPConnect, ScopeMCPBlockedConnect} {
+			t.Run(fmt.Sprintf("%s limited by %s is allowed", scope, key), func(t *testing.T) {
+				t.Parallel()
+				require.NoError(t, ValidateSelector(scope, limitedSelector(scope, key, value)))
+			})
+		}
+		for _, scope := range []Scope{ScopeMCPRead, ScopeMCPWrite, ScopeMCPBlockedRead, ScopeMCPBlockedWrite} {
+			t.Run(fmt.Sprintf("%s limited by %s is refused", scope, key), func(t *testing.T) {
+				t.Parallel()
+				require.ErrorContains(t, ValidateSelector(scope, limitedSelector(scope, key, value)), "is not allowed for scope")
+			})
+		}
+	}
+}
+
+// TestOpenKeys_Golden lists every grant key a check may leave out, by scope and
+// kind of check. Opening a key loosens matching for every check of that kind,
+// so a change to the registry's Open lists must change this list too, where a
+// reviewer sees it.
+func TestOpenKeys_Golden(t *testing.T) {
+	t.Parallel()
+
+	// No project_id: a type's parent key is never opened. org:hooks_ingest
+	// declares project_id itself, and org has no parent.
+	project := []string{SelectorKeyProjectID}
+	server := []string{SelectorKeyServerURL, SelectorKeyServerIdentity}
+	// A list of entries, not a map literal, so the list names only the
+	// scopes that open a key.
+	entries := []struct {
+		scope Scope
+		keys  openKeys
+	}{
+		{ScopeOrgHooksIngest, openKeys{Probe: project, Connection: nil}},
+		{ScopeRiskPolicyBlock, openKeys{Probe: server, Connection: nil}},
+		{ScopeRiskPolicyBypass, openKeys{Probe: server, Connection: nil}},
+		{ScopeMCPConnect, openKeys{
+			Probe:      []string{SelectorKeyTool, SelectorKeyDisposition},
+			Connection: []string{SelectorKeyTool, SelectorKeyDisposition},
+		}},
+	}
+	want := make(map[Scope]openKeys, len(entries))
+	for _, e := range entries {
+		want[e.scope] = e.keys
+	}
+	require.Equal(t, want, scopeOpenKeys)
+}
+
+// Auth clients, blocks and root open nothing: every check on them carries
+// every key a grant names, probes included.
+func TestOpenKeys_NoneOnAuthClientsBlocksOrRoot(t *testing.T) {
+	t.Parallel()
+
+	require.NotContains(t, scopeOpenKeys, ScopeMCPAuth)
+	require.NotContains(t, scopeOpenKeys, ScopeRoot)
+	for scope, exclusion := range scopeExclusions {
+		if exclusion == "" || exclusion == ScopeRiskPolicyBypass {
+			continue
+		}
+		require.NotContains(t, scopeOpenKeys, exclusion, "block of %s", scope)
+	}
+}
+
+// An exact check opens nothing, even a probe of a scope that opens keys.
+func TestOpenKeys_ExactCheckOpensNothing(t *testing.T) {
+	t.Parallel()
+
+	probe := Check{Scope: ScopeMCPConnect, ResourceKind: "", ResourceID: "server-1", Dimensions: nil, exact: false, representedUser: "", probe: true, group: nil, operation: operationDefault}
+	require.True(t, probe.mayOmit(SelectorKeyTool))
+	require.False(t, probe.mayOmit(SelectorKeyProjectID))
+	probe.exact = true
+	require.False(t, probe.mayOmit(SelectorKeyTool))
+}
+
+func TestDispositionFromHints(t *testing.T) {
+	t.Parallel()
+
+	yes, no := new(bool), new(bool)
+	*yes = true
+
+	for name, tc := range map[string]struct {
+		readOnly, destructive, idempotent, openWorld *bool
+		want                                         string
+		conflicting                                  bool
+	}{
+		"no annotations":            {nil, nil, nil, nil, DispositionUnannotated, false},
+		"every hint false":          {no, no, no, no, DispositionUnannotated, false},
+		"read-only":                 {yes, no, no, no, DispositionReadOnly, false},
+		"destructive":               {nil, yes, nil, nil, DispositionDestructive, false},
+		"read-only and destructive": {yes, yes, nil, nil, DispositionDestructive, true},
+		"read-only and idempotent":  {yes, nil, yes, nil, DispositionReadOnly, false},
+		"idempotent":                {nil, no, yes, yes, DispositionIdempotent, false},
+		"open-world":                {nil, nil, nil, yes, DispositionOpenWorld, false},
+	} {
+		got, conflicting := DispositionFromHints(tc.readOnly, tc.destructive, tc.idempotent, tc.openWorld)
+		require.Equal(t, tc.want, got, name)
+		require.Equal(t, tc.conflicting, conflicting, name)
+	}
+}
+
+// A grant key the check does not carry never matches, except where the
+// constructor says the omission is meant: a connection, which names no tool,
+// and a probe.
+func TestMatching_MissingKeyNeverMatches(t *testing.T) {
+	t.Parallel()
+
+	server := uuid.New()
+	project := uuid.New()
+	grants := searchOnlyConnect(server)
+	ref := MCPServer(MCPServerIDOf(server), ProjectIDOf(project))
+
+	for name, check := range map[string]Check{
+		"generated connection":   ref.Connect(),
+		"constructed connection": mcpCheck(ScopeMCPConnect, server.String(), project.String()),
+		"probe of a tool call":   ref.ToolCall("", DispositionReadOnly).Probe(),
+	} {
+		allowed, err := GrantsAuthorize(grants, check)
+		require.NoError(t, err, name)
+		require.True(t, allowed, name)
+	}
+
+	for name, check := range map[string]Check{
+		"tool call without a tool": ref.ToolCall("", DispositionReadOnly),
+		"connect check not built as a connection": {
+			Scope: ScopeMCPConnect, ResourceKind: "", ResourceID: server.String(),
+			Dimensions: map[string]string{SelectorKeyProjectID: project.String()},
+		},
+		"connection matched exactly": func() Check { c := ref.Connect(); c.exact = true; return c }(),
+	} {
+		allowed, err := GrantsAuthorize(grants, check)
+		require.NoError(t, err, name)
+		require.False(t, allowed, name)
+	}
+}
+
+// Only the connect permission has connections.
+func TestMatching_OmissionStampsBelongToTheirPermission(t *testing.T) {
+	t.Parallel()
+
+	read := MCPServer(MCPServerIDFrom("server-1"), ProjectIDFrom("project-1")).Read()
+	require.NoError(t, validateInput(read))
+	require.ErrorIs(t, validateInput(read.asConnection()), ErrInvalidCheck)
+}
+
+// A policy's audience is the same on every server, so an evaluate grant
+// cannot name one. A bypass limited to one server exempts only requests to
+// that server.
+func TestMatching_RiskPolicyAudienceHasNoServerLimit(t *testing.T) {
+	t.Parallel()
+
+	audience := NewSelector(ScopeRiskPolicyEvaluate, "policy-1")
+	for key, value := range map[string]string{SelectorKeyServerURL: "https://one.example.com", SelectorKeyServerIdentity: "one"} {
+		limited := maps.Clone(audience)
+		limited[key] = value
+		require.ErrorContains(t, ValidateSelector(ScopeRiskPolicyEvaluate, limited), "not allowed", key)
+	}
+	bypass := NewSelector(ScopeRiskPolicyBypass, "policy-1")
+	bypass[SelectorKeyServerURL] = "https://one.example.com"
+	grants := []Grant{NewGrantWithSelector(ScopeRiskPolicyEvaluate, audience), NewGrantWithSelector(ScopeRiskPolicyBypass, bypass)}
+
+	application, err := EvaluateRiskPolicy(grants, "policy-1", RiskPolicyDimensions{ServerURL: "https://two.example.com", ServerIdentity: ""})
+	require.NoError(t, err)
+	require.Equal(t, RiskPolicyGoverns, application)
+
+	application, err = EvaluateRiskPolicy(grants, "policy-1", RiskPolicyDimensions{ServerURL: "", ServerIdentity: ""})
+	require.NoError(t, err)
+	require.Equal(t, RiskPolicyGoverns, application)
+
+	application, err = EvaluateRiskPolicy(grants, "policy-1", RiskPolicyDimensions{ServerURL: "https://one.example.com", ServerIdentity: ""})
+	require.NoError(t, err)
+	require.Equal(t, RiskPolicyExempt, application)
+}
+
+// A refusal caused only by a key the check does not carry is logged with the
+// key, so a call site that should carry it shows up. Other refusals, and
+// allowed checks, log nothing.
+func TestMatching_MissingKeyRefusalIsLogged(t *testing.T) {
+	t.Parallel()
+
+	server := uuid.New()
+	project := uuid.New()
+	ref := MCPServer(MCPServerIDOf(server), ProjectIDOf(project))
+
+	var logs bytes.Buffer
+	engine := NewEngine(slog.New(slog.NewTextHandler(&logs, nil)), nil, staticChallengeLogging(false), workos.NewStubClient())
+	ctx := GrantsToContext(enterpriseSessionCtx(t), searchOnlyConnect(server))
+
+	requireForbidden(t, engine.Require(ctx, ref.ToolCall("", DispositionReadOnly)))
+	require.Contains(t, logs.String(), missingKeyLog)
+	require.Contains(t, logs.String(), SelectorKeyTool)
+
+	logs.Reset()
+	requireForbidden(t, engine.Require(ctx, Either(ref.ToolCall("", DispositionReadOnly))))
+	require.Contains(t, logs.String(), missingKeyLog)
+
+	logs.Reset()
+	require.NoError(t, engine.Require(ctx, ref.Connect()))
+	require.NoError(t, engine.Require(ctx, ref.ToolCall("search", DispositionReadOnly)))
+	requireForbidden(t, engine.Require(ctx, ref.ToolCall("delete_all", DispositionDestructive)))
+	require.NotContains(t, logs.String(), missingKeyLog)
+}
+
+// Only a policy that refuses the check explains the refusal: a missing key on
+// a grant in a policy that allows the check is not why it was refused.
+func TestMatching_MissingKeysComeFromRefusingPolicies(t *testing.T) {
+	t.Parallel()
+
+	server := uuid.New()
+	project := uuid.New()
+	call := MCPServer(MCPServerIDOf(server), ProjectIDOf(project)).ToolCall("", DispositionReadOnly)
+	otherServer := []Grant{NewGrant(ScopeMCPConnect, uuid.NewString())}
+	allowing := append([]Grant{NewGrant(ScopeMCPConnect, server.String())}, searchOnlyConnect(server)...)
+
+	refusedElsewhere := grantAuthorization{policies: [][]Grant{otherServer, allowing}, representedUser: "", representedPolicies: nil, legacyAuthCeiling: false}
+	require.Empty(t, refusedElsewhere.keysMissingFrom(call))
+
+	refusedForTheKey := grantAuthorization{policies: [][]Grant{searchOnlyConnect(server), allowing}, representedUser: "", representedPolicies: nil, legacyAuthCeiling: false}
+	require.Equal(t, []string{SelectorKeyTool}, refusedForTheKey.keysMissingFrom(call))
+}
+
+func limitedSelector(scope Scope, key, value string) Selector {
+	selector := NewSelector(scope, "server-one")
+	selector[key] = value
+	return selector
+}
+
+const missingKeyLog = "authz check refused: a grant names a key the check does not carry"
+
+// searchOnlyConnect is a connect grant on server limited to the search tool.
+func searchOnlyConnect(server uuid.UUID) []Grant {
+	selector := NewSelector(ScopeMCPConnect, server.String())
+	selector[SelectorKeyTool] = "search"
+	return []Grant{NewGrantWithSelector(ScopeMCPConnect, selector)}
+}
+
+func TestValidateSelector_refusesNilResourceID(t *testing.T) {
+	t.Parallel()
+
+	require.ErrorContains(t, ValidateSelector(ScopeProjectRead, NewSelector(ScopeProjectRead, "00000000-0000-0000-0000-000000000000")), "nil UUID")
+	require.ErrorContains(t, ValidateSelector(ScopeMCPConnect, NewSelector(ScopeMCPConnect, "00000000-0000-0000-0000-000000000000")), "nil UUID")
+	require.NoError(t, ValidateSelector(ScopeProjectRead, NewSelector(ScopeProjectRead, WildcardResource)))
 }

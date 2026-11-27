@@ -12,7 +12,9 @@ const {
   revokeSessionMutate,
   batchBadgesMutate,
   listAgents,
+  healthFlag,
 } = vi.hoisted(() => ({
+  healthFlag: { value: "off" as "pending" | "on" | "off" },
   useUserSessionClientsInfinite: vi.fn(),
   useUserSessionsInfinite: vi.fn(),
   invalidateAllUserSessionClients: vi.fn(),
@@ -20,6 +22,24 @@ const {
   batchBadgesMutate: vi.fn(),
   listAgents: vi.fn(),
 }));
+
+vi.mock("@/pages/mcp-sessions/connection-health/flag", () => ({
+  useConnectionHealthFlag: () => healthFlag.value,
+}));
+
+vi.mock(
+  "@/pages/mcp-sessions/connection-health/ServerConnectionHealth",
+  async (importOriginal) => ({
+    ...(await importOriginal<object>()),
+    ServerConnectionHealth: ({
+      providerId,
+      serverId,
+    }: {
+      providerId: string;
+      serverId: string;
+    }) => <div data-testid="server-health">{`${providerId}:${serverId}`}</div>,
+  }),
+);
 
 vi.mock("@gram/client/react-query/userSessionClients.js", () => ({
   useUserSessionClientsInfinite: (...args: unknown[]) =>
@@ -224,12 +244,44 @@ describe("ClientsAndSessionsTab", () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
+    healthFlag.value = "off";
   });
+
+  it("shows connection health for the server when the flag is on", () => {
+    healthFlag.value = "on";
+    renderTab(
+      <ClientsAndSessionsTab
+        issuerId="issuer-1"
+        originatingMcpServerId="srv-1"
+      />,
+    );
+
+    expect(screen.getByTestId("server-health").textContent).toBe(
+      "issuer-1:srv-1",
+    );
+    expect(useUserSessionsInfinite).not.toHaveBeenCalled();
+  });
+
+  it.each(["off", "pending"] as const)(
+    "lists sessions without connection health when the flag is %s",
+    (value) => {
+      healthFlag.value = value;
+      renderTab(
+        <ClientsAndSessionsTab
+          issuerId="issuer-1"
+          originatingMcpServerId="srv-1"
+        />,
+      );
+
+      expect(screen.queryByTestId("server-health")).toBeNull();
+      expect(useUserSessionsInfinite).toHaveBeenCalled();
+    },
+  );
 
   it("explains why there is nothing to show when no issuer is attached", () => {
     renderTab(<ClientsAndSessionsTab issuerId={undefined} />);
 
-    expect(screen.getByText(/has no session issuer/i)).toBeDefined();
+    expect(screen.getByText(/Turn on sign-in/i)).toBeDefined();
     // Without an issuer to scope to, the listing endpoints would fall back to
     // the whole project, so both queries have to be disabled rather than
     // merely unrendered.

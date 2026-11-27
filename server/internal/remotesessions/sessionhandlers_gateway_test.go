@@ -19,6 +19,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
+	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -96,11 +98,35 @@ func TestListRemoteSessions_GatewayLoginOrder(t *testing.T) {
 				RemoteSessionIssuerID: env.issuerID, ClientID: "listing-client", TokenEndpointAuthMethod: conv.ToPGText("none"),
 			})
 			require.NoError(t, err)
-			for _, issuer := range []uuid.UUID{memberIssuer, gatewayIssuer} {
-				require.NoError(t, env.q.AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-					RemoteSessionClientID: client.ID, UserSessionIssuerID: issuer,
-				}))
+
+			// The proxied member offers this registration independently of the
+			// issuer links used later for the listing and attachment assertions.
+			associated, err := upstreamclientsrepo.New(env.db).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{
+				OrganizationID: env.organizationID, ProjectID: env.projectID, McpServerID: env.mcpServerID.UUID, RemoteSessionClientID: client.ID,
+			})
+			require.NoError(t, err)
+			require.EqualValues(t, 1, associated)
+			offers := authclientbackfill.New(env.db)
+			authClientID, err := offers.CreateAuthClient(ctx, authclientbackfill.CreateAuthClientParams{
+				ID: uuid.New(), OrganizationID: env.organizationID, ProjectID: clientProject, ClientType: "remote_session",
+				Name: "Listing client", RemoteSessionClientID: client.ID,
+			})
+			require.NoError(t, err)
+			require.NoError(t, offers.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{
+				ProjectID: env.projectID, OrganizationID: env.organizationID, McpServerID: env.mcpServerID.UUID, AuthClientID: authClientID, Source: "admin",
+			}))
+			authorization := &remotesessions.TypedAuthorization{
+				OrganizationID: env.organizationID, ProjectID: env.projectID, ServerID: env.mcpServerID.UUID,
+				AuthClientID: authClientID, RemoteSessionClientID: client.ID, Subject: subject,
 			}
+			// This package exercises the callback's grant write, not the MCP
+			// service's subject admission. The transaction still locks the offer.
+			env.mgr.SetTypedAuthorizationValidator(func(_ context.Context, state remotesessions.RemoteLoginState) error {
+				if state.TypedAuthorization == nil || *state.TypedAuthorization != *authorization {
+					return remotesessions.ErrTypedAuthorizationChanged
+				}
+				return nil
+			})
 
 			authorizer := agentmanagement.NewAuthorizer(bindingOwnerOnlyEngine{})
 			env.service.SetBindingAuthorizer(func(ctx context.Context, tx pgx.Tx, id uuid.UUID, _ bool) error {
@@ -136,7 +162,7 @@ func TestListRemoteSessions_GatewayLoginOrder(t *testing.T) {
 				}
 				require.Equal(t, client.ID, loginClient.ID)
 				parent := remotesessions.ParentChallenge{
-					ID: uuid.NewString(), ProjectID: env.projectID, OrganizationID: env.organizationID,
+					TypedAuthorization: authorization, ID: uuid.NewString(), ProjectID: env.projectID, OrganizationID: env.organizationID,
 					UserSessionIssuerID: issuer, Subject: &subject, McpSlug: "listing-server",
 					McpServerID: env.mcpServerID, Resource: resource,
 				}
@@ -178,17 +204,15 @@ func TestListRemoteSessions_GatewayLoginOrder(t *testing.T) {
 				require.NoError(t, err)
 				require.EqualValues(t, 1, count.Subjects)
 
+				// The client is bound to both issuers, so the connection made
+				// through either one can be attached on both.
 				for _, target := range issuers {
 					eligible, err := env.service.ListRemoteSessions(ctx, &gen.ListRemoteSessionsPayload{
 						PrincipalID: new(agent.ID.String()), UserSessionIssuerID: new(target.String()),
 					})
 					require.NoError(t, err)
-					if target == issuers[0] {
-						require.Len(t, eligible.Items, 1)
-						require.Equal(t, sessionID.String(), eligible.Items[0].ID)
-					} else {
-						require.Empty(t, eligible.Items, "a shared client does not authorize cross-issuer attachment")
-					}
+					require.Len(t, eligible.Items, 1, "a client bound to both issuers makes its connection attachable on each")
+					require.Equal(t, sessionID.String(), eligible.Items[0].ID)
 				}
 			}
 

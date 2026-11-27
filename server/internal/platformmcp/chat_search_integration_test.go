@@ -52,6 +52,13 @@ func (f chatSearchFixture) search(query string) SearchChatsInput {
 	return SearchChatsInput{ProjectID: f.project.ID.String(), From: f.base.Add(-time.Hour).Format(time.RFC3339), To: f.base.Add(time.Hour).Format(time.RFC3339), Query: query}
 }
 
+// toolSearch is search as a search_chats call names it: by the project's slug.
+func (f chatSearchFixture) toolSearch(query string) SearchChatsInput {
+	input := f.search(query)
+	input.ProjectID, input.ProjectSlug = "", f.project.Slug
+	return input
+}
+
 func (f chatSearchFixture) chat(t *testing.T, ctx context.Context, owner, title string) uuid.UUID {
 	t.Helper()
 	return seedRecallChat(t, ctx, f.db, f.project.ID, f.principal.OrganizationID, owner, "search-"+uuid.NewString(), title, uuid.NullUUID{})

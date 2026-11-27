@@ -547,7 +547,7 @@
     {
       "id": "litellm",
       "name": "LiteLLM",
-      "vendor": "Others",
+      "vendor": "LiteLLM",
       "plans": "Source lists MDM under team plans; eligibility needs clarification",
       "facts": {
         "org": {
@@ -922,39 +922,53 @@
       "name": "Claude Code · Cloud"
     },
     {
+      "id": "claude-unified-chat-desktop",
+      "vendor": "Anthropic",
+      "family": "Claude · Unified Chat",
+      "surface": "Desktop",
+      "name": "Claude · Unified Chat · Desktop"
+    },
+    {
+      "id": "claude-unified-chat-web",
+      "vendor": "Anthropic",
+      "family": "Claude · Unified Chat",
+      "surface": "Web",
+      "name": "Claude · Unified Chat · Web"
+    },
+    {
       "id": "claude-chat-web",
       "vendor": "Anthropic",
-      "family": "Claude Chat",
+      "family": "Claude Chat (deprecated)",
       "surface": "Web",
-      "name": "Claude Chat · Web"
+      "name": "Claude Chat (deprecated) · Web"
     },
     {
       "id": "claude-chat-desktop",
       "vendor": "Anthropic",
-      "family": "Claude Chat",
+      "family": "Claude Chat (deprecated)",
       "surface": "Desktop",
-      "name": "Claude Chat · Desktop"
+      "name": "Claude Chat (deprecated) · Desktop"
     },
     {
       "id": "cowork-desktop",
       "vendor": "Anthropic",
-      "family": "Cowork",
+      "family": "Cowork (deprecated)",
       "surface": "Desktop",
-      "name": "Cowork · Desktop"
+      "name": "Cowork (deprecated) · Desktop"
     },
     {
       "id": "cowork-cloud",
       "vendor": "Anthropic",
-      "family": "Cowork",
+      "family": "Cowork (deprecated)",
       "surface": "Cloud",
-      "name": "Cowork · Cloud"
+      "name": "Cowork (deprecated) · Cloud"
     },
     {
       "id": "cowork-web",
       "vendor": "Anthropic",
-      "family": "Cowork",
+      "family": "Cowork (deprecated)",
       "surface": "Web",
-      "name": "Cowork · Web"
+      "name": "Cowork (deprecated) · Web"
     },
     {
       "id": "other-claudes-claude-tag",
@@ -1053,6 +1067,13 @@
       "family": "GitHub Copilot",
       "surface": "App",
       "name": "GitHub Copilot"
+    },
+    {
+      "id": "litellm-gateway",
+      "vendor": "LiteLLM",
+      "family": "LiteLLM",
+      "surface": "Gateway",
+      "name": "LiteLLM Gateway"
     }
   ],
   "capabilities": [

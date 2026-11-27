@@ -7,6 +7,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/urfave/cli/v2"
+
+	"github.com/speakeasy-api/gram/server/internal/networkingress"
 )
 
 func TestNetworkIngressProviderDefaultsDisabled(t *testing.T) {
@@ -33,47 +35,15 @@ func TestNetworkIngressQueueDefaultsUnconfigured(t *testing.T) {
 	}
 }
 
-func TestNetworkIngressProviderFlagsRejectInvalidValues(t *testing.T) {
+func TestNetworkIngressProviderFlagsRejectInvalidTag(t *testing.T) {
 	t.Parallel()
-	flags := networkIngressProviderFlags()
-	for _, test := range []struct {
-		name, valid, invalid string
-	}{
-		{"network-ingress-operator-namespace", "tailscale", "Invalid Namespace"},
-		{"network-ingress-worker-namespace", "gram-dev", "other/namespace"},
-		{"network-ingress-backend-namespace", "gram-dev", "other/namespace"},
-		{"network-ingress-backend-service", "gram-private", "https://service"},
-		{"network-ingress-attestor-ca-secret", "gram-private-ca", "secret/name"},
-		{"network-ingress-attestor-image", "registry.example/gram@sha256:" + strings.Repeat("a", 64), "registry.example/gram:latest"},
-		{"network-ingress-backend-pod-labels", "app.kubernetes.io/name=gram-server", "app in (server)"},
-		{"network-ingress-proxy-tag", "tag:gram-proxy", "gram-proxy"},
-		{"network-ingress-service-tag", "tag:gram-service", "tag:"},
-		{"network-ingress-class", "tailscale", "nginx"},
-		{"network-ingress-token-audience", "gram-netingress", "other"},
-		{"network-ingress-kubernetes-api-cidr", "10.0.0.1/32", "10.0.0.1"},
-	} {
-		flag, ok := requireFlag(t, flags, test.name).(*cli.StringFlag)
-		require.True(t, ok, test.name)
-		require.Empty(t, flag.Value, test.name)
-		require.NoError(t, flag.Action(nil, ""), test.name)
-		require.NoError(t, flag.Action(nil, test.valid), test.name)
-		require.Error(t, flag.Action(nil, test.invalid), test.name)
-	}
-	for _, name := range []string{"network-ingress-backend-port", "network-ingress-kubernetes-api-port"} {
-		flag, ok := requireFlag(t, flags, name).(*cli.IntFlag)
-		require.True(t, ok)
-		require.Zero(t, flag.Value)
-		require.NoError(t, flag.Action(nil, 0))
-		require.NoError(t, flag.Action(nil, 443))
-		require.Error(t, flag.Action(nil, -1))
-		require.Error(t, flag.Action(nil, 65536))
-	}
-	cidrs, ok := requireFlag(t, flags, "network-ingress-cluster-cidrs").(*cli.StringSliceFlag)
+	flag, ok := requireFlag(t, networkIngressProviderFlags(), "network-ingress-gateway-tag").(*cli.StringFlag)
 	require.True(t, ok)
-	require.NoError(t, cidrs.Action(nil, nil))
-	require.NoError(t, cidrs.Action(nil, []string{"10.0.0.0/8", "fd00::/8"}))
-	require.Error(t, cidrs.Action(nil, []string{""}))
-	require.Error(t, cidrs.Action(nil, []string{"10.0.0.0"}))
+	require.Equal(t, networkingress.DefaultGatewayTag, flag.Value)
+	require.NoError(t, flag.Action(nil, ""))
+	require.NoError(t, flag.Action(nil, "tag:speakeasy-dev"))
+	require.Error(t, flag.Action(nil, "speakeasy"))
+	require.Error(t, flag.Action(nil, "tag:"))
 }
 
 func TestNetworkIngressConfigFromCLIDefaultsDisabled(t *testing.T) {
@@ -91,23 +61,10 @@ func TestNetworkIngressConfigFromCLIReadsProviderSettings(t *testing.T) {
 	t.Parallel()
 	c := networkIngressTestCLI(t)
 	for name, value := range map[string]string{
-		networkIngressQueueFlag:               "gram-dev-network-ingress",
-		networkIngressMutationFlag:            "true",
-		"network-ingress-operator-namespace":  "tailscale",
-		"network-ingress-worker-namespace":    "gram-dev",
-		"network-ingress-backend-namespace":   "gram-dev",
-		"network-ingress-backend-service":     "gram-private",
-		"network-ingress-backend-port":        "8443",
-		"network-ingress-attestor-image":      "registry.example/gram@sha256:" + strings.Repeat("a", 64),
-		"network-ingress-attestor-ca-secret":  "gram-private-ca",
-		"network-ingress-backend-pod-labels":  "app.kubernetes.io/name=gram-server",
-		"network-ingress-proxy-tag":           "tag:gram-proxy",
-		"network-ingress-service-tag":         "tag:gram-service",
-		"network-ingress-class":               "tailscale",
-		"network-ingress-token-audience":      "gram-netingress",
-		"network-ingress-kubernetes-api-cidr": "10.0.0.1/32",
-		"network-ingress-kubernetes-api-port": "443",
-		"network-ingress-cluster-cidrs":       "10.0.0.0/8,fd00::/8",
+		networkIngressQueueFlag:         "gram-dev-network-ingress",
+		networkIngressMutationFlag:      "true",
+		"network-ingress-gateway-tag":   "tag:speakeasy-dev",
+		"network-ingress-gateway-slots": "2",
 	} {
 		require.NoError(t, c.Set(name, value), name)
 	}
@@ -115,22 +72,16 @@ func TestNetworkIngressConfigFromCLIReadsProviderSettings(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, config.MutationReady())
 	require.Equal(t, "gram-dev-network-ingress", config.ReconcileTaskQueue)
-	require.Equal(t, "gram-private", config.BackendService)
-	require.Equal(t, int32(8443), config.BackendPort)
-	require.Equal(t, "gram-dev", config.Tailscale.BackendNamespace)
-	require.Equal(t, map[string]string{"app.kubernetes.io/name": "gram-server"}, config.Tailscale.BackendPodLabels)
-	require.Equal(t, int32(443), config.Tailscale.KubernetesAPIPort)
-	require.Equal(t, []string{"10.0.0.0/8", "fd00::/8"}, config.Tailscale.ClusterCIDRs)
+	require.Equal(t, "tag:speakeasy-dev", config.Gateway.Tag)
+	require.Equal(t, int32(2), config.Gateway.Slots)
 }
 
 func TestNetworkIngressConfigFromCLIValidatesWithoutFlagActions(t *testing.T) {
 	t.Parallel()
 	for _, test := range []struct{ name, value string }{
 		{networkIngressQueueFlag, "invalid/queue"},
-		{"network-ingress-attestor-image", "registry.example/gram:latest"},
-		{"network-ingress-backend-pod-labels", "app in (server)"},
-		{"network-ingress-backend-port", "4294967297"},
-		{"network-ingress-kubernetes-api-port", "65536"},
+		{"network-ingress-gateway-slots", "17"},
+		{"network-ingress-tailscale-api-url", "http://api.tailscale.com"},
 	} {
 		c := networkIngressTestCLI(t)
 		require.NoError(t, c.Set(test.name, test.value))
@@ -172,7 +123,7 @@ func TestNetworkIngressRuntimeDefaultsDisabled(t *testing.T) {
 func TestOrdinaryWorkerDoesNotOwnNetworkIngressFlags(t *testing.T) {
 	t.Parallel()
 	command := newWorkerCommand()
-	for _, name := range []string{networkIngressQueueFlag, networkIngressMutationFlag, "network-ingress-operator-namespace"} {
+	for _, name := range []string{networkIngressQueueFlag, networkIngressMutationFlag, "network-ingress-gateway-tag"} {
 		for _, candidate := range command.Flags {
 			require.NotEqual(t, name, candidate.Names()[0])
 		}
@@ -232,4 +183,57 @@ func TestValidatePrivateServerConfig(t *testing.T) {
 	require.Error(t, validatePrivateServerConfig(true, ":8443", "cert", "", false))
 	require.Error(t, validatePrivateServerConfig(true, ":8443", "cert", "key", true))
 	require.NoError(t, validatePrivateServerConfig(true, ":8443", "cert", "key", false))
+}
+
+func TestTailnetGatewayRegistersOnlyTheEncryptionSettingsItReads(t *testing.T) {
+	t.Parallel()
+	names := map[string]bool{}
+	for _, flag := range newTailnetGatewayCommand().Flags {
+		names[flag.Names()[0]] = true
+	}
+	require.True(t, names[orgEncryptionCredentialIDFlag], "the gateway decrypts with the organization's key")
+	require.False(t, names[orgEncryptionSwitchGracePeriodFlag], "key switching is the provisioner's, not the gateway's")
+	require.False(t, names[orgEncryptionManagedKeyRetention])
+}
+
+func TestLocalDevelopmentNamerRequiresADevelopmentID(t *testing.T) {
+	t.Parallel()
+
+	_, err := localDevelopmentNamer("local", "", "")
+	require.ErrorContains(t, err, "GRAM_NETWORK_INGRESS_DEV_ID", "a local stack must not fall back to production names")
+
+	namer, err := localDevelopmentNamer("local", "ab12", "")
+	require.NoError(t, err)
+	require.IsType(t, networkingress.LocalNamer{}, namer)
+
+	namer, err = localDevelopmentNamer("prod", "", "")
+	require.NoError(t, err)
+	require.IsType(t, networkingress.ProductionNamer{}, namer)
+
+	_, err = localDevelopmentNamer("prod", "ab12", "")
+	require.ErrorIs(t, err, networkingress.ErrDevIDOutsideLocal)
+
+	namer, err = localDevelopmentNamer("dev", "", "dev")
+	require.NoError(t, err)
+	require.IsType(t, networkingress.QualifiedNamer{}, namer)
+}
+
+func TestGatewayNameQualifierReachesReconcilerAndGateway(t *testing.T) {
+	t.Parallel()
+
+	commands := map[string][]cli.Flag{
+		"network-ingress-worker": networkIngressProviderFlags(),
+		"tailnet-gateway":        newTailnetGatewayCommand().Flags,
+	}
+	for name, flags := range commands {
+		var envVars []string
+		for _, flag := range flags {
+			if flag.Names()[0] == networkIngressGatewayNameQualifierFlag {
+				stringFlag, ok := flag.(*cli.StringFlag)
+				require.True(t, ok)
+				envVars = stringFlag.EnvVars
+			}
+		}
+		require.Equal(t, []string{"GRAM_NETWORK_INGRESS_GATEWAY_NAME_QUALIFIER"}, envVars, "%s reads the qualifier", name)
+	}
 }

@@ -12,23 +12,25 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 )
 
+// gatewayRuntime is networkingress.RuntimeGateway, the only runtime the
+// listener serves.
+const gatewayRuntime = "gateway"
+
 var (
 	ErrIngressUnavailable = errors.New("private network ingress unavailable")
 	ErrIngressChanged     = errors.New("private network ingress changed")
 )
 
 type Ingress struct {
-	ID                     uuid.UUID
-	OrganizationID         string
-	Provider               string
-	DNSName                string
-	IdentityRequired       bool
-	AttestorNamespace      string
-	AttestorServiceAccount string
+	ID               uuid.UUID
+	OrganizationID   string
+	Provider         string
+	DNSName          string
+	IdentityRequired bool
 }
 
 type ingressRepository interface {
-	GetActiveIngressByAttestor(context.Context, repo.GetActiveIngressByAttestorParams) (repo.GetActiveIngressByAttestorRow, error)
+	GetActiveIngressesByDNSName(context.Context, string) ([]repo.GetActiveIngressesByDNSNameRow, error)
 	GetIngressServingState(context.Context, repo.GetIngressServingStateParams) (repo.GetIngressServingStateRow, error)
 }
 
@@ -40,21 +42,21 @@ func NewIngressLookup(db repo.DBTX) *IngressLookup {
 	return &IngressLookup{repo: repo.New(db)}
 }
 
-func (l *IngressLookup) ByAttestor(ctx context.Context, namespace, serviceAccount string) (Ingress, error) {
-	if namespace == "" || serviceAccount == "" {
-		return Ingress{}, fmt.Errorf("%w: attestor identity is incomplete", ErrIngressUnavailable)
+// ByDNSName resolves the gateway-hosted ingress serving host. Exactly one
+// enabled gateway ingress may own a DNS name; anything else fails closed.
+func (l *IngressLookup) ByDNSName(ctx context.Context, host string) (Ingress, error) {
+	canonical, err := requestorigin.CanonicalHost(host)
+	if err != nil || canonical == "" {
+		return Ingress{}, fmt.Errorf("%w: invalid request host", ErrIngressUnavailable)
 	}
-	row, err := l.repo.GetActiveIngressByAttestor(ctx, repo.GetActiveIngressByAttestorParams{
-		AttestorNamespace:      namespace,
-		AttestorServiceAccount: serviceAccount,
-	})
-	if errors.Is(err, pgx.ErrNoRows) {
+	rows, err := l.repo.GetActiveIngressesByDNSName(ctx, canonical)
+	if err != nil {
+		return Ingress{}, fmt.Errorf("lookup private network ingress by host: %w", err)
+	}
+	if len(rows) != 1 {
 		return Ingress{}, ErrIngressUnavailable
 	}
-	if err != nil {
-		return Ingress{}, fmt.Errorf("lookup private network ingress: %w", err)
-	}
-	return ingressFromRow(row, namespace, serviceAccount)
+	return ingressFromRow(rows[0])
 }
 
 // Recheck compares every field that can alter serving authority. This does not
@@ -70,7 +72,9 @@ func (l *IngressLookup) Recheck(ctx context.Context, cached Ingress) error {
 	if err != nil {
 		return fmt.Errorf("recheck private network ingress: %w", err)
 	}
-	if !row.Enabled || row.Deleted || row.OrganizationID != cached.OrganizationID || row.Provider != cached.Provider || row.IdentityRequired != cached.IdentityRequired || row.AttestorNamespace != cached.AttestorNamespace || row.AttestorServiceAccount != cached.AttestorServiceAccount {
+	// ByDNSName serves only gateway rows, so a row whose runtime changed no
+	// longer serves its cached host either.
+	if !row.Enabled || row.Deleted || row.Runtime.String != gatewayRuntime || row.OrganizationID != cached.OrganizationID || row.Provider != cached.Provider || row.IdentityRequired != cached.IdentityRequired {
 		return ErrIngressChanged
 	}
 	if !row.DnsName.Valid {
@@ -83,7 +87,7 @@ func (l *IngressLookup) Recheck(ctx context.Context, cached Ingress) error {
 	return nil
 }
 
-func ingressFromRow(row repo.GetActiveIngressByAttestorRow, namespace, serviceAccount string) (Ingress, error) {
+func ingressFromRow(row repo.GetActiveIngressesByDNSNameRow) (Ingress, error) {
 	if row.ID == uuid.Nil || row.OrganizationID == "" || row.Provider == "" {
 		return Ingress{}, fmt.Errorf("%w: ingress authority is incomplete", ErrIngressUnavailable)
 	}
@@ -95,12 +99,10 @@ func ingressFromRow(row repo.GetActiveIngressByAttestorRow, namespace, serviceAc
 		return Ingress{}, fmt.Errorf("%w: invalid ingress DNS name", ErrIngressUnavailable)
 	}
 	return Ingress{
-		ID:                     row.ID,
-		OrganizationID:         row.OrganizationID,
-		Provider:               row.Provider,
-		DNSName:                host,
-		IdentityRequired:       row.IdentityRequired,
-		AttestorNamespace:      namespace,
-		AttestorServiceAccount: serviceAccount,
+		ID:               row.ID,
+		OrganizationID:   row.OrganizationID,
+		Provider:         row.Provider,
+		DNSName:          host,
+		IdentityRequired: row.IdentityRequired,
 	}, nil
 }

@@ -15,12 +15,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
-	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
-	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 func TestDirectWorkloadReconnect(t *testing.T) {
@@ -41,14 +40,15 @@ func TestDirectWorkloadReconnect(t *testing.T) {
 	issuer := seedWorkloadIssuer(t, ctx, ti, fx.orgID)
 	assignment := assignAgentToWorkload(t, ctx, ti, fx.orgID, issuer, workloadSessionSubject, agent.ID)
 	subject := urn.NewWorkloadSubject(issuer, workloadSessionSubject)
-	session := seedWorkloadSession(t, ctx, ti, fx, subject)
-	client := createConsentRemoteClient(t, ctx, ti.conn, fx.target.ProjectID, fx.orgID, "workload-reconnect", "", []uuid.UUID{fx.target.UserSessionIssuerID})
+	client := createConsentRemoteClient(t, ctx, ti.conn, fx.target.ProjectID, fx.orgID, "workload-reconnect", "")
 	selection := selectionFixture{ti: ti, projectID: fx.target.ProjectID, orgID: fx.orgID}
 	selection.associate(t, ctx, server.ID, client)
-	policy, err := usersessionsrepo.New(ti.conn).GetUserSessionPolicyByJTI(ctx, usersessionsrepo.GetUserSessionPolicyByJTIParams{UserSessionIssuerID: fx.target.UserSessionIssuerID, Jti: session.Jti})
-	require.NoError(t, err)
-	_, err = usersessionsrepo.New(ti.conn).RecordUpstreamClientSelections(ctx, usersessionsrepo.RecordUpstreamClientSelectionsParams{UserSessionIssuerID: fx.target.UserSessionIssuerID, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: policy.CredentialID, Source: upstreamclients.SelectionSourceIssuance, PickedMcpServerIds: []uuid.UUID{server.ID}, PickedClientIds: []uuid.UUID{client}})
-	require.NoError(t, err)
+	typed := seedTypedSessionClient(t, ctx, ti, fx.orgID, fx.target.ProjectID, server.ID, client, authz.AuthClientTypeRemoteSession, urn.NewUserSubject(fx.userID))
+	seedPrincipalGrant(t, ctx, ti, fx.orgID, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), authz.ScopeMCPAuth, typed.String())
+	// Use the ceiling workload issuance actually writes; live agent and owner
+	// grants above still decide whether this exact client can be used.
+	session := seedWorkloadSessionWithVersion(t, ctx, ti, fx, subject, runtimepolicy.IssuedDelegatedPolicyVersion)
+	seedTypedSessionChoice(t, ctx, ti, fx.orgID, fx.target.UserSessionIssuerID, session.Jti, server.ID, typed)
 	token, _, err := sessiontokens.NewSigner("test-jwt-secret").Mint(sessiontokens.MintParams{Subject: subject, Audience: urn.NewUserSessionIssuer(fx.target.UserSessionIssuerID).String(), Issuer: ti.serverURL.JoinPath("mcp", slug).String(), ExpiresAt: &session.ExpiresAt.Time, ClientID: fx.client.ClientID, JTI: session.Jti})
 	require.NoError(t, err)
 

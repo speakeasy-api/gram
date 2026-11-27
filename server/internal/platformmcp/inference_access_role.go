@@ -18,8 +18,10 @@ import (
 const operationConfigureInferenceAccessRole = "configure_inference_access_role"
 
 type ConfigureInferenceAccessRoleInput struct {
-	ProjectID       string `json:"project_id" jsonschema:"explicit project ID for admission and receipt scope; grant scope is controlled by all_projects"`
-	AllProjects     bool   `json:"all_projects,omitempty" jsonschema:"true targets the all-project inference grant; confirm impact across every project and role holder; false targets only project_id"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID       string `json:"-"`
+	AllProjects     bool   `json:"all_projects,omitempty" jsonschema:"true targets the all-project inference grant; confirm impact across every project and role holder; false targets only the project project_slug names"`
 	RoleReference   string `json:"role_reference" jsonschema:"fresh opaque custom role reference from list_access_roles"`
 	ExpectedVersion string `json:"expected_version" jsonschema:"version from the fresh role read"`
 	Enabled         bool   `json:"enabled" jsonschema:"true adds the selected inference grant; false removes only that exact grant, not other scopes"`

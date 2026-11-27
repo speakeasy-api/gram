@@ -22,6 +22,7 @@ import { BusinessMemories } from "./businessmemories.js";
 import { Chat } from "./chat.js";
 import { ChatSessions } from "./chatsessions.js";
 import { CliAuth } from "./cliauth.js";
+import { CommandSearch } from "./commandsearch.js";
 import { Dashboards } from "./dashboards.js";
 import { DataExports } from "./dataexports.js";
 import { Deployments } from "./deployments.js";
@@ -38,15 +39,17 @@ import { Hooks } from "./hooks.js";
 import { HooksServerNames } from "./hooksservernames.js";
 import { Identity } from "./identity.js";
 import { IdentityProviderConnections } from "./identityproviderconnections.js";
-import { Instances } from "./instances.js";
 import { Integrations } from "./integrations.js";
+import { IntentPolicies } from "./intentpolicies.js";
 import { InternalSessionIssuers } from "./internalsessionissuers.js";
 import { JsonWebKeySets } from "./jsonwebkeysets.js";
 import { Keys } from "./keys.js";
 import { Killswitches } from "./killswitches.js";
 import { Litellm } from "./litellm.js";
 import { McpApproval } from "./mcpapproval.js";
+import { McpConnectionHealth } from "./mcpconnectionhealth.js";
 import { McpEndpoints } from "./mcpendpoints.js";
+import { McpFeedback } from "./mcpfeedback.js";
 import { McpMetadata } from "./mcpmetadata.js";
 import { McpRegistries } from "./mcpregistries.js";
 import { McpServers } from "./mcpservers.js";
@@ -203,6 +206,11 @@ export class Gram extends ClientSDK {
     return (this._cliAuth ??= new CliAuth(this._options));
   }
 
+  private _commandSearch?: CommandSearch;
+  get commandSearch(): CommandSearch {
+    return (this._commandSearch ??= new CommandSearch(this._options));
+  }
+
   private _dashboards?: Dashboards;
   get dashboards(): Dashboards {
     return (this._dashboards ??= new Dashboards(this._options));
@@ -281,14 +289,14 @@ export class Gram extends ClientSDK {
       new IdentityProviderConnections(this._options));
   }
 
-  private _instances?: Instances;
-  get instances(): Instances {
-    return (this._instances ??= new Instances(this._options));
-  }
-
   private _integrations?: Integrations;
   get integrations(): Integrations {
     return (this._integrations ??= new Integrations(this._options));
+  }
+
+  private _intentPolicies?: IntentPolicies;
+  get intentPolicies(): IntentPolicies {
+    return (this._intentPolicies ??= new IntentPolicies(this._options));
   }
 
   private _internalSessionIssuers?: InternalSessionIssuers;
@@ -323,9 +331,21 @@ export class Gram extends ClientSDK {
     return (this._mcpApproval ??= new McpApproval(this._options));
   }
 
+  private _mcpConnectionHealth?: McpConnectionHealth;
+  get mcpConnectionHealth(): McpConnectionHealth {
+    return (this._mcpConnectionHealth ??= new McpConnectionHealth(
+      this._options,
+    ));
+  }
+
   private _mcpEndpoints?: McpEndpoints;
   get mcpEndpoints(): McpEndpoints {
     return (this._mcpEndpoints ??= new McpEndpoints(this._options));
+  }
+
+  private _mcpFeedback?: McpFeedback;
+  get mcpFeedback(): McpFeedback {
+    return (this._mcpFeedback ??= new McpFeedback(this._options));
   }
 
   private _mcpMetadata?: McpMetadata;

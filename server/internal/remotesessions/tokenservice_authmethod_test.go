@@ -102,7 +102,7 @@ func setupRefreshFixture(t *testing.T, authMethod string, clientSecret string, s
 		require.NoError(t, encErr)
 		secretPG = conv.ToPGText(secretCiphertext)
 	}
-	client, err := q.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+	client, err := q.CreateRemoteSessionClientFixture(ctx, repo.CreateRemoteSessionClientFixtureParams{
 		ProjectID:               conv.ToNullUUID(*authCtx.ProjectID),
 		OrganizationID:          conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
 		RemoteSessionIssuerID:   issuer.ID,
@@ -114,11 +114,7 @@ func setupRefreshFixture(t *testing.T, authMethod string, clientSecret string, s
 	})
 	require.NoError(t, err)
 
-	err = q.AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: client.ID,
-		UserSessionIssuerID:   userIssuer,
-	})
-	require.NoError(t, err)
+	placeClientForSignIn(t, ctx, ti.conn, client.ID, userIssuer)
 
 	subject := urn.NewUserSubject("refresh-subject-" + methodSlug)
 	seedExpiredRemoteSession(t, ctx, ti, enc, subject, userIssuer, client.ID)
@@ -138,7 +134,7 @@ func seedExpiredRemoteSession(t *testing.T, ctx context.Context, ti *testInstanc
 	require.NoError(t, err)
 	refreshEncStr := refreshEnc
 
-	_, err = repo.New(ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+	_, err = repo.New(ti.conn).UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            subject,
 		UserSessionIssuerID:   userIssuerID,
 		RemoteSessionClientID: clientID,

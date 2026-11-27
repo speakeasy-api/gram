@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
@@ -16,7 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/shutdowndrain"
 )
 
-// ConnectionAttribution files a proxy's refused and failed tool calls.
+// ConnectionAttribution files a proxy's refused, failed and served requests.
 type ConnectionAttribution struct {
 	// Scope is what the rows are filed under.
 	Scope mcpconnectionattempts.Scope
@@ -24,9 +25,10 @@ type ConnectionAttribution struct {
 	// Details are added to every row.
 	Details []mcpconnectionattempts.Option
 
-	// UpstreamFailures also records calls the upstream failed. A gateway leaves
-	// this off and records from its own classification, which covers the handshake.
-	UpstreamFailures bool
+	// UpstreamOutcomes also records what the upstream did with a forwarded
+	// request: calls it failed and requests it served. A gateway leaves this off
+	// and records both from its own classification, which covers the handshake.
+	UpstreamOutcomes bool
 
 	// SelfCredential marks a credential the server holds for itself, which the
 	// person connected did not supply and cannot replace.
@@ -72,9 +74,13 @@ func (c *requestConnections) record(ctx context.Context, code mcpconnectionattem
 	if errors.Is(ctx.Err(), context.Canceled) {
 		return
 	}
+	c.recorder.Once(ctx, c.Scope, mcpconnectionattempts.StepMCPRequest, code, c.options(extra...)...)
+}
+
+// options are what every row of this connection carries, then extra.
+func (c *requestConnections) options(extra ...mcpconnectionattempts.Option) []mcpconnectionattempts.Option {
 	opts := append([]mcpconnectionattempts.Option{mcpconnectionattempts.Provider(c.provider), mcpconnectionattempts.FromRequest(c.Request)}, c.Details...)
-	opts = append(opts, extra...)
-	c.recorder.Once(ctx, c.Scope, mcpconnectionattempts.StepMCPRequest, code, opts...)
+	return append(opts, extra...)
 }
 
 func (c *requestConnections) refusals() []proxy.ToolsCallRefusalInterceptor {
@@ -85,7 +91,7 @@ func (c *requestConnections) refusals() []proxy.ToolsCallRefusalInterceptor {
 }
 
 func (c *requestConnections) withFailures(interceptors []proxy.ToolsCallFailureInterceptor) []proxy.ToolsCallFailureInterceptor {
-	if c == nil || !c.UpstreamFailures {
+	if c == nil || !c.UpstreamOutcomes {
 		return interceptors
 	}
 	return append(interceptors, c)
@@ -93,10 +99,18 @@ func (c *requestConnections) withFailures(interceptors []proxy.ToolsCallFailureI
 
 // requestFailures records credential rejections on requests other than tools/call.
 func (c *requestConnections) requestFailures() []proxy.RequestFailureInterceptor {
-	if c == nil || !c.UpstreamFailures {
+	if c == nil || !c.UpstreamOutcomes {
 		return nil
 	}
 	return []proxy.RequestFailureInterceptor{c}
+}
+
+// requestsServed records the requests the upstream served.
+func (c *requestConnections) requestsServed() []proxy.RequestServedInterceptor {
+	if c == nil || !c.UpstreamOutcomes {
+		return nil
+	}
+	return []proxy.RequestServedInterceptor{c}
 }
 
 // Name implements the interceptor interfaces.
@@ -106,7 +120,7 @@ func (c *requestConnections) Name() string {
 
 // InterceptToolsCallRefusal implements [proxy.ToolsCallRefusalInterceptor].
 func (c *requestConnections) InterceptToolsCallRefusal(ctx context.Context, err error) {
-	if code, ok := refusalHappened(err); ok {
+	if code, ok := refusalHappened(err, c.tunneled); ok {
 		c.record(ctx, code)
 	}
 }
@@ -117,7 +131,7 @@ func (c *requestConnections) InterceptToolsCallFailure(ctx context.Context, fail
 		return
 	}
 	if code, ok := c.upstreamFailureHappened(failure.StatusCode, failure.SentHeader, failure.Header, failure.Err); ok {
-		c.record(ctx, code)
+		c.record(ctx, code, outageAddressOptions(code, failure.Err)...)
 	}
 }
 
@@ -130,8 +144,22 @@ func (c *requestConnections) InterceptRequestFailure(ctx context.Context, failur
 		return
 	}
 	if code, ok := c.upstreamFailureHappened(failure.StatusCode, failure.SentHeader, failure.Header, failure.Err); ok {
-		c.record(ctx, code, mcpconnectionattempts.RequestMethod(requestMethodDetail(failure.Method)))
+		c.record(ctx, code, append(outageAddressOptions(code, failure.Err), mcpconnectionattempts.RequestMethod(requestMethodDetail(failure.Method)))...)
 	}
+}
+
+// InterceptRequestServed implements [proxy.RequestServedInterceptor]. Every
+// request here was forwarded, so the server itself answered.
+func (c *requestConnections) InterceptRequestServed(ctx context.Context) {
+	c.recorder.Served(ctx, c.Scope, true, c.options()...)
+}
+
+// outageAddressOptions name the sign-in provider when its address, not the server's, stopped the call.
+func outageAddressOptions(code mcpconnectionattempts.Code, cause error) []mcpconnectionattempts.Option {
+	if mcpconnectionattempts.AddressOf(code) == guardian.AddressFine || !errors.Is(cause, remotesessions.ErrRemoteSessionUnavailable) {
+		return nil
+	}
+	return []mcpconnectionattempts.Option{remotesessions.OutageAddressOption(cause)}
 }
 
 // upstreamFailureHappened classifies by what the final request carried: a redirect off
@@ -250,8 +278,14 @@ func UpstreamFailureHappened(status int, credentialRejected bool, credential Ups
 			return code, true
 		}
 	}
+	timedOut := slices.ContainsFunc(causes, func(cause error) bool { return errors.Is(cause, proxy.ErrUpstreamTimedOut) })
+	if status == 0 && !timedOut {
+		if code, ok := mcpconnectionattempts.AddressHappened(errors.Join(causes...), tunneled); ok {
+			return code, true
+		}
+	}
 	switch {
-	case status == 0 && slices.ContainsFunc(causes, func(cause error) bool { return errors.Is(cause, proxy.ErrUpstreamTimedOut) }):
+	case status == 0 && timedOut:
 		// A slow server looks the same through a tunnel as it does directly.
 		return mcpconnectionattempts.CodeProviderUnreachable, true
 	case tunneled && status == 0:
@@ -281,7 +315,8 @@ func UpstreamFailureHappened(status int, credentialRejected bool, credential Ups
 }
 
 // refusalHappened classifies a refusal; an unknown error is ours and a held call is not an end state.
-func refusalHappened(err error) (mcpconnectionattempts.Code, bool) {
+// tunneled says the server is reached through a tunnel, whose dials are never an address problem.
+func refusalHappened(err error, tunneled bool) (mcpconnectionattempts.Code, bool) {
 	// A tool the catalog doesn't have is not a connection outcome.
 	if _, held := errors.AsType[*proxy.ToolResultError](err); held || errors.Is(err, errToolNotOnUpstream) {
 		var none mcpconnectionattempts.Code
@@ -306,6 +341,18 @@ func refusalHappened(err error) (mcpconnectionattempts.Code, bool) {
 		if reject.Code == proxy.RejectCodeForbidden {
 			return mcpconnectionattempts.CodePolicyBlocked, true
 		}
+	}
+	// A cold tool catalog lists the server first, so a server that never answered can stop the call here.
+	if listing, ok := errors.AsType[*proxy.UpstreamListingRefusalError](err); ok && !listing.Answered && listing.Cause != nil {
+		_, rejected := errors.AsType[*proxy.RejectError](listing.Cause)
+		// The proxy's own timeout also reads as canceled; only a caller that left is not the server's.
+		left := errors.Is(listing.Cause, context.Canceled) && !errors.Is(listing.Cause, proxy.ErrUpstreamTimedOut)
+		if !rejected && !left {
+			return UpstreamFailureHappened(0, false, UpstreamCredentialSent{Attached: false, Self: false, Configured: false}, tunneled, "", listing.Cause)
+		}
+	}
+	if code, ok := mcpconnectionattempts.AddressHappened(err, tunneled); ok {
+		return code, true
 	}
 	return mcpconnectionattempts.CodeInternalError, true
 }

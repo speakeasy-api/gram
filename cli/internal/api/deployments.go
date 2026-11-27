@@ -125,7 +125,6 @@ func (c *DeploymentsClient) GetDeployment(
 		FunctionsAssets:      result.FunctionsAssets,
 		ExternalMcpToolCount: result.ExternalMcpToolCount,
 		Packages:             result.Packages,
-		ExternalMcps:         result.ExternalMcps,
 	}, nil
 }
 
@@ -201,7 +200,6 @@ func (c *DeploymentsClient) Evolve(
 		ExcludePackages:        []string{},
 		UpsertPackages:         []*deployments.AddPackageForm{},
 		SessionToken:           nil,
-		ExcludeExternalMcps:    []string{},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("api error: %w", err)

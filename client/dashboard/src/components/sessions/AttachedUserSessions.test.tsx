@@ -393,7 +393,7 @@ describe("AttachedUserSessions container", () => {
       finish();
       if (scope === "user") {
         await screen.findByText(
-          "Create an agent you own to attach upstream sessions.",
+          "Create an agent you own first, then connect your account to it.",
         );
         expect(screen.queryByRole("combobox")).toBeNull();
       } else {

@@ -1,47 +1,49 @@
 import { useIsPlatformAdmin, useSession } from "@/contexts/Auth";
 import { Scope } from "@gram/client/models/components/rolegrant.js";
 import { useGrants } from "@gram/client/react-query/grants.js";
+import {
+  type Check,
+  scopeExclusions,
+  scopeOpenKeys,
+  scopeResourceKinds,
+} from "@/lib/authz.gen";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 // Open SDK enums accept future values, but only understood scopes may authorize.
 const knownScopes: ReadonlySet<string> = new Set(Object.values(Scope));
 
+const declaredResourceKinds: ReadonlySet<string> = new Set(
+  Object.values(scopeResourceKinds),
+);
+
 /**
- * Derive the resource kind from a scope's family prefix.
- * Mirrors the server-side ResourceKindForScope in authz/selector.go.
- * mcp:auth is not checkable client-side: the server binds the connection owner.
+ * The resource kind a scope's checks and grant selectors name, from the
+ * registry (lib/authz.gen.ts). Scopes outside it keep the server's legacy
+ * answer (legacyResourceKindForScope in authz/selector.go). mcp:auth is not
+ * checkable client-side: the server binds the connection owner.
  */
 export function resourceKindForScope(scope: string): string {
-  if (scope === "mcp:auth" || scope === "mcp:blocked_auth")
-    return "mcp_auth_client";
-  if (
-    scope.startsWith("project:") ||
-    scope.startsWith("plugin:") ||
-    scope.startsWith("log:") ||
-    scope.startsWith("memory:")
-  )
-    return "project";
-  if (scope.startsWith("remote-mcp:") || scope.startsWith("mcp:")) return "mcp";
-  if (scope.startsWith("org:")) return "org";
-  if (scope.startsWith("environment:")) return "environment";
-  if (scope.startsWith("skill:")) return "skill";
-  if (scope.startsWith("inference:")) return "inference";
-  if (scope.startsWith("assistant:")) return "assistant";
-  if (scope.startsWith("risk_policy:")) return "risk_policy";
-  if (scope.startsWith("chat:")) return "chat";
-  if (scope.startsWith("agent:")) return "agent";
-  if (scope.startsWith("workload:")) return "workload";
+  if (Object.hasOwn(scopeResourceKinds, scope))
+    return scopeResourceKinds[scope] as string;
+  const prefix = scope.split(":")[0] ?? "";
+  if (prefix === "plugin" || prefix === "log") return "project";
+  if (prefix === "remote-mcp") return "mcp";
+  if (declaredResourceKinds.has(prefix) && prefix !== "mcp_auth_client")
+    return prefix;
   return "*";
 }
 
 /**
  * Check if a grant selector matches a check selector.
- * Mirrors the server-side Selector.Matches in authz/selector.go.
+ * Mirrors how the server matches a probe (Check.Probe in authz/access.go):
+ * the dashboard asks whether to show a control, not whether to perform an
+ * action, so it asks the server's discovery question.
  *
  * For each key in the grant selector, if the check also has that key the
  * values must match (or the grant value must be "*"). Keys present in the
- * grant but absent from the check are skipped — the check isn't constraining
- * that dimension.
+ * grant but absent from the check are skipped. The server refuses such an
+ * omission on every request it decides, except a probe, a connection and a
+ * risk policy audience question.
  */
 export function selectorMatches(
   grantSelector: Record<string, string>,
@@ -68,37 +70,13 @@ export function selectorMatchesStrict(
   return true;
 }
 
-/** Direct exclusion scope plus its one-step server scope expansions. */
-const exclusionScopesByScope: Partial<Record<Scope, readonly string[]>> = {
-  "org:read": ["org:blocked_read"],
-  "org:admin": ["org:blocked_admin", "org:blocked_read"],
-  "project:read": ["project:blocked_read"],
-  "project:write": ["project:blocked_write", "project:blocked_read"],
-  // The mcp:blocked_* scopes are independent of one another, unlike the
-  // other families: connecting to a server and administering it are
-  // different jobs, so a block on one takes nothing from the others. Mirrors
-  // scopeExpansions in server/internal/authz/scopes.go.
-  "mcp:read": ["mcp:blocked_read"],
-  "mcp:write": ["mcp:blocked_write"],
-  "mcp:connect": ["mcp:blocked_connect"],
-  "mcp:auth": ["mcp:blocked_auth"],
-  "environment:read": ["environment:blocked_read"],
-  "environment:write": [
-    "environment:blocked_write",
-    "environment:blocked_read",
-  ],
-  "plugin:write": ["plugin:blocked_write"],
-  "skill:read": ["skill:blocked_read"],
-  "skill:write": ["skill:blocked_write", "skill:blocked_read"],
-  "assistant:read": ["assistant:blocked_read"],
-  "assistant:write": ["assistant:blocked_write", "assistant:blocked_read"],
-  "risk_policy:evaluate": ["risk_policy:bypass"],
-  "workload:read": ["workload:blocked_read"],
-  "workload:write": ["workload:blocked_write", "workload:blocked_read"],
-};
-
+/**
+ * The exclusion scopes a check of scope must clear, from the registry
+ * (lib/authz.gen.ts): its own exclusion, then the broader blocks that also
+ * cover it.
+ */
 export function exclusionScopesForScope(scope: Scope): readonly string[] {
-  return exclusionScopesByScope[scope] ?? [];
+  return scopeExclusions[scope] ?? [];
 }
 
 interface EffectiveGrant {
@@ -111,7 +89,6 @@ interface EffectiveGrant {
    */
   directSelectors?: Array<Record<string, string>>;
   subScopes?: string[];
-  effect?: string;
 }
 
 function grantSelectorsMatch(
@@ -191,16 +168,8 @@ export function hasScopeInGrants(
   for (const grant of grants) {
     // An unknown parent must not authorize through its known sub-scopes either.
     if (grant.scope === undefined || !knownScopes.has(grant.scope)) continue;
-    const effect = grant.effect || "allow";
-
-    const isLegacyDeny = effect === "deny" && grant.scope === scope;
-    const isExclusion =
-      effect === "allow" &&
-      grant.scope !== undefined &&
-      exclusionScopes.includes(grant.scope);
-    if (isLegacyDeny || isExclusion) {
-      const yields =
-        isExclusion && exclusionYieldsToDirectGrants(grant.scope ?? "");
+    if (exclusionScopes.includes(grant.scope)) {
+      const yields = exclusionYieldsToDirectGrants(grant.scope);
       exclusionChecks.forEach((check, i) => {
         if (!grantSelectorsMatch(grant, check, true)) return;
         if (yields && !directSelectorsMatch(grant, check, true)) {
@@ -213,7 +182,7 @@ export function hasScopeInGrants(
 
     const scopeMatches =
       grant.scope === scope || grant.subScopes?.includes(scope);
-    if (effect === "allow" && scopeMatches) {
+    if (scopeMatches) {
       allowChecks.forEach((check, i) => {
         if (grantSelectorsMatch(grant, check, false)) hasAllow = true;
         if (directSelectorsMatch(grant, check, false)) directAllow[i] = true;
@@ -250,6 +219,152 @@ export function hasScopeInProject(
 ): boolean {
   return hasScopeInGrants(grants, scope, "*", projectId);
 }
+
+/** One MCP server, such as a gateway, in the project it belongs to. */
+export interface MCPServerTarget {
+  serverId: string;
+  projectId: string;
+}
+
+/** Mirrors authz.MCPServer(id, project).Write() on the server. */
+export function canWriteMCPServerInGrants(
+  grants: EffectiveGrant[],
+  { serverId, projectId }: MCPServerTarget,
+): boolean {
+  return hasScopeInGrants(grants, "mcp:write", serverId, projectId);
+}
+
+/**
+ * Mirrors authz.MCPServers(project).Write() on the server, which names the
+ * project as the resource: write access to the project's MCP servers as a
+ * whole, such as adding one.
+ */
+export function canWriteProjectMCPServersInGrants(
+  grants: EffectiveGrant[],
+  projectId: string,
+): boolean {
+  return hasScopeInGrants(grants, "mcp:write", projectId, projectId);
+}
+
+/**
+ * Whether a grant selector covers a check built by a constructor in
+ * lib/authz.gen.ts, as Check.matchesAllowSelector does on the server: every
+ * key the grant names must be carried with a matching value, except the keys
+ * the check's scope opens on a probe or a connection.
+ */
+function allowSelectorMatches(
+  grantSelector: Record<string, string>,
+  checkSelector: Record<string, string>,
+  open: readonly string[],
+): boolean {
+  for (const [key, grantVal] of Object.entries(grantSelector)) {
+    const checkVal = checkSelector[key];
+    if (checkVal === undefined) {
+      if (open.includes(key)) continue;
+      return false;
+    }
+    if (grantVal !== "*" && grantVal !== checkVal) return false;
+  }
+  return true;
+}
+
+function openKeysFor(check: Check): readonly string[] {
+  const open = scopeOpenKeys[check.scope];
+  if (!open) return [];
+  return [
+    ...(check.isProbe ? open.probe : []),
+    ...(check.connection ? open.connection : []),
+  ];
+}
+
+function checkSelector(
+  check: Check,
+  resourceId: string,
+): Record<string, string> {
+  return {
+    resourceKind: check.resourceKind,
+    resourceId,
+    ...check.dimensions,
+  };
+}
+
+/** One check on one resource, with blocks and direct-grant precedence. */
+function allowedOnResource(
+  grants: EffectiveGrant[],
+  check: Check,
+  resourceId: string,
+): boolean {
+  const selector = checkSelector(check, resourceId);
+  const open = openKeysFor(check);
+  const allowMatches = (selectors: Selectors | undefined) =>
+    selectors === undefined
+      ? true
+      : selectors.some((s) => allowSelectorMatches(s, selector, open));
+  const exclusionScopes = exclusionScopesForScope(check.scope);
+
+  let allowed = false;
+  let directAllow = false;
+  let absoluteBlock = false;
+  let inheritedBlock = false;
+  for (const grant of grants) {
+    if (grant.scope === undefined || !knownScopes.has(grant.scope)) continue;
+    if (exclusionScopes.includes(grant.scope)) {
+      if (grantSelectorsMatch(grant, selector, true)) {
+        if (
+          exclusionYieldsToDirectGrants(grant.scope) &&
+          !directSelectorsMatch(grant, selector, true)
+        ) {
+          inheritedBlock = true;
+        } else {
+          absoluteBlock = true;
+        }
+      }
+    }
+    if (grant.scope === check.scope || grant.subScopes?.includes(check.scope)) {
+      if (allowMatches(grant.selectors)) allowed = true;
+      if (allowMatches(grant.directSelectors ?? [])) directAllow = true;
+    }
+  }
+  return allowed && !absoluteBlock && !(inheritedBlock && !directAllow);
+}
+
+type Selectors = Array<Record<string, string>>;
+
+/**
+ * Whether the server would allow a check built by a constructor in
+ * lib/authz.gen.ts. Unlike hasScopeInGrants it never skips a key the check
+ * leaves out: the constructors carry every key the server needs. A probe on
+ * a collection asks about any resource of the kind in that parent: the
+ * collection itself, or a resource some allow grant reaches.
+ */
+export function canInGrants(grants: EffectiveGrant[], check: Check): boolean {
+  if (check.invalid) {
+    if (import.meta.env.DEV) {
+      console.error("invalid authz check: an id cannot name a resource", check);
+    }
+    return false;
+  }
+  if (!knownScopes.has(check.scope)) return false;
+  if (allowedOnResource(grants, check, check.resourceId)) return true;
+  if (!check.collection || !check.isProbe) return false;
+
+  const candidates = new Set<string>();
+  for (const grant of grants) {
+    if (grant.scope !== check.scope && !grant.subScopes?.includes(check.scope))
+      continue;
+    for (const { resourceId = "*" } of grant.selectors ?? [{}]) {
+      // A wildcard grant reaches resources no grant names.
+      candidates.add(resourceId === "*" ? anyUnnamedResource : resourceId);
+    }
+  }
+  for (const resourceId of candidates) {
+    if (allowedOnResource(grants, check, resourceId)) return true;
+  }
+  return false;
+}
+
+/** A resource id no grant names, standing for every resource of that kind. */
+const anyUnnamedResource = "\u0000";
 
 /**
  * Core RBAC hook. Fetches the current user's effective grants and provides
@@ -291,8 +406,8 @@ function useRBACImpl() {
    * project-wide grants (`{ resourceId: "*", projectId }`) cover the resource
    * and keeps grants for other projects from matching.
    *
-   * Uses exclusion-wins semantics: matching internal exclusion grants (and
-   * legacy deny-effect grants) override matching allow grants.
+   * Uses exclusion-wins semantics: matching internal exclusion grants
+   * override matching allow grants.
    *
    * - If grants haven't loaded yet, returns false (safe default).
    * - A grant with `selectors: undefined` (null from the API) means unrestricted.
@@ -327,6 +442,15 @@ function useRBACImpl() {
     [hasScope],
   );
 
+  /**
+   * Whether the server would allow check, built by a constructor in
+   * lib/authz.gen.ts: can(authz.mcpServer(id, projectId).write()).
+   */
+  const can = useCallback(
+    (check: Check): boolean => !!grants && canInGrants(grants, check),
+    [grants],
+  );
+
   const hasAnyScopeInProject = useCallback(
     (scopes: Scope[], projectId: string): boolean => {
       return scopes.some((scope) =>
@@ -336,22 +460,40 @@ function useRBACImpl() {
     [grants],
   );
 
+  const canWriteMCPServer = useCallback(
+    (target: MCPServerTarget): boolean =>
+      !!grants && canWriteMCPServerInGrants(grants, target),
+    [grants],
+  );
+
+  const canWriteProjectMCPServers = useCallback(
+    (projectId: string): boolean =>
+      !!grants && canWriteProjectMCPServersInGrants(grants, projectId),
+    [grants],
+  );
+
   return useMemo(
     () => ({
+      can,
       hasScope,
       hasAllScopes,
       hasAnyScope,
       hasAnyScopeInProject,
+      canWriteMCPServer,
+      canWriteProjectMCPServers,
       isLoading,
       grants: grants ?? [],
       /** Non-null when the grants query failed (e.g. missing org membership). */
       error: error ?? null,
     }),
     [
+      can,
       hasScope,
       hasAllScopes,
       hasAnyScope,
       hasAnyScopeInProject,
+      canWriteMCPServer,
+      canWriteProjectMCPServers,
       isLoading,
       grants,
       error,

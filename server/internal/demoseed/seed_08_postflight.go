@@ -132,6 +132,21 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 
 	checks := []postflightCountCheck{
 		{
+			what:  "mcp server feedback settings",
+			count: byProject(s.q.ServerFeedbackCountConfigs),
+			fail:  postflightMustEqual(1, "expected 1 server with feedback settings, found %d"),
+		},
+		{
+			what:  "mcp server feedback reports",
+			count: byProject(s.q.ServerFeedbackCountReports),
+			fail:  postflightMustEqual(int64(len(serverFeedbackReports)), fmt.Sprintf("expected %d mcp server feedback reports, found %%d", len(serverFeedbackReports))),
+		},
+		{
+			what:  "remote server tool metadata",
+			count: byProject(s.q.PostflightCountToolMetadata),
+			fail:  postflightMustEqual(inspectMetadataCount(), fmt.Sprintf("expected %d remote server tool metadata rows, found %%d", inspectMetadataCount())),
+		},
+		{
 			what: "paused Gemini connection without credentials",
 			count: func() (int64, error) {
 				return s.q.ActivityCountSafeGeminiComplianceConfig(ctx, repo.ActivityCountSafeGeminiComplianceConfigParams{OrganizationID: org, ProjectID: proj})
@@ -159,6 +174,11 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 		read("risk findings", &findingCount, byOrg(s.q.PostflightCountFindings)),
 		read("members", &memberCount, byOrg(s.q.PostflightCountMembers)),
 		{
+			what:  "access requests",
+			count: byOrg(s.q.PostflightCountAccessRequests),
+			fail:  postflightMustEqual(demoAccessRequestCount, fmt.Sprintf("expected %d demo access requests, found %%d", demoAccessRequestCount)),
+		},
+		{
 			what:  "security audit logs",
 			count: byOrg(s.q.PostflightCountSecurityAuditLogs),
 			fail:  postflightMustEqual(6, "expected 6 security audit logs, found %d"),
@@ -166,7 +186,7 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 		{
 			what:  "auth client associations",
 			count: byOrg(s.q.PostflightCountAuthClientAssociations),
-			fail:  postflightMustEqual(4, "expected 4 auth client associations, found %d"),
+			fail:  postflightMustEqual(6, "expected 6 auth client associations, found %d"),
 		},
 		{
 			what:  "setup tasks",
@@ -269,7 +289,7 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 				return s.q.PostflightCountKillswitchOverlappingActive(ctx, repo.PostflightCountKillswitchOverlappingActiveParams{
 					OrgID:        org,
 					PrincipalKey: s.userID(demoUsers[0].handle),
-					ResourceKey:  s.det("mcpserver-support").String(),
+					ResourceKey:  s.supportServer().String(),
 				})
 			},
 			fail: postflightMustEqual(2, "expected 2 overlapping active killswitches, found %d"),
@@ -451,7 +471,7 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 		{
 			what:  "gateway members",
 			count: byProject(s.q.PostflightCountGatewayMembers),
-			fail:  postflightMustEqual(6, "expected 6 gateway members, found %d"),
+			fail:  postflightMustEqual(10, "expected 10 gateway members, found %d"),
 		},
 		{
 			what:  "removed gateway members",
@@ -471,12 +491,12 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 		{
 			what:  "canonical wrappers",
 			count: byProject(s.q.PostflightCountCanonicalWrappers),
-			fail:  postflightMustEqual(4, "expected 4 canonical hosted MCP servers (support, ops, partner, discovery), found %d"),
+			fail:  postflightMustEqual(1, "expected 1 canonical hosted MCP server (the OpenAPI Server), found %d"),
 		},
 		{
 			what:  "gateway endpoints",
 			count: byProject(s.q.PostflightCountGatewayEndpoints),
-			fail:  postflightMustEqual(2, "expected 2 gateway endpoints, found %d"),
+			fail:  postflightMustEqual(4, "expected 4 gateway endpoints, found %d"),
 		},
 		// A member whose server lost its backend can never be dispatched to,
 		// so it would sit in the gateway's table permanently unavailable.
@@ -484,11 +504,6 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 			what:  "unservable gateway members",
 			count: byProject(s.q.PostflightCountUnservableGatewayMembers),
 			fail:  postflightMustBeZero("%d gateway members are not servable"),
-		},
-		{
-			what:  "tunnel endpoints",
-			count: byProject(s.q.PostflightCountTunnelEndpoints),
-			fail:  postflightMustEqual(1, "expected 1 private tunnel endpoint, found %d"),
 		},
 		{
 			what: "active session quarantines",

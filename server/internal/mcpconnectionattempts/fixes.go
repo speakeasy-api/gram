@@ -44,7 +44,8 @@ var fixedByValues = []FixedBy{FixedByNothing, FixedByAdminChange, FixedBySystemC
 
 // fixKey is the person, app and connection a success must share with the failure it
 // fixes. An attempt that reached no server is told apart by its project and provider
-// connection, so one provider's refresh never fixes another's.
+// connection, so one provider's refresh never fixes another's. It leaves the client out:
+// daily outcomes pair by app registration, while ReadFailingNow tells clients apart.
 type fixKey struct {
 	organizationID string
 	subjectURN     string
@@ -108,7 +109,7 @@ type Fix struct {
 // that started after the failing row, within FixLookahead of the failure's start. A
 // failure with no person has none.
 func (s Successes) Next(failure AttemptSummary) (Fix, bool) {
-	fix := Fix{Failure: failure, Failed: failure.End(s.now), Success: AttemptSummary{}, LastFailed: time.Time{}} //nolint:exhaustruct // filled when found
+	fix := Fix{Failure: failure, Failed: failure.End(s.now), Success: AttemptSummary{}, LastFailed: time.Time{}} //nolint:exhaustruct_v5 // filled when found
 	if failure.SubjectURN == "" {
 		return fix, false
 	}

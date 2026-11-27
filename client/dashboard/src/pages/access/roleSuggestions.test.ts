@@ -40,6 +40,7 @@ function def(
     category: resourceType as ScopeDefinition["category"],
     visibility: slug.includes(":blocked_") ? "internal" : "user_visible",
     agentEligible: true,
+    temporaryGrantable: false,
     sensitive: false,
     subScopes: [],
     ...extra,
@@ -174,6 +175,22 @@ describe("rolesCoveringScope", () => {
     ).toEqual(["writer-blocked-elsewhere", "writer"]);
     expect(
       rolesCoveringScope(roles, "mcp:connect", catalogue, "server-b").map(
+        (r) => r.slug,
+      ),
+    ).toEqual(["writer"]);
+  });
+  it("leaves out a role whose broader block takes the scope away", () => {
+    // A block on mcp:read also takes mcp:write away on the server.
+    const roles = [
+      role("writer-read-blocked", [
+        { scope: "mcp:write", selectors: undefined },
+        { scope: "mcp:blocked_read", selectors: undefined },
+      ]),
+      role("writer", [{ scope: "mcp:write", selectors: undefined }]),
+    ];
+
+    expect(
+      rolesCoveringScope(roles, "mcp:write", catalogue, "server-a").map(
         (r) => r.slug,
       ),
     ).toEqual(["writer"]);

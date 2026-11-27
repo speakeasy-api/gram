@@ -31,6 +31,7 @@ import {
 import { useAllRemoteSessionClients } from "../queries/useAllRemoteSessionClients";
 import { useProtectedResourceMetadata } from "../queries/useProtectedResourceMetadata";
 import { useRemoteSessionIssuersByIds } from "../queries/useRemoteSessionIssuersByIds";
+import { CONFIG_WRITE_META } from "@/lib/config-write";
 
 /**
  * The provider the upstream advertises but Speakeasy has no record of yet.
@@ -43,7 +44,7 @@ const DISCOVERED_PROVIDER_ID = "__discovered__";
 const TIER_ORDER = ["Platform", "Organization", "Project"] as const;
 type ProviderTier = (typeof TIER_ORDER)[number];
 
-export type ProviderOption = {
+type ProviderOption = {
   id: string;
   name: string;
   /** Host-only rendering of the issuer URL; the full URL is never shown here. */
@@ -54,7 +55,7 @@ export type ProviderOption = {
   match: boolean;
 };
 
-export type ProviderGroup = {
+type ProviderGroup = {
   tier: ProviderTier;
   options: ProviderOption[];
   /** The tier's first page is still loading. */
@@ -66,7 +67,7 @@ export type ProviderGroup = {
   loadMore: () => void;
 };
 
-export type ClientOption = {
+type ClientOption = {
   id: string;
   name: string;
   /** A short tail of the provider-issued client_id, to tell clients apart. */
@@ -84,10 +85,10 @@ export type ClientOption = {
  * client of the server's own: "existing" starts it from a stored client's
  * settings and never links that client.
  */
-export type RegistrationChoice = "existing" | "auto" | "manual";
+type RegistrationChoice = "existing" | "auto" | "manual";
 
 /** Which automatic registration to use when the provider offers both. */
-export type RegistrationMethod = "cimd" | "dcr";
+type RegistrationMethod = "cimd" | "dcr";
 
 type UserIdentityStatus =
   | { kind: "idle" }
@@ -912,6 +913,7 @@ export function useUserIdentityDraft({
   };
 
   const commit = useMutation({
+    meta: CONFIG_WRITE_META,
     mutationFn: async ({
       revision,
       replaceClientServerIds,

@@ -52,7 +52,7 @@ func (s *Service) CreateUserSessionIssuer(ctx context.Context, payload *gen.Crea
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 
@@ -126,7 +126,7 @@ func (s *Service) UpdateUserSessionIssuer(ctx context.Context, payload *gen.Upda
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 
@@ -256,10 +256,10 @@ func (s *Service) ListUserSessionIssuers(ctx context.Context, payload *gen.ListU
 		mcpResourceID = requestedResourceID
 	}
 
-	if err := s.authz.RequireAny(ctx,
-		authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil},
-		authz.MCPCheck(authz.ScopeMCPWrite, mcpResourceID.String(), authCtx.ProjectID.String()),
-	); err != nil {
+	if err := s.authz.Require(ctx, authz.Either(
+		authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read(),
+		authz.MCPServer(authz.MCPServerIDOf(mcpResourceID), authz.ProjectIDOf(*authCtx.ProjectID)).Write(),
+	)); err != nil {
 		return nil, err
 	}
 
@@ -303,7 +303,7 @@ func (s *Service) GetUserSessionIssuer(ctx context.Context, payload *gen.GetUser
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -348,15 +348,15 @@ func (s *Service) GetUserSessionIssuer(ctx context.Context, payload *gen.GetUser
 	return s.issuerView(ctx, row), nil
 }
 
-// Soft-deletes an issuer and cascades to its user_sessions and
-// user_session_consents.
+// DeleteUserSessionIssuer retires the issuer, its sessions and consents, and
+// its explicit attachment and orphaned grant targets.
 func (s *Service) DeleteUserSessionIssuer(ctx context.Context, payload *gen.DeleteUserSessionIssuerPayload) error {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return err
 	}
 
@@ -427,12 +427,12 @@ func (s *Service) DeleteUserSessionIssuer(ctx context.Context, payload *gen.Dele
 		return oops.E(oops.CodeUnexpected, err, "delete user session issuer").LogError(ctx, logger)
 	}
 
-	orphanCreds, err := s.revoker.DetachUserSessionIssuerFromClients(ctx, dbtx, deleted.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
+	orphanCreds, err := s.revoker.RetireDeletedUserSessionIssuer(ctx, dbtx, deleted.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
 	if err != nil {
 		return oops.E(
 			oops.CodeUnexpected,
 			err,
-			"failed to detach remote session clients from user session issuer %s",
+			"failed to retire grants for deleted user session issuer %s",
 			deleted.ID,
 		).LogError(ctx, logger)
 	}

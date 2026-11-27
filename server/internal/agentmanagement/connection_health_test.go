@@ -19,7 +19,6 @@ func TestAgentConnectionHealth(t *testing.T) {
 		refresh         bool
 		reauthenticated bool
 		refreshExpired  bool
-		missingLink     bool
 		deletedClient   bool
 		want            bool
 	}{
@@ -27,7 +26,6 @@ func TestAgentConnectionHealth(t *testing.T) {
 		{name: "expired access can refresh", refresh: true},
 		{name: "same connection reauthenticated", refresh: true, reauthenticated: true},
 		{name: "expired refresh and access", refresh: true, refreshExpired: true, want: true},
-		{name: "removed issuer association removes attachment", refresh: true, missingLink: true},
 		{name: "deleted client needs refresh", refresh: true, deletedClient: true, want: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -38,7 +36,7 @@ func TestAgentConnectionHealth(t *testing.T) {
 			project := seedProject(t, db, "org-a", "example")
 			agent := createAgent(t, db, "org-a", "owner", "Example agent")
 			_, issuer := seedManagedSession(t, db, "org-a", "user:owner")
-			session := seedManagedUpstreamWith(t, db, "org-a", issuer, "user:owner", func(p *remoterepo.UpsertRemoteSessionParams) {
+			session := seedManagedUpstreamWith(t, db, "org-a", issuer, "user:owner", func(p *remoterepo.UpsertRemoteSessionFixtureParams) {
 				p.AccessExpiresAt = pgtype.Timestamptz{Time: time.Now().Add(-time.Hour), Valid: true, InfinityModifier: pgtype.Finite}
 				p.RefreshTokenEncrypted = pgtype.Text{String: "", Valid: false}
 				if tc.refresh {
@@ -49,17 +47,11 @@ func TestAgentConnectionHealth(t *testing.T) {
 				}
 			})
 			q := remoterepo.New(db)
-			require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(t.Context(), remoterepo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: session.RemoteSessionClientID, UserSessionIssuerID: issuer}))
 			_, err := q.AttachPrincipalRemoteSessionBinding(t.Context(), remoterepo.AttachPrincipalRemoteSessionBindingParams{ProjectID: project.ID, OrganizationID: "org-a", PrincipalID: agent.ID, UserSessionIssuerID: issuer, SubjectUrn: "user:owner", RemoteSessionID: session.ID})
 			require.NoError(t, err)
 			if tc.reauthenticated {
 				_, err := testrepo.New(db).MutateAttachmentSupersededGrantGenerationFixture(t.Context(), session.ID)
 				require.NoError(t, err)
-			}
-			if tc.missingLink {
-				removed, err := q.DetachOrganizationRemoteSessionClientFromUserSessionIssuer(t.Context(), remoterepo.DetachOrganizationRemoteSessionClientFromUserSessionIssuerParams{OrganizationID: "org-a", RemoteSessionClientID: session.RemoteSessionClientID, UserSessionIssuerID: issuer})
-				require.NoError(t, err)
-				require.EqualValues(t, 1, removed)
 			}
 			if tc.deletedClient {
 				removed, err := q.SoftDeleteRemoteSessionClientFixture(t.Context(), session.RemoteSessionClientID)

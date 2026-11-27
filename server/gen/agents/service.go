@@ -346,6 +346,8 @@ type ListPayload struct {
 	Cursor *string
 	// The number of agents to return per page.
 	Limit int
+	// Keep only agents assigned to this project in the active organization.
+	ProjectID *string
 	// Case-insensitive substring match on the agent name.
 	Search *string
 	// Keep only agents in these lifecycle states.

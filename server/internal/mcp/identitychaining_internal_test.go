@@ -9,7 +9,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -56,7 +58,9 @@ func (c *recordingChainer) Acquire(_ context.Context, req identitychaining.Reque
 
 func chainingService(t *testing.T, chainer identityChainer) *Service {
 	t.Helper()
-	return &Service{identityChainer: chainer}
+	return &Service{
+		aiCatalog:       aivendorstest.NewStore(),
+		identityChainer: chainer}
 }
 
 func humanChainingContext(t *testing.T, userID, organizationID string) context.Context {
@@ -189,12 +193,15 @@ func TestMetaMemberChainer(t *testing.T) {
 		outcome identitychaining.Outcome
 		wantErr bool
 		message string
+		code    mcpconnectionattempts.Code
 	}{
-		{"not applicable stays anonymous", identitychaining.Outcome{Stage: identitychaining.StageSelection, Reason: identitychaining.ReasonNotApplicable, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}, false, ""},
-		{"reauthentication is member scoped", identitychaining.Outcome{Stage: identitychaining.StageDelegation, Reason: identitychaining.ReasonReauthenticationRequired, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}, true, `Server "docs" needs a new company sign-in. Reconnect this gateway in your AI client.`},
-		{"provider rejection is member scoped", identitychaining.Outcome{Stage: identitychaining.StageRedemption, Reason: identitychaining.ReasonInvalidGrant, Confidence: identitychaining.ConfidenceUnknown, Retryable: false, Cached: false, Provider: ""}, true, `Company sign-in for server "docs" isn't working. Contact your administrator.`},
-		{"provider rejecting the saved sign-in offers a reconnect", identitychaining.Outcome{Stage: identitychaining.StageExchange, Reason: identitychaining.ReasonInvalidGrant, Confidence: identitychaining.ConfidenceUnknown, Retryable: false, Cached: false, Provider: ""}, true, `Company sign-in for server "docs" isn't working. Reconnect this gateway in your AI client. If that doesn't help, contact your administrator.`},
-		{"temporary failure is member scoped", identitychaining.Outcome{Stage: identitychaining.StageDelegation, Reason: identitychaining.ReasonTransientFailure, Confidence: identitychaining.ConfidenceVerified, Retryable: true, Cached: false, Provider: ""}, true, `Company sign-in for server "docs" is temporarily unavailable. Try again in a moment.`},
+		{"not applicable stays anonymous", identitychaining.Outcome{Stage: identitychaining.StageSelection, Reason: identitychaining.ReasonNotApplicable, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}, false, "", mcpconnectionattempts.Code{}},
+		{"reauthentication is member scoped", identitychaining.Outcome{Stage: identitychaining.StageDelegation, Reason: identitychaining.ReasonReauthenticationRequired, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}, true, `Server "docs" needs a new company sign-in. Reconnect this gateway in your AI client.`, mcpconnectionattempts.CodeReauthenticationRequired},
+		{"an ineligible account names the administrator", identitychaining.Outcome{Stage: identitychaining.StageAuthorization, Reason: identitychaining.ReasonIneligibleIdentity, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}, true, `Company sign-in for server "docs" isn't working. Contact your administrator.`, mcpconnectionattempts.CodeIneligibleIdentity},
+		{"a personal account names the cause", identitychaining.Outcome{Stage: identitychaining.StageAuthorization, Reason: identitychaining.ReasonUnmanagedAccount, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}, true, `Company sign-in for server "docs" can't use your account, because your company doesn't manage it.`, mcpconnectionattempts.CodeUnmanagedAccount},
+		{"provider rejection is member scoped", identitychaining.Outcome{Stage: identitychaining.StageRedemption, Reason: identitychaining.ReasonInvalidGrant, Confidence: identitychaining.ConfidenceUnknown, Retryable: false, Cached: false, Provider: ""}, true, `Company sign-in for server "docs" isn't working. Contact your administrator.`, mcpconnectionattempts.Code{}},
+		{"provider rejecting the saved sign-in offers a reconnect", identitychaining.Outcome{Stage: identitychaining.StageExchange, Reason: identitychaining.ReasonInvalidGrant, Confidence: identitychaining.ConfidenceUnknown, Retryable: false, Cached: false, Provider: ""}, true, `Company sign-in for server "docs" isn't working. Reconnect this gateway in your AI client. If that doesn't help, contact your administrator.`, mcpconnectionattempts.Code{}},
+		{"temporary failure is member scoped", identitychaining.Outcome{Stage: identitychaining.StageDelegation, Reason: identitychaining.ReasonTransientFailure, Confidence: identitychaining.ConfidenceVerified, Retryable: true, Cached: false, Provider: ""}, true, `Company sign-in for server "docs" is temporarily unavailable. Try again in a moment.`, mcpconnectionattempts.Code{}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -210,6 +217,11 @@ func TestMetaMemberChainer(t *testing.T) {
 				require.Equal(t, tc.message, memberErr.message)
 				_, credential := errors.AsType[memberCredentialError](err)
 				require.Equal(t, tc.outcome.Reason == identitychaining.ReasonReauthenticationRequired, credential, "only sign-in failures should offer reconnect")
+				var recorded mcpconnectionattempts.Code
+				if failure, ok := errors.AsType[memberConnectionError](err); ok {
+					recorded = failure.code
+				}
+				require.Equal(t, tc.code, recorded)
 			} else {
 				require.NoError(t, err)
 			}
@@ -218,6 +230,20 @@ func TestMetaMemberChainer(t *testing.T) {
 			require.Equal(t, issuer, chainer.requests[0].UserSessionIssuerID)
 		})
 	}
+}
+
+// A refused account is recorded while listing; a sign-in to redo is left to the consent flow.
+func TestListingFailureHappenedForChainingRefusals(t *testing.T) {
+	t.Parallel()
+	for _, want := range []mcpconnectionattempts.Code{mcpconnectionattempts.CodeIneligibleIdentity, mcpconnectionattempts.CodeUnmanagedAccount} {
+		code, recorded := (&metaGateContext{}).listingFailureHappened(metaMember{}, memberConnectionError{&metaMemberError{message: "refused"}, want})
+		require.True(t, recorded)
+		require.Equal(t, want, code)
+	}
+
+	reauth := memberConnectionError{memberCredentialError{&metaMemberError{message: "reconnect"}}, mcpconnectionattempts.CodeReauthenticationRequired}
+	_, recorded := (&metaGateContext{}).listingFailureHappened(metaMember{}, reauth)
+	require.False(t, recorded)
 }
 
 // A transient failure that is safe to repeat is retried within a listing,

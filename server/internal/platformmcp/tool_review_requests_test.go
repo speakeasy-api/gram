@@ -9,12 +9,12 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_approval"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
-	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 type stubMCPReviewRequests struct {
@@ -94,22 +94,11 @@ func TestMCPReviewRequestToolsRemainDiscoverableWithoutProjectGrant(t *testing.T
 	registrar := liveReviewRequestRegistrar(&stubMCPReviewRequests{}, stubMCPReviewProjects{})
 	principal := Principal{UserID: "requester", OrganizationID: "organization", ConnectionID: "connection", Generation: "generation", ClientID: "client", Surface: SurfacePlatformMCP}
 	ctx := authz.GrantsToContext(t.Context(), []authz.Grant{})
+	registrar.withAICatalog(aivendorstest.NewStore())
 	visible := registrar.FilterExternalTools(ctx, principal, []*mcp.Tool{{Name: "request_mcp_review"}, {Name: "get_my_mcp_review_request"}})
 	require.Len(t, visible, 2)
 	require.Equal(t, "request_mcp_review", visible[0].Name)
 	require.Equal(t, "get_my_mcp_review_request", visible[1].Name)
-}
-
-func TestMCPReviewRequestRolloutDenialIsFeatureUnavailable(t *testing.T) {
-	t.Parallel()
-
-	result, ok := reviewRequestToolResult(oops.E(oops.CodeForbidden, nil, "MCP approval is not enabled for this organization"))
-	require.True(t, ok)
-	require.NotNil(t, result)
-	require.True(t, result.IsError)
-	text, ok := result.Content[0].(*mcp.TextContent)
-	require.True(t, ok)
-	require.JSONEq(t, `{"code":"feature_unavailable","message":"MCP review requests are not available for this organization."}`, text.Text)
 }
 
 func TestMCPReviewRequestBudgetStopsBeforeEvidenceGathering(t *testing.T) {
@@ -120,9 +109,10 @@ func TestMCPReviewRequestBudgetStopsBeforeEvidenceGathering(t *testing.T) {
 	registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "review-request-test", Version: "test"}, nil))
 	projectID := uuid.New()
 	registerReviewRequestTools(registrar, service, stubMCPReviewProjects{project: ResolvedProject{ID: projectID}}, denied, nil)
+	registrar.withProjects(slugProjects{"project": projectID})
 	principal := Principal{UserID: "requester", OrganizationID: "organization", ConnectionID: "connection", Generation: "generation", ClientID: "client", Surface: SurfacePlatformMCP}
 
-	_, err := descriptorByName(t, registrar, "request_mcp_review").Invoke(ContextWithPrincipal(t.Context(), principal), json.RawMessage(`{"project_id":"`+projectID.String()+`","target_kind":"server_url","target":"https://example.test/mcp","justification":"needed for work"}`))
+	_, err := descriptorByName(t, registrar, "request_mcp_review").Invoke(ContextWithPrincipal(t.Context(), principal), json.RawMessage(`{"project_slug":"project","target_kind":"server_url","target":"https://example.test/mcp","justification":"needed for work"}`))
 	var refusal *ToolRefusalError
 	require.ErrorAs(t, err, &refusal)
 	require.Contains(t, refusal.Payload, `"code":"rate_limited"`)
@@ -136,10 +126,11 @@ func TestMCPReviewRequestToolsBindProjectAndRequester(t *testing.T) {
 	requestID := uuid.New()
 	service := &stubMCPReviewRequests{}
 	registrar := liveReviewRequestRegistrar(service, stubMCPReviewProjects{project: ResolvedProject{ID: projectID, Name: "Project", Slug: "project"}})
+	registrar.withProjects(slugProjects{"project": projectID})
 	principal := Principal{UserID: "requester", OrganizationID: "organization", ConnectionID: "connection", Generation: "generation", ClientID: "client", Surface: SurfacePlatformMCP}
 	ctx := ContextWithPrincipal(t.Context(), principal)
 
-	createdRaw, err := descriptorByName(t, registrar, "request_mcp_review").Invoke(ctx, json.RawMessage(`{"project_id":"`+projectID.String()+`","target_kind":"server_url","target":"https://example.test/mcp?token=fake","justification":"needed for work"}`))
+	createdRaw, err := descriptorByName(t, registrar, "request_mcp_review").Invoke(ctx, json.RawMessage(`{"project_slug":"project","target_kind":"server_url","target":"https://example.test/mcp?token=fake","justification":"needed for work"}`))
 	require.NoError(t, err)
 	created, ok := createdRaw.(RequestMCPReviewOutput)
 	require.True(t, ok)
@@ -148,7 +139,7 @@ func TestMCPReviewRequestToolsBindProjectAndRequester(t *testing.T) {
 	require.Equal(t, projectID, service.createdProject)
 	require.Equal(t, principal.UserID, service.createdUser)
 
-	readRaw, err := descriptorByName(t, registrar, "get_my_mcp_review_request").Invoke(ctx, json.RawMessage(`{"project_id":"`+projectID.String()+`","request_id":"`+requestID.String()+`"}`))
+	readRaw, err := descriptorByName(t, registrar, "get_my_mcp_review_request").Invoke(ctx, json.RawMessage(`{"project_slug":"project","request_id":"`+requestID.String()+`"}`))
 	require.NoError(t, err)
 	read, ok := readRaw.(GetMyMCPReviewRequestOutput)
 	require.True(t, ok)
@@ -170,11 +161,12 @@ func TestMCPReviewRequestToolsReturnTheReviewPage(t *testing.T) {
 	requestID := uuid.New()
 	principal := Principal{UserID: "requester", OrganizationID: "organization", ConnectionID: "connection", Generation: "generation", ClientID: "client", Surface: SurfacePlatformMCP}
 	ctx := ContextWithPrincipal(t.Context(), principal)
-	createInput := json.RawMessage(`{"project_id":"` + projectID.String() + `","target_kind":"server_url","target":"https://example.test/mcp","justification":"needed for work"}`)
-	readInput := json.RawMessage(`{"project_id":"` + projectID.String() + `","request_id":"` + requestID.String() + `"}`)
+	createInput := json.RawMessage(`{"project_slug":"project","target_kind":"server_url","target":"https://example.test/mcp","justification":"needed for work"}`)
+	readInput := json.RawMessage(`{"project_slug":"project","request_id":"` + requestID.String() + `"}`)
 	register := func(service *stubMCPReviewRequests, links *stubReviewLinks) *Registrar {
 		registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "review-request-test", Version: "test"}, nil))
 		registerReviewRequestTools(registrar, service, stubMCPReviewProjects{project: ResolvedProject{ID: projectID, Name: "Project", Slug: "project"}}, allowBudget(), links)
+		registrar.withProjects(slugProjects{"project": projectID})
 		return registrar
 	}
 

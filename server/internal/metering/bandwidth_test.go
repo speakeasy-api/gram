@@ -15,9 +15,11 @@ import (
 
 	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -325,4 +327,134 @@ type flushResponseRecorder struct {
 func (w *flushResponseRecorder) Flush() {
 	w.flushed = true
 	w.ResponseRecorder.Flush()
+}
+
+// Billed egress is what the handler writes, not what leaves the wire, when the
+// meter runs inside the compressor. The server's real ordering is pinned by the
+// MCP listener's mux test.
+func TestMCPBandwidthMiddlewareMetersUncompressedBytesInsideResponseCompression(t *testing.T) {
+	t.Parallel()
+
+	publisher := &bandwidthCapturePublisher{requireBatchSize: 1}
+	projectID := uuid.New()
+	responseBody := `{"jsonrpc":"2.0","result":{"tools":[` + strings.Repeat(`{"name":"widget","description":"A widget tool."},`, 100) + `{}]}}`
+	var writeErr error
+	handler := middleware.ResponseCompression()(metering.NewMCPBandwidthMiddleware(testenv.NewLogger(t), publisher)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		metering.AttributeMCPBandwidth(r.Context(), "org-test", projectID)
+		w.Header().Set("Content-Type", "application/json")
+		_, writeErr = io.WriteString(w, responseBody)
+	})))
+
+	request := httptest.NewRequest(http.MethodGet, "/mcp/hosted", nil)
+	request.Header.Set("Accept-Encoding", "gzip")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, request)
+
+	require.NoError(t, writeErr)
+	require.Equal(t, "gzip", rec.Header().Get(constants.HeaderContentEncoding))
+	require.Less(t, rec.Body.Len(), len(responseBody), "the wire body must actually be compressed")
+	messages, _ := publisher.published()
+	require.Len(t, messages, 1)
+	require.Equal(t, string(metering.MeterMCPBandwidthEgress), messages[0].GetMeterId())
+	require.Equal(t, int64(len(responseBody)), messages[0].GetValue(), "egress is metered before compression")
+}
+
+func TestMCPBandwidthMiddlewareMetersTrailingSlashRuntimeRoutes(t *testing.T) {
+	t.Parallel()
+
+	for _, requestPath := range []string{"/mcp/hosted/", "/platform/mcp/platform-toolset/"} {
+		t.Run(requestPath, func(t *testing.T) {
+			t.Parallel()
+
+			publisher := &bandwidthCapturePublisher{requireBatchSize: 2}
+			handler := metering.NewMCPBandwidthMiddleware(testenv.NewLogger(t), publisher)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				metering.AttributeMCPBandwidth(r.Context(), "org-test", uuid.New())
+				_, _ = io.ReadAll(r.Body)
+				_, _ = io.WriteString(w, "response")
+			}))
+
+			handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, requestPath, strings.NewReader("request")))
+
+			messages, _ := publisher.published()
+			require.Len(t, messages, 2)
+			require.Equal(t, requestPath, messages[0].GetAttributes()[metering.AttributeRequestPath])
+		})
+	}
+}
+
+func TestMCPBandwidthMiddlewareSkipsNestedRuntimePaths(t *testing.T) {
+	t.Parallel()
+
+	for _, requestPath := range []string{"/mcp/hosted//", "/mcp//", "/mcp/hosted/register/"} {
+		t.Run(requestPath, func(t *testing.T) {
+			t.Parallel()
+
+			publisher := &bandwidthCapturePublisher{}
+			handler := metering.NewMCPBandwidthMiddleware(testenv.NewLogger(t), publisher)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				metering.AttributeMCPBandwidth(r.Context(), "org-test", uuid.New())
+				_, _ = io.WriteString(w, "response")
+			}))
+
+			handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, requestPath, strings.NewReader("request")))
+
+			messages, _ := publisher.published()
+			require.Empty(t, messages)
+		})
+	}
+}
+
+func TestMCPBandwidthMiddlewareLabelsPrivateNetworkIngress(t *testing.T) {
+	t.Parallel()
+
+	ingressID := uuid.New()
+	publisher := &bandwidthCapturePublisher{requireBatchSize: 2}
+	handler := metering.NewMCPBandwidthMiddleware(testenv.NewLogger(t), publisher)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		metering.AttributeMCPBandwidth(r.Context(), "org-test", uuid.New())
+		_, _ = io.ReadAll(r.Body)
+		_, _ = io.WriteString(w, "response")
+	}))
+	request := httptest.NewRequest(http.MethodPost, "/mcp/hosted", strings.NewReader("request"))
+	request = request.WithContext(requestorigin.WithContext(request.Context(), requestorigin.Origin{
+		Surface:          requestorigin.SurfacePrivateNetwork,
+		BaseURL:          "https://private.example.ts.net",
+		OrganizationID:   "org-test",
+		NetworkIngressID: ingressID,
+		NetworkIdentity:  nil,
+	}))
+
+	handler.ServeHTTP(httptest.NewRecorder(), request)
+
+	messages, _ := publisher.published()
+	require.Len(t, messages, 2)
+	for _, message := range messages {
+		require.Equal(t, ingressID.String(), message.GetAttributes()[metering.AttributeNetworkIngressID])
+		require.NotContains(t, message.GetAttributes(), metering.AttributeCustomDomain)
+	}
+}
+
+func TestMCPBandwidthMiddlewareOmitsNetworkIngressOnPublicOrigins(t *testing.T) {
+	t.Parallel()
+
+	publisher := &bandwidthCapturePublisher{requireBatchSize: 2}
+	handler := metering.NewMCPBandwidthMiddleware(testenv.NewLogger(t), publisher)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		metering.AttributeMCPBandwidth(r.Context(), "org-test", uuid.New())
+		_, _ = io.ReadAll(r.Body)
+		_, _ = io.WriteString(w, "response")
+	}))
+	request := httptest.NewRequest(http.MethodPost, "/mcp/hosted", strings.NewReader("request"))
+	request = request.WithContext(requestorigin.WithContext(request.Context(), requestorigin.Origin{
+		Surface:          requestorigin.SurfacePlatform,
+		BaseURL:          "https://app.example.test",
+		OrganizationID:   "",
+		NetworkIngressID: uuid.New(),
+		NetworkIdentity:  nil,
+	}))
+
+	handler.ServeHTTP(httptest.NewRecorder(), request)
+
+	messages, _ := publisher.published()
+	require.Len(t, messages, 2)
+	for _, message := range messages {
+		require.NotContains(t, message.GetAttributes(), metering.AttributeNetworkIngressID)
+	}
 }

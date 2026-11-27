@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -33,6 +34,22 @@ func (q *Queries) AddAttachmentReplacementOwnerMembershipFixture(ctx context.Con
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const addNullArrayElementsToProductFixture = `-- name: AddNullArrayElementsToProductFixture :exec
+UPDATE ai_products
+SET bundle_ids = array_append(bundle_ids, NULL),
+  binaries = array_append(binaries, NULL),
+  config_dirs = array_append(config_dirs, NULL),
+  process_names = array_append(process_names, NULL),
+  client_info_names = array_append(client_info_names, NULL)
+WHERE id = $1
+`
+
+// Appends a NULL to every array column, which the schema allows.
+func (q *Queries) AddNullArrayElementsToProductFixture(ctx context.Context, id string) error {
+	_, err := q.db.Exec(ctx, addNullArrayElementsToProductFixture, id)
+	return err
 }
 
 const agePreparationFixtureClaim = `-- name: AgePreparationFixtureClaim :exec
@@ -73,31 +90,6 @@ func (q *Queries) AssociateAuthClientFixture(ctx context.Context, arg AssociateA
 		arg.AuthClientID,
 	)
 	return err
-}
-
-const attachPreparationFixtureInteractiveClient = `-- name: AttachPreparationFixtureInteractiveClient :execrows
-INSERT INTO remote_session_client_user_session_issuers (remote_session_client_id,user_session_issuer_id)
-SELECT c.id, u.id FROM remote_session_clients c
-JOIN user_session_issuers u ON u.id = $1
-  AND u.project_id = c.project_id
-JOIN projects p ON p.id = c.project_id
-  AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)
-  AND (u.organization_id IS NULL OR u.organization_id = p.organization_id)
-WHERE c.id = $2 AND c.project_id = $3
-`
-
-type AttachPreparationFixtureInteractiveClientParams struct {
-	UserID    uuid.UUID
-	ID        uuid.UUID
-	ProjectID uuid.NullUUID
-}
-
-func (q *Queries) AttachPreparationFixtureInteractiveClient(ctx context.Context, arg AttachPreparationFixtureInteractiveClientParams) (int64, error) {
-	result, err := q.db.Exec(ctx, attachPreparationFixtureInteractiveClient, arg.UserID, arg.ID, arg.ProjectID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
 }
 
 const attachmentSourceWasUsedFixture = `-- name: AttachmentSourceWasUsedFixture :one
@@ -150,6 +142,17 @@ UPDATE trusted_issuer_sessions SET credential_generation = NULL WHERE id = $1
 
 func (q *Queries) ClearDelegationGenerationFixture(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, clearDelegationGenerationFixture, id)
+	return err
+}
+
+const clearFunctionsAccessOrganizationFixture = `-- name: ClearFunctionsAccessOrganizationFixture :exec
+UPDATE functions_access SET organization_id = NULL WHERE id = $1
+`
+
+// Test-only fixture: reproduces a function runner key written before
+// functions_access had an organization_id.
+func (q *Queries) ClearFunctionsAccessOrganizationFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, clearFunctionsAccessOrganizationFixture, id)
 	return err
 }
 
@@ -255,6 +258,20 @@ WHERE id = $1
 func (q *Queries) CorruptDeviceIntegrationCredentialsFixture(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, corruptDeviceIntegrationCredentialsFixture, id)
 	return err
+}
+
+const countActivePrincipalRemoteSessionBindingsForSessionFixture = `-- name: CountActivePrincipalRemoteSessionBindingsForSessionFixture :one
+SELECT COUNT(*)::int
+FROM principal_remote_session_bindings
+WHERE remote_session_id = $1
+  AND revoked_at IS NULL
+`
+
+func (q *Queries) CountActivePrincipalRemoteSessionBindingsForSessionFixture(ctx context.Context, remoteSessionID uuid.UUID) (int32, error) {
+	row := q.db.QueryRow(ctx, countActivePrincipalRemoteSessionBindingsForSessionFixture, remoteSessionID)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const countAdvisoryLockWaitersFixture = `-- name: CountAdvisoryLockWaitersFixture :one
@@ -602,23 +619,6 @@ func (q *Queries) CountPlatformMCPSetupMilestoneFixture(ctx context.Context, arg
 	return count, err
 }
 
-const countPreparationFixtureAttachments = `-- name: CountPreparationFixtureAttachments :one
-SELECT count(*) FROM remote_session_client_user_session_issuers l JOIN remote_session_clients c ON c.id=l.remote_session_client_id WHERE c.project_id = $1 AND l.remote_session_client_id = $2 AND l.user_session_issuer_id = $3
-`
-
-type CountPreparationFixtureAttachmentsParams struct {
-	ProjectID uuid.NullUUID
-	ID        uuid.UUID
-	UserID    uuid.UUID
-}
-
-func (q *Queries) CountPreparationFixtureAttachments(ctx context.Context, arg CountPreparationFixtureAttachmentsParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countPreparationFixtureAttachments, arg.ProjectID, arg.ID, arg.UserID)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
 const countPreparationFixtureBindingByID = `-- name: CountPreparationFixtureBindingByID :one
 SELECT count(*) FROM remote_session_ema_bindings WHERE id = $1 AND project_id = $2
 `
@@ -716,21 +716,6 @@ type CountPublishOutboxRowsByTopicParams struct {
 
 func (q *Queries) CountPublishOutboxRowsByTopic(ctx context.Context, arg CountPublishOutboxRowsByTopicParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countPublishOutboxRowsByTopic, arg.OrganizationID, arg.Topic)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
-const countRemoteSessionClientBindingsFixture = `-- name: CountRemoteSessionClientBindingsFixture :one
-SELECT count(*)
-FROM remote_session_client_user_session_issuers
-WHERE remote_session_client_id = $1
-`
-
-// Counts a client's user session issuer bindings, whether or not the client is
-// deleted.
-func (q *Queries) CountRemoteSessionClientBindingsFixture(ctx context.Context, remoteSessionClientID uuid.UUID) (int64, error) {
-	row := q.db.QueryRow(ctx, countRemoteSessionClientBindingsFixture, remoteSessionClientID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -916,26 +901,54 @@ func (q *Queries) CreateAuthClientHeaderFixture(ctx context.Context, arg CreateA
 	return err
 }
 
-const createExternalMCPAttachmentFixture = `-- name: CreateExternalMCPAttachmentFixture :exec
-INSERT INTO external_mcp_attachments (deployment_id, name, slug, registry_server_specifier)
-VALUES ($1, $2, $3, $4)
+const createFunctionsAccessFixture = `-- name: CreateFunctionsAccessFixture :one
+INSERT INTO functions_access (
+    project_id
+  , organization_id
+  , deployment_id
+  , function_id
+  , encryption_key
+  , bearer_format
+) VALUES (
+    $1
+  , (
+      SELECT p.organization_id
+      FROM projects AS p
+      JOIN organization_metadata AS om ON om.id = p.organization_id
+      WHERE p.id = $1
+    )
+  , $2
+  , $3
+  , $4
+  , $5
+)
+RETURNING id
 `
 
-type CreateExternalMCPAttachmentFixtureParams struct {
-	DeploymentID            uuid.UUID
-	Name                    string
-	Slug                    string
-	RegistryServerSpecifier string
+type CreateFunctionsAccessFixtureParams struct {
+	ProjectID     uuid.UUID
+	DeploymentID  uuid.UUID
+	FunctionID    uuid.UUID
+	EncryptionKey conv.Secret
+	BearerFormat  pgtype.Text
 }
 
-func (q *Queries) CreateExternalMCPAttachmentFixture(ctx context.Context, arg CreateExternalMCPAttachmentFixtureParams) error {
-	_, err := q.db.Exec(ctx, createExternalMCPAttachmentFixture,
+// Test-only fixture: stores a function runner key as given, unfenced, for
+// tests that need a deployment's function to have credentials.
+// organization_id is the project's organization, or NULL when it has no
+// metadata row. Production code writes runner keys through package
+// runnerkeys.
+func (q *Queries) CreateFunctionsAccessFixture(ctx context.Context, arg CreateFunctionsAccessFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, createFunctionsAccessFixture,
+		arg.ProjectID,
 		arg.DeploymentID,
-		arg.Name,
-		arg.Slug,
-		arg.RegistryServerSpecifier,
+		arg.FunctionID,
+		arg.EncryptionKey,
+		arg.BearerFormat,
 	)
-	return err
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const createHostedToolsetEndpointFixture = `-- name: CreateHostedToolsetEndpointFixture :execrows
@@ -1521,27 +1534,6 @@ func (q *Queries) DeletedRemoteSessionIdentityClearedFixture(ctx context.Context
 	return identity_cleared, err
 }
 
-const detachRemoteSessionClientFromUserSessionIssuer = `-- name: DetachRemoteSessionClientFromUserSessionIssuer :execrows
-DELETE FROM remote_session_client_user_session_issuers
-WHERE remote_session_client_id = $1
-  AND user_session_issuer_id = $2
-`
-
-type DetachRemoteSessionClientFromUserSessionIssuerParams struct {
-	RemoteSessionClientID uuid.UUID
-	UserSessionIssuerID   uuid.UUID
-}
-
-// Test fixture: remove a client binding to exercise detached shared grants.
-// Returns the number of bindings removed.
-func (q *Queries) DetachRemoteSessionClientFromUserSessionIssuer(ctx context.Context, arg DetachRemoteSessionClientFromUserSessionIssuerParams) (int64, error) {
-	result, err := q.db.Exec(ctx, detachRemoteSessionClientFromUserSessionIssuer, arg.RemoteSessionClientID, arg.UserSessionIssuerID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const directoryReviewAttributeOptedOutFixture = `-- name: DirectoryReviewAttributeOptedOutFixture :one
 SELECT EXISTS (
   SELECT 1 FROM directory_review_attribute_opt_outs
@@ -1634,6 +1626,49 @@ ALTER TABLE audit_logs DISABLE TRIGGER fail_admin_key_audit
 
 func (q *Queries) DisableOpenRouterAdminDisableAuditFailureFixture(ctx context.Context) error {
 	_, err := q.db.Exec(ctx, disableOpenRouterAdminDisableAuditFailureFixture)
+	return err
+}
+
+const editDocumentFixture = `-- name: EditDocumentFixture :exec
+UPDATE ai_product_cimd_documents
+SET url = $1, display_name = $2, enabled = $3,
+    deleted_at = $4
+WHERE id = $5
+`
+
+type EditDocumentFixtureParams struct {
+	Url         string
+	DisplayName string
+	Enabled     bool
+	DeletedAt   pgtype.Timestamptz
+	ID          uuid.UUID
+}
+
+func (q *Queries) EditDocumentFixture(ctx context.Context, arg EditDocumentFixtureParams) error {
+	_, err := q.db.Exec(ctx, editDocumentFixture,
+		arg.Url,
+		arg.DisplayName,
+		arg.Enabled,
+		arg.DeletedAt,
+		arg.ID,
+	)
+	return err
+}
+
+const editProductFixture = `-- name: EditProductFixture :exec
+UPDATE ai_products
+SET display_name = $1, deleted_at = $2
+WHERE id = $3
+`
+
+type EditProductFixtureParams struct {
+	DisplayName string
+	DeletedAt   pgtype.Timestamptz
+	ID          string
+}
+
+func (q *Queries) EditProductFixture(ctx context.Context, arg EditProductFixtureParams) error {
+	_, err := q.db.Exec(ctx, editProductFixture, arg.DisplayName, arg.DeletedAt, arg.ID)
 	return err
 }
 
@@ -2093,8 +2128,6 @@ type ForceRemoteSessionIssuerTokenEndpointFixtureParams struct {
 	OrganizationID        string
 }
 
-// TEST FIXTURE ONLY. Redirects the issuer behind a tenant-owned client to a
-// local token endpoint so refresh behavior can be exercised without raw SQL.
 func (q *Queries) ForceRemoteSessionIssuerTokenEndpointFixture(ctx context.Context, arg ForceRemoteSessionIssuerTokenEndpointFixtureParams) (int64, error) {
 	result, err := q.db.Exec(ctx, forceRemoteSessionIssuerTokenEndpointFixture,
 		arg.TokenEndpoint,
@@ -2263,6 +2296,23 @@ func (q *Queries) GetAttachmentSourceIDFixture(ctx context.Context, arg GetAttac
 	return id, err
 }
 
+const getAuthClientHeaderFixture = `-- name: GetAuthClientHeaderFixture :one
+SELECT value, is_secret FROM mcp_auth_client_headers WHERE id = $1 AND deleted IS FALSE
+`
+
+type GetAuthClientHeaderFixtureRow struct {
+	Value    pgtype.Text
+	IsSecret bool
+}
+
+// Reads an auth client header's stored value and secrecy.
+func (q *Queries) GetAuthClientHeaderFixture(ctx context.Context, id uuid.UUID) (GetAuthClientHeaderFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getAuthClientHeaderFixture, id)
+	var i GetAuthClientHeaderFixtureRow
+	err := row.Scan(&i.Value, &i.IsSecret)
+	return i, err
+}
+
 const getChatSessionLinkByParentFixture = `-- name: GetChatSessionLinkByParentFixture :one
 SELECT kind, child_chat_id, parent_session_id, target_harness, organization_id, project_id
 FROM chat_session_links
@@ -2294,7 +2344,7 @@ func (q *Queries) GetChatSessionLinkByParentFixture(ctx context.Context, parentC
 }
 
 const getDelegationAssertionOrSubjectPresentFixture = `-- name: GetDelegationAssertionOrSubjectPresentFixture :one
-SELECT (identity_assertion_encrypted IS NOT NULL OR upstream_subject_encrypted IS NOT NULL)::boolean AS present
+SELECT ((identity_assertion_encrypted IS NOT NULL OR identity_assertion_org_encrypted IS NOT NULL) OR (upstream_subject_encrypted IS NOT NULL OR upstream_subject_org_encrypted IS NOT NULL))::boolean AS present
 FROM trusted_issuer_sessions WHERE id = $1
 `
 
@@ -2332,7 +2382,7 @@ func (q *Queries) GetDelegationRefreshClaimFixture(ctx context.Context, arg GetD
 }
 
 const getDelegationSecretsAndGenerationFixture = `-- name: GetDelegationSecretsAndGenerationFixture :one
-SELECT (identity_assertion_encrypted IS NOT NULL OR refresh_token_encrypted IS NOT NULL OR upstream_subject_encrypted IS NOT NULL OR nonce_encrypted IS NOT NULL)::boolean AS present,
+SELECT ((identity_assertion_encrypted IS NOT NULL OR identity_assertion_org_encrypted IS NOT NULL) OR (refresh_token_encrypted IS NOT NULL OR refresh_token_org_encrypted IS NOT NULL) OR (upstream_subject_encrypted IS NOT NULL OR upstream_subject_org_encrypted IS NOT NULL) OR (nonce_encrypted IS NOT NULL OR nonce_org_encrypted IS NOT NULL))::boolean AS present,
        credential_generation
 FROM trusted_issuer_sessions WHERE id = $1
 `
@@ -2350,7 +2400,7 @@ func (q *Queries) GetDelegationSecretsAndGenerationFixture(ctx context.Context, 
 }
 
 const getDelegationSecretsPresentFixture = `-- name: GetDelegationSecretsPresentFixture :one
-SELECT (identity_assertion_encrypted IS NOT NULL OR refresh_token_encrypted IS NOT NULL OR upstream_subject_encrypted IS NOT NULL OR nonce_encrypted IS NOT NULL)::boolean AS present
+SELECT ((identity_assertion_encrypted IS NOT NULL OR identity_assertion_org_encrypted IS NOT NULL) OR (refresh_token_encrypted IS NOT NULL OR refresh_token_org_encrypted IS NOT NULL) OR (upstream_subject_encrypted IS NOT NULL OR upstream_subject_org_encrypted IS NOT NULL) OR (nonce_encrypted IS NOT NULL OR nonce_org_encrypted IS NOT NULL))::boolean AS present
 FROM trusted_issuer_sessions WHERE id = $1
 `
 
@@ -2367,7 +2417,7 @@ SELECT subject_urn, access_token_encrypted, refresh_token_encrypted FROM remote_
 
 type GetDeletedRemoteSessionCredentialsFixtureRow struct {
 	SubjectUrn            urn.SessionSubject
-	AccessTokenEncrypted  string
+	AccessTokenEncrypted  pgtype.Text
 	RefreshTokenEncrypted pgtype.Text
 }
 
@@ -2504,6 +2554,72 @@ func (q *Queries) GetDirectoryReviewItemStateFixture(ctx context.Context, id uui
 	return state, err
 }
 
+const getEnvironmentEntryFixture = `-- name: GetEnvironmentEntryFixture :one
+SELECT value, is_secret FROM environment_entries WHERE environment_id = $1 AND name = $2
+`
+
+type GetEnvironmentEntryFixtureParams struct {
+	EnvironmentID uuid.UUID
+	Name          string
+}
+
+type GetEnvironmentEntryFixtureRow struct {
+	Value    string
+	IsSecret bool
+}
+
+// Reads one environment entry by environment and name.
+func (q *Queries) GetEnvironmentEntryFixture(ctx context.Context, arg GetEnvironmentEntryFixtureParams) (GetEnvironmentEntryFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getEnvironmentEntryFixture, arg.EnvironmentID, arg.Name)
+	var i GetEnvironmentEntryFixtureRow
+	err := row.Scan(&i.Value, &i.IsSecret)
+	return i, err
+}
+
+const getFunctionsAccessOrganizationFixture = `-- name: GetFunctionsAccessOrganizationFixture :one
+SELECT organization_id, updated_at FROM functions_access WHERE id = $1
+`
+
+type GetFunctionsAccessOrganizationFixtureRow struct {
+	OrganizationID pgtype.Text
+	UpdatedAt      pgtype.Timestamptz
+}
+
+// Test-only fixture: reads a function runner key's organization, soft-deleted
+// or not.
+func (q *Queries) GetFunctionsAccessOrganizationFixture(ctx context.Context, id uuid.UUID) (GetFunctionsAccessOrganizationFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getFunctionsAccessOrganizationFixture, id)
+	var i GetFunctionsAccessOrganizationFixtureRow
+	err := row.Scan(&i.OrganizationID, &i.UpdatedAt)
+	return i, err
+}
+
+const getFunctionsAccessRowFixture = `-- name: GetFunctionsAccessRowFixture :one
+SELECT id, seq, project_id, deployment_id, function_id, organization_id, encryption_key, encryption_key_org_encrypted, bearer_format, created_at, updated_at, deleted_at, deleted FROM functions_access WHERE id = $1
+`
+
+// Test-only fixture: reads a function runner key row as stored.
+func (q *Queries) GetFunctionsAccessRowFixture(ctx context.Context, id uuid.UUID) (FunctionsAccess, error) {
+	row := q.db.QueryRow(ctx, getFunctionsAccessRowFixture, id)
+	var i FunctionsAccess
+	err := row.Scan(
+		&i.ID,
+		&i.Seq,
+		&i.ProjectID,
+		&i.DeploymentID,
+		&i.FunctionID,
+		&i.OrganizationID,
+		&i.EncryptionKey,
+		&i.EncryptionKeyOrgEncrypted,
+		&i.BearerFormat,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getLatestTrialArmAuditIDFixture = `-- name: GetLatestTrialArmAuditIDFixture :one
 SELECT id::text
 FROM audit_logs
@@ -2519,6 +2635,71 @@ func (q *Queries) GetLatestTrialArmAuditIDFixture(ctx context.Context, organizat
 	var id string
 	err := row.Scan(&id)
 	return id, err
+}
+
+const getLocalEMATypedAuthClientResourceFixture = `-- name: GetLocalEMATypedAuthClientResourceFixture :one
+SELECT resource FROM mcp_auth_client_emas
+WHERE remote_session_client_id = $1
+  AND organization_id = $2 AND deleted IS FALSE
+`
+
+type GetLocalEMATypedAuthClientResourceFixtureParams struct {
+	RemoteSessionClientID uuid.UUID
+	OrganizationID        string
+}
+
+// Reads the resource of the typed auth client the local seed records for the
+// Enterprise Sign-In (ID-JAG) Server's client.
+func (q *Queries) GetLocalEMATypedAuthClientResourceFixture(ctx context.Context, arg GetLocalEMATypedAuthClientResourceFixtureParams) (string, error) {
+	row := q.db.QueryRow(ctx, getLocalEMATypedAuthClientResourceFixture, arg.RemoteSessionClientID, arg.OrganizationID)
+	var resource string
+	err := row.Scan(&resource)
+	return resource, err
+}
+
+const getLocalEMAWiringFixture = `-- name: GetLocalEMAWiringFixture :one
+SELECT b.resource,
+       idp.issuer AS identity_provider,
+       idp_client.client_id AS identity_provider_client_id,
+       idp_client.client_secret_encrypted AS identity_provider_client_secret,
+       vendor.issuer AS authorization_server,
+       vendor.token_endpoint AS authorization_server_token_endpoint,
+       vendor_client.client_id AS authorization_server_client_id
+FROM remote_session_ema_bindings b
+JOIN user_session_issuers usi ON usi.id = b.user_session_issuer_id
+JOIN remote_session_issuers idp ON idp.id = usi.trusted_remote_session_issuer_id
+JOIN remote_session_clients idp_client ON idp_client.id = usi.trusted_remote_session_client_id
+JOIN remote_session_issuers vendor ON vendor.id = b.remote_session_issuer_id
+JOIN remote_session_clients vendor_client ON vendor_client.id = b.remote_session_client_id
+WHERE b.id = $1
+`
+
+type GetLocalEMAWiringFixtureRow struct {
+	Resource                         string
+	IdentityProvider                 string
+	IdentityProviderClientID         string
+	IdentityProviderClientSecret     pgtype.Text
+	AuthorizationServer              string
+	AuthorizationServerTokenEndpoint pgtype.Text
+	AuthorizationServerClientID      string
+}
+
+// Reads what the local seed points the Enterprise Sign-In (ID-JAG) Server's
+// binding at: its resource, the user session issuer's trusted identity
+// provider and client, and the authorization server and its client.
+func (q *Queries) GetLocalEMAWiringFixture(ctx context.Context, id uuid.UUID) (GetLocalEMAWiringFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getLocalEMAWiringFixture, id)
+	var i GetLocalEMAWiringFixtureRow
+	err := row.Scan(
+		&i.Resource,
+		&i.IdentityProvider,
+		&i.IdentityProviderClientID,
+		&i.IdentityProviderClientSecret,
+		&i.AuthorizationServer,
+		&i.AuthorizationServerTokenEndpoint,
+		&i.AuthorizationServerClientID,
+	)
+	return i, err
 }
 
 const getMCPServerRequiresUpstreamAuthFixture = `-- name: GetMCPServerRequiresUpstreamAuthFixture :one
@@ -2785,6 +2966,19 @@ func (q *Queries) GetPrincipalRemoteSessionBindingIssuerFixture(ctx context.Cont
 	return user_session_issuer_id, err
 }
 
+const getPrincipalRemoteSessionBindingSessionFixture = `-- name: GetPrincipalRemoteSessionBindingSessionFixture :one
+SELECT remote_session_id
+FROM principal_remote_session_bindings
+WHERE id = $1
+`
+
+func (q *Queries) GetPrincipalRemoteSessionBindingSessionFixture(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getPrincipalRemoteSessionBindingSessionFixture, id)
+	var remote_session_id uuid.UUID
+	err := row.Scan(&remote_session_id)
+	return remote_session_id, err
+}
+
 const getPublishOutboxDeadLetter = `-- name: GetPublishOutboxDeadLetter :one
 SELECT id, public_id, organization_id, topic, message, attributes,
        attempts, last_error, enqueued_at, created_at
@@ -2852,6 +3046,47 @@ func (q *Queries) GetPublishOutboxRow(ctx context.Context, id int64) (GetPublish
 	return i, err
 }
 
+const getRemoteMCPServerHeaderFixture = `-- name: GetRemoteMCPServerHeaderFixture :one
+SELECT name, value, value_from_request_header, is_secret FROM remote_mcp_server_headers WHERE id = $1 AND deleted IS FALSE
+`
+
+type GetRemoteMCPServerHeaderFixtureRow struct {
+	Name                   string
+	Value                  pgtype.Text
+	ValueFromRequestHeader pgtype.Text
+	IsSecret               bool
+}
+
+// Reads a remote MCP server header's static value or forwarding source.
+func (q *Queries) GetRemoteMCPServerHeaderFixture(ctx context.Context, id uuid.UUID) (GetRemoteMCPServerHeaderFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getRemoteMCPServerHeaderFixture, id)
+	var i GetRemoteMCPServerHeaderFixtureRow
+	err := row.Scan(
+		&i.Name,
+		&i.Value,
+		&i.ValueFromRequestHeader,
+		&i.IsSecret,
+	)
+	return i, err
+}
+
+const getRemoteMCPServerURLFixture = `-- name: GetRemoteMCPServerURLFixture :one
+SELECT name, url FROM remote_mcp_servers WHERE id = $1 AND deleted IS FALSE
+`
+
+type GetRemoteMCPServerURLFixtureRow struct {
+	Name pgtype.Text
+	Url  string
+}
+
+// Reads a remote MCP server's name and upstream URL.
+func (q *Queries) GetRemoteMCPServerURLFixture(ctx context.Context, id uuid.UUID) (GetRemoteMCPServerURLFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getRemoteMCPServerURLFixture, id)
+	var i GetRemoteMCPServerURLFixtureRow
+	err := row.Scan(&i.Name, &i.Url)
+	return i, err
+}
+
 const getRemoteSessionDeletedFixture = `-- name: GetRemoteSessionDeletedFixture :one
 SELECT deleted FROM remote_sessions WHERE id = $1
 `
@@ -2878,6 +3113,24 @@ func (q *Queries) GetRemoteSessionEMABindingFixture(ctx context.Context, id uuid
 	row := q.db.QueryRow(ctx, getRemoteSessionEMABindingFixture, id)
 	var i GetRemoteSessionEMABindingFixtureRow
 	err := row.Scan(&i.UserSessionIssuerID, &i.Generation)
+	return i, err
+}
+
+const getRemoteSessionOrganizationFixture = `-- name: GetRemoteSessionOrganizationFixture :one
+SELECT organization_id, updated_at FROM remote_sessions WHERE id = $1
+`
+
+type GetRemoteSessionOrganizationFixtureRow struct {
+	OrganizationID pgtype.Text
+	UpdatedAt      pgtype.Timestamptz
+}
+
+// Test-only fixture: reads a session's organization at any client scope,
+// soft-deleted or not.
+func (q *Queries) GetRemoteSessionOrganizationFixture(ctx context.Context, id uuid.UUID) (GetRemoteSessionOrganizationFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getRemoteSessionOrganizationFixture, id)
+	var i GetRemoteSessionOrganizationFixtureRow
+	err := row.Scan(&i.OrganizationID, &i.UpdatedAt)
 	return i, err
 }
 
@@ -3374,6 +3627,33 @@ func (q *Queries) InsertDeviceAgentSyncFixture(ctx context.Context, arg InsertDe
 	return err
 }
 
+const insertDocumentFixture = `-- name: InsertDocumentFixture :exec
+INSERT INTO ai_product_cimd_documents (id, ai_product_id, url, display_name, enabled, is_pattern)
+VALUES ($1, $2, $3, $4, $5, $6)
+`
+
+type InsertDocumentFixtureParams struct {
+	ID          uuid.UUID
+	AiProductID string
+	Url         string
+	DisplayName string
+	Enabled     bool
+	IsPattern   bool
+}
+
+// Inserts even where a soft-deleted row holds the URL, unlike the seed.
+func (q *Queries) InsertDocumentFixture(ctx context.Context, arg InsertDocumentFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertDocumentFixture,
+		arg.ID,
+		arg.AiProductID,
+		arg.Url,
+		arg.DisplayName,
+		arg.Enabled,
+		arg.IsPattern,
+	)
+	return err
+}
+
 const insertFunctionToolDefinitionFixture = `-- name: InsertFunctionToolDefinitionFixture :exec
 INSERT INTO function_tool_definitions (tool_urn, project_id, deployment_id, function_id, runtime, name, description)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -3549,7 +3829,8 @@ INSERT INTO network_ingresses (
     'platform',
     true,
     'test-ns',
-    'test-sa',
+    -- Unique per row, so a test can seed several active ingresses.
+    'test-sa-' || CAST(CAST($1 AS uuid) AS text),
     $3
 )
 `
@@ -3566,8 +3847,13 @@ func (q *Queries) InsertNetworkIngressFixture(ctx context.Context, arg InsertNet
 }
 
 const insertOlderRemoteSessionTombstoneFixture = `-- name: InsertOlderRemoteSessionTombstoneFixture :exec
-INSERT INTO remote_sessions (subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, deleted_at)
-SELECT src.subject_urn, src.user_session_issuer_id, src.remote_session_client_id, 'unrelated-old-access', src.deleted_at - interval '1 second'
+INSERT INTO remote_sessions (subject_urn, user_session_issuer_id, remote_session_client_id, organization_id, access_token_encrypted, deleted_at)
+SELECT src.subject_urn, src.user_session_issuer_id, src.remote_session_client_id,
+  (SELECT org.id FROM remote_session_clients AS client
+   LEFT JOIN projects AS project ON project.id = client.project_id
+   JOIN organization_metadata AS org ON org.id = COALESCE(project.organization_id, client.organization_id)
+   WHERE client.id = src.remote_session_client_id),
+  'unrelated-old-access', src.deleted_at - interval '1 second'
 FROM remote_sessions src WHERE src.id = $1::uuid
 `
 
@@ -3825,14 +4111,19 @@ BEGIN
     $fn$;
     CREATE TRIGGER mark_remote_session_identity_write
         BEFORE UPDATE ON remote_sessions FOR EACH ROW
-        WHEN (OLD.updated_at = NEW.updated_at AND OLD.last_used_at IS NOT DISTINCT FROM NEW.last_used_at)
+        WHEN (OLD.updated_at = NEW.updated_at AND OLD.last_used_at IS NOT DISTINCT FROM NEW.last_used_at
+            AND OLD.access_token_encrypted IS NOT DISTINCT FROM NEW.access_token_encrypted
+            AND OLD.access_token_org_encrypted IS NOT DISTINCT FROM NEW.access_token_org_encrypted)
         EXECUTE FUNCTION mark_remote_session_identity_write();
 END
 $install$
 `
 
-// Marks every remote_sessions update that leaves updated_at and last_used_at alone, the
-// identity restatement's signature, by appending to validation_reason.
+// Marks every remote_sessions update that leaves updated_at, last_used_at and the
+// access token alone, the identity restatement's signature, by appending to
+// validation_reason. The token write that follows a refresh's compare-and-swap
+// in the same transaction also leaves updated_at alone, but always replaces the
+// access token.
 func (q *Queries) InstallRemoteSessionIdentityWriteMarkerFixture(ctx context.Context) error {
 	_, err := q.db.Exec(ctx, installRemoteSessionIdentityWriteMarkerFixture)
 	return err
@@ -3879,6 +4170,33 @@ func (q *Queries) IsQueryBlockedByFixture(ctx context.Context, arg IsQueryBlocke
 	return exists, err
 }
 
+const lapseNetworkIngressCertificateLease = `-- name: LapseNetworkIngressCertificateLease :exec
+UPDATE network_ingress_certificate_states
+SET updated_at = updated_at - interval '1 hour'
+WHERE network_ingress_id = $1
+  AND state_key = 'issuance-lease'
+`
+
+// Ages a connection's certificate issuance lease past any lease duration, as
+// if its holder died or stalled.
+func (q *Queries) LapseNetworkIngressCertificateLease(ctx context.Context, networkIngressID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, lapseNetworkIngressCertificateLease, networkIngressID)
+	return err
+}
+
+const lapsePrincipalGrantFixture = `-- name: LapsePrincipalGrantFixture :exec
+UPDATE principal_grants
+SET expires_at = clock_timestamp() - INTERVAL '1 hour'
+WHERE id = $1
+`
+
+// Test-only fixture: turns a grant into a temporary grant that has already
+// lapsed.
+func (q *Queries) LapsePrincipalGrantFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, lapsePrincipalGrantFixture, id)
+	return err
+}
+
 const latchAttachmentOwnerFixture = `-- name: LatchAttachmentOwnerFixture :execrows
 UPDATE agents SET owner_reassignment_required_at = now(), owner_reassignment_reason = 'owner-loss' WHERE id = $1 AND organization_id = $2
 `
@@ -3899,7 +4217,7 @@ func (q *Queries) LatchAttachmentOwnerFixture(ctx context.Context, arg LatchAtta
 const listAgentColumnNamesFixture = `-- name: ListAgentColumnNamesFixture :many
 SELECT column_name::text
 FROM information_schema.columns
-WHERE table_schema = 'public' AND table_name = 'agents'
+WHERE table_schema = current_schema() AND table_name = 'agents'
 ORDER BY ordinal_position
 `
 
@@ -4572,6 +4890,48 @@ func (q *Queries) ListPublishOutboxRows(ctx context.Context) ([]ListPublishOutbo
 	return items, nil
 }
 
+const listRemoteSessionTokensFixture = `-- name: ListRemoteSessionTokensFixture :many
+SELECT id, access_token_encrypted, refresh_token_encrypted::text AS refresh_token_encrypted, auto_refresh
+FROM remote_sessions
+WHERE remote_session_client_id = $1
+  AND deleted IS FALSE
+  AND (access_expires_at IS NULL OR access_expires_at > clock_timestamp())
+ORDER BY id
+`
+
+type ListRemoteSessionTokensFixtureRow struct {
+	ID                    uuid.UUID
+	AccessTokenEncrypted  pgtype.Text
+	RefreshTokenEncrypted string
+	AutoRefresh           bool
+}
+
+// Reads the stored, encrypted tokens of a client's live remote sessions.
+func (q *Queries) ListRemoteSessionTokensFixture(ctx context.Context, remoteSessionClientID uuid.UUID) ([]ListRemoteSessionTokensFixtureRow, error) {
+	rows, err := q.db.Query(ctx, listRemoteSessionTokensFixture, remoteSessionClientID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRemoteSessionTokensFixtureRow
+	for rows.Next() {
+		var i ListRemoteSessionTokensFixtureRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AccessTokenEncrypted,
+			&i.RefreshTokenEncrypted,
+			&i.AutoRefresh,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRiskResultsAll = `-- name: ListRiskResultsAll :many
 SELECT id, project_id, organization_id, risk_policy_id, risk_policy_version, chat_message_id, chat_content_part_id, skill_version_id, source, found, rule_id, description, match, start_pos, end_pos, confidence, tags, spans, dead_letter_reason, excluded_at, excluded_exclusion_id, false_positive_at, false_positive_reason, created_at
 FROM risk_results
@@ -5003,23 +5363,6 @@ func (q *Queries) MovePreparationFixtureUserIssuerProject(ctx context.Context, a
 	return result.RowsAffected(), nil
 }
 
-const mutateAttachmentClientDetachedFromRequestingIssuerFixture = `-- name: MutateAttachmentClientDetachedFromRequestingIssuerFixture :execrows
-DELETE FROM remote_session_client_user_session_issuers WHERE remote_session_client_id = $1 AND user_session_issuer_id = $2
-`
-
-type MutateAttachmentClientDetachedFromRequestingIssuerFixtureParams struct {
-	Client     uuid.UUID
-	Requesting uuid.UUID
-}
-
-func (q *Queries) MutateAttachmentClientDetachedFromRequestingIssuerFixture(ctx context.Context, arg MutateAttachmentClientDetachedFromRequestingIssuerFixtureParams) (int64, error) {
-	result, err := q.db.Exec(ctx, mutateAttachmentClientDetachedFromRequestingIssuerFixture, arg.Client, arg.Requesting)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const mutateAttachmentDeletedAgentFixture = `-- name: MutateAttachmentDeletedAgentFixture :execrows
 UPDATE agents SET deleted_at = clock_timestamp() WHERE id = $1 AND organization_id = $2
 `
@@ -5424,6 +5767,18 @@ func (q *Queries) MutateAttachmentSuspendedAgentFixture(ctx context.Context, arg
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const nestProductBinariesFixture = `-- name: NestProductBinariesFixture :exec
+UPDATE ai_products
+SET binaries = ARRAY[ARRAY['nested-a', 'nested-b']]
+WHERE id = $1
+`
+
+// Stores binaries as a nested array, which the schema allows.
+func (q *Queries) NestProductBinariesFixture(ctx context.Context, id string) error {
+	_, err := q.db.Exec(ctx, nestProductBinariesFixture, id)
+	return err
 }
 
 const orphanDelegationSessionFixture = `-- name: OrphanDelegationSessionFixture :exec
@@ -6444,6 +6799,26 @@ func (q *Queries) SeedUserAccountFixture(ctx context.Context, arg SeedUserAccoun
 	return id, err
 }
 
+const setAPIKeyActivityFixture = `-- name: SetAPIKeyActivityFixture :exec
+UPDATE api_keys
+SET created_at = $1
+  , last_accessed_at = $2
+WHERE id = $3
+`
+
+type SetAPIKeyActivityFixtureParams struct {
+	CreatedAt      pgtype.Timestamptz
+	LastAccessedAt pgtype.Timestamptz
+	ID             uuid.UUID
+}
+
+// Backdates a key's creation and last use so the plugin key reaper sees it as
+// old or recently used.
+func (q *Queries) SetAPIKeyActivityFixture(ctx context.Context, arg SetAPIKeyActivityFixtureParams) error {
+	_, err := q.db.Exec(ctx, setAPIKeyActivityFixture, arg.CreatedAt, arg.LastAccessedAt, arg.ID)
+	return err
+}
+
 const setAPIKeyCreatorFixture = `-- name: SetAPIKeyCreatorFixture :exec
 UPDATE api_keys
 SET created_by_user_id = $1
@@ -6478,6 +6853,26 @@ type SetAPIKeyExpiresAtFixtureParams struct {
 // authentication boundary a credential rotation's grace window creates.
 func (q *Queries) SetAPIKeyExpiresAtFixture(ctx context.Context, arg SetAPIKeyExpiresAtFixtureParams) error {
 	_, err := q.db.Exec(ctx, setAPIKeyExpiresAtFixture, arg.ExpiresAt, arg.KeyHash)
+	return err
+}
+
+const setAPIKeysCreatedAtFixture = `-- name: SetAPIKeysCreatedAtFixture :exec
+UPDATE api_keys
+SET created_at = $1
+WHERE organization_id = $2
+  AND id = ANY($3::uuid[])
+`
+
+type SetAPIKeysCreatedAtFixtureParams struct {
+	CreatedAt      pgtype.Timestamptz
+	OrganizationID string
+	Ids            []uuid.UUID
+}
+
+// Pins created_at on an organization's keys so keys.list paging tests can
+// force ties on the first half of its (created_at, id) ordering.
+func (q *Queries) SetAPIKeysCreatedAtFixture(ctx context.Context, arg SetAPIKeysCreatedAtFixtureParams) error {
+	_, err := q.db.Exec(ctx, setAPIKeysCreatedAtFixture, arg.CreatedAt, arg.OrganizationID, arg.Ids)
 	return err
 }
 
@@ -7300,25 +7695,6 @@ func (q *Queries) SetOpenRouterAPIKeyHashFixture(ctx context.Context, arg SetOpe
 	return err
 }
 
-const setOpenRouterAPIKeyProviderPayloadFixture = `-- name: SetOpenRouterAPIKeyProviderPayloadFixture :exec
-UPDATE openrouter_api_keys
-SET key = $1
-WHERE organization_id = $2
-  AND key_type = $3
-`
-
-type SetOpenRouterAPIKeyProviderPayloadFixtureParams struct {
-	ProviderPayload pgtype.Text
-	OrganizationID  string
-	KeyType         string
-}
-
-// Test-only privacy sentinel in the deprecated plaintext provider payload column.
-func (q *Queries) SetOpenRouterAPIKeyProviderPayloadFixture(ctx context.Context, arg SetOpenRouterAPIKeyProviderPayloadFixtureParams) error {
-	_, err := q.db.Exec(ctx, setOpenRouterAPIKeyProviderPayloadFixture, arg.ProviderPayload, arg.OrganizationID, arg.KeyType)
-	return err
-}
-
 const setOpenRouterKeyLifecycleFixture = `-- name: SetOpenRouterKeyLifecycleFixture :execrows
 UPDATE openrouter_api_keys
 SET disabled = $1,
@@ -7409,7 +7785,7 @@ func (q *Queries) SetPendingDirectoryReviewItemsStateFixture(ctx context.Context
 }
 
 const setPreparationFixtureCIMDURI = `-- name: SetPreparationFixtureCIMDURI :exec
-UPDATE remote_session_clients SET client_id_metadata_uri = 'https://gram.example.com/client.json', client_id = 'https://gram.example.com/client.json', client_secret_encrypted = NULL, token_endpoint_auth_method = 'none' WHERE id = $1 AND project_id = $2
+UPDATE remote_session_clients SET client_id_metadata_uri = 'https://gram.example.com/client.json', client_id = 'https://gram.example.com/client.json', client_secret_encrypted = NULL, client_secret_org_encrypted = NULL, client_secret_generation = client_secret_generation + 1, token_endpoint_auth_method = 'none' WHERE id = $1 AND project_id = $2
 `
 
 type SetPreparationFixtureCIMDURIParams struct {
@@ -7439,7 +7815,7 @@ func (q *Queries) SetPreparationFixtureClientGrants(ctx context.Context, arg Set
 }
 
 const setPreparationFixtureClientSecret = `-- name: SetPreparationFixtureClientSecret :exec
-UPDATE remote_session_clients SET token_endpoint_auth_method = 'client_secret_basic', client_secret_encrypted = $1
+UPDATE remote_session_clients SET token_endpoint_auth_method = 'client_secret_basic', client_secret_encrypted = $1, client_secret_org_encrypted = NULL, client_secret_generation = client_secret_generation + 1
 WHERE id = $2 AND project_id = $3
 `
 
@@ -7478,7 +7854,7 @@ WITH issuer AS (
     RETURNING remote_session_issuers.id
 )
 UPDATE remote_session_clients
-SET token_endpoint_auth_method = 'private_key_jwt', json_web_key_set_id = $1, client_secret_encrypted = NULL,
+SET token_endpoint_auth_method = 'private_key_jwt', json_web_key_set_id = $1, client_secret_encrypted = NULL, client_secret_org_encrypted = NULL, client_secret_generation = client_secret_generation + 1,
     organization_id = $2
 WHERE remote_session_clients.id = $3
   AND remote_session_clients.project_id = $4
@@ -7526,7 +7902,7 @@ func (q *Queries) SetPreparationFixtureDCREndpoint(ctx context.Context, arg SetP
 }
 
 const setPreparationFixtureInteractiveClient = `-- name: SetPreparationFixtureInteractiveClient :exec
-UPDATE remote_session_clients SET client_secret_encrypted='interactive-ciphertext', token_endpoint_auth_method='client_secret_basic', grant_types=ARRAY['authorization_code','refresh_token'], scope=ARRAY['openid'] WHERE id = $1 AND project_id = $2
+UPDATE remote_session_clients SET client_secret_encrypted='interactive-ciphertext', client_secret_org_encrypted = NULL, client_secret_generation = client_secret_generation + 1, token_endpoint_auth_method='client_secret_basic', grant_types=ARRAY['authorization_code','refresh_token'], scope=ARRAY['openid'] WHERE id = $1 AND project_id = $2
 `
 
 type SetPreparationFixtureInteractiveClientParams struct {
@@ -7572,7 +7948,7 @@ func (q *Queries) SetPreparationFixtureIssuerPostAuth(ctx context.Context, arg S
 }
 
 const setPreparationFixtureTestClientSecret = `-- name: SetPreparationFixtureTestClientSecret :exec
-UPDATE remote_session_clients SET token_endpoint_auth_method='client_secret_basic',client_secret_encrypted='test-ciphertext' WHERE id = $1 AND project_id = $2
+UPDATE remote_session_clients SET token_endpoint_auth_method='client_secret_basic',client_secret_encrypted='test-ciphertext', client_secret_org_encrypted = NULL, client_secret_generation = client_secret_generation + 1 WHERE id = $1 AND project_id = $2
 `
 
 type SetPreparationFixtureTestClientSecretParams struct {
@@ -7692,6 +8068,23 @@ func (q *Queries) SetRemoteSessionListFixture(ctx context.Context, arg SetRemote
 		arg.ID,
 		arg.OrganizationID,
 	)
+	return err
+}
+
+const setRemoteSessionOrganizationFixture = `-- name: SetRemoteSessionOrganizationFixture :exec
+UPDATE remote_sessions SET organization_id = $1::text WHERE id = $2
+`
+
+type SetRemoteSessionOrganizationFixtureParams struct {
+	OrganizationID pgtype.Text
+	ID             uuid.UUID
+}
+
+// Test-only fixture: NULL reproduces a row written before remote_sessions had
+// an organization_id; any other value fakes a row that disagrees with its
+// client.
+func (q *Queries) SetRemoteSessionOrganizationFixture(ctx context.Context, arg SetRemoteSessionOrganizationFixtureParams) error {
+	_, err := q.db.Exec(ctx, setRemoteSessionOrganizationFixture, arg.OrganizationID, arg.ID)
 	return err
 }
 
@@ -8179,6 +8572,16 @@ func (q *Queries) SoftDeleteExternalCredentialFixture(ctx context.Context, arg S
 	return err
 }
 
+const softDeleteFunctionsAccessFixture = `-- name: SoftDeleteFunctionsAccessFixture :exec
+UPDATE functions_access SET deleted_at = clock_timestamp() WHERE id = $1
+`
+
+// Test-only fixture: soft-deletes a function runner key.
+func (q *Queries) SoftDeleteFunctionsAccessFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, softDeleteFunctionsAccessFixture, id)
+	return err
+}
+
 const softDeleteHTTPToolDefinitionFixture = `-- name: SoftDeleteHTTPToolDefinitionFixture :exec
 UPDATE http_tool_definitions
 SET deleted_at = clock_timestamp()
@@ -8565,23 +8968,6 @@ func (q *Queries) TryAcquireOpenRouterKeyBillingLockFixture(ctx context.Context,
 	var pg_try_advisory_lock bool
 	err := row.Scan(&pg_try_advisory_lock)
 	return pg_try_advisory_lock, err
-}
-
-const unlinkAttachmentClientFixture = `-- name: UnlinkAttachmentClientFixture :execrows
-DELETE FROM remote_session_client_user_session_issuers WHERE remote_session_client_id = $1 AND user_session_issuer_id = $2
-`
-
-type UnlinkAttachmentClientFixtureParams struct {
-	RemoteSessionClientID uuid.UUID
-	UserSessionIssuerID   uuid.UUID
-}
-
-func (q *Queries) UnlinkAttachmentClientFixture(ctx context.Context, arg UnlinkAttachmentClientFixtureParams) (int64, error) {
-	result, err := q.db.Exec(ctx, unlinkAttachmentClientFixture, arg.RemoteSessionClientID, arg.UserSessionIssuerID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
 }
 
 const updateChatMessageCreatedAt = `-- name: UpdateChatMessageCreatedAt :exec

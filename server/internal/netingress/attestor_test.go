@@ -24,7 +24,7 @@ type staticWorkloadVerifier struct {
 	token   string
 }
 
-func (v staticWorkloadVerifier) Verify(_ context.Context, token, source string) (Ingress, error) {
+func (v staticWorkloadVerifier) Verify(_ context.Context, token, source, _ string) (Ingress, error) {
 	if token != v.token || source == "" {
 		return Ingress{}, ErrAttestationRejected
 	}
@@ -120,13 +120,11 @@ func TestAttestorHandlerStreamsAndCancels(t *testing.T) {
 	privateRuntime := RouteGuard(Middleware(
 		staticWorkloadVerifier{
 			ingress: Ingress{
-				ID:                     uuid.New(),
-				OrganizationID:         "org_test",
-				Provider:               ProviderTailscale,
-				DNSName:                "private.example.ts.net",
-				IdentityRequired:       false,
-				AttestorNamespace:      "gram-test",
-				AttestorServiceAccount: "netingress-test",
+				ID:               uuid.New(),
+				OrganizationID:   "org_test",
+				Provider:         ProviderTailscale,
+				DNSName:          "private.example.ts.net",
+				IdentityRequired: false,
 			},
 			token: "token",
 		},

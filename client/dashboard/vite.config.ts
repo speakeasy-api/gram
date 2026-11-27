@@ -15,8 +15,10 @@ import {
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { replaceAdminServerUrl } from "./src/lib/admin-server-url.ts";
+import { replaceDashboardConfig } from "./src/lib/dashboard-config-html.ts";
 import { blankPreviewRuntimeValues } from "./src/lib/preview-runtime-values.ts";
 import { withoutLocalDevSlot } from "./dev-slot-plugin.ts";
+import { stableFonts } from "./stable-fonts-plugin.ts";
 
 // The address the Vite dev server listens on. It follows GRAM_BIND_IP so it
 // binds the same address as the other local daemons: loopback by default, the
@@ -288,16 +290,16 @@ export default defineConfig(async (env) => {
     : undefined;
   // Two build-time constants, separated so MCP configs / callback URLs /
   // anything operator-facing always report the server's authoritative URL,
-  // and only the playground (which needs same-origin cookie forwarding for
-  // the Vercel AI SDK) routes through the dashboard origin via the vite
-  // proxy.
+  // and only in-browser MCP and chat clients (which need same-origin cookie
+  // forwarding for the Vercel AI SDK) route through the dashboard origin via
+  // the vite proxy.
   //
-  //   __GRAM_SERVER_URL__       — the server's URL, always. Used everywhere
-  //                               except the playground.
-  //   __PLAYGROUND_PROXY_URL__  — the dashboard origin in dev (so the vite
-  //                               proxy can ferry cookies); undefined in
-  //                               prod (no proxy needed). Used only by the
-  //                               playground.
+  //   __GRAM_SERVER_URL__ — the server's URL, always. Used everywhere except
+  //                         in-browser MCP and chat clients.
+  //   __DEV_PROXY_URL__   — the dashboard origin in dev (so the vite proxy
+  //                         can ferry cookies); undefined in prod (no proxy
+  //                         needed). Used only by in-browser MCP and chat
+  //                         clients.
 
   const config: UserConfig = {
     experimental: {
@@ -335,7 +337,7 @@ export default defineConfig(async (env) => {
     },
     define: {
       __GRAM_SERVER_URL__: JSON.stringify(serverUrl),
-      __PLAYGROUND_PROXY_URL__: JSON.stringify(isDev ? siteUrl : undefined),
+      __DEV_PROXY_URL__: JSON.stringify(isDev ? siteUrl : undefined),
       __GRAM_GIT_SHA__: JSON.stringify(process.env["GRAM_GIT_SHA"] || ""),
       // Default Speakeasy API URL baked into the inlined elements code
       // (src/elements/lib/api.ts); config.api.url overrides it at runtime.
@@ -437,6 +439,26 @@ export default defineConfig(async (env) => {
         },
       },
       {
+        // The image entrypoint (42-dashboard-config.sh) fills the
+        // deployment's settings at container start. The dev server reads the
+        // same variable, so a local stack runs with no PostHog, RUM or
+        // configured hosts unless GRAM_DASHBOARD_CONFIG is set. Feature flags
+        // are unaffected: localhost always uses all-on dev telemetry, which
+        // also drops explicit captures. To initialize PostHog locally
+        // (autocaptured pageviews and the session ID for signup attribution),
+        // set it in mise.local.toml:
+        //   GRAM_DASHBOARD_CONFIG = '{"posthogKey":"<dev project key>","posthogHost":"https://metrics.speakeasy.com"}'
+        // (the dev key is in gram-infra's values-dev.yaml).
+        name: "dashboard-config",
+        transformIndexHtml(html) {
+          if (command !== "serve") return html;
+          return replaceDashboardConfig(
+            html,
+            process.env["GRAM_DASHBOARD_CONFIG"] || "",
+          );
+        },
+      },
+      {
         // The preview placeholders are substituted by the dashboard image's
         // entrypoint (41-preview-runtime-values.sh), which never runs under
         // `vite dev`. Blank them here so the dev server does not serve a
@@ -449,6 +471,7 @@ export default defineConfig(async (env) => {
           return blankPreviewRuntimeValues(html);
         },
       },
+      stableFonts(),
       themeInitPlugin(),
       devReadoutPlugin(),
       // Dev only: a production build must not carry a developer's local slot,

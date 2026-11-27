@@ -29,8 +29,8 @@ func (s *seeder) chOwnerSessionRows() []chTelemetryRow {
 				`,"gram.tool.name":"` + tool + `"` +
 				`,"gram.event.source":"tool_call"` +
 				chIf(sess.agent, agentActor, owner) +
-				`,"gram.toolset.slug":"acme-ops"` +
-				`,"gram.mcp_server.id":"` + s.det("mcpserver-ops").String() + `"` +
+				`,"gram.toolset.slug":"openapi-server"` +
+				`,"gram.mcp_server.id":"` + s.supportServer().String() + `"` +
 				`,"http.response.status_code":200` +
 				`,"gram.outcome":"ok"` +
 				`,"http.server.request.duration":` + chRound(0.05+float64(hash64("ownerdur", sess.key, call)%200)/100, 3) +

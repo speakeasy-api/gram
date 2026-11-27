@@ -529,12 +529,11 @@ func (f *ProxyManager) BuildTarget(
 		ToolsCallResponseInterceptors:   toolsCallResponseInterceptors,
 		// Log and connection-outcome rows only: a call with no reply has
 		// nothing to bill, scan, or record as a selected use.
-		ToolsCallFailureInterceptors: connections.withFailures([]proxy.ToolsCallFailureInterceptor{clickHouseLogInterceptor}),
-		ToolsCallRefusalInterceptors: connections.refusals(),
-		RequestFailureInterceptors:   connections.requestFailures(),
-		ToolsListRequestInterceptors: []proxy.ToolsListRequestInterceptor{
-			NewToolsListPostHogEventInterceptor(f.posthog, identity, logger),
-		},
+		ToolsCallFailureInterceptors:  connections.withFailures([]proxy.ToolsCallFailureInterceptor{clickHouseLogInterceptor}),
+		ToolsCallRefusalInterceptors:  connections.refusals(),
+		RequestFailureInterceptors:    connections.requestFailures(),
+		RequestServedInterceptors:     connections.requestsServed(),
+		ToolsListRequestInterceptors:  nil,
 		ToolsListResponseInterceptors: toolsListRespInterceptors,
 		ResourcesReadRequestInterceptors: []proxy.ResourcesReadRequestInterceptor{
 			f.resourcesReadUsageLimitsInterceptor,

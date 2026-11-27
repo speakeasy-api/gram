@@ -434,3 +434,226 @@ WHERE id = @id
   AND purpose = 'encrypt'
   AND deleted IS FALSE
 RETURNING *;
+
+-- Transition state: where an organization is in moving one use case's values
+-- from the platform key to its own key. A missing row is platform_key at
+-- generation 0. Rows are never deleted or recreated, so generation only grows.
+
+-- name: GetEncryptionTransition :one
+SELECT *
+FROM organization_encryption_transitions
+WHERE organization_id = @organization_id
+  AND use_case = @use_case;
+
+-- name: ListEncryptionTransitions :many
+SELECT *
+FROM organization_encryption_transitions
+WHERE organization_id = @organization_id
+ORDER BY use_case;
+
+-- Callers hold the organization lock, so a missing row cannot be inserted
+-- concurrently while they decide.
+-- name: LockEncryptionTransition :one
+SELECT *
+FROM organization_encryption_transitions
+WHERE organization_id = @organization_id
+  AND use_case = @use_case
+FOR UPDATE;
+
+-- name: CreateEncryptionTransition :one
+INSERT INTO organization_encryption_transitions (organization_id, use_case, state, platform_copies_cleared_at)
+VALUES (@organization_id, @use_case, @state, sqlc.narg('platform_copies_cleared_at'))
+RETURNING *;
+
+-- Lands only while the row is still at the generation the caller locked, so a
+-- state change can never skip one.
+-- name: UpdateEncryptionTransitionState :one
+UPDATE organization_encryption_transitions
+SET state = @state,
+    generation = generation + 1,
+    state_changed_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND use_case = @use_case
+  AND generation = @generation
+RETURNING *;
+
+-- name: MarkEncryptionTransitionPlatformCopiesCleared :one
+UPDATE organization_encryption_transitions
+SET platform_copies_cleared_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND use_case = @use_case
+  AND generation = @generation
+  AND platform_copies_cleared_at IS NULL
+RETURNING *;
+
+-- Lists a page of the dual_write transitions of the given use cases across
+-- organizations that may be due a backfill, least recently attempted first: a
+-- transition that never started a backfill sorts as -infinity. It leaves out
+-- transitions whose last backfill started at or after cutoff, the start of
+-- the pass, so a transition backfilled during the pass is not offered again.
+-- after_started, after_organization_id and after_use_case are the sort key of
+-- the previous page's last row; the first page passes -infinity, '' and ''.
+-- name: ListEncryptionBackfillCandidates :many
+SELECT *
+FROM organization_encryption_transitions
+WHERE state = 'dual_write'
+  AND use_case = ANY(@use_cases::text[])
+  AND (last_backfill_started_at IS NULL OR last_backfill_started_at < @cutoff::timestamptz)
+  AND (COALESCE(last_backfill_started_at, '-infinity'::timestamptz), organization_id, use_case)
+    > (@after_started::timestamptz, @after_organization_id::text, @after_use_case::text)
+ORDER BY COALESCE(last_backfill_started_at, '-infinity'::timestamptz), organization_id, use_case
+LIMIT @limit_value;
+
+-- Lists the org_kms transitions of the given use cases that may still need
+-- work: a clear that never finished and was entered more than
+-- stalled_clear_grace ago (so it is not racing the finalize that just
+-- started it), or a clear that finished but whose state was entered within
+-- straggler_window, when a write decided before the move could still land.
+-- Stalled clears come first, in random order: a failed clear records nothing,
+-- so a fixed order would offer the same failing clears first every run.
+-- name: ListEncryptionTransitionsInOrgKMSForSweep :many
+SELECT *
+FROM organization_encryption_transitions
+WHERE state = 'org_kms'
+  AND use_case = ANY(@use_cases::text[])
+  AND (
+    (platform_copies_cleared_at IS NULL AND state_changed_at < clock_timestamp() - @stalled_clear_grace::interval)
+    OR (platform_copies_cleared_at IS NOT NULL AND state_changed_at > clock_timestamp() - @straggler_window::interval)
+  )
+ORDER BY (platform_copies_cleared_at IS NOT NULL), random()
+LIMIT @limit_value;
+
+-- Claims a backfill run and returns its start, which identifies the claim. It
+-- lands only while the use case is still in dual_write at the generation the
+-- run decided under, and no other run holds the claim: no run started yet,
+-- the last run completed, or the last run started more than lease ago and so
+-- can no longer be running. No rows means one of those does not hold.
+-- name: RecordEncryptionTransitionBackfillStarted :one
+UPDATE organization_encryption_transitions
+SET last_backfill_started_at = clock_timestamp(),
+    last_backfill_completed_at = NULL,
+    last_backfill_error = NULL,
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND use_case = @use_case
+  AND state = 'dual_write'
+  AND generation = @generation
+  AND (
+    last_backfill_started_at IS NULL
+    OR last_backfill_completed_at IS NOT NULL
+    OR last_backfill_started_at < clock_timestamp() - @lease::interval
+  )
+RETURNING last_backfill_started_at;
+
+-- Records the end of the run that holds the claim started at started_at. No
+-- rows means another run took the claim over.
+-- name: RecordEncryptionTransitionBackfillCompleted :execrows
+UPDATE organization_encryption_transitions
+SET last_backfill_completed_at = clock_timestamp(),
+    last_backfill_converted_count = @converted_count::bigint,
+    last_backfill_remaining_count = @remaining_count::bigint,
+    last_backfill_unreadable_count = @unreadable_count::bigint,
+    last_backfill_error = sqlc.narg('error'),
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND use_case = @use_case
+  AND last_backfill_started_at = @started_at::timestamptz
+  AND last_backfill_completed_at IS NULL;
+
+-- The database clock, so times compared with state_changed_at and the
+-- backfill columns come from the same clock.
+-- name: GetEncryptionClock :one
+SELECT clock_timestamp()::timestamptz AS now;
+
+-- Records a clean verification pass that started at verified_at. It lands only
+-- while the state is still the generation the pass verified under.
+-- name: RecordEncryptionTransitionVerified :execrows
+UPDATE organization_encryption_transitions
+SET last_verified_at = @verified_at::timestamptz,
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND use_case = @use_case
+  AND generation = @generation;
+
+-- Records a value whose platform-key copy does not decrypt. A new hash means
+-- the row was rewritten, so detection starts over.
+-- name: UpsertEncryptionUnreadableValue :exec
+INSERT INTO organization_encryption_unreadable_values (
+  organization_id, use_case, source_column, row_id, platform_ciphertext_sha256, error_code
+) VALUES (
+  @organization_id, @use_case, @source_column, @row_id, @platform_ciphertext_sha256, @error_code
+)
+ON CONFLICT (organization_id, use_case, source_column, row_id) DO UPDATE
+SET first_detected_at = CASE
+      WHEN organization_encryption_unreadable_values.platform_ciphertext_sha256 = EXCLUDED.platform_ciphertext_sha256
+        THEN organization_encryption_unreadable_values.first_detected_at
+      ELSE clock_timestamp()
+    END,
+    platform_ciphertext_sha256 = EXCLUDED.platform_ciphertext_sha256,
+    error_code = EXCLUDED.error_code,
+    last_detected_at = clock_timestamp(),
+    updated_at = clock_timestamp();
+
+-- Unreadable records are derived state, so deleting one once its value seals
+-- is safe.
+-- name: DeleteEncryptionUnreadableValue :exec
+DELETE FROM organization_encryption_unreadable_values
+WHERE organization_id = @organization_id
+  AND use_case = @use_case
+  AND source_column = @source_column
+  AND row_id = @row_id;
+
+-- Test fixture: moves when a use case entered its state, so tests can pass the
+-- minimum time in dual_write without waiting.
+-- name: SetEncryptionTransitionStateChangedAt :exec
+UPDATE organization_encryption_transitions
+SET state_changed_at = @state_changed_at
+WHERE organization_id = @organization_id
+  AND use_case = @use_case;
+
+-- Test fixture: sets the last backfill's start and end and the last clean
+-- verification, so tests can place a run in the past without waiting.
+-- name: SetEncryptionTransitionRunTimesFixture :exec
+UPDATE organization_encryption_transitions
+SET last_backfill_started_at = sqlc.narg('last_backfill_started_at'),
+    last_backfill_completed_at = sqlc.narg('last_backfill_completed_at'),
+    last_verified_at = sqlc.narg('last_verified_at')
+WHERE organization_id = @organization_id
+  AND use_case = @use_case;
+
+-- Test fixture: reads one unreadable value record.
+-- name: GetEncryptionUnreadableValue :one
+SELECT *
+FROM organization_encryption_unreadable_values
+WHERE organization_id = @organization_id
+  AND use_case = @use_case
+  AND source_column = @source_column
+  AND row_id = @row_id;
+
+-- Test fixture: a fenced write shaped like a feature's, against a table that
+-- has an organization_id column, so tests can exercise the fence predicate
+-- and its row lock on real Postgres.
+-- name: FencedWriteFixture :execrows
+UPDATE organization_encryption_unreadable_values AS v
+SET error_code = @error_code
+WHERE v.organization_id = @organization_id
+  AND v.use_case = @use_case
+  AND v.source_column = @source_column
+  AND v.row_id = @row_id
+  AND COALESCE((
+    SELECT t.generation FROM organization_encryption_transitions AS t
+    WHERE t.organization_id = v.organization_id AND t.use_case = @use_case
+    FOR KEY SHARE
+  ), 0) = @decided_generation::bigint;
+
+-- name: TryLockEncryptionClear :one
+-- Takes the session advisory lock that serializes clearing one organization's
+-- platform-key copies for a use case, without waiting. The caller holds its
+-- connection until it unlocks.
+SELECT pg_try_advisory_lock(hashtextextended('orgencryption-clear:' || @organization_id::text || ':' || @use_case::text, 0))::boolean AS locked;
+
+-- name: UnlockEncryptionClear :one
+-- Releases the lock TryLockEncryptionClear took on the same connection.
+SELECT pg_advisory_unlock(hashtextextended('orgencryption-clear:' || @organization_id::text || ':' || @use_case::text, 0))::boolean AS unlocked;

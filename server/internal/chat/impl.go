@@ -49,6 +49,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/chat/chattitle"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -58,6 +59,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/requestip"
 	"github.com/speakeasy-api/gram/server/internal/risk/chatfindings"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -86,7 +88,19 @@ type Service struct {
 	telemetryService *telemetry.Service
 	billingRepo      billing.Repository
 	audit            *audit.Logger
-	riskFindings     *chatfindings.Reader
+
+	// staffOrg is the deployment's Speakeasy staff organization, which the
+	// credit balance gate never blocks.
+	staffOrg     staff.Organization
+	riskFindings *chatfindings.Reader
+
+	// transcriptShadow opens encrypted shadow copies of message bodies. Nil
+	// unless some project reads through shadows.
+	transcriptShadow *transcriptstore.Store
+
+	// transcriptShadowReadProjects are the projects whose chat reads open
+	// shadows instead of plaintext.
+	transcriptShadowReadProjects map[uuid.UUID]struct{}
 	// access is the per-chat gate, shared with services that reveal session
 	// content under another name (see SessionAccess).
 	access *SessionAccess
@@ -135,6 +149,18 @@ func (s *Service) WithStreamRotation(meterProvider metric.MeterProvider, maxAge 
 	return s
 }
 
+// WithTranscriptShadowReads makes chat reads for the listed projects open
+// message bodies from encrypted shadows instead of plaintext. An empty list or
+// a nil store leaves every project on plaintext.
+func (s *Service) WithTranscriptShadowReads(store *transcriptstore.Store, projectIDs ...uuid.UUID) *Service {
+	s.transcriptShadow = store
+	s.transcriptShadowReadProjects = make(map[uuid.UUID]struct{}, len(projectIDs))
+	for _, projectID := range projectIDs {
+		s.transcriptShadowReadProjects[projectID] = struct{}{}
+	}
+	return s
+}
+
 // WithRiskFindings sets the ClickHouse reader behind chat risk counts, filters and highlights.
 func (s *Service) WithRiskFindings(findings *chatfindings.Reader) *Service {
 	s.riskFindings = findings
@@ -171,32 +197,36 @@ func NewService(
 	assistantTokens *assistanttokens.Manager,
 	billingRepo billing.Repository,
 	auditLogger *audit.Logger,
+	staffOrg staff.Organization,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("chat"))
 
 	return &Service{
-		auth:             auth.New(logger, db, sessions, authzEngine),
-		authz:            authzEngine,
-		db:               db,
-		sessions:         sessions,
-		chatSessions:     chatSessions,
-		assistantTokens:  assistantTokens,
-		logger:           logger,
-		repo:             repo.New(db),
-		tracer:           tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/chat"),
-		openRouter:       openRouter,
-		completionClient: completionClient,
-		contextWindow:    contextWindow,
-		assetStorage:     assetStorage,
-		posthog:          posthog,
-		telemetryService: telemetryService,
-		billingRepo:      billingRepo,
-		audit:            auditLogger,
-		riskFindings:     nil,
-		access:           NewSessionAccess(logger, db, authzEngine),
-		turnStream:       nil, // opt in via WithTurnStream
-		streamMetrics:    nil, // opt in via WithStreamRotation
-		streamMaxAge:     0,   // opt in via WithStreamRotation
+		auth:                         auth.New(logger, db, sessions, authzEngine),
+		authz:                        authzEngine,
+		db:                           db,
+		sessions:                     sessions,
+		chatSessions:                 chatSessions,
+		assistantTokens:              assistantTokens,
+		logger:                       logger,
+		repo:                         repo.New(db),
+		tracer:                       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/chat"),
+		openRouter:                   openRouter,
+		completionClient:             completionClient,
+		contextWindow:                contextWindow,
+		assetStorage:                 assetStorage,
+		posthog:                      posthog,
+		telemetryService:             telemetryService,
+		billingRepo:                  billingRepo,
+		audit:                        auditLogger,
+		staffOrg:                     staffOrg,
+		riskFindings:                 nil,
+		transcriptShadow:             nil,
+		transcriptShadowReadProjects: nil,
+		access:                       NewSessionAccess(logger, db, authzEngine),
+		turnStream:                   nil, // opt in via WithTurnStream
+		streamMetrics:                nil, // opt in via WithStreamRotation
+		streamMaxAge:                 0,   // opt in via WithStreamRotation
 
 		workloadInference: nil, // opt in via WithWorkloadInference
 
@@ -564,12 +594,7 @@ func (s *Service) GetAssistantSessionSummary(ctx context.Context, payload *gen.G
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{
-		Scope:        authz.ScopeProjectRead,
-		ResourceKind: "",
-		ResourceID:   authCtx.ProjectID.String(),
-		Dimensions:   nil,
-	}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -686,11 +711,11 @@ func (s *Service) GetWorkUnitsTrend(ctx context.Context, payload *gen.GetWorkUni
 	if enforce, err := s.authz.ShouldEnforce(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to authorize work units trend").LogError(ctx, s.logger)
 	} else if enforce {
-		allowed, err := s.authz.Evaluate(ctx, authz.ChatReadCheck(projectID))
+		decision, err := s.authz.Decide(authz.WithoutChallenges(ctx), authz.Chats(authz.ProjectIDFrom(projectID)).Read())
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to authorize work units trend").LogError(ctx, s.logger)
 		}
-		if !allowed {
+		if !decision.AllAllowed {
 			return nil, oops.C(oops.CodeForbidden)
 		}
 	}
@@ -1062,7 +1087,7 @@ const (
 // can't be made we fall back to own-sessions rather than failing.
 func (s *Service) chatVisibilityScope(ctx context.Context, authCtx *contextvalues.AuthContext, payloadExternalUserID, payloadUserID *string, agentSessions agentSessionScope) (chatVisibility, error) {
 	// An assistant principal is set only on the assistant runtime path and only
-	// the managed-assistant platform toolset surfaces chat tools, so treat it as
+	// the managed assistant's platform toolset surfaces chat tools, so treat it as
 	// admin-equivalent for project-wide visibility.
 	_, isAssistantCall := contextvalues.GetAssistantPrincipal(ctx)
 
@@ -1074,10 +1099,10 @@ func (s *Service) chatVisibilityScope(ctx context.Context, authCtx *contextvalue
 	// owner-matching, not via chat:read.
 	//
 	// When RBAC is not enforced for the org we must NOT fall through to "see all"
-	// — Evaluate short-circuits to true when enforcement is off, so check
+	// — Decide short-circuits to true when enforcement is off, so check
 	// ShouldEnforce explicitly and treat the disabled case as constrained.
 	//
-	// Use Evaluate rather than Require here: this is a visibility branch, not an
+	// Use Decide rather than Require here: this is a visibility branch, not an
 	// access gate. Members legitimately hold no chat:read grant and fall through
 	// to own-session visibility, so a denial is the expected, non-error outcome.
 	// Require would stamp a chat:read "DENIED" authz challenge on every such
@@ -1088,14 +1113,14 @@ func (s *Service) chatVisibilityScope(ctx context.Context, authCtx *contextvalue
 	if enforce, err := s.authz.ShouldEnforce(ctx); err != nil {
 		s.logger.WarnContext(ctx, "could not determine RBAC enforcement for chat visibility; showing own sessions", attr.SlogError(err))
 	} else if enforce {
-		allowed, err := s.authz.Evaluate(ctx, authz.ChatReadCheck(authCtx.ProjectID.String()))
+		decision, err := s.authz.Decide(authz.WithoutChallenges(ctx), authz.Chats(authz.ProjectIDOf(*authCtx.ProjectID)).Read())
 		if err != nil {
 			// An unsatisfied grant yields (false, nil); a non-nil error is
 			// unexpected. Log it but still serve own sessions rather than
 			// failing the listing.
 			s.logger.WarnContext(ctx, "chat:read visibility check failed for chat listing; showing own sessions", attr.SlogError(err))
 		} else {
-			canReadAllSessions = allowed
+			canReadAllSessions = decision.AllAllowed
 		}
 	}
 
@@ -1157,31 +1182,24 @@ func (s *Service) editableAgentIDs(ctx context.Context, authCtx *contextvalues.A
 	for _, id := range agentIDs {
 		checks = append(checks, agentWriteCheck(id))
 	}
-	allowed, err := s.authz.Filter(ctx, checks)
+	decisions, err := s.authz.Decide(ctx, checks...)
 	if err != nil {
 		// Visibility is never a hard gate: fall back to owned agents.
 		s.logger.WarnContext(ctx, "filter editable agents failed for agent session visibility; showing owned agents only", attr.SlogError(err))
 		return nil, nil
 	}
 
-	editable := make([]uuid.UUID, 0, len(allowed))
-	for _, raw := range allowed {
-		id, err := uuid.Parse(raw)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "parse editable agent id").LogError(ctx, s.logger)
+	editable := make([]uuid.UUID, 0, len(agentIDs))
+	for i, id := range agentIDs {
+		if decisions.Each[i].Allowed {
+			editable = append(editable, id)
 		}
-		editable = append(editable, id)
 	}
 	return editable, nil
 }
 
 func agentWriteCheck(agentID uuid.UUID) authz.Check {
-	return authz.Check{
-		Scope:        authz.ScopeAgentWrite,
-		ResourceKind: authz.ResourceKindAgent,
-		ResourceID:   agentID.String(),
-		Dimensions:   nil,
-	}
+	return authz.Agent(authz.AgentIDOf(agentID)).Write()
 }
 
 // unionAgentIDs merges agent id lists without repeating an id.
@@ -1380,6 +1398,9 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to load risk-windowed messages").LogError(ctx, s.logger)
 		}
+		if err := openShadowRows(ctx, s, authCtx, rows, riskWindowedMessageBody); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to open encrypted chat messages").LogError(ctx, s.logger)
+		}
 		resultMessages = make([]*gen.ChatMessage, len(rows))
 		for i := range rows {
 			r := rows[i]
@@ -1429,6 +1450,9 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to load search-windowed messages").LogError(ctx, s.logger)
 		}
+		if err := openShadowRows(ctx, s, authCtx, rows, searchWindowedMessageBody); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to open encrypted chat messages").LogError(ctx, s.logger)
+		}
 		resultMessages = make([]*gen.ChatMessage, len(rows))
 		for i := range rows {
 			r := rows[i]
@@ -1476,6 +1500,9 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		}
 		// We paged forward from an existing anchor, so older messages exist.
 		hasMoreBefore = true
+		if err := openShadowRows(ctx, s, authCtx, rows, chatMessageBody); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to open encrypted chat messages").LogError(ctx, s.logger)
+		}
 		resultMessages = s.buildGenMessages(ctx, rows)
 
 	case payload.FromStart && payload.BeforeSeq == nil:
@@ -1502,6 +1529,9 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		// carries source inference + ClickHouse enrichment like the newest page.
 		if isInitialLatest {
 			latestPageRows = rows
+		}
+		if err := openShadowRows(ctx, s, authCtx, rows, chatMessageBody); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to open encrypted chat messages").LogError(ctx, s.logger)
 		}
 		resultMessages = s.buildGenMessages(ctx, rows)
 
@@ -1532,6 +1562,9 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		hasMoreAfter = payload.BeforeSeq != nil
 		if isInitialLatest {
 			latestPageRows = rows
+		}
+		if err := openShadowRows(ctx, s, authCtx, rows, chatMessageBody); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to open encrypted chat messages").LogError(ctx, s.logger)
 		}
 		resultMessages = s.buildGenMessages(ctx, rows)
 	}
@@ -1774,13 +1807,13 @@ func extractHTTPMetadata(r *http.Request) httpMetadata {
 // checkCreditBalance rejects the request when the org has consumed its granted
 // credits. Reads only the cached period usage so the gate stays cheap; on
 // cache miss we fail open and rely on the OpenRouter per-key monthly limit as
-// the hard backstop. Speakeasy-internal orgs (specialLimitOrgs) bypass.
+// the hard backstop. The staff organization bypasses it.
 //
 // Phase 0: only enforce the hard gate on free-tier orgs. Pro/enterprise stay
 // bounded by the OpenRouter monthly key cap (creditsAccountTypeMap) until the
 // two limit sources are unified — see AGE-2122.
 func (s *Service) checkCreditBalance(ctx context.Context, orgID, accountType string) error {
-	if openrouter.IsSpecialLimitOrg(orgID) {
+	if s.staffOrg.Is(orgID) {
 		return nil
 	}
 
@@ -2980,9 +3013,9 @@ func buildSummarizeTranscript(messages []repo.ChatMessage) string {
 		if msg.Role != "user" && msg.Role != "assistant" {
 			continue
 		}
-		// Strip allowlisted harness envelopes (<message-context>, <notification>)
-		// so the summarizer sees the human turn, not framing boilerplate — same
-		// canonical tags title generation mines.
+		// Strip allowlisted harness envelopes so the summarizer sees the human
+		// turn, not framing boilerplate — same canonical tags title generation
+		// mines.
 		content := StripLeadingEnvelopes(msg.Content)
 		if content == "" {
 			continue

@@ -1,4 +1,4 @@
-import { render } from "@testing-library/react";
+import { act, render } from "@testing-library/react";
 import { StrictMode } from "react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -20,8 +20,8 @@ describe("useOnUnmount", () => {
     expect(first).not.toHaveBeenCalled();
     expect(latest).not.toHaveBeenCalled();
 
-    view.unmount();
-    await vi.waitFor(() => expect(latest).toHaveBeenCalledOnce());
+    await act(async () => view.unmount());
+    expect(latest).toHaveBeenCalledOnce();
 
     expect(first).not.toHaveBeenCalled();
   });
@@ -37,7 +37,7 @@ describe("useOnUnmount", () => {
     await Promise.resolve();
     expect(cleanup).not.toHaveBeenCalled();
 
-    view.unmount();
-    await vi.waitFor(() => expect(cleanup).toHaveBeenCalledOnce());
+    await act(async () => view.unmount());
+    expect(cleanup).toHaveBeenCalledOnce();
   });
 });

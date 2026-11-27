@@ -102,7 +102,7 @@ func setupResourceDanceFixture(t *testing.T, resource string, slugSuffix string,
 
 	secretCiphertext, err := enc.Encrypt([]byte("res-secret"))
 	require.NoError(t, err)
-	client, err := q.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+	client, err := q.CreateRemoteSessionClientFixture(ctx, repo.CreateRemoteSessionClientFixtureParams{
 		ProjectID:               conv.ToNullUUID(*authCtx.ProjectID),
 		OrganizationID:          conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
 		RemoteSessionIssuerID:   issuer.ID,
@@ -116,11 +116,7 @@ func setupResourceDanceFixture(t *testing.T, resource string, slugSuffix string,
 	})
 	require.NoError(t, err)
 
-	err = q.AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: client.ID,
-		UserSessionIssuerID:   userIssuer,
-	})
-	require.NoError(t, err)
+	placeClientForSignIn(t, ctx, ti.conn, client.ID, userIssuer)
 
 	clients, err := mgr.ListClients(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuer)
 	require.NoError(t, err)

@@ -13,6 +13,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
@@ -23,7 +24,9 @@ import (
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/chatredact"
 	"github.com/speakeasy-api/gram/server/internal/codemode"
+	"github.com/speakeasy-api/gram/server/internal/dataexports"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
@@ -35,10 +38,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/otelsink"
+	"github.com/speakeasy-api/gram/server/internal/mcpfeedback"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
 	"github.com/speakeasy-api/gram/server/internal/oktaresourceconnections"
+	otelsvc "github.com/speakeasy-api/gram/server/internal/otel"
 	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	"github.com/speakeasy-api/gram/server/internal/otelpub"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
@@ -79,8 +84,36 @@ func newConnectionLogExport(publisher gcp.Publisher[*otelv1.InboundLogRecord]) m
 	return mcpconnectionattempts.WithExport(otelsink.New(publisher, gatewayRecordsServiceName))
 }
 
+// newDataExportRouteTester composes a test source for every data export source.
+func newDataExportRouteTester(logger *slog.Logger, meterProvider metric.MeterProvider, policy *guardian.Policy) (*otelsvc.RouteTester, error) {
+	sources := append(otelsvc.NewRouteTestSources(logger, meterProvider),
+		otelsink.NewTestSource(otelsvc.NewConnectionLogTestRequestBuilder(logger, meterProvider), gatewayRecordsServiceName),
+		mcpfeedback.NewTestSource(otelsvc.NewFeedbackLogTestRequestBuilder(logger, meterProvider), gatewayRecordsServiceName),
+	)
+	tester, err := otelsvc.NewRouteTester(policy, sources...)
+	if err != nil {
+		return nil, fmt.Errorf("compose data export route tester: %w", err)
+	}
+	return tester, nil
+}
+
+// newDataExportRouteTests sends export test events with the server's outbound policy, limited per route and per organization.
+func newDataExportRouteTests(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, auditLogger *audit.Logger, encryptionClient *encryption.Client, policy *guardian.Policy, redisClient *redis.Client) (*dataexports.RouteTestCore, error) {
+	tester, err := newDataExportRouteTester(logger, meterProvider, policy)
+	if err != nil {
+		return nil, err
+	}
+	store := ratelimit.NewRedisStore(redisClient)
+	return dataexports.NewRouteTestCore(logger, db, auditLogger, encryptionClient, tester, dataexports.RouteTestLimits{
+		Route:        ratelimit.New(store, dataexports.RouteTestLimitName, ratelimit.PerMinute(dataexports.RouteTestsPerMinute), ratelimit.WithMetrics(meterProvider)),
+		Organization: ratelimit.New(store, dataexports.RouteTestOrganizationLimitName, ratelimit.PerMinute(dataexports.RouteTestsPerOrganizationPerMinute), ratelimit.WithMetrics(meterProvider)),
+	}), nil
+}
+
 type mcpServiceDependencies struct {
-	Connections    *mcpconnectionattempts.Recorder
+	Connections *mcpconnectionattempts.Recorder
+	// AICatalog is the process-wide AI client catalog store.
+	AICatalog      *aivendors.Store
 	TunnelMetrics  *metrics.Collector
 	Logger         *slog.Logger
 	Tracer         trace.TracerProvider
@@ -151,7 +184,7 @@ func newMCPService(c *cli.Context, d mcpServiceDependencies) (service *mcp.Servi
 			err = errors.Join(err, releaseCodeExecutor(c.Context, codeExecutor))
 		}
 	}()
-	service, err = mcp.NewService(d.Logger, d.Tracer, d.Meter, d.DB, d.Sessions, d.ChatSessions, d.Environment, d.Posthog, d.Features, d.ServerURL, d.SiteURL, d.Encryption, cacheImpl,
+	service, err = mcp.NewService(d.AICatalog, d.Logger, d.Tracer, d.Meter, d.DB, d.Sessions, d.ChatSessions, d.Environment, d.Posthog, d.Features, d.ServerURL, d.SiteURL, d.Encryption, cacheImpl,
 		d.Guardian, d.Functions, d.BillingTracker, d.Billing, d.Telemetry, d.ToolCallLogs, d.TelemetryService, d.RAG, d.Triggers, d.Authz, d.AssistantTokens, d.PrincipalCredentials, d.ShadowMCP, d.Audit, d.PlatformExtras, d.PlatformFeatureChecker, d.PlatformToolsets,
 		d.Identity, usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)), d.Challenges, d.MCPRisk, proxy, route.NewRedis(d.Redis), c.String("tunnel-forward-token"), cidrs, d.CallerAssertions, d.Redis,
 		mcp.TunnelPublicConfig{SessionTTL: 0, LiveSessionCap: c.Int("public-tunnels-live-session-cap"), InitializeRate: ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0}, RequestRate: ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0}, MaxRequestLifetime: 0},
@@ -160,12 +193,13 @@ func newMCPService(c *cli.Context, d mcpServiceDependencies) (service *mcp.Servi
 		return nil, fmt.Errorf("initialize MCP service: %w", err)
 	}
 	service.SetCallbackOrigins(d.CallbackOrigins)
+	service.SetFeedback(mcpfeedback.NewRecorder(d.Logger, d.Meter, d.DB, chatredact.New(), mcpfeedback.NewLimits(ratelimit.NewRedisStore(d.Redis), d.Meter), gatewayRecordsServiceName, d.Features))
 	service.SetPlatformHosts(d.PlatformHosts)
 	service.SetOpenAIAppsChallengeToken(c.String("openai-apps-challenge-token"))
 	if err := service.SetMCPRegistryAuth(c.String("mcp-registry-auth")); err != nil {
 		return nil, fmt.Errorf("configure MCP registry auth: %w", err)
 	}
-	delegation := remotesessions.NewDelegationService(d.DB, d.Encryption, d.Challenges)
+	delegation := remotesessions.NewDelegationService(d.DB, d.Challenges)
 	service.SetFederatedLoginConsumer(mcp.NewFederatedDelegationConsumer(delegation))
 	chainer, err := newIdentityChainer(d.Logger, d.Meter, d.DB, d.Redis, d.Encryption, d.Guardian, d.Challenges, delegation, d.Audit)
 	if err != nil {
@@ -195,7 +229,7 @@ func newIdentityChainer(logger *slog.Logger, meter metric.MeterProvider, db *pgx
 	if err != nil {
 		return nil, fmt.Errorf("initialize identity chaining key resolver: %w", err)
 	}
-	chainer := identitychaining.New(logger, db, enc, challenges, delegation, assertionKeys, cache.NewRedisCacheAdapter(redisClient))
+	chainer := identitychaining.New(logger, db, challenges.UpstreamTokens(), challenges, delegation, assertionKeys, cache.NewRedisCacheAdapter(redisClient))
 	chainer.SetResourceResolver(challenges.ResolveEMAResource)
 	chainer.SetCachedResourceResolver(challenges.CachedEMAResource)
 	chainer.SetMeterProvider(meter)

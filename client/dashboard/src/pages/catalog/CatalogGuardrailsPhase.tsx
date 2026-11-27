@@ -64,18 +64,22 @@ export function CatalogGuardrailsPhase({
   // their tools), so customizing installs first, then opens it pre-filled.
   const customize = async () => {
     setCustomizing(true);
-    const mcpServerIds = await releaseState.installForCustomizing();
-    if (mcpServerIds.length === 0) return;
-    void navigate(
-      routes.policyCenter.new.href() +
-        policyNewPrefillQuery({
-          categories: guardrail.categories,
-          mcpServerIds,
-          action: effectiveAction(guardrail),
-          score: guardrail.score,
-          ...(single ? { name: `${single.name} guardrail` } : {}),
-        }),
-    );
+    try {
+      const mcpServerIds = await releaseState.installForCustomizing();
+      if (mcpServerIds.length === 0) return;
+      void navigate(
+        routes.policyCenter.new.href() +
+          policyNewPrefillQuery({
+            categories: guardrail.categories,
+            mcpServerIds,
+            action: effectiveAction(guardrail),
+            score: guardrail.score,
+            ...(single ? { name: `${single.name} guardrail` } : {}),
+          }),
+      );
+    } finally {
+      setCustomizing(false);
+    }
   };
   const { guardrail, servers } = releaseState;
   const single = servers.length === 1 ? servers[0] : undefined;

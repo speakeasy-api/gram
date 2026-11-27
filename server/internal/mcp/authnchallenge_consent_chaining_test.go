@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -13,8 +14,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 const (
@@ -39,7 +42,9 @@ type consentGovernor struct {
 	requests   []identitychaining.Request
 	acquired   []identitychaining.Request
 	signInIDs  []uuid.UUID
-	refreshed  []identitychaining.Request
+	// checkedSignIns are the sign-ins CheckConsent judged.
+	checkedSignIns []uuid.UUID
+	refreshed      []identitychaining.Request
 }
 
 func (g *consentGovernor) Governs(context.Context, identitychaining.Request) bool {
@@ -88,7 +93,7 @@ func (g *consentGovernor) seen() []identitychaining.Request {
 
 func setConsentGovernor(t *testing.T, fx consentActionFixture, issuer uuid.UUID, served ...string) *consentGovernor {
 	t.Helper()
-	g := &consentGovernor{t: t, issuer: issuer, served: map[string]bool{}, governs: len(served) > 0, configured: true, usable: false, refresh: identitychaining.RefreshNotChained, acquire: nil, token: "", mu: sync.Mutex{}, requests: nil, acquired: nil, signInIDs: nil, refreshed: nil}
+	g := &consentGovernor{t: t, issuer: issuer, served: map[string]bool{}, governs: len(served) > 0, configured: true, usable: false, refresh: identitychaining.RefreshNotChained, acquire: nil, token: "", mu: sync.Mutex{}, requests: nil, acquired: nil, signInIDs: nil, checkedSignIns: nil, refreshed: nil}
 	for _, u := range served {
 		g.served[u] = true
 	}
@@ -103,8 +108,20 @@ func seedChainedConsentEndpoint(t *testing.T, tag string) (context.Context, cons
 	ctx, fx := standaloneConsent(t, tag, consentChainedUpstream, func(ctx context.Context, ti *testInstance, projectID, issuerID uuid.UUID, slug string) uuid.UUID {
 		return attachConsentRemoteMcpServer(t, ctx, ti.conn, projectID, issuerID, slug, consentChainedUpstream)
 	})
-	fx.clientA = createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, tag, "", []uuid.UUID{fx.shared})
+	fx.clientA = createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, tag, "")
+	seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, fx.endpoint.McpServerID.UUID, fx.clientA, authz.AuthClientTypeEMA)
+	seedPrincipalMCPConnectGrant(t, ctx, fx.ti, fx.orgID, urn.NewPrincipal(urn.PrincipalTypeUser, fx.subject.ID), fx.endpoint.McpServerID.UUID)
 	return ctx, fx, clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, fx.clientA)
+}
+
+// chainedConsentChoice reads the typed choice the browser includes on approval.
+func chainedConsentChoice(t *testing.T, fx consentActionFixture) string {
+	t.Helper()
+	code, page, _ := render(t, fx)
+	require.Equal(t, http.StatusOK, code)
+	match := regexp.MustCompile(`name="auth_client" form="consent-approve-form" value="([a-f0-9-]+)"`).FindStringSubmatch(page)
+	require.Len(t, match, 2, "approval must carry the visible connection's exact credential")
+	return match[1]
 }
 
 func TestConsentPage_IdentityChainedServiceIsManagedWithFallback(t *testing.T) {
@@ -120,7 +137,7 @@ func TestConsentPage_IdentityChainedServiceIsManagedWithFallback(t *testing.T) {
 	require.Contains(t, page, "0 of 1 connected", "a chained service counts once its check connects")
 	require.Contains(t, page, `data-chain-check="pending"`)
 	require.Contains(t, page, "data-connect-fallback")
-	require.Contains(t, page, "Use a separate sign-in instead")
+	require.Contains(t, page, "data-connect-fallback > Use your own account </button>")
 	require.Contains(t, page, `data-consent-enabled="true"`)
 	require.NotContains(t, page, "Connect or reconnect a service above to give access.")
 
@@ -177,12 +194,13 @@ func TestConsentPage_UnroutableGrantIsNotChained(t *testing.T) {
 	require.NotContains(t, page, consentManagedCopy)
 }
 
-func TestConsentPage_ChainingLookupFaultDegrades(t *testing.T) {
+func TestConsentPage_UnavailableChainingResourceDegrades(t *testing.T) {
 	t.Parallel()
 
 	_, fx, issuer := seedChainedConsentEndpoint(t, "aim61-fault-page")
 	g := setConsentGovernor(t, fx, issuer, consentChainedUpstream)
-	fx.endpoint.McpServerID = conv.ToNullUUID(uuid.New())
+	// Keep the server and its typed offer live; only chaining lacks a resource.
+	fx.endpoint.UpstreamResource = ""
 
 	code, page, _ := render(t, fx)
 	require.NotEqual(t, http.StatusInternalServerError, code)
@@ -228,7 +246,8 @@ func TestConsentPage_DirectTunneledServiceIsManaged(t *testing.T) {
 		serverID = createTunneledServer(t, ctx, ti, projectID, issuerID, slug, identifier)
 		return serverID
 	})
-	fx.clientA = createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim480-tunnel-chained", "", []uuid.UUID{fx.shared})
+	fx.clientA = createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim480-tunnel-chained", "")
+	seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, serverID, fx.clientA, authz.AuthClientTypeEMA)
 	issuer := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, fx.clientA)
 	stampRemoteSessionIssuer(t, ctx, fx.ti.conn, fx.projectID, serverID, conv.ToNullUUID(issuer))
 	g := setConsentGovernor(t, fx, issuer, identifier)
@@ -237,7 +256,7 @@ func TestConsentPage_DirectTunneledServiceIsManaged(t *testing.T) {
 	require.Equal(t, http.StatusOK, code, "a governed sole tunneled service must not auto-connect")
 	require.Nil(t, loc)
 	require.Contains(t, page, consentManagedCopy)
-	require.Contains(t, page, "Use a separate sign-in instead")
+	require.Contains(t, page, "data-connect-fallback > Use your own account </button>")
 
 	reqs := g.seen()
 	require.Len(t, reqs, 1)
@@ -252,7 +271,10 @@ func TestConsentPage_DirectTunneledServiceIsManaged(t *testing.T) {
 	}, reqs[0], "a tunneled upstream is judged with its own derived issuer, through its client")
 }
 
-func (g *consentGovernor) CheckConsent(ctx context.Context, req identitychaining.Request, _ uuid.UUID) identitychaining.Outcome {
+func (g *consentGovernor) CheckConsent(ctx context.Context, req identitychaining.Request, signInID uuid.UUID) identitychaining.Outcome {
+	g.mu.Lock()
+	g.checkedSignIns = append(g.checkedSignIns, signInID)
+	g.mu.Unlock()
 	_, outcome := g.Acquire(ctx, req)
 	return outcome
 }

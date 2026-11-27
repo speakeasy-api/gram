@@ -84,9 +84,10 @@ func (s *ChatSearchService) valid() bool {
 
 // SearchChatsInput selects an explicit project and date interval.
 type SearchChatsInput struct {
-	ProjectID string `json:"project_id,omitempty"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID string `json:"-"`
 
-	ProjectSlug string `json:"project_slug,omitempty"`
+	ProjectSlug string `json:"project_slug"`
 
 	From string `json:"from"`
 
@@ -233,11 +234,11 @@ func (s *ChatSearchService) authorize(ctx context.Context, principal Principal, 
 	// Project-wide transcript access still takes the unrestricted grant. It is
 	// evaluated rather than required: a member without it is the expected case
 	// and falls back to their own scope, not a denial worth recording.
-	allowed, err := s.engine.Evaluate(ctx, authz.ChatReadCheck(principal.OrganizationID), authz.ChatReadCheck(project.ID.String()))
+	decision, err := s.engine.Decide(authz.WithoutChallenges(ctx), authz.OrgChats(authz.OrgIDFrom(principal.OrganizationID)).Read(), authz.Chats(authz.ProjectIDOf(project.ID)).Read())
 	if err != nil {
 		return zero, fmt.Errorf("evaluate chat transcript access: %w", err)
 	}
-	if allowed {
+	if decision.AllAllowed {
 		return chatAccess{project: project, ownUserID: "", ownedAgentIDs: nil}, nil
 	}
 	owned, err := chatrepo.New(s.db).ListOwnedAgentIDs(ctx, chatrepo.ListOwnedAgentIDsParams{
@@ -400,9 +401,10 @@ func containsFold(text, query string) bool {
 
 // ReadChatInput anchors a small context window on one captured message.
 type ReadChatInput struct {
-	ProjectID string `json:"project_id,omitempty"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID string `json:"-"`
 
-	ProjectSlug string `json:"project_slug,omitempty"`
+	ProjectSlug string `json:"project_slug"`
 
 	ChatID string `json:"chat_id"`
 

@@ -4,20 +4,21 @@ import { CopyButton } from "@/components/ui/CopyButton";
 import { DotRow } from "@/components/ui/DotRow";
 import { Text } from "@/components/ui/Text";
 import { useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
+import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
 import {
   hostedToolCountLabel,
-  MCP_SERVER_KIND_LABEL,
   mcpServerDisplayName,
   mcpServerHref,
   type McpServerKind,
 } from "./mcp-server-kind";
-import { SpeakeasyMark } from "./OrganizationGatewayCard";
-import { AlertTriangleIcon, Link2, Network } from "lucide-react";
-import { useHostedMcpOAuthConfigStatus } from "../sources/sources-hooks";
+import { McpKindBadge } from "./McpKindBadge";
+import { SpeakeasyMark } from "./ProjectGatewayCard";
+import type { ProjectGatewayEntryStatus } from "./useProjectGatewayEntry";
+import { Link2, Network } from "lucide-react";
 
 /** Table rows of the /mcp listing; gateways and servers share Name, Kind, Address, Contents. */
 
@@ -25,9 +26,11 @@ const CELL = "px-3 py-3";
 
 function NameCell({
   name,
+  muted = false,
   children,
 }: {
   name: string;
+  muted?: boolean;
   children?: React.ReactNode;
 }): JSX.Element {
   return (
@@ -36,6 +39,7 @@ function NameCell({
         <Text
           variant="subheading"
           as="div"
+          muted={muted}
           className="group-hover:text-primary min-w-0 truncate text-sm transition-colors"
           title={name}
         >
@@ -96,7 +100,7 @@ export function GatewayTableRow({
     >
       <NameCell name={gateway.name} />
       <td className={CELL}>
-        <Badge variant="neutral">Gateway</Badge>
+        <McpKindBadge kind="gateway" />
       </td>
       <AddressCell url={mcpUrl} />
       <td className={CELL}>
@@ -108,52 +112,40 @@ export function GatewayTableRow({
   );
 }
 
-/** The Organization Gateway: every server a person can reach. */
-export function OrganizationGatewayTableRow({
+/** The project's gateway: every server in the project a person can reach. */
+export function ProjectGatewayTableRow({
   url,
-  isOff,
+  status,
 }: {
   url: string | undefined;
-  isOff: boolean;
+  status: ProjectGatewayEntryStatus;
 }): JSX.Element {
   const routes = useRoutes();
+  const isDisabled = status === "off" || status === "unavailable";
   return (
     <DotRow
-      href={routes.mcp.organizationGateway.href()}
-      ariaLabel="Open Organization Gateway"
-      icon={<SpeakeasyMark className="h-5 w-5" />}
+      href={routes.mcp.projectGateway.href()}
+      ariaLabel="Open Project Gateway"
+      className={cn(isDisabled && "bg-muted/30")}
+      icon={
+        <SpeakeasyMark
+          className={cn("h-5 w-5", isDisabled && "opacity-50 grayscale")}
+        />
+      }
     >
-      <NameCell name="Organization Gateway">
-        {isOff && <Badge variant="warning">Off</Badge>}
+      <NameCell name="Project Gateway" muted={isDisabled}>
+        {status === "off" && <Badge variant="warning">Off</Badge>}
+        {status === "unavailable" && (
+          <Badge variant="warning">Unavailable</Badge>
+        )}
       </NameCell>
       <td className={CELL}>
-        <Badge variant="neutral">Gateway</Badge>
+        <McpKindBadge kind="gateway" />
       </td>
-      <td className={`max-w-xs ${CELL}`}>
-        {url ? (
-          <div
-            className="relative z-20 flex items-center gap-1.5"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <Text small muted className="truncate font-mono text-xs">
-              {url.replace(/^https?:\/\//, "")}
-            </Text>
-            <CopyButton
-              text={url}
-              size="sm"
-              icon={Link2}
-              tooltip="Copy MCP URL"
-            />
-          </div>
-        ) : (
-          <Text small muted>
-            —
-          </Text>
-        )}
-      </td>
+      <AddressCell url={url} />
       <td className={CELL}>
         <Text small muted>
-          Every server your team can reach
+          Every server in this project your team can reach
         </Text>
       </td>
     </DotRow>
@@ -171,14 +163,10 @@ export function MCPServerTableRow({
   const routes = useRoutes();
   const hosted = kind === "hosted";
   const toolset = hosted ? server.toolset : undefined;
-  const oauthStatus = useHostedMcpOAuthConfigStatus({
-    toolset,
-    userSessionIssuerId: server.userSessionIssuerId,
-  });
   const name = mcpServerDisplayName(server);
   return (
     <DotRow
-      href={mcpServerHref(routes, server, oauthStatus)}
+      href={mcpServerHref(routes, server)}
       ariaLabel={`Open MCP server ${name}`}
       icon={
         <SourceMcpIcon
@@ -187,18 +175,9 @@ export function MCPServerTableRow({
         />
       }
     >
-      <NameCell name={name}>
-        {oauthStatus === "required-unconfigured" && (
-          <Badge variant="warning">
-            <Badge.LeftIcon>
-              <AlertTriangleIcon />
-            </Badge.LeftIcon>
-            <Badge.Text>OAuth Required</Badge.Text>
-          </Badge>
-        )}
-      </NameCell>
+      <NameCell name={name} />
       <td className={CELL}>
-        <Badge variant="neutral">{MCP_SERVER_KIND_LABEL[kind]}</Badge>
+        <McpKindBadge kind={kind} />
       </td>
       {server.primaryEndpointUrl || hosted ? (
         <AddressCell url={server.primaryEndpointUrl} />

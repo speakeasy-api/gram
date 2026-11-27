@@ -1,4 +1,4 @@
-//nolint:exhaustruct // Chat metadata projections intentionally omit documented optional fields.
+//nolint:exhaustruct_v5 // Chat metadata projections intentionally omit documented optional fields.
 package platformmcp
 
 import (
@@ -102,19 +102,19 @@ func (v authzChatListVisibility) resolve(ctx context.Context, principal Principa
 	if _, isAssistantCall := contextvalues.GetAssistantPrincipal(ctx); isAssistantCall {
 		return chatListScope{userID: "", ownedAgentIDs: nil}, nil
 	}
-	// Evaluate, not Require: a member without chat:read is the expected case,
-	// not a denial to record. Where RBAC is not enforced Evaluate would allow
+	// Decide, not Require: a member without chat:read is the expected case,
+	// not a denial to record. Where RBAC is not enforced Decide would allow
 	// everything, so that case stays constrained to the member's own sessions.
 	enforce, err := v.engine.ShouldEnforce(ctx)
 	if err != nil {
 		return chatListScope{}, fmt.Errorf("resolve chat list visibility: %w", err)
 	}
 	if enforce {
-		allowed, err := v.engine.Evaluate(ctx, authz.ChatReadCheck(projectID.String()))
+		decision, err := v.engine.Decide(authz.WithoutChallenges(ctx), authz.Chats(authz.ProjectIDOf(projectID)).Read())
 		if err != nil {
 			return chatListScope{}, fmt.Errorf("evaluate chat list visibility: %w", err)
 		}
-		if allowed {
+		if decision.AllAllowed {
 			return chatListScope{userID: "", ownedAgentIDs: nil}, nil
 		}
 	}
@@ -200,7 +200,8 @@ func (s *ChatMetadataService) valid() bool {
 // ListChatsInput narrows one project's chats. Every filter is optional; an
 // empty listing returns the chats active in the last week.
 type ListChatsInput struct {
-	ProjectID   string `json:"project_id,omitempty"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID   string `json:"-"`
 	ProjectSlug string `json:"project_slug,omitempty"`
 	Window      string `json:"window,omitempty"`
 	Risk        string `json:"risk,omitempty"`

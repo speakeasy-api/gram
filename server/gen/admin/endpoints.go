@@ -22,7 +22,6 @@ type Endpoints struct {
 	Logout                                  goa.Endpoint
 	GetSession                              goa.Endpoint
 	GetOrganizationFeatures                 goa.Endpoint
-	SetOrganizationProviderSetup            goa.Endpoint
 	SetOrganizationFeature                  goa.Endpoint
 	GetOrganizationChatAnalysisSettings     goa.Endpoint
 	SetOrganizationChatAnalysisSettings     goa.Endpoint
@@ -123,6 +122,9 @@ type Endpoints struct {
 	DisableUpstreamAuthEnforcement          goa.Endpoint
 	BackfillMcpAuthGrants                   goa.Endpoint
 	BackfillMcpConnectGrants                goa.Endpoint
+	GetSecretBackfills                      goa.Endpoint
+	RunMarketplaceTokenBackfill             goa.Endpoint
+	RunRunnerKeyOrganizationBackfill        goa.Endpoint
 	GetProjectRedeployPreview               goa.Endpoint
 	RedeployProject                         goa.Endpoint
 	ListCustomDomains                       goa.Endpoint
@@ -136,9 +138,25 @@ type Endpoints struct {
 	ListMemoryEvalRuns                      goa.Endpoint
 	GetMemoryEvalRun                        goa.Endpoint
 	StartMemoryEvalRun                      goa.Endpoint
+	ListAssistantOrganizations              goa.Endpoint
+	RepairOrganizationAssistantAgentNames   goa.Endpoint
 	ListOrganizationAssistants              goa.Endpoint
 	MigrateOrganizationAssistantIdentities  goa.Endpoint
 	MigrateOrganizationAssistantsToKit      goa.Endpoint
+	GetHooksRollout                         goa.Endpoint
+	GetHooksReleaseProgress                 goa.Endpoint
+	SetHooksRolloutDefault                  goa.Endpoint
+	GetOrganizationHooksRollout             goa.Endpoint
+	SetOrganizationHooksRollout             goa.Endpoint
+	ClearOrganizationHooksRollout           goa.Endpoint
+	ListTailscaleOAuthMigration             goa.Endpoint
+	RunTailscaleOAuthMigrationStep          goa.Endpoint
+	GetOrganizationEncryption               goa.Endpoint
+	ListOrganizationEncryptionTransitions   goa.Endpoint
+	EnrollOrganizationEncryption            goa.Endpoint
+	RollbackOrganizationEncryption          goa.Endpoint
+	RunOrganizationEncryption               goa.Endpoint
+	FinalizeOrganizationEncryption          goa.Endpoint
 }
 
 // UploadPlatformImageRequestData holds both the payload and the HTTP request
@@ -169,7 +187,6 @@ func NewEndpoints(s Service) *Endpoints {
 		Logout:                                  NewLogoutEndpoint(s),
 		GetSession:                              NewGetSessionEndpoint(s, a.APIKeyAuth),
 		GetOrganizationFeatures:                 NewGetOrganizationFeaturesEndpoint(s, a.APIKeyAuth),
-		SetOrganizationProviderSetup:            NewSetOrganizationProviderSetupEndpoint(s, a.APIKeyAuth),
 		SetOrganizationFeature:                  NewSetOrganizationFeatureEndpoint(s, a.APIKeyAuth),
 		GetOrganizationChatAnalysisSettings:     NewGetOrganizationChatAnalysisSettingsEndpoint(s, a.APIKeyAuth),
 		SetOrganizationChatAnalysisSettings:     NewSetOrganizationChatAnalysisSettingsEndpoint(s, a.APIKeyAuth),
@@ -270,6 +287,9 @@ func NewEndpoints(s Service) *Endpoints {
 		DisableUpstreamAuthEnforcement:          NewDisableUpstreamAuthEnforcementEndpoint(s, a.APIKeyAuth),
 		BackfillMcpAuthGrants:                   NewBackfillMcpAuthGrantsEndpoint(s, a.APIKeyAuth),
 		BackfillMcpConnectGrants:                NewBackfillMcpConnectGrantsEndpoint(s, a.APIKeyAuth),
+		GetSecretBackfills:                      NewGetSecretBackfillsEndpoint(s, a.APIKeyAuth),
+		RunMarketplaceTokenBackfill:             NewRunMarketplaceTokenBackfillEndpoint(s, a.APIKeyAuth),
+		RunRunnerKeyOrganizationBackfill:        NewRunRunnerKeyOrganizationBackfillEndpoint(s, a.APIKeyAuth),
 		GetProjectRedeployPreview:               NewGetProjectRedeployPreviewEndpoint(s, a.APIKeyAuth),
 		RedeployProject:                         NewRedeployProjectEndpoint(s, a.APIKeyAuth),
 		ListCustomDomains:                       NewListCustomDomainsEndpoint(s, a.APIKeyAuth),
@@ -283,9 +303,25 @@ func NewEndpoints(s Service) *Endpoints {
 		ListMemoryEvalRuns:                      NewListMemoryEvalRunsEndpoint(s, a.APIKeyAuth),
 		GetMemoryEvalRun:                        NewGetMemoryEvalRunEndpoint(s, a.APIKeyAuth),
 		StartMemoryEvalRun:                      NewStartMemoryEvalRunEndpoint(s, a.APIKeyAuth),
+		ListAssistantOrganizations:              NewListAssistantOrganizationsEndpoint(s, a.APIKeyAuth),
+		RepairOrganizationAssistantAgentNames:   NewRepairOrganizationAssistantAgentNamesEndpoint(s, a.APIKeyAuth),
 		ListOrganizationAssistants:              NewListOrganizationAssistantsEndpoint(s, a.APIKeyAuth),
 		MigrateOrganizationAssistantIdentities:  NewMigrateOrganizationAssistantIdentitiesEndpoint(s, a.APIKeyAuth),
 		MigrateOrganizationAssistantsToKit:      NewMigrateOrganizationAssistantsToKitEndpoint(s, a.APIKeyAuth),
+		GetHooksRollout:                         NewGetHooksRolloutEndpoint(s, a.APIKeyAuth),
+		GetHooksReleaseProgress:                 NewGetHooksReleaseProgressEndpoint(s, a.APIKeyAuth),
+		SetHooksRolloutDefault:                  NewSetHooksRolloutDefaultEndpoint(s, a.APIKeyAuth),
+		GetOrganizationHooksRollout:             NewGetOrganizationHooksRolloutEndpoint(s, a.APIKeyAuth),
+		SetOrganizationHooksRollout:             NewSetOrganizationHooksRolloutEndpoint(s, a.APIKeyAuth),
+		ClearOrganizationHooksRollout:           NewClearOrganizationHooksRolloutEndpoint(s, a.APIKeyAuth),
+		ListTailscaleOAuthMigration:             NewListTailscaleOAuthMigrationEndpoint(s, a.APIKeyAuth),
+		RunTailscaleOAuthMigrationStep:          NewRunTailscaleOAuthMigrationStepEndpoint(s, a.APIKeyAuth),
+		GetOrganizationEncryption:               NewGetOrganizationEncryptionEndpoint(s, a.APIKeyAuth),
+		ListOrganizationEncryptionTransitions:   NewListOrganizationEncryptionTransitionsEndpoint(s, a.APIKeyAuth),
+		EnrollOrganizationEncryption:            NewEnrollOrganizationEncryptionEndpoint(s, a.APIKeyAuth),
+		RollbackOrganizationEncryption:          NewRollbackOrganizationEncryptionEndpoint(s, a.APIKeyAuth),
+		RunOrganizationEncryption:               NewRunOrganizationEncryptionEndpoint(s, a.APIKeyAuth),
+		FinalizeOrganizationEncryption:          NewFinalizeOrganizationEncryptionEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -296,7 +332,6 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.Logout = m(e.Logout)
 	e.GetSession = m(e.GetSession)
 	e.GetOrganizationFeatures = m(e.GetOrganizationFeatures)
-	e.SetOrganizationProviderSetup = m(e.SetOrganizationProviderSetup)
 	e.SetOrganizationFeature = m(e.SetOrganizationFeature)
 	e.GetOrganizationChatAnalysisSettings = m(e.GetOrganizationChatAnalysisSettings)
 	e.SetOrganizationChatAnalysisSettings = m(e.SetOrganizationChatAnalysisSettings)
@@ -397,6 +432,9 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.DisableUpstreamAuthEnforcement = m(e.DisableUpstreamAuthEnforcement)
 	e.BackfillMcpAuthGrants = m(e.BackfillMcpAuthGrants)
 	e.BackfillMcpConnectGrants = m(e.BackfillMcpConnectGrants)
+	e.GetSecretBackfills = m(e.GetSecretBackfills)
+	e.RunMarketplaceTokenBackfill = m(e.RunMarketplaceTokenBackfill)
+	e.RunRunnerKeyOrganizationBackfill = m(e.RunRunnerKeyOrganizationBackfill)
 	e.GetProjectRedeployPreview = m(e.GetProjectRedeployPreview)
 	e.RedeployProject = m(e.RedeployProject)
 	e.ListCustomDomains = m(e.ListCustomDomains)
@@ -410,9 +448,25 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListMemoryEvalRuns = m(e.ListMemoryEvalRuns)
 	e.GetMemoryEvalRun = m(e.GetMemoryEvalRun)
 	e.StartMemoryEvalRun = m(e.StartMemoryEvalRun)
+	e.ListAssistantOrganizations = m(e.ListAssistantOrganizations)
+	e.RepairOrganizationAssistantAgentNames = m(e.RepairOrganizationAssistantAgentNames)
 	e.ListOrganizationAssistants = m(e.ListOrganizationAssistants)
 	e.MigrateOrganizationAssistantIdentities = m(e.MigrateOrganizationAssistantIdentities)
 	e.MigrateOrganizationAssistantsToKit = m(e.MigrateOrganizationAssistantsToKit)
+	e.GetHooksRollout = m(e.GetHooksRollout)
+	e.GetHooksReleaseProgress = m(e.GetHooksReleaseProgress)
+	e.SetHooksRolloutDefault = m(e.SetHooksRolloutDefault)
+	e.GetOrganizationHooksRollout = m(e.GetOrganizationHooksRollout)
+	e.SetOrganizationHooksRollout = m(e.SetOrganizationHooksRollout)
+	e.ClearOrganizationHooksRollout = m(e.ClearOrganizationHooksRollout)
+	e.ListTailscaleOAuthMigration = m(e.ListTailscaleOAuthMigration)
+	e.RunTailscaleOAuthMigrationStep = m(e.RunTailscaleOAuthMigrationStep)
+	e.GetOrganizationEncryption = m(e.GetOrganizationEncryption)
+	e.ListOrganizationEncryptionTransitions = m(e.ListOrganizationEncryptionTransitions)
+	e.EnrollOrganizationEncryption = m(e.EnrollOrganizationEncryption)
+	e.RollbackOrganizationEncryption = m(e.RollbackOrganizationEncryption)
+	e.RunOrganizationEncryption = m(e.RunOrganizationEncryption)
+	e.FinalizeOrganizationEncryption = m(e.FinalizeOrganizationEncryption)
 }
 
 // NewLoginEndpoint returns an endpoint function that calls the method "login"
@@ -485,34 +539,6 @@ func NewGetOrganizationFeaturesEndpoint(s Service, authAPIKeyFn security.AuthAPI
 			return nil, err
 		}
 		res, err := s.GetOrganizationFeatures(ctx, p)
-		if err != nil {
-			return nil, err
-		}
-		vres := NewViewedProductFeatures(res, "default")
-		return vres, nil
-	}
-}
-
-// NewSetOrganizationProviderSetupEndpoint returns an endpoint function that
-// calls the method "setOrganizationProviderSetup" of service "admin".
-func NewSetOrganizationProviderSetupEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
-	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*SetOrganizationProviderSetupPayload)
-		var err error
-		sc := security.APIKeyScheme{
-			Name:           "admin_auth",
-			Scopes:         []string{},
-			RequiredScopes: []string{},
-		}
-		var key string
-		if p.AdminSessionToken != nil {
-			key = *p.AdminSessionToken
-		}
-		ctx, err = authAPIKeyFn(ctx, key, &sc)
-		if err != nil {
-			return nil, err
-		}
-		res, err := s.SetOrganizationProviderSetup(ctx, p)
 		if err != nil {
 			return nil, err
 		}
@@ -2821,6 +2847,75 @@ func NewBackfillMcpConnectGrantsEndpoint(s Service, authAPIKeyFn security.AuthAP
 	}
 }
 
+// NewGetSecretBackfillsEndpoint returns an endpoint function that calls the
+// method "getSecretBackfills" of service "admin".
+func NewGetSecretBackfillsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetSecretBackfillsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetSecretBackfills(ctx, p)
+	}
+}
+
+// NewRunMarketplaceTokenBackfillEndpoint returns an endpoint function that
+// calls the method "runMarketplaceTokenBackfill" of service "admin".
+func NewRunMarketplaceTokenBackfillEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RunMarketplaceTokenBackfillPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.RunMarketplaceTokenBackfill(ctx, p)
+	}
+}
+
+// NewRunRunnerKeyOrganizationBackfillEndpoint returns an endpoint function
+// that calls the method "runRunnerKeyOrganizationBackfill" of service "admin".
+func NewRunRunnerKeyOrganizationBackfillEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RunRunnerKeyOrganizationBackfillPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.RunRunnerKeyOrganizationBackfill(ctx, p)
+	}
+}
+
 // NewGetProjectRedeployPreviewEndpoint returns an endpoint function that calls
 // the method "getProjectRedeployPreview" of service "admin".
 func NewGetProjectRedeployPreviewEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
@@ -3120,6 +3215,53 @@ func NewStartMemoryEvalRunEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFu
 	}
 }
 
+// NewListAssistantOrganizationsEndpoint returns an endpoint function that
+// calls the method "listAssistantOrganizations" of service "admin".
+func NewListAssistantOrganizationsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListAssistantOrganizationsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListAssistantOrganizations(ctx, p)
+	}
+}
+
+// NewRepairOrganizationAssistantAgentNamesEndpoint returns an endpoint
+// function that calls the method "repairOrganizationAssistantAgentNames" of
+// service "admin".
+func NewRepairOrganizationAssistantAgentNamesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RepairOrganizationAssistantAgentNamesPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.RepairOrganizationAssistantAgentNames(ctx, p)
+	}
+}
+
 // NewListOrganizationAssistantsEndpoint returns an endpoint function that
 // calls the method "listOrganizationAssistants" of service "admin".
 func NewListOrganizationAssistantsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
@@ -3188,5 +3330,328 @@ func NewMigrateOrganizationAssistantsToKitEndpoint(s Service, authAPIKeyFn secur
 			return nil, err
 		}
 		return s.MigrateOrganizationAssistantsToKit(ctx, p)
+	}
+}
+
+// NewGetHooksRolloutEndpoint returns an endpoint function that calls the
+// method "getHooksRollout" of service "admin".
+func NewGetHooksRolloutEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetHooksRolloutPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetHooksRollout(ctx, p)
+	}
+}
+
+// NewGetHooksReleaseProgressEndpoint returns an endpoint function that calls
+// the method "getHooksReleaseProgress" of service "admin".
+func NewGetHooksReleaseProgressEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetHooksReleaseProgressPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetHooksReleaseProgress(ctx, p)
+	}
+}
+
+// NewSetHooksRolloutDefaultEndpoint returns an endpoint function that calls
+// the method "setHooksRolloutDefault" of service "admin".
+func NewSetHooksRolloutDefaultEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetHooksRolloutDefaultPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.SetHooksRolloutDefault(ctx, p)
+	}
+}
+
+// NewGetOrganizationHooksRolloutEndpoint returns an endpoint function that
+// calls the method "getOrganizationHooksRollout" of service "admin".
+func NewGetOrganizationHooksRolloutEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetOrganizationHooksRolloutPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetOrganizationHooksRollout(ctx, p)
+	}
+}
+
+// NewSetOrganizationHooksRolloutEndpoint returns an endpoint function that
+// calls the method "setOrganizationHooksRollout" of service "admin".
+func NewSetOrganizationHooksRolloutEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetOrganizationHooksRolloutPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.SetOrganizationHooksRollout(ctx, p)
+	}
+}
+
+// NewClearOrganizationHooksRolloutEndpoint returns an endpoint function that
+// calls the method "clearOrganizationHooksRollout" of service "admin".
+func NewClearOrganizationHooksRolloutEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ClearOrganizationHooksRolloutPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ClearOrganizationHooksRollout(ctx, p)
+	}
+}
+
+// NewListTailscaleOAuthMigrationEndpoint returns an endpoint function that
+// calls the method "listTailscaleOAuthMigration" of service "admin".
+func NewListTailscaleOAuthMigrationEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListTailscaleOAuthMigrationPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListTailscaleOAuthMigration(ctx, p)
+	}
+}
+
+// NewRunTailscaleOAuthMigrationStepEndpoint returns an endpoint function that
+// calls the method "runTailscaleOAuthMigrationStep" of service "admin".
+func NewRunTailscaleOAuthMigrationStepEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RunTailscaleOAuthMigrationStepPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.RunTailscaleOAuthMigrationStep(ctx, p)
+	}
+}
+
+// NewGetOrganizationEncryptionEndpoint returns an endpoint function that calls
+// the method "getOrganizationEncryption" of service "admin".
+func NewGetOrganizationEncryptionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetOrganizationEncryptionPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetOrganizationEncryption(ctx, p)
+	}
+}
+
+// NewListOrganizationEncryptionTransitionsEndpoint returns an endpoint
+// function that calls the method "listOrganizationEncryptionTransitions" of
+// service "admin".
+func NewListOrganizationEncryptionTransitionsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListOrganizationEncryptionTransitionsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListOrganizationEncryptionTransitions(ctx, p)
+	}
+}
+
+// NewEnrollOrganizationEncryptionEndpoint returns an endpoint function that
+// calls the method "enrollOrganizationEncryption" of service "admin".
+func NewEnrollOrganizationEncryptionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*EnrollOrganizationEncryptionPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.EnrollOrganizationEncryption(ctx, p)
+	}
+}
+
+// NewRollbackOrganizationEncryptionEndpoint returns an endpoint function that
+// calls the method "rollbackOrganizationEncryption" of service "admin".
+func NewRollbackOrganizationEncryptionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RollbackOrganizationEncryptionPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.RollbackOrganizationEncryption(ctx, p)
+	}
+}
+
+// NewRunOrganizationEncryptionEndpoint returns an endpoint function that calls
+// the method "runOrganizationEncryption" of service "admin".
+func NewRunOrganizationEncryptionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RunOrganizationEncryptionPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.RunOrganizationEncryption(ctx, p)
+	}
+}
+
+// NewFinalizeOrganizationEncryptionEndpoint returns an endpoint function that
+// calls the method "finalizeOrganizationEncryption" of service "admin".
+func NewFinalizeOrganizationEncryptionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*FinalizeOrganizationEncryptionPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.FinalizeOrganizationEncryption(ctx, p)
 	}
 }

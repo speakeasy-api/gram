@@ -1,4 +1,4 @@
-package platformtools
+package platformtools_test
 
 import (
 	"bytes"

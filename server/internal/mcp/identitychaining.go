@@ -15,6 +15,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -27,6 +28,13 @@ import (
 // delegation cannot be renewed, so the runtime challenged the client to sign
 // in again, which retains a fresh delegation.
 const issuerGateReasonIdentityChainingReauthentication = "identity_chaining_reauthentication"
+
+// issuerGateReasonIdentityChainingIneligible: Speakeasy will not vouch for the
+// human's account, which only an administrator or another account changes.
+const issuerGateReasonIdentityChainingIneligible = "identity_chaining_ineligible"
+
+// issuerGateReasonIdentityChainingUnmanaged: the human signed in with an account the organization doesn't manage, which they fix.
+const issuerGateReasonIdentityChainingUnmanaged = "identity_chaining_unmanaged"
 
 // identityChainer acquires downstream tokens by identity chaining when a human
 // has no usable interactive token for an upstream.
@@ -164,12 +172,8 @@ func (s *Service) resolveDirectUpstreamToken(ctx context.Context, w http.Respons
 	case !outcome.Applicable():
 		return s.routeDirectUpstreamToken(ctx, w, logger, authentication, tokens, upstreamResource, tunneled, backendIssuerID)
 	case outcome.Reason == identitychaining.ReasonReauthenticationRequired:
-		endpoint.LogWith(logger).WarnContext(ctx, "mcp issuer gate rejected: identity chaining requires reauthentication",
-			attr.SlogUserSessionIssuerID(endpoint.UserSessionIssuerID.String()),
-			attr.SlogMcpURL(authentication.mcpURL),
-			attr.SlogOAuthFailureReason(issuerGateReasonIdentityChainingReauthentication),
-		)
-		s.metrics.RecordMCPRequestRejected(ctx, issuerGateReasonIdentityChainingReauthentication, authentication.mcpURL, authentication.surface)
+		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: identity chaining requires reauthentication",
+			issuerGateReasonIdentityChainingReauthentication, mcpconnectionattempts.CodeReauthenticationRequired)
 		// Reauthorizing signs the human in again, which retains a fresh
 		// delegation, so the challenge matches a missing upstream session.
 		return none, s.writeRemoteSessionReconnectChallenge(ctx, w, authentication)
@@ -184,6 +188,12 @@ func (s *Service) resolveDirectUpstreamToken(ctx context.Context, w http.Respons
 			attr.SlogMcpURL(authentication.mcpURL),
 		)
 		return none, s.rejectRemoteSession(ctx, w, authentication, strictErr)
+	case outcome.Reason == identitychaining.ReasonIneligibleIdentity:
+		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: identity chaining refused an ineligible account",
+			issuerGateReasonIdentityChainingIneligible, mcpconnectionattempts.CodeIneligibleIdentity)
+	case outcome.Reason == identitychaining.ReasonUnmanagedAccount:
+		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: identity chaining refused an unmanaged account",
+			issuerGateReasonIdentityChainingUnmanaged, mcpconnectionattempts.CodeUnmanagedAccount)
 	}
 	return none, identityChainingError(outcome)
 }
@@ -232,6 +242,9 @@ func (s *Service) routeDirectUpstreamToken(ctx context.Context, w http.ResponseW
 	case err != nil:
 		return upstreamToken, oops.E(oops.CodeUnexpected, err, "resolve upstream token for proxied MCP backend").LogError(ctx, logger)
 	}
+	if upstreamToken.Token == "" && authentication.chosenClient.Valid {
+		return upstreamToken, s.rejectRemoteSession(ctx, w, authentication, remotesessions.ErrNoValidToken)
+	}
 	return upstreamToken, nil
 }
 
@@ -264,6 +277,9 @@ func upstreamTokenPresent(tokens map[uuid.UUID]remotesessions.UpstreamToken, ups
 func identityChainingError(outcome identitychaining.Outcome) error {
 	if outcome.Retryable {
 		return oops.E(oops.CodeUnavailable, nil, "Company sign-in for this server is temporarily unavailable. Try again in a moment.")
+	}
+	if outcome.Reason == identitychaining.ReasonUnmanagedAccount {
+		return oops.E(oops.CodeForbidden, nil, "Company sign-in for this server can't use your account, because your company doesn't manage it.")
 	}
 	if exchangeRejectedSignIn(outcome) {
 		return oops.E(oops.CodeForbidden, nil, "Company sign-in for this server isn't working. Reconnect this server in your AI client. If that doesn't help, contact your administrator.")
@@ -306,14 +322,21 @@ func (s *Service) metaMemberChainer(gate *metaGateContext, member metaMember, ki
 		case !outcome.Applicable():
 			return "", nil
 		case outcome.Reason == identitychaining.ReasonReauthenticationRequired:
-			return "", memberCredentialError{&metaMemberError{message: fmt.Sprintf("Server %q needs a new company sign-in. Reconnect this gateway in your AI client.", member.slug)}}
+			return "", memberConnectionError{memberCredentialError{&metaMemberError{message: fmt.Sprintf("Server %q needs a new company sign-in. Reconnect this gateway in your AI client.", member.slug)}}, mcpconnectionattempts.CodeReauthenticationRequired}
 		case outcome.Retryable:
 			return "", memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("Company sign-in for server %q is temporarily unavailable. Try again in a moment.", member.slug)}, status: 0, retryable: outcome.SafeToRepeat() && ctx.Err() == nil, retryAfter: 0}
+		}
+		if outcome.Reason == identitychaining.ReasonUnmanagedAccount {
+			return "", memberConnectionError{&metaMemberError{message: fmt.Sprintf("Company sign-in for server %q can't use your account, because your company doesn't manage it.", member.slug)}, mcpconnectionattempts.CodeUnmanagedAccount}
 		}
 		if exchangeRejectedSignIn(outcome) {
 			return "", &metaMemberError{message: fmt.Sprintf("Company sign-in for server %q isn't working. Reconnect this gateway in your AI client. If that doesn't help, contact your administrator.", member.slug)}
 		}
-		return "", &metaMemberError{message: fmt.Sprintf("Company sign-in for server %q isn't working. Contact your administrator.", member.slug)}
+		failure := &metaMemberError{message: fmt.Sprintf("Company sign-in for server %q isn't working. Contact your administrator.", member.slug)}
+		if outcome.Reason == identitychaining.ReasonIneligibleIdentity {
+			return "", memberConnectionError{failure, mcpconnectionattempts.CodeIneligibleIdentity}
+		}
+		return "", failure
 	}
 }
 

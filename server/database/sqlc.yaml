@@ -273,17 +273,6 @@ sql:
         sql_package: "pgx/v5"
         omit_unused_structs: true
 
-  # The legacy toolset alias reads the columns sqlc_retired_columns.sql drops, so it alone leaves that file out.
-  - schema: schema.sql
-    queries: ../internal/hostedmcp/legacyalias/queries.sql
-    engine: postgresql
-    gen:
-      go:
-        package: "repo"
-        out: "../internal/hostedmcp/legacyalias/repo"
-        sql_package: "pgx/v5"
-        omit_unused_structs: true
-
   - schema: [schema.sql, sqlc_retired_columns.sql]
     queries: ../internal/toolsets/queries.sql
     engine: postgresql
@@ -381,6 +370,16 @@ sql:
       go:
         package: "repo"
         out: "../internal/oktaresourceconnections/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: [schema.sql, sqlc_retired_columns.sql]
+    queries: ../internal/mcpfeedback/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/mcpfeedback/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true
 
@@ -525,6 +524,26 @@ sql:
         omit_unused_structs: true
 
   - schema: [schema.sql, sqlc_retired_columns.sql]
+    queries: ../cmd/tools/migrations/remotesessionsorganization/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "remotesessionsorganization"
+        out: "../cmd/tools/migrations/remotesessionsorganization"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: [schema.sql, sqlc_retired_columns.sql]
+    queries: ../internal/secretbackfills/functionsaccessorganization/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "functionsaccessorganization"
+        out: "../internal/secretbackfills/functionsaccessorganization"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: [schema.sql, sqlc_retired_columns.sql]
     queries: ../cmd/tools/migrations/openrouterdisablecauses/queries.sql
     engine: postgresql
     gen:
@@ -553,6 +572,33 @@ sql:
         out: "../internal/chat/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true
+
+  - schema: [schema.sql, sqlc_retired_columns.sql]
+    queries: ../internal/chat/transcriptstore/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/chat/transcriptstore/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: [schema.sql, sqlc_retired_columns.sql]
+    queries: ../internal/chat/transcriptstore/fixtures/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "fixturerepo"
+        out: "../internal/chat/transcriptstore/fixturerepo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+        query_parameter_limit: 20
+        overrides:
+          - db_type: "uuid"
+            nullable: true
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"
 
   - schema: [schema.sql, sqlc_retired_columns.sql]
     queries: ../internal/chat/analysis/queries.sql
@@ -595,7 +641,9 @@ sql:
         omit_unused_structs: true
 
   - schema: [schema.sql, sqlc_retired_columns.sql]
-    queries: ../internal/networkingress/queries.sql
+    queries:
+      - ../internal/networkingress/queries.sql
+      - ../internal/networkingress/credential_queries.sql
     engine: postgresql
     gen:
       go:
@@ -615,12 +663,24 @@ sql:
         omit_unused_structs: true
 
   - schema: [schema.sql, sqlc_retired_columns.sql]
-    queries: ../internal/networkingress/queries.sql
+    queries:
+      - ../internal/networkingress/queries.sql
+      - ../internal/networkingress/credential_queries.sql
     engine: postgresql
     gen:
       go:
         package: "repo"
         out: "../internal/networkingress/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: [schema.sql, sqlc_retired_columns.sql]
+    queries: ../internal/tailnetgateway/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/tailnetgateway/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true
 
@@ -729,6 +789,16 @@ sql:
         omit_unused_structs: true
 
   - schema: [schema.sql, sqlc_retired_columns.sql]
+    queries: ../internal/mcpconnectionhealth/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/mcpconnectionhealth/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: [schema.sql, sqlc_retired_columns.sql]
     queries: ../internal/usersessions/queries.sql
     engine: postgresql
     gen:
@@ -769,16 +839,6 @@ sql:
         omit_unused_structs: true
 
   - schema: [schema.sql, sqlc_retired_columns.sql]
-    queries: ../internal/mcpservers/upstreamclients/associationbackfill/queries.sql
-    engine: postgresql
-    gen:
-      go:
-        package: "associationbackfill"
-        out: "../internal/mcpservers/upstreamclients/associationbackfill"
-        sql_package: "pgx/v5"
-        omit_unused_structs: true
-
-  - schema: [schema.sql, sqlc_retired_columns.sql]
     queries: ../internal/mcpservers/upstreamclients/queries.sql
     engine: postgresql
     gen:
@@ -791,6 +851,8 @@ sql:
   - schema: [schema.sql, sqlc_retired_columns.sql]
     queries:
       - ../internal/remotesessions/queries.sql
+      - ../internal/remotesessions/clientsecret_queries.sql
+      - ../internal/remotesessions/upstreamtoken_queries.sql
       - ../internal/remotesessions/preparation_fixture_queries.sql
       - ../internal/remotesessions/locking_fixture_queries.sql
     engine: postgresql
@@ -904,12 +966,24 @@ sql:
         omit_unused_structs: true
 
   - schema: [schema.sql, sqlc_retired_columns.sql]
-    queries: ../internal/plugins/queries.sql
+    queries:
+      - ../internal/plugins/queries.sql
+      - ../internal/plugins/marketplacetoken_queries.sql
     engine: postgresql
     gen:
       go:
         package: "repo"
         out: "../internal/plugins/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: [schema.sql, sqlc_retired_columns.sql]
+    queries: ../internal/functions/runnerkeys/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/functions/runnerkeys/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true
 
@@ -920,6 +994,16 @@ sql:
       go:
         package: "repo"
         out: "../internal/unproxiedmcp/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: [schema.sql, sqlc_retired_columns.sql]
+    queries: ../internal/shadowmcp/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/shadowmcp/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true
 
@@ -1107,12 +1191,32 @@ sql:
         omit_unused_structs: true
 
   - schema: [schema.sql, sqlc_retired_columns.sql]
+    queries: ../internal/aiproviderkeys/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/aiproviderkeys/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: [schema.sql, sqlc_retired_columns.sql]
     queries: ../internal/modelkeys/queries.sql
     engine: postgresql
     gen:
       go:
         package: "repo"
         out: "../internal/modelkeys/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: [schema.sql, sqlc_retired_columns.sql]
+    queries: ../internal/hooksrollout/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/hooksrollout/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true
 
@@ -1293,6 +1397,16 @@ sql:
         omit_unused_structs: true
 
   - schema: [schema.sql, sqlc_retired_columns.sql]
+    queries: ../internal/aivendors/catalogseed/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/aivendors/catalogseed/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: [schema.sql, sqlc_retired_columns.sql]
     queries: ../internal/roledistribution/queries.sql
     engine: postgresql
     gen:
@@ -1323,6 +1437,16 @@ sql:
         omit_unused_structs: true
 
   - schema: [schema.sql, sqlc_retired_columns.sql]
+    queries: ../internal/commandsearch/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/commandsearch/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: [schema.sql, sqlc_retired_columns.sql]
     queries: ../internal/channels/authn/fixtures/queries.sql
     engine: postgresql
     gen:
@@ -1330,4 +1454,26 @@ sql:
         package: "fixturerepo"
         out: "../internal/channels/authn/fixturerepo"
         sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: [schema.sql, sqlc_retired_columns.sql]
+    queries: ../internal/mcpconnectionattempts/problems/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/mcpconnectionattempts/problems/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: [schema.sql, sqlc_retired_columns.sql]
+    queries: ../internal/aivendors/queries.sql
+    engine: postgresql
+    database:
+      managed: true
+    gen:
+      go:
+        package: repo
+        out: ../internal/aivendors/repo
+        sql_package: pgx/v5
         omit_unused_structs: true

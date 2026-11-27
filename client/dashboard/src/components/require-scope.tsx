@@ -1,10 +1,20 @@
 import { useRBAC } from "@/hooks/useRBAC";
+import type { Check } from "@/lib/authz.gen";
 import { useScopeCatalogue } from "@/hooks/useScopeCatalogue";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import { RequestAccessFormScope } from "@gram/client/models/components/requestaccessform.js";
 import { useRequestAccessMutation } from "@gram/client/react-query/requestAccess.js";
+import {
+  invalidateAllAccessRequests,
+  useAccessRequests,
+} from "@gram/client/react-query/accessRequests.js";
+import { useQueryClient } from "@tanstack/react-query";
+import { GramError } from "@gram/client/models/errors/gramerror.js";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useRoles } from "@gram/client/react-query/roles.js";
 import { cn } from "@/lib/utils";
+import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { SplashScreen } from "@/components/ui/LogoLoader";
@@ -26,17 +36,38 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/Collapsible";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/Tooltip";
+import { Popover, PopoverAnchor, PopoverContent } from "./ui/Popover";
+import { SelfGrantAccess } from "./temporary-access";
+import {
+  RequestAccessDialog,
+  type AccessRequestDraft,
+} from "./request-access-dialog";
+import { requestedDurationFields } from "@/pages/access/requestedDuration";
 
 type RenderFn = (props: { disabled: boolean }) => React.ReactNode;
 
-type RequireScopeProps = {
-  scope: Scope | Scope[];
+type RequireScopeProps = (
+  | {
+      /**
+       * The check to pass, built by a constructor in lib/authz.gen.ts:
+       * check={authz.mcpServer(id, projectId).write()}.
+       */
+      check: Check | Check[];
+      scope?: never;
+      resourceId?: never;
+      projectId?: never;
+    }
+  | {
+      check?: never;
+      scope: Scope | Scope[];
+      /** Optional resource ID to check scope against. */
+      resourceId?: string;
+      /** Optional project the resource belongs to, for project-wide grants. */
+      projectId?: string;
+    }
+) & {
   /** When true, ALL scopes must be present. Default: false (any scope suffices). */
   all?: boolean;
-  /** Optional resource ID to check scope against. */
-  resourceId?: string;
-  /** Optional project the resource belongs to, for project-wide grants. */
-  projectId?: string;
   /**
    * Either a React node or a render function receiving `{ disabled }`.
    * Use the render function form when children contain portals (e.g. dropdowns,
@@ -44,38 +75,62 @@ type RequireScopeProps = {
    */
   children: React.ReactNode | RenderFn;
 } & (
-  | {
-      /**
-       * "page" — renders the Unauthorized full-page fallback.
-       * "section" — hides the children entirely.
-       * "component" — disables children with a tooltip (wraps in a div with pointer-events-none and reduced opacity).
-       */
-      level: "page";
-      fallback?: React.ReactNode;
-    }
-  | {
-      level: "section";
-      fallback?: React.ReactNode;
-    }
-  | {
-      level: "component";
-      /** Tooltip text shown on hover when disabled. */
-      reason?: string;
-      /** Extra classes applied to the disabled wrapper div (e.g. "w-full" for block-level children). */
-      className?: string;
-    }
-);
+    | {
+        /**
+         * "page" — renders the Unauthorized full-page fallback.
+         * "section" — hides the children entirely.
+         * "component" — disables children with a tooltip (wraps in a div with pointer-events-none and reduced opacity).
+         */
+        level: "page";
+        fallback?: React.ReactNode;
+      }
+    | {
+        level: "section";
+        fallback?: React.ReactNode;
+      }
+    | {
+        level: "component";
+        /** Tooltip text shown on hover when disabled. */
+        reason?: string;
+        /** Extra classes applied to the disabled wrapper div (e.g. "w-full" for block-level children). */
+        className?: string;
+      }
+  );
 
 export function RequireScope(
   props: RequireScopeProps,
 ): React.JSX.Element | null {
-  const { scope, all = false, resourceId, projectId, children, level } = props;
-  const { hasAllScopes, hasAnyScope, isLoading } = useRBAC();
+  const { all = false, children, level } = props;
+  const { can, hasAllScopes, hasAnyScope, isLoading } = useRBAC();
 
-  const scopes = Array.isArray(scope) ? scope : [scope];
-  const allowed = all
-    ? hasAllScopes(scopes, resourceId, projectId)
-    : hasAnyScope(scopes, resourceId, projectId);
+  let allowed: boolean;
+  let scopes: Scope[];
+  let resourceId: string | undefined;
+  let projectId: string | undefined;
+  if (props.check !== undefined) {
+    const checks = Array.isArray(props.check) ? props.check : [props.check];
+    allowed = all ? checks.every(can) : checks.some(can);
+    // The fallback names what is missing and lets the viewer ask for it. A
+    // probe on a collection, or checks on different resources, ask about no
+    // single resource, so the request covers the project.
+    scopes = checks.map((check) => check.scope);
+    const [first] = checks;
+    const oneResource = checks.every(
+      (check) =>
+        check.resourceId === first?.resourceId &&
+        !(check.collection && check.isProbe),
+    );
+    resourceId = oneResource ? first?.resourceId : undefined;
+    const projects = new Set(checks.map((check) => check.dimensions.projectId));
+    projectId = projects.size === 1 ? first?.dimensions.projectId : undefined;
+  } else {
+    scopes = Array.isArray(props.scope) ? props.scope : [props.scope];
+    resourceId = props.resourceId;
+    projectId = props.projectId;
+    allowed = all
+      ? hasAllScopes(scopes, resourceId, projectId)
+      : hasAnyScope(scopes, resourceId, projectId);
+  }
 
   const resolveChildren = (disabled: boolean): React.ReactNode =>
     typeof children === "function" ? children({ disabled }) : children;
@@ -122,6 +177,8 @@ export function RequireScope(
           className={props.className}
           scopes={scopes}
           all={all}
+          resourceId={resourceId}
+          projectId={projectId}
         >
           {resolveChildren(true)}
         </ScopeDisabled>
@@ -172,50 +229,77 @@ function requiredScopeLabel(
 
 /**
  * Wraps children in a visually-disabled state with a tooltip explaining why.
+ * Clicking the disabled control opens the same explanation with the way to get
+ * the permission: Request Access, or a temporary self-grant for an admin.
  */
 function ScopeDisabled({
   reason = "You don't have permission to perform this action.",
   className,
   scopes,
   all,
+  resourceId,
+  projectId,
   children,
 }: {
   reason?: string;
   className?: string;
   scopes: Scope[];
   all: boolean;
+  resourceId?: string;
+  projectId?: string;
   children: React.ReactNode;
 }) {
   const { catalogue } = useScopeCatalogue();
+  const [open, setOpen] = React.useState(false);
   const scopeHint = requiredScopeLabel(scopes, all, catalogue);
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <div
-          className={cn(
-            "pointer-events-none inline-flex opacity-50 select-none",
-            className,
-          )}
-        >
-          {/* Wrapper div that re-enables pointer events for the tooltip to work */}
-          <div
-            className="pointer-events-auto w-full cursor-not-allowed **:cursor-not-allowed"
-            onClickCapture={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-            }}
-          >
-            {children}
-          </div>
-        </div>
-      </TooltipTrigger>
-      <TooltipContent>
-        <span>{reason}</span>
-        {scopeHint && (
-          <span className="mt-1 block opacity-80">{scopeHint}</span>
+    <Popover open={open} onOpenChange={setOpen}>
+      <Tooltip>
+        <PopoverAnchor asChild>
+          <TooltipTrigger asChild>
+            <div
+              className={cn(
+                "pointer-events-none inline-flex opacity-50 select-none",
+                className,
+              )}
+            >
+              {/* Wrapper div that re-enables pointer events for the tooltip to work */}
+              <div
+                className="pointer-events-auto w-full cursor-not-allowed **:cursor-not-allowed"
+                onClickCapture={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setOpen(true);
+                }}
+              >
+                {children}
+              </div>
+            </div>
+          </TooltipTrigger>
+        </PopoverAnchor>
+        {!open && (
+          <TooltipContent>
+            <span>{reason}</span>
+            {scopeHint && (
+              <span className="mt-1 block opacity-80">{scopeHint}</span>
+            )}
+          </TooltipContent>
         )}
-      </TooltipContent>
-    </Tooltip>
+      </Tooltip>
+      <PopoverContent align="start" className="w-80 space-y-3 text-sm">
+        <div className="space-y-1">
+          <p>{reason}</p>
+          {scopeHint && <p className="text-muted-foreground">{scopeHint}</p>}
+        </div>
+        <RequestScopeAccess
+          scopes={scopes}
+          all={all}
+          resourceId={resourceId}
+          projectId={projectId}
+          align="start"
+        />
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -235,50 +319,233 @@ type RequestScopeAccessProps = {
   /** When true, every missing scope is requested, not only the first. */
   all?: boolean;
   resourceId?: string;
+  /** The gated resource's name, shown to the requester and the admins. */
+  resourceName?: string;
+  /** The project the gated resource belongs to, for project-wide grants. */
+  projectId?: string;
+  /**
+   * For an admin who can give themselves the access: names the resource for
+   * the "covers" choice (this one, or every one of its kind).
+   */
+  coverage?: { one: string; all: string };
+  /** Runs once an admin has given themselves the access. */
+  onGranted?: () => void;
+  /**
+   * Where the result lines up: centered under a full-page message, or with
+   * the start of a banner's text above it.
+   */
+  align?: "center" | "start";
+  /**
+   * Says the access can be asked for next to the button, for a banner whose
+   * own text only says what is missing.
+   */
+  invite?: boolean;
+  className?: string;
 };
 
 /**
- * Asks an organization admin for the scopes the viewer is missing, and says
- * how that went. Renders nothing when every requestable scope is already held.
+ * The one missing scope an organization admin can give themselves for a
+ * limited time, or null. An all-scopes gate qualifies only when a single
+ * scope is missing: granting one of several would still leave the page shut.
+ */
+function useSelfGrantableScope(
+  scopes: Scope[],
+  all: boolean,
+  resourceId: string | undefined,
+  projectId: string | undefined,
+): Scope | null {
+  const { hasScope } = useRBAC();
+  const { catalogue } = useScopeCatalogue();
+  if (!hasScope("org:admin")) return null;
+  // A gate on "anything in this project" has no single resource to grant, and
+  // a grant on every resource would reach past the project. Ask instead.
+  if (projectId && (resourceId === undefined || resourceId === "*")) {
+    return null;
+  }
+  const missing = scopes.filter((s) => !hasScope(s, resourceId, projectId));
+  if (all && missing.length !== 1) return null;
+  return missing.find((s) => catalogue.get(s)?.temporaryGrantable) ?? null;
+}
+
+/**
+ * Gets the viewer the scopes they are missing. An organization admin gives
+ * themselves a scope for a few hours when the API allows it; anyone else asks
+ * an admin, and is told how that went. Renders nothing when every requestable
+ * scope is already held.
  */
 export function RequestScopeAccess(
   props: RequestScopeAccessProps,
 ): React.JSX.Element | null {
+  const selfGrantScope = useSelfGrantableScope(
+    props.scopes,
+    props.all ?? false,
+    props.resourceId,
+    props.projectId,
+  );
+  if (selfGrantScope) {
+    return (
+      <SelfGrantAccess
+        scope={selfGrantScope}
+        resourceId={props.resourceId}
+        coverage={props.coverage}
+        onGranted={props.onGranted}
+        className={props.className}
+      />
+    );
+  }
   // A request is for one resource and one set of scopes. The key remounts
   // the form when either changes, so "Request sent" for one project does not
   // carry over to the next.
   return (
     <RequestScopeAccessForm
-      key={`${props.resourceId ?? ""}|${props.all ? "all" : "any"}|${props.scopes.join(",")}`}
+      key={`${props.projectId ?? ""}|${props.resourceId ?? ""}|${props.all ? "all" : "any"}|${props.scopes.join(",")}`}
       {...props}
     />
   );
 }
 
-function RequestScopeAccessForm({
+function RequestScopeAccessForm(
+  props: RequestScopeAccessProps,
+): React.JSX.Element | null {
+  // With stored access requests, an approval is a temporary grant, so only
+  // scopes that can be given temporarily can be asked for, and a request made
+  // earlier shows as pending.
+  const accessRequestsOn =
+    useFeatureFlag(FEATURE_FLAGS.accessRequests).status === "enabled";
+  if (accessRequestsOn) return <StoredRequestScopeAccess {...props} />;
+  return (
+    <RequestScopeAccessButton
+      {...props}
+      accessRequestsOn={false}
+      pending={NO_PENDING_REQUESTS}
+      pendingUpdatedAt={0}
+      onRequested={undefined}
+    />
+  );
+}
+
+const NO_PENDING_REQUESTS: PendingRequest[] = [];
+
+type PendingRequest = { scope: string; selector: { resourceId: string } };
+
+function StoredRequestScopeAccess(
+  props: RequestScopeAccessProps,
+): React.JSX.Element | null {
+  const queryClient = useQueryClient();
+  const myPending = useAccessRequests(
+    { status: "pending", mine: true },
+    undefined,
+    { throwOnError: false },
+  );
+  return (
+    <RequestScopeAccessButton
+      {...props}
+      accessRequestsOn
+      pending={myPending.data?.requests ?? NO_PENDING_REQUESTS}
+      pendingUpdatedAt={myPending.dataUpdatedAt ?? 0}
+      onRequested={() => invalidateAllAccessRequests(queryClient)}
+    />
+  );
+}
+
+function RequestScopeAccessButton({
   scopes,
   all = false,
   resourceId,
-}: RequestScopeAccessProps): React.JSX.Element | null {
+  resourceName,
+  invite = false,
+  projectId,
+  className,
+  align = "center",
+  accessRequestsOn,
+  pending,
+  pendingUpdatedAt,
+  onRequested,
+}: RequestScopeAccessProps & {
+  accessRequestsOn: boolean;
+  pending: PendingRequest[];
+  pendingUpdatedAt: number;
+  onRequested: (() => Promise<unknown>) | undefined;
+}): React.JSX.Element | null {
   const [requestState, setRequestState] = React.useState<
-    "idle" | "sending" | "sent" | "no-admin" | "error"
+    | "idle"
+    | "sending"
+    | "sent"
+    | "pending"
+    | "not-requestable"
+    | "no-admin"
+    | "error"
   >("idle");
   const { hasScope } = useRBAC();
+  const { catalogue } = useScopeCatalogue();
   const requestAccessMutation = useRequestAccessMutation();
+  // While requests are stored, asking opens a dialog for how long the access
+  // is needed and why; otherwise the button asks straight away.
+  const [dialogOpen, setDialogOpen] = React.useState(false);
   // Only request scopes the user is actually missing — an all-scopes gate can
   // trip on a partial grant, and admins shouldn't be asked for held scopes.
-  const requestableScopes = getRequestableScopes(scopes).filter(
-    (s) => !hasScope(s, resourceId),
+  const missingScopes = scopes.filter(
+    (s) => !hasScope(s, resourceId, projectId),
   );
-  if (requestableScopes.length === 0) return null;
+  // Members who can't read the organization can't load the catalogue either;
+  // a scope it does not describe is offered, and the server refuses it if it
+  // can't be given temporarily.
+  const askableScopes = getRequestableScopes(missingScopes);
+  const requestableScopes = accessRequestsOn
+    ? askableScopes.filter(
+        (s) => catalogue.get(s)?.temporaryGrantable !== false,
+      )
+    : askableScopes;
+  // A pending request for this access, from an earlier visit, shows as
+  // pending instead of offering to ask again.
+  const alreadyPending = pending.some(
+    (request) =>
+      requestableScopes.includes(request.scope as RequestAccessFormScope) &&
+      request.selector.resourceId === (resourceId ?? "*"),
+  );
 
-  const handleRequestAccess = async () => {
+  // A request made here shows as pending until a pending list read after it
+  // was made no longer holds it: the app-wide watcher refreshes that list
+  // once the request is decided, even when that happens before any poll.
+  const [requestedAt, setRequestedAt] = React.useState(0);
+  React.useEffect(() => {
+    if (requestState !== "pending") return;
+    if (pendingUpdatedAt > requestedAt && !alreadyPending) {
+      setRequestState("idle");
+    }
+  }, [alreadyPending, pendingUpdatedAt, requestedAt, requestState]);
+
+  if (missingScopes.length === 0) return null;
+  // An all-scopes gate stays shut unless every missing scope can be asked for.
+  const cannotUnblock =
+    requestableScopes.length === 0 ||
+    (all && requestableScopes.length < missingScopes.length);
+  const stack = cn(
+    "flex flex-col gap-1",
+    align === "start" ? "items-start text-left" : "items-center text-center",
+    className,
+  );
+  if (cannotUnblock || requestState === "not-requestable") {
+    return (
+      <p className={cn("text-muted-foreground max-w-sm text-sm", stack)}>
+        This access can't be requested here. Ask an organization administrator
+        to give it to you.
+      </p>
+    );
+  }
+  // An "any scope suffices" gate only needs the first requestable scope; an
+  // all-scopes gate must request every missing scope or granting one still
+  // leaves the user blocked. The dialog shows exactly these.
+  const requestedScopes = all
+    ? requestableScopes
+    : requestableScopes.slice(0, 1);
+  const handleRequestAccess = async (draft?: AccessRequestDraft) => {
     setRequestState("sending");
     // An "any scope suffices" gate only needs the first requestable scope; an
     // all-scopes gate must request every missing scope or granting one still
     // leaves the user blocked. Judge on settled results so one failed request
     // doesn't report failure when another admin notification went out.
-    const scopesToRequest = all ? requestableScopes : [requestableScopes[0]!];
+    const scopesToRequest = requestedScopes;
     const results = await Promise.allSettled(
       scopesToRequest.map((scopeToRequest) =>
         requestAccessMutation.mutateAsync({
@@ -286,11 +553,28 @@ function RequestScopeAccessForm({
             requestAccessForm: {
               scope: scopeToRequest,
               resourceId,
+              resourceName,
+              ...(draft
+                ? {
+                    ...requestedDurationFields(draft.duration, new Date()),
+                    message: draft.message || undefined,
+                  }
+                : {}),
             },
           },
         }),
       ),
     );
+    const stored = results.some(
+      (r) => r.status === "fulfilled" && r.value.request !== undefined,
+    );
+    if (stored) {
+      // The app-wide watcher tells the viewer when it is decided.
+      setRequestedAt(Date.now());
+      setRequestState("pending");
+      void onRequested?.();
+      return;
+    }
     const notified = results.some(
       (r) => r.status === "fulfilled" && r.value.sentToCount > 0,
     );
@@ -298,29 +582,83 @@ function RequestScopeAccessForm({
       setRequestState("sent");
       return;
     }
+    const refused = results.every(
+      (r) =>
+        r.status === "rejected" &&
+        r.reason instanceof GramError &&
+        r.reason.statusCode === 400,
+    );
+    if (accessRequestsOn && refused) {
+      setRequestState("not-requestable");
+      return;
+    }
     const reachedServer = results.some((r) => r.status === "fulfilled");
     setRequestState(reachedServer ? "no-admin" : "error");
   };
 
-  switch (requestState) {
-    case "idle":
+  const state =
+    requestState === "idle" && alreadyPending ? "pending" : requestState;
+  switch (state) {
+    case "pending":
       return (
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => void handleRequestAccess()}
-          disabled={requestAccessMutation.isPending}
-        >
-          {requestAccessMutation.isPending ? "Sending..." : "Request Access"}
-        </Button>
+        <div className={stack}>
+          <div className="text-default-success flex items-center gap-1.5 text-sm font-medium">
+            <Icon name="check" className="size-4" />
+            Request pending
+          </div>
+          <p className="text-muted-foreground text-xs">
+            An organization admin can approve it in Speakeasy or Slack. It
+            lapses after 24 hours.
+          </p>
+        </div>
       );
+    case "idle":
     case "sending":
       return (
-        <p className="text-muted-foreground text-sm">Sending request...</p>
+        <>
+          {invite && (
+            <p className={cn("text-muted-foreground text-sm", stack)}>
+              You can request it. An organization admin reviews the request.
+            </p>
+          )}
+          <Button
+            variant="secondary"
+            size="sm"
+            className={className}
+            onClick={() =>
+              accessRequestsOn
+                ? setDialogOpen(true)
+                : void handleRequestAccess()
+            }
+            disabled={state === "sending"}
+          >
+            {state === "sending" && !dialogOpen ? "Sending…" : "Request Access"}
+          </Button>
+          {accessRequestsOn && (
+            <RequestAccessDialog
+              key={`${requestedScopes.join(",")}|${resourceId ?? ""}`}
+              open={dialogOpen}
+              onOpenChange={setDialogOpen}
+              permissions={requestedScopes.map(
+                (scope) => catalogue.get(scope)?.label ?? scope,
+              )}
+              resourceName={
+                resourceName ?? (resourceId ? "This resource" : undefined)
+              }
+              askDuration
+              sending={state === "sending"}
+              onSubmit={(draft) => {
+                void handleRequestAccess(draft).finally(() =>
+                  setDialogOpen(false),
+                );
+              }}
+            />
+          )}
+        </>
       );
     case "sent":
       return (
-        <div className="flex flex-col items-center gap-1">
+        <div className={stack}>
           <div className="text-default-success flex items-center gap-1.5 text-sm font-medium">
             <Icon name="check" className="size-4" />
             Request sent
@@ -332,14 +670,14 @@ function RequestScopeAccessForm({
       );
     case "no-admin":
       return (
-        <p className="text-destructive text-sm">
+        <p className={cn("text-destructive max-w-sm text-sm", stack)}>
           No organization administrator could be notified. Contact an
           administrator directly to request access.
         </p>
       );
     case "error":
       return (
-        <div className="flex flex-col items-center gap-2">
+        <div className={stack}>
           <p className="text-destructive text-sm">
             Failed to send request. Please try again.
           </p>
@@ -356,11 +694,14 @@ function RequestScopeAccessForm({
 }
 
 /**
- * Full-page unauthorized state. Used as the default fallback for page-level RequireScope.
+ * Page-level unauthorized state, the default fallback for page-level
+ * RequireScope. The page keeps its header; a banner at the top of its body
+ * says what is missing and, where the access can be asked for, offers a
+ * Request access button that opens the request dialog in place.
  */
 function Unauthorized({
-  title = "Access restricted",
-  description = "You don't have permission to view this page.",
+  title = "You don't have access to this page",
+  description,
   scopes,
   all,
   resourceId,
@@ -379,88 +720,108 @@ function Unauthorized({
   const { catalogue, tasks } = useScopeCatalogue();
 
   return (
-    <div className="flex h-full min-h-[400px] w-full items-center justify-center">
-      <div className="flex max-w-sm flex-col items-center gap-3 text-center">
-        <div className="bg-muted flex h-12 w-12 items-center justify-center rounded-full">
-          <Icon name="lock" className="text-muted-foreground h-5 w-5" />
-        </div>
-        <h2 className="text-lg font-medium">{title}</h2>
-        <p className="text-muted-foreground text-sm">{description}</p>
-
-        <RequestScopeAccess scopes={scopes} all={all} resourceId={resourceId} />
-
-        {scopes.length > 0 && (
-          /* The wrapper keeps the collapsed height (h-7 == trigger height) in
-             flow while the card is absolutely positioned on top of it, so
-             expanding grows downward instead of re-centring the whole block. */
-          <div className="relative h-7 w-full">
-            <Collapsible
-              open={open}
-              onOpenChange={setOpen}
-              className="absolute inset-x-0 top-0"
-            >
-              <CollapsibleTrigger className="text-muted-foreground hover:text-foreground flex w-full cursor-pointer items-center justify-center gap-1 px-3 py-1.5 text-xs transition-colors">
-                <Icon
-                  name="chevron-right"
-                  className={cn(
-                    "size-3.5 transition-transform",
-                    open && "rotate-90",
-                  )}
-                />
-                What access do I need?
-              </CollapsibleTrigger>
-              <CollapsibleContent className="pt-2">
-                <div className="bg-muted/25 border px-3 py-5 text-left">
-                  <p className="text-muted-foreground text-center text-xs">
-                    {scopes.length === 1
-                      ? "An organization admin can grant you:"
-                      : all
-                        ? "An organization admin can grant you all of:"
-                        : "An organization admin can grant you any of:"}
-                  </p>
-                  <ul className="mt-2 space-y-2">
-                    {scopes.map((s) => {
-                      const entry = catalogue.get(s);
-                      return (
-                        <li
-                          key={s}
-                          className="bg-background text-foreground border px-2 py-1.5 text-xs"
-                        >
-                          <span className="font-medium">
-                            {scopeLabel(catalogue, s)}
-                          </span>{" "}
-                          <span className="text-muted-foreground font-mono">
-                            {s}
-                          </span>
-                          {entry?.description && (
-                            <p className="text-muted-foreground mt-0.5">
-                              {entry.description}
-                            </p>
-                          )}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                  <TaskHint
-                    scopes={scopes}
-                    catalogue={catalogue}
-                    tasks={tasks}
-                    held={(s) => hasScope(s, resourceId, projectId)}
+    <div className="w-full">
+      <Alert
+        // The page's message stays a heading for screen readers, drawn as
+        // the alert's eyebrow.
+        title={<h2 className="font-[inherit] text-[inherit]">{title}</h2>}
+        iconName="lock"
+        className="w-full"
+      >
+        <div className="flex flex-col items-start gap-2">
+          {description && <span>{description}</span>}
+          {scopes.length > 0 && (
+            <span>
+              {scopes.length === 1
+                ? "It needs "
+                : all
+                  ? "It needs all of: "
+                  : "It needs one of: "}
+              {scopes.map((s, i) => (
+                <React.Fragment key={s}>
+                  {i > 0 && ", "}
+                  <span className="font-medium">
+                    {scopeLabel(catalogue, s)}
+                  </span>
+                </React.Fragment>
+              ))}
+              .
+            </span>
+          )}
+          <RequestScopeAccess
+            scopes={scopes}
+            all={all}
+            resourceId={resourceId}
+            projectId={projectId}
+            align="start"
+            invite
+          />
+          {scopes.length > 0 && (
+            <div className="w-full">
+              <Collapsible open={open} onOpenChange={setOpen}>
+                <CollapsibleTrigger className="text-muted-foreground hover:text-foreground flex cursor-pointer items-center gap-1 py-1.5 text-xs transition-colors">
+                  <Icon
+                    name="chevron-right"
+                    className={cn(
+                      "size-3.5 transition-transform",
+                      open && "rotate-90",
+                    )}
                   />
-                  {scopes.length === 1 && (
-                    <RoleHint
-                      scope={scopes[0]!}
+                  What access do I need?
+                </CollapsibleTrigger>
+                <CollapsibleContent className="pt-2">
+                  <div className="bg-muted/25 border px-3 py-5 text-left">
+                    <p className="text-muted-foreground text-center text-xs">
+                      {scopes.length === 1
+                        ? "An organization admin can grant you:"
+                        : all
+                          ? "An organization admin can grant you all of:"
+                          : "An organization admin can grant you any of:"}
+                    </p>
+                    <ul className="mt-2 space-y-2">
+                      {scopes.map((s) => {
+                        const entry = catalogue.get(s);
+                        return (
+                          <li
+                            key={s}
+                            className="bg-background text-foreground border px-2 py-1.5 text-xs"
+                          >
+                            <span className="font-medium">
+                              {scopeLabel(catalogue, s)}
+                            </span>{" "}
+                            <span className="text-muted-foreground font-mono">
+                              {s}
+                            </span>
+                            {entry?.description && (
+                              <p className="text-muted-foreground mt-0.5">
+                                {entry.description}
+                              </p>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                    <TaskHint
+                      scopes={scopes}
                       catalogue={catalogue}
-                      resourceId={resourceId}
-                      projectId={projectId}
+                      tasks={tasks}
+                      held={(s) => hasScope(s, resourceId, projectId)}
                     />
-                  )}
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
-          </div>
-        )}
-      </div>
+                    {scopes.length === 1 && (
+                      <RoleHint
+                        scope={scopes[0]!}
+                        catalogue={catalogue}
+                        resourceId={resourceId}
+                        projectId={projectId}
+                      />
+                    )}
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+            </div>
+          )}
+        </div>
+      </Alert>
     </div>
   );
 }

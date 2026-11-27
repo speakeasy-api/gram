@@ -1,6 +1,7 @@
 import { ActingPrincipal } from "@/components/ui/ActingPrincipal";
 import { Icon } from "@/components/ui/Icon";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { useAssistantsAvailable } from "@/hooks/useAssistantsAvailability";
 import { useReadableAgents } from "@/hooks/useReadableAgents";
 import { useRoutes } from "@/routes";
 import { cn } from "@/lib/utils";
@@ -28,6 +29,9 @@ export function AssistantActorLink({
   className?: string;
 }): JSX.Element | null {
   const routes = useRoutes();
+  // Assistant pages redirect away on a deployment without assistants, so the
+  // name stays plain text there.
+  const assistantsAvailable = useAssistantsAvailable();
   // A chat row carries the agent's id, which is not permission to open that
   // agent: a reader who may read the chat may not be allowed the agent. One
   // cached inventory request serves every row, and an agent missing from it
@@ -90,7 +94,7 @@ export function AssistantActorLink({
     );
   }
 
-  if (chat.assistantId) {
+  if (chat.assistantId && assistantsAvailable) {
     return (
       <SimpleTooltip tooltip="Assistant">
         {wrap(

@@ -126,6 +126,63 @@ func TestIngest_CoworkHooksAndTranscriptStoreEachMessageOnce(t *testing.T) {
 	require.Contains(t, keys, "claude-tool-call:toolu_1")
 }
 
+// TestIngest_CoworkReplyWithoutTranscriptStoredOnce: a Cowork session that
+// runs Claude Code only as a tool server writes no transcript, so the Stop
+// hook sends each reply as assistant.responded. The reply is stored as the
+// session's assistant row, once however often the same event is re-sent,
+// and a second reply to the same prompt gets its own row.
+func TestIngest_CoworkReplyWithoutTranscriptStoredOnce(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+
+	sessionID := uuid.NewString()
+	surface := surfaceCowork
+	promptID := "prompt-1"
+	now := time.Now().UTC()
+	event := func(eventType string, occurredAt time.Time) *gen.IngestPayload {
+		payload := canonicalIngestPayload("claude", eventType, sessionID)
+		payload.Session.Surface = &surface
+		payload.Session.TurnID = &promptID
+		at := occurredAt.Format(time.RFC3339Nano)
+		payload.Event.OccurredAt = &at
+		return payload
+	}
+	reply := func(text string, occurredAt time.Time) *gen.IngestPayload {
+		payload := event("assistant.responded", occurredAt)
+		role := "assistant"
+		payload.Data = &gen.HookIngestData{Message: &gen.HookMessageData{Text: &text, Role: &role}}
+		return payload
+	}
+
+	prompt := "list the files"
+	promptEvent := event("prompt.submitted", now.Add(-2*time.Second))
+	promptEvent.Data = &gen.HookIngestData{Prompt: &gen.HookPromptData{Text: &prompt}}
+	_, err := ti.service.IngestAuthenticated(ctx, authCtx, promptEvent)
+	require.NoError(t, err)
+
+	first := reply("Two files.", now.Add(-time.Second))
+	for range 2 { // the binary's offline spool can send the same event again
+		_, err = ti.service.IngestAuthenticated(ctx, authCtx, first)
+		require.NoError(t, err)
+	}
+	_, err = ti.service.IngestAuthenticated(ctx, authCtx, reply("Done.", now))
+	require.NoError(t, err)
+
+	messages, err := chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{ChatID: sessionIDToUUID(sessionID), ProjectID: *authCtx.ProjectID})
+	require.NoError(t, err)
+	got := make([]string, 0, len(messages))
+	for _, m := range messages {
+		got = append(got, m.Role+": "+m.Content)
+		require.Equal(t, "cowork", m.Source.String)
+	}
+	require.Equal(t, []string{"user: list the files", "assistant: Two files.", "assistant: Done."}, got)
+}
+
 // An event from outside Cowork is the capture path, as before.
 func TestIngest_NonCoworkEventStoresRow(t *testing.T) {
 	t.Parallel()
@@ -172,4 +229,57 @@ func TestIngest_CoworkEventRowRespectsSessionCapture(t *testing.T) {
 	messages, err := chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{ChatID: sessionIDToUUID(sessionID), ProjectID: *authCtx.ProjectID})
 	require.NoError(t, err)
 	require.Empty(t, messages)
+}
+
+// Cowork skips SessionStart, so a live Cowork session often has no cached
+// OTEL service name or SessionStart variant. Its hook rows must still be
+// labelled cowork from the event's own session.surface, the same as its
+// transcript rows. A plain Claude Code event keeps its claude-code label.
+func TestIngest_CoworkHookRowsLabelledCoworkWithoutCachedSurface(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+
+	ingest := func(sessionID string, cowork bool) {
+		surface := surfaceCowork
+		promptID := "prompt-1"
+		prompt := "list the files"
+		promptEvent := canonicalIngestPayload("claude", "prompt.submitted", sessionID)
+		promptEvent.Session.TurnID = &promptID
+		promptEvent.Data = &gen.HookIngestData{Prompt: &gen.HookPromptData{Text: &prompt}}
+
+		toolID, toolName := "toolu_1", "Bash"
+		toolEvent := canonicalIngestPayload("claude", "tool.requested", sessionID)
+		toolEvent.Session.TurnID = &promptID
+		toolEvent.Data = &gen.HookIngestData{ToolCall: &gen.HookToolCallData{ID: &toolID, Name: &toolName, Input: map[string]any{"command": "ls"}}}
+
+		for _, payload := range []*gen.IngestPayload{promptEvent, toolEvent} {
+			if cowork {
+				payload.Session.Surface = &surface
+			}
+			_, err := ti.service.IngestAuthenticated(ctx, authCtx, payload)
+			require.NoError(t, err)
+		}
+	}
+	sources := func(sessionID string) []string {
+		messages, err := chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{ChatID: sessionIDToUUID(sessionID), ProjectID: *authCtx.ProjectID})
+		require.NoError(t, err)
+		out := make([]string, 0, len(messages))
+		for _, m := range messages {
+			out = append(out, m.Source.String)
+		}
+		return out
+	}
+
+	coworkSession := uuid.NewString()
+	ingest(coworkSession, true)
+	require.Equal(t, []string{"cowork", "cowork"}, sources(coworkSession), "cowork hook rows carry the cowork source")
+
+	claudeSession := uuid.NewString()
+	ingest(claudeSession, false)
+	require.Equal(t, []string{"claude-code", "claude-code"}, sources(claudeSession), "a plain Claude Code session is unchanged")
 }

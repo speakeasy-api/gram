@@ -121,3 +121,27 @@ func TestMapShadowDecisionCoreErrorPreservesCallerErrors(t *testing.T) {
 	existing := shadowDecisionInvalid("already mapped")
 	require.ErrorIs(t, mapShadowDecisionCoreError(existing), ErrShadowDecisionInvalid)
 }
+
+// A decision the project's policy cannot express is refused with the
+// decision that can be enforced, not a generic "read the review again".
+func TestMapShadowDecisionCoreErrorNamesInexpressibleAudience(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name    string
+		err     error
+		message string
+	}{
+		{name: "narrow deny", err: oops.E(oops.CodeBadRequest, mcpapproval.ErrNarrowDenialUnderEveryoneBlockAll, "deny without naming principals"), message: "Deny without audience references."},
+		{name: "narrow allow", err: oops.E(oops.CodeBadRequest, mcpapproval.ErrNarrowApprovalUnderAllowAll, "approve without naming principals"), message: "Allow with the Everyone reference"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			var decisionErr *ShadowDecisionError
+			require.ErrorAs(t, mapShadowDecisionCoreError(test.err), &decisionErr)
+			require.Equal(t, "invalid_request", decisionErr.Code)
+			require.Contains(t, decisionErr.Message, test.message)
+		})
+	}
+}

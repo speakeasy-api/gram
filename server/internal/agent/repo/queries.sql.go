@@ -145,6 +145,40 @@ func (q *Queries) DeviceAgentStateReportExists(ctx context.Context, arg DeviceAg
 	return found, err
 }
 
+const getAIScanTargetCatalogState = `-- name: GetAIScanTargetCatalogState :one
+SELECT
+  EXISTS (SELECT 1 FROM ai_products p WHERE p.id = $1 AND p.deleted IS FALSE) AS product_exists,
+  EXISTS (
+    SELECT 1 FROM ai_scan_targets t
+    WHERE t.organization_id = $2 AND t.id = $1
+      AND NOT (
+        t.display_name IS NULL AND t.category IS NULL AND t.version_plist_key IS NULL
+        AND cardinality(t.bundle_ids) = 0 AND cardinality(t.binaries) = 0
+        AND cardinality(t.config_dirs) = 0 AND cardinality(t.process_names) = 0
+        AND cardinality(t.cimd_vendor_keys) = 0 AND cardinality(t.oauth_client_ids) = 0
+        AND cardinality(t.client_info_names) = 0
+      )
+  ) AS has_definition
+`
+
+type GetAIScanTargetCatalogStateParams struct {
+	ID             string
+	OrganizationID string
+}
+
+type GetAIScanTargetCatalogStateRow struct {
+	ProductExists bool
+	HasDefinition bool
+}
+
+// Only decision-only rows may take a catalog link; an ID match is not enough.
+func (q *Queries) GetAIScanTargetCatalogState(ctx context.Context, arg GetAIScanTargetCatalogStateParams) (GetAIScanTargetCatalogStateRow, error) {
+	row := q.db.QueryRow(ctx, getAIScanTargetCatalogState, arg.ID, arg.OrganizationID)
+	var i GetAIScanTargetCatalogStateRow
+	err := row.Scan(&i.ProductExists, &i.HasDefinition)
+	return i, err
+}
+
 const getAIScanTargetForUpdate = `-- name: GetAIScanTargetForUpdate :one
 SELECT organization_id, id, ai_product_id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, cimd_vendor_keys, oauth_client_ids, client_info_names, status, rationale, created_at, updated_at
 FROM ai_scan_targets
@@ -189,7 +223,13 @@ SELECT
   pr.slug AS project_slug,
   om.slug AS organization_slug,
   om.name AS organization_name,
+  -- The marketplace token as the connection stores it. Package
+  -- marketplacetokens opens it into the install URL.
+  pgc.organization_id AS connection_organization_id,
   pgc.marketplace_token,
+  pgc.marketplace_token_hash,
+  pgc.marketplace_token_encrypted,
+  pgc.marketplace_token_org_encrypted,
   pgc.updated_at AS marketplace_updated_at,
   -- The hooks subtree may be pinned by the rollout gate under a pre-rename org
   -- name; the view derives the observability slug from this snapshot so devices
@@ -258,7 +298,7 @@ LEFT JOIN plugins p
       AND pa.principal_urn = ANY($2::text[])
   )
 WHERE pr.organization_id = $1
-  AND pgc.marketplace_token IS NOT NULL
+  AND (pgc.marketplace_token_hash IS NOT NULL OR pgc.marketplace_token IS NOT NULL)
   AND (
     -- The org's default project (oldest by created_at, then id) is the org-wide baseline:
     -- always surface its marketplace + observability (when enabled), even when
@@ -286,28 +326,33 @@ type GetAgentPluginSetParams struct {
 }
 
 type GetAgentPluginSetRow struct {
-	ProjectID               uuid.UUID
-	ProjectSlug             string
-	OrganizationSlug        string
-	OrganizationName        string
-	MarketplaceToken        pgtype.Text
-	MarketplaceUpdatedAt    pgtype.Timestamptz
-	PublishedHooksConfig    []byte
-	MarketplaceNameOverride pgtype.Text
-	ObservabilityEnabled    bool
-	IsDefaultProject        bool
-	PluginID                uuid.NullUUID
-	PluginSlug              pgtype.Text
-	PluginName              pgtype.Text
-	PluginDescription       pgtype.Text
-	PluginUpdatedAt         pgtype.Timestamptz
-	PluginInstallMode       string
+	ProjectID                    uuid.UUID
+	ProjectSlug                  string
+	OrganizationSlug             string
+	OrganizationName             string
+	ConnectionOrganizationID     pgtype.Text
+	MarketplaceToken             pgtype.Text
+	MarketplaceTokenHash         pgtype.Text
+	MarketplaceTokenEncrypted    pgtype.Text
+	MarketplaceTokenOrgEncrypted pgtype.Text
+	MarketplaceUpdatedAt         pgtype.Timestamptz
+	PublishedHooksConfig         []byte
+	MarketplaceNameOverride      pgtype.Text
+	ObservabilityEnabled         bool
+	IsDefaultProject             bool
+	PluginID                     uuid.NullUUID
+	PluginSlug                   pgtype.Text
+	PluginName                   pgtype.Text
+	PluginDescription            pgtype.Text
+	PluginUpdatedAt              pgtype.Timestamptz
+	PluginInstallMode            string
 }
 
 // Returns the device agent's full plugin set for an org, marketplace-first.
 //
 // The base is the org's *published* marketplaces (plugin_github_connections rows
-// with a marketplace_token), scoped so the device agent isn't flooded with every
+// with a marketplace token: its hash, or until the marketplace token backfill
+// moves it, the plaintext column), scoped so the device agent isn't flooded with every
 // project: the org's default project always appears (marketplace + its
 // observability plugin when the project has not disabled it, synthesized in the
 // view layer) as the org-wide baseline, while a non-default project appears only
@@ -342,7 +387,11 @@ func (q *Queries) GetAgentPluginSet(ctx context.Context, arg GetAgentPluginSetPa
 			&i.ProjectSlug,
 			&i.OrganizationSlug,
 			&i.OrganizationName,
+			&i.ConnectionOrganizationID,
 			&i.MarketplaceToken,
+			&i.MarketplaceTokenHash,
+			&i.MarketplaceTokenEncrypted,
+			&i.MarketplaceTokenOrgEncrypted,
 			&i.MarketplaceUpdatedAt,
 			&i.PublishedHooksConfig,
 			&i.MarketplaceNameOverride,
@@ -849,10 +898,11 @@ func (q *Queries) RecordDeviceAgentServedEtag(ctx context.Context, arg RecordDev
 }
 
 const setAIScanTargetStatus = `-- name: SetAIScanTargetStatus :one
-INSERT INTO ai_scan_targets (organization_id, id, status, rationale)
-VALUES ($1, $2, $3, $4)
+INSERT INTO ai_scan_targets (organization_id, id, ai_product_id, status, rationale)
+VALUES ($1, $2, $3, $4, $5)
 ON CONFLICT (organization_id, id) DO UPDATE
-SET status = EXCLUDED.status
+SET ai_product_id = COALESCE(ai_scan_targets.ai_product_id, EXCLUDED.ai_product_id)
+  , status = EXCLUDED.status
   , rationale = EXCLUDED.rationale
   , updated_at = clock_timestamp()
 RETURNING organization_id, id, ai_product_id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, cimd_vendor_keys, oauth_client_ids, client_info_names, status, rationale, created_at, updated_at
@@ -861,6 +911,7 @@ RETURNING organization_id, id, ai_product_id, display_name, category, bundle_ids
 type SetAIScanTargetStatusParams struct {
 	OrganizationID string
 	ID             string
+	AiProductID    pgtype.Text
 	Status         string
 	Rationale      pgtype.Text
 }
@@ -869,6 +920,7 @@ func (q *Queries) SetAIScanTargetStatus(ctx context.Context, arg SetAIScanTarget
 	row := q.db.QueryRow(ctx, setAIScanTargetStatus,
 		arg.OrganizationID,
 		arg.ID,
+		arg.AiProductID,
 		arg.Status,
 		arg.Rationale,
 	)
@@ -926,7 +978,8 @@ VALUES (
   $12::text[]
 )
 ON CONFLICT (organization_id, id) DO UPDATE
-SET display_name = EXCLUDED.display_name
+SET ai_product_id = NULL
+  , display_name = EXCLUDED.display_name
   , category = EXCLUDED.category
   , bundle_ids = EXCLUDED.bundle_ids
   , binaries = EXCLUDED.binaries
@@ -959,6 +1012,7 @@ type UpsertAIScanTargetParams struct {
 // endpoints, so neither upsert touches the other's columns: adding a target
 // must not silently clear a standing block, and blocking one must not wipe
 // the signatures agents scan for.
+// A definition makes the row the organization's own, so drop any product link.
 func (q *Queries) UpsertAIScanTarget(ctx context.Context, arg UpsertAIScanTargetParams) (AiScanTarget, error) {
 	row := q.db.QueryRow(ctx, upsertAIScanTarget,
 		arg.OrganizationID,

@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -28,8 +29,8 @@ func TestGetObservabilityOverview_ValidatesUserFiltersBeforeCanonicalLookup(t *t
 	unavailable.Close()
 	engine := authz.NewEngine(ti.logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	logsEnabled := func(context.Context, string) (bool, error) { return true, nil }
-	service := telemetry.NewService(ti.logger, testenv.NewTracerProvider(t), unavailable, ti.chConn,
-		nil, nil, logsEnabled, logsEnabled, nil, engine, ti.featureFlags)
+	service := telemetry.NewService(ti.logger, testenv.NewTracerProvider(t), unavailable, ti.chConn, ti.chConn,
+		nil, nil, logsEnabled, logsEnabled, nil, engine, &feature.InMemory{})
 	now := time.Now().UTC()
 	payload := &gen.GetObservabilityOverviewPayload{
 		From: now.Add(-time.Hour).Format(time.RFC3339), To: now.Format(time.RFC3339),

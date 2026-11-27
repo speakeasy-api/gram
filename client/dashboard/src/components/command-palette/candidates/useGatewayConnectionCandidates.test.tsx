@@ -111,12 +111,18 @@ it("finds a cached registration and opens its canonical gateway with private mat
     useGatewayConnectionCandidates({ enabled: true, inProject: true }),
   );
   expect(result.current.map((candidate) => candidate.title)).toEqual([
-    "Organization Gateway Connections",
-    "Organization Gateway Activity",
+    "Organization Gateway",
+    "Project Gateway",
+    "Project Gateway Connections",
+    "Project Gateway Activity",
     "Example gateway",
     "Example desktop",
   ]);
-  const registration = result.current[3]!;
+  void result.current[1]!.run("open");
+  expect(state.navigate).toHaveBeenLastCalledWith(
+    "/acme/projects/project-one/mcp/project-gateway",
+  );
+  const registration = result.current[5]!;
   expect(registration.keywords).toContain("public-client");
   void registration.run("open");
   expect(state.navigate).toHaveBeenCalledWith(
@@ -124,11 +130,15 @@ it("finds a cached registration and opens its canonical gateway with private mat
   );
   void result.current[0]!.run("open");
   expect(state.navigate).toHaveBeenCalledWith(
-    "/acme/projects/project-one/mcp/organization-gateway?tab=connections",
+    "/acme/projects/project-one/mcp/organization-gateway",
   );
-  void result.current[1]!.run("open");
+  void result.current[2]!.run("open");
   expect(state.navigate).toHaveBeenCalledWith(
-    "/acme/projects/project-one/mcp/organization-gateway?tab=activity",
+    "/acme/projects/project-one/mcp/project-gateway?tab=connections",
+  );
+  void result.current[3]!.run("open");
+  expect(state.navigate).toHaveBeenCalledWith(
+    "/acme/projects/project-one/mcp/project-gateway?tab=activity",
   );
 });
 it("does not fetch or return cached resources while closed or unauthorized", () => {
@@ -184,17 +194,14 @@ it("keys both inventories by organization and project and offers org navigation 
     ],
     staleTime: 30_000,
   });
-  void result.current[0]!.run("open");
+  void result.current[2]!.run("open");
   expect(state.navigate).toHaveBeenLastCalledWith(
-    "/acme/projects/project-one/mcp/organization-gateway?tab=connections",
+    "/acme/projects/project-one/mcp/project-gateway?tab=connections",
   );
   state.org = "org-two";
   state.project = "project-two";
   rerender({ inProject: false });
-  expect(result.current.map((c) => c.title)).toEqual([
-    "Organization Gateway Connections",
-    "Organization Gateway Activity",
-  ]);
+  expect(result.current.map((c) => c.title)).toEqual(["Organization Gateway"]);
   expect(state.queryCalls.at(-1)?.enabled).toBe(false);
   expect(state.queryCalls.at(-1)?.queryKey).toEqual([
     "gateways",

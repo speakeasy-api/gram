@@ -1,12 +1,14 @@
 package k8s
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"strings"
 	"time"
@@ -26,15 +28,34 @@ const (
 	NetworkIngressErrorInvalidDesiredState = "invalid_desired_state"
 	NetworkIngressErrorUnsupportedProvider = "unsupported_provider"
 	NetworkIngressErrorInvalidCredentials  = "invalid_credentials" // #nosec G101 -- bounded status code, not credential material.
-	NetworkIngressErrorKubernetes          = "kubernetes_api"
+	// No provider reports kubernetes_api any more; rows recorded while the
+	// Kubernetes operator hosted ingresses can still carry it.
+	NetworkIngressErrorKubernetes = "kubernetes_api"
 	// Teardown is blocked because the provider refused the saved credentials.
 	NetworkIngressErrorProviderCredentialsRejected = "provider_credentials_rejected" // #nosec G101 -- bounded status code, not credential material.
+	// The provider accepted the credentials but they lack a scope, or may not
+	// act on the tag or service.
+	NetworkIngressErrorProviderForbidden = "provider_forbidden"
+	// The provider throttled the call; it is retried.
+	NetworkIngressErrorProviderRateLimited = "provider_rate_limited"
+	// The provider API was unreachable or failed on its side; it is retried.
+	NetworkIngressErrorProviderAPIUnavailable = "provider_api_unavailable"
+	// The hosts are connected but the customer's tailnet has not approved
+	// them to host the service, so clients cannot reach it.
+	NetworkIngressErrorProviderServiceNotApproved = "provider_service_not_approved"
+	// The hosts are approved but Tailscale has not obtained the service's TLS
+	// certificate from Let's Encrypt yet, usually because the tailnet used its
+	// weekly allowance of new certificates. The gateway retries on its own.
+	NetworkIngressErrorProviderCertificateUnavailable = "provider_certificate_unavailable"
+	// The organization's encryption key is suspended or unreachable, so the
+	// gateway cannot seal or read its secrets. For a customer-managed key the
+	// customer restores access to it.
+	NetworkIngressErrorEncryptionKeyUnavailable = "encryption_key_unavailable"
 )
 
 var (
 	ErrNetworkIngressUnsupportedProvider = errors.New("unsupported network ingress provider")
 	ErrNetworkIngressInvalidDesiredState = errors.New("invalid network ingress desired state")
-	ErrNetworkIngressReplacementPending  = errors.New("network ingress immutable replacement pending")
 
 	// ErrNetworkIngressDeletionPending means teardown must be retried until resources are absent.
 	ErrNetworkIngressDeletionPending = errors.New("network ingress deletion pending")
@@ -42,12 +63,26 @@ var (
 	// ErrNetworkIngressProviderCredentialsRejected means the provider refused
 	// the saved credentials, so teardown cannot progress until they work again.
 	ErrNetworkIngressProviderCredentialsRejected = errors.New("network ingress provider rejected credentials")
+
+	// ErrNetworkIngressProviderForbidden means the credentials work but lack a
+	// permission. It also matches ErrNetworkIngressProviderCredentialsRejected,
+	// since teardown is blocked the same way.
+	ErrNetworkIngressProviderForbidden = fmt.Errorf("%w: missing permission", ErrNetworkIngressProviderCredentialsRejected)
+
+	// ErrNetworkIngressProviderRateLimited means the provider API throttled the call.
+	ErrNetworkIngressProviderRateLimited = errors.New("network ingress provider rate limited")
+
+	// ErrNetworkIngressProviderAPIUnavailable means the provider API was
+	// unreachable or failed on its side.
+	ErrNetworkIngressProviderAPIUnavailable = errors.New("network ingress provider api unavailable")
 )
 
-// NetworkIngressResourceNames is the provider-neutral, persisted identity of
-// every Kubernetes resource owned by one ingress. Reconciliation and deletion
-// consume this value verbatim; they never derive names from mutable customer
-// input or from a tombstone.
+// NetworkIngressResourceNames is the persisted identity of one ingress,
+// stored in network_ingresses.provider_resources. The names are those of the
+// Kubernetes resources the retired Tailscale operator provider created; the
+// tailnet gateway reads only OwnerID. New rows still store the full document,
+// and attestor_namespace and attestor_service_account are derived from it,
+// until a contract migration drops those columns.
 type NetworkIngressResourceNames struct {
 	OwnerID                uuid.UUID `json:"owner_id"`
 	Namespace              string    `json:"namespace"`
@@ -149,30 +184,41 @@ func ParseNetworkIngressResourceNames(encoded []byte) (NetworkIngressResourceNam
 // decrypted provider-opaque bytes and must remain in-memory only. Only the
 // selected provider adapter may decode their contents.
 type NetworkIngressDesired struct {
-	ID             uuid.UUID                   `json:"id"`
+	ID uuid.UUID `json:"id"`
+
+	// OrganizationID owns the ingress; the tailnet gateway keeps
+	// per-organization state.
+	OrganizationID string                      `json:"organization_id"`
 	Provider       string                      `json:"provider"`
 	Hostname       string                      `json:"hostname"`
 	Credentials    []byte                      `json:"-"`
 	Resources      NetworkIngressResourceNames `json:"resources"`
-	AttestorImage  string                      `json:"attestor_image"`
-	BackendService string                      `json:"backend_service"`
-	BackendPort    int32                       `json:"backend_port"`
 }
 
-func (d NetworkIngressDesired) Validate() error {
-	if d.ID == uuid.Nil || d.Provider == "" || d.Hostname == "" || len(d.Credentials) == 0 || d.AttestorImage == "" || d.BackendService == "" || d.BackendPort <= 0 || d.BackendPort > 65535 {
-		return fmt.Errorf("%w: desired state is incomplete", ErrNetworkIngressInvalidDesiredState)
+// TailscaleCredentials is the plaintext shape of a Tailscale ingress's
+// encrypted OAuth client credentials.
+type TailscaleCredentials struct {
+	ClientID     string `json:"client_id"`
+	ClientSecret string `json:"client_secret"`
+}
+
+// ParseTailscaleCredentials decodes decrypted Tailscale credentials, rejecting
+// unknown fields, trailing data and incomplete values.
+func ParseTailscaleCredentials(encoded []byte) (TailscaleCredentials, error) {
+	var credentials TailscaleCredentials
+	decoder := json.NewDecoder(bytes.NewReader(encoded))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&credentials); err != nil {
+		return credentials, fmt.Errorf("%w: invalid Tailscale credential payload", ErrNetworkIngressInvalidDesiredState)
 	}
-	if d.Hostname != strings.ToLower(d.Hostname) || len(k8svalidation.IsDNS1123Label(d.Hostname)) > 0 {
-		return fmt.Errorf("%w: hostname must be a lowercase DNS label", ErrNetworkIngressInvalidDesiredState)
+	var trailing json.RawMessage
+	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
+		return TailscaleCredentials{}, fmt.Errorf("%w: invalid Tailscale credential payload", ErrNetworkIngressInvalidDesiredState)
 	}
-	if err := d.Resources.Validate(); err != nil {
-		return err
+	if credentials.ClientID == "" || credentials.ClientSecret == "" {
+		return TailscaleCredentials{}, fmt.Errorf("%w: Tailscale credentials are incomplete", ErrNetworkIngressInvalidDesiredState)
 	}
-	if d.Resources.OwnerID != d.ID {
-		return fmt.Errorf("%w: resource owner does not match ingress", ErrNetworkIngressInvalidDesiredState)
-	}
-	return nil
+	return credentials, nil
 }
 
 type NetworkIngressObservation struct {
@@ -186,8 +232,15 @@ type NetworkIngressProvisioner interface {
 	Apply(context.Context, NetworkIngressDesired) (NetworkIngressObservation, error)
 	Observe(context.Context, NetworkIngressResourceNames) (NetworkIngressObservation, error)
 	// Delete returns nil only once all persisted resources are confirmed absent.
-	// ErrNetworkIngressDeletionPending is retryable while Kubernetes completes deletion.
+	// ErrNetworkIngressDeletionPending is retryable while teardown completes.
 	Delete(context.Context, NetworkIngressResourceNames) error
+}
+
+// NetworkIngressCredentialedDeleter is implemented by providers whose teardown
+// must call the customer's provider API, such as deleting tailnet devices.
+// The executor prefers it over Delete whenever the saved credentials decrypt.
+type NetworkIngressCredentialedDeleter interface {
+	DeleteWithCredentials(context.Context, NetworkIngressResourceNames, []byte) error
 }
 
 type NetworkIngressProvisionerRegistry struct {

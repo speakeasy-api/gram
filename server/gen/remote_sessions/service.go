@@ -51,17 +51,15 @@ type Service interface {
 	// the signed-in user's saved authorization. Never executes tools. A provider
 	// tab returning is not evidence of authorization. Requires an ordinary
 	// dashboard session and mcp:connect on the exact server; API keys are refused.
-	// Requires the staff-managed provider_setup organization feature, disabled by
-	// default; unavailable organizations receive HTTP 404.
 	TestServerConnection(context.Context, *TestServerConnectionPayload) (res *ServerConnectionTestResult, err error)
 	// Atomically configure identity for a Remote MCP-backed MCP server. The
 	// complete plan selects or creates a project Remote Identity Provider and
-	// links an existing client, creates a manual client, or automatically prefers
-	// CIMD over DCR. Existing-client linking requires mcp:write on the target and
-	// on every other MCP server sharing its user session issuer, because the
-	// client binding is keyed by issuer; creating a provider or client
-	// additionally requires project:write. Unsupported automatic registration
-	// returns manual_setup_required without changing local state.
+	// offers an existing client, creates a manual client, or automatically prefers
+	// CIMD over DCR. Requires mcp:write on the target and any servers explicitly
+	// named for replacement. Creating a provider or client also requires
+	// project:write. The commit changes server offers, not issuer-client bindings.
+	// Unsupported automatic registration returns manual_setup_required without
+	// changing local state.
 	CommitServerIdentityConfiguration(context.Context, *CommitServerIdentityConfigurationPayload) (res *CommitServerIdentityConfigurationResult, err error)
 	// Preview which other MCP servers and gateways a client binding change on a
 	// user session issuer would affect, across every project in the organization
@@ -79,23 +77,27 @@ type Service interface {
 	// List the upstream OAuth clients an MCP server is associated with. An
 	// association is a per-server configuration fact: one client can serve several
 	// servers, and server_count reports how many live servers share each client,
-	// since editing or rotating a shared client changes every one of them.
-	// Associations are recorded ahead of the serving path that will read them;
-	// until then the server keeps signing in through its user session issuer's
-	// bindings. Requires mcp:read on the server.
+	// since editing or rotating a shared client changes every one of them. Hosted
+	// servers use this placement to select the upstream registration; a downstream
+	// sign-in issuer does not select a registration for a hosted server. Requires
+	// mcp:read on the server.
 	ListServerClientAssociations(context.Context, *ListServerClientAssociationsPayload) (res *ListServerClientAssociationsResult, err error)
+	// Associate one MCP server with a reachable upstream OAuth client. The
+	// association identifies the server's exact registration without requiring or
+	// creating a user session issuer binding. A server may have only one
+	// registration, and a per-user client cannot be shared by proxied servers at
+	// different upstream addresses. Attaching to a hosted server records that
+	// upstream authentication is required. When upstream auth enforcement is on,
+	// attaching can restore the derived auth client link removed by a previous
+	// detach. Requires mcp:write on the server.
+	AttachServerClientAssociation(context.Context, *AttachServerClientAssociationPayload) (res *AttachServerClientAssociationResult, err error)
 	// Remove one MCP server's association with an upstream OAuth client. The
-	// client and its associations with other servers are untouched. When the
-	// server is the only consumer of its user session issuer, the association
-	// follows the issuer's client binding: with upstream auth enforcement off,
-	// detach returns a conflict (409) and you must turn off User Identity on the
-	// server instead; with enforcement on, detach retires only the
-	// backfill-derived typed auth-client link and keeps the association. In this
-	// sole-consumer case, repeating detach returns not found (404). For other
-	// servers, detach removes the association (or records an exclusion for an
-	// unclaimed client bound to the server's issuer) and synchronizes the
-	// backfill-derived typed links. Administrator-owned typed links are untouched.
-	// Requires mcp:write on the server.
+	// client, its issuer bindings, and its associations with other servers are
+	// untouched. Derived auth client links are synchronized; administrator-owned
+	// typed links are untouched. A hosted server that requires upstream
+	// authentication remains configured to require it and needs a replacement
+	// registration before it can use upstream OAuth. Requires mcp:write on the
+	// server.
 	DetachServerClientAssociation(context.Context, *DetachServerClientAssociationPayload) (err error)
 	// List remote_sessions in the caller's project. Supplying both principal_id
 	// and user_session_issuer_id instead lists only the ordinary human caller's
@@ -135,7 +137,7 @@ const ServiceName = "remoteSessions"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [13]string{"beginBindingRefresh", "completeBindingRefresh", "listBindings", "attachBinding", "detachBinding", "testServerConnection", "commitServerIdentityConfiguration", "getServerIdentityImpact", "listServerClientAssociations", "detachServerClientAssociation", "listRemoteSessions", "countRemoteSessions", "revokeRemoteSession"}
+var MethodNames = [14]string{"beginBindingRefresh", "completeBindingRefresh", "listBindings", "attachBinding", "detachBinding", "testServerConnection", "commitServerIdentityConfiguration", "getServerIdentityImpact", "listServerClientAssociations", "attachServerClientAssociation", "detachServerClientAssociation", "listRemoteSessions", "countRemoteSessions", "revokeRemoteSession"}
 
 // AttachBindingPayload is the payload type of the remoteSessions service
 // attachBinding method.
@@ -145,6 +147,28 @@ type AttachBindingPayload struct {
 	RemoteSessionID     string
 	SessionToken        *string
 	ProjectSlugInput    *string
+}
+
+// AttachServerClientAssociationPayload is the payload type of the
+// remoteSessions service attachServerClientAssociation method.
+type AttachServerClientAssociationPayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+	// The MCP server.
+	McpServerID string
+	// The remote session client.
+	RemoteSessionClientID string
+}
+
+// AttachServerClientAssociationResult is the result type of the remoteSessions
+// service attachServerClientAssociation method.
+type AttachServerClientAssociationResult struct {
+	// The server's association with the client.
+	Association *ServerClientAssociation
+	// Deprecated: always empty. This field is retained for compatibility; attach
+	// no longer binds the client to user session issuers.
+	BoundUserSessionIssuerIds []string
 }
 
 // BeginBindingRefreshPayload is the payload type of the remoteSessions service
@@ -183,8 +207,8 @@ type CommitServerIdentityConfigurationPayload struct {
 	McpServerID string
 	// An existing Remote Identity Provider visible to the target project.
 	ProviderID *string
-	// Refuse a save if the user session issuer also serves another MCP server.
-	// Setup screens must set this to avoid changing shared sign-in bindings.
+	// Refuse a save if the user session issuer also serves another MCP server. Set
+	// this to require a dedicated user session issuer for the target server.
 	// Explicitly assign a dedicated issuer before retrying.
 	TargetServerOnly *bool
 	// A new project-scoped Remote Identity Provider to create.
@@ -388,13 +412,13 @@ type DetachBindingPayload struct {
 // DetachServerClientAssociationPayload is the payload type of the
 // remoteSessions service detachServerClientAssociation method.
 type DetachServerClientAssociationPayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
 	// The MCP server.
 	McpServerID string
-	// The associated remote session client.
+	// The remote session client.
 	RemoteSessionClientID string
-	SessionToken          *string
-	ApikeyToken           *string
-	ProjectSlugInput      *string
 }
 
 // GetServerIdentityImpactPayload is the payload type of the remoteSessions

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -59,6 +60,10 @@ type ProbeResult struct {
 
 	// Reason is the stable failure code for unreachable outcomes.
 	Reason *string
+
+	// ServerName is the name the server reports in the handshake, when it
+	// completed and named itself.
+	ServerName *string
 }
 
 type probeObservation struct {
@@ -145,7 +150,9 @@ func probeRemoteMcpURL(ctx context.Context, policy *guardian.Policy, rawURL stri
 	if last != nil {
 		status = &last.status
 	}
-	return probeObservation{result: mcpAvailableResult(), httpStatus: status}
+	result := mcpAvailableResult()
+	result.ServerName = reportedServerName(session.InitializeResult())
+	return probeObservation{result: result, httpStatus: status}
 }
 
 // probeResponse is the part of an upstream response the probe classifies.
@@ -222,6 +229,7 @@ func classifyProbeError(ctx context.Context, err error, last *probeResponse) pro
 				ProtectedResourceMetadataURL: parseProtectedResourceMetadataURL(last.wwwAuthenticate),
 				HTTPStatus:                   nil,
 				Reason:                       nil,
+				ServerName:                   nil,
 			},
 			httpStatus: &status,
 		}
@@ -245,6 +253,7 @@ func mcpAvailableResult() ProbeResult {
 		ProtectedResourceMetadataURL: nil,
 		HTTPStatus:                   nil,
 		Reason:                       nil,
+		ServerName:                   nil,
 	}
 }
 
@@ -254,6 +263,7 @@ func invalidMCPResponseResult(status int) ProbeResult {
 		ProtectedResourceMetadataURL: nil,
 		HTTPStatus:                   &status,
 		Reason:                       nil,
+		ServerName:                   nil,
 	}
 }
 
@@ -263,6 +273,7 @@ func unreachableResult(reason string, status *int) ProbeResult {
 		ProtectedResourceMetadataURL: nil,
 		HTTPStatus:                   status,
 		Reason:                       &reason,
+		ServerName:                   nil,
 	}
 }
 
@@ -422,4 +433,32 @@ func parseAuthParamValue(header string, start int) (string, int, bool) {
 
 func isAuthTokenByte(b byte) bool {
 	return b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z' || b >= '0' && b <= '9' || strings.ContainsRune("!#$%&'*+-.^_`|~", rune(b))
+}
+
+// maxReportedServerNameLength caps the name a server reports for itself. It
+// is suggested as a display name, which people read in one line.
+const maxReportedServerNameLength = 100
+
+// reportedServerName is the human name a server gives itself: its title, or
+// its name when it has none. The server controls it, so control and format
+// characters (bidi controls among them, which could make it render
+// deceptively) and runs of whitespace become single spaces and it is cut to
+// maxReportedServerNameLength characters.
+func reportedServerName(result *mcp.InitializeResult) *string {
+	if result == nil || result.ServerInfo == nil {
+		return nil
+	}
+	for _, candidate := range []string{result.ServerInfo.Title, result.ServerInfo.Name} {
+		words := strings.FieldsFunc(candidate, func(r rune) bool {
+			return unicode.IsSpace(r) || unicode.IsControl(r) || unicode.Is(unicode.Cf, r)
+		})
+		name := []rune(strings.Join(words, " "))
+		if len(name) > maxReportedServerNameLength {
+			name = []rune(strings.TrimSpace(string(name[:maxReportedServerNameLength])))
+		}
+		if len(name) > 0 {
+			return new(string(name))
+		}
+	}
+	return nil
 }

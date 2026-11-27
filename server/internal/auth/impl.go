@@ -159,6 +159,7 @@ type Service struct {
 	orgRepo              *orgRepo.Queries
 	authzProvisioner     *authz.Provisioner
 	organizationSeeder   OrganizationFeatureSeeder
+	newOrgSeeder         OrganizationFeatureSeeder
 	trialBundleSeeder    EnterpriseTrialBundleSeeder
 	auditLogger          *audit.Logger
 	trialNotifier        trialemails.Notifier
@@ -189,6 +190,7 @@ func NewService(
 	nonceStore cache.Cache,
 	authzProvisioner *authz.Provisioner,
 	organizationSeeder OrganizationFeatureSeeder,
+	newOrgSeeder OrganizationFeatureSeeder,
 	trialBundleSeeder EnterpriseTrialBundleSeeder,
 	auditLogger *audit.Logger,
 	trialNotifier trialemails.Notifier,
@@ -222,6 +224,7 @@ func NewService(
 		orgRepo:              orgRepo.New(db),
 		authzProvisioner:     authzProvisioner,
 		organizationSeeder:   organizationSeeder,
+		newOrgSeeder:         newOrgSeeder,
 		trialBundleSeeder:    trialBundleSeeder,
 		auditLogger:          auditLogger,
 		trialNotifier:        trialNotifier,
@@ -275,7 +278,7 @@ func loginNonceBindingMiddleware(env string) func(http.Handler) http.Handler {
 				return
 			}
 
-			//nolint:exhaustruct // we only desire these fields and dont want to accidentally change behavior with some unexpected zero value
+			//nolint:exhaustruct_v5 // we only desire these fields and dont want to accidentally change behavior with some unexpected zero value
 			http.SetCookie(w, &http.Cookie{
 				Name:     nonceBindingCookie,
 				Value:    binding,
@@ -302,7 +305,7 @@ func callbackNonceBindingMiddleware(next http.Handler) http.Handler {
 		}
 
 		// Clear the cookie regardless of outcome — it's single-use.
-		//nolint:exhaustruct // we only desire these fields and dont want to accidentally change behavior with some unexpected zero value
+		//nolint:exhaustruct_v5 // we only desire these fields and dont want to accidentally change behavior with some unexpected zero value
 		http.SetCookie(w, &http.Cookie{
 			Name:     nonceBindingCookie,
 			Value:    "",
@@ -470,10 +473,11 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		WorkOSSessionID:        idpUser.WorkOSSessionID,
 		AuthenticationMethod:   idpUser.AuthenticationMethod,
 		Evidence: signins.Evidence{
-			HostedDomain:       idpUser.Evidence.HostedDomain,
-			TenantID:           idpUser.Evidence.TenantID,
-			VerifiedEmail:      idpUser.Evidence.VerifiedEmail,
-			IDPAuthenticatedAt: idpUser.Evidence.AuthenticatedAt,
+			HostedDomain:        idpUser.Evidence.HostedDomain,
+			HostedDomainChecked: idpUser.Evidence.HostedDomainChecked,
+			TenantID:            idpUser.Evidence.TenantID,
+			VerifiedEmail:       idpUser.Evidence.VerifiedEmail,
+			IDPAuthenticatedAt:  idpUser.Evidence.AuthenticatedAt,
 		},
 		Impersonated:    idpUser.ImpersonatorEmail() != "",
 		AuthenticatedAt: authenticatedAt,
@@ -972,6 +976,7 @@ func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *ge
 		LoginHint:       email,
 		ScreenHint:      screenHint,
 		Prompt:          "",
+		OrganizationID:  "",
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error building authorization URL").LogError(ctx, s.logger)
@@ -1261,33 +1266,24 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		if err != nil {
 			return nil, err
 		}
-		// Build the full list of project IDs, then filter to only those the
-		// user is allowed to see (mirrors the projects.List endpoint).
-		projectIDs := make([]string, 0, len(projectRows))
-		for _, p := range projectRows {
-			projectIDs = append(projectIDs, p.ID.String())
-		}
-
-		allowedIDs := projectIDs
-		if len(projectIDs) > 0 && org.ID == authCtx.ActiveOrganizationID {
-			checks := make([]authz.Check, len(projectIDs))
-			for i, id := range projectIDs {
-				checks[i] = authz.Check{Scope: authz.ScopeProjectRead, ResourceID: id, ResourceKind: "", Dimensions: nil}
+		// Keep only the projects the user is allowed to see (mirrors the
+		// projects.List endpoint).
+		filtered := len(projectRows) > 0 && org.ID == authCtx.ActiveOrganizationID
+		var decisions authz.Decisions
+		if filtered {
+			checks := make([]authz.Check, len(projectRows))
+			for i, project := range projectRows {
+				checks[i] = authz.Project(authz.ProjectIDOf(project.ID)).Read()
 			}
-			allowedIDs, err = s.authz.Filter(ctx, checks)
+			decisions, err = s.authz.Decide(ctx, checks...)
 			if err != nil {
 				return nil, err
 			}
 		}
 
-		allowed := make(map[string]struct{}, len(allowedIDs))
-		for _, id := range allowedIDs {
-			allowed[id] = struct{}{}
-		}
-
-		orgProjects := make([]*gen.ProjectEntry, 0, len(allowedIDs))
-		for _, project := range projectRows {
-			if _, ok := allowed[project.ID.String()]; !ok {
+		orgProjects := make([]*gen.ProjectEntry, 0, len(projectRows))
+		for i, project := range projectRows {
+			if filtered && !decisions.Each[i].Allowed {
 				continue
 			}
 			orgProjects = append(orgProjects, &gen.ProjectEntry{
@@ -1674,10 +1670,10 @@ func (s *Service) persistProvisionedOrganization(
 		return orgRepo.OrganizationMetadatum{}, fmt.Errorf("provision organization access: %w", err)
 	}
 
-	if s.organizationSeeder == nil {
-		return orgRepo.OrganizationMetadatum{}, errors.New("organization feature seeder is not configured")
+	if s.newOrgSeeder == nil {
+		return orgRepo.OrganizationMetadatum{}, errors.New("new organization feature seeder is not configured")
 	}
-	if err := s.organizationSeeder(ctx, tx, org.ID); err != nil {
+	if err := s.newOrgSeeder(ctx, tx, org.ID); err != nil {
 		return orgRepo.OrganizationMetadatum{}, fmt.Errorf("seed organization default entitlements: %w", err)
 	}
 

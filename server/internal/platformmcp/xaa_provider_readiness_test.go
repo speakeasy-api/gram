@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	jwksrepo "github.com/speakeasy-api/gram/server/internal/jsonwebkeysets/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -39,11 +40,10 @@ func TestXAAReadinessSpeakeasyVendorWithoutOktaConnection(t *testing.T) {
 
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagEMAProviders, f.organizationID, true)
-	flags.SetFlag(feature.FlagOktaConnections, f.organizationID, true)
 	speakeasy := remotesessions.EMAProvider{Kind: remotesessions.EMAProviderSpeakeasy, RemoteSessionIssuerID: uuid.Nil, InternalSessionIssuerID: internal.ID, Unavailable: ""}
 	governor := orderedGovernor{recordingGovernor: &recordingGovernor{issuer: f.issuerA, serves: true}, order: remotesessions.EMAProviderOrder{VendorIssuer: "https://as-a.example.test", IsDefault: false, Providers: []remotesessions.EMAProvider{speakeasy}}, ordered: true}
 	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
-	// The Okta rollout is on but the organization has no Okta connection.
+	// The organization has no Okta connection.
 	okta := &xaaReaderStub{err: oops.C(oops.CodeFailedPrecondition)}
 	service := NewPostgresReader(testenv.NewLogger(t), conn).WithXAAReadiness(okta, nil, flags).WithXAAIdentityChaining(governor, nil).WithAuthorization(engine).xaaReadiness
 	require.NotNil(t, service)
@@ -53,7 +53,19 @@ func TestXAAReadinessSpeakeasyVendorWithoutOktaConnection(t *testing.T) {
 	actor = contextvalues.SetActingSurface(actor, contextvalues.ActingSurfacePlatformMCP)
 	admin := authz.NewGrant(authz.ScopeOrgAdmin, f.organizationID)
 
-	server, ok, err := service.servers.Server(authz.GrantsToContext(actor, []authz.Grant{admin, authz.NewGrant(authz.ScopeMCPRead, f.serverID.String())}), f.organizationID, f.projectID, f.serverID)
+	// The fixture has a legacy server association. It is not enough to make
+	// the proxied server eligible until the server offers a live registration.
+	readerCtx := authz.GrantsToContext(actor, []authz.Grant{admin, authz.NewGrant(authz.ScopeMCPRead, f.serverID.String())})
+	_, ok, err := service.servers.Server(readerCtx, f.organizationID, f.projectID, f.serverID)
+	require.NoError(t, err)
+	require.False(t, ok)
+	binding, err := remotesessionsrepo.New(conn).GetEMABinding(ctx, remotesessionsrepo.GetEMABindingParams{ProjectID: f.projectID, OrganizationID: f.organizationID, UserSessionIssuerID: f.userIssuer, RemoteSessionIssuerID: f.issuerA, Resource: "https://upstream.example.test/mcp"})
+	require.NoError(t, err)
+	offers := authclientbackfill.New(conn)
+	authClientID, err := offers.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{OrganizationID: f.organizationID, ProjectID: conv.ToNullUUID(f.projectID), ClientType: authz.AuthClientTypeRemoteSession, Source: "admin", RemoteSessionClientID: binding.RemoteSessionClientID})
+	require.NoError(t, err)
+	require.NoError(t, offers.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{ProjectID: f.projectID, OrganizationID: f.organizationID, McpServerID: f.serverID, AuthClientID: authClientID, Source: "admin"}))
+	server, ok, err := service.servers.Server(readerCtx, f.organizationID, f.projectID, f.serverID)
 	require.NoError(t, err)
 	require.True(t, ok)
 	require.True(t, server.speakeasy, "the vendor's order is read through the provider resolver")
@@ -71,8 +83,6 @@ func TestXAAReadinessSpeakeasyVendorWithoutOktaConnection(t *testing.T) {
 	require.Len(t, output.IdentityChaining.Bindings, 1)
 	require.Equal(t, 1, okta.calls, "the Okta reader reported no connection before the fallback")
 
-	binding, err := remotesessionsrepo.New(conn).GetEMABinding(ctx, remotesessionsrepo.GetEMABindingParams{ProjectID: f.projectID, OrganizationID: f.organizationID, UserSessionIssuerID: f.userIssuer, RemoteSessionIssuerID: f.issuerA, Resource: "https://upstream.example.test/mcp"})
-	require.NoError(t, err)
 	accepted := time.Now().UTC().Add(-time.Hour).Truncate(time.Second)
 	_, err = remotesessionsrepo.New(conn).PlantEMACredentialFixture(ctx, remotesessionsrepo.PlantEMACredentialFixtureParams{
 		OrganizationID: conv.ToPGText(f.organizationID), ProjectID: conv.ToNullUUID(f.projectID), UserSessionIssuerID: conv.ToNullUUID(f.userIssuer),
@@ -99,11 +109,6 @@ func TestXAAReadinessSpeakeasyVendorWithoutOktaConnection(t *testing.T) {
 	result, _, err = service.read(authz.GrantsToContext(actor, []authz.Grant{admin, authz.NewGrant(authz.ScopeMCPRead, f.serverID.String())}), f.organizationID, f.projectID, f.serverID)
 	require.NoError(t, err)
 	requireXAARefusal(t, result, "setup_required")
-
-	flags.SetFlag(feature.FlagOktaConnections, f.organizationID, false)
-	result, _, err = service.read(authz.GrantsToContext(actor, []authz.Grant{admin, authz.NewGrant(authz.ScopeMCPRead, f.serverID.String())}), f.organizationID, f.projectID, f.serverID)
-	require.NoError(t, err)
-	requireXAARefusal(t, result, unavailableCode)
 }
 
 func requireXAARefusal(t *testing.T, result *mcp.CallToolResult, code string) {

@@ -23,6 +23,9 @@ func (w *ChatMessageWriter) ProjectMessage(ctx context.Context, projectID, messa
 	if guard == nil || build == nil || messageID == uuid.Nil {
 		return false, fmt.Errorf("projection requires admission guard and message ID")
 	}
+	// A projection the guard refuses or build skips captures nothing, so it
+	// must not fail on the key. Keep the error for a change that captures.
+	prepared := w.PrepareTranscriptShadow(ctx, projectID)
 	tx, err := w.db.Begin(ctx)
 	if err != nil {
 		return false, fmt.Errorf("begin message projection: %w", err)
@@ -67,6 +70,7 @@ func (w *ChatMessageWriter) ProjectMessage(ctx context.Context, projectID, messa
 	}
 	write = writes[0]
 	var changed int64
+	var organizationID string
 	if exists {
 		changed, err = q.PatchKitProjectionMessage(ctx, repo.PatchKitProjectionMessageParams{ProjectID: uuid.NullUUID{UUID: projectID, Valid: true}, ChatID: write.Params.ChatID, ID: messageID, Content: write.Params.Content, ContentRaw: write.Params.ContentRaw, ToolCalls: write.Params.ToolCalls, ContentHash: write.Params.ContentHash, FinishReason: write.Params.FinishReason})
 	} else {
@@ -76,6 +80,7 @@ func (w *ChatMessageWriter) ProjectMessage(ctx context.Context, projectID, messa
 			if lookupErr != nil {
 				return false, fmt.Errorf("look up projection organization: %w", lookupErr)
 			}
+			organizationID = org
 			readings, meterErr := w.meterMessages(ctx, w.logger, org, projectID, writes, now)
 			if meterErr != nil {
 				return false, fmt.Errorf("meter projected message: %w", meterErr)
@@ -90,6 +95,21 @@ func (w *ChatMessageWriter) ProjectMessage(ctx context.Context, projectID, messa
 	}
 	if err != nil {
 		return false, fmt.Errorf("persist projected message: %w", err)
+	}
+	_, captureEnabled := w.transcriptShadowProjects[projectID]
+	if changed > 0 && w.transcriptShadow != nil && captureEnabled {
+		if prepared != nil {
+			return false, prepared
+		}
+		if organizationID == "" {
+			organizationID, err = q.GetProjectOrganizationID(ctx, projectID)
+			if err != nil {
+				return false, fmt.Errorf("look up projection shadow organization: %w", err)
+			}
+		}
+		if err := w.captureTranscriptShadow(ctx, tx, organizationID, projectID, []uuid.UUID{messageID}); err != nil {
+			return false, err
+		}
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return false, fmt.Errorf("commit message projection: %w", err)

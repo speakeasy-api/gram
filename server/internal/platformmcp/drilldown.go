@@ -1,4 +1,4 @@
-//nolint:exhaustruct // Diagnostic projections intentionally omit documented optional fields.
+//nolint:exhaustruct_v5 // Diagnostic projections intentionally omit documented optional fields.
 package platformmcp
 
 import (
@@ -70,7 +70,7 @@ func (s *DiagnosticsService) resolveDrilldown(ctx context.Context, principal Pri
 		return drilldownTarget{}, ErrUnavailable
 	}
 	if projectID == "" || mcpID == "" {
-		return drilldownTarget{}, fmt.Errorf("project_id and mcp_id are required")
+		return drilldownTarget{}, fmt.Errorf("project_slug and mcp_id are required")
 	}
 	if err := budget.Allow(ctx, principal); err != nil {
 		return drilldownTarget{}, err
@@ -117,8 +117,10 @@ func (s *DiagnosticsService) drilldownEnvelope(ctx context.Context, target drill
 // filter and no attribute selector: the only axis is the MCP the overview
 // already named.
 type QueryMCPEventsInput struct {
-	ProjectID string `json:"project_id" jsonschema:"project ID that owns the MCP"`
-	MCPID     string `json:"mcp_id" jsonschema:"configured MCP ID as returned by find_mcp or get_mcp"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID string `json:"-"`
+	MCPID     string `json:"mcp_id" jsonschema:"configured MCP server ID as returned by find_mcp, get_mcp, or get_project_overview, with no prefix. Never a gateway ID: a gateway is not an MCP server"`
 	Window    string `json:"window,omitempty" jsonschema:"observation window: 1h or 24h (default); this tool looks back at most 24h"`
 }
 
@@ -217,8 +219,10 @@ type MCPUsageUser struct {
 }
 
 type ListMCPUsageUsersInput struct {
-	ProjectID string `json:"project_id" jsonschema:"project ID that owns the MCP"`
-	MCPID     string `json:"mcp_id" jsonschema:"configured MCP ID as returned by find_mcp or get_mcp"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID string `json:"-"`
+	MCPID     string `json:"mcp_id" jsonschema:"configured MCP server ID as returned by find_mcp, get_mcp, or get_project_overview, with no prefix. Never a gateway ID: a gateway is not an MCP server"`
 	Window    string `json:"window,omitempty" jsonschema:"observation window: 1h or 24h (default); this tool looks back at most 24h"`
 }
 
@@ -289,8 +293,10 @@ func (s *DiagnosticsService) ListMCPUsageUsers(ctx context.Context, principal Pr
 // QueryMCPTracesInput asks for individual occurrences of a failure class the
 // overview or diagnostics already identified.
 type QueryMCPTracesInput struct {
-	ProjectID string `json:"project_id" jsonschema:"project ID that owns the MCP"`
-	MCPID     string `json:"mcp_id" jsonschema:"configured MCP ID as returned by find_mcp or get_mcp"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID string `json:"-"`
+	MCPID     string `json:"mcp_id" jsonschema:"configured MCP server ID as returned by find_mcp, get_mcp, or get_project_overview, with no prefix. Never a gateway ID: a gateway is not an MCP server"`
 	Window    string `json:"window,omitempty" jsonschema:"observation window: 1h or 24h (default); this tool looks back at most 24h"`
 	Outcome   string `json:"outcome,omitempty" jsonschema:"optional outcome class to narrow to: success, blocked, unauthorized, client_error, server_error, failed, or unknown"`
 	Cursor    string `json:"cursor,omitempty" jsonschema:"opaque cursor returned by a previous query_mcp_traces result"`
@@ -323,7 +329,7 @@ func (s *DiagnosticsService) QueryMCPTraces(ctx context.Context, principal Princ
 		return QueryMCPTracesOutput{}, fmt.Errorf("outcome must be one of success, blocked, unauthorized, client_error, server_error, failed, unknown")
 	}
 	if input.ProjectID == "" || input.MCPID == "" {
-		return QueryMCPTracesOutput{}, fmt.Errorf("project_id and mcp_id are required")
+		return QueryMCPTracesOutput{}, fmt.Errorf("project_slug and mcp_id are required")
 	}
 	if s.reader == nil {
 		return QueryMCPTracesOutput{}, ErrUnavailable
@@ -462,8 +468,10 @@ func summaryIdentityParams(target drilldownTarget, start, end int64) telemetryre
 
 // QueryMCPMetricsInput asks for one MCP's aggregate levels over a window.
 type QueryMCPMetricsInput struct {
-	ProjectID string `json:"project_id" jsonschema:"project ID that owns the MCP"`
-	MCPID     string `json:"mcp_id" jsonschema:"configured MCP ID as returned by find_mcp or get_mcp"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID string `json:"-"`
+	MCPID     string `json:"mcp_id" jsonschema:"configured MCP server ID as returned by find_mcp, get_mcp, or get_project_overview, with no prefix. Never a gateway ID: a gateway is not an MCP server"`
 	Window    string `json:"window,omitempty" jsonschema:"observation window: 1h, 24h (default), or 7d"`
 }
 
@@ -545,8 +553,10 @@ func (s *DiagnosticsService) QueryMCPMetrics(ctx context.Context, principal Prin
 // or name: the caller asks about someone it was shown, not about someone it
 // can describe.
 type GetUserMCPStatusInput struct {
-	ProjectID string `json:"project_id" jsonschema:"project ID that owns the MCP"`
-	MCPID     string `json:"mcp_id" jsonschema:"configured MCP ID as returned by find_mcp or get_mcp"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID string `json:"-"`
+	MCPID     string `json:"mcp_id" jsonschema:"configured MCP server ID as returned by find_mcp, get_mcp, or get_project_overview, with no prefix. Never a gateway ID: a gateway is not an MCP server"`
 	// SubjectReference is an expiring, session-bound handle returned in the
 	// optional rows of a summary tool. It cannot be searched, joined,
 	// refreshed, or constructed.

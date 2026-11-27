@@ -1,4 +1,7 @@
-import { RESOURCE_IDENTIFIER_EXPLAINER } from "@/pages/sources/tunneled-mcp/copy";
+import {
+  RESOURCE_IDENTIFIER_EXPLAINER,
+  RESOURCE_IDENTIFIER_TECHNICAL,
+} from "@/pages/sources/tunneled-mcp/copy";
 import type { TunneledMcpServer } from "@gram/client/models/components/tunneledmcpserver.js";
 import { useUpdateTunneledMcpServerMutation } from "@gram/client/react-query/updateTunneledMcpServer.js";
 import { useQueryClient } from "@tanstack/react-query";
@@ -18,8 +21,9 @@ export function ResourceIdentifierSection({
   return (
     <EditableSourceFieldSection
       id={MCP_RESOURCE_IDENTIFIER_SECTION_ID}
-      title="Resource Identifier"
+      title="Resource identifier"
       description={`${RESOURCE_IDENTIFIER_EXPLAINER} Leave blank if the server has no OAuth of its own.`}
+      technicalDetails={RESOURCE_IDENTIFIER_TECHNICAL}
       label="Protected resource identifier"
       placeholder="https://mcp.internal.example.com/mcp"
       stored={tunneledMcpServer.resourceIdentifier ?? ""}

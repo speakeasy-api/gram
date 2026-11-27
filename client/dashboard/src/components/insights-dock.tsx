@@ -68,6 +68,8 @@ import type { InsightsConfigOptions } from "./insights-context";
 import { InsightsContext, useInsightsState } from "./insights-context";
 import { InsightsShortcutKeys } from "./insights-dock-shortcut-hint";
 import { useAskAiListener } from "./command-palette/askAiBridge";
+import { TERMINAL_SKIN_COMPONENTS } from "./home/terminal-skin-components";
+import { TERMINAL_SKIN_CSS } from "./home/terminal-skin-theme";
 
 // Types-only re-export (erased at compile time, won't break Fast Refresh)
 export type { InsightsConfigOptions } from "./insights-context";
@@ -523,12 +525,18 @@ function InsightsDock({
       isFirstLocation.current = false;
       return;
     }
+    // Settings pages are long forms with a Save button per section; an
+    // expanded dock would sit over them, so they always open on the pill.
+    if (/\/settings(\/|$)/.test(location.pathname)) {
+      collapseNow();
+      return;
+    }
     cancelCollapse();
     if (Date.now() - collapsedAt.current < DOCK_REOPEN_WINDOW_MS) {
       collapsedAt.current = 0;
       setExpanded(true);
     }
-  }, [location.pathname, cancelCollapse]);
+  }, [location.pathname, cancelCollapse, collapseNow]);
 
   // After surviving a navigation the dock is expanded without holding focus,
   // so blur can never fire again — collapse on pointerdown outside the card
@@ -999,6 +1007,7 @@ export function InsightsProvider({
     ready: assistantReady,
     allowed: assistantAllowed,
     error: assistantError,
+    retry: retryAssistant,
     needsAdmin: assistantNeedsAdmin,
   } = useServerAssistantTransport(mcpConfig.projectSlug, true, {
     getSkillIds: getSelectedSkillIds,
@@ -1119,7 +1128,9 @@ export function InsightsProvider({
   // exception: wrapping them would nest RemoteThreadListRuntimes before their
   // useHideInsightsDock layout effect can register with this parent.
   const pageOwnsRuntime =
-    routes.playground.active ||
+    // Inspect's Chat tab mounts its own provider.
+    routes.mcp.details.inspect.active ||
+    routes.mcp.gateway.inspect.active ||
     routes.assistants.newAssistant.active ||
     routes.assistants.detail.active;
   const shouldMountRuntime = assistantReady && !pageOwnsRuntime;
@@ -1288,8 +1299,12 @@ export function InsightsProvider({
           CHAT_MARKDOWN_CSS +
           CHAT_FULLPAGE_COMPOSER_CSS +
           CHAT_LANDING_COMPOSER_CSS +
-          CHAT_LINK_CSS,
+          CHAT_LINK_CSS +
+          TERMINAL_SKIN_CSS,
       },
+      // Inert unless a surface wraps <Chat /> in TerminalSkinContext.Provider
+      // (the project homepage terminal); everywhere else renders stock.
+      components: { ...mcpConfig.components, ...TERMINAL_SKIN_COMPONENTS },
     }),
     [
       mcpConfig,
@@ -1341,16 +1356,46 @@ export function InsightsProvider({
 
   const consumePendingPrompt = useCallback(() => setPendingPrompt(null), []);
 
+  // Dismiss genies the dock down into the sidebar-footer resume button (and
+  // the button genies it back) — same view transition as the onboarding
+  // banner. Collapse the panel too so a resume always restores the pill.
+  const {
+    dismissed: dockDismissed,
+    dismiss: dismissDock,
+    resume: resumeDock,
+  } = useInsightsDockCta();
+  const handleDockDismiss = useCallback(() => {
+    setIsExpanded(false);
+    dismissDock();
+  }, [dismissDock]);
+  // A dismissed dock renders no panel, so opening it has to bring the dock back.
+  const dockRef = useRef({
+    hidden: hideTrigger,
+    dismissed: dockDismissed,
+    resume: resumeDock,
+  });
+  dockRef.current = {
+    hidden: hideTrigger,
+    dismissed: dockDismissed,
+    resume: resumeDock,
+  };
+  const expandPanel = useCallback((expanded: boolean) => {
+    const dock = dockRef.current;
+    // A page that hides the dock keeps it dismissed, and keeps its resume button.
+    if (expanded && dock.dismissed && !dock.hidden) dock.resume();
+    setIsExpanded(expanded);
+  }, []);
+
   // Bridge: the command palette's "Ask AI" row dispatches a window event from
   // outside this provider. Open the chat panel and, when a prompt was typed,
   // drop the user straight into a running conversation.
   useAskAiListener(
     useCallback(
       (prompt: string) => {
-        setIsExpanded(true);
+        expandPanel(true);
         if (prompt.trim()) handleSendPrompt(prompt);
       },
-      [handleSendPrompt],
+      [expandPanel, handleSendPrompt],
     ),
   );
 
@@ -1364,16 +1409,6 @@ export function InsightsProvider({
     },
     [handleSendPrompt],
   );
-
-  // Dismiss genies the dock down into the sidebar-footer resume button (and
-  // the button genies it back) — same view transition as the onboarding
-  // banner. Collapse the panel too so a resume always restores the pill.
-  const { dismissed: dockDismissed, dismiss: dismissDock } =
-    useInsightsDockCta();
-  const handleDockDismiss = useCallback(() => {
-    setIsExpanded(false);
-    dismissDock();
-  }, [dismissDock]);
 
   // Start a brand-new Project Assistant conversation. Bumping the runtime key
   // remounts the shared runtime onto a fresh thread; the new thread gets its
@@ -1439,7 +1474,7 @@ export function InsightsProvider({
     () => ({
       available: !hideTrigger,
       isExpanded,
-      setIsExpanded,
+      setIsExpanded: expandPanel,
       setOverride: handleSetOverride,
       sendPrompt: handleSendPrompt,
       // Expose the gated "runtime is mounted" signal, not the raw eager
@@ -1447,16 +1482,21 @@ export function InsightsProvider({
       // only once the provider actually exists.
       assistantReady: runtimeMounted,
       assistantNeedsAdmin,
+      assistantError,
+      retryAssistant,
       newConversation: handleStartFresh,
       registerDockHide,
     }),
     [
       hideTrigger,
       isExpanded,
+      expandPanel,
       handleSetOverride,
       handleSendPrompt,
       runtimeMounted,
       assistantNeedsAdmin,
+      assistantError,
+      retryAssistant,
       handleStartFresh,
       registerDockHide,
     ],
@@ -1493,7 +1533,16 @@ export function InsightsProvider({
       {assistantError && (
         <div className="border-destructive/40 bg-destructive/10 text-destructive mx-4 mt-1 flex items-start gap-2 border px-3 py-2 text-xs">
           <Terminal className="mt-0.5 size-3.5 shrink-0" />
-          <span>{assistantError}</span>
+          <span>
+            {assistantError}{" "}
+            <button
+              type="button"
+              onClick={retryAssistant}
+              className="cursor-pointer font-medium underline underline-offset-2"
+            >
+              Try again
+            </button>
+          </span>
         </div>
       )}
 

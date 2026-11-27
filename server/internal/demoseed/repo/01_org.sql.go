@@ -12,6 +12,26 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const orgBackdateLogsFeature = `-- name: OrgBackdateLogsFeature :exec
+UPDATE organization_features
+SET created_at = $1::timestamptz
+WHERE organization_id = $2::text
+  AND feature_name = 'logs'
+  AND deleted IS FALSE
+  AND created_at > $1::timestamptz
+`
+
+type OrgBackdateLogsFeatureParams struct {
+	Since pgtype.Timestamptz
+	OrgID string
+}
+
+// Logs count as on from before the seeded connection events, so their problems are read.
+func (q *Queries) OrgBackdateLogsFeature(ctx context.Context, arg OrgBackdateLogsFeatureParams) error {
+	_, err := q.db.Exec(ctx, orgBackdateLogsFeature, arg.Since, arg.OrgID)
+	return err
+}
+
 const orgCountCustomDomainDiagnostics = `-- name: OrgCountCustomDomainDiagnostics :one
 SELECT count(*) FROM custom_domains WHERE organization_id = $1
  AND domain = $2 AND dns_configuration_status = 'unconfirmed' AND health_status = 'healthy'
@@ -1086,14 +1106,8 @@ WITH target AS MATERIALIZED (
   INSERT INTO mcp_endpoints (project_id, custom_domain_id, meta_mcp_server_id, slug, is_domain_root)
   SELECT project_id, domain_id, meta_id, 'reseed-domain-root', TRUE FROM target
   RETURNING id
-), tools AS (
-  INSERT INTO toolsets (organization_id, project_id, name, slug, mcp_slug, custom_domain_id)
-  SELECT organization_id, project_id, 'Reseed domain ordering', 'reseed-domain-' || kind,
-    'reseed-' || md5(organization_id), CASE WHEN kind = 'custom' THEN domain_id ELSE NULL END
-  FROM target CROSS JOIN (VALUES ('custom'), ('shared')) AS variants(kind)
-  RETURNING id
 )
-SELECT ((SELECT count(*) FROM endpoint) + (SELECT count(*) FROM tools))::integer AS planted
+SELECT (SELECT count(*) FROM endpoint)::integer AS planted
 `
 
 type OrgPlantCustomDomainDependentsParams struct {
@@ -1101,7 +1115,7 @@ type OrgPlantCustomDomainDependentsParams struct {
 	ProjectID uuid.UUID
 }
 
-// Test fixture: both SET NULL references must disappear before domain deletion.
+// Test fixture: the SET NULL reference must disappear before domain deletion.
 func (q *Queries) OrgPlantCustomDomainDependents(ctx context.Context, arg OrgPlantCustomDomainDependentsParams) (int32, error) {
 	row := q.db.QueryRow(ctx, orgPlantCustomDomainDependents, arg.OrgID, arg.ProjectID)
 	var planted int32

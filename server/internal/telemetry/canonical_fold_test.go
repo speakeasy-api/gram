@@ -15,7 +15,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
@@ -45,7 +44,6 @@ func TestCostAnalytics_CanonicalFold_FiltersFoldThroughMap(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti, orgID := foldTestContext(t)
-	ti.featureFlags.SetFlag(feature.FlagCanonicalIdentityFold, orgID, true)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	projectID := authCtx.ProjectID.String()
@@ -110,7 +108,6 @@ func TestCostAnalytics_CanonicalFold_GroupByEmailFoldsBuckets(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti, orgID := foldTestContext(t)
-	ti.featureFlags.SetFlag(feature.FlagCanonicalIdentityFold, orgID, true)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	projectID := authCtx.ProjectID.String()
@@ -165,8 +162,7 @@ func TestCostAnalytics_CanonicalFold_GroupByEmailFoldsBuckets(t *testing.T) {
 func TestCostAnalytics_CanonicalFold_UnmappedEmailStaysLiteral(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti, orgID := foldTestContext(t)
-	ti.featureFlags.SetFlag(feature.FlagCanonicalIdentityFold, orgID, true)
+	ctx, ti, _ := foldTestContext(t)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	projectID := authCtx.ProjectID.String()
@@ -195,7 +191,6 @@ func TestCostAnalytics_CanonicalFold_SelfConsistentUnderMapLag(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti, orgID := foldTestContext(t)
-	ti.featureFlags.SetFlag(feature.FlagCanonicalIdentityFold, orgID, true)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	projectID := authCtx.ProjectID.String()
@@ -237,40 +232,6 @@ func TestCostAnalytics_CanonicalFold_SelfConsistentUnderMapLag(t *testing.T) {
 	require.InDelta(t, 3, query(workEmail), 0.001)
 }
 
-func TestCostAnalytics_CanonicalFold_ShadowServesLiteralResults(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti, orgID := foldTestContext(t)
-	ti.featureFlags.SetFlag(feature.FlagCanonicalIdentityFoldShadow, orgID, true)
-
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	projectID := authCtx.ProjectID.String()
-	suffix := uuid.NewString()[:8]
-	workEmail := "swork-" + suffix + "@example.com"
-	personalEmail := "spersonal-" + suffix + "@example.com"
-	userID := uuid.NewString()
-	seedIdentityMapEntry(t, ctx, ti, orgID, workEmail, userID, workEmail)
-	seedIdentityMapEntry(t, ctx, ti, orgID, personalEmail, userID, workEmail)
-
-	now := time.Now().UTC()
-	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, now.Add(-10*time.Minute), uuid.NewString(), 1, 100, 50, 0, 0, "opus", workEmail, "", nil, "main", "", "", "", "")
-	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, now.Add(-9*time.Minute), uuid.NewString(), 2, 200, 100, 0, 0, "opus", personalEmail, "", nil, "main", "", "", "", "")
-
-	// Shadow mode must not change served results: with no Postgres identity
-	// links, the literal path matches only the requested email even though the
-	// map would fold both.
-	result, err := ti.service.Query(ctx, &gen.QueryPayload{
-		From:    now.Add(-time.Hour).Format(time.RFC3339),
-		To:      now.Add(time.Hour).Format(time.RFC3339),
-		Filters: []*gen.QueryFilter{{Dimension: "email", Values: []string{workEmail}}},
-		TopN:    10,
-		SortBy:  "total_cost",
-	})
-	require.NoError(t, err)
-	require.Len(t, result.Table, 1)
-	require.InDelta(t, 1, result.Table[0].Measures.TotalCost, 0.001)
-}
-
 func TestEmployeeDetail_CanonicalFold_AllIdentifiersConverge(t *testing.T) {
 	t.Parallel()
 
@@ -279,7 +240,6 @@ func TestEmployeeDetail_CanonicalFold_AllIdentifiersConverge(t *testing.T) {
 	ctx, ti := newTestLogsService(t)
 	authCtx0, _ := contextvalues.GetAuthContext(ctx)
 	orgID := authCtx0.ActiveOrganizationID
-	ti.featureFlags.SetFlag(feature.FlagCanonicalIdentityFold, orgID, true)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	projectID := authCtx.ProjectID.String()
@@ -319,7 +279,6 @@ func TestEmployeeDetail_CanonicalFold_UnfoldableOrgFallsBackToLegacyScope(t *tes
 	// serving the detail page unfiltered would show every user's rows.
 	badOrgID := "org'--" + uuid.NewString()[:8]
 	ctx = switchOrganizationInCtx(t, ctx, badOrgID)
-	ti.featureFlags.SetFlag(feature.FlagCanonicalIdentityFold, badOrgID, true)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	projectID := authCtx.ProjectID.String()
@@ -340,8 +299,6 @@ func TestGetObservabilityOverview_CanonicalFold_SummaryScopesToUser(t *testing.T
 
 	ctx, ti := newTestLogsService(t)
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	orgID := authCtx.ActiveOrganizationID
-	ti.featureFlags.SetFlag(feature.FlagCanonicalIdentityFold, orgID, true)
 
 	projectID := authCtx.ProjectID.String()
 	deploymentID := uuid.NewString()
@@ -371,7 +328,6 @@ func TestEmployeeDetail_CanonicalFold_DeletedUserEmailNotFolded(t *testing.T) {
 	ctx, ti := newTestLogsService(t)
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	orgID := authCtx.ActiveOrganizationID
-	ti.featureFlags.SetFlag(feature.FlagCanonicalIdentityFold, orgID, true)
 
 	projectID := authCtx.ProjectID.String()
 	deploymentID := uuid.NewString()
@@ -431,7 +387,7 @@ func TestSearchEmployeeAgentUsage_CanonicalFold_OneRowPerEmployee(t *testing.T) 
 	require.NotContains(t, byEmail, personalEmail)
 	require.NotContains(t, byEmail, strings.ToUpper(personalEmail))
 
-	// Literal mode keeps the split rows — the flag-off behavior.
+	// An empty canonical org keeps the split rows.
 	params.CanonicalIdentityOrg = ""
 	rows, err = ti.chClient.SearchEmployeeAgentUsage(ctx, params)
 	require.NoError(t, err)
@@ -493,7 +449,6 @@ func TestGetHooksSummary_CanonicalFold_UserDimensionFolds(t *testing.T) {
 	ctx, ti := newTestLogsService(t)
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	orgID := authCtx.ActiveOrganizationID
-	ti.featureFlags.SetFlag(feature.FlagCanonicalIdentityFold, orgID, true)
 
 	projectID := authCtx.ProjectID.String()
 	deploymentID := uuid.NewString()
@@ -591,7 +546,6 @@ func TestHooksDrill_CanonicalFold_ExclusionAndTraceList(t *testing.T) {
 	ctx, ti := newTestLogsService(t)
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	orgID := authCtx.ActiveOrganizationID
-	ti.featureFlags.SetFlag(feature.FlagCanonicalIdentityFold, orgID, true)
 
 	projectID := authCtx.ProjectID.String()
 	deploymentID := uuid.NewString()
@@ -670,7 +624,6 @@ func TestSearchUsers_CanonicalFold_CursorPagination(t *testing.T) {
 	ctx, ti := newTestLogsService(t)
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	orgID := authCtx.ActiveOrganizationID
-	ti.featureFlags.SetFlag(feature.FlagCanonicalIdentityFold, orgID, true)
 
 	projectID := authCtx.ProjectID.String()
 	deploymentID := uuid.NewString()
@@ -752,7 +705,6 @@ func TestSearchUsers_CanonicalFold_IDDrillReachesFoldedSummary(t *testing.T) {
 	ctx, ti := newTestLogsService(t)
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	orgID := authCtx.ActiveOrganizationID
-	ti.featureFlags.SetFlag(feature.FlagCanonicalIdentityFold, orgID, true)
 
 	projectID := authCtx.ProjectID.String()
 	deploymentID := uuid.NewString()
@@ -791,7 +743,6 @@ func TestSearchUsers_CanonicalFold_RoleRollupCountsEmployeeOnce(t *testing.T) {
 	ctx, ti := newTestLogsService(t)
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	orgID := authCtx.ActiveOrganizationID
-	ti.featureFlags.SetFlag(feature.FlagCanonicalIdentityFold, orgID, true)
 
 	projectID := authCtx.ProjectID.String()
 	deploymentID := uuid.NewString()
@@ -832,7 +783,6 @@ func TestSearchUsers_CanonicalFold_OneRowPerEmployee(t *testing.T) {
 	ctx, ti := newTestLogsService(t)
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	orgID := authCtx.ActiveOrganizationID
-	ti.featureFlags.SetFlag(feature.FlagCanonicalIdentityFold, orgID, true)
 
 	projectID := authCtx.ProjectID.String()
 	deploymentID := uuid.NewString()
@@ -895,45 +845,6 @@ func TestSearchUsers_CanonicalFold_OneRowPerEmployee(t *testing.T) {
 	require.Equal(t, int64(300), filtered.Users[0].TotalInputTokens)
 }
 
-func TestSearchUsers_CanonicalFold_ShadowServesLiteralList(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestLogsService(t)
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	orgID := authCtx.ActiveOrganizationID
-	ti.featureFlags.SetFlag(feature.FlagCanonicalIdentityFoldShadow, orgID, true)
-
-	projectID := authCtx.ProjectID.String()
-	deploymentID := uuid.NewString()
-	suffix := uuid.NewString()[:8]
-	workEmail := "vwork-" + suffix + "@example.com"
-	personalEmail := "vpersonal-" + suffix + "@example.com"
-	userID := "gram-user-" + uuid.NewString()
-	seedIdentityMapEntry(t, ctx, ti, orgID, workEmail, userID, workEmail)
-	seedIdentityMapEntry(t, ctx, ti, orgID, personalEmail, userID, workEmail)
-
-	now := time.Now().UTC()
-	insertPollingLogWithUserAndEmail(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), userID, workEmail, 100, 50, 1.0)
-	insertPollingLogWithEmail(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), strings.ToUpper(personalEmail), 200, 100, 2.0)
-
-	// Shadow mode serves the literal list — the employee still splits across
-	// their two email keys — while the folded comparison runs detached.
-	res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
-		Filter: &gen.SearchUsersFilter{
-			From: now.Add(-time.Hour).Format(time.RFC3339),
-			To:   now.Add(time.Hour).Format(time.RFC3339),
-		},
-		UserType: "internal",
-		Limit:    100,
-		Sort:     "desc",
-	})
-	require.NoError(t, err)
-	require.Len(t, res.Users, 2)
-	keys := []string{res.Users[0].UserID, res.Users[1].UserID}
-	require.Contains(t, keys, workEmail)
-	require.Contains(t, keys, strings.ToUpper(personalEmail))
-}
-
 func TestGetUnproxiedMcpServerUserUsage_CanonicalFold_OneRowPerEmployee(t *testing.T) {
 	t.Parallel()
 
@@ -983,7 +894,7 @@ func TestGetUnproxiedMcpServerUserUsage_CanonicalFold_OneRowPerEmployee(t *testi
 	require.Equal(t, workEmail, rows[0].UserEmail)
 	require.Equal(t, uint64(2), rows[0].CallCount)
 
-	// Literal mode keeps the split rows — the flag-off behavior.
+	// An empty canonical org keeps the split rows.
 	params.CanonicalIdentityOrg = ""
 	rows, _, err = ti.chClient.GetUnproxiedMcpServerUserUsage(ctx, params)
 	require.NoError(t, err)

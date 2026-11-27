@@ -32,6 +32,7 @@ import {
   DRAWER_CELL_LABEL,
   DRAWER_FOOTNOTE,
   DrawerSection,
+  ChatReadAccess,
   NoRevealAccessNote,
   RevealFailedNote,
   RevealingNote,
@@ -42,7 +43,12 @@ import { redactionChipLabel } from "./payload-spans";
 import { RedactionChip, RevealedSpan } from "./risk-ui";
 import { SEVERITY_EDGE, SEVERITY_TEXT } from "./risk-severity";
 import type { SeverityRating } from "./risk-utils";
-import { TRANSCRIPT_DENIED_REASON, useUnmaskedMatch } from "./unmask";
+import { ActiveTemporaryAccess } from "@/components/temporary-access";
+import {
+  REVEAL_SCOPE,
+  TRANSCRIPT_DENIED_NOTE,
+  useUnmaskedMatch,
+} from "./unmask";
 
 // Same initial window the transcript sheet loads around risk findings.
 const CONTEXT_WINDOW_LIMIT = 200;
@@ -343,9 +349,12 @@ export function FindingContext({
     );
   } else if (forbidden) {
     body = (
-      <p className="text-muted-foreground text-sm">
-        {TRANSCRIPT_DENIED_REASON}
-      </p>
+      <div className="flex flex-col items-start gap-3">
+        <p className="text-muted-foreground text-sm">
+          {TRANSCRIPT_DENIED_NOTE}
+        </p>
+        <ChatReadAccess chatId={chatId} />
+      </div>
     );
   } else if (chatQuery.isError) {
     body = (
@@ -436,7 +445,12 @@ export function FindingContext({
       {revealed && canReveal && auditedReveal && unmask.isError && (
         <RevealFailedNote onRetry={reveal} />
       )}
-      {maskable && !canReveal && !restricted && <NoRevealAccessNote />}
+      {maskable && !canReveal && !restricted && !forbidden && (
+        <NoRevealAccessNote chatId={chatId || undefined} />
+      )}
+      {canReveal && chatId && (
+        <ActiveTemporaryAccess scope={REVEAL_SCOPE} resourceId={chatId} />
+      )}
       {maskable && !restricted && (
         <span className={DRAWER_FOOTNOTE}>
           Reveals are audited · Surrounding messages follow transcript access

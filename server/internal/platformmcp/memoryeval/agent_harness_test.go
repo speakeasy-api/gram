@@ -21,10 +21,10 @@ import (
 )
 
 var (
-	scriptedProjectID = regexp.MustCompile(`project_id is ([0-9a-f-]{36})`)
-	scriptedAnswerKey = regexp.MustCompile(`(?m)^Answer key: (.*)$`)
-	scriptedCandidate = regexp.MustCompile(`(?ms)^Assistant's answer: (.*?)\n\nGrade`)
-	scriptedKeyWord   = regexp.MustCompile(`[A-Za-z]{4,}`)
+	scriptedProjectSlug = regexp.MustCompile(`project_slug is ([a-z0-9][a-z0-9-]*)`)
+	scriptedAnswerKey   = regexp.MustCompile(`(?m)^Answer key: (.*)$`)
+	scriptedCandidate   = regexp.MustCompile(`(?ms)^Assistant's answer: (.*?)\n\nGrade`)
+	scriptedKeyWord     = regexp.MustCompile(`[A-Za-z]{4,}`)
 )
 
 // scriptedModel stands in for both the answering model and the judge, so the
@@ -66,11 +66,11 @@ func (m scriptedModel) GetCompletion(_ context.Context, request openrouter.Compl
 		return &openrouter.CompletionResponse{Content: "Not found"}, nil
 	}
 	if !strings.Contains(transcript, `"role":"tool"`) {
-		match := scriptedProjectID.FindStringSubmatch(transcript)
+		match := scriptedProjectSlug.FindStringSubmatch(transcript)
 		if match == nil {
-			return nil, errors.New("scripted model: project_id not found in prompt")
+			return nil, errors.New("scripted model: project_slug not found in prompt")
 		}
-		args, err := json.Marshal(map[string]string{"project_id": match[1], "from": m.searchFrom, "to": m.searchTo, "query": "PgCat"})
+		args, err := json.Marshal(map[string]string{"project_slug": match[1], "from": m.searchFrom, "to": m.searchTo, "query": "PgCat"})
 		if err != nil {
 			return nil, fmt.Errorf("encode search arguments: %w", err)
 		}

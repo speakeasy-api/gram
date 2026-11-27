@@ -228,8 +228,8 @@ func TestWorkloadOwnerEffectiveExclusionsAndDirectPrecedence(t *testing.T) {
 	ctx := contextvalues.WithPrincipalCredentialAuthorization(t.Context(), authCtx, actor, contextvalues.PrincipalCredential{
 		DelegatedGrants: raw, DelegatedGrantsVersion: int32(CurrentDelegatedPolicyVersion),
 	})
-	selected := authz.Check{Scope: authz.ScopeMCPConnect, ResourceID: "selected-server"}
-	other := authz.Check{Scope: authz.ScopeMCPConnect, ResourceID: "other-server"}
+	selected := authz.MCPServer(authz.MCPServerIDFrom("selected-server"), authz.ProjectIDFrom(f.projectID)).Connect()
+	other := authz.MCPServer(authz.MCPServerIDFrom("other-server"), authz.ProjectIDFrom(f.projectID)).Connect()
 	prepared, err := f.engine.PrepareContext(ctx)
 	require.NoError(t, err)
 	requireRuntimeForbidden(t, f.engine, prepared, selected)

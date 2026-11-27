@@ -238,6 +238,7 @@ func TestRemoteSessionRejections(t *testing.T) {
 			require.Equal(t, string(tc.who), row.WhoFixes)
 			require.Equal(t, tc.detail, row.SubReason)
 			require.Equal(t, subject.String(), row.SubjectURN)
+			require.Empty(t, row.ProviderHost, "the request row names no sign-in issuer")
 		})
 	}
 }
@@ -275,6 +276,7 @@ func TestProxiedUpstreamFailureRecords(t *testing.T) {
 
 	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeProviderServerError)
 	require.Equal(t, mcpServer.ID.String(), row.ServerID)
+	require.Equal(t, mcpconnectionattempts.NormalizeProviderHost(upstream.URL), row.ProviderHost)
 	require.Equal(t, mcpconnectionattempts.FamilyClaudeCode, row.ClientFamily)
 	require.Equal(t, string(mcpconnectionattempts.WhoProvider), row.WhoFixes)
 }
@@ -363,11 +365,12 @@ func TestGatewayMemberRows(t *testing.T) {
 		w.WriteHeader(http.StatusUnauthorized)
 	}))
 	t.Cleanup(deny.Close)
-	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-rows", "", []uuid.UUID{issuerID})
+	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-rows", "")
 	remoteIssuerID := clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)
-	createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", deny.URL, conv.ToNullUUID(remoteIssuerID), 0)
+	member := createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", deny.URL, conv.ToNullUUID(remoteIssuerID), 0)
 	subject := createTestUser(t, ctx, ti, "meta-rows-user-"+uuid.NewString())
-	bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject)
+	typed := seedTypedSessionClient(t, ctx, ti, orgID, projectID, member.mcpServerID, clientID, "remote_session", subject)
+	bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject, metaServingChoice{organizationID: orgID, serverID: member.mcpServerID, clientID: typed})
 
 	_, isError := metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
 	require.True(t, isError)
@@ -375,11 +378,53 @@ func TestGatewayMemberRows(t *testing.T) {
 	require.Equal(t, meta.ID.String(), row.ServerID)
 	require.NotEmpty(t, row.MemberID)
 	require.Equal(t, subject.String(), row.SubjectURN)
+	require.Empty(t, row.ProviderHost, "a member that was never reached names no upstream")
 
 	insertQualifiedRemoteSessionToken(t, ctx, ti, issuerID, clientID, subject, "token-refused", deny.URL)
 	_, isError = metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
 	require.True(t, isError)
-	rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeProviderRejected)
+	row = rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeProviderRejected)
+	require.Equal(t, mcpconnectionattempts.NormalizeProviderHost(deny.URL), row.ProviderHost)
+}
+
+// A member refresh outage counts once per provider, on its provider_refresh row, not again here.
+func TestGatewayMemberRefreshOutageNamesTheProviderOnce(t *testing.T) {
+	t.Parallel()
+
+	rec := mcpconnectionattemptstest.New(t)
+	ctx, ti := buildTestMCPService(t, testenv.NewLogger(t), testenv.NewMeterProvider(t), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, nil, nil, false, mcp.MetaRuntimeConfig{}, testenv.NewTracerProvider(t), nil, nil, "", false, rec.Recorder)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+	authCtx := requireProjectAuthContext(t, ctx)
+	projectID, orgID := *authCtx.ProjectID, authCtx.ActiveOrganizationID
+
+	issuerID := createUserSessionIssuer(t, ctx, ti.conn, projectID)
+	metaSlug := "meta-refresh-" + uuid.NewString()[:8]
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, metaSlug, issuerID)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(upstream.Close)
+	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-refresh", "")
+	remoteIssuerID := clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)
+	remoteIssuer, err := remotesessions_repo.New(ti.conn).GetRemoteSessionIssuerByID(ctx, remotesessions_repo.GetRemoteSessionIssuerByIDParams{
+		ID: remoteIssuerID, ProjectID: uuid.NullUUID{UUID: projectID, Valid: true}, IncludeOrganizational: true, OrganizationID: conv.ToPGText(orgID), IncludeGlobal: true,
+	})
+	require.NoError(t, err)
+	member := createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", upstream.URL, conv.ToNullUUID(remoteIssuerID), 0)
+	subject := createTestUser(t, ctx, ti, "meta-refresh-user-"+uuid.NewString())
+	typed := seedTypedSessionClient(t, ctx, ti, orgID, projectID, member.mcpServerID, clientID, "remote_session", subject)
+	bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject, metaServingChoice{organizationID: orgID, serverID: member.mcpServerID, clientID: typed})
+	upsertExpiredRefreshableRemoteSession(t, ctx, ti, issuerID, clientID, subject)
+	pointRemoteSessionTokenEndpoint(t, ctx, ti, authCtx, clientID, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusServiceUnavailable) })
+
+	_, isError := metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
+	require.True(t, isError)
+	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeRemoteSessionUnavailable)
+	require.NotEmpty(t, row.MemberID)
+	require.Empty(t, row.ProviderHost, "the request row names no issuer")
+	refresh := rec.RequireEnded(mcpconnectionattempts.StepProviderRefresh, mcpconnectionattempts.CodeProviderServerError)
+	require.Equal(t, mcpconnectionattempts.NormalizeProviderHost(remoteIssuer.Issuer), refresh.ProviderHost)
+	require.Len(t, rec.Rows(), 2, "one outage, named once")
 }
 
 // A busy or broken member must write its row and read true, through the real request path.
@@ -412,10 +457,11 @@ func TestGatewayMemberOutageRows(t *testing.T) {
 				w.WriteHeader(tc.status)
 			}))
 			t.Cleanup(upstream.Close)
-			clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-outage", "", []uuid.UUID{issuerID})
-			createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", upstream.URL, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)), 0)
+			clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-outage", "")
+			member := createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", upstream.URL, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)), 0)
 			subject := createTestUser(t, ctx, ti, "meta-outage-user-"+uuid.NewString())
-			bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject)
+			typed := seedTypedSessionClient(t, ctx, ti, orgID, projectID, member.mcpServerID, clientID, "remote_session", subject)
+			bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject, metaServingChoice{organizationID: orgID, serverID: member.mcpServerID, clientID: typed})
 			insertQualifiedRemoteSessionToken(t, ctx, ti, issuerID, clientID, subject, "token-outage", upstream.URL)
 
 			text, isError := metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
@@ -424,6 +470,7 @@ func TestGatewayMemberOutageRows(t *testing.T) {
 			require.Equal(t, `server "member" `+tc.text+contextvalues.ConnectionReferenceMarker+row.AttemptID.String(), text)
 			require.NotEmpty(t, row.MemberID)
 			require.Equal(t, string(mcpconnectionattempts.WhoProvider), row.WhoFixes)
+			require.Equal(t, mcpconnectionattempts.NormalizeProviderHost(upstream.URL), row.ProviderHost, "a member's provider failure names its upstream")
 		})
 	}
 }
@@ -445,10 +492,11 @@ func TestGatewayRowsReadTheReportedClient(t *testing.T) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	t.Cleanup(upstream.Close)
-	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-client", "", []uuid.UUID{issuerID})
-	createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", upstream.URL, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)), 0)
+	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-client", "")
+	member := createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", upstream.URL, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)), 0)
 	subject := createTestUser(t, ctx, ti, "meta-client-user-"+uuid.NewString())
-	bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject)
+	typed := seedTypedSessionClient(t, ctx, ti, orgID, projectID, member.mcpServerID, clientID, "remote_session", subject)
+	bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject, metaServingChoice{organizationID: orgID, serverID: member.mcpServerID, clientID: typed})
 	insertQualifiedRemoteSessionToken(t, ctx, ti, issuerID, clientID, subject, "token-client", upstream.URL)
 
 	const userAgent = "python-httpx/0.28.1"
@@ -478,7 +526,7 @@ func TestGatewayRowsReadTheReportedClient(t *testing.T) {
 	}
 }
 
-// A toolset gate's rejection reads the record a hosted session keeps, and a missing session the User-Agent.
+// A hosted server's gate cannot name the toolset-keyed session record, so its rejection reads the User-Agent.
 func TestGateRejectionReadsTheReportedClient(t *testing.T) {
 	t.Parallel()
 
@@ -496,8 +544,8 @@ func TestGateRejectionReadsTheReportedClient(t *testing.T) {
 	_, err := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.McpSlug.String, makeInitializeBody(), bearer, map[string]string{"User-Agent": "claude-code/2.1.0", "Mcp-Session-Id": sessionID})
 	require.Error(t, err)
 	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeInvalidRemoteSession)
-	require.Equal(t, mcpconnectionattempts.FamilyCursor, row.ClientFamily)
-	require.Equal(t, "1.7.3", row.ClientVersion)
+	require.Equal(t, mcpconnectionattempts.FamilyClaudeCode, row.ClientFamily)
+	require.Equal(t, "2.1.0", row.ClientVersion)
 	require.NotEmpty(t, row.AppKey)
 }
 
@@ -805,7 +853,7 @@ func TestDirectHostedMissingSecurityRecordsResponsibleParty(t *testing.T) {
 			rec := mcpconnectionattemptstest.New(t)
 			ti.service.SetConnectionRecorder(rec.Recorder)
 			response, err := servePublicHTTP(t, context.Background(), ti, ts.McpSlug.String, makeInitializeBody(), "", nil)
-			require.EqualError(t, err, "serve public: "+oops.C(oops.CodeUnauthorized).Error())
+			require.EqualError(t, err, "serve public: serve toolset-backed mcp: "+oops.C(oops.CodeUnauthorized).Error())
 			require.Empty(t, response.Body.String())
 			require.Empty(t, response.Header().Get("WWW-Authenticate"))
 			row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, tc.want)
@@ -827,11 +875,11 @@ func TestDirectHostedMissingSecuritySkipsNotifications(t *testing.T) {
 	ti.service.SetConnectionRecorder(rec.Recorder)
 
 	_, err := servePublicHTTP(t, t.Context(), ti, ts.McpSlug.String, []byte(`{"jsonrpc":"2.0","method":"notifications/initialized"}`), "", nil)
-	require.EqualError(t, err, "serve public: "+oops.C(oops.CodeUnauthorized).Error())
+	require.EqualError(t, err, "serve public: serve toolset-backed mcp: "+oops.C(oops.CodeUnauthorized).Error())
 	rec.RequireNothing()
 
 	_, err = servePublicHTTP(t, t.Context(), ti, ts.McpSlug.String, makeToolsCallBody("test_tool"), "", nil)
-	require.EqualError(t, err, "serve public: "+oops.C(oops.CodeUnauthorized).Error())
+	require.EqualError(t, err, "serve public: serve toolset-backed mcp: "+oops.C(oops.CodeUnauthorized).Error())
 	rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeCallerCredentialMissing)
 	require.Len(t, rec.Rows(), 1)
 }
@@ -1103,7 +1151,7 @@ func TestExternalOAuthFirstHandshakeRecordsNothing(t *testing.T) {
 
 			for range 2 {
 				response, err := servePublicHTTP(t, context.Background(), ti, external.McpSlug, makeInitializeBody(), "", nil)
-				require.EqualError(t, err, "serve public: "+oops.C(oops.CodeUnauthorized).Error())
+				require.EqualError(t, err, "serve public: serve toolset-backed mcp: "+oops.C(oops.CodeUnauthorized).Error())
 				require.Contains(t, response.Header().Get("WWW-Authenticate"), "resource_metadata=")
 			}
 			rec.RequireNothing()
@@ -1127,45 +1175,40 @@ func TestExternalOAuthTokenWithUnmetSchemeRecords(t *testing.T) {
 	rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeCredentialMisconfigured)
 }
 
-// A later client needing a re-link decides the response, so it keeps its own row beside the refresh row.
-func TestFreshRefreshOutrankedByReconnectKeepsTheReconnectRow(t *testing.T) {
+// A sibling registration on the issuer must not refresh or report an outcome for this hosted server.
+func TestHostedReconnectIgnoresRefreshableSibling(t *testing.T) {
 	t.Parallel()
 	rec := mcpconnectionattemptstest.New(t)
 	ctx, ti := buildTestMCPService(t, testenv.NewLogger(t), testenv.NewMeterProvider(t), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, nil, nil, false, mcp.MetaRuntimeConfig{}, testenv.NewTracerProvider(t), nil, nil, "", false, rec.Recorder)
 	ti.service.SetConnectionRecorder(rec.Recorder)
 	authCtx := requireProjectAuthContext(t, ctx)
 	fixture := createRemoteSessionResolverFixture(t, ctx, ti, authCtx, "fresh-outranked")
-	// Clients resolve in id order, so the lower id must be the one that refreshes.
-	refreshing := fixture.RemoteSessionClient.ID
-	other := createConsentRemoteClient(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "fresh-outranked-unlinked-"+uuid.NewString()[:8], "", []uuid.UUID{fixture.UserSessionIssuer.ID})
-	if other.String() < refreshing.String() {
-		refreshing = other
-	}
+	sibling := createConsentRemoteClient(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "hosted-refresh-sibling-"+uuid.NewString()[:8], "")
 
 	neverLinked := mintUserSessionBearerForSubject(t, ti, fixture.Toolset, urn.NewUserSubject("gate-user-"+uuid.NewString()))
 	want, wantErr := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.McpSlug.String, makeInitializeBody(), neverLinked, nil)
 	require.Error(t, wantErr)
 	require.Len(t, rec.Rows(), 1, "a never-linked subject gets the gate row")
+	baselineReason := rec.Rows()[0].Reason
 
 	subject := urn.NewUserSubject("gate-user-" + uuid.NewString())
-	upsertExpiredRefreshableRemoteSession(t, ctx, ti, fixture.UserSessionIssuer.ID, refreshing, subject)
+	upsertExpiredRefreshableRemoteSession(t, ctx, ti, fixture.UserSessionIssuer.ID, sibling, subject)
 	var calls atomic.Int32
-	pointRemoteSessionTokenEndpoint(t, ctx, ti, authCtx, refreshing, func(w http.ResponseWriter, _ *http.Request) {
+	pointRemoteSessionTokenEndpoint(t, ctx, ti, authCtx, sibling, func(w http.ResponseWriter, _ *http.Request) {
 		calls.Add(1)
 		w.WriteHeader(http.StatusServiceUnavailable)
 	})
 	got, gotErr := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.McpSlug.String, makeInitializeBody(), mintUserSessionBearerForSubject(t, ti, fixture.Toolset, subject), nil)
-	require.EqualValues(t, 1, calls.Load(), "the refreshing client must resolve first")
+	require.Zero(t, calls.Load(), "only the assigned registration can refresh")
 	require.EqualError(t, gotErr, wantErr.Error())
 	require.Equal(t, want.Code, got.Code)
 	require.Equal(t, want.Body.String(), got.Body.String())
 	require.Equal(t, want.Header().Get("WWW-Authenticate"), got.Header().Get("WWW-Authenticate"))
 
 	rows := rec.Rows()[1:]
-	require.Len(t, rows, 2)
-	require.Equal(t, mcpconnectionattempts.StepProviderRefresh.String(), rows[0].Step)
-	require.Equal(t, mcpconnectionattempts.StepMCPRequest.String(), rows[1].Step)
-	require.Equal(t, mcpconnectionattempts.CodeInvalidRemoteSession.String(), rows[1].Reason)
+	require.Len(t, rows, 1)
+	require.Equal(t, mcpconnectionattempts.StepMCPRequest.String(), rows[0].Step)
+	require.Equal(t, baselineReason, rows[0].Reason, "a sibling grant does not change the exact registration’s reconnect outcome")
 }
 
 // A gateway call is past sign-in and takes no caller headers, so its rows stay as they were.
@@ -1261,7 +1304,7 @@ func TestFreshInvalidGrantWritesOnlyTheRefreshRow(t *testing.T) {
 func upsertUnreadableRemoteSession(t *testing.T, ctx context.Context, ti *testInstance, userSessionIssuerID, remoteSessionClientID uuid.UUID, subject urn.SessionSubject, resource string) {
 	t.Helper()
 
-	_, err := remotesessions_repo.New(ti.conn).UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+	_, err := remotesessions_repo.New(ti.conn).UpsertRemoteSessionFixture(ctx, remotesessions_repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            subject,
 		UserSessionIssuerID:   userSessionIssuerID,
 		RemoteSessionClientID: remoteSessionClientID,
@@ -1334,10 +1377,11 @@ func TestUnreadableUpstreamTokenGatewayMemberAsksToReconnect(t *testing.T) {
 			issuerID := createUserSessionIssuer(t, ctx, ti.conn, projectID)
 			metaSlug := "meta-unreadable-" + uuid.NewString()[:8]
 			meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, metaSlug, issuerID)
-			clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-unreadable", "", []uuid.UUID{issuerID})
-			createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", upstream.URL, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)), 0)
+			clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-unreadable", "")
+			member := createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", upstream.URL, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)), 0)
 			subject := createTestUser(t, ctx, ti, "meta-unreadable-user-"+uuid.NewString())
-			bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject)
+			typed := seedTypedSessionClient(t, ctx, ti, orgID, projectID, member.mcpServerID, clientID, "remote_session", subject)
+			bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject, metaServingChoice{organizationID: orgID, serverID: member.mcpServerID, clientID: typed})
 			resource := ""
 			if tc.resource {
 				resource = upstream.URL
@@ -1387,7 +1431,7 @@ func overwriteMemberTokens(t *testing.T, ctx context.Context, f memberRefreshOut
 	}
 	current, err := remotesessions_repo.New(f.ti.conn).GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{SubjectUrn: f.subject, RemoteSessionClientID: f.clientID})
 	require.NoError(t, err)
-	_, err = remotesessions_repo.New(f.ti.conn).UpdateRemoteSessionTokensIfUnchanged(ctx, remotesessions_repo.UpdateRemoteSessionTokensIfUnchangedParams{
+	_, err = remotesessions_repo.New(f.ti.conn).UpdateRemoteSessionTokensIfUnchangedFixture(ctx, remotesessions_repo.UpdateRemoteSessionTokensIfUnchangedFixtureParams{
 		SubjectUrn: f.subject, RemoteSessionClientID: f.clientID, ExpectedUpdatedAt: current.UpdatedAt,
 		AccessTokenEncrypted: encrypt(access), AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(accessExpiresIn)),
 		RefreshTokenEncrypted: conv.ToPGText(encrypt(refresh)), Scopes: current.Scopes,
@@ -1410,7 +1454,7 @@ func TestUnreadableUpstreamTokenGatewayMemberHeals(t *testing.T) {
 
 	stored, err := remotesessions_repo.New(ti.conn).GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{SubjectUrn: f.subject, RemoteSessionClientID: f.clientID})
 	require.NoError(t, err)
-	access, err := ti.enc.Decrypt(stored.AccessTokenEncrypted)
+	access, err := ti.enc.Decrypt(stored.AccessTokenEncrypted.String)
 	require.NoError(t, err, "the renewed access token is stored under the current key")
 	require.Equal(t, "refreshed-token", access)
 	refresh, err := ti.enc.Decrypt(stored.RefreshTokenEncrypted.String)
@@ -1464,13 +1508,14 @@ func TestUnreadableUpstreamTokenGatewayMemberMisconfiguredNamesAdministrator(t *
 	issuerID := createUserSessionIssuer(t, ctx, ti.conn, projectID)
 	metaSlug := "meta-unreadable-admin-" + uuid.NewString()[:8]
 	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, metaSlug, issuerID)
-	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-unreadable-admin", provider.URL, []uuid.UUID{issuerID})
-	createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", upstream.URL, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)), 0)
+	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-unreadable-admin", provider.URL)
+	member := createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", upstream.URL, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)), 0)
 	subject := createTestUser(t, ctx, ti, "meta-unreadable-admin-user-"+uuid.NewString())
-	bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject)
+	typed := seedTypedSessionClient(t, ctx, ti, orgID, projectID, member.mcpServerID, clientID, "remote_session", subject)
+	bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject, metaServingChoice{organizationID: orgID, serverID: member.mcpServerID, clientID: typed})
 	refresh, err := ti.enc.Encrypt([]byte("live-refresh"))
 	require.NoError(t, err)
-	_, err = remotesessions_repo.New(ti.conn).UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+	_, err = remotesessions_repo.New(ti.conn).UpsertRemoteSessionFixture(ctx, remotesessions_repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn: subject, UserSessionIssuerID: issuerID, RemoteSessionClientID: clientID,
 		AccessTokenEncrypted: "not-ciphertext", AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)),
 		RefreshTokenEncrypted: conv.ToPGText(refresh), RefreshExpiresAt: pgtype.Timestamptz{Valid: false},
@@ -1543,12 +1588,14 @@ func TestUnreadableSharedIssuerGrantNeverDialsEitherMember(t *testing.T) {
 	issuerID := createUserSessionIssuer(t, ctx, ti.conn, projectID)
 	metaSlug := "meta-shared-" + uuid.NewString()[:8]
 	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, metaSlug, issuerID)
-	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-shared", "", []uuid.UUID{issuerID})
+	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-shared", "")
 	remoteIssuer := conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID))
-	createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "alpha", upstreamA.URL, remoteIssuer, 0)
-	createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "beta", upstreamB.URL, remoteIssuer, 1)
+	alpha := createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "alpha", upstreamA.URL, remoteIssuer, 0)
+	beta := createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "beta", upstreamB.URL, remoteIssuer, 1)
 	subject := createTestUser(t, ctx, ti, "meta-shared-user-"+uuid.NewString())
-	bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject)
+	typedAlpha := seedTypedSessionClient(t, ctx, ti, orgID, projectID, alpha.mcpServerID, clientID, "remote_session", subject)
+	typedBeta := seedTypedSessionClient(t, ctx, ti, orgID, projectID, beta.mcpServerID, clientID, "remote_session", subject)
+	bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject, metaServingChoice{organizationID: orgID, serverID: alpha.mcpServerID, clientID: typedAlpha}, metaServingChoice{organizationID: orgID, serverID: beta.mcpServerID, clientID: typedBeta})
 	upsertUnreadableRemoteSession(t, ctx, ti, issuerID, clientID, subject, upstreamA.URL)
 
 	for _, member := range []string{"alpha", "beta"} {

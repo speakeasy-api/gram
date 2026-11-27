@@ -1,4 +1,4 @@
-//nolint:exhaustruct // Canonical payloads and nullable database values intentionally use documented zero values.
+//nolint:exhaustruct_v5 // Canonical payloads and nullable database values intentionally use documented zero values.
 package killswitches
 
 import (

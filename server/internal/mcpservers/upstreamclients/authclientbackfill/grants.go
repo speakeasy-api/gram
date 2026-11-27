@@ -121,6 +121,14 @@ func (p *grantPlan) want(kind GrantKind, principal urn.Principal, scope authz.Sc
 	return nil
 }
 
+// ProvisionFromTypedOffers grants defaults for a newly materialized, complete
+// set of typed offers. The caller owns the transaction that creates that set;
+// no rollout tasks or issuer-link repairs are run by this entry point.
+func ProvisionFromTypedOffers(ctx context.Context, tx pgx.Tx, organizationID string) error {
+	report := newReport(true)
+	return runGrants(ctx, tx, Options{OrganizationID: organizationID, Apply: true, PageSize: 0, TypedOnly: true}, &report, true, true)
+}
+
 // runGrants provisions the default mcp:auth grants so the mandatory check
 // allows what today's decisions allow: personal defaults always, shared client
 // grants with withShared, and legacy API key policies with withKeys, which
@@ -317,7 +325,7 @@ func reachesServer(grant authz.Grant, use ListSharedAuthClientServersRow) bool {
 		ids = append(ids, use.ToolsetID.UUID)
 	}
 	return slices.ContainsFunc(ids, func(id uuid.UUID) bool {
-		return authz.GrantAllows(grant, authz.MCPCheck(authz.ScopeMCPConnect, id.String(), use.ProjectID.String()))
+		return authz.GrantAllows(grant, authz.MCPServer(authz.MCPServerIDOf(id), authz.ProjectIDOf(use.ProjectID)).Connect())
 	})
 }
 

@@ -70,14 +70,6 @@ func (s *StubClient) InvalidateBillingCustomerCaches(ctx context.Context, orgID 
 	return nil
 }
 
-func (s *StubClient) CreateCheckout(ctx context.Context, orgID string, serverURL string, successURL string) (string, error) {
-	_, span := s.tracer.Start(ctx, "stub_client.create_checkout")
-	span.SetStatus(codes.Error, "not implemented")
-	defer span.End()
-
-	return "", fmt.Errorf("not implemented")
-}
-
 func (s *StubClient) CreateTopUpCheckout(ctx context.Context, orgID, serverURL, successURL string) (string, error) {
 	_, span := s.tracer.Start(ctx, "stub_client.create_topup_checkout")
 	span.SetStatus(codes.Error, "not implemented")
@@ -197,7 +189,7 @@ func (s *StubClient) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error)
 				"Custom tool creation",
 				"Hosted server deployments",
 				"14 day log retention",
-				"Built in MCP Playground",
+				"Built in MCP Inspect",
 				"Connect to Claude, Cursor, Gemini and more",
 			},
 			IncludedBullets: []string{

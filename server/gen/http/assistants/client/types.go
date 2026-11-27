@@ -22,6 +22,8 @@ type CreateAssistantRequestBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The model identifier used by the assistant.
 	Model string `form:"model" json:"model" xml:"model"`
+	// The reasoning effort used by the assistant.
+	ReasoningEffort string `form:"reasoning_effort" json:"reasoning_effort" xml:"reasoning_effort"`
 	// The system instructions for the assistant.
 	Instructions string `form:"instructions" json:"instructions" xml:"instructions"`
 	// Hosted (toolset-backed) MCP servers to attach, by toolset slug. When sent,
@@ -49,6 +51,8 @@ type UpdateAssistantRequestBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The model identifier used by the assistant.
 	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
+	// The reasoning effort used by the assistant.
+	ReasoningEffort *string `form:"reasoning_effort,omitempty" json:"reasoning_effort,omitempty" xml:"reasoning_effort,omitempty"`
 	// The system instructions for the assistant.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
 	// Hosted (toolset-backed) MCP servers to attach, by toolset slug. When sent,
@@ -150,6 +154,8 @@ type GetAssistantResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The model identifier used by the assistant.
 	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
+	// The reasoning effort used by the assistant.
+	ReasoningEffort *string `form:"reasoning_effort,omitempty" json:"reasoning_effort,omitempty" xml:"reasoning_effort,omitempty"`
 	// The system instructions for the assistant.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
 	// Hosted (toolset-backed) MCP servers attached to the assistant, by toolset
@@ -194,6 +200,8 @@ type CreateAssistantResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The model identifier used by the assistant.
 	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
+	// The reasoning effort used by the assistant.
+	ReasoningEffort *string `form:"reasoning_effort,omitempty" json:"reasoning_effort,omitempty" xml:"reasoning_effort,omitempty"`
 	// The system instructions for the assistant.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
 	// Hosted (toolset-backed) MCP servers attached to the assistant, by toolset
@@ -238,6 +246,8 @@ type UpdateAssistantResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The model identifier used by the assistant.
 	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
+	// The reasoning effort used by the assistant.
+	ReasoningEffort *string `form:"reasoning_effort,omitempty" json:"reasoning_effort,omitempty" xml:"reasoning_effort,omitempty"`
 	// The system instructions for the assistant.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
 	// Hosted (toolset-backed) MCP servers attached to the assistant, by toolset
@@ -307,6 +317,8 @@ type GetManagedAssistantResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The model identifier used by the assistant.
 	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
+	// The reasoning effort used by the assistant.
+	ReasoningEffort *string `form:"reasoning_effort,omitempty" json:"reasoning_effort,omitempty" xml:"reasoning_effort,omitempty"`
 	// The system instructions for the assistant.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
 	// Hosted (toolset-backed) MCP servers attached to the assistant, by toolset
@@ -351,6 +363,8 @@ type EnsureManagedAssistantResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The model identifier used by the assistant.
 	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
+	// The reasoning effort used by the assistant.
+	ReasoningEffort *string `form:"reasoning_effort,omitempty" json:"reasoning_effort,omitempty" xml:"reasoning_effort,omitempty"`
 	// The system instructions for the assistant.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
 	// Hosted (toolset-backed) MCP servers attached to the assistant, by toolset
@@ -2466,6 +2480,8 @@ type AssistantResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The model identifier used by the assistant.
 	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
+	// The reasoning effort used by the assistant.
+	ReasoningEffort *string `form:"reasoning_effort,omitempty" json:"reasoning_effort,omitempty" xml:"reasoning_effort,omitempty"`
 	// The system instructions for the assistant.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
 	// Hosted (toolset-backed) MCP servers attached to the assistant, by toolset
@@ -2609,12 +2625,19 @@ type ExecutionProfileOptionResponseBody struct {
 // of the "createAssistant" endpoint of the "assistants" service.
 func NewCreateAssistantRequestBody(p *assistants.CreateAssistantPayload) *CreateAssistantRequestBody {
 	body := &CreateAssistantRequestBody{
-		Name:           p.Name,
-		Model:          p.Model,
-		Instructions:   p.Instructions,
-		WarmTTLSeconds: p.WarmTTLSeconds,
-		MaxConcurrency: p.MaxConcurrency,
-		Status:         p.Status,
+		Name:            p.Name,
+		Model:           p.Model,
+		ReasoningEffort: p.ReasoningEffort,
+		Instructions:    p.Instructions,
+		WarmTTLSeconds:  p.WarmTTLSeconds,
+		MaxConcurrency:  p.MaxConcurrency,
+		Status:          p.Status,
+	}
+	{
+		var zero string
+		if body.ReasoningEffort == zero {
+			body.ReasoningEffort = "medium"
+		}
 	}
 	if p.Toolsets != nil {
 		body.Toolsets = make([]*AssistantToolsetRefRequestBody, len(p.Toolsets))
@@ -2648,6 +2671,7 @@ func NewUpdateAssistantRequestBody(p *assistants.UpdateAssistantPayload) *Update
 		ID:                     p.ID,
 		Name:                   p.Name,
 		Model:                  p.Model,
+		ReasoningEffort:        p.ReasoningEffort,
 		Instructions:           p.Instructions,
 		WarmTTLSeconds:         p.WarmTTLSeconds,
 		MaxConcurrency:         p.MaxConcurrency,
@@ -2910,6 +2934,7 @@ func NewGetAssistantAssistantOK(body *GetAssistantResponseBody) *types.Assistant
 		AgentID:         body.AgentID,
 		Name:            *body.Name,
 		Model:           *body.Model,
+		ReasoningEffort: *body.ReasoningEffort,
 		Instructions:    *body.Instructions,
 		WarmTTLSeconds:  *body.WarmTTLSeconds,
 		MaxConcurrency:  *body.MaxConcurrency,
@@ -3107,6 +3132,7 @@ func NewCreateAssistantAssistantOK(body *CreateAssistantResponseBody) *types.Ass
 		AgentID:         body.AgentID,
 		Name:            *body.Name,
 		Model:           *body.Model,
+		ReasoningEffort: *body.ReasoningEffort,
 		Instructions:    *body.Instructions,
 		WarmTTLSeconds:  *body.WarmTTLSeconds,
 		MaxConcurrency:  *body.MaxConcurrency,
@@ -3304,6 +3330,7 @@ func NewUpdateAssistantAssistantOK(body *UpdateAssistantResponseBody) *types.Ass
 		AgentID:         body.AgentID,
 		Name:            *body.Name,
 		Model:           *body.Model,
+		ReasoningEffort: *body.ReasoningEffort,
 		Instructions:    *body.Instructions,
 		WarmTTLSeconds:  *body.WarmTTLSeconds,
 		MaxConcurrency:  *body.MaxConcurrency,
@@ -3975,6 +4002,7 @@ func NewGetManagedAssistantAssistantOK(body *GetManagedAssistantResponseBody) *t
 		AgentID:         body.AgentID,
 		Name:            *body.Name,
 		Model:           *body.Model,
+		ReasoningEffort: *body.ReasoningEffort,
 		Instructions:    *body.Instructions,
 		WarmTTLSeconds:  *body.WarmTTLSeconds,
 		MaxConcurrency:  *body.MaxConcurrency,
@@ -4172,6 +4200,7 @@ func NewEnsureManagedAssistantAssistantOK(body *EnsureManagedAssistantResponseBo
 		AgentID:         body.AgentID,
 		Name:            *body.Name,
 		Model:           *body.Model,
+		ReasoningEffort: *body.ReasoningEffort,
 		Instructions:    *body.Instructions,
 		WarmTTLSeconds:  *body.WarmTTLSeconds,
 		MaxConcurrency:  *body.MaxConcurrency,
@@ -4727,6 +4756,9 @@ func ValidateGetAssistantResponseBody(body *GetAssistantResponseBody) (err error
 	if body.Model == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("model", "body"))
 	}
+	if body.ReasoningEffort == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reasoning_effort", "body"))
+	}
 	if body.Instructions == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("instructions", "body"))
 	}
@@ -4770,6 +4802,11 @@ func ValidateGetAssistantResponseBody(body *GetAssistantResponseBody) (err error
 	}
 	if body.AgentID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", *body.AgentID, goa.FormatUUID))
+	}
+	if body.ReasoningEffort != nil {
+		if !(*body.ReasoningEffort == "none" || *body.ReasoningEffort == "low" || *body.ReasoningEffort == "medium" || *body.ReasoningEffort == "high") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.reasoning_effort", *body.ReasoningEffort, []any{"none", "low", "medium", "high"}))
+		}
 	}
 	for _, e := range body.Toolsets {
 		if e != nil {
@@ -4826,6 +4863,9 @@ func ValidateCreateAssistantResponseBody(body *CreateAssistantResponseBody) (err
 	if body.Model == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("model", "body"))
 	}
+	if body.ReasoningEffort == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reasoning_effort", "body"))
+	}
 	if body.Instructions == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("instructions", "body"))
 	}
@@ -4869,6 +4909,11 @@ func ValidateCreateAssistantResponseBody(body *CreateAssistantResponseBody) (err
 	}
 	if body.AgentID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", *body.AgentID, goa.FormatUUID))
+	}
+	if body.ReasoningEffort != nil {
+		if !(*body.ReasoningEffort == "none" || *body.ReasoningEffort == "low" || *body.ReasoningEffort == "medium" || *body.ReasoningEffort == "high") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.reasoning_effort", *body.ReasoningEffort, []any{"none", "low", "medium", "high"}))
+		}
 	}
 	for _, e := range body.Toolsets {
 		if e != nil {
@@ -4925,6 +4970,9 @@ func ValidateUpdateAssistantResponseBody(body *UpdateAssistantResponseBody) (err
 	if body.Model == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("model", "body"))
 	}
+	if body.ReasoningEffort == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reasoning_effort", "body"))
+	}
 	if body.Instructions == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("instructions", "body"))
 	}
@@ -4968,6 +5016,11 @@ func ValidateUpdateAssistantResponseBody(body *UpdateAssistantResponseBody) (err
 	}
 	if body.AgentID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", *body.AgentID, goa.FormatUUID))
+	}
+	if body.ReasoningEffort != nil {
+		if !(*body.ReasoningEffort == "none" || *body.ReasoningEffort == "low" || *body.ReasoningEffort == "medium" || *body.ReasoningEffort == "high") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.reasoning_effort", *body.ReasoningEffort, []any{"none", "low", "medium", "high"}))
+		}
 	}
 	for _, e := range body.Toolsets {
 		if e != nil {
@@ -5057,6 +5110,9 @@ func ValidateGetManagedAssistantResponseBody(body *GetManagedAssistantResponseBo
 	if body.Model == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("model", "body"))
 	}
+	if body.ReasoningEffort == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reasoning_effort", "body"))
+	}
 	if body.Instructions == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("instructions", "body"))
 	}
@@ -5100,6 +5156,11 @@ func ValidateGetManagedAssistantResponseBody(body *GetManagedAssistantResponseBo
 	}
 	if body.AgentID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", *body.AgentID, goa.FormatUUID))
+	}
+	if body.ReasoningEffort != nil {
+		if !(*body.ReasoningEffort == "none" || *body.ReasoningEffort == "low" || *body.ReasoningEffort == "medium" || *body.ReasoningEffort == "high") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.reasoning_effort", *body.ReasoningEffort, []any{"none", "low", "medium", "high"}))
+		}
 	}
 	for _, e := range body.Toolsets {
 		if e != nil {
@@ -5156,6 +5217,9 @@ func ValidateEnsureManagedAssistantResponseBody(body *EnsureManagedAssistantResp
 	if body.Model == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("model", "body"))
 	}
+	if body.ReasoningEffort == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reasoning_effort", "body"))
+	}
 	if body.Instructions == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("instructions", "body"))
 	}
@@ -5199,6 +5263,11 @@ func ValidateEnsureManagedAssistantResponseBody(body *EnsureManagedAssistantResp
 	}
 	if body.AgentID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", *body.AgentID, goa.FormatUUID))
+	}
+	if body.ReasoningEffort != nil {
+		if !(*body.ReasoningEffort == "none" || *body.ReasoningEffort == "low" || *body.ReasoningEffort == "medium" || *body.ReasoningEffort == "high") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.reasoning_effort", *body.ReasoningEffort, []any{"none", "low", "medium", "high"}))
+		}
 	}
 	for _, e := range body.Toolsets {
 		if e != nil {
@@ -7951,6 +8020,9 @@ func ValidateAssistantResponseBody(body *AssistantResponseBody) (err error) {
 	if body.Model == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("model", "body"))
 	}
+	if body.ReasoningEffort == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reasoning_effort", "body"))
+	}
 	if body.Instructions == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("instructions", "body"))
 	}
@@ -7994,6 +8066,11 @@ func ValidateAssistantResponseBody(body *AssistantResponseBody) (err error) {
 	}
 	if body.AgentID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", *body.AgentID, goa.FormatUUID))
+	}
+	if body.ReasoningEffort != nil {
+		if !(*body.ReasoningEffort == "none" || *body.ReasoningEffort == "low" || *body.ReasoningEffort == "medium" || *body.ReasoningEffort == "high") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.reasoning_effort", *body.ReasoningEffort, []any{"none", "low", "medium", "high"}))
+		}
 	}
 	for _, e := range body.Toolsets {
 		if e != nil {

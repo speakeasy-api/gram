@@ -27,7 +27,7 @@ import (
 
 func testConfig() config {
 	return config{
-		table:         eventsTable,
+		table:         EventsTable,
 		queueSize:     64,
 		maxBatch:      8,
 		flushInterval: 10 * time.Millisecond,
@@ -36,6 +36,11 @@ func testConfig() config {
 		logsCheckTimeout: 10 * time.Second,
 
 		repeatsInterval: time.Hour,
+
+		servedInterval:      5 * time.Minute,
+		servedFlushInterval: 10 * time.Millisecond,
+		servedFlushBudget:   10 * time.Second,
+		servedTable:         lastServedTable,
 	}
 }
 
@@ -93,20 +98,26 @@ func newTestRecorderWithLogs(t *testing.T, conn driver.Conn, logsEnabled func(co
 
 func (r testRecorder) dropped(t *testing.T, reason dropReason) int64 {
 	t.Helper()
+	return r.counted(t, meterDropped, reason)
+}
+
+// counted sums a counter's points with reason as their drop reason, or every point for "".
+func (r testRecorder) counted(t *testing.T, name string, reason dropReason) int64 {
+	t.Helper()
 
 	var collected metricdata.ResourceMetrics
 	require.NoError(t, r.reader.Collect(t.Context(), &collected))
 	var total int64
 	for _, scope := range collected.ScopeMetrics {
 		for _, m := range scope.Metrics {
-			if m.Name != meterDropped {
+			if m.Name != name {
 				continue
 			}
 			sum, ok := m.Data.(metricdata.Sum[int64])
 			require.True(t, ok)
 			for _, point := range sum.DataPoints {
 				value, _ := point.Attributes.Value(attr.ConnectionDropReasonKey)
-				if value.AsString() == string(reason) {
+				if reason == "" || value.AsString() == string(reason) {
 					total += point.Value
 				}
 			}
@@ -597,6 +608,23 @@ func TestRecord_MetricKeepsAKnownProvider(t *testing.T) {
 			_, tagged := tags[string(attr.ConnectionProviderKey)]
 			require.False(t, tagged, "a row that reached no provider has no provider tag")
 		}
+	}
+}
+
+// A listing row keeps its member's host for the log but is not counted as a provider attempt.
+func TestRecord_MetricLeavesListingRowsUntagged(t *testing.T) {
+	t.Parallel()
+
+	recorder := newTestRecorder(t, clickhouseConn(t), testConfig())
+	attempt := Begin(testScope())
+	recorder.End(t.Context(), attempt, StepDiscoveryMember, CodeProviderServerError, Provider("https://mcp.example.com/mcp"))
+	require.NoError(t, recorder.Shutdown(t.Context()))
+
+	points := stepTags(t, recorder)
+	require.NotEmpty(t, points)
+	for _, tags := range points {
+		_, tagged := tags[string(attr.ConnectionProviderKey)]
+		require.False(t, tagged, "a listing row has no provider tag")
 	}
 }
 
@@ -1167,12 +1195,12 @@ func TestRecorderOnceReportsAdmission(t *testing.T) {
 	t.Parallel()
 	var absent *Recorder
 	require.False(t, absent.Once(t.Context(), testScope(), StepProviderRefresh, CodeProviderServerError))
-	rec := NewCapturing(func(Row) {}, func(context.Context, string) (bool, error) { return true, nil })
+	rec := NewCapturing(func(Row) {}, nil, func(context.Context, string) (bool, error) { return true, nil })
 	require.True(t, rec.Once(t.Context(), testScope(), StepProviderRefresh, CodeProviderServerError))
 	require.False(t, rec.Once(t.Context(), Scope{}, StepProviderRefresh, CodeProviderServerError))
-	disabled := NewCapturing(func(Row) { t.Error("disabled capture") }, func(context.Context, string) (bool, error) { return false, nil })
+	disabled := NewCapturing(func(Row) { t.Error("disabled capture") }, nil, func(context.Context, string) (bool, error) { return false, nil })
 	require.False(t, disabled.Once(t.Context(), testScope(), StepProviderRefresh, CodeProviderServerError))
-	panics := NewCapturing(func(Row) { panic("capture failed") }, func(context.Context, string) (bool, error) { return true, nil })
+	panics := NewCapturing(func(Row) { panic("capture failed") }, nil, func(context.Context, string) (bool, error) { return true, nil })
 	require.False(t, panics.Once(t.Context(), testScope(), StepProviderRefresh, CodeProviderServerError))
 	rec.capture = nil
 	rec.queue = make(chan Row, 1)

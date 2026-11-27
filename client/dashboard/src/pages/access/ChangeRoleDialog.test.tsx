@@ -75,6 +75,7 @@ const chatRead: ScopeDefinition = {
   category: "session" as ScopeDefinition["category"],
   visibility: "user_visible",
   agentEligible: false,
+  temporaryGrantable: false,
   sensitive: true,
   subScopes: [],
 };
@@ -87,6 +88,7 @@ const definitions: ScopeDefinition[] = [
     category: "log" as ScopeDefinition["category"],
     visibility: "user_visible",
     agentEligible: true,
+    temporaryGrantable: false,
     sensitive: true,
     subScopes: [],
   },
@@ -98,6 +100,7 @@ const definitions: ScopeDefinition[] = [
     category: "org" as ScopeDefinition["category"],
     visibility: "user_visible",
     agentEligible: false,
+    temporaryGrantable: false,
     sensitive: true,
     subScopes: [],
     exclusionScope: "org:blocked_admin" as ScopeDefinition["exclusionScope"],

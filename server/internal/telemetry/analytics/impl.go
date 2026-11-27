@@ -91,7 +91,7 @@ func (s *Service) authorize(ctx context.Context) (*contextvalues.AuthContext, er
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 	return authCtx, nil
@@ -121,11 +121,11 @@ func (s *Service) readableDatasets(ctx context.Context, authCtx *contextvalues.A
 	for _, ds := range datasets {
 		check, needsCheck := ds.AccessCheck(authCtx.ActiveOrganizationID)
 		if needsCheck {
-			allowed, err := s.authz.Evaluate(ctx, check)
+			decision, err := s.authz.Decide(authz.WithoutChallenges(ctx), check)
 			if err != nil {
 				return nil, nil, fmt.Errorf("evaluate dataset %s access: %w", ds.Name, err)
 			}
-			if !allowed {
+			if !decision.AllAllowed {
 				restricted = append(restricted, ds.Name)
 				continue
 			}

@@ -8,6 +8,7 @@ import { domainsGetDomain } from "../funcs/domainsGetDomain.js";
 import { domainsListDomains } from "../funcs/domainsListDomains.js";
 import { domainsListMcpEndpoints } from "../funcs/domainsListMcpEndpoints.js";
 import { domainsListRootMcpServers } from "../funcs/domainsListRootMcpServers.js";
+import { domainsReconcileDomain } from "../funcs/domainsReconcileDomain.js";
 import { domainsRegisterDomain } from "../funcs/domainsRegisterDomain.js";
 import { domainsSetRootMcpEndpoint } from "../funcs/domainsSetRootMcpEndpoint.js";
 import { domainsUpdateDomain } from "../funcs/domainsUpdateDomain.js";
@@ -40,6 +41,10 @@ import {
   ListRootMcpServersRequest,
   ListRootMcpServersSecurity,
 } from "../models/operations/listrootmcpservers.js";
+import {
+  ReconcileDomainRequest,
+  ReconcileDomainSecurity,
+} from "../models/operations/reconciledomain.js";
 import {
   RegisterDomainRequest,
   RegisterDomainSecurity,
@@ -162,6 +167,25 @@ export class Domains extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ListRootMcpServersResponseBody> {
     return unwrapAsync(domainsListRootMcpServers(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * reconcileDomain domains
+   *
+   * @remarks
+   * Reapply the configured ingress state for the organization's verified custom domain
+   */
+  async reconcileDomain(
+    request?: ReconcileDomainRequest | undefined,
+    security?: ReconcileDomainSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<CustomDomain> {
+    return unwrapAsync(domainsReconcileDomain(
       this,
       request,
       security,

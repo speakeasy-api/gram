@@ -1,4 +1,4 @@
-//nolint:exhaustruct // MCP SDK manifests intentionally rely on documented zero-value optional fields.
+//nolint:exhaustruct_v5 // MCP SDK manifests intentionally rely on documented zero-value optional fields.
 package platformmcp
 
 import (
@@ -19,7 +19,7 @@ import (
 const getMyChannelsAccessName = "get_my_channels_access"
 
 const getMyChannelsAccessDescription = "Get the Channels endpoint for one explicit project and which Channels permissions you personally hold in that project. " +
-	"Channels is project-scoped messaging between dashboard users and agent instances. Supply exactly one of project_id or project_slug; there is no default project fallback. Requires live project:read access to the selected project. " +
+	"Channels is project-scoped messaging between dashboard users and agent instances. Name the project by its slug, as list_projects returns it; there is no default project fallback. Requires live project:read access to the selected project. " +
 	"Returns the endpoint URL to add to an MCP client, whether you may connect an instance, administer Channels, and read every conversation in that project, plus the next action. " +
 	"It returns no messages, no conversations, no presence, no other member's permissions, and no credential: authorize against the returned endpoint to use Channels. " +
 	"Channels must be enabled for your organization; otherwise this tool returns channels_not_enabled without an endpoint."
@@ -37,8 +37,9 @@ var getMyChannelsAccessMeta = ToolMeta{
 }
 
 type GetMyChannelsAccessInput struct {
-	ProjectID   string `json:"project_id,omitempty" jsonschema:"exact project ID; supply exactly one project selector"`
-	ProjectSlug string `json:"project_slug,omitempty" jsonschema:"exact project slug; supply exactly one project selector, with no default project fallback"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID   string `json:"-"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
 }
 
 // GetMyChannelsAccessOutput is the caller's own Channels access.
@@ -107,7 +108,7 @@ func (s *ChannelsAccessService) Get(ctx context.Context, principal Principal, in
 	if err != nil {
 		return GetMyChannelsAccessOutput{}, err
 	}
-	if err := s.engine.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceID: project.ID.String()}); err != nil {
+	if err := s.engine.Require(ctx, authz.Project(authz.ProjectIDOf(project.ID)).Read()); err != nil {
 		if isAuthorizationDenied(err) {
 			return GetMyChannelsAccessOutput{}, ErrForbidden
 		}
@@ -129,13 +130,10 @@ func (s *ChannelsAccessService) Get(ctx context.Context, principal Principal, in
 	if !enabled {
 		return channelsAccessNotEnabled(), nil
 	}
-	permissions := make([]bool, 0, 3)
-	for _, scope := range []authz.Scope{authz.ScopeChannelsConnect, authz.ScopeChannelsAdmin, authz.ScopeChannelsReadAll} {
-		allowed, err := s.engine.Evaluate(ctx, authz.Check{Scope: scope, ResourceID: project.ID.String()})
-		if err != nil {
-			return GetMyChannelsAccessOutput{}, fmt.Errorf("evaluate %s: %w", scope, err)
-		}
-		permissions = append(permissions, allowed)
+	ref := authz.Project(authz.ProjectIDOf(project.ID))
+	decisions, err := s.engine.Decide(authz.WithoutChallenges(ctx), ref.ChannelsConnect(), ref.ChannelsAdmin(), ref.ChannelsReadAll())
+	if err != nil {
+		return GetMyChannelsAccessOutput{}, fmt.Errorf("evaluate channels permissions: %w", err)
 	}
 	// The answer is the access the Channels endpoint enforces: an access
 	// exception overrides the role-granted connect and read-all permissions,
@@ -145,9 +143,9 @@ func (s *ChannelsAccessService) Get(ctx context.Context, principal Principal, in
 		ProjectID:      project.ID.String(),
 		SubjectID:      principal.UserID,
 		SubjectName:    "",
-		CanConnect:     permissions[0],
-		CanAdmin:       permissions[1],
-		CanReadAll:     permissions[2],
+		CanConnect:     decisions.Each[0].Allowed,
+		CanAdmin:       decisions.Each[1].Allowed,
+		CanReadAll:     decisions.Each[2].Allowed,
 	})
 	if err != nil {
 		return GetMyChannelsAccessOutput{}, fmt.Errorf("resolve channels access: %w", err)

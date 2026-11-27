@@ -160,7 +160,7 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, authCtx.ProjectID.String(), authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServers(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 
@@ -234,6 +234,9 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 		ToolVariationsGroupID: ids.ToolVariationsGroupID,
 	}, true)
 	if err != nil {
+		if errors.Is(err, errProviderSetupPending) {
+			return nil, oops.E(oops.CodeInvalid, err, "%s", err).LogError(ctx, logger)
+		}
 		if errors.Is(err, ErrServerReferenceOutsideProject) {
 			return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogError(ctx, logger)
 		}
@@ -363,6 +366,11 @@ func (s *Service) setDefaultServerIcon(ctx context.Context, logger *slog.Logger,
 		return
 	}
 
+	if isPendingProviderSetupURL(sourceURL) {
+		// Setup replaces this temporary URL; skip outbound favicon discovery for it.
+		return
+	}
+
 	vendorURL, err := url.Parse(sourceURL)
 	if err != nil {
 		logger.ErrorContext(ctx, "parse mcp server url for default icon", attr.SlogError(err))
@@ -448,7 +456,7 @@ func (s *Service) requireServerWriteUnlocked(ctx context.Context, serverID uuid.
 		return repo.McpServer{}, oops.E(oops.CodeUnexpected, err, "get mcp server").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, grantResourceID(server.ID, server.ToolsetID), projectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDFrom(grantResourceID(server.ID, server.ToolsetID)), authz.ProjectIDOf(projectID)).Write()); err != nil {
 		return repo.McpServer{}, err
 	}
 	return server, nil
@@ -508,7 +516,7 @@ func (s *Service) GetMcpServer(ctx context.Context, payload *gen.GetMcpServerPay
 		return nil, oops.E(oops.CodeUnexpected, err, "get mcp server").LogError(ctx, s.logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, grantResourceID(server.ID, server.ToolsetID), authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDFrom(grantResourceID(server.ID, server.ToolsetID)), authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -561,7 +569,7 @@ func (s *Service) ListToolFilters(ctx context.Context, payload *gen.ListToolFilt
 		return nil, oops.E(oops.CodeUnexpected, err, "get mcp server").LogError(ctx, s.logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, grantResourceID(server.ID, server.ToolsetID), authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDFrom(grantResourceID(server.ID, server.ToolsetID)), authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -654,19 +662,15 @@ func (s *Service) ListMcpServers(ctx context.Context, payload *gen.ListMcpServer
 
 	checks := make([]authz.Check, len(servers))
 	for i, server := range servers {
-		checks[i] = authz.MCPCheck(authz.ScopeMCPRead, grantResourceID(server.ID, server.ToolsetID), authCtx.ProjectID.String())
+		checks[i] = authz.MCPServer(authz.MCPServerIDFrom(grantResourceID(server.ID, server.ToolsetID)), authz.ProjectIDOf(*authCtx.ProjectID)).Read()
 	}
-	allowedIDs, err := s.authz.Filter(ctx, checks)
+	decisions, err := s.authz.Decide(ctx, checks...)
 	if err != nil {
 		return nil, err
 	}
-	allowedSet := make(map[string]struct{}, len(allowedIDs))
-	for _, id := range allowedIDs {
-		allowedSet[id] = struct{}{}
-	}
-	allowed := make([]repo.McpServer, 0, len(allowedIDs))
-	for _, server := range servers {
-		if _, ok := allowedSet[grantResourceID(server.ID, server.ToolsetID)]; ok {
+	allowed := make([]repo.McpServer, 0, len(servers))
+	for i, server := range servers {
+		if decisions.Each[i].Allowed {
 			allowed = append(allowed, server)
 		}
 	}
@@ -683,7 +687,7 @@ func (s *Service) ListMcpServersForOrg(ctx context.Context, payload *gen.ListMcp
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -699,23 +703,23 @@ func (s *Service) ListMcpServersForOrg(ctx context.Context, payload *gen.ListMcp
 	// org:read lists every server; only mcp:read readers get the server details.
 	checks := make([]authz.Check, len(servers))
 	for i, server := range servers {
-		checks[i] = authz.MCPCheck(authz.ScopeMCPRead, grantResourceID(server.ID, server.ToolsetID), server.ProjectID.String())
+		checks[i] = authz.MCPServer(authz.MCPServerIDFrom(grantResourceID(server.ID, server.ToolsetID)), authz.ProjectIDOf(server.ProjectID)).Read()
 	}
-	allowedIDs, err := s.authz.Filter(ctx, checks)
+	decisions, err := s.authz.Decide(ctx, checks...)
 	if err != nil {
 		return nil, err
 	}
-	allowedSet := make(map[string]struct{}, len(allowedIDs))
-	for _, id := range allowedIDs {
-		allowedSet[id] = struct{}{}
-	}
-	readable := make([]repo.McpServer, 0, len(allowedIDs))
-	readableViews := make([]*types.McpServer, 0, len(allowedIDs))
+	readable := make([]repo.McpServer, 0, len(servers))
+	readableViews := make([]*types.McpServer, 0, len(servers))
 	for i, server := range servers {
-		if _, ok := allowedSet[grantResourceID(server.ID, server.ToolsetID)]; ok {
+		if decisions.Each[i].Allowed {
 			readable = append(readable, server)
 			readableViews = append(readableViews, views[i])
+			continue
 		}
+		// Setup readiness is a server detail, so organization readers without
+		// mcp:read don't see it.
+		views[i].SetupGuideCompletedAt = nil
 	}
 	EnrichViews(ctx, logger, s.db, s.serverURL, authCtx.ActiveOrganizationID, readable, readableViews)
 
@@ -833,7 +837,7 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	}
 	// Authorization keys on the row as it exists, not the backing the payload
 	// may switch it to.
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, grantResourceID(existing.ID, existing.ToolsetID), authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDFrom(grantResourceID(existing.ID, existing.ToolsetID)), authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 
@@ -893,6 +897,9 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 				return nil, oops.E(oops.CodeUnexpected, remoteErr, "resolve proposed remote MCP target").LogError(ctx, logger)
 			}
 			proposedURL = remote.Url
+			if isPendingProviderSetupURL(proposedURL) {
+				return nil, oops.E(oops.CodeInvalid, errProviderSetupPending, "%s", errProviderSetupPending).LogError(ctx, logger)
+			}
 		}
 		if err := s.checkDistributionAdmission(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, serverID, proposedURL, backendChanged); err != nil {
 			return nil, err
@@ -1019,14 +1026,6 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		}
 	}
 
-	// Moving the server onto an issuer configures its sign-in, so a server
-	// that is the issuer's only consumer offers the clients bound there.
-	if ids.UserSessionIssuerID.Valid && ids.UserSessionIssuerID != existing.UserSessionIssuerID {
-		if err := upstreamclients.CaptureSoleConsumers(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, []uuid.UUID{ids.UserSessionIssuerID.UUID}, nil); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "capture mcp server upstream clients").LogError(ctx, logger)
-		}
-	}
-
 	if err := s.publicationRequests.Project(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "enqueue MCP server publication").LogError(ctx, logger)
 	}
@@ -1034,7 +1033,7 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 	if ids.UserSessionIssuerID.Valid {
-		remotesessions.BestEffortResyncMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, []uuid.UUID{ids.UserSessionIssuerID.UUID})
+		remotesessions.BestEffortRestampMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, []uuid.UUID{ids.UserSessionIssuerID.UUID})
 		refreshed, refreshErr := repo.New(s.db).GetMCPServerByIDAndProjectID(ctx, repo.GetMCPServerByIDAndProjectIDParams{
 			ID:        serverID,
 			ProjectID: *authCtx.ProjectID,
@@ -1045,12 +1044,12 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 			updated = refreshed
 		}
 	} else {
-		// Without an issuer the server keeps no upstream client associations; a detached issuer's other servers are recomputed.
+		// Refresh the stamp for other servers if this server left their issuer.
 		var detached []uuid.UUID
 		if clearIssuer && existing.UserSessionIssuerID.Valid {
 			detached = []uuid.UUID{existing.UserSessionIssuerID.UUID}
 		}
-		remotesessions.BestEffortResyncMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, detached)
+		remotesessions.BestEffortRestampMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, detached)
 	}
 	afterView, _ := s.buildMcpServerView(ctx, authCtx.ActiveOrganizationID, updated)
 
@@ -1237,7 +1236,7 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 	if isCanonicalHostedWrapper(lockedServer.Server) {
 		return oops.E(oops.CodeConflict, nil, "mcp server changed concurrently; retry the deletion").LogWarn(ctx, logger)
 	}
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, grantResourceID(lockedServer.Server.ID, lockedServer.Server.ToolsetID), authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDFrom(grantResourceID(lockedServer.Server.ID, lockedServer.Server.ToolsetID)), authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return err
 	}
 
@@ -1315,7 +1314,7 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 	if deleted.UserSessionIssuerID.Valid {
 		releasedIssuers = []uuid.UUID{deleted.UserSessionIssuerID.UUID}
 	}
-	remotesessions.BestEffortResyncMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, releasedIssuers)
+	remotesessions.BestEffortRestampMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, releasedIssuers)
 	if tombstoned.DetachedPluginServers > 0 {
 		connected, connectionErr := pluginsrepo.New(s.db).HasPluginGithubConnectionForProject(ctx, *authCtx.ProjectID)
 		if connectionErr != nil {

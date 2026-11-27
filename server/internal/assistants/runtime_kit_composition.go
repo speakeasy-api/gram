@@ -260,9 +260,9 @@ func (s *ServiceCore) kitCompositionBootstrap(ctx context.Context, r assistantRu
 		return zero, fmt.Errorf("get Kit assistant: %w", err)
 	}
 	assistant := assistantRecordFromGetRow(row)
-	attachments, err := loadAssistantMcpServers(ctx, db, assistantrepo.LoadAssistantMcpServersParams{ProjectID: r.ProjectID, AssistantIds: []uuid.UUID{r.AssistantID}})
+	attachments, err := assistantrepo.New(db).LoadAssistantMcpServers(ctx, assistantrepo.LoadAssistantMcpServersParams{ProjectID: r.ProjectID, AssistantIds: []uuid.UUID{r.AssistantID}})
 	for _, attached := range attachments {
-		assistant.MCPServers = append(assistant.MCPServers, assistantMCPServerRow{ServerSlug: attached.ServerSlug, ToolsetSlug: attached.ToolsetSlug, DefaultEnvironmentSlug: attached.DefaultEnvironmentSlug, EnvironmentID: attached.EnvironmentID, EnvironmentSlug: attached.EnvironmentSlug, MCPServerID: attached.McpServerID, Visibility: attached.Visibility, EndpointSlug: attached.EndpointSlug, EndpointDomain: attached.EndpointDomain})
+		assistant.MCPServers = append(assistant.MCPServers, assistantMCPServerRow{ServerSlug: attached.ServerSlug, ToolsetSlug: attached.ToolsetSlug, DefaultEnvironmentSlug: attached.DefaultEnvironmentSlug, EnvironmentID: attached.EnvironmentID, EnvironmentSlug: attached.EnvironmentSlug, MCPServerID: attached.McpServerID, Visibility: attached.Visibility, EndpointSlug: attached.EndpointSlug, EndpointDomain: attached.EndpointDomain, EndpointIsDomainRoot: attached.EndpointIsDomainRoot})
 	}
 	if err != nil {
 		return zero, fmt.Errorf("load Kit assistant MCP servers: %w", err)
@@ -283,7 +283,7 @@ func (s *ServiceCore) kitCompositionBootstrap(ctx context.Context, r assistantRu
 			}
 		}
 	}
-	slugs, err := s.assistantPlatformSlugs(ctx, assistant, true)
+	slugs, err := s.assistantPlatformSlugs(ctx, assistant)
 	if err != nil {
 		return zero, err
 	}
@@ -337,7 +337,7 @@ func (s *ServiceCore) kitCompositionBootstrap(ctx context.Context, r assistantRu
 	}
 
 	instructions := []byte("# Speakeasy assistant\n\n" + assistant.Instructions + "\n")
-	bootstrap := KitLocalBootstrap{Model: assistant.Model, AgentsMD: instructions, MCPJSON: mcpJSON, GatewayToken: []byte(gateway), Workload: workload, AssertionFile: kitCompositionAssertionFile(c), InferenceEndpoint: c.Origin.String() + "/chat/completions"}
+	bootstrap := KitLocalBootstrap{Model: assistant.Model, ReasoningEffort: assistant.ReasoningEffort, AgentsMD: instructions, MCPJSON: mcpJSON, GatewayToken: []byte(gateway), Workload: workload, AssertionFile: kitCompositionAssertionFile(c), InferenceEndpoint: c.Origin.String() + "/chat/completions"}
 	if err := validateKitBootstrap(bootstrap); err != nil {
 		return zero, err
 	}
@@ -368,7 +368,7 @@ type kitMCPConnection struct {
 	Name        string
 	Resource    *url.URL
 	Environment string
-	ProjectID   uuid.UUID `exhaustruct:"optional"`
+	ProjectID   uuid.UUID
 }
 
 func kitBuiltinMCPConnections(base *url.URL, projectID uuid.UUID, slugs []string) []kitMCPConnection {

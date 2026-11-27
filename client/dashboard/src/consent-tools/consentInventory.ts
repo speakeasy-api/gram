@@ -3,7 +3,8 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { CfWorkerJsonSchemaValidator } from "@modelcontextprotocol/sdk/validation/cfworker";
 
 import type { ToolAnnotation } from "@/components/tool-selection/annotations";
-import { isRecord, isToolAnnotation } from "./prefill";
+import { isToolAnnotation } from "@/components/tool-selection/annotations";
+import { isRecord } from "./prefill";
 
 export interface ConsentTool {
   name: string;

@@ -15,8 +15,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	plugindelivery "github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/plugins/marketplacetokens/marketplacetokenstest"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -31,6 +33,7 @@ func TestRemovePluginServerUnavailableThroughMCP(t *testing.T) {
 		}
 	})
 	registrar.withExternalAuthorizer(allowExternalCallAuthorizer{})
+	registrar.withProjects(slugProjects{})
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
 	serverSession, err := server.Connect(t.Context(), serverTransport, nil)
 	require.NoError(t, err)
@@ -51,7 +54,7 @@ func TestRemovePluginServerUnavailableThroughMCP(t *testing.T) {
 	require.True(t, *found.Annotations.DestructiveHint)
 	require.True(t, found.Annotations.IdempotentHint)
 	refusal := callSkillsRefusal(t, t.Context(), session, "remove_plugin_server", map[string]any{
-		"project_id": uuid.NewString(), "plugin_id": uuid.NewString(), "membership_id": uuid.NewString(), "confirmed": true,
+		"project_slug": "no-such-project", "plugin_id": uuid.NewString(), "membership_id": uuid.NewString(), "confirmed": true,
 	})
 	require.Equal(t, "feature_unavailable", refusal.Code)
 }
@@ -78,14 +81,14 @@ func TestRemovePluginServerThroughMCP(t *testing.T) {
 	membershipID := add(plugin.ID)
 	otherMembershipID := add(otherPlugin.ID)
 	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
-	delivery := plugindelivery.NewService(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, &sessions.Manager{}, nil, engine, audit.NewLogger(), nil, "test", "https://example.test", nil, nil)
+	delivery := plugindelivery.NewService(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, &sessions.Manager{}, nil, engine, audit.NewLogger(), nil, "test", "https://example.test", nil, nil, staff.Organization{}, marketplacetokenstest.Tokens(t, conn))
 	service := testPluginTargets(conn).WithAuthorization(engine).WithServerRemoval(delivery)
 
 	admin := newPluginRemovalSession(t, service, principal, []authz.Grant{authz.NewGrant(authz.ScopeOrgAdmin, principal.OrganizationID)}, nil)
-	before := callSkillsTool[GetPluginOutput](t, ctx, admin, "get_plugin", map[string]any{"project_id": project.ID.String(), "plugin": plugin.ID.String()})
+	before := callSkillsTool[GetPluginOutput](t, ctx, admin, "get_plugin", map[string]any{"project_slug": project.Slug, "plugin": plugin.ID.String()})
 	require.Len(t, before.Servers, 1)
 	require.Equal(t, membershipID, before.Servers[0].MembershipID)
-	args := map[string]any{"project_id": project.ID.String(), "plugin_id": plugin.ID.String(), "membership_id": membershipID, "confirmed": false}
+	args := map[string]any{"project_slug": project.Slug, "plugin_id": plugin.ID.String(), "membership_id": membershipID, "confirmed": false}
 	require.Equal(t, "confirmation_required", callSkillsRefusal(t, ctx, admin, "remove_plugin_server", args).Code)
 	args["confirmed"] = true
 
@@ -103,9 +106,9 @@ func TestRemovePluginServerThroughMCP(t *testing.T) {
 	args["plugin_id"] = otherPlugin.ID.String()
 	require.Equal(t, "not_found", callSkillsRefusal(t, ctx, admin, "remove_plugin_server", args).Code)
 	args["plugin_id"] = plugin.ID.String()
-	args["project_id"] = uuid.NewString()
+	args["project_slug"] = "no-such-project"
 	require.Equal(t, "not_found", callSkillsRefusal(t, ctx, admin, "remove_plugin_server", args).Code)
-	args["project_id"] = project.ID.String()
+	args["project_slug"] = project.Slug
 	foreign := principal
 	foreign.OrganizationID = "org_other"
 	foreignAdmin := newPluginRemovalSession(t, service, foreign, []authz.Grant{authz.NewGrant(authz.ScopeOrgAdmin, foreign.OrganizationID)}, nil)
@@ -114,16 +117,16 @@ func TestRemovePluginServerThroughMCP(t *testing.T) {
 	writer := newPluginRemovalSession(t, service, principal, []authz.Grant{authz.NewGrant(authz.ScopePluginWrite, project.ID.String())}, nil)
 	removed := callSkillsTool[RemovePluginServerOutput](t, ctx, writer, "remove_plugin_server", args)
 	require.True(t, removed.Removed)
-	after := callSkillsTool[GetPluginOutput](t, ctx, admin, "get_plugin", map[string]any{"project_id": project.ID.String(), "plugin": plugin.ID.String()})
+	after := callSkillsTool[GetPluginOutput](t, ctx, admin, "get_plugin", map[string]any{"project_slug": project.Slug, "plugin": plugin.ID.String()})
 	require.Empty(t, after.Servers)
-	other := callSkillsTool[GetPluginOutput](t, ctx, admin, "get_plugin", map[string]any{"project_id": project.ID.String(), "plugin": otherPlugin.ID.String()})
+	other := callSkillsTool[GetPluginOutput](t, ctx, admin, "get_plugin", map[string]any{"project_slug": project.Slug, "plugin": otherPlugin.ID.String()})
 	require.Len(t, other.Servers, 1)
 	require.Equal(t, otherMembershipID, other.Servers[0].MembershipID)
 	require.Equal(t, "not_found", callSkillsRefusal(t, ctx, writer, "remove_plugin_server", args).Code)
 	replacementID := add(plugin.ID)
 	require.NotEqual(t, membershipID, replacementID)
 	require.Equal(t, "not_found", callSkillsRefusal(t, ctx, admin, "remove_plugin_server", args).Code)
-	replacement := callSkillsTool[GetPluginOutput](t, ctx, admin, "get_plugin", map[string]any{"project_id": project.ID.String(), "plugin": plugin.ID.String()})
+	replacement := callSkillsTool[GetPluginOutput](t, ctx, admin, "get_plugin", map[string]any{"project_slug": project.Slug, "plugin": plugin.ID.String()})
 	require.Len(t, replacement.Servers, 1)
 	require.Equal(t, replacementID, replacement.Servers[0].MembershipID)
 	args["membership_id"] = replacementID
@@ -143,6 +146,7 @@ func newPluginRemovalSession(t *testing.T, service *PluginsService, principal Pr
 	})
 	reg := newRegistrar(server)
 	reg.withExternalAuthorizer(allowExternalCallAuthorizer{})
+	reg.withProjects(&RegistrationStore{db: service.db, icons: nil})
 	registerRemovePluginServerTool(reg, service)
 	registerPluginTools(reg, service)
 	if accessReads != nil {

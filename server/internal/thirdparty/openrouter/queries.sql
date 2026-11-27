@@ -14,21 +14,39 @@ SELECT pg_advisory_unlock(
 ) AS unlocked;
 
 -- name: CreateOpenRouterAPIKey :one
+-- Stores both copies of the key sealed under the decided transition
+-- generation. No rows means the transition moved; aiproviderkeys seals again.
 INSERT INTO openrouter_api_keys (
     organization_id
   , key_type
   , key_encrypted
+  , key_org_encrypted
   , key_hash
   , monthly_credits
   , disable_causes
-) VALUES (
-    @organization_id
-  , @key_type
-  , @key_encrypted
-  , @key_hash
-  , @monthly_credits
-  , '{}'::text[]
 )
+SELECT
+    v.organization_id
+  , v.key_type
+  , v.key_encrypted
+  , v.key_org_encrypted
+  , v.key_hash
+  , v.monthly_credits
+  , '{}'::text[]
+FROM (
+  SELECT
+      @organization_id::text AS organization_id
+    , @key_type::text AS key_type
+    , sqlc.narg('key_encrypted')::text AS key_encrypted
+    , sqlc.narg('key_org_encrypted')::text AS key_org_encrypted
+    , @key_hash::text AS key_hash
+    , @monthly_credits::bigint AS monthly_credits
+) AS v
+WHERE COALESCE((
+  SELECT t.generation FROM organization_encryption_transitions AS t
+  WHERE t.organization_id = v.organization_id AND t.use_case = 'ai-provider-keys'
+  FOR KEY SHARE
+), 0) = @decided_generation
 RETURNING *;
 
 -- name: AcquireOpenRouterBillingLock :exec

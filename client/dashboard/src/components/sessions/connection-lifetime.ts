@@ -1,4 +1,4 @@
-import { formatDistance } from "date-fns";
+import { formatDistance } from "date-fns/formatDistance";
 
 import type { RemoteSession } from "@gram/client/models/components/remotesession.js";
 import { dateTimeFormatters } from "@/lib/dates";
@@ -16,6 +16,8 @@ import { dateTimeFormatters } from "@/lib/dates";
 export type ConnectionLifetime =
   /** No readable expiry was recorded, so nothing can be said about its end. */
   | { kind: "unknown" }
+  /** The upstream issued an access token with no expiry and nothing ends it. */
+  | { kind: "never" }
   | { kind: "refreshes" }
   | { kind: "refreshes-until"; at: Date; soon: boolean }
   | { kind: "expires"; at: Date; soon: boolean }
@@ -65,6 +67,18 @@ export function connectionLifetime(
     // A lapsed refresh token still leaves the access token it last minted,
     // which works until its own expiry and is then the end.
   }
+  // An absent access expiry means the upstream issued a token that does not
+  // expire, so only the authorization deadline can end the connection.
+  if (session.accessExpiresAt === undefined) {
+    if (!authorization) return { kind: "never" };
+    if (authorization.getTime() <= now)
+      return { kind: "ended", at: authorization };
+    return {
+      kind: "expires",
+      at: authorization,
+      soon: authorization.getTime() - now <= ENDING_SOON_MS,
+    };
+  }
   const access = instant(session.accessExpiresAt);
   if (!access) {
     if (authorization && authorization.getTime() <= now)
@@ -112,6 +126,7 @@ export function connectionLifetimeLabel(
     case "unknown":
       return "Expiry not recorded";
     case "refreshes":
+    case "never":
       return "Never expires";
     case "refreshes-until":
       return `Expires ${dateTimeFormatters.day.format(lifetime.at)}`;

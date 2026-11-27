@@ -58,6 +58,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
@@ -65,10 +67,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
+	"github.com/speakeasy-api/gram/server/internal/orggateway"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/interceptors"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -85,6 +92,20 @@ type TypedAuthorization struct {
 	Subject               urn.SessionSubject `json:"subject"`
 }
 
+// HostedPlacement pins the live association used by a hosted server login.
+// Resource is always empty for a hosted toolset: an RFC 8707 target of another
+// server that shares this registration must never be borrowed.
+type HostedPlacement struct {
+	// AssociationID is filled when OAuth state is minted; a later reattach is a new placement.
+	AssociationID         uuid.UUID `json:"association_id"`
+	OrganizationID        string    `json:"organization_id"`
+	ProjectID             uuid.UUID `json:"project_id"`
+	ServerID              uuid.UUID `json:"server_id"`
+	RemoteSessionClientID uuid.UUID `json:"remote_session_client_id"`
+	GatewayProjectID      uuid.UUID `json:"gateway_project_id,omitzero"`
+	OAuthClientID         string    `json:"oauth_client_id,omitempty"`
+}
+
 // ParentChallenge projects the in-flight user-session AuthnChallengeState
 // into the fields the remote leg needs. mcp/ builds this from its
 // AuthnChallengeState; remotesessions/ never imports mcp/.
@@ -99,6 +120,7 @@ type TypedAuthorization struct {
 // the post-callback bounce to /<RouteBase>/{slug}/connect.
 type ParentChallenge struct {
 	TypedAuthorization *TypedAuthorization
+	HostedPlacement    *HostedPlacement
 	// ConnectionPopup opts this leg into the dashboard’s explicit reconnect completion.
 	ConnectionPopup     bool
 	ID                  string
@@ -152,8 +174,9 @@ type ParentChallenge struct {
 // budget as the parent AuthnChallengeState.
 type RemoteLoginState struct {
 	// TypedAuthorization records the exact typed binding that authorized this login.
-	// Absent state always uses the legacy issuer binding check.
+	// Hosted logins use their server placement instead of a typed binding.
 	TypedAuthorization *TypedAuthorization `json:"typed_authorization,omitempty"`
+	HostedPlacement    *HostedPlacement    `json:"hosted_placement,omitempty"`
 	// ConnectionPopup preserves the server-owned opt-in through upstream redirects and retries.
 	ConnectionPopup   bool      `json:"connection_popup,omitempty"`
 	ID                string    `json:"id"`
@@ -234,6 +257,7 @@ type RemoteLoginState struct {
 func (s RemoteLoginState) parent() ParentChallenge {
 	return ParentChallenge{
 		TypedAuthorization:  s.TypedAuthorization,
+		HostedPlacement:     s.HostedPlacement,
 		ConnectionPopup:     s.ConnectionPopup,
 		ID:                  s.ParentChallengeID,
 		ProjectID:           s.ProjectID,
@@ -292,6 +316,8 @@ type ChallengeManager struct {
 	logger      *slog.Logger
 	db          *pgxpool.Pool
 	enc         *encryption.Client
+	secrets     *clientsecrets.Secrets
+	tokens      *upstreamtokens.Tokens
 	policy      *guardian.Policy
 	tunnels     *tunnelrouting.HTTPClient
 	cache       cache.TypedCacheObject[RemoteLoginState]
@@ -397,6 +423,34 @@ type PrivateAuthorityValidator func(context.Context, RemoteLoginState) error
 
 type ChallengeManagerOption func(*ChallengeManager)
 
+// WithClientSecrets installs the process's client secret seam, which knows
+// the organization encryption configured in the process. Without it the
+// manager seals and opens client secrets as a process without organization
+// encryption: platform_key works and every other transition state fails
+// closed. Production wiring always passes it.
+func WithClientSecrets(secrets *clientsecrets.Secrets) ChallengeManagerOption {
+	return func(m *ChallengeManager) {
+		m.secrets = secrets
+	}
+}
+
+// WithUpstreamTokens installs the process's upstream token seam, which knows the
+// organization encryption configured in the process. Without it the manager
+// seals and opens stored upstream tokens as a process without organization
+// encryption: platform_key works and every other transition state fails
+// closed. Production wiring always passes it.
+func WithUpstreamTokens(tokens *upstreamtokens.Tokens) ChallengeManagerOption {
+	return func(m *ChallengeManager) {
+		m.tokens = tokens
+	}
+}
+
+// UpstreamTokens is the seam the manager opens and stores upstream tokens
+// with, for components built over the same manager.
+func (m *ChallengeManager) UpstreamTokens() *upstreamtokens.Tokens {
+	return m.tokens
+}
+
 func WithPrivateAuthorityValidator(validator PrivateAuthorityValidator) ChallengeManagerOption {
 	return func(m *ChallengeManager) {
 		m.privateAuthorityValidator = validator
@@ -450,6 +504,186 @@ func (m *ChallengeManager) validateTypedAuthorization(ctx context.Context, state
 		return errors.New("typed authorization validator is unavailable")
 	}
 	return m.typedAuthorizationValidator(ctx, state)
+}
+
+// validateHostedPlacementState rejects incomplete or contradictory callback
+// state before any lookup. Gateway project scope is independent of the
+// member's project, particularly for the organization-wide derived gateway.
+func (s RemoteLoginState) validateHostedPlacementState() error {
+	a := s.HostedPlacement
+	if a == nil || s.TypedAuthorization != nil || s.Subject == nil || s.Subject.IsZero() ||
+		a.OrganizationID == "" || a.OrganizationID != s.OrganizationID || a.ProjectID == uuid.Nil || a.ProjectID != s.ProjectID ||
+		a.ServerID == uuid.Nil || a.RemoteSessionClientID == uuid.Nil || a.RemoteSessionClientID != s.RemoteSessionClientID ||
+		s.UserSessionIssuerID == uuid.Nil || s.RemoteSessionIssuerID == uuid.Nil || s.Resource != "" {
+		return ErrTypedAuthorizationInvalid
+	}
+	switch {
+	case s.RouteBase == mcproute.OrganizationGateway:
+		expectedGatewayID := orggateway.GatewayID(s.OrganizationID)
+		if a.GatewayProjectID != uuid.Nil {
+			if a.GatewayProjectID != a.ProjectID {
+				return ErrTypedAuthorizationInvalid
+			}
+			expectedGatewayID = orggateway.ProjectGatewayID(s.OrganizationID, a.GatewayProjectID)
+		}
+		if s.McpServerID.Valid || !s.MetaMcpServerID.Valid || s.MetaMcpServerID.UUID != expectedGatewayID {
+			return ErrTypedAuthorizationInvalid
+		}
+	case s.MetaMcpServerID.Valid:
+		if s.McpServerID.Valid || a.GatewayProjectID != a.ProjectID {
+			return ErrTypedAuthorizationInvalid
+		}
+	default:
+		if !s.McpServerID.Valid || s.McpServerID.UUID != a.ServerID || a.GatewayProjectID != uuid.Nil {
+			return ErrTypedAuthorizationInvalid
+		}
+	}
+	if !s.ResourceMcpServerID.Valid || s.ResourceMcpServerID.UUID != a.ServerID {
+		return ErrTypedAuthorizationInvalid
+	}
+	return nil
+}
+
+// liveHostedPlacement reads the exact placement, including the downstream issuer.
+func (s RemoteLoginState) liveHostedPlacement(ctx context.Context, db remotesessions_repo.DBTX) (uuid.UUID, error) {
+	a := s.HostedPlacement
+	id, err := remotesessions_repo.New(db).GetHostedRemoteLoginPlacement(ctx, remotesessions_repo.GetHostedRemoteLoginPlacementParams{
+		McpServerID: a.ServerID, ProjectID: a.ProjectID, OrganizationID: a.OrganizationID, RemoteSessionClientID: a.RemoteSessionClientID,
+		UserSessionIssuerID: s.UserSessionIssuerID, DirectServer: s.McpServerID.Valid, RemoteSessionIssuerID: s.RemoteSessionIssuerID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return uuid.Nil, ErrTypedAuthorizationChanged
+	}
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("read hosted login placement: %w", err)
+	}
+	return id, nil
+}
+
+// validateHostedPlacement verifies the same association, not a detach and
+// reattach with the same registration. With locked=true the caller already
+// holds the project, server, downstream issuer, upstream issuer and client.
+// Cleanup paths need not take the server lock, so also lock the association.
+func (s RemoteLoginState) validateHostedPlacement(ctx context.Context, db remotesessions_repo.DBTX, locked bool) error {
+	id, err := s.liveHostedPlacement(ctx, db)
+	if err != nil {
+		return err
+	}
+	if id != s.HostedPlacement.AssociationID {
+		return ErrTypedAuthorizationChanged
+	}
+	if locked {
+		if _, err := remotesessions_repo.New(db).LockHostedRemoteLoginPlacement(ctx, id); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return ErrTypedAuthorizationChanged
+			}
+			return fmt.Errorf("lock hosted login placement: %w", err)
+		}
+	}
+	return nil
+}
+
+func (m *ChallengeManager) validateRemoteLoginAuthorization(ctx context.Context, state RemoteLoginState) error {
+	if state.HostedPlacement != nil {
+		if err := state.validateHostedPlacementState(); err != nil {
+			return err
+		}
+		if err := state.validateHostedPlacement(ctx, m.db, false); err != nil {
+			return err
+		}
+		if state.MetaMcpServerID.Valid {
+			if err := state.validateHostedGateway(ctx, m.db, false); err != nil {
+				return err
+			}
+		}
+		if m.typedAuthorizationValidator == nil {
+			return errors.New("hosted login subject validator is unavailable")
+		}
+		return m.typedAuthorizationValidator(ctx, state)
+	}
+	if state.TypedAuthorization != nil {
+		return m.validateTypedAuthorization(ctx, state)
+	}
+	// A cached gateway callback without exact placement cannot be committed
+	// safely. Require a new consent instead of reconstructing it from live
+	// inventory that may describe a different placement.
+	if state.MetaMcpServerID.Valid || state.RouteBase == mcproute.OrganizationGateway {
+		return ErrTypedAuthorizationChanged
+	}
+	if state.McpServerID.Valid {
+		srv, err := mcpserversrepo.New(m.db).GetMCPServerByIDAndOrganizationID(ctx, mcpserversrepo.GetMCPServerByIDAndOrganizationIDParams{ID: state.McpServerID.UUID, OrganizationID: state.OrganizationID})
+		if errors.Is(err, pgx.ErrNoRows) || (err == nil && (srv.ToolsetID.Valid || srv.ProjectID != state.ProjectID)) {
+			return ErrTypedAuthorizationChanged
+		}
+		if err != nil {
+			return fmt.Errorf("check remote login server kind: %w", err)
+		}
+	}
+	return nil
+}
+
+// validateHostedGateway checks the current downstream issuer and, for a
+// stored gateway, optionally locks the gateway before the member server.
+func (s RemoteLoginState) validateHostedGateway(ctx context.Context, db remotesessions_repo.DBTX, lock bool) error {
+	if s.RouteBase == mcproute.OrganizationGateway {
+		organization, err := organizationsrepo.New(db).GetOrganizationMetadata(ctx, s.OrganizationID)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrTypedAuthorizationChanged
+		}
+		if err != nil {
+			return fmt.Errorf("load hosted login organization: %w", err)
+		}
+		issuer, unavailable, err := orggateway.Availability(ctx, db, organization)
+		if err != nil {
+			return fmt.Errorf("check hosted organization gateway: %w", err)
+		}
+		if unavailable != orggateway.UnavailabilityNone || issuer != s.UserSessionIssuerID {
+			return ErrTypedAuthorizationChanged
+		}
+		return nil
+	}
+	meta := metamcprepo.New(db)
+	var gateway metamcprepo.MetaMcpServer
+	var err error
+	if lock {
+		gateway, err = meta.LockMetaMCPServer(ctx, metamcprepo.LockMetaMCPServerParams{ID: s.MetaMcpServerID.UUID, OrganizationID: s.OrganizationID, ProjectID: s.ProjectID})
+	} else {
+		gateway, err = meta.GetMetaMCPServerByIDAndProjectID(ctx, metamcprepo.GetMetaMCPServerByIDAndProjectIDParams{ID: s.MetaMcpServerID.UUID, ProjectID: s.ProjectID})
+	}
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrTypedAuthorizationChanged
+	}
+	if err != nil {
+		return fmt.Errorf("read hosted login gateway: %w", err)
+	}
+	if gateway.OrganizationID != s.OrganizationID || !gateway.UserSessionIssuerID.Valid || gateway.UserSessionIssuerID.UUID != s.UserSessionIssuerID {
+		return ErrTypedAuthorizationChanged
+	}
+	return nil
+}
+
+// lockHostedGatewayMember keeps the exact stored membership stable through
+// commit. Take it after the server lock, since server deletions can remove
+// membership rows while holding their server row.
+func (s RemoteLoginState) lockHostedGatewayMember(ctx context.Context, db remotesessions_repo.DBTX) error {
+	meta := metamcprepo.New(db)
+	members, err := meta.ListMetaMCPMembers(ctx, metamcprepo.ListMetaMCPMembersParams{MetaMcpServerID: s.MetaMcpServerID.UUID, ProjectID: s.ProjectID})
+	if err != nil {
+		return fmt.Errorf("list hosted login gateway members: %w", err)
+	}
+	for _, member := range members {
+		if member.McpServerID == s.HostedPlacement.ServerID {
+			got, err := meta.LockMetaMCPMember(ctx, metamcprepo.LockMetaMCPMemberParams{ID: member.ID, ProjectID: s.ProjectID})
+			if errors.Is(err, pgx.ErrNoRows) || (err == nil && (got.McpServerID != member.McpServerID || got.MetaMcpServerID != s.MetaMcpServerID.UUID)) {
+				return ErrTypedAuthorizationChanged
+			}
+			if err != nil {
+				return fmt.Errorf("lock hosted login gateway member: %w", err)
+			}
+			return nil
+		}
+	}
+	return ErrTypedAuthorizationChanged
 }
 
 // WithRegistrationAuditLogger records automatic client registration rotations
@@ -520,6 +754,8 @@ func NewChallengeManager(
 		logger:  logger,
 		db:      db,
 		enc:     enc,
+		secrets: nil,
+		tokens:  nil,
 		policy:  policy,
 		tunnels: tunnels,
 		cache: cache.NewTypedObjectCache[RemoteLoginState](
@@ -533,7 +769,7 @@ func NewChallengeManager(
 		issuerMetadata: nil,
 		serverURL:      serverURL,
 		origins:        DefaultCallbackOrigins(serverURL),
-		revoker:        NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, policy, tunnels),
+		revoker:        NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, nil, nil, policy, tunnels),
 		authorizeInterceptors: []interceptors.AuthorizeInterceptor{
 			interceptors.NewGoogle(logger),
 		},
@@ -555,13 +791,21 @@ func NewChallengeManager(
 	for _, option := range options {
 		option(manager)
 	}
+	if manager.secrets == nil {
+		manager.secrets = clientsecrets.WithoutOrganizationEncryption(logger, db, enc)
+	}
+	if manager.tokens == nil {
+		manager.tokens = upstreamtokens.WithoutOrganizationEncryption(logger, db, enc)
+	}
 	manager.revoker.assertions = manager.assertions
+	manager.revoker.secrets = manager.secrets
+	manager.revoker.tokens = manager.tokens
 	if manager.enricher == nil {
 		manager.enricher = NewSessionEnricher(logger, enc, policy, nil, nil, tunnels, manager.issuerMetadata)
 	}
 	// The manager's own refreshes restate identity with the same verifier.
-	manager.refresher = NewRefreshService(logger, meterProvider, db, enc, policy, tunnels, cacheImpl, WithRefreshIDTokenVerifier(manager.idTokens), WithRefreshIssuerMetadataRefresher(manager.issuerMetadata), WithRefreshSessionEnricher(manager.enricher), WithRefreshTokenEndpointAssertionSigner(manager.assertions), WithRefreshConnectionRecorder(manager.connections), WithRefreshFeatureFlags(manager.features))
-	manager.rotator = NewClientRotator(logger, db, enc, policy, tunnels, cacheImpl, serverURL, manager.revoker, manager.auditLogger, manager.registrationTelemetry)
+	manager.refresher = NewRefreshService(logger, meterProvider, db, enc, policy, tunnels, cacheImpl, WithRefreshClientSecrets(manager.secrets), WithRefreshUpstreamTokens(manager.tokens), WithRefreshIDTokenVerifier(manager.idTokens), WithRefreshIssuerMetadataRefresher(manager.issuerMetadata), WithRefreshSessionEnricher(manager.enricher), WithRefreshTokenEndpointAssertionSigner(manager.assertions), WithRefreshConnectionRecorder(manager.connections), WithRefreshFeatureFlags(manager.features))
+	manager.rotator = NewClientRotator(logger, db, enc, manager.secrets, policy, tunnels, cacheImpl, serverURL, manager.revoker, manager.auditLogger, manager.registrationTelemetry)
 	manager.rotator.origins = manager.origins
 	if manager.clientCredentialBuilder != nil {
 		manager.clientCredentials = manager.clientCredentialBuilder(manager)
@@ -582,7 +826,6 @@ type Client struct {
 
 	RemoteSessionIssuerID uuid.UUID
 	ExternalClientID      string
-	ClientSecretEncrypted *string
 	IssuerSlug            string
 
 	// IssuerName is the issuer's operator-set display name, nil when unset.
@@ -686,6 +929,9 @@ type Client struct {
 	// consent card, connect step or authorize redirect.
 	CredentialOwner CredentialOwner
 }
+
+// CanStartSignIn reports whether the client's authorization server can start a browser sign-in.
+func (c Client) CanStartSignIn() bool { return c.AuthorizationEndpoint != "" }
 
 // needsRegistrationRotation reports whether the client's upstream registration
 // should be replaced before sending a user to the authorize endpoint: the
@@ -1059,7 +1305,6 @@ func clientFromRow(r remotesessions_repo.ListRemoteSessionClientsForUserSessionI
 		ProjectID:                        r.ClientProjectID,
 		RemoteSessionIssuerID:            r.RemoteSessionIssuerID,
 		ExternalClientID:                 r.ExternalClientID,
-		ClientSecretEncrypted:            conv.FromPGText[string](r.ClientSecretEncrypted),
 		IssuerSlug:                       r.IssuerSlug,
 		IssuerName:                       conv.FromPGText[string](r.IssuerName),
 		IssuerLogoAssetID:                r.IssuerLogoAssetID,
@@ -1235,26 +1480,30 @@ func (m *ChallengeManager) remoteSessionStatuses(
 	if err != nil {
 		return nil, fmt.Errorf("list remote session statuses: %w", err)
 	}
-	return m.remoteSessionStates(rows), nil
+	return m.remoteSessionStates(ctx, rows), nil
 }
 
 // remoteSessionStates keys each status row by its client. A row with nothing
-// resolution can use reports expired, so connecting again rewrites it.
-func (m *ChallengeManager) remoteSessionStates(rows []remotesessions_repo.ListRemoteSessionStatusesForSubjectRow) map[uuid.UUID]RemoteSessionState {
+// resolution can use reports expired, so connecting again rewrites it. A row
+// whose organization key cannot open its tokens right now keeps its status,
+// since a sign-in would not help, but offers no refresh.
+func (m *ChallengeManager) remoteSessionStates(ctx context.Context, rows []remotesessions_repo.ListRemoteSessionStatusesForSubjectRow) map[uuid.UUID]RemoteSessionState {
 	statuses := make(map[uuid.UUID]RemoteSessionState, len(rows))
 	now := time.Now()
 	for _, row := range rows {
 		status, canRefresh := RemoteSessionStatus(row.Status), row.CanRefresh
 		stored := storedTokenRow(row)
-		read := readStoredTokens(m.enc, stored, now)
-		if status == RemoteSessionActive && !read.usable {
+		read := readStoredTokens(ctx, m.tokens, stored, now)
+		if status == RemoteSessionActive && read.needsSignIn() {
 			status, canRefresh = RemoteSessionExpired, false
 		}
-		// A refresh token this key can't read can't be sent, so Refresh is not offered.
+		// A refresh token the keys can't read can't be sent, so Refresh is not offered.
 		if canRefresh {
 			refreshErr := read.refreshErr
-			if !read.refreshRead {
-				_, refreshErr = m.enc.Decrypt(stored.RefreshTokenEncrypted.String)
+			if read.keyErr != nil {
+				refreshErr = read.keyErr
+			} else if !read.refreshRead {
+				_, refreshErr = openRefreshToken(ctx, m.tokens, stored)
 			}
 			canRefresh = refreshErr == nil
 		}
@@ -1352,7 +1601,7 @@ func (m *ChallengeManager) RefreshRemoteSession(
 	if err != nil {
 		return zero, fmt.Errorf("get consent remote session: %w", err)
 	}
-	if !session.RefreshTokenEncrypted.Valid || session.RefreshTokenEncrypted.String == "" {
+	if !hasRefreshToken(session) {
 		return zero, ErrRemoteSessionNotRefreshable
 	}
 
@@ -1404,8 +1653,9 @@ func (m *ChallengeManager) DisconnectRemoteSession(ctx context.Context, subject 
 	for _, row := range disconnected {
 		m.revoker.RevokeDetached(ctx, RevokedCredentials{
 			RemoteSessionClientID: row.RemoteSessionClientID,
-			AccessTokenEncrypted:  row.AccessTokenEncrypted,
-			RefreshTokenEncrypted: row.RefreshTokenEncrypted,
+			OrganizationID:        row.OrganizationID,
+			AccessToken:           upstreamtokens.Stored(row.AccessTokenEncrypted, row.AccessTokenOrgEncrypted),
+			RefreshToken:          upstreamtokens.Stored(row.RefreshTokenEncrypted, row.RefreshTokenOrgEncrypted),
 		})
 	}
 
@@ -1467,7 +1717,7 @@ func (m *ChallengeManager) mintAuthorization(
 		m.metrics.Record(ctx, client.IssuerURL, remotesessionmetrics.ClassifyPKCESupport(client.IssuerCodeChallengeMethodsSupported))
 	}
 
-	if client.AuthorizationEndpoint == "" {
+	if !client.CanStartSignIn() {
 		return "", fmt.Errorf("remote_session_issuer %s: %w", client.IssuerSlug, ErrIssuerNoAuthorizationEndpoint)
 	}
 	if client.TokenEndpoint == "" {
@@ -1593,6 +1843,7 @@ func (m *ChallengeManager) mintAuthorization(
 		ConnectionPopup:       parent.ConnectionPopup,
 		ID:                    stateID,
 		TypedAuthorization:    parent.TypedAuthorization,
+		HostedPlacement:       parent.HostedPlacement,
 		ParentChallengeID:     parent.ID,
 		ProjectID:             parent.ProjectID,
 		OrganizationID:        parent.OrganizationID,
@@ -1627,6 +1878,33 @@ func (m *ChallengeManager) mintAuthorization(
 		ResourceMcpServerID:   parent.ResourceMcpServerID,
 		ProviderHost:          mcpconnectionattempts.NormalizeProviderHost(client.IssuerURL),
 		RemoteSessionIssuerID: client.RemoteSessionIssuerID,
+	}
+	if state.HostedPlacement != nil {
+		if err := state.validateHostedPlacementState(); err != nil {
+			return "", err
+		}
+		placementID, err := state.liveHostedPlacement(ctx, m.db)
+		if err != nil {
+			return "", err
+		}
+		placement := *state.HostedPlacement
+		if placement.AssociationID != uuid.Nil && placement.AssociationID != placementID {
+			return "", ErrTypedAuthorizationChanged
+		}
+		placement.AssociationID = placementID
+		state.HostedPlacement = &placement
+		// Strip a baked-in resource before deriving the assertion audience and
+		// sending the exchange request. Hosted toolsets have no upstream MCP URL.
+		endpoint, err := url.Parse(state.TokenEndpoint)
+		if err != nil {
+			return "", fmt.Errorf("parse hosted token endpoint: %w", err)
+		}
+		query := endpoint.Query()
+		if query.Has("resource") {
+			query.Del("resource")
+			endpoint.RawQuery = query.Encode()
+			state.TokenEndpoint = endpoint.String()
+		}
 	}
 	if err := m.cache.Store(ctx, state); err != nil {
 		return "", fmt.Errorf("store remote login state: %w", err)
@@ -1665,6 +1943,10 @@ func (m *ChallengeManager) mintAuthorization(
 			ic.ModifyAuthorize(ctx, q)
 		}
 	}
+	if parent.HostedPlacement != nil {
+		// The authorization endpoint itself may have a baked-in resource.
+		q.Del("resource")
+	}
 	u.RawQuery = q.Encode()
 	return u.String(), nil
 }
@@ -1674,15 +1956,16 @@ func (m *ChallengeManager) mintAuthorization(
 // organization's grant.
 var errRemoteLoginWithoutOrganization = errors.New("remote login state has no organization")
 
-// storeRemoteSessionGrant records a consent for (subject, client). A live
-// grant consented through another organization's sign-in is tombstoned first,
-// so the new row records the organization the consent was made in; otherwise
-// the grant is updated in place. q must be the caller's transaction, holding
-// the sign-in and client locks.
-func storeRemoteSessionGrant(ctx context.Context, q *remotesessions_repo.Queries, organizationID string, params remotesessions_repo.UpsertRemoteSessionParams) (remotesessions_repo.RemoteSession, error) {
+// storeRemoteSessionGrant records a consent for (subject, client) and stores
+// its tokens. A live grant consented through another organization's sign-in is
+// tombstoned first, so the new row records the organization the consent was
+// made in; otherwise the grant is updated in place. dbtx must be the caller's
+// transaction, holding the sign-in and client locks.
+func storeRemoteSessionGrant(ctx context.Context, dbtx remotesessions_repo.DBTX, tokens *upstreamtokens.Tokens, organizationID string, params remotesessions_repo.UpsertRemoteSessionGrantParams, issued upstreamtokens.RemoteSessionTokens) (remotesessions_repo.RemoteSession, error) {
 	if organizationID == "" {
 		return remotesessions_repo.RemoteSession{}, errRemoteLoginWithoutOrganization
 	}
+	q := remotesessions_repo.New(dbtx)
 	if _, err := q.SoftDeleteRemoteSessionConsentedInOtherOrganization(ctx, remotesessions_repo.SoftDeleteRemoteSessionConsentedInOtherOrganizationParams{
 		SubjectUrn:            params.SubjectUrn,
 		RemoteSessionClientID: params.RemoteSessionClientID,
@@ -1690,9 +1973,13 @@ func storeRemoteSessionGrant(ctx context.Context, q *remotesessions_repo.Queries
 	}); err != nil {
 		return remotesessions_repo.RemoteSession{}, fmt.Errorf("tombstone grant from another organization: %w", err)
 	}
-	sess, err := q.UpsertRemoteSession(ctx, params)
+	sess, err := q.UpsertRemoteSessionGrant(ctx, params)
 	if err != nil {
 		return sess, fmt.Errorf("upsert remote session: %w", err)
+	}
+	sess, err = tokens.SetRemoteSession(ctx, dbtx, sess.ID, sess.OrganizationID, issued)
+	if err != nil {
+		return sess, fmt.Errorf("store remote session tokens: %w", err)
 	}
 	return sess, nil
 }
@@ -1880,9 +2167,9 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		}
 	}
 
-	if err := m.validateTypedAuthorization(ctx, state); err != nil {
+	if err := m.validateRemoteLoginAuthorization(ctx, state); err != nil {
 		t.Refuse(ctx, TypedAuthorizationHappened(err))
-		return none, oops.E(oops.CodeUnauthorized, err, "typed connection authorization is no longer valid").LogWarn(ctx, logger)
+		return none, oops.E(oops.CodeUnauthorized, err, "connection authorization is no longer valid").LogWarn(ctx, logger)
 	}
 
 	queries := remotesessions_repo.New(m.db)
@@ -1899,6 +2186,10 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		return none, oops.E(oops.CodeUnexpected, err, "load remote session client").LogError(ctx, logger)
 	}
 	client := clientRow.RemoteSessionClient
+	if state.HostedPlacement != nil && client.RemoteSessionIssuerID != state.RemoteSessionIssuerID {
+		t.Refuse(ctx, mcpconnectionattempts.CodeConnectionChanged)
+		return none, oops.E(oops.CodeUnauthorized, ErrTypedAuthorizationChanged, "hosted upstream issuer changed").LogWarn(ctx, logger)
+	}
 	// Retain provider metadata before the exchange. An administrative change
 	// while the token endpoint responds must not reinterpret its granted scopes.
 	exchangeIssuer, err := queries.GetRemoteSessionClientWithIssuerByID(ctx, client.ID)
@@ -1907,11 +2198,15 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	}
 
 	var clientSecret string
-	if client.ClientSecretEncrypted.Valid && client.TokenEndpointAuthMethod.String != string(TokenEndpointAuthMethodPrivateKeyJWT) {
-		decoded, derr := m.enc.Decrypt(client.ClientSecretEncrypted.String)
-		if derr != nil {
+	if stored := clientsecrets.Stored(client.ClientSecretEncrypted, client.ClientSecretOrgEncrypted); clientsecrets.Has(stored) && client.TokenEndpointAuthMethod.String != string(TokenEndpointAuthMethodPrivateKeyJWT) {
+		decoded, derr := m.secrets.Open(ctx, nil, clientOwner(client), stored)
+		switch {
+		case orgencryption.IsUnreadable(derr):
 			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 			return none, oops.E(oops.CodeUnexpected, derr, "decrypt client secret").LogError(ctx, logger)
+		case derr != nil:
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
+			return none, oops.E(oops.CodeUnavailable, derr, "the client secret could not be opened right now; try signing in again shortly").LogError(ctx, logger)
 		}
 		clientSecret = decoded
 	}
@@ -1944,6 +2239,19 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		t.Refuse(ctx, mcpconnectionattempts.CodeCredentialMisconfigured)
 		return none, oops.E(oops.CodeUnauthorized, err, "the remote session client's assertion audience is misconfigured").LogError(ctx, logger)
 	}
+	// The pair the exchange returns has to be stored, and the code cannot be
+	// redeemed twice, so the organization's key must be able to seal it first:
+	// the organization the session will be stored with, resolved as the grant
+	// upsert resolves it.
+	sessionOrganization, err := remotesessions_repo.New(m.db).GetRemoteSessionClientSessionOrganization(ctx, client.ID)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
+		return none, oops.E(oops.CodeUnexpected, err, "resolve the session's organization").LogError(ctx, logger)
+	}
+	if err := m.tokens.RequireUsable(ctx, nil, conv.ToPGTextEmpty(sessionOrganization)); err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeTransientFailure)
+		return none, oops.E(oops.CodeUnavailable, err, "the session's tokens cannot be stored right now; try signing in again shortly").LogError(ctx, logger)
+	}
 	tok, err := m.exchangeCode(ctx, doer, state, TokenEndpointClientAuth{
 		Method:                authMethod,
 		RemoteSessionClientID: client.ID,
@@ -1961,17 +2269,13 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		t.At(mcpconnectionattempts.StepProviderToken)
 		t.Refuse(ctx, exchangeHappened(err, clientRow.TunneledMcpServerID.Valid))
 		m.noteExchangeTokenEndpointMissing(ctx, logger, client.ID, err)
-		failure := exchangeFailure(ctx, logger, err, clientRow.TunneledMcpServerID.Valid)
-		if !exchangeFailureIsProviderOutage(failure, err) {
-			return none, failure
-		}
-		return none, providerOutageError(failure, m.providerLabel(ctx, state))
+		return none, exchangeFailureAnswer(ctx, logger, err, clientRow.TunneledMcpServerID.Valid, func() string { return m.providerLabel(ctx, state) })
 	}
 	// The pair is live upstream from this line on, and every path out of here
 	// that does not store it strands it: unreachable through Speakeasy, and outside
 	// the reach of every revoke path since no row points at it. So arm the
 	// revocation on the exchange rather than on the first thing done with the
-	// result — encrypting it can fail too — and disarm it once the row is
+	// result — sealing it can fail too — and disarm it once the row is
 	// committed.
 	t.At(mcpconnectionattempts.StepProviderToken)
 	stranded := true
@@ -1992,21 +2296,6 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		if enrichment, err = buildEnrichment(noTokenResponse, nil, interfaces, nil); err != nil {
 			logIdentityFailure(ctx, logger, "enrichment interfaces dropped; session stored without them", err, attr.SlogRemoteSessionClientID(client.ID.String()))
 		}
-	}
-
-	accessEnc, err := m.enc.Encrypt([]byte(tok.AccessToken))
-	if err != nil {
-		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
-		return none, oops.E(oops.CodeUnexpected, err, "encrypt access token").LogError(ctx, logger)
-	}
-	var refreshEnc *string
-	if tok.RefreshToken != "" {
-		v, eerr := m.enc.Encrypt([]byte(tok.RefreshToken))
-		if eerr != nil {
-			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
-			return none, oops.E(oops.CodeUnexpected, eerr, "encrypt refresh token").LogError(ctx, logger)
-		}
-		refreshEnc = &v
 	}
 
 	// A token with no reported expiry — neither expires_in nor a JWT exp —
@@ -2053,17 +2342,18 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		scopes = []string{}
 	}
 	// Only the visible consent control opts a new session into scheduled
-	// keepalive. On reconnect, UpsertRemoteSession preserves the stored choice.
+	// keepalive. On reconnect, UpsertRemoteSessionGrant preserves the stored choice.
 	autoRefresh := false
 	if state.AutoRefresh != nil {
 		autoRefresh = *state.AutoRefresh
 	}
 
 	// Recheck subject permission after the exchange, before taking database
-	// locks. The exact typed binding is then locked through grant commit below.
-	if err := m.validateTypedAuthorization(ctx, state); err != nil {
+	// locks. The exact typed binding or hosted placement is then locked through
+	// grant commit below.
+	if err := m.validateRemoteLoginAuthorization(ctx, state); err != nil {
 		t.Refuse(ctx, TypedAuthorizationHappened(err))
-		return none, oops.E(oops.CodeUnauthorized, err, "typed connection authorization is no longer valid").LogWarn(ctx, logger)
+		return none, oops.E(oops.CodeUnauthorized, err, "connection authorization is no longer valid").LogWarn(ctx, logger)
 	}
 	dbtx, err := m.db.Begin(ctx)
 	if err != nil {
@@ -2073,14 +2363,42 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 	txQueries := remotesessions_repo.New(dbtx)
 
+	if state.HostedPlacement != nil && state.MetaMcpServerID.Valid && state.RouteBase != mcproute.OrganizationGateway {
+		if err := state.validateHostedGateway(ctx, dbtx, true); err != nil {
+			if errors.Is(err, ErrTypedAuthorizationDenied) {
+				t.Refuse(ctx, TypedAuthorizationHappened(err))
+				return none, oops.E(oops.CodeUnauthorized, err, "hosted gateway is no longer valid").LogWarn(ctx, logger)
+			}
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
+			return none, oops.E(oops.CodeUnexpected, err, "lock hosted gateway").LogError(ctx, logger)
+		}
+	}
+
 	// Typed writers lock the server before the issuer and registration. Keep
 	// legacy callbacks unchanged, but follow that order for typed logins too.
+	var serverID uuid.UUID
 	if a := state.TypedAuthorization; a != nil {
-		if _, err := txQueries.LockTypedRemoteLoginServer(ctx, remotesessions_repo.LockTypedRemoteLoginServerParams{McpServerID: a.ServerID, ProjectID: state.ProjectID, OrganizationID: state.OrganizationID}); err != nil {
+		serverID = a.ServerID
+	} else if a := state.HostedPlacement; a != nil {
+		serverID = a.ServerID
+	}
+	if serverID != uuid.Nil {
+		if _, err := txQueries.LockTypedRemoteLoginServer(ctx, remotesessions_repo.LockTypedRemoteLoginServerParams{McpServerID: serverID, ProjectID: state.ProjectID, OrganizationID: state.OrganizationID}); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return none, oops.E(oops.CodeUnauthorized, err, "typed connection server is no longer valid").LogWarn(ctx, logger)
+				return none, oops.E(oops.CodeUnauthorized, err, "connection server is no longer valid").LogWarn(ctx, logger)
 			}
-			return none, oops.E(oops.CodeUnexpected, err, "lock typed connection server").LogError(ctx, logger)
+			return none, oops.E(oops.CodeUnexpected, err, "lock connection server").LogError(ctx, logger)
+		}
+	}
+
+	if state.HostedPlacement != nil && state.MetaMcpServerID.Valid && state.RouteBase != mcproute.OrganizationGateway {
+		if err := state.lockHostedGatewayMember(ctx, dbtx); err != nil {
+			if errors.Is(err, ErrTypedAuthorizationChanged) {
+				t.Refuse(ctx, mcpconnectionattempts.CodeConnectionChanged)
+				return none, oops.E(oops.CodeUnauthorized, err, "hosted gateway membership is no longer valid").LogWarn(ctx, logger)
+			}
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
+			return none, oops.E(oops.CodeUnexpected, err, "lock hosted gateway membership").LogError(ctx, logger)
 		}
 	}
 
@@ -2099,23 +2417,32 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		return none, oops.E(oops.CodeUnexpected, err, "lock user session issuer for remote session write").LogError(ctx, logger)
 	}
 
-	// The upstream exchange has already happened, so the token pair exists
-	// either way; this transaction decides whether Speakeasy stores it. The
-	// client-row lock serializes the write against the issuer-delete orphan
-	// cascade, which locks the same row before sweeping the client's
-	// sessions: a callback that acquires the lock after that cascade
-	// committed re-reads the binding as dead and is rejected here, instead
-	// of resurrecting a grant no live issuer can reach or revoke. A rejected
-	// callback leaves the revocation armed above still standing.
-	//
-	// No row means the client itself is gone, which the binding recheck below
-	// rejects on its own — there is nothing left to serialize against.
+	if state.HostedPlacement != nil {
+		_, err := txQueries.LockHostedRemoteLoginUpstreamIssuer(ctx, state.RemoteSessionIssuerID)
+		if errors.Is(err, pgx.ErrNoRows) {
+			t.Refuse(ctx, mcpconnectionattempts.CodeConnectionChanged)
+			return none, oops.E(oops.CodeUnauthorized, err, "hosted upstream issuer is no longer valid").LogWarn(ctx, logger)
+		}
+		if err != nil {
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
+			return none, oops.E(oops.CodeUnexpected, err, "lock hosted upstream issuer").LogError(ctx, logger)
+		}
+	}
+
+	// The client lock serializes publication with registration deletion and
+	// issuer retirement. If the client is already gone, the binding check
+	// below rejects the exchange and leaves its upstream revoke armed.
 	if _, err := txQueries.LockRemoteSessionClientForSessionWrite(ctx, state.RemoteSessionClientID); err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return none, oops.E(oops.CodeUnexpected, err, "lock remote session client").LogError(ctx, logger)
 	}
 
-	if state.TypedAuthorization != nil {
+	if state.HostedPlacement != nil {
+		if err := state.validateHostedPlacement(ctx, dbtx, true); err != nil {
+			t.Refuse(ctx, TypedAuthorizationHappened(err))
+			return none, oops.E(oops.CodeUnauthorized, err, "hosted connection placement is no longer valid").LogWarn(ctx, logger)
+		}
+	} else if state.TypedAuthorization != nil {
 		a := state.TypedAuthorization
 
 		if _, err := txQueries.LockTypedRemoteLoginAuthorization(ctx, remotesessions_repo.LockTypedRemoteLoginAuthorizationParams{
@@ -2151,13 +2478,25 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		}
 	}
 
-	storedSession, err := storeRemoteSessionGrant(ctx, txQueries, state.OrganizationID, remotesessions_repo.UpsertRemoteSessionParams{
+	if state.HostedPlacement != nil && state.RouteBase == mcproute.OrganizationGateway {
+		// A derived gateway has no persisted parent to lock. Recheck its issuer
+		// inventory and availability immediately before writing, after waiting
+		// for the issuer, registration and placement locks.
+		if err := state.validateHostedGateway(ctx, dbtx, false); err != nil {
+			if errors.Is(err, ErrTypedAuthorizationChanged) {
+				t.Refuse(ctx, mcpconnectionattempts.CodeConnectionChanged)
+				return none, oops.E(oops.CodeUnauthorized, err, "hosted gateway is no longer valid").LogWarn(ctx, logger)
+			}
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
+			return none, oops.E(oops.CodeUnexpected, err, "recheck hosted gateway issuer").LogError(ctx, logger)
+		}
+	}
+
+	storedSession, err := storeRemoteSessionGrant(ctx, dbtx, m.tokens, state.OrganizationID, remotesessions_repo.UpsertRemoteSessionGrantParams{
 		SubjectUrn:            *state.Subject,
 		UserSessionIssuerID:   state.UserSessionIssuerID,
 		RemoteSessionClientID: state.RemoteSessionClientID,
-		AccessTokenEncrypted:  accessEnc,
 		AccessExpiresAt:       conv.PtrToPGTimestamptz(accessExpires),
-		RefreshTokenEncrypted: conv.PtrToPGText(refreshEnc),
 		AuthorizationExpiresAt: conv.PtrToPGTimestamptz(
 			authorizationExpires,
 		),
@@ -2170,11 +2509,15 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		UpstreamDisplayName: identityCols.DisplayName,
 		IdentitySource:      identityCols.Source,
 		Enrichment:          enrichment,
-	})
+	}, upstreamtokens.RemoteSessionTokens{AccessToken: tok.AccessToken, RefreshToken: tok.RefreshToken, KeepRefreshToken: false})
 	if err != nil {
 		if errors.Is(err, errRemoteLoginWithoutOrganization) {
 			t.Refuse(ctx, mcpconnectionattempts.CodeExpired)
 			return none, oops.E(oops.CodeUnauthorized, err, "this login expired, start it again").LogWarn(ctx, logger)
+		}
+		if orgencryption.IsKeyProblem(err) {
+			t.Refuse(ctx, mcpconnectionattempts.CodeTransientFailure)
+			return none, oops.E(oops.CodeUnavailable, err, "the session's tokens cannot be stored right now; try signing in again shortly").LogError(ctx, logger)
 		}
 		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return none, oops.E(oops.CodeUnexpected, err, "store remote session").LogError(ctx, logger)
@@ -2306,6 +2649,9 @@ func exchangeHappened(err error, tunneled bool) mcpconnectionattempts.Code {
 		if errors.Is(err, tunnelrouting.ErrNoTunnelRoute) {
 			return mcpconnectionattempts.CodeTunnelUnavailable
 		}
+		if code, ok := mcpconnectionattempts.AddressHappened(err, tunneled); ok {
+			return code
+		}
 		return mcpconnectionattempts.CodeProviderUnreachable
 	}
 	endpointErr, ok := errors.AsType[*tokenEndpointError](err)
@@ -2387,6 +2733,20 @@ func (m *ChallengeManager) providerLabel(ctx context.Context, state RemoteLoginS
 	return parsed.Hostname()
 }
 
+// exchangeFailureAnswer is what a failed code exchange shows: an address an admin fixes, a provider outage, or the failure.
+func exchangeFailureAnswer(ctx context.Context, logger *slog.Logger, err error, tunneled bool, provider func() string) error {
+	failure := exchangeFailure(ctx, logger, err, tunneled)
+	_, transport := errors.AsType[*tokenExchangeUnavailableError](err)
+	if address := guardian.AddressFailureOf(err, tunneled); transport && address != guardian.AddressFine {
+		// Still tagged as caused outside Speakeasy, so the response headers stay as they were.
+		return fmt.Errorf("complete remote login: %w: %w", ErrProviderOutageExternal, oops.WithBrowserAdminDetail(oops.WithBrowserReason(failure, SignInAddressReason(address)), SignInAddressDetail(address)))
+	}
+	if !exchangeFailureIsProviderOutage(failure, err) {
+		return failure
+	}
+	return providerOutageError(failure, provider())
+}
+
 // exchangeFailureIsProviderOutage excludes failures Speakeasy's own signing caused.
 func exchangeFailureIsProviderOutage(failure *oops.ShareableError, err error) bool {
 	if errors.Is(err, tunnelrouting.ErrRouteStoreUnavailable) {
@@ -2415,13 +2775,13 @@ func (m *ChallengeManager) retryWithoutResource(r *http.Request, t *mcpconnectio
 		return none, oops.E(oops.CodeUnauthorized, cause, "the identity provider rejected the requested resource").LogWarn(ctx, logger, attrs...)
 	}
 
+	if err := m.validateRemoteLoginAuthorization(ctx, state); err != nil {
+		t.Refuse(ctx, TypedAuthorizationHappened(err))
+		return none, oops.E(oops.CodeUnauthorized, err, "connection authorization is no longer valid")
+	}
 	var clients []Client
 	var err error
-	if state.TypedAuthorization != nil {
-		if err = m.validateTypedAuthorization(ctx, state); err != nil {
-			t.Refuse(ctx, TypedAuthorizationHappened(err))
-			return none, oops.E(oops.CodeUnauthorized, err, "typed connection authorization is no longer valid")
-		}
+	if state.TypedAuthorization != nil || state.HostedPlacement != nil {
 		clients, err = m.ListAuthClientRegistrations(ctx, state.ProjectID, state.OrganizationID, []uuid.UUID{state.RemoteSessionClientID})
 	} else {
 		clients, err = m.ListClients(ctx, state.ProjectID, state.OrganizationID, state.UserSessionIssuerID)
@@ -2576,6 +2936,9 @@ func exchangeFailure(ctx context.Context, logger *slog.Logger, err error, tunnel
 		return oops.E(code, err, "%s: the client assertion could not be signed", message).LogError(ctx, logger)
 	}
 	if _, ok := errors.AsType[*tokenExchangeUnavailableError](err); ok {
+		if address := guardian.AddressFailureOf(err, tunneled); address != guardian.AddressFine {
+			return oops.E(oops.CodeGatewayError, err, "token exchange failed: %s. Ask your administrator to check the sign-in provider's address", address.Problem("the sign-in provider")).LogWarn(ctx, logger)
+		}
 		reason := "the identity provider could not be reached"
 		if errors.Is(err, tunnelrouting.ErrNoTunnelRoute) {
 			reason = "the MCP tunnel is not connected"
@@ -2718,7 +3081,7 @@ func (m *ChallengeManager) identityFromExchange(ctx context.Context, logger *slo
 			return nil, map[string]interfaceRecord{IdentitySourceIDToken: {Status: interfaceStatusRejected, At: time.Now(), HTTPStatus: 0, Reason: "rejected at exchange"}}, noAccess
 		}
 	}
-	target := enrichmentTargetFromClient(issuer, organizationID)
+	target := enrichmentTargetFromClient(issuer, organizationID, m.secrets)
 	target.resource = resource
 	interfaces := map[string]interfaceRecord{}
 	if selected == nil {
@@ -2782,8 +3145,11 @@ func (e *tokenExchangeUnavailableError) Unwrap() error { return e.err }
 // storedTokenRow is the part of a status row readStoredTokens judges.
 func storedTokenRow(row remotesessions_repo.ListRemoteSessionStatusesForSubjectRow) remotesessions_repo.RemoteSession {
 	var sess remotesessions_repo.RemoteSession
+	sess.OrganizationID = row.OrganizationID
 	sess.AccessTokenEncrypted = row.AccessTokenEncrypted
+	sess.AccessTokenOrgEncrypted = row.AccessTokenOrgEncrypted
 	sess.RefreshTokenEncrypted = row.RefreshTokenEncrypted
+	sess.RefreshTokenOrgEncrypted = row.RefreshTokenOrgEncrypted
 	sess.AccessExpiresAt = row.AccessExpiresAt
 	sess.RefreshExpiresAt = row.RefreshExpiresAt
 	sess.AuthorizationExpiresAt = row.AuthorizationExpiresAt

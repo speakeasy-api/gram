@@ -45,19 +45,18 @@ interface ToolListProps {
   onToolsRemove?: (toolUrns: string[]) => void;
   onAddToToolset?: (toolUrns: string[]) => void;
   onCreateToolset?: (toolUrns: string[]) => void;
-  onTestInPlayground?: () => void;
+  onTestInInspect?: () => void;
   className?: string;
   /** When true, hides action menus and selection checkboxes for a view-only presentation. */
   readOnly?: boolean;
   // Selection mode props for AddToolsDialog
-  selectionMode?: "add" | "remove";
+  selectionMode?: "add";
   selectedUrns?: string[];
   onSelectionChange?: (urns: string[]) => void;
-  onToolClick?: (tool: Tool) => void;
 }
 
 interface ToolGroup {
-  type: "package" | "function" | "custom" | "higher_order" | "external-mcp";
+  type: "package" | "function" | "custom" | "higher_order";
   icon:
     | "file-code"
     | "square-function"
@@ -129,7 +128,6 @@ function groupTools(
   const groups: ToolGroup[] = [];
   const packageMap = new Map<string, Tool[]>();
   const functionMap = new Map<string, Tool[]>();
-  const registryServerNameToTools = new Map<string, Tool[]>();
   const functionTools: Tool[] = [];
   const customTools: Tool[] = [];
   const higherOrderTools: Tool[] = [];
@@ -167,10 +165,6 @@ function groupTools(
         // Function tools without a source go to the generic functions group
         functionTools.push(tool);
       }
-    } else if (tool.type === "external-mcp") {
-      const groupKey = tool.registryServerName;
-      const existing = registryServerNameToTools.get(groupKey) || [];
-      registryServerNameToTools.set(groupKey, [...existing, tool]);
     } else {
       // Everything else (prompts without higher order, etc.)
       customTools.push(tool);
@@ -208,16 +202,6 @@ function groupTools(
       tools: functionTools,
     });
   }
-
-  // Add external MCP tools group
-  registryServerNameToTools.forEach((tools, registryServerName) => {
-    groups.push({
-      type: "external-mcp",
-      icon: "mcp",
-      title: registryServerName,
-      tools: sortToolsByMethod(tools),
-    });
-  });
 
   // Add custom tools group with sorted tools
   if (customTools.length > 0) {
@@ -266,9 +250,8 @@ function ToolRow({
   isSelected,
   isFocused,
   onCheckboxChange,
-  onTestInPlayground,
+  onTestInInspect,
   onRemove,
-  onToolClick,
   readOnly,
 }: {
   tool: Tool;
@@ -279,9 +262,8 @@ function ToolRow({
   isSelected: boolean;
   isFocused: boolean;
   onCheckboxChange: (checked: boolean) => void;
-  onTestInPlayground?: () => void;
+  onTestInInspect?: () => void;
   onRemove?: () => void;
-  onToolClick?: (tool: Tool) => void;
   readOnly?: boolean;
 }) {
   const isDisabled = false;
@@ -419,11 +401,11 @@ function ToolRow({
       onClick: handleCopyName,
       icon: "copy" as const,
     },
-    ...(onTestInPlayground
+    ...(onTestInInspect
       ? [
           {
-            label: "Test in Playground",
-            onClick: onTestInPlayground,
+            label: "Test in Inspect",
+            onClick: onTestInInspect,
             icon: "message-circle" as const,
           },
         ]
@@ -452,9 +434,7 @@ function ToolRow({
           className={cn(
             "group border-neutral-softest hover:bg-muted relative flex items-center justify-between overflow-hidden border-b py-4 pr-3 pl-4 transition-colors last:border-b-0",
             isFocused && "bg-muted",
-            onToolClick && "cursor-pointer",
           )}
-          onClick={() => onToolClick?.(tool)}
         >
           <div className="flex min-w-0 flex-[0_1_60%] items-center gap-4">
             {!readOnly && (
@@ -760,13 +740,12 @@ export function ToolList({
   onToolsRemove,
   onAddToToolset,
   onCreateToolset,
-  onTestInPlayground,
+  onTestInInspect,
   className,
   readOnly,
   selectionMode,
   selectedUrns = [],
   onSelectionChange,
-  onToolClick,
 }: ToolListProps): JSX.Element {
   const { data: deployment } = useLatestDeployment();
 
@@ -1130,13 +1109,12 @@ export function ToolList({
                         onCheckboxChange={(checked) =>
                           handleCheckboxChange(toolId, checked)
                         }
-                        onTestInPlayground={onTestInPlayground}
+                        onTestInInspect={onTestInInspect}
                         onRemove={
                           selectionMode !== "add" && onToolsRemove
                             ? () => onToolsRemove([toolId])
                             : undefined
                         }
-                        onToolClick={onToolClick}
                         readOnly={readOnly}
                       />
                     );

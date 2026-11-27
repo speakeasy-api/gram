@@ -1,4 +1,4 @@
-import { useOrganization, useSession } from "@/contexts/Auth";
+import { useOrganization, useProject, useSession } from "@/contexts/Auth";
 import {
   useProjectSlugForRequests,
   useSdkClient,
@@ -31,6 +31,8 @@ export function useAgentIdentityCandidates({
   const sdk = useSdkClient();
   const projectSlug = useProjectSlugForRequests();
   const { projectSlug: routeProjectSlug } = useSlugs();
+  const project = useProject();
+  const projectId = routeProjectSlug === project.slug ? project.id : undefined;
   const routes = useRoutes({ projectSlug });
   const navigate = useNavigate();
   const { search } = useLocation();
@@ -40,6 +42,7 @@ export function useAgentIdentityCandidates({
   // impersonated, and demo sessions.
   const queryEnabled =
     enabled &&
+    (!routeProjectSlug || Boolean(projectId)) &&
     organization.slug !== DEMO_ORG_SLUG &&
     !session.organizationOverride &&
     !session.impersonatorEmail;
@@ -51,8 +54,8 @@ export function useAgentIdentityCandidates({
     isFetchingNextPage,
     isFetchNextPageError,
   } = useInfiniteQuery({
-    // This is the identities index's key, so opening Command K after that page
-    // reuses its inventory instead of issuing a duplicate list request.
+    // Reuse the unfiltered Agents roster within a project. The org shell
+    // has no project scope and keeps its organization-wide inventory.
     queryKey: [
       "identities",
       "registered-agents",
@@ -64,11 +67,18 @@ export function useAgentIdentityCandidates({
       "[]",
       "",
       scopeOverride,
+      projectId,
     ],
     queryFn: ({ pageParam, signal }) =>
       fetchRegisteredAgents(
         sdk,
-        { cursor: pageParam, limit: 50, search: "", sortOrder: "asc" },
+        {
+          projectId,
+          cursor: pageParam,
+          limit: 50,
+          search: "",
+          sortOrder: "asc",
+        },
         signal,
       ),
     initialPageParam: undefined as string | undefined,

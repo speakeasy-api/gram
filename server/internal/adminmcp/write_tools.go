@@ -1,4 +1,4 @@
-//nolint:exhaustruct // MCP SDK manifests intentionally use documented optional defaults.
+//nolint:exhaustruct_v5 // MCP SDK manifests intentionally use documented optional defaults.
 package adminmcp
 
 import (
@@ -298,6 +298,7 @@ func AttachWrites(runtime *Runtime, oauth *StaffOAuth, deps WriteDependencies, w
 		OperationUpdateSupportMatrix:                  &supportMatrixWriter{runner: runner, writes: writes},
 		OperationCreateRegistryEntry:                  &registryEntryWriter{runner: runner, registry: registry, writes: writes},
 		OperationSetRegistryIcons:                     &registryIconsWriter{runner: runner, registry: registry, writes: writes},
+		OperationRepairAssistantAgentNames:            &assistantAgentNameRepairWriter{runner: runner, audit: auditLogger, writes: writes},
 		OperationMigrateAssistantsToKit:               &assistantKitMigrationWriter{runner: runner, audit: auditLogger, writes: writes, now: time.Now},
 	}}
 	if deps.ProjectRedeployer != nil {

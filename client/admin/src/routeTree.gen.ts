@@ -10,9 +10,12 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AssistantsRouteImport } from './routes/assistants'
 import { Route as CustomDomainsRouteImport } from './routes/custom-domains'
 import { Route as CustomerUsageRouteImport } from './routes/customer-usage'
+import { Route as EncryptionTransitionsRouteImport } from './routes/encryption-transitions'
 import { Route as FleetHealthRouteImport } from './routes/fleet-health'
+import { Route as HooksRolloutRouteImport } from './routes/hooks-rollout'
 import { Route as IntegrationCoverageRouteImport } from './routes/integration-coverage'
 import { Route as McpSetupRouteImport } from './routes/mcp-setup'
 import { Route as MemoryEvalsRouteImport } from './routes/memory-evals'
@@ -24,8 +27,10 @@ import { Route as PlatformMcpFeedbackRouteImport } from './routes/platform-mcp-f
 import { Route as ProjectsRouteImport } from './routes/projects'
 import { Route as RegistryRouteImport } from './routes/registry'
 import { Route as RemoteSessionIssuersRouteImport } from './routes/remote-session-issuers'
+import { Route as SecretBackfillsRouteImport } from './routes/secret-backfills'
 import { Route as SignupOffersRouteImport } from './routes/signup-offers'
 import { Route as StokenCalculatorRouteImport } from './routes/stoken-calculator'
+import { Route as TailscaleOauthMigrationRouteImport } from './routes/tailscale-oauth-migration'
 import { Route as UpstreamOauthMigrationRouteImport } from './routes/upstream-oauth-migration'
 import { Route as UsersRouteImport } from './routes/users'
 import { Route as OrganizationsIndexRouteImport } from './routes/organizations.index'
@@ -46,6 +51,7 @@ import { Route as OrganizationsIdOrSlugAssistantsRouteImport } from './routes/or
 import { Route as OrganizationsIdOrSlugBillingRouteImport } from './routes/organizations.$idOrSlug.billing'
 import { Route as OrganizationsIdOrSlugCoverageRouteImport } from './routes/organizations.$idOrSlug.coverage'
 import { Route as OrganizationsIdOrSlugCustomDomainRouteImport } from './routes/organizations.$idOrSlug.custom-domain'
+import { Route as OrganizationsIdOrSlugEncryptionRouteImport } from './routes/organizations.$idOrSlug.encryption'
 import { Route as OrganizationsIdOrSlugFeaturesRouteImport } from './routes/organizations.$idOrSlug.features'
 import { Route as OrganizationsIdOrSlugHooksRouteImport } from './routes/organizations.$idOrSlug.hooks'
 import { Route as OrganizationsIdOrSlugMcpServersRouteImport } from './routes/organizations.$idOrSlug.mcp-servers'
@@ -64,6 +70,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AssistantsRoute = AssistantsRouteImport.update({
+  id: '/assistants',
+  path: '/assistants',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CustomDomainsRoute = CustomDomainsRouteImport.update({
   id: '/custom-domains',
   path: '/custom-domains',
@@ -74,9 +85,19 @@ const CustomerUsageRoute = CustomerUsageRouteImport.update({
   path: '/customer-usage',
   getParentRoute: () => rootRouteImport,
 } as any)
+const EncryptionTransitionsRoute = EncryptionTransitionsRouteImport.update({
+  id: '/encryption-transitions',
+  path: '/encryption-transitions',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const FleetHealthRoute = FleetHealthRouteImport.update({
   id: '/fleet-health',
   path: '/fleet-health',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HooksRolloutRoute = HooksRolloutRouteImport.update({
+  id: '/hooks-rollout',
+  path: '/hooks-rollout',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IntegrationCoverageRoute = IntegrationCoverageRouteImport.update({
@@ -134,6 +155,11 @@ const RemoteSessionIssuersRoute = RemoteSessionIssuersRouteImport.update({
   path: '/remote-session-issuers',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SecretBackfillsRoute = SecretBackfillsRouteImport.update({
+  id: '/secret-backfills',
+  path: '/secret-backfills',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SignupOffersRoute = SignupOffersRouteImport.update({
   id: '/signup-offers',
   path: '/signup-offers',
@@ -142,6 +168,11 @@ const SignupOffersRoute = SignupOffersRouteImport.update({
 const StokenCalculatorRoute = StokenCalculatorRouteImport.update({
   id: '/stoken-calculator',
   path: '/stoken-calculator',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TailscaleOauthMigrationRoute = TailscaleOauthMigrationRouteImport.update({
+  id: '/tailscale-oauth-migration',
+  path: '/tailscale-oauth-migration',
   getParentRoute: () => rootRouteImport,
 } as any)
 const UpstreamOauthMigrationRoute = UpstreamOauthMigrationRouteImport.update({
@@ -254,6 +285,12 @@ const OrganizationsIdOrSlugCustomDomainRoute =
     path: '/custom-domain',
     getParentRoute: () => OrganizationsIdOrSlugRoute,
   } as any)
+const OrganizationsIdOrSlugEncryptionRoute =
+  OrganizationsIdOrSlugEncryptionRouteImport.update({
+    id: '/encryption',
+    path: '/encryption',
+    getParentRoute: () => OrganizationsIdOrSlugRoute,
+  } as any)
 const OrganizationsIdOrSlugFeaturesRoute =
   OrganizationsIdOrSlugFeaturesRouteImport.update({
     id: '/features',
@@ -329,9 +366,12 @@ const OrganizationsIdOrSlugProjectsProjectIdOrSlugRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/assistants': typeof AssistantsRoute
   '/custom-domains': typeof CustomDomainsRoute
   '/customer-usage': typeof CustomerUsageRoute
+  '/encryption-transitions': typeof EncryptionTransitionsRoute
   '/fleet-health': typeof FleetHealthRoute
+  '/hooks-rollout': typeof HooksRolloutRoute
   '/integration-coverage': typeof IntegrationCoverageRoute
   '/mcp-setup': typeof McpSetupRoute
   '/memory-evals': typeof MemoryEvalsRoute
@@ -343,8 +383,10 @@ export interface FileRoutesByFullPath {
   '/projects': typeof ProjectsRouteWithChildren
   '/registry': typeof RegistryRouteWithChildren
   '/remote-session-issuers': typeof RemoteSessionIssuersRouteWithChildren
+  '/secret-backfills': typeof SecretBackfillsRoute
   '/signup-offers': typeof SignupOffersRoute
   '/stoken-calculator': typeof StokenCalculatorRoute
+  '/tailscale-oauth-migration': typeof TailscaleOauthMigrationRoute
   '/upstream-oauth-migration': typeof UpstreamOauthMigrationRoute
   '/users': typeof UsersRouteWithChildren
   '/organizations/$idOrSlug': typeof OrganizationsIdOrSlugRouteWithChildren
@@ -364,6 +406,7 @@ export interface FileRoutesByFullPath {
   '/organizations/$idOrSlug/billing': typeof OrganizationsIdOrSlugBillingRoute
   '/organizations/$idOrSlug/coverage': typeof OrganizationsIdOrSlugCoverageRoute
   '/organizations/$idOrSlug/custom-domain': typeof OrganizationsIdOrSlugCustomDomainRoute
+  '/organizations/$idOrSlug/encryption': typeof OrganizationsIdOrSlugEncryptionRoute
   '/organizations/$idOrSlug/features': typeof OrganizationsIdOrSlugFeaturesRoute
   '/organizations/$idOrSlug/hooks': typeof OrganizationsIdOrSlugHooksRoute
   '/organizations/$idOrSlug/mcp-servers': typeof OrganizationsIdOrSlugMcpServersRouteWithChildren
@@ -380,17 +423,22 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/assistants': typeof AssistantsRoute
   '/custom-domains': typeof CustomDomainsRoute
   '/customer-usage': typeof CustomerUsageRoute
+  '/encryption-transitions': typeof EncryptionTransitionsRoute
   '/fleet-health': typeof FleetHealthRoute
+  '/hooks-rollout': typeof HooksRolloutRoute
   '/integration-coverage': typeof IntegrationCoverageRoute
   '/mcp-setup': typeof McpSetupRoute
   '/memory-evals': typeof MemoryEvalsRoute
   '/onboarding-playbooks': typeof OnboardingPlaybooksRoute
   '/onboarding-steps': typeof OnboardingStepsRoute
   '/platform-mcp-feedback': typeof PlatformMcpFeedbackRoute
+  '/secret-backfills': typeof SecretBackfillsRoute
   '/signup-offers': typeof SignupOffersRoute
   '/stoken-calculator': typeof StokenCalculatorRoute
+  '/tailscale-oauth-migration': typeof TailscaleOauthMigrationRoute
   '/upstream-oauth-migration': typeof UpstreamOauthMigrationRoute
   '/platform-credentials/$credentialId': typeof PlatformCredentialsCredentialIdRoute
   '/projects/$idOrSlug': typeof ProjectsIdOrSlugRoute
@@ -407,6 +455,7 @@ export interface FileRoutesByTo {
   '/organizations/$idOrSlug/billing': typeof OrganizationsIdOrSlugBillingRoute
   '/organizations/$idOrSlug/coverage': typeof OrganizationsIdOrSlugCoverageRoute
   '/organizations/$idOrSlug/custom-domain': typeof OrganizationsIdOrSlugCustomDomainRoute
+  '/organizations/$idOrSlug/encryption': typeof OrganizationsIdOrSlugEncryptionRoute
   '/organizations/$idOrSlug/features': typeof OrganizationsIdOrSlugFeaturesRoute
   '/organizations/$idOrSlug/hooks': typeof OrganizationsIdOrSlugHooksRoute
   '/organizations/$idOrSlug/members': typeof OrganizationsIdOrSlugMembersRoute
@@ -423,9 +472,12 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/assistants': typeof AssistantsRoute
   '/custom-domains': typeof CustomDomainsRoute
   '/customer-usage': typeof CustomerUsageRoute
+  '/encryption-transitions': typeof EncryptionTransitionsRoute
   '/fleet-health': typeof FleetHealthRoute
+  '/hooks-rollout': typeof HooksRolloutRoute
   '/integration-coverage': typeof IntegrationCoverageRoute
   '/mcp-setup': typeof McpSetupRoute
   '/memory-evals': typeof MemoryEvalsRoute
@@ -437,8 +489,10 @@ export interface FileRoutesById {
   '/projects': typeof ProjectsRouteWithChildren
   '/registry': typeof RegistryRouteWithChildren
   '/remote-session-issuers': typeof RemoteSessionIssuersRouteWithChildren
+  '/secret-backfills': typeof SecretBackfillsRoute
   '/signup-offers': typeof SignupOffersRoute
   '/stoken-calculator': typeof StokenCalculatorRoute
+  '/tailscale-oauth-migration': typeof TailscaleOauthMigrationRoute
   '/upstream-oauth-migration': typeof UpstreamOauthMigrationRoute
   '/users': typeof UsersRouteWithChildren
   '/organizations/$idOrSlug': typeof OrganizationsIdOrSlugRouteWithChildren
@@ -458,6 +512,7 @@ export interface FileRoutesById {
   '/organizations/$idOrSlug/billing': typeof OrganizationsIdOrSlugBillingRoute
   '/organizations/$idOrSlug/coverage': typeof OrganizationsIdOrSlugCoverageRoute
   '/organizations/$idOrSlug/custom-domain': typeof OrganizationsIdOrSlugCustomDomainRoute
+  '/organizations/$idOrSlug/encryption': typeof OrganizationsIdOrSlugEncryptionRoute
   '/organizations/$idOrSlug/features': typeof OrganizationsIdOrSlugFeaturesRoute
   '/organizations/$idOrSlug/hooks': typeof OrganizationsIdOrSlugHooksRoute
   '/organizations/$idOrSlug/mcp-servers': typeof OrganizationsIdOrSlugMcpServersRouteWithChildren
@@ -476,9 +531,12 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/assistants'
     | '/custom-domains'
     | '/customer-usage'
+    | '/encryption-transitions'
     | '/fleet-health'
+    | '/hooks-rollout'
     | '/integration-coverage'
     | '/mcp-setup'
     | '/memory-evals'
@@ -490,8 +548,10 @@ export interface FileRouteTypes {
     | '/projects'
     | '/registry'
     | '/remote-session-issuers'
+    | '/secret-backfills'
     | '/signup-offers'
     | '/stoken-calculator'
+    | '/tailscale-oauth-migration'
     | '/upstream-oauth-migration'
     | '/users'
     | '/organizations/$idOrSlug'
@@ -511,6 +571,7 @@ export interface FileRouteTypes {
     | '/organizations/$idOrSlug/billing'
     | '/organizations/$idOrSlug/coverage'
     | '/organizations/$idOrSlug/custom-domain'
+    | '/organizations/$idOrSlug/encryption'
     | '/organizations/$idOrSlug/features'
     | '/organizations/$idOrSlug/hooks'
     | '/organizations/$idOrSlug/mcp-servers'
@@ -527,17 +588,22 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/assistants'
     | '/custom-domains'
     | '/customer-usage'
+    | '/encryption-transitions'
     | '/fleet-health'
+    | '/hooks-rollout'
     | '/integration-coverage'
     | '/mcp-setup'
     | '/memory-evals'
     | '/onboarding-playbooks'
     | '/onboarding-steps'
     | '/platform-mcp-feedback'
+    | '/secret-backfills'
     | '/signup-offers'
     | '/stoken-calculator'
+    | '/tailscale-oauth-migration'
     | '/upstream-oauth-migration'
     | '/platform-credentials/$credentialId'
     | '/projects/$idOrSlug'
@@ -554,6 +620,7 @@ export interface FileRouteTypes {
     | '/organizations/$idOrSlug/billing'
     | '/organizations/$idOrSlug/coverage'
     | '/organizations/$idOrSlug/custom-domain'
+    | '/organizations/$idOrSlug/encryption'
     | '/organizations/$idOrSlug/features'
     | '/organizations/$idOrSlug/hooks'
     | '/organizations/$idOrSlug/members'
@@ -569,9 +636,12 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/assistants'
     | '/custom-domains'
     | '/customer-usage'
+    | '/encryption-transitions'
     | '/fleet-health'
+    | '/hooks-rollout'
     | '/integration-coverage'
     | '/mcp-setup'
     | '/memory-evals'
@@ -583,8 +653,10 @@ export interface FileRouteTypes {
     | '/projects'
     | '/registry'
     | '/remote-session-issuers'
+    | '/secret-backfills'
     | '/signup-offers'
     | '/stoken-calculator'
+    | '/tailscale-oauth-migration'
     | '/upstream-oauth-migration'
     | '/users'
     | '/organizations/$idOrSlug'
@@ -604,6 +676,7 @@ export interface FileRouteTypes {
     | '/organizations/$idOrSlug/billing'
     | '/organizations/$idOrSlug/coverage'
     | '/organizations/$idOrSlug/custom-domain'
+    | '/organizations/$idOrSlug/encryption'
     | '/organizations/$idOrSlug/features'
     | '/organizations/$idOrSlug/hooks'
     | '/organizations/$idOrSlug/mcp-servers'
@@ -621,9 +694,12 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AssistantsRoute: typeof AssistantsRoute
   CustomDomainsRoute: typeof CustomDomainsRoute
   CustomerUsageRoute: typeof CustomerUsageRoute
+  EncryptionTransitionsRoute: typeof EncryptionTransitionsRoute
   FleetHealthRoute: typeof FleetHealthRoute
+  HooksRolloutRoute: typeof HooksRolloutRoute
   IntegrationCoverageRoute: typeof IntegrationCoverageRoute
   McpSetupRoute: typeof McpSetupRoute
   MemoryEvalsRoute: typeof MemoryEvalsRoute
@@ -635,8 +711,10 @@ export interface RootRouteChildren {
   ProjectsRoute: typeof ProjectsRouteWithChildren
   RegistryRoute: typeof RegistryRouteWithChildren
   RemoteSessionIssuersRoute: typeof RemoteSessionIssuersRouteWithChildren
+  SecretBackfillsRoute: typeof SecretBackfillsRoute
   SignupOffersRoute: typeof SignupOffersRoute
   StokenCalculatorRoute: typeof StokenCalculatorRoute
+  TailscaleOauthMigrationRoute: typeof TailscaleOauthMigrationRoute
   UpstreamOauthMigrationRoute: typeof UpstreamOauthMigrationRoute
   UsersRoute: typeof UsersRouteWithChildren
 }
@@ -648,6 +726,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/assistants': {
+      id: '/assistants'
+      path: '/assistants'
+      fullPath: '/assistants'
+      preLoaderRoute: typeof AssistantsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/custom-domains': {
@@ -664,11 +749,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CustomerUsageRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/encryption-transitions': {
+      id: '/encryption-transitions'
+      path: '/encryption-transitions'
+      fullPath: '/encryption-transitions'
+      preLoaderRoute: typeof EncryptionTransitionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/fleet-health': {
       id: '/fleet-health'
       path: '/fleet-health'
       fullPath: '/fleet-health'
       preLoaderRoute: typeof FleetHealthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/hooks-rollout': {
+      id: '/hooks-rollout'
+      path: '/hooks-rollout'
+      fullPath: '/hooks-rollout'
+      preLoaderRoute: typeof HooksRolloutRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/integration-coverage': {
@@ -748,6 +847,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RemoteSessionIssuersRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/secret-backfills': {
+      id: '/secret-backfills'
+      path: '/secret-backfills'
+      fullPath: '/secret-backfills'
+      preLoaderRoute: typeof SecretBackfillsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/signup-offers': {
       id: '/signup-offers'
       path: '/signup-offers'
@@ -760,6 +866,13 @@ declare module '@tanstack/react-router' {
       path: '/stoken-calculator'
       fullPath: '/stoken-calculator'
       preLoaderRoute: typeof StokenCalculatorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tailscale-oauth-migration': {
+      id: '/tailscale-oauth-migration'
+      path: '/tailscale-oauth-migration'
+      fullPath: '/tailscale-oauth-migration'
+      preLoaderRoute: typeof TailscaleOauthMigrationRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/upstream-oauth-migration': {
@@ -902,6 +1015,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OrganizationsIdOrSlugCustomDomainRouteImport
       parentRoute: typeof OrganizationsIdOrSlugRoute
     }
+    '/organizations/$idOrSlug/encryption': {
+      id: '/organizations/$idOrSlug/encryption'
+      path: '/encryption'
+      fullPath: '/organizations/$idOrSlug/encryption'
+      preLoaderRoute: typeof OrganizationsIdOrSlugEncryptionRouteImport
+      parentRoute: typeof OrganizationsIdOrSlugRoute
+    }
     '/organizations/$idOrSlug/features': {
       id: '/organizations/$idOrSlug/features'
       path: '/features'
@@ -1013,6 +1133,7 @@ interface OrganizationsIdOrSlugRouteChildren {
   OrganizationsIdOrSlugBillingRoute: typeof OrganizationsIdOrSlugBillingRoute
   OrganizationsIdOrSlugCoverageRoute: typeof OrganizationsIdOrSlugCoverageRoute
   OrganizationsIdOrSlugCustomDomainRoute: typeof OrganizationsIdOrSlugCustomDomainRoute
+  OrganizationsIdOrSlugEncryptionRoute: typeof OrganizationsIdOrSlugEncryptionRoute
   OrganizationsIdOrSlugFeaturesRoute: typeof OrganizationsIdOrSlugFeaturesRoute
   OrganizationsIdOrSlugHooksRoute: typeof OrganizationsIdOrSlugHooksRoute
   OrganizationsIdOrSlugMcpServersRoute: typeof OrganizationsIdOrSlugMcpServersRouteWithChildren
@@ -1030,6 +1151,7 @@ const OrganizationsIdOrSlugRouteChildren: OrganizationsIdOrSlugRouteChildren = {
   OrganizationsIdOrSlugCoverageRoute: OrganizationsIdOrSlugCoverageRoute,
   OrganizationsIdOrSlugCustomDomainRoute:
     OrganizationsIdOrSlugCustomDomainRoute,
+  OrganizationsIdOrSlugEncryptionRoute: OrganizationsIdOrSlugEncryptionRoute,
   OrganizationsIdOrSlugFeaturesRoute: OrganizationsIdOrSlugFeaturesRoute,
   OrganizationsIdOrSlugHooksRoute: OrganizationsIdOrSlugHooksRoute,
   OrganizationsIdOrSlugMcpServersRoute:
@@ -1152,9 +1274,12 @@ const UsersRouteWithChildren = UsersRoute._addFileChildren(UsersRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AssistantsRoute: AssistantsRoute,
   CustomDomainsRoute: CustomDomainsRoute,
   CustomerUsageRoute: CustomerUsageRoute,
+  EncryptionTransitionsRoute: EncryptionTransitionsRoute,
   FleetHealthRoute: FleetHealthRoute,
+  HooksRolloutRoute: HooksRolloutRoute,
   IntegrationCoverageRoute: IntegrationCoverageRoute,
   McpSetupRoute: McpSetupRoute,
   MemoryEvalsRoute: MemoryEvalsRoute,
@@ -1166,8 +1291,10 @@ const rootRouteChildren: RootRouteChildren = {
   ProjectsRoute: ProjectsRouteWithChildren,
   RegistryRoute: RegistryRouteWithChildren,
   RemoteSessionIssuersRoute: RemoteSessionIssuersRouteWithChildren,
+  SecretBackfillsRoute: SecretBackfillsRoute,
   SignupOffersRoute: SignupOffersRoute,
   StokenCalculatorRoute: StokenCalculatorRoute,
+  TailscaleOauthMigrationRoute: TailscaleOauthMigrationRoute,
   UpstreamOauthMigrationRoute: UpstreamOauthMigrationRoute,
   UsersRoute: UsersRouteWithChildren,
 }

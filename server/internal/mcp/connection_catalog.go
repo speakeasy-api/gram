@@ -25,7 +25,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
-	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -42,8 +41,15 @@ var errConnectionCatalogExpired = errors.New("connection catalog expired; give c
 
 var errConnectionCatalogTooLarge = errors.New("approved tool definitions exceed the supported size")
 
-// catalogMemberNotApproved explains a member outside the approved catalog.
+// catalogMemberNotApproved explains a member outside the approved catalog
+// when the catalog does not record which members consent showed.
 const catalogMemberNotApproved = "This server was not approved. Reconnect this gateway in your AI app to add it."
+
+// catalogMemberSkippedAtConsent explains a member consent showed but did not approve.
+const catalogMemberSkippedAtConsent = "This server was left out when this gateway was approved because it was not connected or not available then. Reconnect this gateway in your AI app to add it."
+
+// catalogMemberAddedSinceConsent explains a member that joined the gateway after consent.
+const catalogMemberAddedSinceConsent = "This server was added to the gateway after it was approved. Reconnect this gateway in your AI app to add it."
 
 // consentRejectionReason is the log reason for an approval that cannot serve a
 // request. Clients see only a sign-in challenge or consent_required, so these
@@ -91,6 +97,9 @@ type connectionCatalogMember struct {
 	// where typed auth clients choose upstream authentication; an approval
 	// stored before it was recorded has none.
 	TypedBackendHash string `json:"typed_backend_hash,omitempty"`
+	// TypedApproval means consent captured this member through typed offers.
+	// Older catalogs still compare using their original rollout compatibility.
+	TypedApproval bool `json:"typed_approval,omitempty"`
 	// Auth binds a proxied member's shared-runtime choice; hosted members use
 	// their toolset's authentication and leave this nil.
 	Auth *connectionCatalogAuth `json:"auth,omitempty"`
@@ -110,7 +119,7 @@ func (m connectionCatalogMember) configurationChanged(current memberConfiguratio
 // fingerprint: the organization chooses upstream authentication through typed
 // auth clients and the approval recorded one.
 func (m connectionCatalogMember) typedCompared(typed bool) bool {
-	return typed && m.TypedBackendHash != ""
+	return (typed || m.TypedApproval) && m.TypedBackendHash != ""
 }
 
 // approvedHash is the approved fingerprint the member is compared on.
@@ -150,6 +159,10 @@ type connectionCatalog struct {
 	Members map[string]connectionCatalogMember `json:"members"`
 	// MemberOutcomes records unavailable members without authorizing them.
 	MemberOutcomes []consentMemberOutcome `json:"member_outcomes,omitempty"`
+	// ShownServerIDs lists every member consent showed, approved or not, so
+	// an unapproved member reads as skipped rather than added since. Nil in
+	// catalogs approved before it was recorded.
+	ShownServerIDs []uuid.UUID `json:"shown_server_ids,omitempty"`
 	// Tools retains complete qualified tool definitions, sorted by name.
 	Tools []*toolListEntry `json:"tools,omitempty"`
 	// ExpiresAt covers the authorization lifetime and code redemption window.
@@ -165,7 +178,7 @@ func (c connectionCatalog) CacheKey() string { return connectionCatalogKey(c.Org
 // approveInitialConnectionCatalog completes all fallible catalog work while the
 // challenge remains retryable. A losing approval may leave an unreferenced
 // record, which expires; an authorization code never names a partial record.
-func (s *Service) approveInitialConnectionCatalog(ctx context.Context, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState, inventory *consentToolInventory, selection *toolfilter.SessionSelection, mode toolfilter.CatalogMode, allTools bool, upstreamPicks map[uuid.UUID]uuid.UUID, durationHours int, now time.Time) (*toolfilter.CatalogReference, error) {
+func (s *Service) approveInitialConnectionCatalog(ctx context.Context, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState, inventory *consentToolInventory, selection *toolfilter.SessionSelection, mode toolfilter.CatalogMode, allTools bool, durationHours int, now time.Time) (*toolfilter.CatalogReference, error) {
 	issuer, err := usersessionsrepo.New(s.db).GetUserSessionIssuerByID(ctx, usersessionsrepo.GetUserSessionIssuerByIDParams{
 		ID: endpoint.UserSessionIssuerID, ProjectID: endpoint.ProjectID, OrganizationID: endpoint.OrganizationID,
 	})
@@ -180,7 +193,7 @@ func (s *Service) approveInitialConnectionCatalog(ctx context.Context, endpoint 
 	if durationHours > 0 {
 		lifetime = min(lifetime, time.Duration(durationHours)*time.Hour)
 	}
-	catalog, err := s.freezeConnectionCatalog(ctx, endpoint, state, state.ClientID, inventory, selection, mode, upstreamPicks, now.Add(lifetime+userSessionGrantTTL))
+	catalog, err := s.freezeConnectionCatalog(ctx, endpoint, state, state.ClientID, inventory, selection, mode, now.Add(lifetime+userSessionGrantTTL))
 	if err != nil {
 		return nil, err
 	}
@@ -217,22 +230,25 @@ func (s *Service) publishConnectionCatalog(ctx context.Context, catalog *connect
 
 // upstreamChoices records only reviewed members, even when their issuer also
 // serves other gateways. An empty scope must stay non-nil: nil means issuer-wide.
-func (c *connectionCatalog) upstreamChoices(credentialID uuid.UUID, typedOnly bool) usersessionsrepo.RecordUpstreamClientSelectionsParams {
-	picks := usersessionsrepo.RecordUpstreamClientSelectionsParams{
+func (c *connectionCatalog) upstreamChoices(credentialID uuid.UUID) usersessionsrepo.RecordIssuedAuthClientChoicesParams {
+	picks := usersessionsrepo.RecordIssuedAuthClientChoicesParams{
 		UserSessionIssuerID: c.IssuerID,
-		CredentialKind:      upstreamclients.CredentialKindUserSession,
 		CredentialID:        credentialID,
-		Source:              upstreamclients.SelectionSourceIssuance,
 		ScopeMcpServerIds:   make([]uuid.UUID, 0, len(c.Members)),
+		ExcludeMcpServerIds: nil,
+		PickedExplicit:      nil,
 		PickedMcpServerIds:  nil,
 		PickedClientIds:     nil,
 		PickedAuthClientIds: nil,
-		TypedOnly:           typedOnly,
+		AllowSoleOffer:      false,
 	}
 	for _, member := range c.Members {
 		picks.ScopeMcpServerIds = append(picks.ScopeMcpServerIds, member.ServerID)
 		if member.Auth != nil {
 			picks.PickedMcpServerIds = append(picks.PickedMcpServerIds, member.ServerID)
+			// The approved catalog binds the exact client used for the tool
+			// preview, whether preselected or named in the picker.
+			picks.PickedExplicit = append(picks.PickedExplicit, true)
 			picks.PickedClientIds = append(picks.PickedClientIds, member.Auth.RegistrationID.UUID)
 			picks.PickedAuthClientIds = append(picks.PickedAuthClientIds, member.Auth.ClientID)
 		}
@@ -242,9 +258,12 @@ func (c *connectionCatalog) upstreamChoices(credentialID uuid.UUID, typedOnly bo
 
 // freezeConnectionCatalog validates the captured routes, credentials and tool
 // definitions for both initial approval and a member's reconnect approval.
-func (s *Service) freezeConnectionCatalog(ctx context.Context, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState, clientID string, inventory *consentToolInventory, selection *toolfilter.SessionSelection, mode toolfilter.CatalogMode, upstreamPicks map[uuid.UUID]uuid.UUID, expiresAt time.Time) (*connectionCatalog, error) {
+func (s *Service) freezeConnectionCatalog(ctx context.Context, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState, clientID string, inventory *consentToolInventory, selection *toolfilter.SessionSelection, mode toolfilter.CatalogMode, expiresAt time.Time) (*connectionCatalog, error) {
 	if inventory == nil || !inventory.Complete || inventory.StateID != state.ID || inventory.Resource != endpointToolSelectionResource(endpoint) {
 		return nil, fmt.Errorf("a completed gateway catalog is required; reload consent")
+	}
+	if !inventory.TypedGateway {
+		return nil, fmt.Errorf("gateway preview predates typed credentials: %w", errConsentConfigurationChanged)
 	}
 	if state.Subject == nil || state.Subject.IsZero() || (mode != toolfilter.CatalogModeCached && mode != toolfilter.CatalogModeLive) {
 		return nil, fmt.Errorf("invalid connection catalog approval")
@@ -262,10 +281,6 @@ func (s *Service) freezeConnectionCatalog(ctx context.Context, endpoint *Resolve
 	if err != nil {
 		return nil, err
 	}
-	typedChoices, err := s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)
-	if err != nil {
-		return nil, err
-	}
 	// Each member's credential is judged for the consenting person, as their
 	// requests will be.
 	subjectCtx, err := s.contextForSessionSubject(ctx, endpoint, *state.Subject, "consent:"+state.ID, clientID)
@@ -276,24 +291,31 @@ func (s *Service) freezeConnectionCatalog(ctx context.Context, endpoint *Resolve
 	members := make(map[string]connectionCatalogMember, len(inventory.MemberBindings))
 	for slug, member := range inventory.MemberBindings {
 		if member.ServerID != uuid.Nil {
-			typedCompared := member.typedCompared(typedChoices)
+			typedCompared := member.typedCompared(true)
 			s.recordUpstreamIssuerReconsent(ctx, s.logger, upstreamIssuerReconsentCheck{
 				organizationID: endpoint.OrganizationID,
 				serverID:       member.ServerID,
 				site:           upstreamIssuerReconsentSiteCatalogFreeze,
 				consenter:      state.Subject.String(),
-				outcome:        upstreamIssuerReconsent(member.approvedHash(typedChoices), hashes[member.ServerID].forMode(typedCompared), otherHashes[member.ServerID].forMode(typedCompared), nil),
+				outcome:        upstreamIssuerReconsent(member.approvedHash(true), hashes[member.ServerID].forMode(typedCompared), otherHashes[member.ServerID].forMode(typedCompared), nil),
 			})
 		}
-		if member.ServerID == uuid.Nil || member.configurationChanged(hashes[member.ServerID], typedChoices) {
-			return nil, errConsentConfigurationChanged
+		if member.ServerID == uuid.Nil || member.configurationChanged(hashes[member.ServerID], true) {
+			return nil, fmt.Errorf("gateway member configuration changed: %w", errConsentConfigurationChanged)
 		}
 		if member.Auth != nil {
-			if err := s.validateCatalogMemberAuth(subjectCtx, endpoint, *state.Subject, member, upstreamPicks, typedChoices); err != nil {
-				return nil, err
+			if err := s.validateCatalogMemberAuth(subjectCtx, endpoint, *state.Subject, member); err != nil {
+				return nil, fmt.Errorf("validate gateway member credential: %w", err)
 			}
 		}
+		member.TypedApproval = true
 		members[slug] = member
+	}
+	var shown []uuid.UUID
+	for _, outcome := range inventory.MemberOutcomes {
+		if outcome.ServerID != uuid.Nil {
+			shown = append(shown, outcome.ServerID)
+		}
 	}
 	tools := make([]*toolListEntry, 0, len(inventory.Tools))
 	var outcomes []consentMemberOutcome
@@ -317,7 +339,7 @@ func (s *Service) freezeConnectionCatalog(ctx context.Context, endpoint *Resolve
 	catalog := connectionCatalog{
 		Version: connectionCatalogVersion, ApprovalChallengeID: "", ID: uuid.New(), OrganizationID: endpoint.OrganizationID,
 		IssuerID: endpoint.UserSessionIssuerID, ClientID: clientID, Subject: *state.Subject,
-		Resource: inventory.Resource, Members: members, MemberOutcomes: outcomes, Tools: tools,
+		Resource: inventory.Resource, Members: members, MemberOutcomes: outcomes, ShownServerIDs: shown, Tools: tools,
 		ExpiresAt: expiresAt,
 	}
 	return &catalog, nil
@@ -401,7 +423,7 @@ func (s *Service) rejectConnectionCatalog(ctx context.Context, endpoint *Resolve
 // describeCachedMember applies current tool permissions to stored definitions.
 // It never resolves upstream tokens or starts an MCP session.
 func (s *Service) describeCachedMember(ctx context.Context, gate *metaGateContext, member metaMember) (*memberCatalog, error) {
-	catalog := &memberCatalog{entries: nil, byName: map[string]*toolListEntry{}, incomplete: false}
+	catalog := &memberCatalog{entries: nil, byName: map[string]*toolListEntry{}, local: nil, incomplete: false, instructions: ""}
 	checks := []authz.Check{}
 	var dispositions map[string]string
 	private := member.visibility != "public"
@@ -435,17 +457,17 @@ func (s *Service) describeCachedMember(ctx context.Context, gate *metaGateContex
 				// Cached discovery keeps consented annotations; execution checks the live tool disposition.
 				disposition = dispositionFromAnnotations(entry.Annotations)
 			}
-			checks = append(checks, authz.MCPToolCallCheck(resourceID.String(), authz.MCPToolCallDimensions{Tool: name, Disposition: disposition, ProjectID: member.projectID.String()}))
+			checks = append(checks, authz.MCPServer(authz.MCPServerIDOf(resourceID), authz.ProjectIDOf(member.projectID)).ToolCall(name, disposition))
 		}
 	}
 	if len(checks) > 0 {
-		matched, err := s.authz.FindMatched(ctx, checks)
+		decisions, err := s.authz.Decide(ctx, checks...)
 		if err != nil {
 			return nil, fmt.Errorf("authorize cached member tools: %w", err)
 		}
 		kept := catalog.entries[:0]
 		for i, entry := range catalog.entries {
-			if matched[i] {
+			if decisions.Each[i].Allowed {
 				kept = append(kept, entry)
 			}
 		}
@@ -481,6 +503,25 @@ func (c *connectionCatalog) approvedMembers(members []metaMember) (approved, una
 	return approved, unapproved
 }
 
+// notApprovedMessage says why a member is outside this catalog: consent
+// showed it and left it out, or it joined the gateway since. A catalog that
+// predates the shown list, or approved this server under another project,
+// keeps the message that covers both.
+func (c *connectionCatalog) notApprovedMessage(serverID uuid.UUID) string {
+	approvedElsewhere := false
+	for _, member := range c.Members {
+		approvedElsewhere = approvedElsewhere || member.ServerID == serverID
+	}
+	switch {
+	case c.ShownServerIDs == nil || approvedElsewhere:
+		return catalogMemberNotApproved
+	case slices.Contains(c.ShownServerIDs, serverID):
+		return catalogMemberSkippedAtConsent
+	default:
+		return catalogMemberAddedSinceConsent
+	}
+}
+
 // catalogCheckRecording says whether a member check counts toward the re-consent forecast and writes diagnostics.
 type catalogCheckRecording string
 
@@ -498,7 +539,7 @@ func (s *Service) validateCatalogMember(ctx context.Context, gate *metaGateConte
 	}
 	approved, found := gate.catalog.Members[member.slug]
 	if !found || approved.ServerID != member.serverID || approved.ProjectID != member.projectID {
-		return s.rejectCatalogMember(ctx, gate, member, recording, consentRejectionMemberNotApproved, catalogMemberNotApproved,
+		return s.rejectCatalogMember(ctx, gate, member, recording, consentRejectionMemberNotApproved, gate.catalog.notApprovedMessage(member.serverID),
 			map[string]bool{"member_recorded": found, "server_id_matches": found && approved.ServerID == member.serverID, "project_id_matches": found && approved.ProjectID == member.projectID})
 	}
 
@@ -681,7 +722,7 @@ func (s *Service) checkCatalogApproval(ctx context.Context, logger *slog.Logger,
 // refuseCatalogConsentCall records and words a call refused because its approval no longer matches.
 func (s *Service) refuseCatalogConsentCall(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember, consent catalogConsentError, named bool) (string, staleChoiceRemedy) {
 	message, remedy := s.catalogConsentRefusal(ctx, logger, gate, member, consent, named)
-	s.recordMemberFailure(ctx, gate, member, consentRefusalHappened(remedy), mcpconnectionattempts.Detail(string(consent.reason)))
+	s.recordMemberFailure(ctx, gate, member, uuid.Nil, consentRefusalHappened(remedy), mcpconnectionattempts.Detail(string(consent.reason)))
 	return message, remedy
 }
 
@@ -728,41 +769,25 @@ func (s *Service) catalogMemberConfigurations(ctx context.Context, organizationI
 	return hashes, others, nil
 }
 
-// validateCatalogMemberAuth checks that a member's captured credential can
-// still be used as it was approved. Where typed auth client resolution is
-// enforced the person picked the typed client, so it is checked by itself;
-// elsewhere the captured client must still be the one the person's connected
-// service maps to.
-func (s *Service) validateCatalogMemberAuth(ctx context.Context, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, member connectionCatalogMember, upstreamPicks map[uuid.UUID]uuid.UUID, typedChoices bool) error {
-	if typedChoices && member.Auth.ClientID == uuid.Nil {
-		// The member was approved needing no upstream authentication.
-		resolved, err := s.resolveAuthClientForConsent(ctx, endpoint.OrganizationID, member.ServerID, member.ProjectID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, subject)
+// validateCatalogMemberAuth rechecks the exact captured option; a registration
+// is never used to infer a new selection.
+func (s *Service) validateCatalogMemberAuth(ctx context.Context, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, member connectionCatalogMember) error {
+	if member.Auth.ClientID == uuid.Nil {
+		resolved, err := s.resolveNoAuthChoice(withTypedConsentAuth(ctx), endpoint.OrganizationID, member.ServerID)
 		if err != nil {
 			return err
 		}
-		if resolved.outcome != authClientNoAuth || member.Auth.RegistrationID.Valid {
+		if enforcedCompatibility(resolved).outcome != authClientNoAuth || member.Auth.RegistrationID.Valid {
 			return errConsentConfigurationChanged
 		}
 		return nil
 	}
-	if typedChoices {
-		resolved, err := s.resolveAuthClientChoiceForConsent(ctx, endpoint.OrganizationID, member.ServerID, member.ProjectID, member.Auth.ClientID, subject)
-		if err != nil {
-			return err
-		}
-		if resolved.outcome == authClientGap || resolved.outcome == authClientNoAccess || resolved.choice.clientID != member.Auth.RegistrationID {
-			return errConsentConfigurationChanged
-		}
-		return nil
-	}
-	if member.Auth.RegistrationID.UUID != upstreamPicks[member.ServerID] {
-		return errConsentConfigurationChanged
-	}
-	resolved, err := s.resolveAuthClientForConsent(ctx, endpoint.OrganizationID, member.ServerID, member.ProjectID, member.Auth.RegistrationID, subject)
+	resolved, err := s.resolveAuthClientChoiceForConsent(withTypedConsentAuth(ctx), endpoint.OrganizationID, member.ServerID, member.ProjectID, member.Auth.ClientID, subject)
 	if err != nil {
 		return err
 	}
-	if resolved.outcome == authClientGap || resolved.outcome == authClientNoAccess || resolved.clientID != member.Auth.ClientID {
+	resolved = enforcedCompatibility(resolved)
+	if (resolved.outcome != authClientResolved && resolved.outcome != authClientLegacy) || resolved.clientID != member.Auth.ClientID || resolved.choice.clientID != member.Auth.RegistrationID {
 		return errConsentConfigurationChanged
 	}
 	return nil

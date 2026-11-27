@@ -3,17 +3,23 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
+	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"net/http"
+	"net/http/httptest"
 	"slices"
 	"strings"
 	"sync"
+	"testing"
 	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/stretchr/testify/require"
+	otellog "go.opentelemetry.io/otel/log"
 
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
@@ -23,6 +29,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -69,12 +77,17 @@ func (s *Service) SetConnectionRecorder(recorder *mcpconnectionattempts.Recorder
 
 // ConnectionAttempt exposes the state's connection attempt.
 func (a AuthnChallengeState) ConnectionAttempt(endpoint *ResolvedMcpEndpoint) mcpconnectionattempts.Attempt {
-	return a.connectionAttempt(endpoint)
+	return a.connectionAttempt(aivendors.CompiledSnapshot(), endpoint)
 }
 
 // SetEnvironmentLoader replaces the environment loader.
 func (s *Service) SetEnvironmentLoader(loader toolconfig.EnvironmentLoader) {
 	s.env = loader
+}
+
+// SetTelemetryLogger replaces the logger that writes tool call log rows.
+func (s *Service) SetTelemetryLogger(logger *tm.Logger) {
+	s.telemLogger = logger
 }
 
 // SetCIMDResolver replaces the client metadata document resolver.
@@ -159,7 +172,7 @@ func (s *Service) FailAIToolBlockedIDsRead(err error) {
 // FailAIToolCatalogRead makes the scan-target catalog read behind the gateway
 // block check fail with err, leaving the blocked-ids read intact.
 func (s *Service) FailAIToolCatalogRead(err error) {
-	s.aiToolBlockReads.catalog = func(context.Context, *agentrepo.Queries, string) (*aitargets.OrganizationList, error) {
+	s.aiToolBlockReads.catalog = func(context.Context, *agentrepo.Queries, string, *aivendors.Snapshot) (*aitargets.OrganizationList, error) {
 		return nil, err
 	}
 }
@@ -279,6 +292,16 @@ func (s *Service) SetAuthzEngine(engine *authz.Engine) {
 	s.authz = engine
 }
 
+// SetIDPSessionRevoker swaps what ends identity provider sessions, to observe or fail it.
+func (s *Service) SetIDPSessionRevoker(revoker sessions.SessionRevoker) {
+	s.idpSessions = revoker
+}
+
+// SetIdentityResolver swaps the identity provider client, to observe the sign-ins it starts.
+func (s *Service) SetIdentityResolver(resolver IdentityResolver) {
+	s.identityResolver = resolver
+}
+
 // SetChatSessionsManager swaps the store revocation checks read, to take it down.
 func (s *Service) SetChatSessionsManager(manager *chatsessions.Manager) {
 	s.chatSessionsManager = manager
@@ -371,4 +394,53 @@ func (s *Service) SetIDJAGTrust(store idjag.Store) {
 // StaleNoAuthWarned reports whether the stale choice warning already fired for this subject, server and reason.
 func (s *Service) StaleNoAuthWarned(subject string, serverID uuid.UUID, reason string) bool {
 	return s.staleNoAuthLog.seen.Contains(subject + "|" + serverID.String() + "|" + reason)
+}
+
+// NewExportingConnectionRecorder stores every row; exported shuts it down and returns what the export published.
+func NewExportingConnectionRecorder(t *testing.T) (recorder *mcpconnectionattempts.Recorder, exported func() []otellog.Record) {
+	t.Helper()
+	sink := &verdictExportSink{mu: sync.Mutex{}, records: nil}
+	logsOn := func(context.Context, string) (bool, error) { return true, nil }
+	recorder = mcpconnectionattempts.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), storingConn{}, logsOn, mcpconnectionattempts.WithExport(sink))
+	return recorder, func() []otellog.Record {
+		require.NoError(t, recorder.Shutdown(t.Context()))
+		sink.mu.Lock()
+		defer sink.mu.Unlock()
+		return slices.Clone(sink.records)
+	}
+}
+
+// MarkConsentSwitched writes a slug-less switch marker on issuerID, which only shared-server lookups honour.
+func (s *Service) MarkConsentSwitched(ctx context.Context, stateID string, issuerID uuid.UUID, clientName string) error {
+	if err := s.accountSwitchCache.Store(ctx, accountSwitchMarker{ID: stateID, McpSlug: "", UserSessionIssuerID: issuerID.String(), ClientName: clientName}); err != nil {
+		return fmt.Errorf("store switch marker: %w", err)
+	}
+	return nil
+}
+
+// BindConsentBrowser binds state to a new browser, as authorize does, and returns that browser's cookie.
+func BindConsentBrowser(state *AuthnChallengeState) (*http.Cookie, error) {
+	w := httptest.NewRecorder()
+	if err := bindConsentBrowser(w, state); err != nil {
+		return nil, err
+	}
+	res := w.Result()
+	defer func() { _ = res.Body.Close() }()
+	return res.Cookies()[0], nil
+}
+
+// ConsentBrowserMatches reports whether r comes from the browser state is bound to.
+func ConsentBrowserMatches(r *http.Request, state AuthnChallengeState) bool {
+	return consentBrowserMatches(r, state, time.Now())
+}
+
+// ConsentSwitched reports whether an account switch marked stateID as spent.
+func (s *Service) ConsentSwitched(ctx context.Context, stateID string) bool {
+	_, err := s.accountSwitchCache.Get(ctx, "authnChallengeSwitched:"+stateID)
+	return err == nil
+}
+
+// AgentConnectionsOutageError is the consent page's answer when an agent's connection is in an outage.
+func AgentConnectionsOutageError(w http.ResponseWriter, err error) error {
+	return agentConnectionsOutage(remoteSessionUnavailableError(w, err), err)
 }

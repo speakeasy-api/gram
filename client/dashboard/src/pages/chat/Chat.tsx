@@ -70,6 +70,7 @@ import { useRecentLabelOverride } from "@/components/command-palette/recentlyVis
 import { FALLBACK_TITLE } from "@/elements/components/activeChatTitle.helpers";
 import { useRoutes } from "@/routes";
 import { RequireScope } from "@/components/require-scope";
+import { RequireAssistantsAvailable } from "@/components/require-assistants-available";
 import { useProject } from "@/contexts/Auth";
 import { Skeleton } from "@/components/ui/Skeleton";
 
@@ -85,9 +86,11 @@ export function ChatRoot(): ReactElement {
   // The page IS the chat, so hide the floating dock across the /chat subtree.
   useHideInsightsDock();
   return (
-    <RequireScope scope="assistant:read" projectId={project.id} level="page">
-      <Outlet />
-    </RequireScope>
+    <RequireAssistantsAvailable>
+      <RequireScope scope="assistant:read" projectId={project.id} level="page">
+        <Outlet />
+      </RequireScope>
+    </RequireAssistantsAvailable>
   );
 }
 
@@ -1020,7 +1023,10 @@ export function ChatConversation(): ReactElement {
   };
 
   return (
-    <div className="flex h-full flex-col">
+    // A viewport height, not h-full: the dock's wrapper column above this
+    // page is sized by its content (the document scrolls), so h-full would
+    // let a long transcript grow the page and carry the composer with it.
+    <div className="flex h-[calc(100vh-var(--banner-offset,0px))] flex-col">
       {/* h-(--header-height) + px-8: same row height and content inset as
           Page.Header, so this header's rule lines up with the sidebar's. */}
       <header className="border-border flex h-(--header-height) shrink-0 items-center gap-3 border-b px-8">

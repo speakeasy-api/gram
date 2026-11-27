@@ -22,9 +22,11 @@ import (
 	metarepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 func seedSessionGateway(t *testing.T, ctx context.Context, ti *testInstance, issuer uuid.UUID) uuid.UUID {
@@ -186,7 +188,8 @@ func TestGatewaySessionAssociationFilters(t *testing.T) {
 	require.NoError(t, err)
 	_, err = seedUserSession(t, ctx, ti.conn, issuer, urn.NewUserSubject("no-accounts"))
 	require.NoError(t, err)
-	client := seedUpstream(t, ctx, ti.conn, conv.ToNullUUID(*auth.ProjectID), issuer, subject, "provider.example.test")
+	provenance := seedIssuerInProject(t, ctx, ti.conn, *auth.ProjectID, "association-origin")
+	client := seedUpstream(t, ctx, ti.conn, conv.ToNullUUID(*auth.ProjectID), provenance, subject, "provider.example.test")
 	toolset := attachIssuerToolset(t, ctx, ti, *auth.ProjectID, issuer, "associated-toolset")
 	member, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
 		ID: uuid.New(), ProjectID: *auth.ProjectID, ToolsetID: conv.ToNullUUID(toolset.ID), Name: conv.ToPGText("Example member"), Slug: conv.ToPGText("example-member"), Visibility: "private",
@@ -194,7 +197,7 @@ func TestGatewaySessionAssociationFilters(t *testing.T) {
 	require.NoError(t, err)
 	_, err = metarepo.New(ti.conn).CreateMetaMCPMember(ctx, metarepo.CreateMetaMCPMemberParams{ProjectID: *auth.ProjectID, MetaMcpServerID: gateway, McpServerID: member.ID})
 	require.NoError(t, err)
-	require.NoError(t, testrepo.New(ti.conn).InsertMCPServerRemoteSessionClientFixture(ctx, testrepo.InsertMCPServerRemoteSessionClientFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: member.ID, RemoteSessionClientID: client}))
+	seedInventoryOAuthOffer(t, ctx, ti, auth.ActiveOrganizationID, *auth.ProjectID, member.ID, client)
 	facets, err := ti.service.ListGatewaySessionFacets(ctx, &gen.ListGatewaySessionFacetsPayload{GatewayID: new(gateway.String())})
 	require.NoError(t, err)
 	require.Len(t, facets.Servers, 1)
@@ -204,6 +207,23 @@ func TestGatewaySessionAssociationFilters(t *testing.T) {
 	require.Len(t, result.Items, 1)
 	require.Equal(t, session.ID.String(), result.Items[0].ID)
 	require.Len(t, result.Items[0].Upstreams, 1)
+
+	// A selected gateway wins even if the caller omits the inventory mode.
+	// Another gateway ID must not inherit this member's typed offer.
+	q := usersessionsrepo.New(ti.conn)
+	params := usersessionsrepo.ListRemoteSessionUpstreamsForSubjectsParams{
+		SubjectUrns: []string{subject.String()}, IssuerIds: []uuid.UUID{issuer},
+		OrganizationID: auth.ActiveOrganizationID, ProjectIds: []uuid.UUID{*auth.ProjectID},
+		GatewayID: conv.ToNullUUID(gateway), GatewayInventory: false,
+	}
+	upstreams, err := q.ListRemoteSessionUpstreamsForSubjects(ctx, params)
+	require.NoError(t, err)
+	require.Len(t, upstreams, 1)
+	params.GatewayID = conv.ToNullUUID(uuid.New())
+	upstreams, err = q.ListRemoteSessionUpstreamsForSubjects(ctx, params)
+	require.NoError(t, err)
+	require.Empty(t, upstreams)
+
 	empty, err := ti.service.ListGatewaySessions(ctx, &gen.ListGatewaySessionsPayload{GatewayID: new(gateway.String()), ServerID: new(uuid.NewString())})
 	require.NoError(t, err)
 	require.Empty(t, empty.Items)
@@ -334,4 +354,53 @@ func TestGatewaySessionsHideDeletedUserMetadata(t *testing.T) {
 		require.NoError(t, err)
 		require.Empty(t, filtered.Items)
 	}
+}
+
+func TestGatewaySessionsProjectGateway(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	org, err := orgrepo.New(ti.conn).GetOrganizationMetadata(ctx, auth.ActiveOrganizationID)
+	require.NoError(t, err)
+	project, err := projectsrepo.New(ti.conn).GetProjectByID(ctx, *auth.ProjectID)
+	require.NoError(t, err)
+	sibling := createSiblingProject(t, ctx, ti.conn, "project-gateway-sibling")
+	issuer := seedOrganizationTierIssuer(t, ctx, ti.conn, "project-gateway-workforce")
+
+	gatewayBase := testServerURL + "/mcp/gateway/" + org.Slug
+	seed := func(resource pgtype.Text) string {
+		subject := urn.NewUserSubject(uuid.NewString())
+		row, err := seedUserSession(t, ctx, ti.conn, issuer, subject)
+		require.NoError(t, err)
+		require.NoError(t, testrepo.New(ti.conn).SetGatewaySessionListFixture(ctx, testrepo.SetGatewaySessionListFixtureParams{
+			ID: row.ID, OrganizationID: conv.ToPGText(auth.ActiveOrganizationID), Resource: resource,
+			CreatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true}, RefreshExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true},
+		}))
+		seedUpstream(t, ctx, ti.conn, conv.ToNullUUID(*auth.ProjectID), issuer, subject, uuid.NewString()[:8]+".example.test")
+		seedUpstream(t, ctx, ti.conn, conv.ToNullUUID(sibling), issuer, subject, uuid.NewString()[:8]+".example.test")
+		return row.ID.String()
+	}
+	projectSession := seed(conv.ToPGText(gatewayBase + "/projects/" + project.Slug))
+	// Issuer-wide authorizations cover every endpoint on the issuer.
+	issuerSession := seed(pgtype.Text{String: "", Valid: false})
+	seed(conv.ToPGText(gatewayBase))
+	seed(conv.ToPGText(gatewayBase + "/projects/project-gateway-sibling"))
+
+	projectCtx := withExactAuthzGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeProjectRead, auth.ProjectID.String()))
+	result, err := ti.service.ListGatewaySessions(projectCtx, &gen.ListGatewaySessionsPayload{ProjectID: new(auth.ProjectID.String())})
+	require.NoError(t, err)
+	var actual []string
+	for _, session := range result.Items {
+		actual = append(actual, session.ID)
+		require.Len(t, session.Upstreams, 1, "only the project's upstream accounts are listed")
+	}
+	require.ElementsMatch(t, []string{projectSession, issuerSession}, actual)
+
+	_, err = ti.service.ListGatewaySessions(projectCtx, &gen.ListGatewaySessionsPayload{ProjectID: new(sibling.String())})
+	requireOopsCode(t, err, oops.CodeForbidden)
+	_, err = ti.service.ListGatewaySessions(ctx, &gen.ListGatewaySessionsPayload{ProjectID: new(uuid.NewString())})
+	requireOopsCode(t, err, oops.CodeNotFound)
+	_, err = ti.service.ListGatewaySessions(ctx, &gen.ListGatewaySessionsPayload{ProjectID: new(auth.ProjectID.String()), GatewayID: new(uuid.NewString())})
+	requireOopsCode(t, err, oops.CodeBadRequest)
 }

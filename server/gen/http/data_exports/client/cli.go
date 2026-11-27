@@ -279,8 +279,8 @@ func BuildCreateRoutePayload(dataExportsCreateRouteBody string, dataExportsCreat
 		if err != nil {
 			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"data_source\": \"mcp_connection_logs\",\n      \"enabled\": false,\n      \"min_severity\": \"warn\",\n      \"otel_destination_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
 		}
-		if !(body.DataSource == "product_telemetry" || body.DataSource == "risk_findings" || body.DataSource == "tool_call_logs" || body.DataSource == "mcp_connection_logs") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.data_source", body.DataSource, []any{"product_telemetry", "risk_findings", "tool_call_logs", "mcp_connection_logs"}))
+		if !(body.DataSource == "product_telemetry" || body.DataSource == "risk_findings" || body.DataSource == "tool_call_logs" || body.DataSource == "mcp_connection_logs" || body.DataSource == "mcp_feedback") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.data_source", body.DataSource, []any{"product_telemetry", "risk_findings", "tool_call_logs", "mcp_connection_logs", "mcp_feedback"}))
 		}
 		if body.OtelDestinationID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.otel_destination_id", *body.OtelDestinationID, goa.FormatUUID))
@@ -341,8 +341,8 @@ func BuildUpdateRoutePayload(dataExportsUpdateRouteBody string, dataExportsUpdat
 		if err != nil {
 			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"data_source\": \"mcp_connection_logs\",\n      \"enabled\": false,\n      \"min_severity\": \"warn\",\n      \"otel_destination_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
 		}
-		if !(body.DataSource == "product_telemetry" || body.DataSource == "risk_findings" || body.DataSource == "tool_call_logs" || body.DataSource == "mcp_connection_logs") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.data_source", body.DataSource, []any{"product_telemetry", "risk_findings", "tool_call_logs", "mcp_connection_logs"}))
+		if !(body.DataSource == "product_telemetry" || body.DataSource == "risk_findings" || body.DataSource == "tool_call_logs" || body.DataSource == "mcp_connection_logs" || body.DataSource == "mcp_feedback") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.data_source", body.DataSource, []any{"product_telemetry", "risk_findings", "tool_call_logs", "mcp_connection_logs", "mcp_feedback"}))
 		}
 		if body.OtelDestinationID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.otel_destination_id", *body.OtelDestinationID, goa.FormatUUID))
@@ -427,6 +427,45 @@ func BuildDeleteRoutePayload(dataExportsDeleteRouteID string, dataExportsDeleteR
 		}
 	}
 	v := &dataexports.DeleteRoutePayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildTestRoutePayload builds the payload for the dataExports testRoute
+// endpoint from CLI flags.
+func BuildTestRoutePayload(dataExportsTestRouteID string, dataExportsTestRouteSessionToken string, dataExportsTestRouteApikeyToken string, dataExportsTestRouteProjectSlugInput string) (*dataexports.TestRoutePayload, error) {
+	var err error
+	var id string
+	{
+		id = dataExportsTestRouteID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if dataExportsTestRouteSessionToken != "" {
+			sessionToken = &dataExportsTestRouteSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if dataExportsTestRouteApikeyToken != "" {
+			apikeyToken = &dataExportsTestRouteApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if dataExportsTestRouteProjectSlugInput != "" {
+			projectSlugInput = &dataExportsTestRouteProjectSlugInput
+		}
+	}
+	v := &dataexports.TestRoutePayload{}
 	v.ID = id
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken

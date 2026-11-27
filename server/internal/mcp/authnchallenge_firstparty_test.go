@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets/clientsecretstest"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -116,7 +117,7 @@ func TestHandleFirstPartyConnect_BindsAgentRefreshAttemptToOAuthState(t *testing
 	require.NoError(t, err)
 	meter := testenv.NewMeterProvider(t)
 	refresher := remotesessions.NewRefreshService(ti.logger, meter, ti.conn, ti.enc, policy, nil, ti.cacheAdapter)
-	bindings := remotesessions.NewService(ti.logger, ti.tracerProvider, meter, ti.conn, ti.sessionManager, ti.authzEngine, ti.enc, nil, policy, nil, ti.audit, ti.serverURL, remotesessions.NewIdentityCommitter(ti.logger, ti.conn, ti.enc, ti.audit, ti.serverURL, policy, nil, nil), refresher, nil, nil)
+	bindings := remotesessions.NewService(ti.logger, ti.tracerProvider, meter, ti.conn, ti.sessionManager, ti.authzEngine, ti.enc, clientsecretstest.New(t, ti.conn, ti.enc), nil, policy, nil, ti.audit, ti.serverURL, remotesessions.NewIdentityCommitter(ti.logger, ti.conn, ti.enc, clientsecretstest.New(t, ti.conn, ti.enc), ti.audit, ti.serverURL, policy, nil, nil), refresher, nil, nil)
 	bindings.SetBindingAuthorizer(func(ctx context.Context, tx pgx.Tx, id uuid.UUID, _ bool) error {
 		_, _, err := agentmanagement.NewAuthorizer(ti.authzEngine).RequireAgentOwnerForUpdate(ctx, tx, id, agentmanagement.OwnedAgentSetup)
 		if err != nil {
@@ -129,8 +130,8 @@ func TestHandleFirstPartyConnect_BindsAgentRefreshAttemptToOAuthState(t *testing
 	ti.service.SetBindingRefreshAttempts(attempts)
 	agent, err := agentsrepo.New(ti.conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{OrganizationID: auth.ActiveOrganizationID, OwnerUserID: auth.UserID, Name: "Exact popup agent"})
 	require.NoError(t, err)
-	client := createConsentRemoteClient(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "refresh-popup-client", "", []uuid.UUID{issuerID})
-	source, err := repo.New(ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{SubjectUrn: urn.NewUserSubject(auth.UserID), UserSessionIssuerID: issuerID, RemoteSessionClientID: client, AccessTokenEncrypted: "fixture-token", AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), Scopes: []string{}})
+	client := createConsentRemoteClient(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "refresh-popup-client", "")
+	source, err := repo.New(ti.conn).UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{SubjectUrn: urn.NewUserSubject(auth.UserID), UserSessionIssuerID: issuerID, RemoteSessionClientID: client, AccessTokenEncrypted: "fixture-token", AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), Scopes: []string{}})
 	require.NoError(t, err)
 	binding, err := bindings.AttachBinding(ctx, &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: issuerID.String(), RemoteSessionID: source.ID.String()})
 	require.NoError(t, err)
@@ -169,7 +170,7 @@ func TestHandleFirstPartyConnect_BindsAgentRefreshAttemptToOAuthState(t *testing
 	require.NoError(t, err)
 	require.Equal(t, attempt.AttemptID, rotated.BindingRefreshAttemptID)
 	require.Equal(t, client, rotated.ReauthenticateClientID)
-	renewed, err := repo.New(ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{SubjectUrn: source.SubjectUrn, UserSessionIssuerID: issuerID, RemoteSessionClientID: client, AccessTokenEncrypted: "renewed-fixture", AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), Scopes: []string{}})
+	renewed, err := repo.New(ti.conn).UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{SubjectUrn: source.SubjectUrn, UserSessionIssuerID: issuerID, RemoteSessionClientID: client, AccessTokenEncrypted: "renewed-fixture", AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), Scopes: []string{}})
 	require.NoError(t, err)
 	grant := remotesessions.RemoteGrant{ConnectionPopup: true, ParentChallengeID: rotatedID, UserSessionIssuerID: issuerID, RemoteSessionClientID: client, Subject: source.SubjectUrn, RemoteSessionID: renewed.ID, RemoteSessionUpdatedAt: renewed.UpdatedAt.Time, GrantGeneration: renewed.GrantGeneration}
 	wrongClient := grant

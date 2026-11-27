@@ -62,8 +62,8 @@ type CommitServerIdentityConfigurationRequestBody struct {
 	McpServerID string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
 	// An existing Remote Identity Provider visible to the target project.
 	ProviderID *string `form:"provider_id,omitempty" json:"provider_id,omitempty" xml:"provider_id,omitempty"`
-	// Refuse a save if the user session issuer also serves another MCP server.
-	// Setup screens must set this to avoid changing shared sign-in bindings.
+	// Refuse a save if the user session issuer also serves another MCP server. Set
+	// this to require a dedicated user session issuer for the target server.
 	// Explicitly assign a dedicated issuer before retrying.
 	TargetServerOnly *bool `form:"target_server_only,omitempty" json:"target_server_only,omitempty" xml:"target_server_only,omitempty"`
 	// A new project-scoped Remote Identity Provider to create.
@@ -96,12 +96,21 @@ type CommitServerIdentityConfigurationRequestBody struct {
 	ReplaceClientServerIds []string `form:"replace_client_server_ids,omitempty" json:"replace_client_server_ids,omitempty" xml:"replace_client_server_ids,omitempty"`
 }
 
+// AttachServerClientAssociationRequestBody is the type of the "remoteSessions"
+// service "attachServerClientAssociation" endpoint HTTP request body.
+type AttachServerClientAssociationRequestBody struct {
+	// The MCP server.
+	McpServerID string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	// The remote session client.
+	RemoteSessionClientID string `form:"remote_session_client_id" json:"remote_session_client_id" xml:"remote_session_client_id"`
+}
+
 // DetachServerClientAssociationRequestBody is the type of the "remoteSessions"
 // service "detachServerClientAssociation" endpoint HTTP request body.
 type DetachServerClientAssociationRequestBody struct {
 	// The MCP server.
 	McpServerID string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
-	// The associated remote session client.
+	// The remote session client.
 	RemoteSessionClientID string `form:"remote_session_client_id" json:"remote_session_client_id" xml:"remote_session_client_id"`
 }
 
@@ -213,6 +222,17 @@ type ListServerClientAssociationsResponseBody struct {
 	// claims and it has not explicitly detached. Empty when the server requires no
 	// upstream sign-in.
 	RequiredClientIds []string `form:"required_client_ids,omitempty" json:"required_client_ids,omitempty" xml:"required_client_ids,omitempty"`
+}
+
+// AttachServerClientAssociationResponseBody is the type of the
+// "remoteSessions" service "attachServerClientAssociation" endpoint HTTP
+// response body.
+type AttachServerClientAssociationResponseBody struct {
+	// The server's association with the client.
+	Association *ServerClientAssociationResponseBody `form:"association,omitempty" json:"association,omitempty" xml:"association,omitempty"`
+	// Deprecated: always empty. This field is retained for compatibility; attach
+	// no longer binds the client to user session issuers.
+	BoundUserSessionIssuerIds []string `form:"bound_user_session_issuer_ids,omitempty" json:"bound_user_session_issuer_ids,omitempty" xml:"bound_user_session_issuer_ids,omitempty"`
 }
 
 // ListRemoteSessionsResponseBody is the type of the "remoteSessions" service
@@ -1932,6 +1952,196 @@ type ListServerClientAssociationsGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// AttachServerClientAssociationUnauthorizedResponseBody is the type of the
+// "remoteSessions" service "attachServerClientAssociation" endpoint HTTP
+// response body for the "unauthorized" error.
+type AttachServerClientAssociationUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AttachServerClientAssociationForbiddenResponseBody is the type of the
+// "remoteSessions" service "attachServerClientAssociation" endpoint HTTP
+// response body for the "forbidden" error.
+type AttachServerClientAssociationForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AttachServerClientAssociationBadRequestResponseBody is the type of the
+// "remoteSessions" service "attachServerClientAssociation" endpoint HTTP
+// response body for the "bad_request" error.
+type AttachServerClientAssociationBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AttachServerClientAssociationNotFoundResponseBody is the type of the
+// "remoteSessions" service "attachServerClientAssociation" endpoint HTTP
+// response body for the "not_found" error.
+type AttachServerClientAssociationNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AttachServerClientAssociationConflictResponseBody is the type of the
+// "remoteSessions" service "attachServerClientAssociation" endpoint HTTP
+// response body for the "conflict" error.
+type AttachServerClientAssociationConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AttachServerClientAssociationUnsupportedMediaResponseBody is the type of the
+// "remoteSessions" service "attachServerClientAssociation" endpoint HTTP
+// response body for the "unsupported_media" error.
+type AttachServerClientAssociationUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AttachServerClientAssociationInvalidResponseBody is the type of the
+// "remoteSessions" service "attachServerClientAssociation" endpoint HTTP
+// response body for the "invalid" error.
+type AttachServerClientAssociationInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AttachServerClientAssociationInvariantViolationResponseBody is the type of
+// the "remoteSessions" service "attachServerClientAssociation" endpoint HTTP
+// response body for the "invariant_violation" error.
+type AttachServerClientAssociationInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AttachServerClientAssociationUnexpectedResponseBody is the type of the
+// "remoteSessions" service "attachServerClientAssociation" endpoint HTTP
+// response body for the "unexpected" error.
+type AttachServerClientAssociationUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AttachServerClientAssociationGatewayErrorResponseBody is the type of the
+// "remoteSessions" service "attachServerClientAssociation" endpoint HTTP
+// response body for the "gateway_error" error.
+type AttachServerClientAssociationGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // DetachServerClientAssociationUnauthorizedResponseBody is the type of the
 // "remoteSessions" service "detachServerClientAssociation" endpoint HTTP
 // response body for the "unauthorized" error.
@@ -2734,7 +2944,8 @@ type RemoteSessionResponseBody struct {
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The remote_session_client this session was minted against.
 	RemoteSessionClientID *string `form:"remote_session_client_id,omitempty" json:"remote_session_client_id,omitempty" xml:"remote_session_client_id,omitempty"`
-	// Upstream access-token expiry. Independent of refresh_expires_at.
+	// Upstream access-token expiry. Independent of refresh_expires_at. Omitted
+	// when the upstream reported no expiry, which readers treat as non-expiring.
 	AccessExpiresAt *string `form:"access_expires_at,omitempty" json:"access_expires_at,omitempty" xml:"access_expires_at,omitempty"`
 	// Upstream refresh-token expiry. Null when the session has no refresh token.
 	RefreshExpiresAt *string `form:"refresh_expires_at,omitempty" json:"refresh_expires_at,omitempty" xml:"refresh_expires_at,omitempty"`
@@ -3256,6 +3467,17 @@ func NewCommitServerIdentityConfigurationRequestBody(p *remotesessions.CommitSer
 		for i, val := range p.ReplaceClientServerIds {
 			body.ReplaceClientServerIds[i] = val
 		}
+	}
+	return body
+}
+
+// NewAttachServerClientAssociationRequestBody builds the HTTP request body
+// from the payload of the "attachServerClientAssociation" endpoint of the
+// "remoteSessions" service.
+func NewAttachServerClientAssociationRequestBody(p *remotesessions.AttachServerClientAssociationPayload) *AttachServerClientAssociationRequestBody {
+	body := &AttachServerClientAssociationRequestBody{
+		McpServerID:           p.McpServerID,
+		RemoteSessionClientID: p.RemoteSessionClientID,
 	}
 	return body
 }
@@ -4769,6 +4991,169 @@ func NewListServerClientAssociationsGatewayError(body *ListServerClientAssociati
 	return v
 }
 
+// NewAttachServerClientAssociationResultOK builds a "remoteSessions" service
+// "attachServerClientAssociation" endpoint result from a HTTP "OK" response.
+func NewAttachServerClientAssociationResultOK(body *AttachServerClientAssociationResponseBody) *remotesessions.AttachServerClientAssociationResult {
+	v := &remotesessions.AttachServerClientAssociationResult{}
+	v.Association = unmarshalServerClientAssociationResponseBodyToRemotesessionsServerClientAssociation(body.Association)
+	v.BoundUserSessionIssuerIds = make([]string, len(body.BoundUserSessionIssuerIds))
+	for i, val := range body.BoundUserSessionIssuerIds {
+		v.BoundUserSessionIssuerIds[i] = val
+	}
+
+	return v
+}
+
+// NewAttachServerClientAssociationUnauthorized builds a remoteSessions service
+// attachServerClientAssociation endpoint unauthorized error.
+func NewAttachServerClientAssociationUnauthorized(body *AttachServerClientAssociationUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAttachServerClientAssociationForbidden builds a remoteSessions service
+// attachServerClientAssociation endpoint forbidden error.
+func NewAttachServerClientAssociationForbidden(body *AttachServerClientAssociationForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAttachServerClientAssociationBadRequest builds a remoteSessions service
+// attachServerClientAssociation endpoint bad_request error.
+func NewAttachServerClientAssociationBadRequest(body *AttachServerClientAssociationBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAttachServerClientAssociationNotFound builds a remoteSessions service
+// attachServerClientAssociation endpoint not_found error.
+func NewAttachServerClientAssociationNotFound(body *AttachServerClientAssociationNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAttachServerClientAssociationConflict builds a remoteSessions service
+// attachServerClientAssociation endpoint conflict error.
+func NewAttachServerClientAssociationConflict(body *AttachServerClientAssociationConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAttachServerClientAssociationUnsupportedMedia builds a remoteSessions
+// service attachServerClientAssociation endpoint unsupported_media error.
+func NewAttachServerClientAssociationUnsupportedMedia(body *AttachServerClientAssociationUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAttachServerClientAssociationInvalid builds a remoteSessions service
+// attachServerClientAssociation endpoint invalid error.
+func NewAttachServerClientAssociationInvalid(body *AttachServerClientAssociationInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAttachServerClientAssociationInvariantViolation builds a remoteSessions
+// service attachServerClientAssociation endpoint invariant_violation error.
+func NewAttachServerClientAssociationInvariantViolation(body *AttachServerClientAssociationInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAttachServerClientAssociationUnexpected builds a remoteSessions service
+// attachServerClientAssociation endpoint unexpected error.
+func NewAttachServerClientAssociationUnexpected(body *AttachServerClientAssociationUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAttachServerClientAssociationGatewayError builds a remoteSessions service
+// attachServerClientAssociation endpoint gateway_error error.
+func NewAttachServerClientAssociationGatewayError(body *AttachServerClientAssociationGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewDetachServerClientAssociationUnauthorized builds a remoteSessions service
 // detachServerClientAssociation endpoint unauthorized error.
 func NewDetachServerClientAssociationUnauthorized(body *DetachServerClientAssociationUnauthorizedResponseBody) *goa.ServiceError {
@@ -5592,6 +5977,26 @@ func ValidateListServerClientAssociationsResponseBody(body *ListServerClientAsso
 	}
 	for _, e := range body.RequiredClientIds {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.required_client_ids[*]", e, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateAttachServerClientAssociationResponseBody runs the validations
+// defined on AttachServerClientAssociationResponseBody
+func ValidateAttachServerClientAssociationResponseBody(body *AttachServerClientAssociationResponseBody) (err error) {
+	if body.Association == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("association", "body"))
+	}
+	if body.BoundUserSessionIssuerIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("bound_user_session_issuer_ids", "body"))
+	}
+	if body.Association != nil {
+		if err2 := ValidateServerClientAssociationResponseBody(body.Association); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	for _, e := range body.BoundUserSessionIssuerIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.bound_user_session_issuer_ids[*]", e, goa.FormatUUID))
 	}
 	return
 }
@@ -7798,6 +8203,251 @@ func ValidateListServerClientAssociationsGatewayErrorResponseBody(body *ListServ
 	return
 }
 
+// ValidateAttachServerClientAssociationUnauthorizedResponseBody runs the
+// validations defined on
+// attachServerClientAssociation_unauthorized_response_body
+func ValidateAttachServerClientAssociationUnauthorizedResponseBody(body *AttachServerClientAssociationUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAttachServerClientAssociationForbiddenResponseBody runs the
+// validations defined on attachServerClientAssociation_forbidden_response_body
+func ValidateAttachServerClientAssociationForbiddenResponseBody(body *AttachServerClientAssociationForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAttachServerClientAssociationBadRequestResponseBody runs the
+// validations defined on
+// attachServerClientAssociation_bad_request_response_body
+func ValidateAttachServerClientAssociationBadRequestResponseBody(body *AttachServerClientAssociationBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAttachServerClientAssociationNotFoundResponseBody runs the
+// validations defined on attachServerClientAssociation_not_found_response_body
+func ValidateAttachServerClientAssociationNotFoundResponseBody(body *AttachServerClientAssociationNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAttachServerClientAssociationConflictResponseBody runs the
+// validations defined on attachServerClientAssociation_conflict_response_body
+func ValidateAttachServerClientAssociationConflictResponseBody(body *AttachServerClientAssociationConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAttachServerClientAssociationUnsupportedMediaResponseBody runs the
+// validations defined on
+// attachServerClientAssociation_unsupported_media_response_body
+func ValidateAttachServerClientAssociationUnsupportedMediaResponseBody(body *AttachServerClientAssociationUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAttachServerClientAssociationInvalidResponseBody runs the
+// validations defined on attachServerClientAssociation_invalid_response_body
+func ValidateAttachServerClientAssociationInvalidResponseBody(body *AttachServerClientAssociationInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAttachServerClientAssociationInvariantViolationResponseBody runs the
+// validations defined on
+// attachServerClientAssociation_invariant_violation_response_body
+func ValidateAttachServerClientAssociationInvariantViolationResponseBody(body *AttachServerClientAssociationInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAttachServerClientAssociationUnexpectedResponseBody runs the
+// validations defined on attachServerClientAssociation_unexpected_response_body
+func ValidateAttachServerClientAssociationUnexpectedResponseBody(body *AttachServerClientAssociationUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAttachServerClientAssociationGatewayErrorResponseBody runs the
+// validations defined on
+// attachServerClientAssociation_gateway_error_response_body
+func ValidateAttachServerClientAssociationGatewayErrorResponseBody(body *AttachServerClientAssociationGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateDetachServerClientAssociationUnauthorizedResponseBody runs the
 // validations defined on
 // detachServerClientAssociation_unauthorized_response_body
@@ -8818,9 +9468,6 @@ func ValidateRemoteSessionResponseBody(body *RemoteSessionResponseBody) (err err
 	}
 	if body.RemoteSessionClientID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("remote_session_client_id", "body"))
-	}
-	if body.AccessExpiresAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("access_expires_at", "body"))
 	}
 	if body.HasRefreshToken == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("has_refresh_token", "body"))

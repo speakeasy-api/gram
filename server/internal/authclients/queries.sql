@@ -140,7 +140,29 @@ WHERE msac.auth_client_id = @auth_client_id
   AND ms.project_id = msac.project_id
 RETURNING msac.id, msac.project_id, ms.name AS mcp_server_name;
 
--- name: GetOrganizationMCPServer :one
+-- name: UndoServerBackfillAuthClientDetaches :many
+-- Undoes administrator detaches of one upstream OAuth client's backfilled
+-- auth clients from one MCP server, for an explicit attach of that client.
+-- The deleted links become source 'backfill' retirements, which the backfill
+-- relinks while the association they were derived from stands. Returns the
+-- auth clients whose detach was undone, once per undone row.
+UPDATE mcp_server_auth_clients msac
+SET source = 'backfill',
+    updated_at = clock_timestamp()
+FROM mcp_auth_clients ac
+WHERE msac.mcp_server_id = @mcp_server_id
+  AND msac.project_id = @project_id
+  AND msac.organization_id = @organization_id
+  AND msac.source = 'admin'
+  AND msac.deleted IS TRUE
+  AND ac.id = msac.auth_client_id
+  AND ac.organization_id = msac.organization_id
+  AND ac.remote_session_client_id = @remote_session_client_id
+  AND ac.source = 'backfill'
+  AND ac.deleted IS FALSE
+RETURNING msac.auth_client_id;
+
+-- name: ListOrganizationMCPServersByID :many
 SELECT
   ms.id,
   ms.project_id,
@@ -148,6 +170,10 @@ SELECT
   ms.slug,
   ms.visibility,
   ms.toolset_id,
+  (ms.user_session_issuer_id IS NOT NULL)::boolean AS has_sign_in,
+  COALESCE(ms.requires_upstream_auth, ms.user_session_issuer_id IS NOT NULL)::boolean AS hosted_requires_assignment,
+  COALESCE(placement.total, 0)::bigint AS hosted_placements,
+  COALESCE(placement.reachable, 0)::bigint AS reachable_hosted_placements,
   (
     -- Upstream credentials the auth client records do not cover yet: no
     -- auth client was ever linked to the server, live or detached, but it
@@ -201,13 +227,41 @@ SELECT
           AND (lower(pend_header.name) = 'authorization' OR pend_header.value_from_request_header IS NOT NULL OR pend_header.is_secret)
       )
     )
-  )::boolean AS upstream_auth_pending
+  )::boolean AS upstream_auth_pending,
+  EXISTS (
+    SELECT 1
+    FROM mcp_server_auth_clients AS offered
+    JOIN mcp_auth_clients AS client
+      ON client.id = offered.auth_client_id
+     AND client.organization_id = offered.organization_id
+     AND client.deleted IS FALSE
+     AND client.enabled
+    WHERE offered.mcp_server_id = ms.id
+      AND offered.project_id = ms.project_id
+      AND offered.organization_id = p.organization_id
+      AND offered.deleted IS FALSE
+  ) AS offers_enabled_client
 FROM mcp_servers ms
 JOIN projects p
   ON p.id = ms.project_id
  AND p.organization_id = @organization_id
  AND p.deleted IS FALSE
-WHERE ms.id = @id
+-- Count stale placements as well as live ones: a stale placement is not an
+-- opt-out, and more than one placement is ambiguous even if only one is live.
+LEFT JOIN LATERAL (
+  SELECT count(*) AS total, count(i.id) AS reachable
+  FROM mcp_server_remote_session_clients AS a
+  LEFT JOIN remote_session_clients AS c
+    ON c.id = a.remote_session_client_id AND NOT c.deleted
+   AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
+  LEFT JOIN remote_session_issuers AS i
+    ON i.id = c.remote_session_issuer_id AND NOT i.deleted
+   AND (i.project_id = p.id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = p.organization_id)))
+  WHERE ms.toolset_id IS NOT NULL AND a.mcp_server_id = ms.id
+    AND a.project_id = ms.project_id AND a.organization_id = p.organization_id AND NOT a.deleted
+) AS placement ON TRUE
+WHERE ms.id = ANY(@ids::uuid[])
+  AND (sqlc.narg(project_id)::uuid IS NULL OR ms.project_id = sqlc.narg(project_id)::uuid)
   AND ms.deleted IS FALSE;
 
 -- name: ListServerAuthClients :many
@@ -239,7 +293,7 @@ WHERE msac.mcp_server_id = @mcp_server_id
   AND ac.source = 'backfill'
 ORDER BY ac.name, ac.id;
 
--- name: GetAuthClientRegistration :one
+-- name: LockAuthClientRegistration :one
 -- An OAuth registration a new remote_session or service_account client may
 -- name: live, with a live issuer, and in the client's project, shared across
 -- the organization, or platform-global.
@@ -270,7 +324,8 @@ WHERE c.id = @id
     WHERE p.id = c.project_id
       AND p.organization_id = @organization_id::text
       AND p.deleted IS FALSE
-  ));
+  ))
+FOR SHARE OF c;
 
 -- name: GetOrganizationProject :one
 SELECT p.id

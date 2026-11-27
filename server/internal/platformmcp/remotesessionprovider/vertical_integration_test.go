@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -195,7 +196,7 @@ func TestReviewedRemoteSessionProviderVerticalSlice(t *testing.T) {
 	fingerprint, err := testrepo.New(conn).GetPlatformMCPReadinessFingerprintFixture(ctx, registration.ID)
 	require.NoError(t, err)
 	require.NotEmpty(t, fingerprint)
-	require.NotContains(t, fingerprint, remoteSession.AccessTokenEncrypted)
+	require.NotContains(t, fingerprint, remoteSession.AccessTokenEncrypted.String)
 
 	require.NoError(t, testrepo.New(conn).ExpireRemoteSessionAccessTokenFixture(ctx, remoteSession.ID))
 	refreshed, err := store.ProbeProviderReadiness(ctx, principal, project.ID, registration.ID, adapters)
@@ -492,11 +493,11 @@ func seedReviewedRemoteIssuer(t *testing.T, ctx context.Context, conn *pgxpool.P
 func seedReviewedRemoteClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, organizationID string, userSessionIssuerID, remoteIssuerID uuid.UUID) uuid.UUID {
 	t.Helper()
 	queries := remotesessionsrepo.New(conn)
-	client, err := queries.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+	client, err := queries.CreateRemoteSessionClientFixture(ctx, remotesessionsrepo.CreateRemoteSessionClientFixtureParams{
 		ProjectID: conv.ToNullUUID(projectID), OrganizationID: conv.ToPGText(organizationID), RemoteSessionIssuerID: remoteIssuerID, ClientID: "reviewed-client", ClientSecretEncrypted: pgtype.Text{}, ClientIDIssuedAt: conv.ToPGTimestamptz(time.Now().UTC()), ClientSecretExpiresAt: pgtype.Timestamptz{}, TokenEndpointAuthMethod: conv.ToPGText("none"), Scope: []string{"tools:read"}, Audience: pgtype.Text{},
 	})
 	require.NoError(t, err)
-	require.NoError(t, queries.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: client.ID, UserSessionIssuerID: userSessionIssuerID}))
+	require.NoError(t, upstreamclients.CaptureSoleConsumers(ctx, conn, organizationID, projectID, []uuid.UUID{userSessionIssuerID}, []uuid.UUID{client.ID}))
 	return client.ID
 }
 

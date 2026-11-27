@@ -1,4 +1,8 @@
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { waitForHookState as waitFor } from "@/test/waitForHookState";
+import { accountSpecifiers, accountSetupUrls } from "./account-provider";
+import { oktaRemoteTemplate } from "./provider-setup/okta";
+import { snowflakeRemoteTemplate } from "./snowflake-install";
+import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockCreatePolicy = vi.fn();
@@ -19,10 +23,12 @@ const mockUnproxiedDeleteServer = vi.fn();
 const mockFetchImageFromURL = vi.fn();
 const mockMcpMetadataSet = vi.fn();
 const mockUseEffectiveUserSessionIssuers = vi.fn();
+const mockSetShadowMCPOfficialServer = vi.fn();
 
 // Return a stable client reference to avoid re-render loops from useCallback deps
 const mockClient = {
   risk: { policies: { create: mockCreatePolicy } },
+  access: { setShadowMCPOfficialServer: mockSetShadowMCPOfficialServer },
   remoteMcp: {
     createServer: mockCreateServer,
     deleteServer: mockDeleteServer,
@@ -115,6 +121,16 @@ vi.mock("@gram/client/react-query/riskListPolicies.js", () => ({
   invalidateAllRiskListPolicies: vi.fn(() => Promise.resolve()),
 }));
 
+vi.mock("@gram/client/react-query/shadowMCPInventory.js", () => ({
+  invalidateAllShadowMCPInventory: vi.fn(() => Promise.resolve()),
+}));
+vi.mock("@gram/client/react-query/shadowMCPInventoryServer.js", () => ({
+  invalidateAllShadowMCPInventoryServer: vi.fn(() => Promise.resolve()),
+}));
+vi.mock("@gram/client/react-query/findShadowMCPInventoryServers.js", () => ({
+  invalidateAllFindShadowMCPInventoryServers: vi.fn(() => Promise.resolve()),
+}));
+
 vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({}),
 }));
@@ -162,6 +178,25 @@ function makeServer(overrides: Partial<CatalogServer> = {}): CatalogServer {
 // literals in the renderHook callback create a new array each render →
 // infinite loop → OOM.
 const EMPTY_SERVERS: CatalogServer[] = [];
+
+// The Shadow MCP server people reach directly at the catalog endpoint. Kept
+// stable for the same reason as the servers array.
+const SHADOW_REPLACEMENTS = [
+  {
+    projectId: "proj-1",
+    remoteUrl: "https://mcp.example.com/mcp",
+    shadowServerUrl: "https://mcp.example.com/mcp/",
+    shadowName: "Example",
+    shadowServerSlug: "mcp-example-com-mcp-12345678",
+    userCount: 3,
+  },
+];
+const NO_SHADOW_REPLACEMENTS: typeof SHADOW_REPLACEMENTS = [];
+// Two endpoint spellings of one upstream match one Shadow MCP server.
+const DUPLICATE_SHADOW_REPLACEMENTS = [
+  SHADOW_REPLACEMENTS[0]!,
+  { ...SHADOW_REPLACEMENTS[0]!, remoteUrl: "https://mcp.example.com/mcp/" },
+];
 
 describe("useRemoteMcpInstallWorkflow", () => {
   beforeEach(() => {
@@ -249,6 +284,104 @@ describe("useRemoteMcpInstallWorkflow", () => {
       await pending;
     });
     expect(mockCreateServer).not.toHaveBeenCalled();
+  });
+
+  it.each(["snowflake", "okta"] as const)(
+    "creates native %s disabled before account configuration without probing or OAuth",
+    async (provider) => {
+      const servers = [
+        makeServer({
+          registrySpecifier: accountSpecifiers[provider],
+          remotes: [
+            remote(
+              provider === "okta"
+                ? oktaRemoteTemplate
+                : snowflakeRemoteTemplate,
+            ),
+          ],
+        }),
+      ];
+      const initialConfiguration = { identityMode: "user" as const };
+      const { result } = renderHook(() =>
+        useRemoteMcpInstallWorkflow({
+          servers,
+          accountSetupEnabled: true,
+          initialConfiguration,
+        }),
+      );
+      await act(async () => {
+        if (result.current.phase !== "configure")
+          throw new Error("Expected configure");
+        await result.current.startInstall();
+      });
+      expect(mockCreateServer).toHaveBeenCalledWith(
+        {
+          createServerForm: {
+            name: accountSpecifiers[provider],
+            url: accountSetupUrls[provider],
+            transportType: "streamable-http",
+          },
+        },
+        undefined,
+        undefined,
+      );
+      expect(mockMcpServersCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          createMcpServerForm: expect.objectContaining({
+            remoteMcpServerId: "rms-1",
+            visibility: "disabled",
+          }),
+        }),
+        undefined,
+        undefined,
+      );
+      expect(mockProbeURL).not.toHaveBeenCalled();
+      expect(mockDiscoverProtectedResourceMetadata).not.toHaveBeenCalled();
+      expect(mockCommitIdentity).not.toHaveBeenCalled();
+      expect(mockMcpServersUpdate).not.toHaveBeenCalled();
+      expect(result.current.phase).toBe("complete");
+      if (result.current.phase !== "complete")
+        throw new Error("Expected complete");
+      expect(result.current.statuses[0]).toMatchObject({
+        mcpServerId: "mcp-server-1",
+        remoteUrl: accountSetupUrls[provider],
+        identityMode: "user",
+        setupRequired: expect.any(String),
+      });
+    },
+  );
+
+  it("retains Snowflake customize intent for server Setup instead of opening a competing editor", async () => {
+    const servers = [
+      makeServer({
+        registrySpecifier: "com.snowflake/cortex-mcp",
+        remotes: [remote(snowflakeRemoteTemplate)],
+      }),
+    ];
+    const initialConfiguration = { identityMode: "user" as const };
+    const { result } = renderHook(() =>
+      useRemoteMcpInstallWorkflow({
+        servers,
+        initialConfiguration,
+        accountSetupEnabled: true,
+        offerGuardrails: true,
+      }),
+    );
+    act(() => {
+      if (result.current.phase === "configure")
+        result.current.continueToGuardrails?.();
+    });
+    await act(async () => {
+      if (result.current.phase !== "guardrails")
+        throw new Error("Expected guardrails");
+      expect(await result.current.installForCustomizing()).toEqual([]);
+    });
+    if (result.current.phase !== "complete")
+      throw new Error("Expected complete");
+    expect(result.current.statuses[0]?.setupPolicy?.categories).toEqual(
+      new Set(["secrets", "pii"]),
+    );
+    expect(mockCreatePolicy).not.toHaveBeenCalled();
   });
 
   it("retains accepted servers when policy creation fails", async () => {
@@ -1129,6 +1262,152 @@ describe("useRemoteMcpInstallWorkflow", () => {
     expect(state.statuses[0]!.error).toContain("boom");
   });
 
+  it("replaces a chosen Shadow MCP server with the added server", async () => {
+    mockSetShadowMCPOfficialServer.mockResolvedValue(undefined);
+    const servers = [makeServer({ title: "Example Official" })];
+    const { result } = renderHook(() =>
+      useRemoteMcpInstallWorkflow({
+        servers,
+        shadowMCPReplacements: SHADOW_REPLACEMENTS,
+      }),
+    );
+
+    await startInstall(result);
+    await waitFor(() => expect(result.current.phase).toBe("complete"));
+
+    // The added server becomes the official version, which blocks direct use.
+    expect(mockSetShadowMCPOfficialServer).toHaveBeenCalledWith(
+      {
+        setShadowMCPOfficialServerForm: {
+          projectId: "proj-1",
+          serverUrl: "https://mcp.example.com/mcp/",
+          mcpServerId: "mcp-server-1",
+        },
+      },
+      undefined,
+      undefined,
+    );
+    const state = result.current;
+    if (state.phase !== "complete") throw new Error("unexpected phase");
+    expect(state.shadowReplacements).toEqual([
+      {
+        status: "replaced",
+        shadowName: "Example",
+        shadowServerSlug: "mcp-example-com-mcp-12345678",
+        serverName: "Example Official",
+      },
+    ]);
+  });
+
+  it("links a Shadow MCP server once when several endpoints match it", async () => {
+    mockSetShadowMCPOfficialServer.mockResolvedValue(undefined);
+    const servers = [
+      makeServer({
+        remotes: [
+          remote("https://mcp.example.com/mcp"),
+          remote("https://mcp.example.com/mcp/"),
+        ],
+      }),
+    ];
+    const { result } = renderHook(() =>
+      useRemoteMcpInstallWorkflow({
+        servers,
+        autoSelectRemotes: true,
+        shadowMCPReplacements: DUPLICATE_SHADOW_REPLACEMENTS,
+      }),
+    );
+
+    await startInstall(result);
+    await waitFor(() => expect(result.current.phase).toBe("complete"));
+
+    expect(mockSetShadowMCPOfficialServer).toHaveBeenCalledOnce();
+    const state = result.current;
+    if (state.phase !== "complete") throw new Error("unexpected phase");
+    expect(state.shadowReplacements).toMatchObject([{ status: "replaced" }]);
+  });
+
+  it("adds the server only when the admin keeps the Shadow MCP server", async () => {
+    const servers = [makeServer()];
+    const { result } = renderHook(() =>
+      useRemoteMcpInstallWorkflow({
+        servers,
+        shadowMCPReplacements: NO_SHADOW_REPLACEMENTS,
+      }),
+    );
+
+    await startInstall(result);
+    await waitFor(() => expect(result.current.phase).toBe("complete"));
+
+    expect(mockMcpServersCreate).toHaveBeenCalledOnce();
+    expect(mockSetShadowMCPOfficialServer).not.toHaveBeenCalled();
+    const state = result.current;
+    if (state.phase !== "complete") throw new Error("unexpected phase");
+    expect(state.shadowReplacements).toBeUndefined();
+  });
+
+  it("does not replace a Shadow MCP server with a server kept disabled for setup", async () => {
+    mockDiscoverProtectedResourceMetadata.mockResolvedValue({
+      available: true,
+      metadata: { authorizationServers: ["https://id.example.com"] },
+    });
+    mockFetchIssuerMetadata.mockResolvedValue({
+      issuer: "https://id.example.com",
+      authorizationEndpoint: "https://id.example.com/authorize",
+      tokenEndpoint: "https://id.example.com/token",
+      registrationEndpoint: "https://id.example.com/register",
+    });
+    mockGetIssuer.mockRejectedValue(
+      Object.assign(new Error("not found"), { statusCode: 404 }),
+    );
+    mockCommitIdentity.mockResolvedValue({
+      manualSetupRequired: false,
+      registrationMethod: "dcr",
+      failure: {
+        outcome: "refused",
+        reason: "authorization_rejected",
+        retryable: false,
+      },
+    });
+    const servers = [makeServer({ supportsDcr: true, title: "Example" })];
+    const { result } = renderHook(() =>
+      useRemoteMcpInstallWorkflow({
+        servers,
+        shadowMCPReplacements: SHADOW_REPLACEMENTS,
+      }),
+    );
+
+    await startInstall(result);
+    await waitFor(() => expect(result.current.phase).toBe("complete"));
+
+    expect(mockSetShadowMCPOfficialServer).not.toHaveBeenCalled();
+    const state = result.current;
+    if (state.phase !== "complete") throw new Error("unexpected phase");
+    expect(state.shadowReplacements).toMatchObject([
+      { status: "setup-required", shadowName: "Example" },
+    ]);
+  });
+
+  it("reports a failed replacement and keeps the added server", async () => {
+    mockSetShadowMCPOfficialServer.mockRejectedValue(new Error("denied"));
+    const servers = [makeServer()];
+    const { result } = renderHook(() =>
+      useRemoteMcpInstallWorkflow({
+        servers,
+        shadowMCPReplacements: SHADOW_REPLACEMENTS,
+      }),
+    );
+
+    await startInstall(result);
+    await waitFor(() => expect(result.current.phase).toBe("complete"));
+
+    const state = result.current;
+    if (state.phase !== "complete") throw new Error("unexpected phase");
+    expect(state.statuses[0]).toMatchObject({ status: "completed" });
+    expect(state.shadowReplacements).toMatchObject([
+      { status: "failed", error: "denied" },
+    ]);
+  });
+
   it("continues installing remaining servers after one fails", async () => {
     mockMcpServersCreate
       .mockRejectedValueOnce(new Error("first fails"))
@@ -1217,7 +1496,7 @@ describe("useRemoteMcpInstallWorkflow", () => {
       data: {
         mcpServers: [
           {
-            toolset: { registrySpecifier: "test/server", externalMcpSlugs: [] },
+            toolset: { registrySpecifier: "test/server" },
           },
         ],
       },

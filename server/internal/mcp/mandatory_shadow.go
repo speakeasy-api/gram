@@ -42,18 +42,9 @@ const (
 )
 
 const (
-	mandatoryOutcomeAllow   = "allow"
-	mandatoryOutcomeDeny    = "deny"
-	mandatoryOutcomeError   = "error"
-	mandatoryOutcomeSkipped = "skipped"
-
-	// mandatoryReasonResolverOff is an auth client used without the typed
-	// resolver, so no client was evaluated.
-	mandatoryReasonResolverOff = "resolver_off"
-
-	// mandatoryReasonNoConnectionOwner is a personal client used by a session
-	// that represents no user.
-	mandatoryReasonNoConnectionOwner = "no_connection_owner"
+	mandatoryOutcomeAllow = "allow"
+	mandatoryOutcomeDeny  = "deny"
+	mandatoryOutcomeError = "error"
 
 	mandatoryShadowTimeout = 250 * time.Millisecond
 
@@ -83,6 +74,16 @@ func (l *onceLog) first(key string) bool {
 	}
 	l.seen.Add(key, struct{}{})
 	return true
+}
+
+// forget drops key, so its next occurrence is first again.
+func (l *onceLog) forget(key string) {
+	if l == nil {
+		return
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.seen.Remove(key)
 }
 
 // mandatoryShadow evaluates one request's mandatory checks beside today's
@@ -128,7 +129,7 @@ func withMandatoryAdmission(ctx context.Context) context.Context {
 	if shared, ok := ctx.Value(mandatoryAdmissionKey{}).(*mandatoryAdmission); ok && shared.authCtx == authCtx {
 		return ctx
 	}
-	return context.WithValue(ctx, mandatoryAdmissionKey{}, &mandatoryAdmission{authCtx: authCtx}) //nolint:exhaustruct // filled once on first use
+	return context.WithValue(ctx, mandatoryAdmissionKey{}, &mandatoryAdmission{authCtx: authCtx}) //nolint:exhaustruct_v5 // filled once on first use
 }
 
 // admitMandatoryShadow admits the caller for the shadow, reusing the
@@ -182,15 +183,22 @@ func isAccessDenial(err error) bool {
 	return errors.As(err, &shareable) && (shareable.Code == oops.CodeForbidden || shareable.Code == oops.CodeUnauthorized || shareable.Code == oops.CodeNotFound)
 }
 
-// shadowAuthClientUse records the check for using a resolved client. A
-// personal client a non-user session uses has no connection owner to check
-// yet, so it is recorded as skipped rather than as an invalid check.
-func (s *Service) shadowAuthClientUse(ctx context.Context, organizationID string, legacyAllowed bool, projectID, clientID uuid.UUID, registrationID uuid.NullUUID, clientType string, owner string) {
-	if clientType == authClientTypeRemoteSession && owner == "" {
-		s.newMandatoryShadow(ctx, organizationID).recordSkipped(ctx, mandatorySurfaceAuthClient, legacyAllowed, mandatoryReasonNoConnectionOwner, clientID.String(), projectID.String())
+// shadowAuthClientUse records the decision for using a resolved client, the
+// one enforcement makes, against today's decision. permit carries its
+// resolved connection owner.
+func (s *Service) shadowAuthClientUse(ctx context.Context, legacyAllowed bool, permit authClientPermitRequest) {
+	m := s.newMandatoryShadow(ctx, permit.OrganizationID)
+	if m == nil {
 		return
 	}
-	s.shadowMandatory(ctx, mandatorySurfaceAuthClient, organizationID, legacyAllowed, mandatoryAuthClientCheck(projectID, clientID, registrationID, clientType, owner))
+	use := mandatoryAuthClientCheck(permit.ProjectID, permit.ClientID, permit.RegistrationID, permit.ClientType, permit.connectionOwner())
+	m.recordDecision(ctx, mandatorySurfaceAuthClient, legacyAllowed, use, func() (authz.MandatoryDecision, error) {
+		// The visibility read is bounded like the shadow's admission, so the
+		// shadow never adds unbounded latency to the request it observes.
+		decideCtx, cancel := context.WithTimeout(ctx, mandatoryShadowTimeout)
+		defer cancel()
+		return decideAuthClientUse(decideCtx, m.authorization, permit, s.mandatoryServerVisibility)
+	})
 }
 
 // mandatoryAuthClientCheck is the check for using a resolved client. A
@@ -270,25 +278,13 @@ func (m *mandatoryShadow) recordDecision(ctx context.Context, surface string, le
 	if err == nil {
 		decision, err = decide()
 	}
-	m.emit(ctx, surface, legacyAllowed, check.ResourceID, check.Dimensions[authz.SelectorKeyProjectID], decision, err, "")
+	m.emit(ctx, surface, legacyAllowed, check.ResourceID, check.Dimensions[authz.SelectorKeyProjectID], decision, err)
 }
 
-// recordSkipped records a decision today's path made that the mandatory
-// check cannot evaluate yet, such as an auth client chosen without the
-// typed resolver. A skipped check is never an allow.
-func (m *mandatoryShadow) recordSkipped(ctx context.Context, surface string, legacyAllowed bool, reason, resourceID, projectID string) {
-	if m == nil {
-		return
-	}
-	m.emit(ctx, surface, legacyAllowed, resourceID, projectID, authz.MandatoryDecision{Allowed: false, Source: authz.MandatoryPolicySourceNone, Reason: authz.MandatoryDenyReasonNone}, nil, reason)
-}
-
-func (m *mandatoryShadow) emit(ctx context.Context, surface string, legacyAllowed bool, resourceID, projectID string, decision authz.MandatoryDecision, err error, skipped string) {
+func (m *mandatoryShadow) emit(ctx context.Context, surface string, legacyAllowed bool, resourceID, projectID string, decision authz.MandatoryDecision, err error) {
 	s := m.service
 	outcome, reason := mandatoryOutcomeDeny, string(decision.Reason)
 	switch {
-	case skipped != "":
-		outcome, reason = mandatoryOutcomeSkipped, skipped
 	case err != nil:
 		outcome = mandatoryOutcomeError
 	case decision.Allowed:
@@ -326,7 +322,7 @@ func (m *mandatoryShadow) emit(ctx context.Context, surface string, legacyAllowe
 		attribute.String(string(attr.ResourceIDKey), resourceID),
 	))
 
-	agreed := err == nil && skipped == "" && decision.Allowed == legacyAllowed
+	agreed := err == nil && decision.Allowed == legacyAllowed
 	fields := []any{
 		attr.SlogOrganizationID(m.organizationID),
 		attr.SlogMandatoryAuthzSurface(surface),

@@ -1,4 +1,9 @@
-import { Spinner } from "@/components/ui/Spinner";
+import {
+  useGitHubAccountSearch,
+  MIN_GITHUB_SEARCH_LENGTH,
+  type GithubUserResult,
+} from "@/hooks/useGitHubAccountSearch";
+import { GitHubAccountResults } from "@/components/GitHubAccountResults";
 import { Input } from "@/components/moon/input";
 import { Label } from "@/components/moon/label";
 import { Dialog } from "@/components/ui/Dialog";
@@ -14,33 +19,8 @@ interface PublishDialogProps {
   mode?: "publish" | "manage";
 }
 
-interface GithubUserResult {
-  login: string;
-  avatar_url: string;
-  html_url: string;
-}
-
 // GitHub username rules: 1-39 chars, alphanumeric or hyphen, cannot start with hyphen.
 const GITHUB_USERNAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9-]{0,38}$/;
-const MIN_QUERY_LEN = 2;
-const DEBOUNCE_MS = 300;
-
-async function searchGithubUsers(
-  query: string,
-  signal: AbortSignal,
-): Promise<GithubUserResult[]> {
-  const resp = await fetch(
-    `https://api.github.com/search/users?q=${encodeURIComponent(query)}&per_page=5`,
-    {
-      signal,
-      headers: { Accept: "application/vnd.github+json" },
-    },
-  );
-  if (!resp.ok) return [];
-  const data = (await resp.json()) as { items?: GithubUserResult[] };
-  return data.items ?? [];
-}
-
 export const PublishDialog = memo(function PublishDialog({
   open,
   onOpenChange,
@@ -52,41 +32,17 @@ export const PublishDialog = memo(function PublishDialog({
   const [usernames, setUsernames] = useState<string[]>([]);
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [results, setResults] = useState<GithubUserResult[]>([]);
-  const [searchLoading, setSearchLoading] = useState(false);
   const [focused, setFocused] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
-  // Debounced GitHub user search.
-  useEffect(() => {
-    const trimmed = draft.trim().replace(/^@/, "");
-    if (trimmed.length < MIN_QUERY_LEN) {
-      setResults([]);
-      setSearchLoading(false);
-      return;
-    }
-    const controller = new AbortController();
-    const timer = setTimeout(() => {
-      void (async () => {
-        setSearchLoading(true);
-        try {
-          const items = await searchGithubUsers(trimmed, controller.signal);
-          // Filter out anyone already added.
-          setResults(items.filter((it) => !usernames.includes(it.login)));
-          setActiveIndex(0);
-        } catch {
-          // Abort or network error — silently drop; user can still type freely.
-        } finally {
-          setSearchLoading(false);
-        }
-      })();
-    }, DEBOUNCE_MS);
-    return () => {
-      clearTimeout(timer);
-      controller.abort();
-    };
-  }, [draft, usernames]);
+  const search = useGitHubAccountSearch(
+    open ? draft.trim().replace(/^@/, "") : "",
+  );
+  const results = search.results.filter(
+    (item) => !usernames.includes(item.login),
+  );
+  const searchLoading = search.loading;
 
   // Close dropdown on outside click.
   useEffect(() => {
@@ -119,7 +75,6 @@ export const PublishDialog = memo(function PublishDialog({
     (user: GithubUserResult) => {
       if (addUsername(user.login)) {
         setDraft("");
-        setResults([]);
         setActiveIndex(0);
       }
     },
@@ -135,7 +90,7 @@ export const PublishDialog = memo(function PublishDialog({
         focused &&
         (results.length > 0 ||
           searchLoading ||
-          draft.trim().length >= MIN_QUERY_LEN);
+          draft.trim().length >= MIN_GITHUB_SEARCH_LENGTH);
 
       if (hasResultsForNav && e.key === "ArrowDown") {
         e.preventDefault();
@@ -229,7 +184,7 @@ export const PublishDialog = memo(function PublishDialog({
     focused &&
     (results.length > 0 ||
       searchLoading ||
-      (draft.trim().length >= MIN_QUERY_LEN && !searchLoading));
+      (draft.trim().length >= MIN_GITHUB_SEARCH_LENGTH && !searchLoading));
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -318,6 +273,7 @@ export const PublishDialog = memo(function PublishDialog({
                   value={draft}
                   onChange={(e) => {
                     setDraft(e.target.value);
+                    setActiveIndex(0);
                     if (error) setError(null);
                   }}
                   onKeyDown={handleKeyDown}
@@ -335,60 +291,41 @@ export const PublishDialog = memo(function PublishDialog({
                   data-bwignore="true"
                   data-form-type="other"
                   role="combobox"
-                  aria-expanded={dropdownOpen}
-                  aria-controls="github-user-results"
+                  aria-expanded={dropdownOpen && results.length > 0}
+                  aria-controls={
+                    dropdownOpen && results.length
+                      ? "github-user-results"
+                      : undefined
+                  }
+                  aria-activedescendant={
+                    dropdownOpen && results[activeIndex]
+                      ? `github-user-results-${activeIndex}`
+                      : undefined
+                  }
                   aria-autocomplete="list"
                   className="h-7 flex-1 border-0 bg-transparent p-0 shadow-none focus-visible:ring-0"
                 />
               </div>
 
               {dropdownOpen && (
-                <div
+                <GitHubAccountResults
                   id="github-user-results"
-                  role="listbox"
-                  className="bg-popover text-popover-foreground absolute z-50 mt-1 max-h-56 w-full overflow-y-auto border p-1 shadow-lg"
-                >
-                  {searchLoading && (
-                    <div className="text-muted-foreground flex items-center gap-2 px-2 py-1.5 text-xs">
-                      <Spinner className="mr-0 h-3 w-3" />
-                      Searching GitHub…
-                    </div>
-                  )}
-                  {!searchLoading && results.length === 0 && (
-                    <div className="text-muted-foreground px-2 py-1.5 text-xs">
+                  label="GitHub accounts"
+                  results={results}
+                  activeIndex={activeIndex}
+                  onActiveIndexChange={setActiveIndex}
+                  onSelect={selectResult}
+                  loading={searchLoading}
+                  emptyMessage={
+                    <>
                       No matches. Press Enter to add{" "}
                       <code className="text-foreground">
                         {draft.trim().replace(/^@/, "")}
                       </code>{" "}
                       anyway.
-                    </div>
-                  )}
-                  {results.map((user, idx) => (
-                    <button
-                      type="button"
-                      key={user.login}
-                      role="option"
-                      aria-selected={idx === activeIndex}
-                      onClick={() => selectResult(user)}
-                      onMouseEnter={() => setActiveIndex(idx)}
-                      className={`flex w-full items-center gap-2 px-2 py-1 text-left ${
-                        idx === activeIndex
-                          ? "bg-accent text-accent-foreground"
-                          : ""
-                      }`}
-                    >
-                      <img
-                        src={user.avatar_url}
-                        alt=""
-                        className="h-5 w-5 flex-shrink-0 rounded-full"
-                        loading="lazy"
-                      />
-                      <span className="text-foreground text-sm">
-                        {user.login}
-                      </span>
-                    </button>
-                  ))}
-                </div>
+                    </>
+                  }
+                />
               )}
             </div>
             <p className="text-muted-foreground text-xs">

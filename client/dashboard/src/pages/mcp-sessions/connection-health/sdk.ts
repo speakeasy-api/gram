@@ -1,0 +1,416 @@
+import type { GramCore } from "@gram/client/core.js";
+import { mcpConnectionHealthGetAttempt } from "@gram/client/funcs/mcpConnectionHealthGetAttempt.js";
+import { mcpConnectionHealthGetAttemptCounts } from "@gram/client/funcs/mcpConnectionHealthGetAttemptCounts.js";
+import { mcpConnectionHealthGetSessionActivity } from "@gram/client/funcs/mcpConnectionHealthGetSessionActivity.js";
+import { mcpConnectionHealthGetSignInSummary } from "@gram/client/funcs/mcpConnectionHealthGetSignInSummary.js";
+import { mcpConnectionHealthGetSuspectedProblem } from "@gram/client/funcs/mcpConnectionHealthGetSuspectedProblem.js";
+import { mcpConnectionHealthListAttempts } from "@gram/client/funcs/mcpConnectionHealthListAttempts.js";
+import { mcpConnectionHealthListDeniedClients } from "@gram/client/funcs/mcpConnectionHealthListDeniedClients.js";
+import { mcpConnectionHealthListSuspectedProblems } from "@gram/client/funcs/mcpConnectionHealthListSuspectedProblems.js";
+import type { ConnectionAttemptDetail } from "@gram/client/models/components/connectionattemptdetail.js";
+import type { ConnectionAttemptFilters } from "@gram/client/models/components/connectionattemptfilters.js";
+import type { ConnectionAttemptRow } from "@gram/client/models/components/connectionattemptrow.js";
+import type { ConnectionAttemptStep } from "@gram/client/models/components/connectionattemptstep.js";
+import type { ConnectionPerson } from "@gram/client/models/components/connectionperson.js";
+import type { ConnectionServer } from "@gram/client/models/components/connectionserver.js";
+import type { SuspectedProblem as SdkSuspectedProblem } from "@gram/client/models/components/suspectedproblem.js";
+import type { SuspectedProblemDetail as SdkSuspectedProblemDetail } from "@gram/client/models/components/suspectedproblemdetail.js";
+import { unwrapAsync } from "@gram/client/types/fp";
+import { RETENTION_MS } from "./filters";
+import type {
+  AttemptCountsResponse,
+  AttemptDetail,
+  AttemptRangeRequest,
+  AttemptRow,
+  AttemptStep,
+  DeniedClientsResponse,
+  GetAttemptResponse,
+  GetSuspectedProblemResponse,
+  ListAttemptsRequest,
+  ListSuspectedProblemsResponse,
+  ListAttemptsResponse,
+  Outcome,
+  Person,
+  ProblemPart,
+  ProblemRule,
+  ServerKind,
+  ServerRef,
+  SessionActivityResponse,
+  SignInSummaryResponse,
+  Source,
+  StepGroup,
+  SummaryBucket,
+  SuspectedProblem,
+  SuspectedProblemDetail,
+  ViewerScope,
+  WhoFixes,
+} from "./types";
+
+// The SDK names enum fields after their types (`connectionOutcome`), keeps
+// times as Dates and leaves enums open; the views read the contract's names.
+
+const iso = (date: Date): string => date.toISOString();
+
+/** A window start no older than retention by the time it is sent. */
+function since(from: string): Date {
+  const oldest = Date.now() - RETENTION_MS;
+  return new Date(Math.max(Date.parse(from), oldest));
+}
+
+function serverOf(ref: ConnectionServer): ServerRef {
+  return { id: ref.id, kind: ref.kind as ServerKind, name: ref.name };
+}
+
+function server(ref: ConnectionServer | undefined): ServerRef | undefined {
+  return ref && serverOf(ref);
+}
+
+function personOf(ref: ConnectionPerson): Person {
+  return {
+    subjectUrn: ref.subjectUrn,
+    kind: ref.kind as Person["kind"],
+    userId: ref.userId,
+    name: ref.name,
+    email: ref.email,
+  };
+}
+
+function person(ref: ConnectionPerson | undefined): Person | undefined {
+  return ref && personOf(ref);
+}
+
+function row(r: ConnectionAttemptRow | ConnectionAttemptDetail): AttemptRow {
+  return {
+    id: r.id,
+    time: iso(r.time),
+    firstStartedAt: iso(r.firstStartedAt),
+    count: r.count,
+    outcome: r.connectionOutcome as Outcome,
+    step: r.connectionStepGroup as StepGroup,
+    reason: r.reason,
+    message: r.message,
+    technicalMessage: r.technicalMessage,
+    source: r.connectionFailureSource as Source | undefined,
+    person: person(r.person),
+    network: r.network && { key: r.network.key, label: r.network.label },
+    app: {
+      family: r.app.family,
+      name: r.app.name,
+      version: r.app.version,
+      appKey: r.app.appKey,
+    },
+    server: server(r.server),
+    member: server(r.member),
+    service: r.service,
+  };
+}
+
+function step(s: ConnectionAttemptStep): AttemptStep {
+  return {
+    at: iso(s.at),
+    step: s.connectionStepGroup as StepGroup,
+    storedStep: s.storedStep,
+    result: s.result,
+    final: s.final,
+    reason: s.reason,
+    message: s.message,
+    technicalMessage: s.technicalMessage,
+    member: server(s.member),
+    service: s.service,
+  };
+}
+
+function detail(d: ConnectionAttemptDetail): AttemptDetail {
+  return {
+    ...row(d),
+    startedAt: iso(d.startedAt),
+    userSessionIssuerId: d.userSessionIssuerId,
+    traceId: d.traceId,
+    steps: d.steps.map(step),
+    context: {
+      grantType: d.context.grantType,
+      subReason: d.context.subReason,
+      retries: d.context.retries,
+    },
+  };
+}
+
+function range(request: AttemptRangeRequest) {
+  return {
+    userSessionIssuerId: request.userSessionIssuerId,
+    serverId: request.serverId,
+    from: since(request.from),
+    to: new Date(request.to),
+    filters: request.filters as ConnectionAttemptFilters | undefined,
+  };
+}
+
+export async function listAttempts(
+  client: GramCore,
+  gramProject: string,
+  request: ListAttemptsRequest,
+): Promise<ListAttemptsResponse> {
+  const result = await unwrapAsync(
+    mcpConnectionHealthListAttempts(client, {
+      gramProject,
+      listAttemptsRequestBody: {
+        ...range(request),
+        cursor: request.cursor,
+        limit: request.limit,
+      },
+    }),
+  );
+  return {
+    loggingEnabled: result.loggingEnabled,
+    viewerScope: result.connectionViewerScope as ViewerScope,
+    attempts: result.attempts?.map(row),
+    nextCursor: result.nextCursor,
+  };
+}
+
+export async function getAttemptCounts(
+  client: GramCore,
+  gramProject: string,
+  request: AttemptRangeRequest,
+): Promise<AttemptCountsResponse> {
+  const result = await unwrapAsync(
+    mcpConnectionHealthGetAttemptCounts(client, {
+      gramProject,
+      connectionAttemptQuery: range(request),
+    }),
+  );
+  return {
+    loggingEnabled: result.loggingEnabled,
+    viewerScope: result.connectionViewerScope as ViewerScope,
+    totalAttempts: result.totalAttempts,
+    facets: result.facets,
+    truncated: result.truncated,
+  };
+}
+
+export async function getAttempt(
+  client: GramCore,
+  gramProject: string,
+  reference: string,
+): Promise<GetAttemptResponse> {
+  const result = await unwrapAsync(
+    mcpConnectionHealthGetAttempt(client, {
+      gramProject,
+      getAttemptRequestBody: { reference },
+    }),
+  );
+  return {
+    loggingEnabled: result.loggingEnabled,
+    viewerScope: result.connectionViewerScope as ViewerScope,
+    found: result.found,
+    attempt: result.attempt && detail(result.attempt),
+  };
+}
+
+export async function getSignInSummary(
+  client: GramCore,
+  gramProject: string,
+  request: {
+    userSessionIssuerId: string;
+    serverId?: string;
+    from: string;
+    to: string;
+    bucket?: SummaryBucket;
+    steps?: readonly StepGroup[];
+  },
+): Promise<SignInSummaryResponse> {
+  const result = await unwrapAsync(
+    mcpConnectionHealthGetSignInSummary(client, {
+      gramProject,
+      getSignInSummaryRequestBody: {
+        userSessionIssuerId: request.userSessionIssuerId,
+        serverId: request.serverId,
+        from: since(request.from),
+        to: new Date(request.to),
+        bucket: request.bucket,
+        steps: request.steps && [...request.steps],
+      },
+    }),
+  );
+  return {
+    loggingEnabled: result.loggingEnabled,
+    viewerScope: result.connectionViewerScope as ViewerScope,
+    bucket: result.bucket as SummaryBucket | undefined,
+    buckets: result.buckets?.map((b) => ({
+      start: iso(b.start),
+      signIns: b.signIns,
+      renewals: b.renewals,
+    })),
+  };
+}
+
+export async function getSessionActivity(
+  client: GramCore,
+  gramProject: string,
+  request: { userSessionIssuerId: string; from: string; to: string },
+): Promise<SessionActivityResponse> {
+  const result = await unwrapAsync(
+    mcpConnectionHealthGetSessionActivity(client, {
+      gramProject,
+      getSessionActivityRequestBody: {
+        userSessionIssuerId: request.userSessionIssuerId,
+        from: since(request.from),
+        to: new Date(request.to),
+      },
+    }),
+  );
+  return {
+    days: result.days,
+    activeNow: result.activeNow,
+    averageSessionSeconds: result.averageSessionSeconds,
+    averageWindowFrom: iso(result.averageWindowFrom),
+    averageWindowTo: iso(result.averageWindowTo),
+    configuredSessionSeconds: result.configuredSessionSeconds,
+  };
+}
+
+export async function listDeniedClients(
+  client: GramCore,
+  gramProject: string,
+  request: {
+    userSessionIssuerId: string;
+    serverId?: string;
+    from: string;
+    to: string;
+  },
+): Promise<DeniedClientsResponse> {
+  const result = await unwrapAsync(
+    mcpConnectionHealthListDeniedClients(client, {
+      gramProject,
+      connectionHealthRangeQuery: {
+        userSessionIssuerId: request.userSessionIssuerId,
+        serverId: request.serverId,
+        from: since(request.from),
+        to: new Date(request.to),
+      },
+    }),
+  );
+  return {
+    loggingEnabled: result.loggingEnabled,
+    viewerScope: result.connectionViewerScope as ViewerScope,
+    clients: result.clients?.map((c) => ({
+      app: c.app,
+      reason: c.reason,
+      message: c.message,
+      technicalMessage: c.technicalMessage,
+      attempts: c.attempts,
+      people: c.people,
+      networks: c.networks,
+      lastAt: iso(c.lastAt),
+    })),
+  };
+}
+
+function problem(
+  p: SdkSuspectedProblem | SdkSuspectedProblemDetail,
+): SuspectedProblem {
+  return {
+    id: p.id,
+    headline: p.headline,
+    fact: p.fact,
+    since: iso(p.since),
+    lastFailedAt: iso(p.lastFailedAt),
+    peopleCount: p.peopleCount,
+    peopleOnServerCount: p.peopleOnServerCount,
+    scope: {
+      kind: p.scope.kind as SuspectedProblem["scope"]["kind"],
+      id: p.scope.id,
+      name: p.scope.name,
+    },
+    rule: p.suspectedProblemRule as ProblemRule,
+    part: p.suspectedProblemPart as ProblemPart,
+    whoFixes: p.suspectedProblemWhoFixes as WhoFixes | undefined,
+    filters: {
+      from: iso(p.filters.from),
+      outcomes: p.filters.outcomes as Outcome[] | undefined,
+      serverIds: p.filters.serverIds,
+      memberIds: p.filters.memberIds,
+      people: p.filters.people,
+      apps: p.filters.apps,
+      appVersions: p.filters.appVersions,
+      reasons: p.filters.reasons,
+    },
+  };
+}
+
+function problemDetail(d: SdkSuspectedProblemDetail): SuspectedProblemDetail {
+  return {
+    ...problem(d),
+    source: d.connectionFailureSource as Source | undefined,
+    failedPer10Minutes: d.failedPer10Minutes.map((b) => ({
+      start: iso(b.start),
+      attempts: b.attempts,
+    })),
+    lastConnectedAt: d.lastConnectedAt && iso(d.lastConnectedAt),
+    otherFailuresOnService: d.otherFailuresOnService,
+    messages: d.messages,
+    people: d.people.map((p) => ({
+      person: personOf(p.person),
+      apps: p.apps,
+      appsTotal: p.appsTotal,
+      servers: p.servers.map((s) => ({
+        server: serverOf(s.server),
+        member: server(s.member),
+      })),
+      serversTotal: p.serversTotal,
+      attempts: p.attempts,
+      firstFailedAt: iso(p.firstFailedAt),
+    })),
+    peopleTotal: d.peopleTotal,
+    serversTotal: d.serversTotal,
+    asOf: iso(d.asOf),
+    countsWidened: d.countsWidened,
+    servers: d.servers.map((s) => ({
+      server: serverOf(s.server),
+      member: server(s.member),
+      attempts: s.attempts,
+    })),
+  };
+}
+
+export async function listSuspectedProblems(
+  client: GramCore,
+  gramProject: string,
+  request: {
+    userSessionIssuerId: string;
+    serverId?: string;
+    part?: ProblemPart;
+  },
+): Promise<ListSuspectedProblemsResponse> {
+  const result = await unwrapAsync(
+    mcpConnectionHealthListSuspectedProblems(client, {
+      gramProject,
+      listSuspectedProblemsRequestBody: request,
+    }),
+  );
+  return {
+    loggingEnabled: result.loggingEnabled,
+    viewerScope: result.connectionViewerScope as ViewerScope,
+    problems: result.problems.map(problem),
+    problemsTotal: result.problemsTotal,
+  };
+}
+
+export async function getSuspectedProblem(
+  client: GramCore,
+  gramProject: string,
+  request: { userSessionIssuerId: string; id: string; serverId?: string },
+): Promise<GetSuspectedProblemResponse> {
+  const result = await unwrapAsync(
+    mcpConnectionHealthGetSuspectedProblem(client, {
+      gramProject,
+      getSuspectedProblemRequestBody: request,
+    }),
+  );
+  return {
+    loggingEnabled: result.loggingEnabled,
+    viewerScope: result.connectionViewerScope as ViewerScope,
+    found: result.found,
+    problem: result.problem && problemDetail(result.problem),
+  };
+}

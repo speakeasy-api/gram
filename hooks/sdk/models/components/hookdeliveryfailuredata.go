@@ -9,24 +9,24 @@ import (
 	"time"
 )
 
-// Cause - Failure class the hook sender observed. http means the control plane answered with a retryable status.
-type Cause string
+// HookDeliveryFailureDataCause - Failure class the hook sender observed. http means the control plane answered with a retryable status.
+type HookDeliveryFailureDataCause string
 
 const (
-	CauseDNS                Cause = "dns"
-	CauseTLS                Cause = "tls"
-	CauseTimeout            Cause = "timeout"
-	CauseCanceled           Cause = "canceled"
-	CauseConnection         Cause = "connection"
-	CauseUnreadableResponse Cause = "unreadable-response"
-	CauseUnknown            Cause = "unknown"
-	CauseHTTP               Cause = "http"
+	HookDeliveryFailureDataCauseDNS                HookDeliveryFailureDataCause = "dns"
+	HookDeliveryFailureDataCauseTLS                HookDeliveryFailureDataCause = "tls"
+	HookDeliveryFailureDataCauseTimeout            HookDeliveryFailureDataCause = "timeout"
+	HookDeliveryFailureDataCauseCanceled           HookDeliveryFailureDataCause = "canceled"
+	HookDeliveryFailureDataCauseConnection         HookDeliveryFailureDataCause = "connection"
+	HookDeliveryFailureDataCauseUnreadableResponse HookDeliveryFailureDataCause = "unreadable-response"
+	HookDeliveryFailureDataCauseUnknown            HookDeliveryFailureDataCause = "unknown"
+	HookDeliveryFailureDataCauseHTTP               HookDeliveryFailureDataCause = "http"
 )
 
-func (e Cause) ToPointer() *Cause {
+func (e HookDeliveryFailureDataCause) ToPointer() *HookDeliveryFailureDataCause {
 	return &e
 }
-func (e *Cause) UnmarshalJSON(data []byte) error {
+func (e *HookDeliveryFailureDataCause) UnmarshalJSON(data []byte) error {
 	var v string
 	if err := json.Unmarshal(data, &v); err != nil {
 		return err
@@ -47,10 +47,10 @@ func (e *Cause) UnmarshalJSON(data []byte) error {
 	case "unknown":
 		fallthrough
 	case "http":
-		*e = Cause(v)
+		*e = HookDeliveryFailureDataCause(v)
 		return nil
 	default:
-		return fmt.Errorf("invalid value for Cause: %v", v)
+		return fmt.Errorf("invalid value for HookDeliveryFailureDataCause: %v", v)
 	}
 }
 
@@ -152,7 +152,7 @@ type HookDeliveryFailureData struct {
 	// speakeasy-hooks binary version that made the attempt.
 	BinaryVersion *string `json:"binary_version,omitzero"`
 	// Failure class the hook sender observed. http means the control plane answered with a retryable status.
-	Cause Cause `json:"cause"`
+	Cause HookDeliveryFailureDataCause `json:"cause"`
 	// Whether a failed send was a live hook or a spool-drain replay.
 	DeliveryPhase DeliveryPhase `json:"delivery_phase"`
 	// Wall time the client spent on the send across its attempts, in milliseconds.
@@ -218,9 +218,9 @@ func (h *HookDeliveryFailureData) GetBinaryVersion() *string {
 	return h.BinaryVersion
 }
 
-func (h *HookDeliveryFailureData) GetCause() Cause {
+func (h *HookDeliveryFailureData) GetCause() HookDeliveryFailureDataCause {
 	if h == nil {
-		return Cause("")
+		return HookDeliveryFailureDataCause("")
 	}
 	return h.Cause
 }

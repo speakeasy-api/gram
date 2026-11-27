@@ -1,5 +1,33 @@
 # admin
 
+## 0.14.2
+
+### Patch Changes
+
+- 5a611c9: The admin encryption transitions list now shows only organizations with values for the selected use case by default, with how many values each has and when one was last written, most recently written first. Staff can switch to every organization or sort oldest first, and the state counts follow the filter.
+
+## 0.14.1
+
+### Patch Changes
+
+- bb54618: Staff can move an organization's saved Tailscale OAuth clients to its organization key from a temporary **Tailscale OAuth migration** page in the admin dashboard, one step at a time: enroll, backfill and verify, finalize, then clear the platform-key copies.
+
+## 0.14.0
+
+### Minor Changes
+
+- 477e3ab: Staff can download the original OpenAPI documents used by a toolset-backed MCP server from the Sources section on its admin health page. Source files are not exposed through Admin MCP or customer-facing tools by this change.
+
+### Patch Changes
+
+- 57a8691: The support matrix adds Claude · Unified Chat for Desktop and Web, the merged chat and Cowork view in the Claude apps. Claude Chat and Cowork are now labelled deprecated, and their rows and recorded coverage stay in place. On an organization's observed coverage, Unified Chat claims count toward the Cowork column for methods that report through the plugin's hooks, and toward Claude Chat for the Compliance API and inference hooks.
+
+## 0.13.1
+
+### Patch Changes
+
+- d077556: Remove the external MCP fields from the API. Deployments no longer list external MCP sources, evolving a deployment ignores `exclude_external_mcps`, toolsets no longer carry external MCP header definitions, and the `externalmcp` tool type is no longer a valid tool filter. The deployment external MCP counts stay, always 0, so older clients keep working. The dashboard drops its external MCP views, warnings and OAuth auto-setup.
+
 ## 0.13.0
 
 ### Minor Changes

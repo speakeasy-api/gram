@@ -6,6 +6,11 @@ import type {
   OrgRouteStructure,
   RouteStructure,
 } from "./routes";
+import {
+  PrototypePage,
+  SetupTaskRedirect,
+  SetupWizard,
+} from "./route-pages.lazy";
 import Channels from "./pages/channels/Channels";
 import AssistantPage from "./pages/assistants/Assistant";
 import AssistantsIndex, { AssistantsRoot } from "./pages/assistants/Assistants";
@@ -35,7 +40,11 @@ import SkillVersionHistory from "./pages/skills/SkillVersionHistory";
 import Deployment from "./pages/deployments/deployment/Deployment";
 import Deployments, { DeploymentsRoot } from "./pages/deployments/Deployments";
 import ProjectIdentityRedirect from "./pages/org/ProjectIdentityRedirect";
-import UserSessions from "./pages/org/UserSessions";
+import McpSessionsIndex, {
+  LegacyMcpSessionsConfiguration,
+  LegacyMcpSessionsProviderDetail,
+} from "./pages/mcp-sessions/McpSessionsIndex";
+import McpSessionsProvider from "./pages/mcp-sessions/McpSessionsProvider";
 import EventFeed from "./pages/data/EventFeed";
 import DataExports from "./pages/data-exports/DataExports";
 import { LegacyDataRedirect } from "./pages/data-exports/LegacyDataRedirect";
@@ -59,7 +68,9 @@ import { RedirectToDeployments } from "./pages/mcp/add/LegacyRedirects";
 import Sources, { SourcesRoot } from "./pages/mcp/sources/Sources";
 import SourceDetailRoute from "./pages/mcp/sources/SourceDetail";
 import GatewayDetailPage from "./pages/mcp/gateway/GatewayDetails";
-import OrganizationGatewayPage from "./pages/mcp/OrganizationGateway";
+import OrganizationGatewayPage, {
+  ProjectGatewayPage,
+} from "./pages/mcp/OrganizationGateway";
 import MCPServerDetails from "./pages/mcp/x/MCPServerDetails";
 import { ToolsetSlugRedirectPage } from "./pages/mcp/ToolsetRedirect";
 import { InsightsHooksPage, InsightsRoot } from "./pages/insights/Insights";
@@ -126,10 +137,8 @@ import {
 } from "./pages/org/encryption-keys/EncryptionKeys";
 import OrgWebhooks from "./pages/org/OrgWebhooks";
 import UserSessionIssuerDetail from "./pages/user-session-issuers/UserSessionIssuerDetail";
-import {
-  UserSessionIssuersPage,
-  UserSessionIssuersRoot,
-} from "./pages/user-session-issuers/UserSessionIssuers";
+import { SyncFromOkta } from "./pages/mcp/sync-from-okta/SyncFromOkta";
+import { UserSessionIssuersPage } from "./pages/user-session-issuers/UserSessionIssuers";
 import {
   RemoteIdentityProvidersPage,
   RemoteIdentityProvidersRoot,
@@ -140,11 +149,9 @@ import PlatformAdminOverview from "./pages/platform-admin/Overview";
 import PlatformAdminRbacOverride from "./pages/platform-admin/RbacOverride";
 import PlatformAdminOnboarding from "./pages/platform-admin/Onboarding";
 import PlatformAdminOpenRouterKeys from "./pages/platform-admin/OpenRouterKeys";
-import Playground from "./pages/playground/Playground";
 import NewPromptPage from "./pages/prompts/NewPrompt";
 import PromptPage from "./pages/prompts/Prompt";
 import Prompts, { PromptsRoot } from "./pages/prompts/Prompts";
-import SDK from "./pages/sdk/SDK";
 import Access from "./pages/access/Access";
 import { RoleEditorPage } from "./pages/access/RoleEditorPage";
 import RequestAccess from "./pages/access/RequestAccess";
@@ -154,6 +161,7 @@ import RiskOverviewRedirect from "./pages/security/RiskOverviewRedirect";
 import Watchdog, { WatchdogRoot } from "./pages/security/watchdog/Watchdog";
 import SignalDetail from "./pages/security/watchdog/SignalDetail";
 import RiskEventsPage from "./pages/security/RiskEventsPage";
+import IntentPolicies from "./pages/security/intent-policies/IntentPolicies";
 import {
   ShadowAIRoot,
   ShadowAISectionRedirect,
@@ -161,6 +169,7 @@ import {
   ShadowMCPServerLegacyRedirect,
 } from "./pages/shadow-ai/ShadowAI";
 import ShadowAIToolDetail from "./pages/shadow-ai/ShadowAIToolDetail";
+import ShadowMCP from "./pages/shadow-mcp/ShadowMCP";
 import ShadowMCPServerDetail from "./pages/shadow-mcp/ShadowMCPServerDetail";
 import PolicyCenter, { PolicyCenterRoot } from "./pages/security/PolicyCenter";
 import PolicyDetail, { PolicyNew } from "./pages/security/PolicyDetail";
@@ -171,11 +180,6 @@ import {
   KillswitchIndexRedirect,
   KillswitchRecordRedirect,
 } from "./pages/killswitch/KillswitchesRoot";
-
-const SetupWizard = React.lazy(() => import("./pages/setup/SetupWizard"));
-const SetupTaskRedirect = React.lazy(
-  () => import("./pages/setup/SetupTaskRedirect"),
-);
 
 /**
  * The page each route renders. Route paths, titles and the `useRoutes` /
@@ -230,9 +234,6 @@ const ROUTE_PAGES: PageTree<RouteStructure> = {
         component: ChatConversation,
       },
     },
-  },
-  playground: {
-    component: Playground,
   },
   integrations: {
     component: Integrations,
@@ -325,6 +326,9 @@ const ROUTE_PAGES: PageTree<RouteStructure> = {
           function: {
             component: FunctionsOnboarding,
           },
+          okta: {
+            component: SyncFromOkta,
+          },
         },
       },
       catalog: {
@@ -352,6 +356,9 @@ const ROUTE_PAGES: PageTree<RouteStructure> = {
       organizationGateway: {
         component: OrganizationGatewayPage,
       },
+      projectGateway: {
+        component: ProjectGatewayPage,
+      },
       gateway: {
         component: GatewayDetailPage,
         subPages: {
@@ -377,6 +384,7 @@ const ROUTE_PAGES: PageTree<RouteStructure> = {
           teamAccess: {},
           guardrails: {},
           sessions: {},
+          feedback: {},
           settings: {},
           authentication: {},
           performance: {},
@@ -418,7 +426,29 @@ const ROUTE_PAGES: PageTree<RouteStructure> = {
     indexComponent: InsightsHooksPage,
   },
   mcpSessions: {
-    component: UserSessions,
+    component: Outlet,
+    indexComponent: McpSessionsIndex,
+    subPages: {
+      provider: {
+        component: McpSessionsProvider,
+        subPages: {
+          overview: {},
+          connections: {},
+          connectionLogs: {},
+          mcpServers: {},
+          settings: {},
+        },
+      },
+      configuration: {
+        component: Outlet,
+        indexComponent: LegacyMcpSessionsConfiguration,
+        subPages: {
+          issuerDetail: {
+            component: LegacyMcpSessionsProviderDetail,
+          },
+        },
+      },
+    },
   },
   remoteIdentityProviders: {
     component: RemoteIdentityProvidersRoot,
@@ -588,6 +618,9 @@ const ROUTE_PAGES: PageTree<RouteStructure> = {
   riskEvents: {
     component: RiskEventsPage,
   },
+  intentPolicies: {
+    component: IntentPolicies,
+  },
   shadowAI: {
     component: ShadowAIRoot,
     indexComponent: ShadowAISectionRedirect,
@@ -632,15 +665,12 @@ const ROUTE_PAGES: PageTree<RouteStructure> = {
   },
   shadowMCP: {
     component: ShadowAIRoot,
-    indexComponent: ShadowMCPIndexRedirect,
+    indexComponent: ShadowMCP,
     subPages: {
       detail: {
         component: ShadowMCPServerLegacyRedirect,
       },
     },
-  },
-  sdks: {
-    component: SDK,
   },
   deployments: {
     component: DeploymentsRoot,
@@ -671,6 +701,9 @@ const ROUTE_PAGES: PageTree<RouteStructure> = {
     component: Settings,
   },
   docs: {},
+  prototype: {
+    component: PrototypePage,
+  },
 };
 
 const ORG_ROUTE_PAGES: PageTree<OrgRouteStructure> = {
@@ -722,7 +755,7 @@ const ORG_ROUTE_PAGES: PageTree<OrgRouteStructure> = {
     component: OrgWebhooks,
   },
   userSessionIssuers: {
-    component: UserSessionIssuersRoot,
+    component: Outlet,
     indexComponent: UserSessionIssuersPage,
     subPages: {
       issuerDetail: {
@@ -842,6 +875,9 @@ const ORG_ROUTE_PAGES: PageTree<OrgRouteStructure> = {
         component: Access,
       },
       challenges: {
+        component: Access,
+      },
+      requests: {
         component: Access,
       },
     },

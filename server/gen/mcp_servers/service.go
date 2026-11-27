@@ -38,6 +38,10 @@ type Service interface {
 	// server-side slug. The id and visibility fields are required; exactly one of
 	// remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id must be provided.
 	UpdateMcpServer(context.Context, *UpdateMcpServerPayload) (res *types.McpServer, err error)
+	// Mark the upstream provider's manual setup guide for an MCP server as done,
+	// or clear that mark. Marking it done again keeps the original completion
+	// time. Requires the same access as updateMcpServer.
+	SetSetupGuideCompleted(context.Context, *SetSetupGuideCompletedPayload) (res *types.McpServer, err error)
 	// List the tool filter scopes (tags) available on an MCP server and the tools
 	// under each, including tools excluded from all filters. Exactly one of id or
 	// slug must be provided. Read-only; reflects the explicit tool variations
@@ -96,7 +100,7 @@ const ServiceName = "mcpServers"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [13]string{"createMcpServer", "getMcpServer", "listMcpServers", "listMcpServersForOrg", "updateMcpServer", "listToolFilters", "setToolMetadataBatch", "addToolMetadataBatch", "listToolMetadata", "setToolMetadata", "deleteToolMetadata", "deleteMcpServer", "getMcpServerUsageImpact"}
+var MethodNames = [14]string{"createMcpServer", "getMcpServer", "listMcpServers", "listMcpServersForOrg", "updateMcpServer", "setSetupGuideCompleted", "listToolFilters", "setToolMetadataBatch", "addToolMetadataBatch", "listToolMetadata", "setToolMetadata", "deleteToolMetadata", "deleteMcpServer", "getMcpServerUsageImpact"}
 
 // AddToolMetadataBatchPayload is the payload type of the mcpServers service
 // addToolMetadataBatch method.
@@ -254,6 +258,18 @@ type ListToolMetadataPayload struct {
 type ListToolMetadataResult struct {
 	// The stored tool metadata for the MCP server
 	Tools []*types.ToolMetadata
+}
+
+// SetSetupGuideCompletedPayload is the payload type of the mcpServers service
+// setSetupGuideCompleted method.
+type SetSetupGuideCompletedPayload struct {
+	// The ID of the MCP server
+	ID string
+	// true marks the setup guide as done; false clears the mark
+	Completed        bool
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
 }
 
 // SetToolMetadataBatchPayload is the payload type of the mcpServers service

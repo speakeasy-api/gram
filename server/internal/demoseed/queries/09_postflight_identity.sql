@@ -27,9 +27,6 @@ FROM principal_remote_session_bindings b
 JOIN agents a ON a.id = b.principal_id AND a.organization_id = b.organization_id
 JOIN remote_sessions rs ON rs.id = b.remote_session_id
 JOIN user_sessions us ON us.id = @user_session_id::uuid
-JOIN remote_session_client_user_session_issuers link
-  ON link.remote_session_client_id = rs.remote_session_client_id
- AND link.user_session_issuer_id = us.user_session_issuer_id
 WHERE b.organization_id = @org_id::text AND b.project_id = @project_id::uuid
   AND b.revoked_at IS NULL AND a.suspended_at IS NULL AND a.revoked_at IS NULL
   AND b.remote_session_id = ANY(@remote_session_ids::uuid[])
@@ -37,8 +34,7 @@ WHERE b.organization_id = @org_id::text AND b.project_id = @project_id::uuid
   AND b.user_session_issuer_id = us.user_session_issuer_id
   AND rs.subject_urn = b.attached_by_subject_id
   AND b.attached_by_subject_id = rs.subject_urn
-  AND rs.access_token_encrypted <> ''
-  AND rs.refresh_token_encrypted IS NULL AND rs.auto_refresh IS FALSE;
+  AND rs.access_token_encrypted <> '';
 
 -- name: PostflightIDSessionBindings :one
 SELECT count(*) FROM principal_remote_session_bindings
@@ -49,11 +45,13 @@ SELECT count(*) FROM remote_sessions
 WHERE user_session_issuer_id IN
   (SELECT id FROM user_session_issuers WHERE project_id = @project_id::uuid);
 
--- name: PostflightIDInertUpstreamSessions :one
+-- The Example OAuth server's sign-ins. The live ones hold MCP fixture
+-- tokens (fixture_servers.go); the expired ones keep the dummy token.
+-- name: PostflightIDPerUserUpstreamSessions :one
 SELECT count(*) FROM remote_sessions
 WHERE remote_session_client_id = @remote_session_client_id::uuid
   AND deleted IS FALSE
-  AND access_token_encrypted <> '' AND refresh_token_encrypted IS NULL
+  AND access_token_encrypted <> ''
   AND (validation_status IS NULL
        OR validation_status IN ('valid', 'rejected_by_member', 'inactive', 'unknown'));
 
@@ -109,10 +107,13 @@ WHERE project_id = @project_id::uuid
   AND grant_types = ARRAY['client_credentials']
   AND deleted IS FALSE;
 
--- Nobody connects a self client, and no MCP server uses this one.
--- name: PostflightIDJamfClientIssuerBindings :one
-SELECT count(*) FROM remote_session_client_user_session_issuers
-WHERE remote_session_client_id = @jamf_client::uuid;
+-- Nobody connects a self client, and no MCP server offers this one.
+-- name: PostflightIDJamfClientOffers :one
+SELECT count(*) FROM mcp_server_auth_clients offer
+JOIN mcp_auth_clients client ON client.id = offer.auth_client_id AND client.organization_id = offer.organization_id
+WHERE client.remote_session_client_id = @jamf_client::uuid
+  AND offer.organization_id = @org_id::text AND offer.project_id = @project_id::uuid
+  AND client.deleted IS FALSE AND offer.deleted IS FALSE;
 
 -- name: PostflightIDJamfClientSessions :one
 SELECT count(*) FROM remote_sessions
@@ -128,7 +129,7 @@ WHERE project_id = @project_id::uuid
 -- duplicated any of them would leave the badges telling a different story
 -- than the one they were seeded to tell.
 -- Two upstream MCP issuers, two independent gateway issuers, and one
--- Connections issuer; GitHub uses the organization workforce issuer.
+-- Connections issuer.
 -- name: PostflightIDProjectUserSessionIssuers :one
 SELECT count(*) FROM user_session_issuers
 WHERE project_id = @project_id::uuid AND deleted IS FALSE;
@@ -149,7 +150,7 @@ WHERE id = @workforce_issuer::uuid
 SELECT count(*) FROM user_session_clients
 WHERE project_id = @project_id::uuid AND deleted IS FALSE;
 
--- EMA: two ready bindings, no cached credentials, and one saved provider
+-- EMA: one ready binding, no cached credentials, and no saved provider
 -- order. The workforce issuer accepts ID-JAGs from the fictional provider
 -- without federating interactive sign-in through it.
 -- name: PostflightIDWorkforceInboundEMATrust :one
@@ -176,8 +177,8 @@ WHERE organization_id = @org_id::text;
 SELECT count(*) FROM remote_session_ema_providers
 WHERE organization_id = @org_id::text AND deleted IS FALSE;
 
--- Linear's remote identity provider, the identity chaining example, Jamf
--- Pro, and the two EMA services' authorization servers.
+-- The Example OAuth server's remote identity provider, the identity chaining example, Jamf
+-- Pro, Acme Wiki's authorization server, Linear and Notion.
 -- name: PostflightIDProjectRemoteSessionIssuers :one
 SELECT count(*) FROM remote_session_issuers
 WHERE project_id = @project_id::uuid AND deleted IS FALSE;
@@ -187,61 +188,85 @@ SELECT count(*) FROM remote_session_clients
 WHERE project_id = @project_id::uuid AND organization_id = @org_id::text
   AND client_id_issued_at IS NOT NULL AND deleted IS FALSE;
 
--- name: PostflightIDRemoteIdentityBindings :one
-SELECT count(*)
-FROM remote_session_client_user_session_issuers link
-JOIN user_session_issuers usi ON usi.id = link.user_session_issuer_id
-WHERE usi.project_id = @project_id::uuid;
-
--- The stamp has to be what ResyncMCPServerRemoteSessionIssuers would derive:
--- every live client bound to Linear's user session issuer names one remote
--- issuer, and it is the stamped one. Returns no row (pgx.ErrNoRows) when the
--- HAVING fails, including when no live client is bound at all.
--- name: PostflightIDLinearIssuerStamp :one
-SELECT count(*)
-FROM remote_session_client_user_session_issuers link
-JOIN remote_session_clients c ON c.id = link.remote_session_client_id
-WHERE link.user_session_issuer_id = @linear_issuer::uuid
-  AND c.deleted IS FALSE
-HAVING bool_and(c.remote_session_issuer_id = @linear_remote_issuer::uuid);
+-- The Example OAuth server offers one personal registration, owned by its stamped provider.
+-- name: PostflightIDLinearPersonalOffer :one
+SELECT CASE WHEN bool_and(registration.remote_session_issuer_id = @linear_remote_issuer::uuid)
+            THEN count(*) ELSE 0 END::bigint
+FROM mcp_server_auth_clients AS offer
+JOIN mcp_auth_clients AS auth_client
+  ON auth_client.id = offer.auth_client_id
+ AND auth_client.organization_id = offer.organization_id
+JOIN remote_session_clients AS registration ON registration.id = auth_client.remote_session_client_id
+WHERE offer.mcp_server_id = @linear_server::uuid
+  AND offer.project_id = @project_id::uuid
+  AND offer.organization_id = @org_id::text
+  AND offer.deleted IS FALSE
+  AND auth_client.deleted IS FALSE AND auth_client.enabled
+  AND auth_client.client_type = 'remote_session'
+  AND registration.deleted IS FALSE
+  AND registration.credential_owner = 'subject';
 
 -- name: PostflightIDLinearStampedServers :one
 SELECT count(*) FROM mcp_servers
 WHERE project_id = @project_id::uuid
   AND remote_session_issuer_id = @linear_remote_issuer::uuid;
 
+-- The fixture servers phase moves it to the hosted fixture and pins both
+-- of the fixture's scopes, so a new sign-in can read and write notes.
 -- name: PostflightIDLinearProtectedResource :one
 SELECT count(*) FROM remote_protected_resources
 WHERE project_id = @project_id::uuid AND deleted IS FALSE
-  AND resource_identifier = 'https://mcp.linear.app/mcp'
-  AND scope_override = ARRAY['read'];
+  AND resource_identifier = @resource::text
+  AND scope_override = ARRAY['notes:read', 'notes:write'];
 
 -- name: PostflightIDServerClientAssociations :one
 SELECT count(*) FROM mcp_server_remote_session_clients
 WHERE project_id = @project_id::uuid AND deleted IS FALSE;
 
 -- Check both the total and the expected credential/server/client tuples so
--- thirty-two misassigned choices cannot satisfy postflight.
+-- forty-one misassigned choices cannot satisfy postflight.
 -- name: PostflightIDUpstreamClientChoices :one
 WITH live AS (
-  SELECT * FROM upstream_client_selections
-  WHERE project_id = @project_id::uuid AND deleted IS FALSE
-    AND credential_kind = 'user_session'
+  SELECT choice.*, EXISTS (
+    SELECT 1 FROM mcp_server_auth_clients offer
+    JOIN mcp_auth_clients client
+      ON client.id = offer.auth_client_id
+     AND client.organization_id = offer.organization_id
+    JOIN remote_session_clients registration ON registration.id = client.remote_session_client_id AND registration.deleted IS FALSE
+    JOIN remote_session_issuers issuer ON issuer.id = registration.remote_session_issuer_id AND issuer.deleted IS FALSE
+    WHERE offer.mcp_server_id = choice.mcp_server_id
+      AND offer.project_id = choice.project_id
+      AND offer.organization_id = choice.organization_id
+      AND offer.deleted IS FALSE
+      AND client.id = choice.auth_client_id
+      AND client.remote_session_client_id = choice.remote_session_client_id
+      AND client.client_type IN ('remote_session', 'ema')
+      AND client.deleted IS FALSE AND client.enabled
+  ) AS personal_offer
+  FROM upstream_client_selections choice
+  WHERE choice.project_id = @project_id::uuid AND choice.deleted IS FALSE
+    AND choice.credential_kind = 'user_session'
+    AND NOT EXISTS (
+      SELECT 1 FROM user_sessions s
+      WHERE s.id = choice.credential_id AND s.project_id = choice.project_id
+        AND s.user_session_issuer_id = @health_issuer_id::uuid
+    )
 )
 SELECT count(*) FROM live
-WHERE (SELECT count(*) FROM live) = 32
+WHERE (SELECT count(*) FROM live) = 41
   AND credential_kind = 'user_session'
   AND (
     (credential_id = ANY(@linear_session_ids::uuid[])
      AND mcp_server_id = @linear_server_id::uuid
      AND remote_session_client_id = @linear_client_id::uuid
-     AND no_auth IS FALSE)
+     AND no_auth IS FALSE
+     AND personal_offer)
     OR
     (credential_id = ANY(@slack_session_ids::uuid[])
      AND mcp_server_id = @slack_server_id::uuid
      AND remote_session_client_id IS NULL
-     AND client_attachment_scope IS NULL
-     AND no_auth IS TRUE)
+     AND auth_client_id = @slack_auth_client_id::uuid
+     AND no_auth IS FALSE)
     OR
     (credential_id = ANY(@org_session_ids::uuid[])
      AND mcp_server_id = ANY(@org_no_auth_server_ids::uuid[])
@@ -250,64 +275,68 @@ WHERE (SELECT count(*) FROM live) = 32
      AND no_auth IS TRUE)
     OR
     (credential_id = ANY(@org_session_ids::uuid[])
-     AND mcp_server_id = @github_server_id::uuid
-     AND remote_session_client_id IS NULL
-     AND auth_client_id = @github_auth_client_id::uuid
      AND no_auth IS FALSE
-     AND EXISTS (SELECT 1 FROM mcp_auth_clients ac
-                 JOIN mcp_server_auth_clients l
-                   ON l.auth_client_id = ac.id AND l.mcp_server_id = live.mcp_server_id
-                  AND l.project_id = @project_id::uuid AND l.deleted IS FALSE
-                 WHERE ac.id = live.auth_client_id AND ac.organization_id = live.organization_id
-                   AND ac.deleted IS FALSE AND ac.enabled))
-    OR
-    (credential_id = ANY(@org_session_ids::uuid[])
-     AND no_auth IS FALSE
-     AND EXISTS (SELECT 1 FROM mcp_server_remote_session_clients a
-                 JOIN remote_session_clients c ON c.id = a.remote_session_client_id AND c.deleted IS FALSE
-                 JOIN user_sessions us ON us.id = live.credential_id
-                 JOIN remote_session_client_user_session_issuers binding
-                   ON binding.remote_session_client_id = c.id
-                  AND binding.user_session_issuer_id = us.user_session_issuer_id
-                 WHERE a.mcp_server_id = live.mcp_server_id
-                   AND a.remote_session_client_id = live.remote_session_client_id
-                   AND a.deleted IS FALSE))
+     AND personal_offer)
   );
 
--- Count live choices outside the intended set: Linear through its main client,
--- Slack with no upstream authentication, the organization gateway's GitHub
--- choice of the caller's own token and its tunneled inventory choice, each on a
--- seeded session.
+-- The connection health provider's held sign-ins each record no upstream
+-- sign-in on every server of the provider.
+-- name: PostflightIDHealthUpstreamClientChoices :one
+SELECT count(*)
+FROM upstream_client_selections u
+JOIN user_sessions s ON s.id = u.credential_id AND s.project_id = u.project_id AND s.deleted IS FALSE
+JOIN mcp_servers m ON m.id = u.mcp_server_id AND m.project_id = u.project_id
+WHERE u.project_id = @project_id::uuid AND u.deleted IS FALSE
+  AND u.credential_kind = 'user_session'
+  AND s.user_session_issuer_id = @health_issuer_id::uuid
+  AND m.user_session_issuer_id = @health_issuer_id::uuid
+  AND u.no_auth AND u.remote_session_client_id IS NULL;
+
+-- Count live choices outside the intended set: the Example OAuth server
+-- through its main client, the Example Shared Credential server with no
+-- upstream authentication, and the organization gateway's choices of each
+-- server's associated client, each on a seeded session. Connection health
+-- sign-ins may only choose no upstream sign-in on the provider's own servers.
 -- name: PostflightIDMisassignedUpstreamClientChoices :one
 SELECT count(*)
 FROM upstream_client_selections u
 WHERE u.project_id = @project_id::uuid AND u.deleted IS FALSE
   AND u.credential_kind = 'user_session'
   AND NOT (
-    EXISTS (SELECT 1 FROM user_sessions s WHERE s.id = u.credential_id AND s.deleted IS FALSE)
+    EXISTS (SELECT 1 FROM user_sessions hs
+            JOIN mcp_servers hm ON hm.id = u.mcp_server_id AND hm.project_id = u.project_id
+            WHERE hs.id = u.credential_id AND hs.deleted IS FALSE
+              AND hs.user_session_issuer_id = @health_issuer_id::uuid
+              AND hm.user_session_issuer_id = @health_issuer_id::uuid)
+    AND u.no_auth AND u.remote_session_client_id IS NULL
+  )
+  AND NOT (
+    EXISTS (SELECT 1 FROM user_sessions s WHERE s.id = u.credential_id AND s.deleted IS FALSE
+            AND s.user_session_issuer_id IS DISTINCT FROM @health_issuer_id::uuid)
     AND (
       (u.mcp_server_id = @linear_server_id::uuid AND u.remote_session_client_id = @linear_client_id::uuid)
-      OR (u.mcp_server_id = @slack_server_id::uuid AND u.no_auth)
+      OR (u.mcp_server_id = @slack_server_id::uuid AND u.auth_client_id = @slack_auth_client_id::uuid AND NOT u.no_auth)
       OR (u.credential_id = ANY(@org_session_ids::uuid[])
           AND u.mcp_server_id = ANY(@org_no_auth_server_ids::uuid[]) AND u.no_auth)
-      OR (u.credential_id = ANY(@org_session_ids::uuid[])
-          AND u.mcp_server_id = @github_server_id::uuid AND u.remote_session_client_id IS NULL
-          AND u.auth_client_id = @github_auth_client_id::uuid AND NOT u.no_auth
-          AND EXISTS (SELECT 1 FROM mcp_auth_clients ac
-                      JOIN mcp_server_auth_clients l
-                        ON l.auth_client_id = ac.id AND l.mcp_server_id = u.mcp_server_id
-                       AND l.project_id = @project_id::uuid AND l.deleted IS FALSE
-                      WHERE ac.id = u.auth_client_id AND ac.organization_id = u.organization_id
-                        AND ac.deleted IS FALSE AND ac.enabled))
       OR (u.credential_id = ANY(@org_session_ids::uuid[]) AND NOT u.no_auth
-          AND EXISTS (SELECT 1 FROM mcp_server_remote_session_clients a
-                      WHERE a.mcp_server_id = u.mcp_server_id
-                        AND a.remote_session_client_id = u.remote_session_client_id
-                        AND a.deleted IS FALSE))
+          AND EXISTS (SELECT 1 FROM mcp_server_auth_clients offer
+                      JOIN mcp_auth_clients client
+                        ON client.id = offer.auth_client_id
+                       AND client.organization_id = offer.organization_id
+                      JOIN remote_session_clients registration ON registration.id = client.remote_session_client_id AND registration.deleted IS FALSE
+                      JOIN remote_session_issuers issuer ON issuer.id = registration.remote_session_issuer_id AND issuer.deleted IS FALSE
+                      WHERE offer.mcp_server_id = u.mcp_server_id
+                        AND offer.project_id = u.project_id
+                        AND offer.organization_id = u.organization_id
+                        AND offer.deleted IS FALSE
+                        AND client.id = u.auth_client_id
+                        AND client.remote_session_client_id = u.remote_session_client_id
+                        AND client.client_type IN ('remote_session', 'ema')
+                        AND client.deleted IS FALSE AND client.enabled))
     )
   );
 
--- The headless app's one profile, choosing the shared token on Linear,
+-- The headless app's one profile, choosing the shared token on the Example OAuth server,
 -- which is still enabled and offered there.
 -- name: PostflightIDIssuanceProfileChoices :one
 SELECT count(*)
@@ -328,7 +357,7 @@ WHERE u.project_id = @project_id::uuid AND u.deleted IS FALSE
   AND u.auth_client_id = @auth_client_id::uuid;
 
 -- The identity-bound assistant's person-backed and userless turns use the
--- shared token on Linear, by an administrator's choice in each profile's
+-- shared token on the Example OAuth server, by an administrator's choice in each profile's
 -- latest version, and the token is still enabled and offered there.
 -- name: PostflightIDExecutionProfileChoices :one
 SELECT count(*)
@@ -727,3 +756,8 @@ WHERE t.project_id = @project_id::uuid
   AND t.deleted IS FALSE
   AND c.deleted IS FALSE
   AND c.session_surface = 'speakeasy-slack';
+-- name: PostflightIDLinkedAITools :one
+SELECT count(*) FROM ai_scan_targets t
+JOIN ai_products p ON p.id = t.ai_product_id
+WHERE t.organization_id = @org_id::text AND t.ai_product_id = t.id
+  AND t.id IN ('claude-code', 'codex', 'hermes-agent', 'zed', 'goose');

@@ -3,13 +3,11 @@
 package demoseed
 
 import (
-	"slices"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/associationbackfill"
+	"github.com/speakeasy-api/gram/server/internal/demoseed/demoseedtest"
 )
 
 func TestDemoServerClientAssociations(t *testing.T) {
@@ -22,61 +20,29 @@ func TestLocalServerClientAssociations(t *testing.T) {
 	testServerClientAssociations(t, LocalSpec())
 }
 
-// Every seeded proxied server whose issuer binds an upstream client carries
-// the association it is meant to use, so the backfill has nothing to decide.
-// GitHub and DeepWiki share the workforce issuer with the EMA services and
-// Notion but have no evidence for any of their clients, so they use none.
-// DeepWiki is public and needs no sign-in at all.
+// Check that seed and reseed expose the personal registrations as typed offers.
 func testServerClientAssociations(t *testing.T, spec Spec) {
 	t.Helper()
 	ctx := t.Context()
 	db, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
-	det := func(name string) uuid.UUID { return detUUID(spec.NameSeed + name) }
-	github := det("mcpserver-github")
-	deepwiki := det("mcpserver-deepwiki")
-	want := map[uuid.UUID][]uuid.UUID{
-		det("mcpserver-linear"):      {det("remote-identity-client-linear"), det("attachment-client")},
-		det("mcpserver-ema-tracker"): {det("ema-client-tracker")},
-		det("mcpserver-ema-wiki"):    {det("ema-client-wiki")},
-	}
-
+	seed := &seeder{spec: spec}
+	queries := demoseedtest.New(db)
 	for range 2 {
-		seedLocalPostgres(ctx, t, db, spec)
-
-		rows, err := associationbackfill.New(db).ListUpstreamClientBackfillCandidates(ctx, associationbackfill.ListUpstreamClientBackfillCandidatesParams{
-			Cursor:         uuid.Nil,
-			OrganizationID: spec.OrgID,
-			PageSize:       1000,
-		})
-		require.NoError(t, err)
-		got := map[uuid.UUID][]uuid.UUID{}
-		var uncovered []uuid.UUID
-		for _, row := range rows {
-			if row.PairLive {
-				got[row.McpServerID] = append(got[row.McpServerID], row.RemoteSessionClientID.UUID)
-			}
-			if row.Proxied && row.RemoteSessionClientID.Valid && row.LiveAssociations == 0 && !slices.Contains(uncovered, row.McpServerID) {
-				uncovered = append(uncovered, row.McpServerID)
-			}
-		}
-		require.Len(t, got, len(want))
-		for serverID, clients := range want {
-			require.ElementsMatch(t, clients, got[serverID], "server %s", serverID)
-		}
-		require.ElementsMatch(t, []uuid.UUID{github, deepwiki}, uncovered, "every proxied server with an issuer-bound client must be associated")
-
-		report, err := associationbackfill.Run(ctx, db, associationbackfill.Options{OrganizationID: spec.OrgID, Apply: false, PageSize: 0})
-		require.NoError(t, err)
-		require.Zero(t, report.Decided, "the seed must write every association the backfill would decide")
-		require.Zero(t, report.Gaps)
-		for _, result := range report.Results {
-			if result.MCPServerID == github || result.MCPServerID == deepwiki {
-				require.Equal(t, associationbackfill.OutcomeNoClient, result.Outcome)
-			}
-		}
-		for _, result := range report.GatewayResults {
-			require.True(t, result.Outcome.Covered(), "gateway server %s is %s", result.MCPServerID, result.Outcome)
+		seedNativePostgres(ctx, t, db, spec)
+		for _, fixture := range []struct{ server, registration string }{
+			{"linear", "remote-identity-client-linear"},
+			{"linear-app", "remote-identity-client-linear-app"},
+			{"notion-app", "remote-identity-client-notion-app"},
+			{"ema-wiki", "ema-client-wiki"},
+		} {
+			present, err := queries.HasExactSeedPersonalOffer(ctx, demoseedtest.HasExactSeedPersonalOfferParams{
+				OrgID:          spec.OrgID,
+				ServerID:       seed.det("mcpserver-" + fixture.server).String(),
+				RegistrationID: seed.det(fixture.registration).String(),
+			})
+			require.NoError(t, err)
+			require.True(t, present, "%s must offer exactly its expected personal registration", fixture.server)
 		}
 	}
 }

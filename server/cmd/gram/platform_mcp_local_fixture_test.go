@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/access"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/marketplace"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
@@ -80,7 +81,8 @@ func TestAttachShadowInventoryConstructsWithLocalFixtureDependencies(t *testing.
 	limiter := allowingPlatformMCPBudget{}
 	reader := platformmcp.NewPostgresReader(testenv.NewLogger(t), nil)
 	config := platformMCPConfig{
-		DB: nil, JWTSigningKey: "test-signing-key", FeatureFlags: &feature.InMemory{},
+		AICatalog: aivendorstest.NewStore(),
+		DB:        nil, JWTSigningKey: "test-signing-key", FeatureFlags: &feature.InMemory{},
 		ShadowInventory: &access.Service{}, ShadowReview: &mcpapproval.Service{},
 	}
 	budget := platformmcp.OperationBudget{Connection: limiter, Organization: limiter}

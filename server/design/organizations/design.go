@@ -51,6 +51,30 @@ var _ = Service("organizations", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "OrganizationGateway"}`)
 	})
 
+	Method("getProjectGateway", func() {
+		Description("Get the selected project's Project Gateway: the organization's gateway limited to that project's MCP servers. It is served under the same conditions as the organization's gateway. Requires project:read.")
+
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ProjectGateway)
+
+		HTTP(func() {
+			GET("/rpc/organizations.getProjectGateway")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getProjectGateway")
+		Meta("openapi:extension:x-speakeasy-name-override", "getProjectGateway")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ProjectGateway"}`)
+	})
+
 	Method("sendInvite", func() {
 		Description("Send a WorkOS invitation for the active organization.")
 
@@ -601,6 +625,16 @@ var SetupTask = Type("SetupTask", func() {
 var ListSetupTasksResult = Type("ListSetupTasksResult", func() {
 	Attribute("tasks", ArrayOf(SetupTask), "Setup tasks in catalog order. A group precedes the cards under it.")
 	Required("tasks")
+})
+
+var ProjectGateway = Type("ProjectGateway", func() {
+	Description("The selected project's gateway, or why it is not served.")
+	Attribute("available", Boolean, "Whether the project is served a gateway.")
+	Attribute("url", String, "The gateway's MCP URL. Set only when available.")
+	Attribute("unavailable_reason", String, "Why the gateway is not served. Set only when not available.", func() {
+		Enum("no_organization_issuer", "multiple_organization_issuers", "custom_domain_only", "organization_disabled", "turned_off")
+	})
+	Required("available")
 })
 
 var OrganizationGateway = Type("OrganizationGateway", func() {

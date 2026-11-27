@@ -1,4 +1,4 @@
-//nolint:exhaustruct,wrapcheck // Composition intentionally relies on documented optional zero values.
+//nolint:exhaustruct_v5,wrapcheck // Composition intentionally relies on documented optional zero values.
 package gram
 
 import (
@@ -20,6 +20,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/access"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -43,6 +44,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpskills"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
+	"github.com/speakeasy-api/gram/server/internal/mcpfeedback"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
@@ -60,6 +62,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/analysisstatus"
 	"github.com/speakeasy-api/gram/server/internal/risk/chatfindings"
@@ -75,6 +78,9 @@ import (
 )
 
 type platformMCPConfig struct {
+	// AICatalog is the process-wide AI client catalog store.
+	AICatalog *aivendors.Store
+
 	// CustomDomainTargetSuffix is the normalized parent of designated CNAME destinations.
 	CustomDomainTargetSuffix string
 	// GatewaySessions shares dashboard session scoping and pagination.
@@ -82,36 +88,38 @@ type platformMCPConfig struct {
 	// AgentAuthorizationChecks is the dashboard's authorization check listing
 	// the agent identity reads use.
 	AgentAuthorizationChecks platformmcp.AgentAuthorizationChecks
-	// GatewayProxy serves the caller's own MCP servers through their organization gateway.
-	GatewayProxy           platformmcp.GatewayProxy
-	DeploymentRedeploy     platformmcp.DeploymentRedeployManagement
-	AssistantIdentity      platformmcp.AssistantIdentityManagement
-	WorkloadAssertionReuse platformmcp.WorkloadAssertionReuseManagement
+	DeploymentRedeploy       platformmcp.DeploymentRedeployManagement
+	AssistantIdentity        platformmcp.AssistantIdentityManagement
+	WorkloadAssertionReuse   platformmcp.WorkloadAssertionReuseManagement
 	// InboundEMAUserIssuers and InboundEMARemoteIssuers are the organization
 	// issuer management APIs the inbound EMA trust tools act through.
 	InboundEMAUserIssuers   platformmcp.InboundEMAUserIssuerManagement
 	InboundEMARemoteIssuers platformmcp.InboundEMARemoteIssuerManagement
 	// Workspaces creates the first organization for a user who connects with
 	// none. Nil refuses such a user, as before self-serve signup existed.
-	Workspaces             platformmcp.WorkspaceProvisioner
-	SignalAuthoring        *sigint.Service
-	Logger                 *slog.Logger
-	MeterProvider          metric.MeterProvider
-	TracerProvider         trace.TracerProvider
-	Mux                    goahttp.Muxer
-	DB                     *pgxpool.Pool
-	Redis                  *redis.Client
-	ServerURL              *url.URL
-	DashboardURL           *url.URL
-	Environment            string
-	JWTSigningKey          string
-	ProductFeatures        *productfeatures.Client
-	IssuerGate             *internalsessionissuers.Gate
-	IssuerSigner           *internalsessionissuers.Signer
-	FeatureFlags           feature.Provider
-	DistributionAdmission  *admission.Guard
-	Authz                  *authz.Engine
-	Encryption             *encryption.Client
+	Workspaces            platformmcp.WorkspaceProvisioner
+	SignalAuthoring       *sigint.Service
+	Logger                *slog.Logger
+	MeterProvider         metric.MeterProvider
+	TracerProvider        trace.TracerProvider
+	Mux                   goahttp.Muxer
+	DB                    *pgxpool.Pool
+	Redis                 *redis.Client
+	ServerURL             *url.URL
+	DashboardURL          *url.URL
+	Environment           string
+	JWTSigningKey         string
+	ProductFeatures       *productfeatures.Client
+	IssuerGate            *internalsessionissuers.Gate
+	IssuerSigner          *internalsessionissuers.Signer
+	FeatureFlags          feature.Provider
+	DistributionAdmission *admission.Guard
+	Authz                 *authz.Engine
+	Encryption            *encryption.Client
+
+	// UpstreamTokens opens stored upstream OAuth tokens over the process's
+	// organization encryption.
+	UpstreamTokens         *upstreamtokens.Tokens
 	Identity               *identity.Resolver
 	Sessions               *sessions.Manager
 	Catalog                *externalmcp.CatalogService
@@ -122,6 +130,8 @@ type platformMCPConfig struct {
 	AccessRoles            access.RoleProvider
 	PluginPublisher        *plugins.Service
 	PluginManagement       *plugins.Service
+	// DataExportRouteTests is shared with the dashboard, so both spend the same allowances.
+	DataExportRouteTests *dataexports.RouteTestCore
 	// DirectoryReview backs the directory review tools with the dashboard's
 	// access service, so they share its authorization, checks and audit.
 	DirectoryReview        platformmcp.DirectoryReviewBackend
@@ -151,6 +161,9 @@ type platformMCPConfig struct {
 	// CodeModeAvailable lets gateway connection settings report whether Code
 	// Mode is served. Nil reports it unavailable.
 	CodeModeAvailable platformmcp.CodeModeAvailability
+	// FunctionsDisabled is true when the deployment runs with the disabled
+	// Functions provider, so creating an MCP server from functions refuses.
+	FunctionsDisabled bool
 	// CodeExecutor runs Platform MCP execute programs for connections the
 	// discovery flag serves Code Mode. Nil keeps Code Mode unavailable.
 	CodeExecutor codemode.Executor
@@ -176,7 +189,7 @@ type platformMCPConfig struct {
 	Telemetry platformmcp.DiagnosticsTelemetryReader
 	// ToolUsage is the target-aware tool usage read behind
 	// get_tool_usage_summary: the same pipeline the dashboard Insights board
-	// and the managed platform_get_tool_usage_summary tool read. Nil keeps the
+	// reads. Nil keeps the
 	// tool visible as unavailable rather than serving an empty breakdown.
 	ToolUsage platformmcp.ToolUsageBreakdownReader
 	// SessionCapture resolves the organization's metrics mode, which decides
@@ -295,6 +308,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	oauthTelemetry := platformmcp.NewOAuthTelemetry(config.Logger, config.MeterProvider)
 	oauthStore := platformmcp.NewPostgresOAuthStore(config.DB).WithTelemetry(oauthTelemetry)
 	oauth, err := platformmcp.NewOAuthHTTP(platformmcp.OAuthHTTPConfig{
+		AICatalog:     config.AICatalog,
 		BaseURL:       config.ServerURL,
 		Environment:   config.Environment,
 		Cache:         cache.NewRedisCacheAdapter(config.Redis),
@@ -461,7 +475,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		adapters,
 		ratelimit.New(limitStore, platformmcp.ForcedReadinessProbeLimit, ratelimit.PerMinute(platformmcp.ForcedReadinessProbesPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 		budgets.Repair,
-		platformmcp.NewRemoteMCPReadinessProber(config.Logger, config.DB, config.Encryption, config.GuardianPolicy, config.RemoteChallengeManager).WithIdentityChaining(chaining),
+		platformmcp.NewRemoteMCPReadinessProber(config.AICatalog, config.Logger, config.DB, config.Encryption, config.GuardianPolicy, config.RemoteChallengeManager).WithIdentityChaining(chaining),
 	).WithTelemetry(telemetry)
 	lifecycleMetadata, err := newPlatformMCPLifecycleMetadataService(config)
 	if err != nil {
@@ -561,6 +575,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB).
 		WithCustomDomainTargetSuffix(config.CustomDomainTargetSuffix).
 		WithCodeModeAvailability(config.CodeModeAvailable).
+		WithFunctionsDisabled(config.FunctionsDisabled).
 		WithXAAReadiness(oktaresourceconnections.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuditLogger, config.FeatureFlags), newPlatformMCPOktaSignIn(config), config.FeatureFlags).
 		WithInternalSessionIssuer(config.IssuerGate).
 		WithInboundEMATrust(config.InboundEMAUserIssuers, config.InboundEMARemoteIssuers).
@@ -571,6 +586,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithDataExports(config.Encryption, config.DashboardURL).
 		WithDataExportMutations(config.AuditLogger, config.DashboardURL).
 		WithDataExportRouteToggle(newPlatformMCPDataExportRouteToggle(config, authorizer, limitStore)).
+		WithDataExportTestEvent(platformmcp.NewDataExportTestEventService(config.Logger, config.DB, config.DataExportRouteTests, authorizer)).
 		WithCanonicalIdentityGate(config.CanonicalIdentity).
 		WithRecentToolCalls(config.RecentToolCalls, config.DashboardURL).
 		WithMCPNetworkTraffic(config.NetworkTraffic, config.LogsEnabled).
@@ -584,10 +600,12 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithChatMetadata(platformmcp.NewChatMetadataService(config.DB, config.Authz, chatfindings.New(config.DB, config.ChatRiskFindings), budgets.SensitiveDiagnostics, config.JWTSigningKey)).
 		WithChatSearch(platformmcp.NewChatSearchService(config.DB, config.Authz, config.AuditLogger, budgets.SensitiveSessionRecall, config.JWTSigningKey)).
 		WithTeamMemory(platformmcp.NewTeamMemoryService(config.DB, config.Authz, config.AuditLogger, budgets.TeamMemory, platformmcp.NewChatSearchRedactor())).
+		// The feedback service runs the dashboard's own mcp:read check on the
+		// exact server; the read is metered like the other diagnostic reads.
+		WithMCPFeedback(platformmcp.NewMCPFeedbackReadService(mcpfeedback.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuditLogger), budgets.Diagnostics)).
 		WithOrganizationGateway(platformmcp.NewOrganizationGatewayService(config.DB, config.ServerURL).WithOrganizationHosts(config.CallbackOrigins.OrganizationHosts)).
 		WithGatewaySessions(config.GatewaySessions).
-		WithAgentIdentityReads(platformmcp.NewAgentIdentityReadService(config.Logger, config.DB, config.Encryption, config.Authz, config.AgentAuthorizationChecks, budgets.Diagnostics)).
-		WithGatewayProxy(config.GatewayProxy, config.FeatureFlags).
+		WithAgentIdentityReads(platformmcp.NewAgentIdentityReadService(config.Logger, config.DB, config.UpstreamTokens, config.Authz, config.AgentAuthorizationChecks, budgets.Diagnostics)).
 		WithChannelsAccess(config.ChannelsAccess).
 		WithToolExposure(newPlatformMCPToolExposure(config, authorizer, limitStore)).
 		WithGateways(newPlatformMCPGateways(config, authorizer, limitStore)).
@@ -655,7 +673,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		platformmcp.NewAssistantIdentityService(config.AssistantIdentity, platformReader),
 		platformmcp.NewSignalAuthoringService(config.SignalAuthoring, platformReader, config.Authz, config.JWTSigningKey),
 		newPlatformMCPConnectionMutations(config),
-	).WithOAuthTelemetry(oauthTelemetry).WithRiskTelemetry(riskTelemetry).WithDashboardLinks(config.DashboardURL, config.ServerURL, config.DB).WithDiscovery(platformmcp.DiscoveryConfig{Flags: config.FeatureFlags, CodeExecutor: config.CodeExecutor, CodeModeAvailable: config.CodeModeAvailable})
+	).WithAICatalog(config.AICatalog).WithOAuthTelemetry(oauthTelemetry).WithRiskTelemetry(riskTelemetry).WithDashboardLinks(config.DashboardURL, config.ServerURL, config.DB).WithDiscovery(platformmcp.DiscoveryConfig{Flags: config.FeatureFlags, CodeExecutor: config.CodeExecutor, CodeModeAvailable: config.CodeModeAvailable})
 	runtime, err = withPlatformMCPSkills(runtime, config)
 	if err != nil {
 		return AssistantSurface{}, fmt.Errorf("serve local Platform MCP skills: %w", err)
@@ -688,8 +706,7 @@ func withPlatformMCPSkills(runtime *platformmcp.Runtime, config platformMCPConfi
 // success would report them unavailable whenever an unrelated Shadow MCP
 // dependency is missing. Callers attach the two independently.
 func attachShadowInventory(reader *platformmcp.PostgresReader, config platformMCPConfig, budget platformmcp.OperationBudget) bool {
-	organizationSlugs := platformmcp.NewPostgresOrganizationSlugResolver(config.DB)
-	shadowInventory, err := platformmcp.NewShadowInventoryService(config.ShadowInventory, config.ShadowReview, config.FeatureFlags, organizationSlugs, platformrepo.New(config.DB), budget, config.JWTSigningKey)
+	shadowInventory, err := platformmcp.NewShadowInventoryService(config.ShadowInventory, config.ShadowReview, platformrepo.New(config.DB), budget, config.JWTSigningKey)
 	if err != nil {
 		config.Logger.WarnContext(context.Background(), "platform mcp shadow inventory unavailable", attr.SlogError(err))
 		return false
@@ -1116,7 +1133,7 @@ func platformMCPIdentityChaining(config platformMCPConfig) platformmcp.IdentityC
 	if config.RemoteChallengeManager == nil {
 		return nil
 	}
-	g := identitychaining.NewGovernor(config.Logger, config.DB, config.Encryption, remotesessions.NewDelegationService(config.DB, config.Encryption, config.RemoteChallengeManager))
+	g := identitychaining.NewGovernor(config.Logger, config.DB, config.UpstreamTokens, remotesessions.NewDelegationService(config.DB, config.RemoteChallengeManager))
 	g.SetSpeakeasyIssuer(config.IssuerGate, config.IssuerSigner, config.FeatureFlags)
 	g.SetResourceResolver(config.RemoteChallengeManager.ResolveEMAResource)
 	return g
@@ -1128,6 +1145,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	oauthTelemetry := platformmcp.NewOAuthTelemetry(config.Logger, config.MeterProvider)
 	oauthStore := platformmcp.NewPostgresOAuthStore(config.DB).WithTelemetry(oauthTelemetry)
 	oauth, err := platformmcp.NewOAuthHTTP(platformmcp.OAuthHTTPConfig{
+		AICatalog:     config.AICatalog,
 		BaseURL:       config.ServerURL,
 		Environment:   config.Environment,
 		Cache:         cache.NewRedisCacheAdapter(config.Redis),
@@ -1274,7 +1292,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		adapters,
 		ratelimit.New(limitStore, platformmcp.ForcedReadinessProbeLimit, ratelimit.PerMinute(platformmcp.ForcedReadinessProbesPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 		budgets.Repair,
-		platformmcp.NewRemoteMCPReadinessProber(config.Logger, config.DB, config.Encryption, config.GuardianPolicy, config.RemoteChallengeManager).WithIdentityChaining(chaining),
+		platformmcp.NewRemoteMCPReadinessProber(config.AICatalog, config.Logger, config.DB, config.Encryption, config.GuardianPolicy, config.RemoteChallengeManager).WithIdentityChaining(chaining),
 	).WithTelemetry(telemetry)
 	lifecycleMetadata, err := newPlatformMCPLifecycleMetadataService(config)
 	if err != nil {
@@ -1355,6 +1373,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB).
 		WithCustomDomainTargetSuffix(config.CustomDomainTargetSuffix).
 		WithCodeModeAvailability(config.CodeModeAvailable).
+		WithFunctionsDisabled(config.FunctionsDisabled).
 		WithXAAReadiness(oktaresourceconnections.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuditLogger, config.FeatureFlags), newPlatformMCPOktaSignIn(config), config.FeatureFlags).
 		WithInternalSessionIssuer(config.IssuerGate).
 		WithInboundEMATrust(config.InboundEMAUserIssuers, config.InboundEMARemoteIssuers).
@@ -1365,6 +1384,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithDataExports(config.Encryption, config.DashboardURL).
 		WithDataExportMutations(config.AuditLogger, config.DashboardURL).
 		WithDataExportRouteToggle(newPlatformMCPDataExportRouteToggle(config, authorizer, limitStore)).
+		WithDataExportTestEvent(platformmcp.NewDataExportTestEventService(config.Logger, config.DB, config.DataExportRouteTests, authorizer)).
 		WithCanonicalIdentityGate(config.CanonicalIdentity).
 		WithRecentToolCalls(config.RecentToolCalls, config.DashboardURL).
 		WithMCPNetworkTraffic(config.NetworkTraffic, config.LogsEnabled).
@@ -1378,10 +1398,12 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithChatMetadata(platformmcp.NewChatMetadataService(config.DB, config.Authz, chatfindings.New(config.DB, config.ChatRiskFindings), budgets.SensitiveDiagnostics, config.JWTSigningKey)).
 		WithChatSearch(platformmcp.NewChatSearchService(config.DB, config.Authz, config.AuditLogger, budgets.SensitiveSessionRecall, config.JWTSigningKey)).
 		WithTeamMemory(platformmcp.NewTeamMemoryService(config.DB, config.Authz, config.AuditLogger, budgets.TeamMemory, platformmcp.NewChatSearchRedactor())).
+		// The feedback service runs the dashboard's own mcp:read check on the
+		// exact server; the read is metered like the other diagnostic reads.
+		WithMCPFeedback(platformmcp.NewMCPFeedbackReadService(mcpfeedback.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuditLogger), budgets.Diagnostics)).
 		WithOrganizationGateway(platformmcp.NewOrganizationGatewayService(config.DB, config.ServerURL).WithOrganizationHosts(config.CallbackOrigins.OrganizationHosts)).
 		WithGatewaySessions(config.GatewaySessions).
-		WithAgentIdentityReads(platformmcp.NewAgentIdentityReadService(config.Logger, config.DB, config.Encryption, config.Authz, config.AgentAuthorizationChecks, budgets.Diagnostics)).
-		WithGatewayProxy(config.GatewayProxy, config.FeatureFlags).
+		WithAgentIdentityReads(platformmcp.NewAgentIdentityReadService(config.Logger, config.DB, config.UpstreamTokens, config.Authz, config.AgentAuthorizationChecks, budgets.Diagnostics)).
 		WithChannelsAccess(config.ChannelsAccess).
 		WithToolExposure(newPlatformMCPToolExposure(config, authorizer, limitStore)).
 		WithGateways(newPlatformMCPGateways(config, authorizer, limitStore)).
@@ -1392,7 +1414,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	platformReader.WithAnalytics(platformmcp.NewAnalyticsService(config.Logger, config.Analytics, config.FeatureFlags, organizationSlugs, platformReader, budgets.Diagnostics, config.ProductFeatures).WithConversationAccess(config.ConversationAccess))
 	platformReader.WithWidgets(platformmcp.NewWidgetService(config.Logger, config.Widgets, platformReader, config.Authz, config.FeatureFlags, organizationSlugs, config.JWTSigningKey))
 	platformReader.WithDashboards(platformmcp.NewDashboardsService(config.Logger, config.Dashboards, platformReader, config.Authz, config.FeatureFlags, organizationSlugs, config.JWTSigningKey))
-	shadowInventory, shadowErr := platformmcp.NewShadowInventoryService(config.ShadowInventory, config.ShadowReview, config.FeatureFlags, organizationSlugs, platformrepo.New(config.DB), budgets.SensitiveDiagnostics, config.JWTSigningKey)
+	shadowInventory, shadowErr := platformmcp.NewShadowInventoryService(config.ShadowInventory, config.ShadowReview, platformrepo.New(config.DB), budgets.SensitiveDiagnostics, config.JWTSigningKey)
 	if shadowErr != nil {
 		config.Logger.WarnContext(context.Background(), "platform mcp shadow inventory unavailable", attr.SlogError(shadowErr))
 	} else {
@@ -1460,7 +1482,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		platformmcp.NewAssistantIdentityService(config.AssistantIdentity, platformReader),
 		platformmcp.NewSignalAuthoringService(config.SignalAuthoring, platformReader, config.Authz, config.JWTSigningKey),
 		newPlatformMCPConnectionMutations(config),
-	).WithOAuthTelemetry(oauthTelemetry).WithRiskTelemetry(riskTelemetry).WithDashboardLinks(config.DashboardURL, config.ServerURL, config.DB).WithDiscovery(platformmcp.DiscoveryConfig{Flags: config.FeatureFlags, CodeExecutor: config.CodeExecutor, CodeModeAvailable: config.CodeModeAvailable})
+	).WithAICatalog(config.AICatalog).WithOAuthTelemetry(oauthTelemetry).WithRiskTelemetry(riskTelemetry).WithDashboardLinks(config.DashboardURL, config.ServerURL, config.DB).WithDiscovery(platformmcp.DiscoveryConfig{Flags: config.FeatureFlags, CodeExecutor: config.CodeExecutor, CodeModeAvailable: config.CodeModeAvailable})
 	runtime, err = withPlatformMCPSkills(runtime, config)
 	if err != nil {
 		return AssistantSurface{}, fmt.Errorf("serve browser Platform MCP skills: %w", err)

@@ -12,12 +12,17 @@ export function OwnScopeToolLogsNotice(): JSX.Element {
     // The quiet variant: this is the page's normal state for most members,
     // not a warning, so it earns a hairline and an icon but no color.
     <Alert title={null} className="shrink-0">
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+      <div className="flex flex-col items-start gap-2">
         <span>
-          Showing your sessions and your agents&apos; activity. Ask an admin for
-          the View tool logs permission to see every member&apos;s.
+          Showing your sessions and your agents&apos; activity. You don&apos;t
+          have access to every member&apos;s tool logs, but you can request it.
         </span>
-        <RequestScopeAccess scopes={["log:read"]} resourceId={project.id} />
+        <RequestScopeAccess
+          scopes={["log:read"]}
+          resourceId={project.id}
+          resourceName={project.name}
+          align="start"
+        />
       </div>
     </Alert>
   );

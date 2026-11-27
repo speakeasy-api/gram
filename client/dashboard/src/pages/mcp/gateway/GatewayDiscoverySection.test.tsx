@@ -5,7 +5,6 @@ import {
   render,
   screen,
 } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { unrecognized } from "@gram/client/types/unrecognized.js";
 import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
@@ -23,7 +22,10 @@ const state = vi.hoisted(() => ({
   success: undefined as undefined | (() => Promise<void>),
 }));
 vi.mock("@/hooks/useRBAC", () => ({
-  useRBAC: () => ({ hasScope: () => state.canWrite }),
+  useRBAC: () => ({
+    canWriteProjectMCPServers: (projectId: string) =>
+      projectId === "project-test" && state.canWrite,
+  }),
 }));
 vi.mock("@/components/require-scope", () => ({
   RequireScope: (props: {
@@ -97,8 +99,7 @@ beforeEach(() => {
 describe("Gateway discovery settings", () => {
   it("saves the selected mode and refreshes gateway readers", async () => {
     show();
-    fireEvent.click(screen.getByRole("combobox"));
-    fireEvent.click(await screen.findByRole("option", { name: "Direct" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Direct" }));
     fireEvent.click(screen.getByRole("button", { name: /save/i }));
     expect(state.mutate).toHaveBeenCalledWith({
       request: {
@@ -119,9 +120,9 @@ describe("Gateway discovery settings", () => {
   it("disables controls for a reader and supplies project scope feedback", () => {
     state.canWrite = false;
     show();
-    expect((screen.getByRole("combobox") as HTMLButtonElement).disabled).toBe(
-      true,
-    );
+    for (const radio of screen.getAllByRole("radio")) {
+      expect((radio as HTMLButtonElement).disabled).toBe(true);
+    }
     expect(
       (screen.getByRole("button", { name: /save/i }) as HTMLButtonElement)
         .disabled,
@@ -130,13 +131,13 @@ describe("Gateway discovery settings", () => {
       expect.objectContaining({
         scope: "mcp:write",
         resourceId: gateway.projectId,
+        projectId: gateway.projectId,
       }),
     );
   });
   it("disables controls during a save", async () => {
     const { rerender } = show();
-    fireEvent.click(screen.getByRole("combobox"));
-    fireEvent.click(await screen.findByRole("option", { name: "Direct" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Direct" }));
     expect(
       (screen.getByRole("button", { name: /save/i }) as HTMLButtonElement)
         .disabled,
@@ -147,9 +148,9 @@ describe("Gateway discovery settings", () => {
         <GatewayDiscoverySection metaMcpServer={gateway} />
       </TooltipProvider>,
     );
-    expect((screen.getByRole("combobox") as HTMLButtonElement).disabled).toBe(
-      true,
-    );
+    for (const radio of screen.getAllByRole("radio")) {
+      expect((radio as HTMLButtonElement).disabled).toBe(true);
+    }
     expect(
       (screen.getByRole("button", { name: /sav/i }) as HTMLButtonElement)
         .disabled,
@@ -167,9 +168,10 @@ it.each(["future_mode", "constructor", "__proto__"])(
         />
       </TooltipProvider>,
     );
-    const select = screen.getByRole("combobox") as HTMLButtonElement;
-    expect(select.disabled).toBe(true);
-    expect(select.textContent).toContain("Unknown mode");
+    for (const radio of screen.getAllByRole("radio")) {
+      expect((radio as HTMLButtonElement).disabled).toBe(true);
+      expect(radio.getAttribute("aria-checked")).toBe("false");
+    }
     expect(screen.getByText(/Refresh the page before changing/)).toBeTruthy();
     const save = screen.getByRole("button", {
       name: /save/i,
@@ -182,8 +184,7 @@ it.each(["future_mode", "constructor", "__proto__"])(
 
 it("blocks a selected draft when refreshed discovery becomes unsupported", async () => {
   const { rerender } = show();
-  fireEvent.click(screen.getByRole("combobox"));
-  fireEvent.click(await screen.findByRole("option", { name: "Direct" }));
+  fireEvent.click(screen.getByRole("radio", { name: "Direct" }));
   rerender(
     <TooltipProvider>
       <GatewayDiscoverySection
@@ -198,7 +199,9 @@ it("blocks a selected draft when refreshed discovery becomes unsupported", async
     name: /save/i,
   }) as HTMLButtonElement;
   expect(save.disabled).toBe(true);
-  expect(screen.getByRole("combobox").textContent).toContain("Unknown mode");
+  for (const radio of screen.getAllByRole("radio")) {
+    expect(radio.getAttribute("aria-checked")).toBe("false");
+  }
   fireEvent.click(save);
   expect(state.mutate).not.toHaveBeenCalled();
 });
@@ -211,8 +214,7 @@ it("allows changing a direct gateway to progressive", async () => {
       />
     </TooltipProvider>,
   );
-  fireEvent.click(screen.getByRole("combobox"));
-  fireEvent.click(await screen.findByRole("option", { name: "Progressive" }));
+  fireEvent.click(screen.getByRole("radio", { name: "Progressive" }));
   fireEvent.click(screen.getByRole("button", { name: /save/i }));
   expect(state.mutate).toHaveBeenCalledWith(
     expect.objectContaining({
@@ -229,17 +231,15 @@ it("allows changing a direct gateway to progressive", async () => {
 
 it("only lets Code Mode be chosen when it is available", async () => {
   const view = show();
-  fireEvent.click(screen.getByRole("combobox"));
   expect(
-    screen
-      .getByRole("option", { name: "Code Mode (unavailable)" })
-      .getAttribute("aria-disabled"),
-  ).toBe("true");
+    (screen.getByRole("radio", { name: "Code Mode" }) as HTMLButtonElement)
+      .disabled,
+  ).toBe(true);
+  expect(screen.getByText("Unavailable")).toBeTruthy();
   view.unmount();
   state.codeEnabled = true;
   show();
-  fireEvent.click(screen.getByRole("combobox"));
-  fireEvent.click(await screen.findByRole("option", { name: "Code Mode" }));
+  fireEvent.click(screen.getByRole("radio", { name: "Code Mode" }));
   fireEvent.click(screen.getByRole("button", { name: /save/i }));
   expect(state.mutate).toHaveBeenCalledWith({
     request: {
@@ -281,14 +281,14 @@ it("disables Code Mode for a gateway that allows anonymous callers", () => {
       />
     </TooltipProvider>,
   );
-  fireEvent.click(screen.getByRole("combobox"));
-  const option = screen.getByRole("option", {
-    name: "Code Mode (requires sign-in)",
-  });
-  expect(option.getAttribute("aria-disabled")).toBe("true");
+  expect(
+    (screen.getByRole("radio", { name: "Code Mode" }) as HTMLButtonElement)
+      .disabled,
+  ).toBe(true);
+  expect(screen.getByText("Requires sign-in")).toBeTruthy();
 });
 
-it("shows Code Mode disabled to an organization without it", async () => {
+it("shows Code Mode disabled to an organization without it", () => {
   state.entitled = false;
   render(
     <TooltipProvider>
@@ -300,16 +300,12 @@ it("shows Code Mode disabled to an organization without it", async () => {
       />
     </TooltipProvider>,
   );
-  expect(screen.queryByText(/Contact\s+Speakeasy to turn it on/i)).toBeNull();
-  fireEvent.click(screen.getByRole("combobox"));
-  const option = screen.getByRole("option", {
-    name: "Code Mode (not enabled)",
-  });
-  expect(option.getAttribute("aria-disabled")).toBe("true");
-  await userEvent.hover(option.parentElement!);
   expect(
-    (await screen.findAllByText(/Contact\s+Speakeasy to turn it on/i)).length,
-  ).toBeGreaterThan(0);
+    (screen.getByRole("radio", { name: "Code Mode" }) as HTMLButtonElement)
+      .disabled,
+  ).toBe(true);
+  // The next step sits beside the row, not only in a tooltip.
+  expect(screen.getByText(/Contact Speakeasy to turn it on/i)).toBeTruthy();
 });
 
 it("explains a saved Code gateway in an organization without Code Mode", () => {
@@ -335,8 +331,7 @@ it("does not claim the organization is not enabled while the feature read is unk
   state.codeEnabled = true;
   const view = show();
   expect(screen.queryByText(/not enabled for your organization/i)).toBeNull();
-  fireEvent.click(screen.getByRole("combobox"));
-  fireEvent.click(await screen.findByRole("option", { name: "Code Mode" }));
+  fireEvent.click(screen.getByRole("radio", { name: "Code Mode" }));
   fireEvent.click(screen.getByRole("button", { name: /save/i }));
   expect(state.mutate).toHaveBeenCalledTimes(1);
   view.unmount();
@@ -361,8 +356,7 @@ it("does not claim the organization is not enabled while the feature read is unk
 it("blocks a Code Mode draft when the organization's entitlement turns off", async () => {
   state.codeEnabled = true;
   const view = show();
-  fireEvent.click(screen.getByRole("combobox"));
-  fireEvent.click(await screen.findByRole("option", { name: "Code Mode" }));
+  fireEvent.click(screen.getByRole("radio", { name: "Code Mode" }));
   state.entitled = false;
   view.rerender(
     <TooltipProvider>
@@ -377,10 +371,8 @@ it("blocks a Code Mode draft when the organization's entitlement turns off", asy
   expect(save.disabled).toBe(true);
   fireEvent.click(save);
   expect(state.mutate).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole("combobox"));
   expect(
-    screen
-      .getByRole("option", { name: "Code Mode (not enabled)" })
-      .getAttribute("aria-disabled"),
-  ).toBe("true");
+    (screen.getByRole("radio", { name: "Code Mode" }) as HTMLButtonElement)
+      .disabled,
+  ).toBe(true);
 });

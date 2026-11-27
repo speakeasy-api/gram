@@ -1,11 +1,13 @@
 import { useQueries } from "@tanstack/react-query";
+import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
 import { queryKeyMcpServerAuthentication } from "@gram/client/react-query/mcpServerAuthentication.js";
 import { useOrganization, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { collectPageItems } from "@/components/sessions/collectPageItems";
-import { useUpstreamAuthEnforcement } from "@/hooks/useUpstreamAuthEnforcement";
+import { isForbiddenError } from "@/lib/errors";
 import {
   offersPersonalSignIn,
+  usesTypedOwnerConnections,
   serverConnection,
   serverSignIns,
   userSubject,
@@ -28,15 +30,9 @@ export interface OwnerConnections {
  * person separately, read for a new agent they are about to own.
  *
  * The agent does not exist yet, so this reads the person's sessions in each
- * server's project rather than the agent's attachment candidates: one listing
- * of their sessions per project, and the upstream sign-ins each issuer asks
- * for. Provisioning checks the agent's real candidates again before attaching.
- *
- * A server with an issuer still needs nobody when its own auth clients offer
- * no personal sign-in: the issuer may be shared with servers that do. Under
- * upstream auth enforcement the sign-ins it asks for come from those auth
- * clients too, since a shared issuer binds another server's registration;
- * otherwise from the issuer, which is what routes the call.
+ * server's project. Proxied servers choose among their own offers, while hosted
+ * servers still use their issuer's registrations. Saving rechecks eligibility
+ * with the attachment API and keeps existing, usable attachments.
  */
 export function useOwnerConnections(
   servers: InventoryServer[],
@@ -44,7 +40,6 @@ export function useOwnerConnections(
   agentId?: string,
 ): OwnerConnections {
   const sdk = useSdkClient();
-  const enforcement = useUpstreamAuthEnforcement();
   const organization = useOrganization();
   const { user } = useSession();
   const personal = servers.filter((server) => server.issuerId);
@@ -100,6 +95,14 @@ export function useOwnerConnections(
       throwOnError: false,
     })),
   });
+  const readsHostedClients = (request: (typeof issuers)[number]) =>
+    enabled &&
+    personal.some(
+      (server) =>
+        !usesTypedOwnerConnections(server) &&
+        server.projectSlug === request.gramProject &&
+        server.issuerId === request.userSessionIssuerId,
+    );
   const clients = useQueries({
     queries: issuers.map((request) => ({
       queryKey: ["owner-connections", "clients", ownerScope, request],
@@ -107,7 +110,7 @@ export function useOwnerConnections(
         collectPageItems(
           sdk.remoteSessionClients.list(request, undefined, { signal }),
         ),
-      enabled,
+      enabled: readsHostedClients(request),
       retry: false,
       throwOnError: false,
     })),
@@ -134,21 +137,60 @@ export function useOwnerConnections(
         issuer.userSessionIssuerId === server.issuerId,
     );
   /**
-   * The upstream sign-ins a server asks for, once its auth is read: from its
-   * own auth clients when enforced, else from its issuer's registrations.
+   * Whether the viewer may not read the agent's attachments on a server's
+   * issuer. Their own connection is still read and shown; only the agent's
+   * assignment is unknown to them.
    */
+  const bindingsHidden = (server: InventoryServer): boolean => {
+    const read = bindings[issuerIndex(server)];
+    return !!agentId && !!read?.isError && isForbiddenError(read.error);
+  };
+  /**
+   * What people call each upstream registration, read from the auth clients
+   * of every listed server. An issuer shared across the organization lists
+   * registrations that belong to other servers, and those servers' own auth
+   * clients are where the name a person recognizes, such as "Stripe", lives.
+   * One registration can sit under several auth clients; when they disagree
+   * on its name none of them wins, and the registration's own display name is
+   * used instead, whatever order the reads land in.
+   */
+  const signInNames = new Map<string, string | null>();
+  for (const read of auth) {
+    for (const client of read.data?.clients ?? []) {
+      if (!client.remoteSessionClientId || !client.name) continue;
+      const known = signInNames.get(client.remoteSessionClientId);
+      signInNames.set(
+        client.remoteSessionClientId,
+        known === undefined || known === client.name ? client.name : null,
+      );
+    }
+  }
   const signIns = (
     server: InventoryServer,
-  ): { data?: ServerSignIn[]; isError: boolean } => {
+  ): { data?: ServerSignIn[]; isError: boolean; anyOne: boolean } => {
     const authRead = auth[personal.indexOf(server)];
-    if (enforcement === "loading") return { isError: false };
-    const typed =
-      enforcement === "enforced" && authRead?.data
-        ? serverSignIns(authRead.data)
-        : undefined;
-    if (typed) return { data: typed, isError: false };
+    if (usesTypedOwnerConnections(server)) {
+      const data = authRead?.data && serverSignIns(authRead.data);
+      return {
+        data: data?.map((signIn) => ({
+          ...signIn,
+          name: signInNames.get(signIn.id) === null ? undefined : signIn.name,
+        })),
+        isError: !!authRead?.isError,
+        anyOne: true,
+      };
+    }
+    // Hosted servers still use their downstream issuer's registrations.
     const read = clients[issuerIndex(server)];
-    return { data: read?.data, isError: !!read?.isError };
+    return {
+      data: read?.data?.map((client: RemoteSessionClient) => ({
+        id: client.id,
+        credentialOwner: client.credentialOwner,
+        name: signInNames.get(client.id) ?? client.displayName,
+      })),
+      isError: !!read?.isError,
+      anyOne: false,
+    };
   };
   const byServer = new Map<string, ServerConnection>();
   for (const server of personal) {
@@ -159,40 +201,51 @@ export function useOwnerConnections(
     const authRead = auth[personal.indexOf(server)];
     const sessionRead = sessions[projects.indexOf(server.projectSlug)];
     const clientRead = signIns(server);
-    const bindingRead = bindings[issuerIndex(server)];
+    // An attachment the viewer may not read is no failure of their own
+    // connection, which is read without it.
+    const hidden = bindingsHidden(server);
+    const bindingRead = hidden ? undefined : bindings[issuerIndex(server)];
     if (
       authRead?.isError ||
       sessionRead?.isError ||
       clientRead.isError ||
-      (agentId && bindingRead?.isError)
+      (agentId && !hidden && bindingRead?.isError)
     ) {
       byServer.set(server.id, { status: "error" });
+      continue;
+    }
+    if (
+      usesTypedOwnerConnections(server) &&
+      authRead?.data &&
+      !clientRead.data
+    ) {
+      byServer.set(server.id, { status: "setup-required" });
       continue;
     }
     if (
       !authRead?.data ||
       !sessionRead?.data ||
       !clientRead.data ||
-      (agentId && !bindingRead?.data)
+      (agentId && !hidden && !bindingRead?.data)
     ) {
       byServer.set(server.id, { status: "checking" });
       continue;
     }
+    // The issuer a connection was made through is provenance. Match the
+    // registration offered by this server, including gateway-made sessions.
     byServer.set(
       server.id,
-      serverConnection(server.issuerId!, clientRead.data, [
-        ...(bindingRead?.data?.items ?? []).flatMap((binding) =>
-          binding.remoteSession
-            ? [
-                {
-                  ...binding.remoteSession,
-                  userSessionIssuerId: server.issuerId!,
-                },
-              ]
-            : [],
-        ),
-        ...sessionRead.data,
-      ]),
+      serverConnection(
+        clientRead.data,
+        [
+          ...(bindingRead?.data?.items ?? []).flatMap((binding) =>
+            binding.remoteSession ? [binding.remoteSession] : [],
+          ),
+          ...sessionRead.data,
+        ],
+        undefined,
+        { anyOne: clientRead.anyOne },
+      ),
     );
   }
   const assignedByServer = agentId ? new Map(byServer) : undefined;
@@ -202,6 +255,15 @@ export function useOwnerConnections(
       // checking or error state stands.
       const authRead = auth[personal.indexOf(server)];
       if (shared(server) || !authRead?.data || authRead.isError) continue;
+      if (bindingsHidden(server)) {
+        // A failed read of the viewer's own connection stays an error: it
+        // is theirs to retry, and the tab counts it.
+        const status = byServer.get(server.id)?.status;
+        if (status !== "error" && status !== "setup-required") {
+          assignedByServer.set(server.id, { status: "forbidden" });
+        }
+        continue;
+      }
       const clientsRead = signIns(server);
       const bindingRead = bindings[issuerIndex(server)];
       if (
@@ -211,25 +273,24 @@ export function useOwnerConnections(
         bindingRead.isError
       )
         continue;
-      if (bindingRead.data.items.some((binding) => !binding.remoteSession)) {
+      // An attachment whose session is gone leaves its sign-in unserved, but
+      // where any one sign-in serves, the others decide below.
+      if (
+        !clientsRead.anyOne &&
+        bindingRead.data.items.some((binding) => !binding.remoteSession)
+      ) {
         assignedByServer.set(server.id, { status: "missing" });
         continue;
       }
       assignedByServer.set(
         server.id,
         serverConnection(
-          server.issuerId!,
           clientsRead.data,
           bindingRead.data.items.flatMap((binding) =>
-            binding.remoteSession
-              ? [
-                  {
-                    ...binding.remoteSession,
-                    userSessionIssuerId: server.issuerId!,
-                  },
-                ]
-              : [],
+            binding.remoteSession ? [binding.remoteSession] : [],
           ),
+          undefined,
+          { anyOne: clientsRead.anyOne },
         ),
       );
     }
@@ -241,7 +302,7 @@ export function useOwnerConnections(
       await Promise.all(
         [
           ...sessions,
-          ...clients,
+          ...clients.filter((_, index) => readsHostedClients(issuers[index]!)),
           ...(agentId ? bindings : []),
           // A server's auth does not change when someone signs in, but a
           // failed read gets another try.

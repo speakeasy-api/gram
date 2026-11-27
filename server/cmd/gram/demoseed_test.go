@@ -49,3 +49,18 @@ func TestAssetConsumersRequireValidSiteURLBeforeConnecting(t *testing.T) {
 		}
 	}
 }
+
+func TestDemoSeedLocalRequiresValidMockMCPURLBeforeConnecting(t *testing.T) {
+	t.Parallel()
+	for _, raw := range []string{"/mcp", "localhost:4100/mcp", "ftp://localhost/mcp", "http:///mcp", "http://:4100/mcp", "http://[::1"} {
+		t.Run(raw, func(t *testing.T) {
+			t.Parallel()
+			flags := flag.NewFlagSet("demo-seed", flag.ContinueOnError)
+			flags.Bool("local", true, "")
+			flags.String("site-url", "https://example.test", "")
+			flags.String("local-mock-mcp-url", raw, "")
+			err := newDemoSeedCommand().Action(cli.NewContext(nil, flags, nil))
+			require.ErrorContains(t, err, "local seed local-mock-mcp-url")
+		})
+	}
+}

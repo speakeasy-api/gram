@@ -44,6 +44,7 @@ import type { OtelDestination } from "@gram/client/models/components/oteldestina
 import type { ProjectEntry } from "@gram/client/models/components/projectentry.js";
 import { Plus } from "lucide-react";
 import { type ReactNode, useId, useMemo } from "react";
+import { SendTestEventSection } from "./SendTestEventSection";
 
 const NEW_DESTINATION = "__new_destination__";
 
@@ -84,7 +85,7 @@ const MIN_SEVERITY_OPTIONS: Array<{
     value: MinSeverity.Warn,
     label: "Warnings and errors",
     description:
-      "Also blocked connections, such as someone without access to a server.",
+      "Also blocked connections, such as someone without access to a server, and failed sign-in steps that may still recover, such as a saved sign-in the service no longer accepts.",
   },
   {
     value: MinSeverity.Info,
@@ -417,6 +418,26 @@ export function ConfigureExportSheet({
               }}
             </form.Field>
 
+            {route?.otelDestinationId ? (
+              <form.Subscribe
+                selector={(state) =>
+                  state.values.dataSource !== route.dataSource ||
+                  state.values.destinationId !== route.otelDestinationId
+                }
+              >
+                {(unsavedChanges) => (
+                  <SendTestEventSection
+                    projectSlug={project.slug}
+                    routeId={route.id}
+                    sendsEverySignal={
+                      route.dataSource === DataSource.ProductTelemetry
+                    }
+                    unsavedChanges={unsavedChanges}
+                  />
+                )}
+              </form.Subscribe>
+            ) : null}
+
             <form.Subscribe
               selector={(state) =>
                 state.values.destinationId === NEW_DESTINATION
@@ -539,8 +560,8 @@ export function ConfigureExportSheet({
                             <div className="space-y-1">
                               <Label>Include sensitive data</Label>
                               <Text muted className="text-sm">
-                                Send tool arguments, results, and prompt
-                                content.
+                                Send tool arguments, results, prompt content,
+                                and what agents write in feedback.
                               </Text>
                             </div>
                             <Switch

@@ -5,6 +5,7 @@ import type {
 } from "@gram/client/models/components/setresourceaudienceentry.js";
 import {
   BLOCK_LEVEL,
+  closedBesides,
   complementTools,
   effectiveForeignGrants,
   inheritedGrants,
@@ -25,7 +26,7 @@ import {
   withoutRules,
   type AudienceRule,
 } from "./manageAccessState";
-import { LEVEL_VERB, narrowingLabel } from "./serverAudience";
+import { coversTool, LEVEL_VERB, narrowingLabel } from "./serverAudience";
 
 /**
  * What one click on the Access list writes. The endpoint replaces every rule
@@ -60,12 +61,12 @@ export interface Narrowing {
  * authz/selector.go. The set is closed, which is what makes "only these" and
  * "everything but these" two ways of writing the same restriction.
  */
-const DISPOSITIONS: SetResourceAudienceEntryDispositions[] = [
+const DISPOSITIONS = [
   "read_only",
   "destructive",
   "idempotent",
   "open_world",
-];
+] as const satisfies readonly SetResourceAudienceEntryDispositions[];
 
 function serverLabel(resourceName?: string): string {
   return resourceName ?? "this server";
@@ -77,10 +78,14 @@ function withoutOwnBlock(
   row: AccessRow,
   scope: ScopeKey,
 ): AudienceRule[] {
-  if (!row.cells[scope].ownBlock) return direct;
-  return withoutRules(direct, [
-    ruleId({ principalUrn: row.principalUrn, level: BLOCK_LEVEL[scope] }),
-  ]);
+  const blocks = row.cells[scope].ownBlocks;
+  if (blocks.length === 0) return direct;
+  return withoutRules(
+    direct,
+    blocks.map((block) =>
+      ruleId({ principalUrn: row.principalUrn, level: block.level }),
+    ),
+  );
 }
 
 /**
@@ -116,14 +121,14 @@ function reachMessage(row: AccessRow, server: string, reach: string): string {
   return `${row.displayName} can now ${reach} ${server}.`;
 }
 
-/** The catalogue's tools carrying any of these annotations. */
+/** The catalogue's tools whose annotation, as the server picks it, is one of these. */
 function toolsCarrying(
   catalog: ToolSelectionTool[],
   dispositions: string[],
 ): string[] {
-  const wanted = new Set(dispositions);
+  if (dispositions.length === 0) return [];
   return catalog
-    .filter((tool) => tool.annotations.some((a) => wanted.has(a)))
+    .filter((tool) => coversTool({ tools: [], dispositions }, tool))
     .map((tool) => tool.name);
 }
 
@@ -154,7 +159,20 @@ export function allowWrite(
   scope: ScopeKey,
   resourceName?: string,
 ): AudienceWrite {
-  const base = withoutOwnBlock(direct, row, scope);
+  // A lifted block can close more than this scope: a view block takes manage
+  // too. Whatever still grants those keeps being blocked, so allowing view
+  // does not quietly open manage.
+  const kept = new Set(
+    row.cells[scope].ownBlocks.flatMap((block) =>
+      closedBesides(block.level, scope),
+    ),
+  );
+  let base = withoutOwnBlock(direct, row, scope);
+  for (const key of kept) {
+    if (row.cells[key].grants.length > 0 && !row.cells[key].ownBlock) {
+      base = withRule(base, row.principalUrn, BLOCK_LEVEL[key]);
+    }
+  }
   // Something else may already open this whole. Lifting the block is then
   // the entire edit, and this row's own narrower rule goes with it: a grant
   // alongside an unnarrowed one takes nothing away and only muddies the line.
@@ -286,13 +304,17 @@ export function narrowWrite(
       return allowWrite(direct, row, "use", resourceName);
     }
     // Restore the selected classes past inherited blocks without granting
-    // unannotated tools that the inherited policy still excludes.
+    // unannotated tools that the inherited policy still excludes. A row with
+    // no connect grant needs the allow too: a block only subtracts, and since
+    // connect stopped coming with view or manage, a row can hold manage and
+    // still have no connect, so blocks alone would save and grant nothing.
     const needsOverride =
-      outranksInheritedBlocks(row) &&
-      !row.cells.use.direct.some(isUnnarrowed) &&
-      row.cells.use.blocks.some(
-        (block) => block.principalUrn !== row.principalUrn,
-      );
+      row.cells.use.grants.length === 0 ||
+      (outranksInheritedBlocks(row) &&
+        !row.cells.use.direct.some(isUnnarrowed) &&
+        row.cells.use.blocks.some(
+          (block) => block.principalUrn !== row.principalUrn,
+        ));
     const withChoice = needsOverride
       ? withRule(base, row.principalUrn, "use", {
           tools: [],
@@ -426,8 +448,9 @@ export function allowDestructiveWrite(
 
 /**
  * Take a principal off this server. The rules it owns here go, and anything
- * still reaching it is subtracted. Blocks are independent, so "no access at
- * all" is all three of them.
+ * still reaching it is subtracted. A view block also takes manage, but
+ * connect's block stands alone, so "no access at all" writes a block for each
+ * line rather than leaning on one to cover the rest.
  */
 export function revokeRowWrite(
   direct: AudienceRule[],
@@ -501,10 +524,7 @@ export function narrowingSeed(
   const grantedTools =
     reachableTools(
       cell,
-      namedTools.map((name) => ({
-        name,
-        annotations: [],
-      })),
+      namedTools.map((name) => ({ name, disposition: undefined })),
     ) ?? [];
   if (grantedTools.length > 0) return { tools: grantedTools, dispositions: [] };
 
@@ -522,7 +542,9 @@ export function narrowingSeed(
         reachableTools(cell, [
           {
             name: "",
-            annotations: DISPOSITIONS.filter((known) => known === disposition),
+            disposition: [...DISPOSITIONS, "unannotated" as const].find(
+              (known) => known === disposition,
+            ),
           },
         ]) ?? []
       ).length > 0,

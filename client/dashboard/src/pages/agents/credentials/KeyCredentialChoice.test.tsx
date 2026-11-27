@@ -93,7 +93,8 @@ describe("KeyCredentialChoice", () => {
         }}
       />,
     );
-    expect(onChange).not.toHaveBeenCalled();
+    // The personal connection is the default, so the picker never sits empty.
+    expect(onChange).toHaveBeenCalledWith("account");
     fireEvent.click(
       screen.getByRole("combobox", {
         name: "Credential the key uses on Linear",
@@ -101,7 +102,7 @@ describe("KeyCredentialChoice", () => {
     );
     expect(
       screen.getByRole("option", {
-        name: "The account connected for this agent",
+        name: "Personal connection",
       }),
     ).toBeTruthy();
     fireEvent.click(

@@ -1,4 +1,4 @@
-//nolint:exhaustruct // The audit actor carries only the identity a toolset creation records.
+//nolint:exhaustruct_v5 // The audit actor carries only the identity a toolset creation records.
 package toolsets
 
 import (
@@ -260,8 +260,6 @@ func ensureGeneratedMcpSlug(ctx context.Context, dbtx pgx.Tx, logger *slog.Logge
 			Slug:                     slug,
 			CustomDomainID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 			OrganizationID:           orgID,
-			ExcludeToolsetID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-			ExcludeMcpServerID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 			SkipDomainOwnershipCheck: false,
 		})
 		if err != nil {
@@ -411,7 +409,7 @@ func sameResourceURNs(existing, next []urn.Resource) bool {
 // canReadEnvironment reports whether the caller holds environment:read on
 // environment. Only a denial is false; any other failure is returned.
 func canReadEnvironment(ctx context.Context, engine *authz.Engine, environment environmentsRepo.Environment) (bool, error) {
-	err := engine.Require(ctx, authz.EnvironmentCheck(authz.ScopeEnvironmentRead, environment.ID.String(), environment.ProjectID.String()))
+	err := engine.Require(ctx, authz.Environment(authz.EnvironmentIDOf(environment.ID), authz.ProjectIDOf(environment.ProjectID)).Read())
 	var shareable *oops.ShareableError
 	switch {
 	case err == nil:

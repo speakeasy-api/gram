@@ -30,7 +30,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
-	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -41,7 +40,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oktaissuer"
 	"github.com/speakeasy-api/gram/server/internal/oktaresourceconnections/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -69,11 +67,6 @@ type Service struct {
 	authz    *authz.Engine
 	audit    *audit.Logger
 	features feature.Provider
-
-	// authEnforcement reads which organizations choose upstream
-	// authentication through typed auth clients, where a server's
-	// authorization server and client come from what it offers.
-	authEnforcement *authenforcement.Gate
 }
 
 var (
@@ -92,14 +85,13 @@ func NewService(
 ) *Service {
 	logger = logger.With(attr.SlogComponent("oktaresourceconnections"))
 	return &Service{
-		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/oktaresourceconnections"),
-		logger:          logger,
-		db:              db,
-		auth:            auth.New(logger, db, sessionManager, authzEngine),
-		authz:           authzEngine,
-		audit:           auditLogger,
-		features:        features,
-		authEnforcement: authenforcement.NewGate(db),
+		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/oktaresourceconnections"),
+		logger:   logger,
+		db:       db,
+		auth:     auth.New(logger, db, sessionManager, authzEngine),
+		authz:    authzEngine,
+		audit:    auditLogger,
+		features: features,
 	}
 }
 
@@ -145,7 +137,7 @@ func (s *Service) authorize(ctx context.Context, mutation bool) (*contextvalues.
 		return nil, s.logger, oops.C(oops.CodeUnauthorized)
 	}
 	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID), attr.SlogUserID(authCtx.UserID))
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, logger, err
 	}
 	if mutation {
@@ -164,19 +156,15 @@ func (s *Service) authorize(ctx context.Context, mutation bool) (*contextvalues.
 func (s *Service) readable(ctx context.Context, servers []repo.ListEligibleServersRow) ([]repo.ListEligibleServersRow, error) {
 	checks := make([]authz.Check, len(servers))
 	for i, sv := range servers {
-		checks[i] = authz.MCPCheck(authz.ScopeMCPRead, sv.ID.String(), sv.ProjectID.String())
+		checks[i] = authz.MCPServer(authz.MCPServerIDOf(sv.ID), authz.ProjectIDOf(sv.ProjectID)).Read()
 	}
-	allowedIDs, err := s.authz.Filter(ctx, checks)
+	decisions, err := s.authz.Decide(ctx, checks...)
 	if err != nil {
 		return nil, fmt.Errorf("filter readable servers: %w", err)
 	}
-	allowed := make(map[string]struct{}, len(allowedIDs))
-	for _, id := range allowedIDs {
-		allowed[id] = struct{}{}
-	}
-	out := make([]repo.ListEligibleServersRow, 0, len(allowedIDs))
-	for _, sv := range servers {
-		if _, ok := allowed[sv.ID.String()]; ok {
+	out := make([]repo.ListEligibleServersRow, 0, len(servers))
+	for i, sv := range servers {
+		if decisions.Each[i].Allowed {
 			out = append(out, sv)
 		}
 	}
@@ -190,23 +178,6 @@ func actor(ctx context.Context, authCtx *contextvalues.AuthContext) urn.Principa
 		return p
 	}
 	return urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
-}
-
-// requireEnabled checks the rollout flag; a lookup failure reads as
-// unavailable, never forbidden.
-func (s *Service) requireEnabled(ctx context.Context, logger *slog.Logger, organizationID string) error {
-	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, organizationID)
-	if err != nil {
-		return oops.E(oops.CodeUnavailable, err, "okta connections availability could not be determined").LogError(ctx, logger)
-	}
-	enabled, err := s.features.IsFlagEnabled(ctx, feature.FlagOktaConnections, organizationID, feature.OrgProjectGroups(org.Slug, ""))
-	if err != nil {
-		return oops.E(oops.CodeUnavailable, err, "okta connections availability could not be determined").LogError(ctx, logger)
-	}
-	if !enabled {
-		return oops.E(oops.CodeForbidden, nil, "okta connections are not enabled for this organization")
-	}
-	return nil
 }
 
 // upstreamKey identifies the resource the administrator connects in Okta.
@@ -286,7 +257,7 @@ func (snap *snapshot) resourceScopes(sv repo.ListEligibleServersRow) func(client
 		switch {
 		case row == nil:
 			return none
-		case sv.TypedAuthEnforced:
+		case sv.UsesTypedOffers:
 			if !slices.Contains(sv.OfferedClientIds, clientID) {
 				return none
 			}
@@ -353,11 +324,7 @@ func (s *Service) load(ctx context.Context, logger *slog.Logger, organizationID 
 		return nil, oops.E(oops.CodeUnexpected, err, "load identity provider connection").LogError(ctx, logger)
 	}
 
-	enforced, err := s.authEnforcement.Enforced(ctx, organizationID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "read upstream auth enforcement").LogError(ctx, logger)
-	}
-	all, err := q.ListEligibleServers(ctx, repo.ListEligibleServersParams{OrganizationID: organizationID, TypedAuthEnforced: enforced})
+	all, err := q.ListEligibleServers(ctx, organizationID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list servers").LogError(ctx, logger)
 	}
@@ -423,7 +390,7 @@ func (s *Service) load(ctx context.Context, logger *slog.Logger, organizationID 
 	if snap.discoverScopes {
 		var asks []remotesessions.ResourceOwnerQuery
 		for _, sv := range servers {
-			if sv.TypedAuthEnforced || !sv.RemoteUrl.Valid || !sv.UserSessionIssuerID.Valid {
+			if sv.UsesTypedOffers || !sv.RemoteUrl.Valid || !sv.UserSessionIssuerID.Valid {
 				continue
 			}
 			if _, ok := snap.resources[resourceKey{projectID: sv.ProjectID, url: sv.RemoteUrl.String}]; !ok {
@@ -518,7 +485,7 @@ func resolveClient(sv repo.ListEligibleServersRow, resource, documentResource st
 		if !ok || (c.ProjectID.Valid && c.ProjectID.UUID != sv.ProjectID) {
 			continue
 		}
-		if sv.TypedAuthEnforced && !slices.Contains(sv.OfferedClientIds, c.ID) {
+		if sv.UsesTypedOffers && !slices.Contains(sv.OfferedClientIds, c.ID) {
 			continue
 		}
 		// Identity chaining requests the scopes recorded at Turn on.
@@ -546,7 +513,7 @@ func resolveClient(sv repo.ListEligibleServersRow, resource, documentResource st
 			continue
 		}
 		switch {
-		case sv.TypedAuthEnforced:
+		case sv.UsesTypedOffers:
 			if !slices.Contains(sv.OfferedClientIds, c.ID) {
 				continue
 			}
@@ -701,9 +668,6 @@ func (s *Service) Confirm(ctx context.Context, payload *srv.ConfirmPayload) (*sr
 	if err != nil {
 		return nil, err
 	}
-	if err := s.requireEnabled(ctx, logger, authCtx.ActiveOrganizationID); err != nil {
-		return nil, err
-	}
 	items, err := parseConfirmations(payload.Connections)
 	if err != nil {
 		return nil, err
@@ -739,17 +703,13 @@ func (s *Service) Confirm(ctx context.Context, payload *srv.ConfirmPayload) (*sr
 	snap.connection = current
 	snap.deepLink = deepLink(current)
 
-	enforced, err := s.authEnforcement.Enforced(ctx, authCtx.ActiveOrganizationID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "read upstream auth enforcement").LogError(ctx, logger)
-	}
-
 	// All keys belong to the locked connection. Validate aliases before any
 	// writes: multiple servers can refer to the same issuer and resource.
+	reloadedIssuers := make(map[uuid.UUID]bool)
 	servers := make([]repo.ListEligibleServersRow, 0, len(items))
 	byUpstream := make(map[upstreamKey]confirmation, len(items))
 	for _, item := range items {
-		sv, err := q.GetEligibleServer(ctx, repo.GetEligibleServerParams{OrganizationID: authCtx.ActiveOrganizationID, McpServerID: item.serverID, TypedAuthEnforced: enforced})
+		sv, err := q.GetEligibleServer(ctx, repo.GetEligibleServerParams{OrganizationID: authCtx.ActiveOrganizationID, McpServerID: item.serverID})
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, nil, "server not found")
 		}
@@ -768,6 +728,12 @@ func (s *Service) Confirm(ctx context.Context, payload *srv.ConfirmPayload) (*sr
 		resource := resourceIndicator(server)
 		if resource == "" {
 			return nil, oops.E(oops.CodeFailedPrecondition, nil, "the server has no resource indicator")
+		}
+		if !reloadedIssuers[server.IssuerID] {
+			if err := snap.reloadIssuer(ctx, q, logger, authCtx.ActiveOrganizationID, server.IssuerID); err != nil {
+				return nil, err
+			}
+			reloadedIssuers[server.IssuerID] = true
 		}
 		if _, _, binding := resolveClient(server, resource, snap.documentResource(server), snap.clients[server.IssuerID], snap.bindings[server.IssuerID], snap.resourceScopes(server)); binding == ClientBindingMissing || binding == ClientBindingAmbiguous {
 			return nil, oops.E(oops.CodeFailedPrecondition, nil, "the server has no single client registered at its authorization server")
@@ -850,12 +816,25 @@ func resourceConnectionForUpdate(ctx context.Context, q *repo.Queries, organizat
 	return &record{OktaResourceConnection: rc, label: ""}, nil
 }
 
+// reloadIssuer updates the response and validation inputs after the write's
+// eligible server is read under the connection lock.
+func (snap *snapshot) reloadIssuer(ctx context.Context, q *repo.Queries, logger *slog.Logger, organizationID string, issuerID uuid.UUID) error {
+	issuerIDs := []uuid.UUID{issuerID}
+	clients, err := q.ListIssuerClients(ctx, repo.ListIssuerClientsParams{OrganizationID: organizationID, IssuerIds: issuerIDs})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "reload issuer clients").LogError(ctx, logger)
+	}
+	bindings, err := q.ListEMABindings(ctx, repo.ListEMABindingsParams{OrganizationID: organizationID, IssuerIds: issuerIDs})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "reload identity chaining bindings").LogError(ctx, logger)
+	}
+	snap.clients[issuerID], snap.bindings[issuerID] = clients, bindings
+	return nil
+}
+
 func (s *Service) Reset(ctx context.Context, payload *srv.ResetPayload) (*srv.OktaResourceConnectionServer, error) {
 	authCtx, logger, err := s.authorize(ctx, true)
 	if err != nil {
-		return nil, err
-	}
-	if err := s.requireEnabled(ctx, logger, authCtx.ActiveOrganizationID); err != nil {
 		return nil, err
 	}
 	id, err := uuid.Parse(payload.McpServerID)
@@ -877,11 +856,7 @@ func (s *Service) Reset(ctx context.Context, payload *srv.ResetPayload) (*srv.Ok
 	if err := lockConnection(ctx, q, authCtx.ActiveOrganizationID, snap.connection.ID, logger); err != nil {
 		return nil, err
 	}
-	enforced, err := s.authEnforcement.Enforced(ctx, authCtx.ActiveOrganizationID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "read upstream auth enforcement").LogError(ctx, logger)
-	}
-	sv, err := q.GetEligibleServer(ctx, repo.GetEligibleServerParams{OrganizationID: authCtx.ActiveOrganizationID, McpServerID: id, TypedAuthEnforced: enforced})
+	sv, err := q.GetEligibleServer(ctx, repo.GetEligibleServerParams{OrganizationID: authCtx.ActiveOrganizationID, McpServerID: id})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, oops.E(oops.CodeNotFound, nil, "server not found")
 	}
@@ -893,6 +868,9 @@ func (s *Service) Reset(ctx context.Context, payload *srv.ResetPayload) (*srv.Ok
 		return nil, err
 	} else if len(visible) == 0 {
 		return nil, oops.E(oops.CodeNotFound, nil, "server not found")
+	}
+	if err := snap.reloadIssuer(ctx, q, logger, authCtx.ActiveOrganizationID, server.IssuerID); err != nil {
+		return nil, err
 	}
 	resource := resourceIndicator(server)
 	before, err := resourceConnectionForUpdate(ctx, q, authCtx.ActiveOrganizationID, snap.connection.ID, server.IssuerID, resource)

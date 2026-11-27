@@ -14,6 +14,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	authclientsrepo "github.com/speakeasy-api/gram/server/internal/authclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -51,12 +52,12 @@ const (
 // The levels an explanation covers, in display order, and the scope each
 // checks. They are the same checks the MCP endpoint and dashboard enforce.
 var explainedAccessLevels = []struct {
-	level string
-	scope authz.Scope
+	level      string
+	permission func(authz.MCPServerRef) authz.Check
 }{
-	{level: audienceLevelUse, scope: authz.ScopeMCPConnect},
-	{level: audienceLevelView, scope: authz.ScopeMCPRead},
-	{level: audienceLevelManage, scope: authz.ScopeMCPWrite},
+	{level: audienceLevelUse, permission: authz.MCPServerRef.Connect},
+	{level: audienceLevelView, permission: authz.MCPServerRef.Read},
+	{level: audienceLevelManage, permission: authz.MCPServerRef.Write},
 }
 
 // EffectiveMCPAccess is the compact form of the same use, view, and manage
@@ -74,7 +75,7 @@ type EffectiveMCPAccess struct {
 func EvaluateEffectiveMCPAccess(grants []authz.Grant, resourceID, projectID string) (EffectiveMCPAccess, error) {
 	var result EffectiveMCPAccess
 	for _, level := range explainedAccessLevels {
-		check := authz.MCPCheck(level.scope, resourceID, projectID)
+		check := level.permission(authz.MCPServer(authz.MCPServerIDFrom(resourceID), authz.ProjectIDFrom(projectID)))
 		explanation, err := authz.ExplainGrantCheck(grants, check)
 		if err != nil {
 			return EffectiveMCPAccess{}, fmt.Errorf("evaluate %s access: %w", level.level, err)
@@ -129,7 +130,7 @@ type MCPAccessRuleSummary struct {
 func SummarizeMCPAccessRules(grants []authz.Grant, resourceID, projectID string, roleNames map[string]string) (EffectiveMCPAccess, []MCPAccessRuleSummary, error) {
 	// Filter once before tool probes: unrelated servers cannot contribute to
 	// either a resource decision or any tool decision on this server.
-	check := authz.MCPCheck(authz.ScopeMCPConnect, resourceID, projectID)
+	check := authz.MCPServer(authz.MCPServerIDFrom(resourceID), authz.ProjectIDFrom(projectID)).Connect()
 	relevant := make([]authz.Grant, 0, len(grants))
 	for _, grant := range grants {
 		if selectorReachesMCP(grant.Selector, check) {
@@ -161,7 +162,7 @@ func SummarizeMCPAccessRules(grants []authz.Grant, resourceID, projectID string,
 	describe := explainedRuleDescriber{resourceID: resourceID, projectID: projectID, names: names, sources: nil}
 	rules := make([]MCPAccessRuleSummary, 0)
 	for _, level := range explainedAccessLevels {
-		explained, err := explainAccessLevel(grants, level.level, authz.MCPCheck(level.scope, resourceID, projectID), describe)
+		explained, err := explainAccessLevel(grants, level.level, level.permission(authz.MCPServer(authz.MCPServerIDFrom(resourceID), authz.ProjectIDFrom(projectID))), describe)
 		if err != nil {
 			return EffectiveMCPAccess{}, nil, err
 		}
@@ -230,9 +231,7 @@ func effectiveToolAccess(grants []authz.Grant, check authz.Check, explanation au
 			continue
 		}
 		seen[key] = struct{}{}
-		allowed, err := authz.GrantsAuthorize(grants, authz.MCPToolCallCheck(check.ResourceID, authz.MCPToolCallDimensions{
-			Tool: tool, Disposition: disposition, ProjectID: check.Dimensions[authz.SelectorKeyProjectID],
-		}))
+		allowed, err := authz.GrantsAuthorize(grants, authz.MCPServer(authz.MCPServerIDFrom(check.ResourceID), authz.ProjectIDFrom(check.Dimensions[authz.SelectorKeyProjectID])).ToolCall(tool, disposition))
 		if err != nil {
 			return "", fmt.Errorf("evaluate tool access: %w", err)
 		}
@@ -282,15 +281,10 @@ func (s *Service) ExplainResourceAccess(ctx context.Context, payload *gen.Explai
 	}
 	// The same gate as the resource's audience: the explanation names the
 	// rules reaching a member, which that surface already shows.
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, payload.ResourceID, projectID)); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDFrom(payload.ResourceID), authz.ProjectIDFrom(projectID)).Read()); err != nil {
 		return nil, err
 	}
-	if err := s.authz.Require(ctx, authz.Check{
-		Scope:        authz.ScopeOrgRead,
-		ResourceKind: "",
-		ResourceID:   ac.ActiveOrganizationID,
-		Dimensions:   nil,
-	}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -357,16 +351,11 @@ func (s *Service) ExplainResourceAccess(ctx context.Context, payload *gen.Explai
 	}
 	// Directory attribute values can carry personal data, so which mapping
 	// produced a role is shown to the same audience as the mappings.
-	showSources, err := s.authz.Evaluate(ctx, authz.Check{
-		Scope:        authz.ScopeOrgAdmin,
-		ResourceKind: "",
-		ResourceID:   ac.ActiveOrganizationID,
-		Dimensions:   nil,
-	})
+	decision, err := s.authz.Decide(authz.WithoutChallenges(ctx), authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin())
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "evaluate directory mapping visibility").LogError(ctx, logger)
 	}
-	if !showSources {
+	if !decision.AllAllowed {
 		for principalURN, source := range sources {
 			source.mappings = nil
 			sources[principalURN] = source
@@ -385,15 +374,79 @@ func (s *Service) ExplainResourceAccess(ctx context.Context, payload *gen.Explai
 		sources:    sources,
 	}
 	result := &gen.ExplainResourceAccessResult{
-		Visibility: resource.Visibility,
-		Levels:     make([]*gen.ExplainedAccessLevel, 0, len(explainedAccessLevels)),
+		Visibility:  resource.Visibility,
+		Levels:      make([]*gen.ExplainedAccessLevel, 0, len(explainedAccessLevels)),
+		Credentials: nil,
 	}
 	for _, level := range explainedAccessLevels {
-		explained, err := explainAccessLevel(grants, level.level, authz.MCPCheck(level.scope, payload.ResourceID, projectID), describe)
+		explained, err := explainAccessLevel(grants, level.level, level.permission(authz.MCPServer(authz.MCPServerIDFrom(payload.ResourceID), authz.ProjectIDFrom(projectID))), describe)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "explain access").LogError(ctx, logger)
 		}
 		result.Levels = append(result.Levels, explained)
+	}
+
+	projectUUID, err := uuid.Parse(projectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "parse resource project").LogError(ctx, logger)
+	}
+	clients, err := authclientsrepo.New(s.db).ListServerAuthClients(ctx, authclientsrepo.ListServerAuthClientsParams{
+		McpServerID:    resourceID,
+		ProjectID:      projectUUID,
+		OrganizationID: ac.ActiveOrganizationID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list server credentials").LogError(ctx, logger)
+	}
+	result.Credentials, err = explainCredentials(grants, clients, projectID, payload.UserID, describe)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "explain credential access").LogError(ctx, logger)
+	}
+	return result, nil
+}
+
+// explainCredentials explains, for each credential a server offers, whether
+// the member may use it acting as themselves: a personal credential with
+// their own connection. Server access is explained separately; reaching an
+// upstream that needs sign-in takes both.
+func explainCredentials(grants []authz.Grant, clients []authclientsrepo.McpAuthClient, projectID, userID string, describe explainedRuleDescriber) ([]*gen.ExplainedCredentialAccess, error) {
+	result := make([]*gen.ExplainedCredentialAccess, 0, len(clients))
+	for _, client := range clients {
+		dims := authz.MCPAuthClientDimensions{
+			ClientType:      client.ClientType,
+			ProjectID:       projectID,
+			ConnectionOwner: "",
+			UpstreamClient:  "",
+		}
+		if client.ClientType == authz.AuthClientTypeRemoteSession {
+			dims.ConnectionOwner = userID
+			if client.RemoteSessionClientID.Valid {
+				dims.UpstreamClient = client.RemoteSessionClientID.UUID.String()
+			}
+		}
+		explanation, err := authz.ExplainAuthClientUse(grants, client.ID.String(), dims, userID)
+		if err != nil {
+			return nil, fmt.Errorf("explain credential %s: %w", client.ID, err)
+		}
+		rules := make([]*gen.ExplainedCredentialRule, 0, len(explanation.Contributions))
+		for _, contribution := range explanation.Contributions {
+			rules = append(rules, describe.credentialRule(contribution.Grant, client.ID.String(), string(contribution.Effect), contribution.Reason))
+		}
+		sort.SliceStable(rules, func(i, j int) bool {
+			left, right := slices.Index(explainedEffectOrder, rules[i].Effect), slices.Index(explainedEffectOrder, rules[j].Effect)
+			if left != right {
+				return left < right
+			}
+			return rules[i].DisplayName < rules[j].DisplayName
+		})
+		result = append(result, &gen.ExplainedCredentialAccess{
+			AuthClientID: client.ID.String(),
+			Name:         client.Name,
+			ClientType:   client.ClientType,
+			Enabled:      client.Enabled,
+			Allowed:      explanation.Allowed,
+			Rules:        rules,
+		})
 	}
 	return result, nil
 }
@@ -507,21 +560,13 @@ func toolProbes(grants []authz.Grant, check authz.Check) []authz.Check {
 			continue
 		}
 		seen[key] = struct{}{}
-		probes = append(probes, authz.MCPToolCallCheck(check.ResourceID, authz.MCPToolCallDimensions{
-			Tool:        key.tool,
-			Disposition: key.disposition,
-			ProjectID:   check.Dimensions[authz.SelectorKeyProjectID],
-		}))
+		probes = append(probes, authz.MCPServer(authz.MCPServerIDFrom(check.ResourceID), authz.ProjectIDFrom(check.Dimensions[authz.SelectorKeyProjectID])).ToolCall(key.tool, key.disposition))
 	}
 	// Any other tool, carrying no annotation a rule names: what a narrowed
 	// grant leaves out.
 	if len(probes) > 0 {
 		if _, ok := seen[probeKey{tool: otherTool, disposition: ""}]; !ok {
-			probes = append(probes, authz.MCPToolCallCheck(check.ResourceID, authz.MCPToolCallDimensions{
-				Tool:        otherTool,
-				Disposition: "",
-				ProjectID:   check.Dimensions[authz.SelectorKeyProjectID],
-			}))
+			probes = append(probes, authz.MCPServer(authz.MCPServerIDFrom(check.ResourceID), authz.ProjectIDFrom(check.Dimensions[authz.SelectorKeyProjectID])).ToolCall(otherTool, ""))
 		}
 	}
 	return probes
@@ -693,5 +738,28 @@ func (d explainedRuleDescriber) rule(grant authz.Grant, effect string, reason au
 		Reason:              reasonValue,
 		ViaDirectoryMapping: source.mappedOnly,
 		DirectorySources:    source.mappings,
+	}
+}
+
+// credentialRule renders a grant matching a member's use of clientID.
+func (d explainedRuleDescriber) credentialRule(grant authz.Grant, clientID, effect string, reason authz.BlockedReason) *gen.ExplainedCredentialRule {
+	base := d.rule(grant, effect, reason)
+	appliesTo := "all_credentials"
+	switch {
+	case grant.Selector.ResourceID() == clientID:
+		appliesTo = "credential"
+	case grant.Selector[authz.SelectorKeyClientType] != "" && grant.Selector[authz.SelectorKeyClientType] != authz.WildcardResource:
+		appliesTo = "credential_type"
+	}
+	projectBound := grant.Selector[authz.SelectorKeyProjectID] != "" && grant.Selector[authz.SelectorKeyProjectID] != authz.WildcardResource
+	return &gen.ExplainedCredentialRule{
+		PrincipalUrn:        base.PrincipalUrn,
+		Kind:                base.Kind,
+		DisplayName:         base.DisplayName,
+		AppliesTo:           appliesTo,
+		ProjectBound:        &projectBound,
+		Effect:              effect,
+		Reason:              base.Reason,
+		ViaDirectoryMapping: base.ViaDirectoryMapping,
 	}
 }

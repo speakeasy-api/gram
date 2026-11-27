@@ -62,11 +62,13 @@ func (e *AccessRoleMutationError) Unwrap() error { return e.Cause }
 type MCPAccessRoleRule struct {
 	MCPID       string `json:"mcp_id" jsonschema:"configured MCP ID returned by find_mcp for the explicit project"`
 	Tool        string `json:"tool,omitempty" jsonschema:"optional exact tool name currently returned by get_mcp_access"`
-	Disposition string `json:"disposition,omitempty" jsonschema:"optional closed tool disposition: read_only, destructive, idempotent, or open_world"`
+	Disposition string `json:"disposition,omitempty" jsonschema:"optional closed tool disposition: read_only, destructive, idempotent, open_world, or unannotated (tools that declare no hints)"`
 }
 
 type CreateMCPAccessRoleInput struct {
-	ProjectID      string              `json:"project_id" jsonschema:"explicit project ID that owns every configured MCP in rules"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID      string              `json:"-"`
 	Name           string              `json:"name" jsonschema:"display name for the new custom role"`
 	Description    string              `json:"description,omitempty" jsonschema:"optional description for the new custom role"`
 	Rules          []MCPAccessRoleRule `json:"rules" jsonschema:"MCP access rules generated only for configured MCP IDs in this project; an empty list creates a role with no grants"`
@@ -75,7 +77,9 @@ type CreateMCPAccessRoleInput struct {
 }
 
 type UpdateMCPAccessRoleInput struct {
-	ProjectID       string              `json:"project_id" jsonschema:"explicit project ID that owns every configured MCP in the delta"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID       string              `json:"-"`
 	RoleReference   string              `json:"role_reference" jsonschema:"opaque role reference returned by list_access_roles, get_mcp_access, or a role mutation"`
 	ExpectedVersion string              `json:"expected_version" jsonschema:"opaque role version returned by the preceding role mutation"`
 	AddRules        []MCPAccessRoleRule `json:"add_rules,omitempty" jsonschema:"MCP access rules to add without replacing other grants"`
@@ -377,7 +381,7 @@ func (s *AccessRoleMutationService) resolveRules(ctx context.Context, principal 
 			return nil, accessRoleMutationInvalid("A requested exact tool name is invalid.")
 		}
 		if disposition != "" && !validAccessRoleDisposition(disposition) {
-			return nil, accessRoleMutationInvalid("Rule disposition must be read_only, destructive, idempotent, or open_world.")
+			return nil, accessRoleMutationInvalid("Rule disposition must be read_only, destructive, idempotent, open_world, or unannotated.")
 		}
 		if !requireCurrentTarget {
 			result = append(result, normalizedMCPAccessRoleRule{MCPID: mcpID.String(), Tool: tool, Disposition: disposition})
@@ -581,7 +585,7 @@ func validAccessRoleName(value string) bool {
 
 func validAccessRoleDisposition(value string) bool {
 	switch value {
-	case authz.DispositionReadOnly, authz.DispositionDestructive, authz.DispositionIdempotent, authz.DispositionOpenWorld:
+	case authz.DispositionReadOnly, authz.DispositionDestructive, authz.DispositionIdempotent, authz.DispositionOpenWorld, authz.DispositionUnannotated:
 		return true
 	default:
 		return false

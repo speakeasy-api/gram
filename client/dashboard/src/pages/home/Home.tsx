@@ -1,4 +1,5 @@
 import { useHideInsightsDock } from "@/components/insights-context";
+import { useAssistantsAvailable } from "@/hooks/useAssistantsAvailability";
 import { Page } from "@/components/page-layout";
 import { ProjectDashboard } from "@/components/project/ProjectDashboard";
 import { RequireScope } from "@/components/require-scope";
@@ -12,11 +13,18 @@ import { useProject } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useRoutes } from "@/routes";
 import { Navigate } from "react-router";
+import { HomeWidgets } from "@/components/home/HomeWidgets";
+import { HomeTerminal } from "@/components/home/HomeTerminal";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
+import { Skeleton } from "@/components/ui/Skeleton";
 
 export default function Home(): JSX.Element {
   const { hasAnyScope, hasAnyScopeInProject, isLoading } = useRBAC();
+  const terminalHome = useFeatureFlag(FEATURE_FLAGS.terminalHome);
   const routes = useRoutes();
   const { id: projectId } = useProject();
+  const assistantsAvailable = useAssistantsAvailable();
   // Home carries its own "Ask anything" widget, so suppress the floating dock.
   useHideInsightsDock();
 
@@ -30,6 +38,48 @@ export default function Home(): JSX.Element {
     return <Navigate to={routes.mcp.href()} replace />;
   }
 
+  // Without the assistant there is nothing to anchor the grid, so those
+  // projects keep the classic overview.
+  const showTerminalHome =
+    terminalHome.status === "enabled" &&
+    assistantsAvailable &&
+    hasAnyScope(["assistant:read"], projectId);
+
+  if (terminalHome.status === "loading") {
+    return (
+      <Page>
+        <Page.Header>
+          <Page.Header.Breadcrumbs />
+        </Page.Header>
+        <Page.Body>
+          <Skeleton
+            label="Loading the project home"
+            className="h-[32rem] w-full"
+          />
+        </Page.Body>
+      </Page>
+    );
+  }
+
+  if (showTerminalHome) {
+    return (
+      <Page>
+        <Page.Header>
+          <Page.Header.Breadcrumbs />
+        </Page.Header>
+        <Page.Body>
+          <RequireScope
+            scope="project:read"
+            resourceId={projectId}
+            level="page"
+          >
+            <TerminalHomeGrid />
+          </RequireScope>
+        </Page.Body>
+      </Page>
+    );
+  }
+
   return (
     <Page>
       <Page.Header>
@@ -40,26 +90,53 @@ export default function Home(): JSX.Element {
           {/* Full content width so the widget lines up with the dashboard
               below (the /chat page centers it; the home page does not). The
               compact variant drops pinned/recents — history lives on /chat. */}
-          <RequireScope
-            scope="assistant:read"
-            projectId={projectId}
-            level="section"
-          >
-            <div className="w-full pt-2 pb-6">
-              <div
-                className={cn(
-                  BRAND_MESH_SURFACE_CLASS,
-                  "border-border z-10 border p-8",
-                )}
-              >
-                <BrandMeshLayers />
-                <ChatLanding compact />
+          {assistantsAvailable && (
+            <RequireScope
+              scope="assistant:read"
+              projectId={projectId}
+              level="section"
+            >
+              <div className="w-full pt-2 pb-6">
+                <div
+                  className={cn(
+                    BRAND_MESH_SURFACE_CLASS,
+                    "border-border z-10 border p-8",
+                  )}
+                >
+                  <BrandMeshLayers />
+                  <ChatLanding compact />
+                </div>
               </div>
-            </div>
-          </RequireScope>
+            </RequireScope>
+          )}
           <ProjectDashboard />
         </RequireScope>
       </Page.Body>
     </Page>
+  );
+}
+
+/**
+ * Bento grid around the terminal: on wide screens the terminal takes the
+ * right two of three columns and the top two rows; tiles fill the left column
+ * and the bottom row. Below `lg` everything stacks, terminal first.
+ */
+function TerminalHomeGrid(): JSX.Element {
+  return (
+    // On wide screens the grid fills the viewport below the header: three
+    // equal rows, the terminal spanning the top two, and every widget
+    // scrolling inside its own card instead of growing the page.
+    <div className="grid grid-cols-1 gap-6 pt-2 lg:h-[calc(100dvh-var(--header-height)-var(--banner-offset,0px)-7.5rem)] lg:grid-cols-3 lg:grid-rows-3">
+      <HomeTerminal className="h-[32rem] lg:col-span-2 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:h-auto" />
+      <HomeWidgets
+        classNames={[
+          "lg:col-start-1 lg:row-start-1",
+          "lg:col-start-1 lg:row-start-2",
+          "",
+          "",
+          "",
+        ]}
+      />
+    </div>
   );
 }

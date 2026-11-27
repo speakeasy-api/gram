@@ -24,32 +24,38 @@ import (
 	"go.temporal.io/sdk/client"
 	goahttp "goa.design/goa/v3/http"
 
+	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/netingress"
 )
 
 type mcpServerRuntime struct {
-	MCP      *mcp.Service
-	Metadata *mcpmetadata.Service
+	AICatalog *aivendors.Store
+	MCP       *mcp.Service
+	Metadata  *mcpmetadata.Service
 }
 
 type mcpServerRuntimeDependencies struct {
-	MCP      *mcp.Service
-	Metadata *mcpmetadata.Service
+	AICatalog *aivendors.Store
+	MCP       *mcp.Service
+	Metadata  *mcpmetadata.Service
 }
 
 func buildMCPServerRuntime(deps mcpServerRuntimeDependencies) (*mcpServerRuntime, error) {
-	if deps.MCP == nil || deps.Metadata == nil {
+	if deps.AICatalog == nil || deps.MCP == nil || deps.Metadata == nil {
 		return nil, errors.New("MCP server runtime dependencies are incomplete")
 	}
 
 	return &mcpServerRuntime{
-		MCP:      deps.MCP,
-		Metadata: deps.Metadata,
+		AICatalog: deps.AICatalog,
+		MCP:       deps.MCP,
+		Metadata:  deps.Metadata,
 	}, nil
 }
 
@@ -69,6 +75,9 @@ func newNetworkIngressServerCommand() *cli.Command {
 			); err != nil {
 				return err
 			}
+			if err := validatePrivateGatewayPrincipal(c.String("netingress-gateway-namespace"), c.String("netingress-gateway-service-account")); err != nil {
+				return err
+			}
 
 			ctx, cancel := context.WithCancel(c.Context)
 			defer cancel()
@@ -81,7 +90,7 @@ func newNetworkIngressServerCommand() *cli.Command {
 			o11y.PullAppInfo(ctx).Command = "network-ingress-server"
 			slog.SetDefault(logger)
 			shutdown, err := o11y.SetupOTelSDK(ctx, logger, o11y.SetupOTelSDKOptions{
-				ServiceName: "gram-network-ingress-server", ServiceVersion: shortGitSHA(), GitSHA: GitSHA,
+				ServiceName: "gram-network-ingress-server", ServiceVersion: shortGitSHA(), GitSHA: GitSHA, Partition: PullPartition(ctx),
 				EnableTracing: c.Bool("with-otel-tracing"), EnableMetrics: c.Bool("with-otel-metrics"),
 			})
 			if err != nil {
@@ -105,15 +114,15 @@ func newNetworkIngressServerCommand() *cli.Command {
 				[]*o11y.NamedResource[*pgxpool.Pool]{{Name: "default", Resource: deps.DB}},
 				[]*o11y.NamedResource[*redis.Client]{{Name: "default", Resource: deps.Redis}}, temporalHealth)
 			stopControl, err := controlServer.Start(ctx, privateIngressReadinessHandler(
-				deps.Kubernetes.Clientset.AuthenticationV1().TokenReviews(),
-				"/var/run/secrets/kubernetes.io/serviceaccount/token", healthHandler))
+				deps.TokenReviewer, c.String("netingress-readiness-token-file"), healthHandler))
 			if err != nil {
 				return fmt.Errorf("start private ingress control server: %w", err)
 			}
 			defer func() { _ = runShutdown(logger, ctx, []func(context.Context) error{stopControl}) }()
 			return servePrivateIngress(ctx, privateIngressServerDependencies{
 				Logger: logger, MeterProvider: otel.GetMeterProvider(), DB: deps.DB,
-				Kubernetes: deps.Kubernetes, Runtime: deps.Runtime,
+				TokenReviewer: deps.TokenReviewer, Runtime: deps.Runtime, MeterReadings: deps.MeterReadings,
+				GatewayNamespace: c.String("netingress-gateway-namespace"), GatewayServiceAccount: c.String("netingress-gateway-service-account"),
 			}, c.String("netingress-address"), c.String("netingress-tls-cert-file"), c.String("netingress-tls-key-file"))
 		},
 		Before: func(ctx *cli.Context) error {
@@ -123,7 +132,7 @@ func newNetworkIngressServerCommand() *cli.Command {
 }
 
 func privateIngressServerFlags() []cli.Flag {
-	flags := mcpRuntimeFlags()
+	flags := append(mcpRuntimeFlags(), transcriptShadowFlag())
 	return append(flags,
 		riskFingerprintPepperFlag(),
 		&cli.StringFlag{
@@ -141,7 +150,37 @@ func privateIngressServerFlags() []cli.Flag {
 			Usage:   "TLS private key file for the private network ingress listener",
 			EnvVars: []string{"GRAM_NETINGRESS_TLS_KEY_FILE"},
 		},
+		&cli.StringFlag{
+			Name:    "netingress-readiness-token-file",
+			Usage:   "Token the readiness probe reviews to confirm token review works; the pod's own service-account token in a cluster",
+			Value:   "/var/run/secrets/kubernetes.io/serviceaccount/token",
+			EnvVars: []string{"GRAM_NETINGRESS_READINESS_TOKEN_FILE"},
+		},
+		&cli.StringFlag{
+			Name:    "netingress-local-token-key-file",
+			Usage:   "Local development only: verify attestation tokens signed with this HMAC key instead of Kubernetes TokenReview",
+			EnvVars: []string{"GRAM_NETINGRESS_LOCAL_TOKEN_KEY_FILE"},
+		},
+		&cli.StringFlag{
+			Name:    "netingress-gateway-namespace",
+			Usage:   "Namespace of the tailnet gateway service account, the only workload whose attestation is accepted",
+			EnvVars: []string{"GRAM_NETINGRESS_GATEWAY_NAMESPACE"},
+		},
+		&cli.StringFlag{
+			Name:    "netingress-gateway-service-account",
+			Usage:   "Tailnet gateway service account, the only workload whose attestation is accepted",
+			EnvVars: []string{"GRAM_NETINGRESS_GATEWAY_SERVICE_ACCOUNT"},
+		},
 	)
+}
+
+// validatePrivateGatewayPrincipal requires the tailnet gateway's identity: the
+// gateway is the only workload that forwards private network traffic.
+func validatePrivateGatewayPrincipal(namespace, serviceAccount string) error {
+	if namespace == "" || serviceAccount == "" {
+		return errors.New("private network ingress gateway namespace and service account are required")
+	}
+	return nil
 }
 
 func validatePrivateServerConfig(enabled bool, address, certFile, keyFile string, devSingleProcess bool) error {
@@ -164,8 +203,19 @@ type privateIngressServerDependencies struct {
 	Logger        *slog.Logger
 	MeterProvider metric.MeterProvider
 	DB            *pgxpool.Pool
-	Kubernetes    *k8s.KubernetesClients
 	Runtime       *mcpServerRuntime
+
+	// MeterReadings receives the MCP bandwidth readings for runtime exchanges
+	// admitted through the private listener.
+	MeterReadings gcp.Publisher[*meteringv1.MeterReading]
+
+	// TokenReviewer verifies the attestation token on every private request.
+	TokenReviewer netingress.TokenReviewer
+
+	// GatewayNamespace and GatewayServiceAccount identify the tailnet gateway,
+	// whose requests resolve their ingress by host. Both are required.
+	GatewayNamespace      string
+	GatewayServiceAccount string
 }
 
 func servePrivateIngress(
@@ -175,11 +225,14 @@ func servePrivateIngress(
 	certFile string,
 	keyFile string,
 ) error {
-	if deps.Kubernetes == nil || deps.Kubernetes.Clientset == nil {
-		return errors.New("private network ingress listener requires an in-cluster Kubernetes client")
+	if deps.TokenReviewer == nil {
+		return errors.New("private network ingress listener requires an attestation token reviewer")
 	}
 	if deps.Runtime == nil {
 		return errors.New("private network ingress listener requires an MCP server runtime")
+	}
+	if deps.MeterReadings == nil {
+		return errors.New("private network ingress listener requires a meter readings publisher")
 	}
 	certificate, err := tls.LoadX509KeyPair(certFile, keyFile)
 	if err != nil {
@@ -187,33 +240,19 @@ func servePrivateIngress(
 	}
 
 	telemetry := netingress.NewTelemetry(deps.Logger, deps.MeterProvider)
-	mux := goahttp.NewMuxer()
-	mux.Use(middleware.NetworkServingPolicyVersion)
-	mux.Use(netingress.RouteGuard)
-	mux.Use(middleware.DropInboundOTelBaggage)
-	mux.Use(func(h http.Handler) http.Handler {
-		return otelhttp.NewHandler(h, "http",
-			otelhttp.WithServerName("gram-netingress"),
-			otelhttp.WithPublicEndpointFn(func(*http.Request) bool { return true }),
-		)
-	})
-	mux.Use(middleware.RouteLabelerMiddleware)
-	mux.Use(middleware.MCPProtocolVersionTelemetry)
-	mux.Use(middleware.NewHTTPLoggingMiddleware(deps.Logger))
-	mux.Use(middleware.NewRecovery(deps.Logger))
-	mux.Use(netingress.Middleware(
-		netingress.NewAttestationVerifier(
-			deps.Kubernetes.Clientset.AuthenticationV1().TokenReviews(),
-			netingress.NewIngressLookup(deps.DB),
-			netingress.DefaultTokenAudience,
-			30*time.Second,
-			telemetry,
-		),
-		netingress.IdentityParsers{netingress.ProviderTailscale: netingress.TailscaleIdentityParser{}},
+	verifier := netingress.NewAttestationVerifier(
+		deps.TokenReviewer,
+		netingress.NewIngressLookup(deps.DB),
+		netingress.DefaultTokenAudience,
+		30*time.Second,
 		telemetry,
-	))
-	mux.Use(middleware.SessionMiddleware)
-	mcp.AttachPrivate(mux, deps.Runtime.MCP, deps.Runtime.Metadata)
+	)
+	if err := verifier.UseGatewayPrincipal(deps.GatewayNamespace, deps.GatewayServiceAccount); err != nil {
+		return fmt.Errorf("configure tailnet gateway principal: %w", err)
+	}
+	mux := newPrivateIngressHandler(deps.Logger, telemetry, verifier, deps.MeterReadings, deps.Runtime.AICatalog, func(mux goahttp.Muxer) {
+		mcp.AttachPrivate(mux, deps.Runtime.MCP, deps.Runtime.Metadata)
+	})
 
 	listener, err := net.Listen("tcp", address)
 	if err != nil {
@@ -256,4 +295,44 @@ func servePrivateIngress(
 	}
 	<-shutdownDone
 	return nil
+}
+
+// newPrivateIngressHandler builds the private listener's middleware chain
+// around the routes attach registers.
+func newPrivateIngressHandler(
+	logger *slog.Logger,
+	telemetry *netingress.Telemetry,
+	verifier netingress.WorkloadVerifier,
+	meterReadings gcp.Publisher[*meteringv1.MeterReading],
+	aiCatalog *aivendors.Store,
+	attach func(goahttp.Muxer),
+) goahttp.Muxer {
+	mux := goahttp.NewMuxer()
+	mux.Use(middleware.NetworkServingPolicyVersion)
+	mux.Use(netingress.RouteGuard)
+	mux.Use(middleware.DropInboundOTelBaggage)
+	mux.Use(func(h http.Handler) http.Handler {
+		return otelhttp.NewHandler(h, "http",
+			otelhttp.WithServerName("gram-netingress"),
+			otelhttp.WithPublicEndpointFn(func(*http.Request) bool { return true }),
+		)
+	})
+	mux.Use(middleware.RouteLabelerMiddleware)
+	mux.Use(middleware.MCPProtocolVersionTelemetry)
+	mux.Use(middleware.NewHTTPLoggingMiddleware(logger))
+	mux.Use(middleware.NewRecovery(logger))
+	mux.Use(netingress.Middleware(
+		verifier,
+		netingress.IdentityParsers{netingress.ProviderTailscale: netingress.TailscaleIdentityParser{}},
+		telemetry,
+	))
+	// Inside recovery and below netingress.Middleware, so panics and rejected
+	// admissions are not billable and the request origin is set when readings
+	// are attributed. Nothing outside this boundary consumes request bodies or
+	// rewrites successful responses.
+	mux.Use(metering.NewMCPBandwidthMiddleware(logger, meterReadings))
+	mux.Use(middleware.SessionMiddleware)
+	mux.Use(aiCatalog.Middleware)
+	attach(mux)
+	return mux
 }

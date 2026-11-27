@@ -28,6 +28,8 @@ import { AssistantOverviewSettings } from "./AssistantOverviewSettings";
 import { useRBAC } from "@/hooks/useRBAC";
 import { AssistantSkillsSection } from "./AssistantSkillsSection";
 import { AssistantTriggersList } from "./AssistantTriggersList";
+import { ReasoningEffortSelect } from "./ReasoningEffortSelect";
+import { REASONING_EFFORT_HELP } from "./reasoning-effort";
 import { Section } from "./PanelSection";
 import { useAssistantDraft } from "./useAssistantDraft";
 
@@ -100,6 +102,15 @@ export function AssistantDraftPanel(): JSX.Element {
             <Text small muted>
               Once you describe your assistant in the chat, the live spec will
               appear here as it's built.
+            </Text>
+            <Text small>Reasoning effort</Text>
+            <ReasoningEffortSelect
+              value={draft.reasoningEffort ?? "medium"}
+              onValueChange={draft.setReasoningEffort}
+              disabled={!canWrite}
+            />
+            <Text small muted>
+              {REASONING_EFFORT_HELP}
             </Text>
           </Stack>
         </div>

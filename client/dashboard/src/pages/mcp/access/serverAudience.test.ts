@@ -1,11 +1,13 @@
 // @vitest-environment node
 import { unrecognized } from "@gram/client/types/unrecognized.js";
 import type { ToolSelectionTool } from "@/components/tool-selection/ToolSelectionPanel";
+import { toolDisposition } from "@/pages/access/mcpAccessModel";
 import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";
 import { describe, expect, it } from "vitest";
 import {
   audienceIcon,
   blockingRules,
+  coversTool,
   effectiveReach,
   narrowingLabel,
 } from "./serverAudience";
@@ -71,9 +73,26 @@ describe("blockingRules", () => {
 });
 
 describe("blockingRules names only the blocks that took something away", () => {
-  // The mcp:blocked_* scopes are independent. A block on a capability nobody
-  // was granted changed nothing, and naming it sends an administrator to a
-  // role that is not the reason.
+  // A block on a capability nobody was granted changed nothing, and naming it
+  // sends an administrator to a role that is not the reason.
+  it("names a view block that took manage away too", () => {
+    const viewBlock = entry({
+      principalUrn: "role:global:admin",
+      displayName: "Admin",
+      level: "blocked_view",
+      appliesTo: "resource",
+    });
+    const reaching = [
+      entry({ principalUrn: "role:organization:gtm", level: "manage" }),
+      viewBlock,
+    ];
+
+    expect(effectiveReach(reaching)).toBeNull();
+    expect(blockingRules(reaching).map((rule) => rule.displayName)).toEqual([
+      "Admin",
+    ]);
+  });
+
   it("ignores a block on a capability the grants never opened", () => {
     const reaching = [
       gtmGrant,
@@ -141,6 +160,48 @@ describe("principal precedence", () => {
     expect(effectiveReach(reaching, [], hana)?.capabilities).toContain("view");
   });
 
+  it("lets an own view rule outrank a role's view block for view only", () => {
+    // The view block also takes manage; a direct view rule restores view and
+    // nothing it does not grant.
+    const reaching = [
+      entry({ principalUrn: "role:organization:gtm", level: "manage" }),
+      entry({
+        principalUrn: "role:global:admin",
+        displayName: "Admin",
+        level: "blocked_view",
+        appliesTo: "resource",
+      }),
+      ownRule({ level: "view" }),
+    ];
+
+    expect(effectiveReach(reaching, [], hana)?.capabilities).toEqual(["view"]);
+  });
+
+  it("keeps narrowed connect when a view block takes whole-server manage", () => {
+    // The view block takes view and manage; the narrowed connect rule is
+    // independent of both and still reaches its tools.
+    const reaching = [
+      entry({ principalUrn: "role:organization:gtm", level: "manage" }),
+      entry({
+        principalUrn: "role:organization:gtm",
+        level: "use",
+        tools: ["search"],
+      }),
+      entry({
+        principalUrn: "role:global:admin",
+        displayName: "Admin",
+        level: "blocked_view",
+        appliesTo: "resource",
+      }),
+    ];
+
+    const reach = effectiveReach(reaching, [
+      { name: "search", disposition: "unannotated" },
+    ]);
+    expect(reach?.capabilities).toEqual(["use"]);
+    expect(reach?.toolsLabel).toBe("Search");
+  });
+
   it("does not let a rule covering every server outrank a block", () => {
     const reaching = [adminBlock, ownRule({ appliesTo: "all_resources" })];
 
@@ -151,8 +212,8 @@ describe("principal precedence", () => {
 describe("effective tool counts with direct overrides", () => {
   const user = "user:1";
   const catalog: ToolSelectionTool[] = [
-    { name: "search", annotations: ["read_only"] },
-    { name: "delete", annotations: ["destructive"] },
+    { name: "search", disposition: "read_only" },
+    { name: "delete", disposition: "destructive" },
   ];
   const direct = entry({
     principalUrn: user,
@@ -311,8 +372,8 @@ describe("effectiveReach without an explicit connect rule", () => {
   // a server reaches none of its tools.
   it("does not count view or manage as connect", () => {
     const tools: ToolSelectionTool[] = [
-      { name: "search", annotations: [] },
-      { name: "deploy", annotations: [] },
+      { name: "search", disposition: "unannotated" },
+      { name: "deploy", disposition: "unannotated" },
     ];
     for (const level of ["view", "manage"] as const) {
       const rules = [entry({ principalUrn: "role:organization:gtm", level })];
@@ -324,5 +385,35 @@ describe("effectiveReach without an explicit connect rule", () => {
         expect(reach?.reachableTools).toEqual([]);
       }
     }
+  });
+});
+
+describe("coversTool", () => {
+  const readOnlyAndIdempotent: ToolSelectionTool = {
+    name: "list",
+    disposition: toolDisposition({
+      annotations: { readOnlyHint: true, idempotentHint: true },
+    }),
+  };
+
+  it("matches a tool by the disposition the server picks for it", () => {
+    expect(
+      coversTool({ dispositions: ["read_only"] }, readOnlyAndIdempotent),
+    ).toBe(true);
+  });
+
+  it("does not match a tool by a hint the server passes over", () => {
+    expect(
+      coversTool({ dispositions: ["idempotent"] }, readOnlyAndIdempotent),
+    ).toBe(false);
+  });
+
+  it("matches a tool without annotations only by an unannotated rule", () => {
+    const create: ToolSelectionTool = {
+      name: "create",
+      disposition: "unannotated",
+    };
+    expect(coversTool({ dispositions: ["read_only"] }, create)).toBe(false);
+    expect(coversTool({ dispositions: ["unannotated"] }, create)).toBe(true);
   });
 });

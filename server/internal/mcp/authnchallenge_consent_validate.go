@@ -11,17 +11,20 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
@@ -35,6 +38,9 @@ import (
 
 // errRemoteSessionUnroutable marks a credential no upstream on this endpoint is ever handed.
 var errRemoteSessionUnroutable = errors.New("remote session routes to no upstream on this endpoint")
+
+// errHostedValidationPlacementChanged means this card is no longer assigned to an admitted hosted server.
+var errHostedValidationPlacementChanged = errors.New("hosted connection no longer matches this endpoint")
 
 // errRemoteSessionNoUsableCredential marks a card whose grant cannot produce a token right now, so nothing was probed.
 var errRemoteSessionNoUsableCredential = errors.New("remote session has no usable credential")
@@ -113,6 +119,9 @@ func checkFailureCode(ctx context.Context, err error) mcpconnectionattempts.Code
 	// Any other refusal is of the caller's identity: credential admission refused it.
 	if refusal, ok := errors.AsType[*oops.ShareableError](err); ok && (refusal.Code == oops.CodeForbidden || refusal.Code == oops.CodeUnauthorized) {
 		return mcpconnectionattempts.CodeSubjectNotAdmitted
+	}
+	if errors.Is(err, errHostedValidationPlacementChanged) {
+		return mcpconnectionattempts.CodeConnectionChanged
 	}
 	code := resolveFailureHappened(err)
 	if member, ok := errors.AsType[memberConnectionError](err); ok {
@@ -215,7 +224,7 @@ func (s *Service) validateRemoteSession(
 			return errValidationRateLimited
 		}
 	}
-	return s.probeRemoteSession(ctx, consentRefreshAttribution(r, endpoint, challengeState), logger, mcpconnectionattempts.FromRequest(r), endpoint, challengeState, client, offered, nil, remotesessionmetrics.ValidationTriggerVerify)
+	return s.probeRemoteSession(ctx, consentRefreshAttribution(s.aiCatalog.SnapshotFor(ctx), r, endpoint, challengeState), logger, mcpconnectionattempts.FromRequest(r), endpoint, challengeState, client, offered, nil, remotesessionmetrics.ValidationTriggerVerify)
 }
 
 // probeRemoteSession presents the card's credential to its upstream and records
@@ -249,6 +258,36 @@ func (s *Service) probeRemoteSession(
 		}
 	}()
 
+	// Direct hosted routes never borrow issuer-linked registrations. A hosted
+	// provider check needs a live sign-in on the route and an in-scope card
+	// before it can resolve member admission for the subject.
+	directHosted := isDirectHostedValidation(endpoint)
+	_, offeredByProxy := offered[client.ID]
+	clientInEndpointProject := !client.ProjectID.Valid || endpoint.ProjectID == uuid.Nil || endpoint.ProjectID == client.ProjectID.UUID
+	canCheckHosted := trigger != remotesessionmetrics.ValidationTriggerKeepalive && endpoint.UserSessionIssuerID != uuid.Nil && clientInEndpointProject
+	if directHosted && !canCheckHosted {
+		return hostedValidationPlacementChanged(ctx, logger)
+	}
+	// Keep the proxied path when a mixed gateway explicitly offers this client.
+	if canCheckHosted && (!offeredByProxy || directHosted) {
+		placement, err := s.hostedValidationPlacement(ctx, logger, endpoint, challengeState, client.ID, client.ProjectID)
+		if verifyHitStoreOutage(ctx, err) {
+			return fmt.Errorf("%w: %w", errValidationUnfinished, err)
+		}
+		if err != nil {
+			if _, ok := errors.AsType[*oops.ShareableError](err); ok {
+				return err
+			}
+			return oops.E(oops.CodeUnexpected, err, "resolve hosted validation placement").LogError(ctx, logger)
+		}
+		if placement.serverID != uuid.Nil {
+			return s.probeHostedRemoteSession(ctx, attribution, logger, fromRequest, endpoint, challengeState, client, placement, expectedGrant, skipped, trigger)
+		}
+		if directHosted || (usesTypedConsentInventory(ctx) && (endpoint.MetaMcpServerID.Valid || endpoint.IsOrganizationGateway())) {
+			return hostedValidationPlacementChanged(ctx, logger)
+		}
+	}
+
 	servedIn, offer := offered[client.ID]
 	var tokenProjectIDs []uuid.UUID
 	if offer {
@@ -266,6 +305,10 @@ func (s *Service) probeRemoteSession(
 		tokenProjectID uuid.UUID
 		usable         bool
 	)
+	// Behind a gateway only the client being checked resolves: another client
+	// the issuer binds, even one for the same authorization server, says
+	// nothing about this one.
+	checked := map[uuid.UUID]bool{client.ID: true}
 	for _, projectID := range tokenProjectIDs {
 		var resolved map[uuid.UUID]remotesessions.UpstreamToken
 		var rerr error
@@ -291,7 +334,9 @@ func (s *Service) probeRemoteSession(
 			serverTokens, rerr = s.remoteChallengeMgr.ResolveServerAccessTokens(ctx, attribution, projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, serverID.UUID, true)
 			resolved = serverTokens.Tokens
 		} else {
-			resolved, rerr = s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, attribution, projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
+			// A gateway checks ambiguity against the member's own credential set
+			// below, so only the client being checked resolves here.
+			resolved, rerr = s.remoteChallengeMgr.ResolveAssociatedAccessTokens(ctx, attribution, projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, checked, true)
 		}
 		if verifyHitStoreOutage(ctx, rerr) {
 			logger.ErrorContext(ctx, "verify stopped by a store outage", attr.SlogError(rerr))
@@ -310,9 +355,12 @@ func (s *Service) probeRemoteSession(
 				if remotesessions.RefreshBusy(candidate.ClientCredentialErr) {
 					return errValidationRateLimited
 				}
-				if remotesessions.OutageKindOf(candidate.ClientCredentialErr) == remotesessions.RefreshOutageNone {
+				switch {
+				case remotesessions.OutageAddress(candidate.ClientCredentialErr) != guardian.AddressFine:
+					logger.WarnContext(ctx, "verify stopped by a sign-in address problem", attr.SlogError(candidate.ClientCredentialErr))
+				case remotesessions.OutageKindOf(candidate.ClientCredentialErr) == remotesessions.RefreshOutageNone:
 					logger.ErrorContext(ctx, "verify stopped by a refresh failure", attr.SlogError(candidate.ClientCredentialErr))
-				} else {
+				default:
 					logger.WarnContext(ctx, "verify stopped by an outage", attr.SlogError(candidate.ClientCredentialErr))
 				}
 				return fmt.Errorf("%w: %w", errValidationUnfinished, candidate.ClientCredentialErr)
@@ -341,9 +389,21 @@ func (s *Service) probeRemoteSession(
 		logger.InfoContext(ctx, "new remote grant not verified: credential changed before probe")
 		return nil
 	}
-	// Route the complete credential set, just as serving does. The target resolver
-	// separately proves that this card is the credential selected for the target.
-	probeCtx, target, err := s.resolveValidationTarget(ctx, logger, endpoint, challengeState, client, tokens)
+	// The target resolver proves that this card is the credential selected for
+	// the target. A gateway member's dispatch routes from the member's own
+	// credential set, so the check reads the same set to refuse what dispatch
+	// would refuse. A card a typed auth client offers already resolved to its
+	// one registration, which is what an enforcing dispatch routes from.
+	memberTokens := func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+		if offer {
+			return tokens, nil
+		}
+		if resolvesByAssociation(member) {
+			return s.remoteChallengeMgr.ResolveAssociatedAccessTokens(ctx, attribution, member.projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, member.associatedClients, true)
+		}
+		return s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, attribution, member.projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
+	}
+	probeCtx, target, err := s.resolveValidationTarget(ctx, logger, endpoint, challengeState, client, tokens, memberTokens, nil)
 	switch {
 	case errors.Is(err, errRemoteSessionUnroutable):
 		return oops.E(oops.CodeBadRequest, err, "This connection is not used by any server behind this endpoint, so it cannot be verified.").LogWarn(ctx, logger)
@@ -354,6 +414,11 @@ func (s *Service) probeRemoteSession(
 		return oops.E(oops.CodeUnexpected, err, "resolve validation target").LogError(ctx, logger)
 	}
 
+	return s.runRemoteSessionProbe(ctx, probeCtx, logger, fromRequest, endpoint, challengeState, client, entry, tokenProjectID, target, trigger)
+}
+
+func (s *Service) runRemoteSessionProbe(ctx, probeCtx context.Context, logger *slog.Logger, fromRequest mcpconnectionattempts.Option, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, client remotesessions.Client, entry remotesessions.UpstreamToken, tokenProjectID uuid.UUID, target validationTarget, trigger remotesessionmetrics.ValidationTrigger) error {
+	subject := *challengeState.Subject
 	// A keepalive never dials a tunnel with no live route, and records nothing: the member is offline, not answering.
 	if trigger == remotesessionmetrics.ValidationTriggerKeepalive && target.tunnelID.Valid && !s.tunnelHasRoute(probeCtx, target.tunnelID.UUID) {
 		return fmt.Errorf("%w: %s", errRemoteSessionMemberOffline, target.name)
@@ -408,6 +473,162 @@ func (s *Service) probeRemoteSession(
 		return nil
 	}
 	logger.InfoContext(ctx, "remote session validated", attr.SlogReason(reason))
+	return nil
+}
+
+func isDirectHostedValidation(endpoint *ResolvedMcpEndpoint) bool {
+	return endpoint.McpServerID.Valid && endpoint.ToolsetID.Valid && !endpoint.MetaMcpServerID.Valid && !endpoint.IsOrganizationGateway()
+}
+
+type hostedValidationPlacement struct {
+	serverID  uuid.UUID
+	projectID uuid.UUID
+}
+
+// hostedValidationPlacement finds a live assignment on a server the consent
+// subject is admitted to. For gateways use the same admitted member snapshot.
+func (s *Service) hostedValidationPlacement(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState, registrationID uuid.UUID, registrationProjectID uuid.NullUUID) (hostedValidationPlacement, error) {
+	var none hostedValidationPlacement
+	if isDirectHostedValidation(endpoint) {
+		p := hostedValidationPlacement{serverID: endpoint.McpServerID.UUID, projectID: endpoint.ProjectID}
+		matches, err := s.hostedValidationAssignmentMatches(ctx, endpoint.OrganizationID, p, registrationID)
+		if err != nil || !matches {
+			return none, err
+		}
+		server, err := mcpservers_repo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{ID: p.serverID, ProjectID: p.projectID})
+		if err != nil {
+			return none, fmt.Errorf("load hosted server for validation admission: %w", err)
+		}
+		subjectCtx, err := s.contextForSessionSubject(ctx, endpoint, *state.Subject, "consent:"+state.ID, state.ClientID)
+		if err != nil {
+			return none, fmt.Errorf("stamp hosted consent subject context: %w", err)
+		}
+		if _, err := s.authorizeProxyBackendAccess(withMandatoryAdmission(subjectCtx), logger, mandatorySurfaceConsent, endpoint.OrganizationID, p.projectID, &server); err != nil {
+			return none, fmt.Errorf("authorize hosted validation: %w", err)
+		}
+		return p, nil
+	}
+	if (!endpoint.MetaMcpServerID.Valid && !endpoint.IsOrganizationGateway()) || (registrationProjectID.Valid && endpoint.ProjectID != uuid.Nil && registrationProjectID.UUID != endpoint.ProjectID) {
+		return none, nil
+	}
+	members, err := s.consentSubjectMembers(ctx, endpoint, state)
+	if err != nil {
+		return none, err
+	}
+	var selected hostedValidationPlacement
+	for _, member := range members {
+		if member.backend != metaMemberBackendHosted || !member.associatedClients[registrationID] {
+			continue
+		}
+		p := hostedValidationPlacement{serverID: member.serverID, projectID: member.projectID}
+		matches, err := s.hostedValidationAssignmentMatches(ctx, endpoint.OrganizationID, p, registrationID)
+		if err != nil {
+			return none, err
+		}
+		if matches {
+			if selected.serverID != uuid.Nil {
+				return none, remotesessions.ErrRemoteSessionMisconfigured
+			}
+			selected = p
+		}
+	}
+	return selected, nil
+}
+
+func (s *Service) hostedValidationAssignmentMatches(ctx context.Context, organizationID string, placement hostedValidationPlacement, registrationID uuid.UUID) (bool, error) {
+	assigned, err := s.hostedRegistration(ctx, organizationID, placement.projectID, placement.serverID)
+	if errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured) || errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	return assigned != uuid.Nil && assigned == registrationID, err
+}
+
+func (s *Service) probeHostedRemoteSession(ctx context.Context, attribution remotesessions.RefreshAttribution, logger *slog.Logger, fromRequest mcpconnectionattempts.Option, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState, client remotesessions.Client, placement hostedValidationPlacement, expectedGrant *remotesessions.RemoteGrant, skipped *remotesessions.SkippedClients, trigger remotesessionmetrics.ValidationTrigger) error {
+	subject := *state.Subject
+	tokens, err := s.remoteChallengeMgr.ResolveHostedRegistrationAccessTokens(ctx, remotesessions.AuthClientTokenRequest{
+		ProjectID: placement.projectID, OrganizationID: endpoint.OrganizationID, UserSessionIssuerID: endpoint.UserSessionIssuerID,
+		Subject: subject, RegistrationID: client.ID, SkipUnusable: true, Attribution: attribution,
+	})
+	if verifyHitStoreOutage(ctx, err) {
+		return fmt.Errorf("%w: %w", errValidationUnfinished, err)
+	}
+	if err != nil {
+		return fmt.Errorf("resolve assigned hosted registration for validation: %w", err)
+	}
+	entry, ok := assignedHostedToken(tokens, client.ID)
+	if ok && entry.SessionUnavailable() {
+		if remotesessions.RefreshBusy(entry.ClientCredentialErr) {
+			return errValidationRateLimited
+		}
+		return fmt.Errorf("%w: %w", errValidationUnfinished, entry.ClientCredentialErr)
+	}
+	if !ok || entry.Token == "" || entry.RemoteSessionID == uuid.Nil {
+		statuses, err := s.remoteChallengeMgr.AuthClientRemoteSessionStatuses(ctx, subject, placement.projectID, endpoint.OrganizationID, []uuid.UUID{client.ID})
+		if verifyHitStoreOutage(ctx, err) {
+			return fmt.Errorf("%w: read hosted registration status: %w", errValidationUnfinished, err)
+		}
+		if err != nil {
+			return fmt.Errorf("read hosted registration status: %w", err)
+		}
+		status, connected := statuses[client.ID]
+		cause := skipped.Reason(placement.projectID, client.RemoteSessionIssuerID, uuid.NullUUID{UUID: client.ID, Valid: true})
+		return oops.E(oops.CodeBadRequest, noUsableCredentialError{cause: cause}, "%s", describeNoUsableCredential(status, connected, time.Now())).LogWarn(ctx, logger)
+	}
+	if expectedGrant != nil && expectedGrant.RemoteSessionID != uuid.Nil &&
+		(entry.RemoteSessionID != expectedGrant.RemoteSessionID || !entry.RemoteSessionResolvedFromUpdatedAt.Equal(expectedGrant.RemoteSessionUpdatedAt)) {
+		return nil
+	}
+	ref := remotesessions.RemoteSessionRef{
+		ID: entry.RemoteSessionID, Subject: subject, ClientID: client.ID,
+		UpdatedAt: entry.RemoteSessionUpdatedAt, ProjectID: placement.projectID, OrganizationID: endpoint.OrganizationID,
+	}
+	return s.verifyHostedRemoteSession(ctx, logger, fromRequest, endpoint, state, client, placement, ref, trigger)
+}
+
+func hostedValidationPlacementChanged(ctx context.Context, logger *slog.Logger) error {
+	return oops.E(oops.CodeBadRequest, errHostedValidationPlacementChanged, "This connection can't be checked here.").LogWarn(ctx, logger)
+}
+
+// A hosted tool has no general MCP upstream to probe with tools/list. The
+// provider's interfaces can prove the grant inactive but cannot prove a tool
+// accepts it. Enrichment only opens the exact version named by the reference.
+func (s *Service) verifyHostedRemoteSession(ctx context.Context, logger *slog.Logger, fromRequest mcpconnectionattempts.Option, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState, client remotesessions.Client, placement hostedValidationPlacement, ref remotesessions.RemoteSessionRef, trigger remotesessionmetrics.ValidationTrigger) error {
+	matches, err := s.hostedValidationAssignmentMatches(ctx, ref.OrganizationID, placement, client.ID)
+	if verifyHitStoreOutage(ctx, err) {
+		return fmt.Errorf("%w: revalidate hosted registration placement: %w", errValidationUnfinished, err)
+	}
+	if err != nil {
+		return err
+	}
+	if !matches {
+		return hostedValidationPlacementChanged(ctx, logger)
+	}
+	probedAt := time.Now()
+	upstream, err := s.remoteChallengeMgr.EnrichRemoteSession(ctx, ref)
+	if verifyHitStoreOutage(ctx, err) {
+		return fmt.Errorf("%w: enrich hosted registration: %w", errValidationUnfinished, err)
+	}
+	if err != nil {
+		return fmt.Errorf("%w: %w", errRemoteSessionVerdictNotRecorded, oops.E(oops.CodeUnexpected, err, "enrich hosted registration").LogError(ctx, logger))
+	}
+	issuer, _ := issuerCardBranding(client, false, s.serverURL)
+	verdict, reason := combineUpstreamVerdict(remotesessions.ValidationOutcomeUnknown, "The provider did not report an inactive sign-in.", upstream, issuer)
+	s.validationMetrics.Record(ctx, client.IssuerURL, trigger, string(verdict))
+	// Unknown is not a member failure: hosted verification deliberately does
+	// not attempt a tool call. Only a provider-proved verdict is attributable.
+	if verdict == remotesessions.ValidationOutcomeInactive {
+		memberID := uuid.Nil
+		if endpoint.MetaMcpServerID.Valid || endpoint.IsOrganizationGateway() {
+			memberID = placement.serverID
+		}
+		var target validationTarget
+		target.memberID = memberID
+		var noMemberProbe probeFailure
+		s.recordRemoteSessionVerdict(ctx, fromRequest, endpoint, state, client, target, ref.ID, verdict, noMemberProbe, trigger)
+	}
+	if _, err := s.remoteChallengeMgr.RecordRemoteSessionValidation(ctx, ref, remotesessions.RemoteSessionValidation{Status: verdict, Reason: reason, At: probedAt}); err != nil {
+		return fmt.Errorf("%w: %w", errRemoteSessionVerdictNotRecorded, oops.E(oops.CodeUnexpected, err, "record hosted registration validation").LogError(ctx, logger))
+	}
 	return nil
 }
 
@@ -542,6 +763,15 @@ func describeNoUsableCredential(state remotesessions.RemoteSessionState, connect
 }
 
 // resolveValidationTarget finds the upstream this endpoint would hand the credential to, judged as the consent subject.
+// recheckMemberScope restricts the scheduled probe to the project that
+// supplied its offer or attachment. Interactive consent passes nil.
+type recheckMemberScope struct {
+	projectID      uuid.UUID
+	typedOffer     bool
+	serverID       uuid.UUID
+	registrationID uuid.UUID
+}
+
 func (s *Service) resolveValidationTarget(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -549,6 +779,8 @@ func (s *Service) resolveValidationTarget(
 	challengeState AuthnChallengeState,
 	client remotesessions.Client,
 	tokens map[uuid.UUID]remotesessions.UpstreamToken,
+	memberTokens func(context.Context, metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error),
+	scope *recheckMemberScope,
 ) (context.Context, validationTarget, error) {
 	var none validationTarget
 	subject := *challengeState.Subject
@@ -562,7 +794,7 @@ func (s *Service) resolveValidationTarget(
 
 	switch {
 	case endpoint.MetaMcpServerID.Valid:
-		return s.metaValidationTarget(ctx, logger, endpoint, client, tokens, sessionID, subject)
+		return s.metaValidationTarget(ctx, logger, endpoint, client, tokens, memberTokens, sessionID, subject, scope)
 	case endpoint.McpServerID.Valid:
 		return s.standaloneValidationTarget(ctx, logger, endpoint, challengeState, client, tokens)
 	default:
@@ -577,11 +809,22 @@ func (s *Service) metaValidationTarget(
 	endpoint *ResolvedMcpEndpoint,
 	client remotesessions.Client,
 	tokens map[uuid.UUID]remotesessions.UpstreamToken,
+	memberTokens func(context.Context, metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error),
 	sessionID string,
 	subject urn.SessionSubject,
+	scope *recheckMemberScope,
 ) (context.Context, validationTarget, error) {
 	var none validationTarget
-	rows, claimed, err := s.claimingMetaMembers(ctx, endpoint, client)
+	var rows []metamcprepo.ListMetaMCPMembersForRemoteSessionClientRow
+	var claimed bool
+	var err error
+	if scope == nil {
+		rows, claimed, err = s.claimingMetaMembers(ctx, endpoint, client)
+	} else {
+		scopedClient := client
+		scopedClient.ProjectID = conv.ToNullUUID(scope.projectID)
+		rows, claimed, err = s.claimingMetaMembersForValidation(ctx, endpoint, scopedClient, scope.typedOffer)
+	}
 	if err != nil {
 		return ctx, none, fmt.Errorf("resolve claiming meta MCP members: %w", err)
 	}
@@ -591,6 +834,9 @@ func (s *Service) metaValidationTarget(
 	entry := tokens[client.RemoteSessionIssuerID]
 	targetID := uuid.Nil
 	for _, row := range rows {
+		if scope != nil && row.McpServerID != scope.serverID {
+			continue
+		}
 		// The dispatch selectors: a tunneled member takes only its own issuer's entry (tunneledIssuerToken).
 		routes := grantRoutesToUpstream(entry.Resource, row.UpstreamUrl, false)
 		if row.Tunneled {
@@ -606,7 +852,17 @@ func (s *Service) metaValidationTarget(
 		return ctx, none, errRemoteSessionUnroutable
 	}
 
-	ctx, members, err := s.resolveEndpointMemberSnapshot(ctx, logger, mandatorySurfaceConsent, endpoint)
+	var members []metaMember
+	switch {
+	case scope == nil:
+		ctx, members, err = s.resolveEndpointMemberSnapshot(ctx, logger, mandatorySurfaceConsent, endpoint)
+	case endpoint.IsOrganizationGateway():
+		// The SQL placement already pins the issuer, tenant, and member.
+		// Use the authorized member snapshot without reading browser inventory.
+		ctx, members, _, err = s.resolveOrganizationMemberSnapshotWithRecheck(ctx, logger, mandatorySurfaceConsent, endpoint.OrganizationID, true, endpoint.UserSessionIssuerID, scope.projectID, false, scope)
+	default:
+		ctx, members, _, err = s.resolveMetaMemberSnapshot(ctx, logger, mandatorySurfaceConsent, endpoint.OrganizationID, endpoint.MetaMcpServerID.UUID, endpoint.ProjectID)
+	}
 	if err != nil {
 		return ctx, none, fmt.Errorf("resolve meta MCP member snapshot: %w", err)
 	}
@@ -622,9 +878,9 @@ func (s *Service) metaValidationTarget(
 	if !found {
 		return ctx, none, errRemoteSessionUnroutable
 	}
-	if member.associatedClients != nil {
-		// The member claimed this client by association, so a credential that
-		// chose it routes by the client's own issuer.
+	if scope != nil || member.associatedClients != nil {
+		// A confirmed claim by offer or association routes by the client's
+		// own issuer, not the member's old provider stamp.
 		member.remoteSessionIssuerID = uuid.NullUUID{UUID: client.RemoteSessionIssuerID, Valid: true}
 	}
 	name := conv.Default(member.name, member.slug)
@@ -634,6 +890,8 @@ func (s *Service) metaValidationTarget(
 	}
 	// No inbound negotiation occurred; the SDK chooses the outbound revision.
 	gate := metaGateContext{
+		agentMembership:  false,
+		caller:           emptyGatewayCaller(),
 		fromRequest:      mcpconnectionattempts.FromRequest(nil),
 		skippedUpstreams: nil,
 		request:          nil,
@@ -699,9 +957,14 @@ func (s *Service) metaValidationTarget(
 	if dial.anonymous {
 		return ctx, none, errRemoteSessionUnroutable
 	}
-	// The dial proves this card matches the actual backend. Check the complete
-	// set for ambiguity without loading and authorizing that backend twice.
-	if _, err := routeMetaMemberToken(tokens, member, entry.Resource); err != nil {
+	// The dial proves this card matches the actual backend. Check the member's
+	// own credential set for ambiguity without loading and authorizing that
+	// backend twice.
+	routable, err := memberTokens(ctx, member)
+	if err != nil {
+		return ctx, none, fmt.Errorf("resolve member credentials for validation: %w", err)
+	}
+	if _, err := routeMetaMemberToken(routable, member, entry.Resource); err != nil {
 		return ctx, none, fmt.Errorf("%w: %w", errRemoteSessionUnroutable, err)
 	}
 	return ctx, validationTarget{name: name, build: probeProxyBuilder(dial.build), tunnelID: member.tunneledServerID, memberID: member.serverID, setupFailed: false}, nil

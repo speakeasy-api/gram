@@ -33,7 +33,7 @@ func TestRoleAudienceDeliversExistingUseGrant(t *testing.T) {
 	require.NoError(t, err)
 	_, err = accessrepo.New(ti.conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{OrganizationID: ac.ActiveOrganizationID, PrincipalUrn: principal, Scope: string(authz.ScopeMCPConnect), Selectors: selectors})
 	require.NoError(t, err)
-	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Delivery"})
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Delivery", AutoAddServersEnabled: new(true)})
 	require.NoError(t, err)
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.NoError(t, err)
@@ -113,7 +113,7 @@ func TestRoleAudienceDeliveryAvoidsOccupiedFallbackDisplayName(t *testing.T) {
 	ac, _ := contextvalues.GetAuthContext(ctx)
 	role := createTestRolePrincipal(t, ctx, ti, "name-collision")
 	target := createTestToolset(t, ctx, ti.conn, "Example")
-	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Name collision"})
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Name collision", AutoAddServersEnabled: new(true)})
 	require.NoError(t, err)
 	expectedIDs := []string{target.ID.String()}
 	for _, name := range []string{"Example", "Example (" + target.ID.String() + ")"} {
@@ -148,7 +148,7 @@ func TestAddPluginServerRejectsLegacyDuplicateOfRoleDeliveredServer(t *testing.T
 	ac, _ := contextvalues.GetAuthContext(ctx)
 	role := createTestRolePrincipal(t, ctx, ti, "legacy-delivery")
 	server := createTestToolset(t, ctx, ti.conn, "Legacy server")
-	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Legacy delivery"})
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Legacy delivery", AutoAddServersEnabled: new(true)})
 	require.NoError(t, err)
 	id := server.ID.String()
 
@@ -212,7 +212,7 @@ func TestRoleAudienceDeliversCanonicalRowOnceBesideGatewayMember(t *testing.T) {
 	_, err = accessrepo.New(ti.conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{OrganizationID: ac.ActiveOrganizationID, PrincipalUrn: principal, Scope: string(authz.ScopeMCPConnect), Selectors: selectors})
 	require.NoError(t, err)
 
-	fresh, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Canonical delivery"})
+	fresh, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Canonical delivery", AutoAddServersEnabled: new(true)})
 	require.NoError(t, err)
 	_, err = ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{PluginID: fresh.ID, PrincipalUrns: []string{role}})
 	require.NoError(t, err)
@@ -222,7 +222,7 @@ func TestRoleAudienceDeliversCanonicalRowOnceBesideGatewayMember(t *testing.T) {
 	require.Equal(t, canonical.String(), *got.Servers[0].McpServerID)
 
 	// An entry already delivered through the member stays and is not doubled.
-	existing, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Member delivery"})
+	existing, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Member delivery", AutoAddServersEnabled: new(true)})
 	require.NoError(t, err)
 	delivered, err := ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{PluginID: existing.ID, McpServerID: conv.PtrEmpty(member.String()), Policy: "required"})
 	require.NoError(t, err)
@@ -273,7 +273,7 @@ func TestRoleAudienceCanonicalEndpointFallback(t *testing.T) {
 			require.NoError(t, err)
 			_, err = accessrepo.New(ti.conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{OrganizationID: ac.ActiveOrganizationID, PrincipalUrn: principal, Scope: string(authz.ScopeMCPConnect), Selectors: selectors})
 			require.NoError(t, err)
-			plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Endpoint fallback"})
+			plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Endpoint fallback", AutoAddServersEnabled: new(true)})
 			require.NoError(t, err)
 			// Fresh delivery and replay both keep at most one wrapper for the toolset.
 			for range 2 {

@@ -481,6 +481,58 @@ func (q *Queries) ListHeadersByServerID(ctx context.Context, remoteMcpServerID u
 	return items, nil
 }
 
+const listLiveRemoteBackedMcpServers = `-- name: ListLiveRemoteBackedMcpServers :many
+SELECT
+    m.id AS mcp_server_id,
+    m.name AS mcp_server_name,
+    m.slug AS mcp_server_slug,
+    rms.name AS remote_name,
+    rms.url AS remote_url
+FROM mcp_servers AS m
+JOIN remote_mcp_servers AS rms ON rms.id = m.remote_mcp_server_id AND rms.project_id = m.project_id AND rms.deleted IS FALSE
+WHERE m.project_id = $1
+    AND m.deleted IS FALSE
+    AND m.visibility <> 'disabled'
+ORDER BY m.created_at, m.id
+`
+
+type ListLiveRemoteBackedMcpServersRow struct {
+	McpServerID   uuid.UUID
+	McpServerName pgtype.Text
+	McpServerSlug pgtype.Text
+	RemoteName    pgtype.Text
+	RemoteUrl     string
+}
+
+// Every live, enabled MCP server in the project that proxies to a remote URL.
+// Shadow MCP reads this to tell a directly-used server URL that the project
+// already serves through Speakeasy from one it does not.
+func (q *Queries) ListLiveRemoteBackedMcpServers(ctx context.Context, projectID uuid.UUID) ([]ListLiveRemoteBackedMcpServersRow, error) {
+	rows, err := q.db.Query(ctx, listLiveRemoteBackedMcpServers, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListLiveRemoteBackedMcpServersRow
+	for rows.Next() {
+		var i ListLiveRemoteBackedMcpServersRow
+		if err := rows.Scan(
+			&i.McpServerID,
+			&i.McpServerName,
+			&i.McpServerSlug,
+			&i.RemoteName,
+			&i.RemoteUrl,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMcpServerIDsByRemoteURL = `-- name: ListMcpServerIDsByRemoteURL :many
 SELECT m.id
 FROM mcp_servers AS m
@@ -510,6 +562,69 @@ func (q *Queries) ListMcpServerIDsByRemoteURL(ctx context.Context, arg ListMcpSe
 			return nil, err
 		}
 		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOfferedOAuthRegistrationsForStaffScopes = `-- name: ListOfferedOAuthRegistrationsForStaffScopes :many
+SELECT DISTINCT c.id, c.scope, i.name AS issuer_name, i.issuer AS issuer_url,
+       i.scopes_supported, i.scope_override, i.omit_scope_fallback
+FROM mcp_server_auth_clients AS offer
+JOIN projects AS p ON p.id = offer.project_id AND p.organization_id = offer.organization_id AND p.deleted IS FALSE
+JOIN mcp_servers AS m ON m.id = offer.mcp_server_id AND m.project_id = p.id AND m.deleted IS FALSE
+JOIN mcp_auth_clients AS ac ON ac.id = offer.auth_client_id AND ac.organization_id = p.organization_id
+  AND (ac.project_id IS NULL OR ac.project_id = p.id) AND ac.enabled AND ac.deleted IS FALSE
+JOIN remote_session_clients AS c ON c.id = ac.remote_session_client_id AND c.deleted IS FALSE
+  AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
+JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id AND i.deleted IS FALSE
+  AND (i.project_id = p.id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = p.organization_id)))
+WHERE offer.organization_id = $1 AND offer.project_id = $2
+  AND offer.mcp_server_id = $3 AND offer.deleted IS FALSE
+ORDER BY c.id
+`
+
+type ListOfferedOAuthRegistrationsForStaffScopesParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	McpServerID    uuid.UUID
+}
+
+type ListOfferedOAuthRegistrationsForStaffScopesRow struct {
+	ID                uuid.UUID
+	Scope             []string
+	IssuerName        pgtype.Text
+	IssuerUrl         string
+	ScopesSupported   []string
+	ScopeOverride     []string
+	OmitScopeFallback pgtype.Bool
+}
+
+// Direct typed offers own the protected resource of the server that offers
+// them. Do not infer an offer from the server's downstream sign-in issuer.
+func (q *Queries) ListOfferedOAuthRegistrationsForStaffScopes(ctx context.Context, arg ListOfferedOAuthRegistrationsForStaffScopesParams) ([]ListOfferedOAuthRegistrationsForStaffScopesRow, error) {
+	rows, err := q.db.Query(ctx, listOfferedOAuthRegistrationsForStaffScopes, arg.OrganizationID, arg.ProjectID, arg.McpServerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOfferedOAuthRegistrationsForStaffScopesRow
+	for rows.Next() {
+		var i ListOfferedOAuthRegistrationsForStaffScopesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Scope,
+			&i.IssuerName,
+			&i.IssuerUrl,
+			&i.ScopesSupported,
+			&i.ScopeOverride,
+			&i.OmitScopeFallback,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

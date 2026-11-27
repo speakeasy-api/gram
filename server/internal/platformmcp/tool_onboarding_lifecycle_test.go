@@ -12,7 +12,7 @@ func TestIdentityProviderAttachmentOutputPresentsExactAuthorizationLink(t *testi
 
 	output := identityProviderAttachmentOutput(
 		"project",
-		"registration",
+		"mcp",
 		CatalogIdentityProviderAttachmentResult{Attached: true, ProviderURL: "https://provider.example"},
 		"https://dashboard.example/organization/projects/project/mcp/server/inspect",
 	)
@@ -43,7 +43,7 @@ func TestIdentityProviderAttachmentReturnsOnlyBoundedResults(t *testing.T) {
 			name:    "existing attachment conflict",
 			err:     ErrIdentityProviderAttachmentConflict,
 			code:    "identity_provider_attachment_conflict",
-			message: "This MCP server already has a different or unclear sign-in provider set up, so nothing was changed. Ask the user how they want to proceed.",
+			message: "The server or its provider configuration changed, or the existing OAuth client is not offered on this server. No attachment was made. Check this exact server and configure its User Identity offer before retrying.",
 		},
 	}
 

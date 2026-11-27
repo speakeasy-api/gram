@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/url"
 	"runtime"
@@ -17,10 +18,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/deployments/events"
 	"github.com/speakeasy-api/gram/server/internal/deployments/repo"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	funcrepo "github.com/speakeasy-api/gram/server/internal/functions/repo"
+	"github.com/speakeasy-api/gram/server/internal/functions/runnerkeys"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -35,7 +37,7 @@ type DeployFunctionRunners struct {
 	db             *pgxpool.Pool
 	deployer       functions.Deployer
 	defaultVersion functions.RunnerVersion
-	enc            *encryption.Client
+	keys           *runnerkeys.Keys
 }
 
 func NewDeployFunctionRunners(
@@ -43,14 +45,14 @@ func NewDeployFunctionRunners(
 	db *pgxpool.Pool,
 	deployer functions.Deployer,
 	defaultVersion functions.RunnerVersion,
-	enc *encryption.Client,
+	keys *runnerkeys.Keys,
 ) *DeployFunctionRunners {
 	return &DeployFunctionRunners{
 		logger:         logger.With(attr.SlogComponent("deploy_function_runner")),
 		db:             db,
 		deployer:       deployer,
 		defaultVersion: defaultVersion,
-		enc:            enc,
+		keys:           keys,
 	}
 }
 
@@ -125,12 +127,25 @@ func (d *DeployFunctionRunners) do(ctx context.Context, args DeployFunctionRunne
 
 	tasks := make([]deployFunctionRunnerTask, 0, len(depfuncs))
 	stop := false
+	// keyErr is the first preflight error that a retry may clear, such as an
+	// organization key that KMS could not reach, or that the customer has to
+	// fix. It is returned as is, so Do retries the deployment or reports why
+	// the key cannot be used, instead of the generic preflight failure.
+	var keyErr error
 	for _, fnc := range depfuncs {
-		if task, err := d.preflightFunction(ctx, logger, args, fnc, creds, assetURLs); err != nil {
+		task, err := d.preflightFunction(ctx, logger, args, fnc, creds, assetURLs)
+		if err != nil {
 			stop = true
-		} else {
-			tasks = append(tasks, task)
+			var serr *oops.ShareableError
+			if keyErr == nil && errors.As(err, &serr) && (serr.IsTemporary(ctx) || serr.Code == oops.CodeFailedPrecondition) {
+				keyErr = err
+			}
+			continue
 		}
+		tasks = append(tasks, task)
+	}
+	if keyErr != nil {
+		return keyErr
 	}
 	if stop {
 		return oops.E(oops.CodeInvalid, nil, "one or more functions failed preflight checks").LogError(ctx, d.logger)
@@ -162,6 +177,8 @@ func (d *DeployFunctionRunners) do(ctx context.Context, args DeployFunctionRunne
 			})
 			var serr *oops.ShareableError
 			switch {
+			case errors.Is(err, functions.ErrFunctionsDisabled):
+				return fmt.Errorf("deploy function runner: %w", err)
 			case errors.As(err, &serr):
 				return serr
 			case err != nil:
@@ -171,6 +188,9 @@ func (d *DeployFunctionRunners) do(ctx context.Context, args DeployFunctionRunne
 		})
 	}
 	if err := workers.Wait(); err != nil {
+		if errors.Is(err, functions.ErrFunctionsDisabled) {
+			return d.refuseDisabled(ctx, args, err)
+		}
 		return err
 	}
 
@@ -250,14 +270,17 @@ func (d *DeployFunctionRunners) preflightFunction(
 		return empty, oops.E(oops.CodeInvariantViolation, nil, "function is missing credentials").LogError(ctx, logger)
 	}
 
-	enckey := c.EncryptionKey.Reveal()
-	if len(enckey) == 0 || c.BearerFormat.String == "" {
+	if c.BearerFormat.String == "" {
 		return empty, oops.E(oops.CodeInvariantViolation, nil, "malformed credentials generated for function").LogError(ctx, logger)
 	}
 
-	sec, err := d.enc.Decrypt(string(enckey))
+	sec, err := d.keys.Open(ctx, runnerkeys.Stored{
+		OrganizationID: c.OrganizationID,
+		Platform:       c.EncryptionKey,
+		Org:            c.EncryptionKeyOrgEncrypted,
+	})
 	if err != nil {
-		return empty, oops.E(oops.CodeInvariantViolation, err, "failed to unseal function credentials").LogError(ctx, logger)
+		return empty, runnerkeys.Error(ctx, logger, err, "failed to unseal function credentials")
 	}
 
 	if len(sec) == 0 {
@@ -272,7 +295,7 @@ func (d *DeployFunctionRunners) preflightFunction(
 		runtime:          functions.Runtime(fnc.Runtime),
 		memoryMiB:        mem,
 		scale:            scale,
-		bearerSecret:     base64.StdEncoding.EncodeToString([]byte(sec)),
+		bearerSecret:     base64.StdEncoding.EncodeToString(sec),
 		assetID:          fnc.AssetID,
 		assetURL:         assetURL,
 		assetSHA256:      fa.Sha256,
@@ -300,4 +323,29 @@ func (d *DeployFunctionRunners) resolveRunnerVersion(
 	}
 
 	return conv.Default(functions.RunnerVersion(pinned), d.defaultVersion)
+}
+
+// refuseDisabled fails a deployment that carries functions on a deployment
+// that runs with the disabled Functions provider. It records the reason as a
+// deployment log so the failed deployment explains itself, and returns a code
+// that is not temporary so Temporal does not retry the activity.
+func (d *DeployFunctionRunners) refuseDisabled(ctx context.Context, args DeployFunctionRunnersRequest, cause error) error {
+	eventsHandler := events.NewLogHandler()
+	logger := slog.New(eventsHandler).With(
+		attr.SlogProjectID(args.ProjectID.String()),
+		attr.SlogDeploymentID(args.DeploymentID.String()),
+	)
+	logger.ErrorContext(ctx, functions.ErrFunctionsDisabled.Error())
+	if _, err := eventsHandler.Flush(ctx, d.db); err != nil {
+		d.logger.ErrorContext(ctx, "flush functions disabled deployment event",
+			attr.SlogProjectID(args.ProjectID.String()),
+			attr.SlogDeploymentID(args.DeploymentID.String()),
+			attr.SlogError(err),
+		)
+	}
+
+	return oops.E(oops.CodeNotImplemented, cause, "%s", functions.ErrFunctionsDisabled.Error()).LogWarn(ctx, d.logger,
+		attr.SlogProjectID(args.ProjectID.String()),
+		attr.SlogDeploymentID(args.DeploymentID.String()),
+	)
 }

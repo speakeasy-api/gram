@@ -133,7 +133,7 @@ func (a channelsAdmission) PrepareContext(ctx context.Context, identity authn.Id
 	if !enforce {
 		return ctx, errors.New("channels authorization enforcement unavailable")
 	}
-	if err := a.engine.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: authz.ResourceKindProject, ResourceID: project.ID.String(), Dimensions: nil}); err != nil {
+	if err := a.engine.Require(ctx, authz.Project(authz.ProjectIDOf(project.ID)).Read()); err != nil {
 		return ctx, fmt.Errorf("channels project access required: %w", err)
 	}
 	return ctx, nil
@@ -254,15 +254,12 @@ func newChannelsAuthenticator(config channelsConfig, tokens channelsTokenAuthent
 		// freshly loaded grants. None of them implies another, and none is
 		// implied by mcp:connect or by organization membership, so one combined
 		// check would quietly widen whichever of them the caller lacks.
-		allowed := make([]bool, 0, 3)
-		for _, scope := range []authz.Scope{authz.ScopeChannelsConnect, authz.ScopeChannelsAdmin, authz.ScopeChannelsReadAll} {
-			yes, err := config.Authz.Evaluate(prepared, authz.Check{Scope: scope, ResourceID: principal.ProjectID.String(), ResourceKind: "project", Dimensions: nil})
-			if err != nil {
-				return channels.Principal{}, fmt.Errorf("evaluate channels permission %s: %w", scope, err)
-			}
-			allowed = append(allowed, yes)
+		project := authz.Project(authz.ProjectIDOf(principal.ProjectID))
+		decisions, err := config.Authz.Decide(authz.WithoutChallenges(prepared), project.ChannelsConnect(), project.ChannelsAdmin(), project.ChannelsReadAll())
+		if err != nil {
+			return channels.Principal{}, fmt.Errorf("evaluate channels permissions: %w", err)
 		}
-		return channels.Principal{OrganizationID: principal.OrganizationID, ProjectID: principal.ProjectID.String(), SubjectID: principal.Principal.ID, SubjectName: subjectName, CanConnect: allowed[0], CanAdmin: allowed[1], CanReadAll: allowed[2]}, nil
+		return channels.Principal{OrganizationID: principal.OrganizationID, ProjectID: principal.ProjectID.String(), SubjectID: principal.Principal.ID, SubjectName: subjectName, CanConnect: decisions.Each[0].Allowed, CanAdmin: decisions.Each[1].Allowed, CanReadAll: decisions.Each[2].Allowed}, nil
 	}
 }
 

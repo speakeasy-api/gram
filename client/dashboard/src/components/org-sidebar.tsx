@@ -26,8 +26,6 @@ import { Wrench } from "lucide-react";
 import { useCanSetUpOrg } from "@/hooks/useCanSetUpOrg";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useRBAC } from "@/hooks/useRBAC";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 
 /** Scopes that make an org-level nav item visible. */
 const orgReadOrAdmin: Scope[] = ["org:read", "org:admin"];
@@ -73,9 +71,6 @@ export function OrgSidebar({
   );
   const productFeatures = canReadFeatures ? featuresData : undefined;
   const isPlatformAdmin = useIsPlatformAdmin();
-  const isUserSessionIssuersEnabled =
-    useFeatureFlag(FEATURE_FLAGS.userSessionIssuerDashboard).status ===
-    "enabled";
 
   const settingsActive = [
     orgRoutes.billing,
@@ -198,15 +193,6 @@ export function OrgSidebar({
                   { item: orgRoutes.skills, scope: "org:admin" },
                   { item: orgRoutes.aiIntegrations, scope: orgReadOrAdmin },
                   { item: orgRoutes.webhooks, scope: orgReadOrAdmin },
-                  ...(isUserSessionIssuersEnabled
-                    ? [
-                        {
-                          item: orgRoutes.userSessionIssuers,
-                          scope: orgReadOrAdmin,
-                          label: "Authorization Servers",
-                        },
-                      ]
-                    : []),
                 ]}
               />
 

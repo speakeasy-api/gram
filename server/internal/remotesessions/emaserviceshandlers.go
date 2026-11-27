@@ -71,7 +71,7 @@ func (s *Service) ListEMAServices(ctx context.Context, _ *orgissuersgen.ListEMAS
 	}
 	org := authCtx.ActiveOrganizationID
 	logger := s.logger.With(attr.SlogOrganizationID(org))
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: org, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(org)).Read()); err != nil {
 		return nil, err
 	}
 	q := repo.New(s.db)
@@ -129,7 +129,7 @@ func (s *Service) ListEMAServices(ctx context.Context, _ *orgissuersgen.ListEMAS
 		if !row.McpServerID.Valid || !emaBindingSetUp(row.State) {
 			continue
 		}
-		serverChecks[row.McpServerID.UUID.String()] = authz.MCPCheck(authz.ScopeMCPRead, mcpGrantResourceID(row.McpServerID.UUID, row.McpServerToolsetID), row.ProjectID.String())
+		serverChecks[row.McpServerID.UUID.String()] = authz.MCPServer(authz.MCPServerIDOf(mcpGrantResourceID(row.McpServerID.UUID, row.McpServerToolsetID)), authz.ProjectIDOf(row.ProjectID)).Read()
 		server := &orgissuersgen.EMAServiceServer{
 			ID: row.McpServerID.UUID.String(), Name: row.McpServerName, Slug: row.McpServerSlug,
 			ProjectID: row.ProjectID.String(), ProjectSlug: row.ProjectSlug, ProjectName: row.ProjectName,
@@ -220,14 +220,14 @@ func (s *Service) ListEMAServices(ctx context.Context, _ *orgissuersgen.ListEMAS
 			checks = append(checks, serverChecks[server.ID])
 		}
 	}
-	readable, err := s.authz.FindMatched(ctx, checks)
+	decisions, err := s.authz.Decide(ctx, checks...)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "check MCP server read access").LogError(ctx, logger)
 	}
 	listed := map[string][]*orgissuersgen.EMAServiceServer{}
 	hidden := map[string]int{}
 	for i, c := range candidates {
-		if !readable[i] {
+		if !decisions.Each[i].Allowed {
 			hidden[c.vendor]++
 			continue
 		}

@@ -86,6 +86,18 @@ type Client struct {
 	// createSessionHandoff endpoint.
 	CreateSessionHandoffDoer goahttp.Doer
 
+	// ListPendingAccessRequests Doer is the HTTP client used to make requests to
+	// the listPendingAccessRequests endpoint.
+	ListPendingAccessRequestsDoer goahttp.Doer
+
+	// ListRequestableAccess Doer is the HTTP client used to make requests to the
+	// listRequestableAccess endpoint.
+	ListRequestableAccessDoer goahttp.Doer
+
+	// RequestAccess Doer is the HTTP client used to make requests to the
+	// requestAccess endpoint.
+	RequestAccessDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -123,6 +135,9 @@ func NewClient(
 		ReportStateDoer:                  doer,
 		ReportCrashDoer:                  doer,
 		CreateSessionHandoffDoer:         doer,
+		ListPendingAccessRequestsDoer:    doer,
+		ListRequestableAccessDoer:        doer,
+		RequestAccessDoer:                doer,
 		RestoreResponseBody:              restoreBody,
 		scheme:                           scheme,
 		host:                             host,
@@ -539,6 +554,78 @@ func (c *Client) CreateSessionHandoff() goa.Endpoint {
 		resp, err := c.CreateSessionHandoffDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("agent", "createSessionHandoff", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListPendingAccessRequests returns an endpoint that makes HTTP requests to
+// the agent service listPendingAccessRequests server.
+func (c *Client) ListPendingAccessRequests() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListPendingAccessRequestsRequest(c.encoder)
+		decodeResponse = DecodeListPendingAccessRequestsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListPendingAccessRequestsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListPendingAccessRequestsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("agent", "listPendingAccessRequests", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListRequestableAccess returns an endpoint that makes HTTP requests to the
+// agent service listRequestableAccess server.
+func (c *Client) ListRequestableAccess() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListRequestableAccessRequest(c.encoder)
+		decodeResponse = DecodeListRequestableAccessResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListRequestableAccessRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListRequestableAccessDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("agent", "listRequestableAccess", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RequestAccess returns an endpoint that makes HTTP requests to the agent
+// service requestAccess server.
+func (c *Client) RequestAccess() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRequestAccessRequest(c.encoder)
+		decodeResponse = DecodeRequestAccessResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRequestAccessRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RequestAccessDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("agent", "requestAccess", err)
 		}
 		return decodeResponse(resp)
 	}

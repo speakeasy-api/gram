@@ -400,6 +400,10 @@ type Proxy struct {
 	// See [RequestFailureInterceptor].
 	RequestFailureInterceptors []RequestFailureInterceptor
 
+	// RequestServedInterceptors run once for a forwarded POST the remote MCP
+	// server answered without an error. See [RequestServedInterceptor].
+	RequestServedInterceptors []RequestServedInterceptor
+
 	// ToolsListRequestInterceptors run for inbound "tools/list" JSON-RPC
 	// requests only, after the generic UserRequestInterceptors chain has
 	// completed. Non-tools/list requests skip this loop entirely.
@@ -555,7 +559,7 @@ func (p *Proxy) Get(w http.ResponseWriter, r *http.Request) (err error) {
 		defer stopAge()
 
 		streamStart := time.Now()
-		relay := &sseRelay{bytes: 0, responseRelayed: atomic.Bool{}, resumable: false, age: age}
+		relay := &sseRelay{bytes: 0, responseRelayed: atomic.Bool{}, resumable: false, method: "", served: false, age: age}
 		streamErr := p.relaySSEStream(ctx, w, r, upstreamReq, upstreamResp, jsonrpc.ID{}, relay, nil, nil, nil, nil, nil, label)
 		responseBytes = relay.bytes
 		reason := streamEndReason(r, upstreamResp.Body, streamErr)
@@ -853,7 +857,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	// abandon it, with shutdowndrain.ErrInterrupted as the cause, while ctx stays live
 	// for answering the client and running interceptors. A subscriptions/listen
 	// stream is not interrupted: it already ends when the drain starts.
-	relay := &sseRelay{bytes: 0, responseRelayed: atomic.Bool{}, resumable: false, age: p.streamAge(start)}
+	relay := &sseRelay{bytes: 0, responseRelayed: atomic.Bool{}, resumable: false, method: jsonrpcMethod, served: false, age: p.streamAge(start)}
 	forwardCtx, cancelForward := context.WithCancelCause(ctx)
 	defer cancelForward(nil)
 	if !listen {
@@ -1211,7 +1215,10 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	if err != nil {
 		return err
 	}
-	observeResponse(ctx, msg)
+	// An acknowledgement with no reply serves a notification only when it is empty, not an error page.
+	if observeReply(ctx, msg, userReqID, jsonrpcMethod, p.wantsServed(upstreamStatus) && (msg != nil || len(bodyBytes) == 0)) {
+		p.runRequestServedInterceptors(ctx)
+	}
 	return nil
 }
 
@@ -1655,10 +1662,15 @@ func (p *Proxy) relaySSEStream(
 			return fmt.Errorf("stream sse event: %w", writeErr)
 		}
 		result.bytes += int64(len(emit))
-		if isResponseTo(msg, responseID) {
+		replied := isResponseTo(msg, responseID)
+		if replied {
 			result.markResponseRelayed(p.Drain, upstreamResp.Body)
 		}
-		observeResponse(ctx, msg)
+		// Recorded as the reply reaches the client, not when the stream ends.
+		if observeReply(ctx, msg, responseID, result.method, replied && p.wantsServed(upstreamResp.StatusCode)) && !result.served {
+			result.served = true
+			p.runRequestServedInterceptors(ctx)
+		}
 		if flusher != nil {
 			flusher.Flush()
 		}
@@ -1736,6 +1748,12 @@ type sseRelay struct {
 
 	// resumable reports whether any upstream event carried an SSE id.
 	resumable bool
+
+	// method is the JSON-RPC method of the request that opened the stream.
+	method string
+
+	// served reports that the served interceptors ran for the response relayed to that request.
+	served bool
 
 	// age is the stream's maximum age.
 	age streamAge
@@ -1924,6 +1942,23 @@ func (p *Proxy) runRequestFailureInterceptors(ctx context.Context, failure *Requ
 			trace.WithAttributes(attr.RemoteMCPProxyInterceptor(interceptor.Name())))
 		interceptor.InterceptRequestFailure(iterCtx, failure)
 		span.End()
+	}
+}
+
+// wantsServed reports whether an upstream answer with status could be recorded as served.
+func (p *Proxy) wantsServed(status int) bool {
+	return len(p.RequestServedInterceptors) > 0 && status >= 200 && status < 300
+}
+
+// runRequestServedInterceptors invokes each configured
+// RequestServedInterceptor in order, unless the caller went away first. It runs
+// once per served request, so it opens no span.
+func (p *Proxy) runRequestServedInterceptors(ctx context.Context) {
+	if ctx.Err() != nil {
+		return
+	}
+	for _, interceptor := range p.RequestServedInterceptors {
+		interceptor.InterceptRequestServed(ctx)
 	}
 }
 

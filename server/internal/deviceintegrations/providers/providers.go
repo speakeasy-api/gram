@@ -13,6 +13,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"slices"
 	"sort"
 	"sync"
@@ -173,6 +174,11 @@ type CoverageSnapshot struct {
 type Deps struct {
 	// Client is the SSRF-hardened HTTP client from the guardian policy.
 	Client *guardian.HTTPClient
+
+	// ServerURL is this deployment's server URL, for links a provider writes
+	// into a vendor system. Nil when the process has none configured; a
+	// provider that needs it must fail its push rather than guess a host.
+	ServerURL *url.URL
 }
 
 // InventorySource pulls the managed-device fleet from the vendor.
@@ -375,7 +381,7 @@ func Lookup(id string) (Descriptor, bool) {
 	defer registryMu.RUnlock()
 	d, ok := registry[id]
 	if !ok {
-		return Descriptor{}, false //nolint:exhaustruct // zero descriptor for the not-found case
+		return Descriptor{}, false //nolint:exhaustruct_v5 // zero descriptor for the not-found case
 	}
 	return d.clone(), true
 }

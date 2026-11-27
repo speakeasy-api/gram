@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/stretchr/testify/require"
 )
@@ -18,8 +19,8 @@ func TestGenericConnectionEndingsMatchSeededApp(t *testing.T) {
 
 func TestStoppedConnectionAttemptRowsKeepBrowserIdentity(t *testing.T) {
 	t.Parallel()
-	s := &seeder{spec: DefaultSpec()}
-	scope := mcpconnectionattempts.ServerScope(s.orgID(), s.projectID(), s.det("mcpserver-github"), mcpconnectionattempts.AppDCR)
+	s := &seeder{spec: DefaultSpec(), catalog: aivendors.CompiledSnapshot()}
+	scope := mcpconnectionattempts.ServerScope(s.orgID(), s.projectID(), s.det("mcpserver-linear"), mcpconnectionattempts.AppDCR)
 	attempt := mcpconnectionattempts.AttemptAt(s.det("stopped-attempt"), time.Now(), scope)
 	rows, err := s.connectionAttemptRows(attempt, "stopped-attempt", connectionEndings[0], true)
 	require.NoError(t, err)
@@ -33,13 +34,13 @@ func TestStoppedConnectionAttemptRowsKeepBrowserIdentity(t *testing.T) {
 
 func TestStoppedConnectionAttemptMembersBelongToGateway(t *testing.T) {
 	t.Parallel()
-	s := &seeder{spec: DefaultSpec()}
+	s := &seeder{spec: DefaultSpec(), catalog: aivendors.CompiledSnapshot()}
 	for name, tc := range map[string]struct {
 		scope  mcpconnectionattempts.Scope
 		rows   int
 		member bool
 	}{
-		"server":               {mcpconnectionattempts.ServerScope(s.orgID(), s.projectID(), s.det("mcpserver-github"), mcpconnectionattempts.AppDCR), 2, false},
+		"server":               {mcpconnectionattempts.ServerScope(s.orgID(), s.projectID(), s.det("mcpserver-linear"), mcpconnectionattempts.AppDCR), 2, false},
 		"project gateway":      {mcpconnectionattempts.GatewayScope(s.orgID(), s.projectID(), s.det("metamcp-1"), mcpconnectionattempts.AppDCR), 3, true},
 		"organization gateway": {mcpconnectionattempts.OrganizationGatewayScope(s.orgID(), s.det("organization-gateway"), mcpconnectionattempts.AppDCR), 2, false},
 	} {
@@ -50,7 +51,7 @@ func TestStoppedConnectionAttemptMembersBelongToGateway(t *testing.T) {
 			require.NoError(t, err)
 			require.Len(t, rows, tc.rows)
 			if tc.member {
-				require.Equal(t, s.det("mcpserver-support").String(), rows[2].MemberID)
+				require.Equal(t, s.supportServer().String(), rows[2].MemberID)
 				require.Equal(t, mcpconnectionattempts.FamilyBrowser, rows[2].ClientFamily)
 				require.Equal(t, s.connectionDevice("stopped-attempt"), rows[2].DeviceKey)
 			} else {

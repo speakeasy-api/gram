@@ -32,15 +32,12 @@ func DescribeDeployment(ctx context.Context, logger *slog.Logger, depRepo *repo.
 	stat := rows[0].Status
 	openapiv3ToolCount := rows[0].Openapiv3ToolCount
 	functionsToolCount := rows[0].FunctionsToolCount
-	externalMcpToolCount := rows[0].ExternalMcpToolCount
 	attachedOpenAPIv3 := make([]*types.OpenAPIv3DeploymentAsset, 0, len(rows))
 	attachedFunctionsAssets := make([]*types.DeploymentFunctions, 0, len(rows))
 	attachedPackages := make([]*types.DeploymentPackage, 0, len(rows))
-	attachedExternalMCPs := make([]*types.DeploymentExternalMCP, 0, len(rows))
 	var seenOpenAPIv3 = make(map[uuid.UUID]bool)
 	var seenFunctions = make(map[uuid.UUID]bool)
 	var seenPackages = make(map[uuid.UUID]bool)
-	var seenExternalMCPs = make(map[uuid.UUID]bool)
 
 	for _, r := range rows {
 		depOpenAPIv3ID := r.DeploymentsOpenapiv3AssetID.UUID
@@ -113,33 +110,6 @@ func DescribeDeployment(ctx context.Context, logger *slog.Logger, depRepo *repo.
 			})
 			seenPackages[pkgID] = true
 		}
-
-		externalMCPID := r.ExternalMcpID.UUID
-		if externalMCPID != uuid.Nil && !seenExternalMCPs[externalMCPID] {
-			registryIDPtr := conv.FromNullableUUID(r.ExternalMcpRegistryID)
-
-			// Attachments published from a collection carried no registry id.
-			// Collections are gone, but their rows outlive them, so a missing
-			// registry id describes an existing deployment rather than a bug.
-			if err := inv.Check(
-				"describe deployment external mcp",
-				"valid name", r.ExternalMcpName.Valid && r.ExternalMcpName.String != "",
-				"valid slug", r.ExternalMcpSlug.Valid && r.ExternalMcpSlug.String != "",
-				"valid registry server specifier", r.ExternalMcpRegistryServerSpecifier.Valid && r.ExternalMcpRegistryServerSpecifier.String != "",
-			); err != nil {
-				return nil, oops.E(oops.CodeInvariantViolation, err, "invalid state for deployment external mcp").LogError(ctx, logger)
-			}
-
-			mcp := &types.DeploymentExternalMCP{
-				ID:                      externalMCPID.String(),
-				RegistryID:              registryIDPtr,
-				Name:                    r.ExternalMcpName.String,
-				Slug:                    types.Slug(r.ExternalMcpSlug.String),
-				RegistryServerSpecifier: r.ExternalMcpRegistryServerSpecifier.String,
-			}
-			attachedExternalMCPs = append(attachedExternalMCPs, mcp)
-			seenExternalMCPs[externalMCPID] = true
-		}
 	}
 
 	return &types.Deployment{
@@ -160,8 +130,7 @@ func DescribeDeployment(ctx context.Context, logger *slog.Logger, depRepo *repo.
 		Openapiv3Assets:      attachedOpenAPIv3,
 		Openapiv3ToolCount:   openapiv3ToolCount,
 		FunctionsToolCount:   functionsToolCount,
-		ExternalMcpToolCount: externalMcpToolCount,
+		ExternalMcpToolCount: new(int64(0)),
 		FunctionsAssets:      attachedFunctionsAssets,
-		ExternalMcps:         attachedExternalMCPs,
 	}, nil
 }

@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"strings"
 	"testing"
 	"time"
 
@@ -18,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -28,12 +28,23 @@ import (
 
 func TestAuthorize_CustomDomainPrivateChallengeUsesGramIDPCallback(t *testing.T) {
 	t.Parallel()
+	for _, switchOn := range []bool{false, true} {
+		t.Run(map[bool]string{false: "account switch off", true: "account switch on"}[switchOn], func(t *testing.T) {
+			t.Parallel()
+			authorizeCustomDomainPrivateChallenge(t, switchOn)
+		})
+	}
+}
+
+func authorizeCustomDomainPrivateChallenge(t *testing.T, switchOn bool) {
+	t.Helper()
 
 	ctx, ti, _ := newTestMCPServiceWithDevIDP(t)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
+	ti.features.SetFlag(feature.FlagMCPConsentAccountSwitch, authCtx.ActiveOrganizationID, switchOn)
 
 	slug := "auth-callback-cd-" + uuid.New().String()[:8]
 	toolset, issuer := createPrivateIssuerGatedToolset(t, ctx, ti, authCtx, slug)
@@ -95,95 +106,25 @@ func TestAuthorize_CustomDomainPrivateChallengeUsesGramIDPCallback(t *testing.T)
 		UserSessionIssuerID: issuer.ID,
 		MCPResourceID:       toolset.ID,
 	}, stored.AgentAuthorizationTarget)
-}
 
-// The end-to-end shape the mint-time snapshot exists for: /authorize runs on a
-// custom domain and the consent POST completing the flow arrives on the
-// platform origin, which is what the remote-session return leg produces. The
-// `iss` the client finally receives has to be the custom-domain issuer it
-// recorded from the metadata document, not the origin of whichever request
-// happened to finish the flow.
-func TestAuthorize_CustomDomainIssSurvivesPlatformOriginConsent(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestMCPService(t)
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectID)
-
-	slug := "iss-cd-e2e-" + uuid.New().String()[:8]
-	toolset, issuer := createPrivateIssuerGatedToolset(t, ctx, ti, authCtx, slug)
-	// Public so /authorize stamps an anonymous subject and goes straight to
-	// consent, keeping this test on the origin question rather than the IDP
-	// round-trip.
-	testenv.SetHostedMCP(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, testenv.HostedMCP{Visibility: "public"})
-	toolset, domain := attachCustomDomainToToolset(t, ctx, ti, authCtx, toolset, "iss-cd-e2e.example.com")
-
-	clientID := "iss-e2e-client"
-	// The redirect_uri insertUserSessionClient registers for this client.
-	clientRedirectURI := "http://example.com/cb"
-	insertUserSessionClient(t, ctx, ti.conn, issuer.ID, clientID)
-
-	domainCtx := customdomains.WithContext(ctx, &customdomains.Context{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		Domain:         domain.Domain,
-		DomainID:       domain.ID,
-	})
-	domainCtx = requestorigin.WithContext(domainCtx, requestorigin.Origin{
-		Surface: requestorigin.SurfaceCustomDomain, BaseURL: "https://" + domain.Domain,
-		OrganizationID: authCtx.ActiveOrganizationID,
-	})
-
-	// What the client records before it ever calls /authorize.
-	advertisedIssuer, supported := fetchAdvertisedIssuer(t, domainCtx, ti, slug)
-	require.Equal(t, true, supported)
-	require.Equal(t, "https://"+domain.Domain+"/mcp/"+slug, advertisedIssuer)
-
-	q := url.Values{}
-	q.Set("response_type", "code")
-	q.Set("client_id", clientID)
-	q.Set("redirect_uri", clientRedirectURI)
-	q.Set("state", "client-state")
-	q.Set("code_challenge", "challenge")
-	q.Set("code_challenge_method", "S256")
-	authReq := httptest.NewRequest(http.MethodGet, "/mcp/"+slug+"/authorize?"+q.Encode(), nil)
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("mcpSlug", slug)
-	authReq = authReq.WithContext(context.WithValue(domainCtx, chi.RouteCtxKey, rctx))
-
-	authResp := httptest.NewRecorder()
-	require.NoError(t, ti.service.HandleAuthorize(authResp, authReq))
-	require.Equal(t, http.StatusFound, authResp.Code)
-
-	consentLoc, err := url.Parse(authResp.Header().Get("Location"))
-	require.NoError(t, err)
-	require.Contains(t, consentLoc.Path, "/connect")
-	stateID := consentLoc.Query().Get("state")
-	require.NotEmpty(t, stateID)
-
-	stored, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
-	require.NoError(t, err)
-
-	// The consent POST arrives with no custom-domain context at all.
-	form := url.Values{}
-	form.Set("state", stateID)
-	form.Set("csrf_token", stored.CSRFToken)
-	form.Set("action", "approve")
-	consentReq := httptest.NewRequest(http.MethodPost, "/mcp/"+slug+"/connect", strings.NewReader(form.Encode()))
-	consentReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	consentRctx := chi.NewRouteContext()
-	consentRctx.URLParams.Add("mcpSlug", slug)
-	consentReq = consentReq.WithContext(context.WithValue(ctx, chi.RouteCtxKey, consentRctx))
-
-	consentResp := httptest.NewRecorder()
-	require.NoError(t, ti.service.HandleConsent(consentResp, consentReq))
-	require.Equal(t, http.StatusSeeOther, consentResp.Code)
-
-	clientLoc, err := url.Parse(consentResp.Header().Get("Location"))
-	require.NoError(t, err)
-	require.NotEmpty(t, clientLoc.Query().Get("code"))
-	require.Equal(t, advertisedIssuer, clientLoc.Query().Get("iss"))
+	if !switchOn {
+		require.Empty(t, w.Result().Cookies(), "as before the switch: no browser binding on this path")
+		require.Empty(t, stored.ConsentBrowserHash)
+		return
+	}
+	cookies := w.Result().Cookies()
+	require.Len(t, cookies, 1, "the starting browser is bound on the consent page's host")
+	require.Equal(t, "__Host-speakeasy_consent_"+stored.FlowID, cookies[0].Name)
+	require.Empty(t, cookies[0].Domain)
+	require.Equal(t, "/", cookies[0].Path)
+	require.True(t, cookies[0].Secure)
+	require.True(t, cookies[0].HttpOnly)
+	require.Equal(t, http.SameSiteLaxMode, cookies[0].SameSite)
+	require.Positive(t, cookies[0].MaxAge)
+	starting := httptest.NewRequest(http.MethodPost, "/", nil)
+	starting.AddCookie(cookies[0])
+	require.True(t, mcp.ConsentBrowserMatches(starting, stored))
+	require.False(t, mcp.ConsentBrowserMatches(httptest.NewRequest(http.MethodPost, "/", nil), stored))
 }
 
 func TestIDPCallback_StaticRouteResolvesToolsetFromChallengeState(t *testing.T) {
@@ -207,6 +148,7 @@ func TestIDPCallback_StaticRouteResolvesToolsetFromChallengeState(t *testing.T) 
 		UserSessionIssuerID: issuer.ID,
 		Endpoint: mcp.EndpointRef{
 			McpSlug:        toolset.McpSlug.String,
+			McpServerID:    uuid.NullUUID{UUID: toolset.ID, Valid: true},
 			CustomDomainID: uuid.NullUUID{UUID: domain.ID, Valid: true},
 		},
 		ClientID:            "test-mcp-client",
@@ -242,6 +184,7 @@ func TestAuthorize_PublicToolset_IgnoresAmbientSessionCredentials(t *testing.T) 
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
+	ti.features.SetFlag(feature.FlagMCPConsentAccountSwitch, authCtx.ActiveOrganizationID, true)
 	slug := "auth-public-anon-" + uuid.New().String()[:8]
 	toolset, issuer := createPrivateIssuerGatedToolset(t, ctx, ti, authCtx, slug)
 	testenv.SetHostedMCP(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, testenv.HostedMCP{Visibility: "public"})
@@ -283,6 +226,8 @@ func TestAuthorize_PublicToolset_IgnoresAmbientSessionCredentials(t *testing.T) 
 		"public /authorize must not promote ambient credentials to a user subject")
 	require.NotEqual(t, authCtx.UserID, stored.Subject.ID)
 	require.NotEqual(t, bearerUserID, stored.Subject.ID)
+	require.Empty(t, stored.ConsentBrowserHash, "an anonymous flow has no sign-in to switch")
+	require.Empty(t, w.Result().Cookies())
 }
 
 // Authorize rejects in two shapes — inline JSON while the redirect_uri is
@@ -356,7 +301,7 @@ func createPrivateIssuerGatedToolset(
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
-	toolset := hostLegacyToolset(t, ctx, ti, toolsetRow, slug, "private", uuid.NullUUID{UUID: issuer.ID, Valid: true})
+	toolset := hostToolset(t, ctx, ti, toolsetRow, slug, "private", uuid.NullUUID{UUID: issuer.ID, Valid: true})
 
 	return toolset, issuer
 }

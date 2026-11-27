@@ -52,6 +52,8 @@ func BuildCustomDomainView(domain customdomainsrepo.CustomDomain, isUpdating boo
 		CreatedAt:                domain.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:                domain.UpdatedAt.Time.Format(time.RFC3339),
 		IsUpdating:               isUpdating,
+		IsReconciling:            false,
+		ReconciliationStatus:     "not_started",
 		IPAllowlist:              ipAllowlist,
 		HealthStatus:             healthStatus,
 		HealthIssue:              healthIssue,

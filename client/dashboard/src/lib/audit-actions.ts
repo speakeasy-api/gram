@@ -25,6 +25,10 @@ export const AUDIT_ACTIONS = [
   "access_grant:create_temporary",
   "access_grant:renew_temporary",
   "access_grant:revoke_temporary",
+  "access_request:approve",
+  "access_request:create",
+  "access_request:deny",
+  "access_request:withdraw",
   "agent:connection_attach",
   "agent:connection_block_create",
   "agent:connection_block_delete",
@@ -62,6 +66,7 @@ export const AUDIT_ACTIONS = [
   "assistant:runtime_switch",
   "assistant:tool_call",
   "assistant:update_execution_profile",
+  "assistant:update_reasoning_effort",
   "aws_iam_credential:create",
   "aws_iam_credential:delete",
   "aws_iam_credential:update",
@@ -86,6 +91,7 @@ export const AUDIT_ACTIONS = [
   "chat_session:recall",
   "custom_domains:create",
   "custom_domains:delete",
+  "custom_domains:reconcile",
   "custom_domains:update",
   "dashboard:create",
   "dashboard:delete",
@@ -97,6 +103,7 @@ export const AUDIT_ACTIONS = [
   "data_export_route:delete",
   "data_export_route:pause",
   "data_export_route:resume",
+  "data_export_route:test",
   "data_export_route:update",
   "deployments:create",
   "deployments:evolve",
@@ -158,6 +165,7 @@ export const AUDIT_ACTIONS = [
   "mcp-server:delete",
   "mcp-server:promote-catalogue",
   "mcp-server:update",
+  "mcp-server:update-feedback-settings",
   "mcp-server:update-scope-pin",
   "mcp-server:update-tool-metadata",
   "mcp-server:update-upstream-auth-requirement",
@@ -218,6 +226,11 @@ export const AUDIT_ACTIONS = [
   "organization_encryption_config:rollback_switch",
   "organization_encryption_config:suspend",
   "organization_encryption_config:switch_key",
+  "organization_encryption_transition:clear_platform_copies",
+  "organization_encryption_transition:enroll",
+  "organization_encryption_transition:finalize",
+  "organization_encryption_transition:rollback",
+  "organization_encryption_transition:start_org_kms",
   "organization_invitation:create",
   "organization_invitation:revoke",
   "organization_invitation:update_role",
@@ -256,6 +269,7 @@ export const AUDIT_ACTIONS = [
   "remote-mcp:delete",
   "remote-mcp:update",
   "remote-session-client:attach-json-web-key-set",
+  "remote-session-client:attach-mcp-server",
   "remote-session-client:attach-user-session-issuer",
   "remote-session-client:create",
   "remote-session-client:delete",
@@ -300,6 +314,10 @@ export const AUDIT_ACTIONS = [
   "risk_result:unmask",
   "session_quarantine:open",
   "session_quarantine:release",
+  "shadow_mcp_official_server:create",
+  "shadow_mcp_official_server:delete",
+  "shadow_mcp_official_server:set",
+  "shadow_mcp_official_server:update",
   "sigint-sensor:create",
   "sigint-sensor:delete",
   "sigint-sensor:update",
@@ -336,6 +354,7 @@ export const AUDIT_ACTIONS = [
   "toolset:detach_external_oauth",
   "toolset:detach_oauth_proxy",
   "toolset:migrate_to_remote_mcp",
+  "toolset:move_legacy_alias",
   "toolset:update",
   "toolset:update_external_oauth_issuer",
   "toolset:update_oauth_proxy",
@@ -351,7 +370,9 @@ export const AUDIT_ACTIONS = [
   "unproxied-mcp:create",
   "unproxied-mcp:delete",
   "user-session-client:cimd-refresh",
+  "user-session-client:create",
   "user-session-client:revoke",
+  "user-session-client:update-redirect-uris",
   "user-session-consent:revoke",
   "user-session-issuer-cimd-client:add",
   "user-session-issuer-cimd-client:remove",
@@ -431,6 +452,14 @@ export function staticActionPhrase(action: AuditAction): string {
       return "renewed temporary access for";
     case "access_grant:revoke_temporary":
       return "revoked temporary access for";
+    case "access_request:create":
+      return "requested";
+    case "access_request:approve":
+      return "approved access request for";
+    case "access_request:deny":
+      return "denied access request for";
+    case "access_request:withdraw":
+      return "withdrew access request for";
 
     case "agent:connection_attach":
       return "granted their connection to agent";
@@ -509,6 +538,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "changed the runtime of assistant";
     case "assistant:tool_call":
       return "ran assistant tool";
+    case "assistant:update_reasoning_effort":
+      return "changed the reasoning effort of assistant";
     case "assistant:update_execution_profile":
       return "changed the upstream credentials of assistant";
 
@@ -628,6 +659,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated custom domain";
     case "custom_domains:delete":
       return "removed custom domain";
+    case "custom_domains:reconcile":
+      return "reconciled custom domain";
 
     case "data_export_route:create":
       return "created data export route";
@@ -639,6 +672,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "paused data export route";
     case "data_export_route:resume":
       return "resumed data export route";
+    case "data_export_route:test":
+      return "sent a test event for data export route";
 
     case "network_ingress:create":
       return "created private network ingress";
@@ -736,6 +771,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated MCP server";
     case "mcp-server:delete":
       return "deleted MCP server";
+    case "mcp-server:update-feedback-settings":
+      return "changed agent feedback on MCP server";
     case "mcp-server:update-scope-pin":
       return "updated pinned scopes on MCP server";
     case "mcp-server:update-tool-metadata":
@@ -933,13 +970,15 @@ export function staticActionPhrase(action: AuditAction): string {
     case "remote-session-client:delete":
       return "deleted remote session client";
     case "remote-session-client:attach-user-session-issuer":
-      return "attached a user session issuer to";
+      return "attached an MCP sign-in to";
     case "remote-session-client:detach-user-session-issuer":
-      return "detached a user session issuer from";
+      return "detached an MCP sign-in from";
     case "remote-session-client:attach-json-web-key-set":
       return "attached a JSON Web Key Set to";
     case "remote-session-client:detach-json-web-key-set":
       return "detached a JSON Web Key Set from";
+    case "remote-session-client:attach-mcp-server":
+      return "attached an MCP server to";
     case "remote-session-client:detach-mcp-server":
       return "detached an MCP server from";
     case "remote-session-client:revoke-sessions":
@@ -996,6 +1035,17 @@ export function staticActionPhrase(action: AuditAction): string {
       return "saved an evaluation review for";
     case "risk_policy:eval_review_delete":
       return "deleted an evaluation review for";
+
+    case "shadow_mcp_official_server:create":
+      return "set the official server choice of Shadow MCP server";
+    case "shadow_mcp_official_server:update":
+      return "changed the official server choice of Shadow MCP server";
+    case "shadow_mcp_official_server:delete":
+      return "removed the official server choice of Shadow MCP server";
+    // Entries written before official servers lost their on/off switch:
+    // one action covered every change, so the phrase stays generic.
+    case "shadow_mcp_official_server:set":
+      return "changed the official server choice of Shadow MCP server";
 
     case "risk_result:dismiss":
       return "dismissed risk finding";
@@ -1096,6 +1146,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "detached an OAuth proxy from";
     case "toolset:migrate_to_remote_mcp":
       return "migrated the external MCP server";
+    case "toolset:move_legacy_alias":
+      return "moved the legacy address";
 
     case "trigger-instance:create":
       return "created trigger";
@@ -1131,18 +1183,22 @@ export function staticActionPhrase(action: AuditAction): string {
       return "revoked user session";
     case "user-session-client:cimd-refresh":
       return "refreshed the client metadata document for";
+    case "user-session-client:create":
+      return "registered user session client";
     case "user-session-client:revoke":
       return "revoked user session client";
+    case "user-session-client:update-redirect-uris":
+      return "updated user session client redirect URIs";
     case "user-session-consent:revoke":
       return "revoked consent for";
     case "user-session-issuer:create":
-      return "created user session issuer";
+      return "created MCP sign-in";
     case "user-session-issuer:update":
-      return "updated user session issuer";
+      return "updated MCP sign-in";
     case "user-session-issuer:delete":
-      return "deleted user session issuer";
+      return "deleted MCP sign-in";
     case "user-session-issuer:migrate":
-      return "migrated user session issuer";
+      return "migrated MCP sign-in";
     case "user-session-issuer-cimd-client:add":
       return "added a CIMD client to";
     case "user-session-issuer-cimd-client:remove":
@@ -1188,6 +1244,18 @@ export function staticActionPhrase(action: AuditAction): string {
       return "suspended";
     case "organization_encryption_config:resume":
       return "resumed";
+    // Internal staff-only entries; the subject names the use case being moved,
+    // as "Organization encryption: <use case>".
+    case "organization_encryption_transition:enroll":
+      return "enrolled";
+    case "organization_encryption_transition:rollback":
+      return "rolled back";
+    case "organization_encryption_transition:finalize":
+      return "finalized";
+    case "organization_encryption_transition:start_org_kms":
+      return "started using organization keys for";
+    case "organization_encryption_transition:clear_platform_copies":
+      return "cleared platform-key copies for";
 
     default:
       return assertNever(action);

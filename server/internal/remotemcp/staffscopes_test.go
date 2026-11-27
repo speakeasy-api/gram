@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -28,6 +29,15 @@ func TestStaffScopes_DescribeResolvesThePin(t *testing.T) {
 	_, err := setPin(ctx, ti, srv.mcpServerID, "read")
 	require.NoError(t, err)
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	typed := authclientbackfill.New(ti.conn)
+	offer, err := typed.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{
+		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: conv.ToNullUUID(*authCtx.ProjectID), ClientType: authclientbackfill.TypeRemoteSession,
+		Source: "admin", RemoteSessionClientID: conv.ToNullUUID(owner),
+	})
+	require.NoError(t, err)
+	require.NoError(t, typed.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{
+		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID, McpServerID: uuid.MustParse(srv.mcpServerID), AuthClientID: offer, Source: "admin",
+	}))
 
 	staff := remotemcp.NewStaffScopes(testenv.NewLogger(t), ti.conn, audit.NewLogger())
 	got, err := staff.Describe(ctx, remotemcp.StaffScopeTarget{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID, McpServerID: uuid.MustParse(srv.mcpServerID)})

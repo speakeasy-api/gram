@@ -1312,20 +1312,6 @@ func TestToolsService_ListTools_WithToolTypesFilter(t *testing.T) {
 		require.Equal(t, 0, platformN, "should not return platform tools")
 		require.Equal(t, 1, tplN, "should return 1 prompt template")
 	})
-
-	t.Run("externalmcp only", func(t *testing.T) {
-		t.Parallel()
-		result, err := ti.service.ListTools(ctx, &gen.ListToolsPayload{
-			Cursor:           nil,
-			DeploymentID:     nil,
-			SessionToken:     nil,
-			ProjectSlugInput: nil,
-			Limit:            nil,
-			ToolTypes:        []types.ToolType{types.ToolType("externalmcp")},
-		})
-		require.NoError(t, err, "list tools externalmcp only")
-		require.Empty(t, result.Tools, "external mcp filter is accepted and matches no tools")
-	})
 }
 
 func TestToolsService_ListTools_FunctionTools_LatestDeploymentOnly(t *testing.T) {

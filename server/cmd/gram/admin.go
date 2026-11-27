@@ -17,7 +17,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/organizations"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 
-	"github.com/Masterminds/semver/v3"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/sourcegraph/conc/pool"
@@ -48,8 +47,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/networkingress/ingresscredentials"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/plugins/marketplacetokens"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -343,6 +345,8 @@ func newAdminCommand() *cli.Command {
 	flags = append(flags, orgDefaultHostFlags()...)
 	flags = append(flags, posthogFlags()...)
 	flags = append(flags, customDomainTargetSuffixFlag())
+	flags = append(flags, orgEncryptionFlags()...)
+	flags = append(flags, staffFlags()...)
 
 	return &cli.Command{
 		Name:  "admin",
@@ -355,6 +359,10 @@ func newAdminCommand() *cli.Command {
 			}
 			if c.String("environment") == "prod" && siteURL.Scheme != "https" {
 				return fmt.Errorf("invalid site-url: HTTPS is required in production")
+			}
+			staffOrg, err := staffOrganizationFromCLI(c)
+			if err != nil {
+				return err
 			}
 
 			serviceName := "gram-admin"
@@ -375,6 +383,7 @@ func newAdminCommand() *cli.Command {
 				ServiceName:    serviceName,
 				ServiceVersion: shortGitSHA(),
 				GitSHA:         GitSHA,
+				Partition:      PullPartition(ctx),
 				EnableTracing:  c.Bool("with-otel-tracing"),
 				EnableMetrics:  c.Bool("with-otel-metrics"),
 			})
@@ -414,6 +423,9 @@ func newAdminCommand() *cli.Command {
 				return fmt.Errorf("failed to connect to database: %w", err)
 			}
 			defer db.Close()
+			if err := verifyStaffOrganization(ctx, logger, db, staffOrg); err != nil {
+				return err
+			}
 
 			err = o11y.StartObservers(meterProvider, db)
 			if err != nil {
@@ -440,13 +452,14 @@ func newAdminCommand() *cli.Command {
 				return fmt.Errorf("connect to clickhouse database: %w", err)
 			}
 			defer o11y.LogDefer(ctx, logger, "failed to shut down clickhouse client", func() error { return chShutdown(ctx) })
-			billingTelemetry := telemetryrepo.New(chDB)
-
-			meterReadConn, meterReadShutdown, err := newClickhouseReadClient(ctx, logger, c)
+			// Admin reads run on the read replica. chDB stays for the migration
+			// tools, which write.
+			chReadDB, chReadShutdown, err := newClickhouseReadClient(ctx, logger, c)
 			if err != nil {
 				return fmt.Errorf("connect to clickhouse read replica: %w", err)
 			}
-			defer o11y.LogDefer(ctx, logger, "failed to shut down clickhouse read client", func() error { return meterReadShutdown(ctx) })
+			defer o11y.LogDefer(ctx, logger, "failed to shut down clickhouse read client", func() error { return chReadShutdown(ctx) })
+			billingTelemetry := telemetryrepo.New(chReadDB)
 
 			adminEncryption, err := encryption.New(c.String("admin-encryption-key"))
 			if err != nil {
@@ -494,7 +507,7 @@ func newAdminCommand() *cli.Command {
 			mux.Use(admin.SessionMiddleware)
 
 			adminWorkOSClient := newAdminWorkOSOrganizationCreator(ctx, logger, guardianPolicy, c)
-			adminOpenRouter := newAdminOpenRouter(ctx, logger, tracerProvider, guardianPolicy, db, redisClient, c)
+			adminOpenRouter := newAdminOpenRouter(ctx, logger, tracerProvider, guardianPolicy, db, redisClient, c, staffOrg)
 			productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
 			posthogClient := posthog.New(ctx, logger, c.String("posthog-api-key"), c.String("posthog-endpoint"), c.String("posthog-personal-api-key"))
 			authz.SetUpstreamSelectorWriteGate(newAdminUpstreamSelectorWriteGate(ctx, c, logger, posthogClient))
@@ -519,7 +532,7 @@ func newAdminCommand() *cli.Command {
 			loopsWorkflowClient := loops.NewWorkflowClient(ctx, logger, guardianPolicy, c.String("loops-api-key"))
 			trialNotifier := trialemails.NewService(db, loopsWorkflowClient, logger, orgHosts)
 
-			billingOperations := usage.NewBillingOperations(logger, db, stripeClient, billingTelemetry, audit.NewLogger(), meterReadConn)
+			billingOperations := usage.NewBillingOperations(logger, db, stripeClient, billingTelemetry, audit.NewLogger(), chReadDB, staffOrg)
 			if err := admin.SeedSupportMatrix(ctx, db); err != nil {
 				return fmt.Errorf("initialize support matrix: %w", err)
 			}
@@ -534,7 +547,7 @@ func newAdminCommand() *cli.Command {
 			if err := organizations.SyncOnboardingSteps(ctx, db); err != nil {
 				return fmt.Errorf("sync onboarding steps: %w", err)
 			}
-			adminService := admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient, adminOpenRouter, trialNotifier, productFeatures, chatAnalysisSignaler, openRouterSpendCap, billingOperations, telemetry.NewSupportCoverage(db, chDB), telemetry.NewMCPServerHealth(db, chDB), siteURL, registryService)
+			adminService := admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient, adminOpenRouter, trialNotifier, productFeatures, chatAnalysisSignaler, openRouterSpendCap, billingOperations, telemetry.NewSupportCoverage(db, chReadDB), telemetry.NewMCPServerHealth(db, chReadDB), siteURL, registryService, staffOrg)
 			adminService.SetProviderHealth(mcpconnectionattempts.NewProviderHealth(logger, chDB))
 			var projectRedeployer admin.ProjectRedeployer
 			if temporalEnv != nil {
@@ -549,13 +562,13 @@ func newAdminCommand() *cli.Command {
 			}
 			adminService.SetCatalogPromotionService(catalogpromotion.New(db, registryService, productFeatures, telemetry.NewMCPServerHealth(db, chDB), nil, guardianPolicy))
 			adminService.SetMCPServerURL(mcpServerURL)
-			adminService.SetHookClients(telemetry.NewHookClients(chDB))
+			adminService.SetHookClients(telemetry.NewHookClients(chReadDB))
 			adminService.SetDeviceAgentVersions(deviceagentversions.NewStore(redisClient))
-			latestHooksVersion, err := semver.NewVersion(plugins.LatestHooksVersion())
+			hooksVersionPolicy, err := plugins.HooksVersionPolicy()
 			if err != nil {
-				return fmt.Errorf("parse latest hooks version: %w", err)
+				return fmt.Errorf("hooks version policy: %w", err)
 			}
-			adminService.SetHookFleet(telemetry.NewHookFleet(chDB), admin.HookFleetVersions{Latest: latestHooksVersion, Minimum: nil})
+			adminService.SetHookFleet(telemetry.NewHookFleet(chDB), hooksVersionPolicy)
 			adminService.SetNewOrganizationDefaultHost(orgHosts.NewOrganizationDefaultHost())
 			adminService.SetWorkOSEnvironmentID(c.String("workos-environment-id"))
 			adminService.SetStripeDashboardMode(c.String("stripe-api-key"))
@@ -568,10 +581,50 @@ func newAdminCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
+			gcpIdentity := newGCPIdentity(ctx, logger, c)
+			// Built whether or not the application key is set: the remote
+			// session service and the Tailscale OAuth client migration need
+			// both, but the organization encryption transition methods need
+			// only organization encryption. Building
+			// it here stops admin at startup when it is misconfigured.
+			orgEncryption, err := newOrgEncryption(ctx, logger, c, db, gcpIdentity, audit.NewLogger())
+			if err != nil {
+				return err
+			}
 			if applicationEncryption != nil {
-				adminService.SetRemoteSessionService(remotesessions.NewGlobalService(logger, tracerProvider, meterProvider, db, applicationEncryption, guardianPolicy))
+				adminService.SetRemoteSessionService(remotesessions.NewGlobalService(logger, tracerProvider, meterProvider, db, applicationEncryption, orgEncryption.ClientSecrets(logger, applicationEncryption), guardianPolicy))
+				// The temporary marketplace token backfill seals with the
+				// same cipher and platform key the servers build their
+				// marketplace tokens over.
+				adminService.SetSecretBackfillPlatformKey(&admin.SecretBackfillPlatformKey{
+					Platform: applicationEncryption,
+					Tokens:   marketplacetokens.New(logger, orgEncryption.Cipher(logger, applicationEncryption), applicationEncryption),
+				})
+				if orgEncryption.Provisioner != nil {
+					adminService.SetTailscaleOAuthMigration(&admin.TailscaleOAuthMigration{
+						Transitions: orgEncryption.Transitions,
+						Runner:      orgencryption.NewRunner(logger, db, orgEncryption.Cipher(logger, applicationEncryption), meterProvider),
+						Store:       ingresscredentials.NewCopyStore(db),
+					})
+				}
 			} else {
 				logger.WarnContext(ctx, "Admin issuers unavailable; no application encryption key configured")
+			}
+			// Transitions change only where keys can be provisioned.
+			// Without Temporal, runs are unavailable and the hourly
+			// background run finishes the clear after finalize.
+			if orgEncryption.Service != nil && orgEncryption.Provisioner != nil {
+				var runs admin.OrganizationEncryptionRunStarter
+				if temporalEnv != nil {
+					runs = &background.TemporalOrganizationEncryptionRunStarter{TemporalEnv: temporalEnv}
+				}
+				adminService.SetOrganizationEncryption(admin.OrganizationEncryption{
+					Transitions: orgEncryption.Transitions,
+					UseCases:    orgEncryptionUseCaseStores(db),
+					Runs:        runs,
+				})
+			} else {
+				logger.WarnContext(ctx, "Admin organization encryption transitions unavailable; organization encryption is not configured")
 			}
 			var platformAssets *assets.Service
 			assetOptions, err := resolveAdminAssetStorage(c.String("assets-backend"), c.String("assets-uri"))
@@ -585,8 +638,9 @@ func newAdminCommand() *cli.Command {
 				defer o11y.LogDefer(ctx, logger, "shut down admin asset storage", func() error { return assetShutdown(ctx) })
 				platformAssets = assets.NewPlatformService(logger, tracerProvider, guardianPolicy, db, assetStorage)
 				adminService.SetAssetService(platformAssets)
+				adminService.SetMCPSourceStorage(assetStorage)
 			}
-			adminService.SetGCPIdentity(newGCPIdentity(ctx, logger, c))
+			adminService.SetGCPIdentity(gcpIdentity)
 			admin.Attach(mux, adminService)
 			if c.Bool("admin-mcp-enabled") {
 				key := c.String("admin-mcp-signing-key")

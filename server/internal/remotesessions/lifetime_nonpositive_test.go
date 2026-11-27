@@ -71,11 +71,11 @@ func requireNoToken(t *testing.T, ctx context.Context, env syntheticExpiryEnv) {
 func storeGrantDeadlines(t *testing.T, ctx context.Context, env syntheticExpiryEnv, access, refresh, authorization pgtype.Timestamptz) {
 	t.Helper()
 	row := activeSession(t, ctx, env)
-	_, err := env.q.UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+	_, err := env.q.UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:             row.SubjectUrn,
 		UserSessionIssuerID:    row.UserSessionIssuerID,
 		RemoteSessionClientID:  row.RemoteSessionClientID,
-		AccessTokenEncrypted:   row.AccessTokenEncrypted,
+		AccessTokenEncrypted:   row.AccessTokenEncrypted.String,
 		AccessExpiresAt:        access,
 		RefreshTokenEncrypted:  row.RefreshTokenEncrypted,
 		AuthorizationExpiresAt: authorization,
@@ -229,7 +229,7 @@ func TestRefreshHandlesUnusableLifetimes(t *testing.T) {
 			require.NoError(t, err)
 
 			row := activeSession(t, ctx, env)
-			plain, err := env.enc.Decrypt(row.AccessTokenEncrypted)
+			plain, err := env.enc.Decrypt(row.AccessTokenEncrypted.String)
 			require.NoError(t, err)
 			require.Equal(t, "refreshed", plain)
 			if tc.keepAuthorization {

@@ -30,7 +30,7 @@ func (s *Service) UpdateKeyPolicy(ctx context.Context, payload *gen.UpdateKeyPol
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 	keyID, err := uuid.Parse(payload.ID)
@@ -75,11 +75,11 @@ func (s *Service) UpdateKeyPolicy(ctx context.Context, payload *gen.UpdateKeyPol
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load api key policy").LogError(ctx, s.logger)
 	}
-	previousAudit, err := policyAuditPayload(grantsToRoleGrants(previous))
+	previousAudit, err := PolicyAuditPayload(grantsToRoleGrants(previous))
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "prepare api key audit").LogError(ctx, s.logger)
 	}
-	policyAudit, err := policyAuditPayload(policy)
+	policyAudit, err := PolicyAuditPayload(policy)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "prepare api key audit").LogError(ctx, s.logger)
 	}

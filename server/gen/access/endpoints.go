@@ -40,7 +40,9 @@ type Endpoints struct {
 	UpdateMemberRoles                    goa.Endpoint
 	ListShadowMCPInventory               goa.Endpoint
 	GetShadowMCPInventoryServer          goa.Endpoint
+	FindShadowMCPInventoryServers        goa.Endpoint
 	UpdateShadowMCPInventoryServerName   goa.Endpoint
+	SetShadowMCPOfficialServer           goa.Endpoint
 	ListShadowMCPInventoryUsers          goa.Endpoint
 	ListShadowMCPInventoryServersForUser goa.Endpoint
 	ResolveShadowMCPInventoryRequest     goa.Endpoint
@@ -61,6 +63,9 @@ type Endpoints struct {
 	ListTemporaryGrants                  goa.Endpoint
 	RenewTemporaryGrant                  goa.Endpoint
 	RevokeTemporaryGrant                 goa.Endpoint
+	ListAccessRequests                   goa.Endpoint
+	DecideAccessRequest                  goa.Endpoint
+	WithdrawAccessRequest                goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "access" service with endpoints.
@@ -92,7 +97,9 @@ func NewEndpoints(s Service) *Endpoints {
 		UpdateMemberRoles:                    NewUpdateMemberRolesEndpoint(s, a.APIKeyAuth),
 		ListShadowMCPInventory:               NewListShadowMCPInventoryEndpoint(s, a.APIKeyAuth),
 		GetShadowMCPInventoryServer:          NewGetShadowMCPInventoryServerEndpoint(s, a.APIKeyAuth),
+		FindShadowMCPInventoryServers:        NewFindShadowMCPInventoryServersEndpoint(s, a.APIKeyAuth),
 		UpdateShadowMCPInventoryServerName:   NewUpdateShadowMCPInventoryServerNameEndpoint(s, a.APIKeyAuth),
+		SetShadowMCPOfficialServer:           NewSetShadowMCPOfficialServerEndpoint(s, a.APIKeyAuth),
 		ListShadowMCPInventoryUsers:          NewListShadowMCPInventoryUsersEndpoint(s, a.APIKeyAuth),
 		ListShadowMCPInventoryServersForUser: NewListShadowMCPInventoryServersForUserEndpoint(s, a.APIKeyAuth),
 		ResolveShadowMCPInventoryRequest:     NewResolveShadowMCPInventoryRequestEndpoint(s, a.APIKeyAuth),
@@ -113,6 +120,9 @@ func NewEndpoints(s Service) *Endpoints {
 		ListTemporaryGrants:                  NewListTemporaryGrantsEndpoint(s, a.APIKeyAuth),
 		RenewTemporaryGrant:                  NewRenewTemporaryGrantEndpoint(s, a.APIKeyAuth),
 		RevokeTemporaryGrant:                 NewRevokeTemporaryGrantEndpoint(s, a.APIKeyAuth),
+		ListAccessRequests:                   NewListAccessRequestsEndpoint(s, a.APIKeyAuth),
+		DecideAccessRequest:                  NewDecideAccessRequestEndpoint(s, a.APIKeyAuth),
+		WithdrawAccessRequest:                NewWithdrawAccessRequestEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -142,7 +152,9 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.UpdateMemberRoles = m(e.UpdateMemberRoles)
 	e.ListShadowMCPInventory = m(e.ListShadowMCPInventory)
 	e.GetShadowMCPInventoryServer = m(e.GetShadowMCPInventoryServer)
+	e.FindShadowMCPInventoryServers = m(e.FindShadowMCPInventoryServers)
 	e.UpdateShadowMCPInventoryServerName = m(e.UpdateShadowMCPInventoryServerName)
+	e.SetShadowMCPOfficialServer = m(e.SetShadowMCPOfficialServer)
 	e.ListShadowMCPInventoryUsers = m(e.ListShadowMCPInventoryUsers)
 	e.ListShadowMCPInventoryServersForUser = m(e.ListShadowMCPInventoryServersForUser)
 	e.ResolveShadowMCPInventoryRequest = m(e.ResolveShadowMCPInventoryRequest)
@@ -163,6 +175,9 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListTemporaryGrants = m(e.ListTemporaryGrants)
 	e.RenewTemporaryGrant = m(e.RenewTemporaryGrant)
 	e.RevokeTemporaryGrant = m(e.RevokeTemporaryGrant)
+	e.ListAccessRequests = m(e.ListAccessRequests)
+	e.DecideAccessRequest = m(e.DecideAccessRequest)
+	e.WithdrawAccessRequest = m(e.WithdrawAccessRequest)
 }
 
 // NewListRolesEndpoint returns an endpoint function that calls the method
@@ -957,6 +972,29 @@ func NewGetShadowMCPInventoryServerEndpoint(s Service, authAPIKeyFn security.Aut
 	}
 }
 
+// NewFindShadowMCPInventoryServersEndpoint returns an endpoint function that
+// calls the method "findShadowMCPInventoryServers" of service "access".
+func NewFindShadowMCPInventoryServersEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*FindShadowMCPInventoryServersPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.FindShadowMCPInventoryServers(ctx, p)
+	}
+}
+
 // NewUpdateShadowMCPInventoryServerNameEndpoint returns an endpoint function
 // that calls the method "updateShadowMCPInventoryServerName" of service
 // "access".
@@ -978,6 +1016,29 @@ func NewUpdateShadowMCPInventoryServerNameEndpoint(s Service, authAPIKeyFn secur
 			return nil, err
 		}
 		return nil, s.UpdateShadowMCPInventoryServerName(ctx, p)
+	}
+}
+
+// NewSetShadowMCPOfficialServerEndpoint returns an endpoint function that
+// calls the method "setShadowMCPOfficialServer" of service "access".
+func NewSetShadowMCPOfficialServerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetShadowMCPOfficialServerPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.SetShadowMCPOfficialServer(ctx, p)
 	}
 }
 
@@ -1535,5 +1596,74 @@ func NewRevokeTemporaryGrantEndpoint(s Service, authAPIKeyFn security.AuthAPIKey
 			return nil, err
 		}
 		return s.RevokeTemporaryGrant(ctx, p)
+	}
+}
+
+// NewListAccessRequestsEndpoint returns an endpoint function that calls the
+// method "listAccessRequests" of service "access".
+func NewListAccessRequestsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListAccessRequestsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListAccessRequests(ctx, p)
+	}
+}
+
+// NewDecideAccessRequestEndpoint returns an endpoint function that calls the
+// method "decideAccessRequest" of service "access".
+func NewDecideAccessRequestEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DecideAccessRequestPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.DecideAccessRequest(ctx, p)
+	}
+}
+
+// NewWithdrawAccessRequestEndpoint returns an endpoint function that calls the
+// method "withdrawAccessRequest" of service "access".
+func NewWithdrawAccessRequestEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*WithdrawAccessRequestPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.WithdrawAccessRequest(ctx, p)
 	}
 }

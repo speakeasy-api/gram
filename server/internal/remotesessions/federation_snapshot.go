@@ -9,13 +9,19 @@ import (
 // and order. Direct struct conversions ensure schema changes cannot silently
 // omit a field from the federation fingerprint.
 type federatedClientSnapshot struct {
-	ID                              uuid.UUID          `json:"ID"`
-	ProjectID                       uuid.NullUUID      `json:"ProjectID"`
-	OrganizationID                  pgtype.Text        `json:"OrganizationID"`
-	AttachmentScope                 pgtype.Text        `json:"AttachmentScope"`
-	RemoteSessionIssuerID           uuid.UUID          `json:"RemoteSessionIssuerID"`
-	ClientID                        string             `json:"ClientID"`
-	ClientSecretEncrypted           pgtype.Text        `json:"ClientSecretEncrypted"`
+	ID                    uuid.UUID     `json:"ID"`
+	ProjectID             uuid.NullUUID `json:"ProjectID"`
+	OrganizationID        pgtype.Text   `json:"OrganizationID"`
+	AttachmentScope       pgtype.Text   `json:"AttachmentScope"`
+	RemoteSessionIssuerID uuid.UUID     `json:"RemoteSessionIssuerID"`
+	ClientID              string        `json:"ClientID"`
+	// The secret's copies change when the same secret is sealed again and
+	// when finalize clears the platform-key copy, so they stay out of the
+	// fingerprint. ClientSecretGeneration changes whenever the secret is set,
+	// replaced or cleared.
+	ClientSecretEncrypted           pgtype.Text        `json:"-"`
+	ClientSecretOrgEncrypted        pgtype.Text        `json:"-"`
+	ClientSecretGeneration          int64              `json:"ClientSecretGeneration"`
 	ClientIDIssuedAt                pgtype.Timestamptz `json:"ClientIDIssuedAt"`
 	ClientSecretExpiresAt           pgtype.Timestamptz `json:"ClientSecretExpiresAt"`
 	TokenEndpointAuthMethod         pgtype.Text        `json:"TokenEndpointAuthMethod"`

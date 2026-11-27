@@ -1,7 +1,7 @@
 import { InlineEmptyState } from "@/components/inline-empty-state";
 import { Page } from "@/components/page-layout";
 import { Button } from "@/components/ui/Button";
-import { SkeletonTable } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { type Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
 import { useDrainInfiniteQuery } from "@/hooks/useDrainInfiniteQuery";
@@ -98,7 +98,11 @@ export function GatewayInheritedSkillsSection({
 
   return (
     <Page.Section>
-      <Page.Section.Title>Inherited from servers</Page.Section.Title>
+      {/* Second section on the tab: no eyebrow, smaller serif, like the
+          Overview tab's section headings. */}
+      <Page.Section.Title area="" className="text-display-xs">
+        Inherited from servers
+      </Page.Section.Title>
       <Page.Section.Description>
         Skills added to servers in {surfaceName}. Agents load them here while
         they can reach that server. Manage them on the server&apos;s Skills tab.

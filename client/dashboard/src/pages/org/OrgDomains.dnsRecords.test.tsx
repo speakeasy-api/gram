@@ -85,6 +85,9 @@ vi.mock("@gram/client/react-query/updateDomain", () => ({
 vi.mock("@gram/client/react-query/checkDomainHealth", () => ({
   useCheckDomainHealthMutation: () => ({ mutate: vi.fn(), isPending: false }),
 }));
+vi.mock("@gram/client/react-query/reconcileDomain", () => ({
+  useReconcileDomainMutation: () => ({ mutate: vi.fn(), isPending: false }),
+}));
 vi.mock("@/components/require-scope", () => ({
   RequireScope: ({ children }: { children: ReactNode }) => children,
 }));
@@ -113,6 +116,8 @@ function customDomain(overrides: Partial<CustomDomain> = {}): CustomDomain {
     verified: false,
     activated: false,
     isUpdating: true,
+    isReconciling: false,
+    reconciliationStatus: "not_started",
     ipAllowlist: [],
     suggestedRecordType: "cname",
     createdAt: new Date("2026-11-01T00:00:00Z"),

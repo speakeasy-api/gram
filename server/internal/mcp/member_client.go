@@ -57,6 +57,8 @@ type memberAttempt struct {
 	lastRetryAfter string
 	// lastErr is the transport failure of the latest recorded exchange, if any.
 	lastErr error
+	// lastCut marks a latest exchange the listing's own time ended, decided as it failed.
+	lastCut bool
 	// refused marks a tools/call the member itself answered with a JSON-RPC error.
 	refused bool
 	// sentCall marks a tools/call handed to the member's proxy. A call on a
@@ -69,7 +71,7 @@ type memberAttempt struct {
 type memberAttemptKey struct{}
 
 func newMemberAttempt(build memberProxyBuilder) *memberAttempt {
-	return &memberAttempt{build: build, mu: sync.Mutex{}, rejected: 0, rejectedAnswer: memberRejection{challenges: nil, authorizationSent: false, configuredSent: false}, lastStatus: 0, lastTunnelError: "", lastForwarded: false, lastRetryAfter: "", lastErr: nil, refused: false, sentCall: false}
+	return &memberAttempt{build: build, mu: sync.Mutex{}, rejected: 0, rejectedAnswer: memberRejection{challenges: nil, authorizationSent: false, configuredSent: false}, lastStatus: 0, lastTunnelError: "", lastForwarded: false, lastRetryAfter: "", lastErr: nil, lastCut: false, refused: false, sentCall: false}
 }
 
 func (a *memberAttempt) memberRefused() bool {
@@ -95,6 +97,7 @@ type memberOutcome interface {
 	tunnelError() string
 	forwarded() bool
 	retryAfter(now time.Time) time.Duration
+	cutByListing() bool
 }
 
 // memberRoundTripper runs every SDK request through the member's proxy builder,
@@ -167,7 +170,7 @@ func (rt *memberRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 	p, err := attempt.build(ctx)
 	if err != nil {
 		err = fmt.Errorf("%w: %w", errMemberUnroutable, err)
-		attempt.recordFailure(record, false, err)
+		attempt.recordFailure(record, false, listingCutOff(ctx, tokenEndpointAnswered(err)), err)
 		return nil, err
 	}
 	if capture, ok := ctx.Value(memberToolResultKey{}).(*memberToolResult); ok {
@@ -220,7 +223,7 @@ func (rt *memberRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 		exchangeErr = errMemberResponseTooLarge
 	}
 	if exchangeErr != nil {
-		attempt.recordFailure(record, forwarded, exchangeErr)
+		attempt.recordFailure(record, forwarded, listingCutOff(ctx, answeredStatus != 0), exchangeErr)
 		// A 401 or 403 whose body then failed is still the member's answer.
 		attempt.recordRejection(record, answeredStatus, answered)
 		return nil, exchangeErr
@@ -232,6 +235,7 @@ func (rt *memberRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 		attempt.lastForwarded = forwarded
 		attempt.lastRetryAfter = rec.header.Get("Retry-After")
 		attempt.lastErr = nil
+		attempt.lastCut = false
 	}
 	attempt.mu.Unlock()
 	attempt.recordRejection(record, rec.status, answered)
@@ -255,8 +259,8 @@ func (rt *memberRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 
 // recordFailure marks the latest exchange as unanswered, so classification
 // does not report the status of an earlier exchange for it. forwarded keeps
-// that a tunnel client had started answering it.
-func (a *memberAttempt) recordFailure(record, forwarded bool, err error) {
+// that a tunnel client had started answering it, and cut that the listing's own time ended it.
+func (a *memberAttempt) recordFailure(record, forwarded, cut bool, err error) {
 	if !record {
 		return
 	}
@@ -267,6 +271,13 @@ func (a *memberAttempt) recordFailure(record, forwarded bool, err error) {
 	a.lastForwarded = forwarded
 	a.lastRetryAfter = ""
 	a.lastErr = err
+	a.lastCut = cut
+}
+
+func (a *memberAttempt) cutByListing() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.lastCut
 }
 
 func (a *memberAttempt) recordRejection(record bool, status int, answer memberRejection) {
@@ -425,6 +436,42 @@ type memberDiscoveryError struct {
 
 func (e memberDiscoveryError) Unwrap() error { return e.metaMemberError }
 
+// memberNoAnswerMessage says why a member call got no answer: its setup stops it, or no reply came.
+func memberNoAnswerMessage(slug string, address guardian.AddressFailure) string {
+	if address == guardian.AddressFine {
+		return fmt.Sprintf("server %q did not answer: upstream unreachable or timed out", slug)
+	}
+	return address.EndUserMessage(fmt.Sprintf("server %q", slug), guardian.OwnAddress)
+}
+
+// memberUpstreamFailedError is a member call that reached its upstream at host, which failed it.
+type memberUpstreamFailedError struct {
+	error
+
+	host string
+}
+
+func (e memberUpstreamFailedError) Unwrap() error { return e.error }
+
+// memberUpstreamHost names the upstream a member failure was the upstream's own, else none.
+func memberUpstreamHost(err error) string {
+	failed, _ := errors.AsType[memberUpstreamFailedError](err)
+	return failed.host
+}
+
+// upstreamFailed marks failure as the upstream's own when code says the upstream itself failed.
+func (d memberDial) upstreamFailed(failure error, code mcpconnectionattempts.Code) error {
+	switch code {
+	case mcpconnectionattempts.CodeProviderRejected, mcpconnectionattempts.CodeSharedCredentialRejected, mcpconnectionattempts.CodeStaticKeyRejected,
+		mcpconnectionattempts.CodeProviderRateLimited, mcpconnectionattempts.CodeProviderServerError, mcpconnectionattempts.CodeProviderUnreachable,
+		mcpconnectionattempts.CodeAddressNotAllowed, mcpconnectionattempts.CodeAddressNotFound:
+		if d.provider != "" {
+			return memberUpstreamFailedError{error: failure, host: d.provider}
+		}
+	}
+	return failure
+}
+
 // sdkTransportRejected is the text the SDK gives a call it did not get answered, for
 // transient HTTP statuses included. The member never said it.
 const sdkTransportRejected = "rejected by transport"
@@ -450,6 +497,9 @@ func memberDeadlineRanOut(ctx context.Context, rt memberOutcome, dial memberDial
 // the distinction between an absent credential and a rejected routed credential.
 // Failures it cannot attribute to the member are logged, since they may be ours.
 func memberClientFailure(ctx context.Context, logger *slog.Logger, rt memberOutcome, dial memberDial, member metaMember, err error) error {
+	if rt.cutByListing() {
+		return listingCutError{memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q did not answer within the gateway listing time", member.slug)}, status: 0, retryable: false, retryAfter: 0}}
+	}
 	// The SDK need not wrap a transport error, so consult the recorded
 	// exchange before reducing a credential failure to an upstream status.
 	exchangeErr := rt.failure()
@@ -475,12 +525,17 @@ func memberClientFailure(ctx context.Context, logger *slog.Logger, rt memberOutc
 	if status, rejected := rt.rejection(); rejected {
 		// As on a direct server: only a rejected credential the final request still carried is recorded.
 		answer := rt.rejectedBy()
-		code, ok := remotemcp.UpstreamFailureHappened(status, remotemcp.CredentialRejected(status, answer.challenges), dial.sentCredential(answer), dial.tunneled, "", errors.Join(err, exchangeErr))
-		if !ok && dial.anonymous && !dial.configuredHeaders {
+		credentialRejected, sent := remotemcp.CredentialRejected(status, answer.challenges), dial.sentCredential(answer)
+		code, ok := remotemcp.UpstreamFailureHappened(status, credentialRejected, sent, dial.tunneled, "", errors.Join(err, exchangeErr))
+		switch {
+		case !ok && dial.anonymous && !dial.configuredHeaders:
 			// Nothing could be sent, so the caller has no connection to it.
 			code = mcpconnectionattempts.CodeInvalidRemoteSession
+		case ok && dial.connectsFirst(sent.Configured):
+			// The message sends the person to connect first, so the row does too.
+			code = mcpconnectionattempts.CodeInvalidRemoteSession
 		}
-		return memberConnectionError{memberAuthFailure(member, dial, status), code}
+		return memberConnectionError{dial.upstreamFailed(memberAuthFailure(member, dial, status, sent.Configured, credentialRejected), code), code}
 	}
 	status := rt.status()
 	if upstreamStatusOK(status) {
@@ -500,7 +555,7 @@ func memberClientFailure(ctx context.Context, logger *slog.Logger, rt memberOutc
 		if memberDeadlineRanOut(ctx, rt, dial, err, exchangeErr) {
 			code = mcpconnectionattempts.CodeProviderUnreachable
 		}
-		return memberConnectionError{upstreamFailure(fmt.Sprintf("server %q did not answer: upstream unreachable or timed out", member.slug), false), code}
+		return memberConnectionError{dial.upstreamFailed(upstreamFailure(fmt.Sprintf("server %q did not answer: upstream unreachable or timed out", member.slug), false), code), code}
 	case errors.Is(err, errMemberResponseTooLarge) || errors.Is(exchangeErr, errMemberResponseTooLarge):
 		return upstreamFailure(fmt.Sprintf("server %q returned a response too large for the meta MCP", member.slug), false)
 	case errors.Is(err, errMemberUnroutable) || errors.Is(exchangeErr, errMemberUnroutable):
@@ -517,9 +572,14 @@ func memberClientFailure(ctx context.Context, logger *slog.Logger, rt memberOutc
 		netErr, isNetErr := errors.AsType[net.Error](exchangeErr)
 		spent := (isNetErr && netErr.Timeout()) || errors.Is(exchangeErr, context.DeadlineExceeded) || errors.Is(exchangeErr, context.Canceled)
 		_, untrusted := errors.AsType[*tls.CertificateVerificationError](exchangeErr)
-		refused := untrusted || errors.Is(exchangeErr, guardian.ErrBlockedIP) || errors.Is(exchangeErr, guardian.ErrBadHost)
 		code, _ := remotemcp.UpstreamFailureHappened(0, false, dial.upstreamCredential(), dial.tunneled, "", errors.Join(err, exchangeErr))
-		return memberConnectionError{upstreamFailure(fmt.Sprintf("server %q did not answer: upstream unreachable or timed out", member.slug), !spent && !refused), code}
+		refused := untrusted || errors.Is(exchangeErr, guardian.ErrBlockedIP) || errors.Is(exchangeErr, guardian.ErrBadHost) || mcpconnectionattempts.AddressOf(code) != guardian.AddressFine
+		failure := upstreamFailure(memberNoAnswerMessage(member.slug, mcpconnectionattempts.AddressOf(code)), !spent && !refused)
+		// A refused or missing address the upstream redirected to is not the member's own, so it names no host.
+		if mcpconnectionattempts.AddressOf(code) != guardian.AddressFine || (!errors.Is(exchangeErr, guardian.ErrBlockedIP) && !errors.Is(exchangeErr, guardian.ErrBadHost)) {
+			failure = dial.upstreamFailed(failure, code)
+		}
+		return memberConnectionError{failure, code}
 	}
 	rpcErr, isRPC := errors.AsType[*jsonrpc.Error](err)
 	message := fmt.Sprintf("server %q upstream call failed with status %d", member.slug, status)
@@ -529,11 +589,11 @@ func memberClientFailure(ctx context.Context, logger *slog.Logger, rt memberOutc
 	switch {
 	case retryableStatus:
 		code, _ := remotemcp.UpstreamFailureHappened(status, false, dial.upstreamCredential(), dial.tunneled, rt.tunnelError(), errors.Join(err, exchangeErr))
-		return memberConnectionError{upstreamFailure(message, true), code}
+		return memberConnectionError{dial.upstreamFailed(upstreamFailure(message, true), code), code}
 	case isRPC && rpcErr.Message == sdkTransportRejected && rt.status() == 0:
 		// The SDK could not send the call, so the member never saw it.
 		code, _ := remotemcp.UpstreamFailureHappened(0, false, dial.upstreamCredential(), dial.tunneled, "", errors.Join(err, exchangeErr))
-		return memberConnectionError{upstreamFailure(message, false), code}
+		return memberConnectionError{dial.upstreamFailed(upstreamFailure(message, false), code), code}
 	// An HTTP-successful JSON-RPC error is a tool result, not evidence of a
 	// failed connection. Local proxy refusals already recorded their own row.
 	case isRPC:
@@ -610,13 +670,13 @@ func (c *memberToolResult) InterceptToolsCallResponse(_ context.Context, call *p
 }
 
 // callMemberTool lets the SDK validate the response and correlate the call,
-// then returns the accepted raw result without a lossy typed round trip.
-func callMemberTool(ctx context.Context, session *mcp.ClientSession, params *mcp.CallToolParams) (json.RawMessage, error) {
+// then returns the accepted raw result without a lossy typed round trip, and whether it is marked isError.
+func callMemberTool(ctx context.Context, session *mcp.ClientSession, params *mcp.CallToolParams) (json.RawMessage, bool, error) {
 	if invocation, ok := ctx.Value(metaCodeInvocationKey{}).(*metaCodeInvocation); ok {
 		invocation.dispatched = true
 	}
 	capture := &memberToolResult{mu: sync.Mutex{}, raw: nil, refusal: nil}
-	_, err := session.CallTool(context.WithValue(ctx, memberToolResultKey{}, capture), params)
+	called, err := session.CallTool(context.WithValue(ctx, memberToolResultKey{}, capture), params)
 	if err != nil {
 		capture.mu.Lock()
 		refusal := capture.refusal
@@ -635,12 +695,12 @@ func callMemberTool(ctx context.Context, session *mcp.ClientSession, params *mcp
 			(refusal.Code == jsonrpc.CodeInvalidParams || refusal.Code == jsonrpc.CodeMethodNotFound) {
 			invocation.rejected = true
 		}
-		return nil, fmt.Errorf("call member tool: %w", err)
+		return nil, false, fmt.Errorf("call member tool: %w", err)
 	}
 	capture.mu.Lock()
 	defer capture.mu.Unlock()
 	if len(capture.raw) == 0 {
-		return nil, errors.New("member tool response has no captured result")
+		return nil, false, errors.New("member tool response has no captured result")
 	}
-	return capture.raw, nil
+	return capture.raw, called != nil && called.IsError, nil
 }

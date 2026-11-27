@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets/clientsecretstest"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -45,7 +46,7 @@ func TestConsentAgentBindingActionsUseRealAttachmentService(t *testing.T) {
 	require.NoError(t, policyErr)
 	meterProvider := testenv.NewMeterProvider(t)
 	refresher := remotesessions.NewRefreshService(ti.logger, meterProvider, ti.conn, ti.enc, policy, nil, ti.cacheAdapter)
-	bindings := remotesessions.NewService(ti.logger, ti.tracerProvider, meterProvider, ti.conn, ti.sessionManager, ti.authzEngine, ti.enc, nil, policy, nil, ti.audit, ti.serverURL, remotesessions.NewIdentityCommitter(ti.logger, ti.conn, ti.enc, ti.audit, ti.serverURL, policy, nil, nil), refresher, nil, nil)
+	bindings := remotesessions.NewService(ti.logger, ti.tracerProvider, meterProvider, ti.conn, ti.sessionManager, ti.authzEngine, ti.enc, clientsecretstest.New(t, ti.conn, ti.enc), nil, policy, nil, ti.audit, ti.serverURL, remotesessions.NewIdentityCommitter(ti.logger, ti.conn, ti.enc, clientsecretstest.New(t, ti.conn, ti.enc), ti.audit, ti.serverURL, policy, nil, nil), refresher, nil, nil)
 	bindings.SetBindingAuthorizer(func(ctx context.Context, tx pgx.Tx, id uuid.UUID, write bool) error {
 		require.False(t, contextvalues.HasValidatedGramSession(ctx))
 		auth, ok := contextvalues.GetAuthContext(ctx)
@@ -70,11 +71,11 @@ func TestConsentAgentBindingActionsUseRealAttachmentService(t *testing.T) {
 	ti.service.SetConsentBindingService(bindings)
 	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, fx.toolset.McpSlug.String, "mcp")
 	require.NoError(t, err)
-	clientID := createConsentRemoteClient(t, ctx, ti.conn, fx.target.ProjectID, fx.orgID, "consent-reuse", "", []uuid.UUID{fx.target.UserSessionIssuerID})
+	clientID := createConsentRemoteClient(t, ctx, ti.conn, fx.target.ProjectID, fx.orgID, "consent-reuse", "")
 	cipher, err := ti.enc.Encrypt([]byte("upstream-placeholder"))
 	require.NoError(t, err)
 	createSession := func(subject urn.SessionSubject) uuid.UUID {
-		session, err := repo.New(ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+		session, err := repo.New(ti.conn).UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 			SubjectUrn: subject, UserSessionIssuerID: fx.target.UserSessionIssuerID,
 			RemoteSessionClientID: clientID, AccessTokenEncrypted: cipher,
 			AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), Scopes: []string{},

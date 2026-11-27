@@ -23,6 +23,7 @@ describe("activeTabFromPath", () => {
     "inspect",
     "team-access",
     "guardrails",
+    "feedback",
     "settings",
   ] as const)(
     "reads the %s tab when the server slug has the same value",
@@ -195,9 +196,14 @@ describe("standsInForToolset", () => {
 });
 
 describe("tabForServer", () => {
-  it("shows a hosted server's tools instead of Inspect", () => {
-    expect(tabForServer("inspect", true)).toBe("tools");
-    for (const tab of ["tools", "resources", "prompts", "settings"] as const) {
+  it("keeps every tab, Inspect included, for a hosted server", () => {
+    for (const tab of [
+      "inspect",
+      "tools",
+      "resources",
+      "prompts",
+      "settings",
+    ] as const) {
       expect(tabForServer(tab, true)).toBe(tab);
     }
   });
@@ -223,6 +229,7 @@ describe("renamedServerHref", () => {
       "teamAccess",
       "guardrails",
       "sessions",
+      "feedback",
       "settings",
     ].map((key) => [
       key,
@@ -261,6 +268,7 @@ describe("renamedServerHref", () => {
     "team-access",
     "guardrails",
     "sessions",
+    "feedback",
     "settings",
   ])("keeps the %s tab under the new slug", (tab) => {
     expect(

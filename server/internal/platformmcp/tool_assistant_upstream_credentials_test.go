@@ -160,7 +160,7 @@ func TestAssistantUpstreamCredentialToolContract(t *testing.T) {
 	require.Equal(t, ExternalAuthorizationOrgAdmin, a.Meta.Authorization)
 	require.Equal(t, ProjectScopeExplicit, a.Meta.ProjectScope)
 	require.Equal(t, externalOnly, a.Meta.Audiences)
-	for _, field := range []string{"project_id", "assistant_id", "trigger_instance_id", "execution_context", "mcp_server_id", "auth_client_id", "expected_version", "confirmed"} {
+	for _, field := range []string{"project_slug", "assistant_id", "trigger_instance_id", "execution_context", "mcp_server_id", "auth_client_id", "expected_version", "confirmed"} {
 		require.Contains(t, string(a.InputSchema), field)
 	}
 	require.Contains(t, a.Description, "assistant:write")

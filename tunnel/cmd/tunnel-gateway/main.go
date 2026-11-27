@@ -4,10 +4,12 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -18,11 +20,28 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/speakeasy-api/gram/tunnel/gateway"
+	"github.com/speakeasy-api/gram/tunnel/redisswitch"
 	"github.com/speakeasy-api/gram/tunnel/route"
 )
 
+// partitionAttrKey matches the gram.partition attribute the Speakeasy server
+// puts on its logs, so the gateway's logs filter the same way.
+const partitionAttrKey = "gram.partition"
+
+// knownPartitions mirrors the closed set in server/internal/partition. Go's
+// internal visibility rule keeps this package from importing it, so the list
+// is repeated here and the tests pin it.
+var knownPartitions = []string{"us", "eu"}
+
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+
+	partition, err := parsePartition(os.Getenv("GRAM_PARTITION"))
+	if err != nil {
+		logger.ErrorContext(context.Background(), "invalid GRAM_PARTITION", slog.Any("error", err))
+		os.Exit(2)
+	}
+	logger = logger.With(slog.String(partitionAttrKey, partition))
 
 	publicListenAddr := envOr("TUNNEL_GATEWAY_PUBLIC_ADDR", envOr("TUNNEL_GATEWAY_ADDR", ":8090"))
 	forwardListenAddr := envOr("TUNNEL_GATEWAY_FORWARD_ADDR", ":8091")
@@ -149,10 +168,13 @@ func buildRouteStore(logger *slog.Logger) (route.Store, error) {
 	if addr == "" {
 		return nil, errors.New("TUNNEL_REDIS_ADDR is required")
 	}
-	client := redis.NewClient(&redis.Options{
+	client, err := redisswitch.NewClient(context.Background(), logger, &redis.Options{
 		Addr:     addr,
 		Password: os.Getenv("TUNNEL_REDIS_PASSWORD"),
-	})
+	}, redisswitch.DefaultRole, redisswitch.NextFromEnv())
+	if err != nil {
+		return nil, err
+	}
 	logger.InfoContext(context.Background(), "tunnel-gateway using redis route store", slog.String("addr", addr))
 	return route.NewRedis(client), nil
 }
@@ -193,4 +215,17 @@ func parseMaxSessions(raw string) (int, error) {
 		return 0, errors.New("max sessions must be non-negative")
 	}
 	return parsed, nil
+}
+
+// parsePartition returns the partition named by GRAM_PARTITION. It has no
+// default: unset, empty or unknown is an error, as in the server, so a
+// deployment that forgets it fails at startup.
+func parsePartition(raw string) (string, error) {
+	if raw == "" {
+		return "", fmt.Errorf("GRAM_PARTITION is required: set it to one of %s", strings.Join(knownPartitions, ", "))
+	}
+	if !slices.Contains(knownPartitions, raw) {
+		return "", fmt.Errorf("unknown partition %q: must be one of %s", raw, strings.Join(knownPartitions, ", "))
+	}
+	return raw, nil
 }

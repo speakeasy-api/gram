@@ -58,7 +58,7 @@ func ResourceOwnersForServers(ctx context.Context, db remotesessions_repo.DBTX, 
 		OrganizationID:       organizationID,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("list clients bound to user session issuers: %w", err)
+		return nil, fmt.Errorf("list registrations associated with servers on the user session issuers: %w", err)
 	}
 	siblings := map[pairKey][]uuid.UUID{}
 	var allClients []uuid.UUID

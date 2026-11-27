@@ -2,14 +2,20 @@ package platformmcp
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/authclients"
+	authclientsrepo "github.com/speakeasy-api/gram/server/internal/authclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	metarepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
@@ -31,6 +37,7 @@ func TestMCPConnectionSettingsToolHasSameInputSchemaWhenUnavailable(t *testing.T
 	bindExternalTestPrincipal(server)
 	reg := newRegistrar(server)
 	reg.withExternalAuthorizer(allowExternalCallAuthorizer{})
+	reg.withProjects(slugProjects{"settings-project": uuid.New()})
 	registerUnavailableMCPConnectionSettingsTool(reg)
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
 	serverSession, err := server.Connect(t.Context(), serverTransport, nil)
@@ -41,7 +48,7 @@ func TestMCPConnectionSettingsToolHasSameInputSchemaWhenUnavailable(t *testing.T
 	require.NoError(t, err)
 	defer func() { _ = session.Close() }()
 	result, err := session.CallTool(t.Context(), &mcp.CallToolParams{Name: getMCPConnectionSettingsToolName, Arguments: map[string]any{
-		"project_id": uuid.NewString(), "target_kind": "mcp_server", "target_id": uuid.NewString(),
+		"project_slug": "settings-project", "target_kind": "mcp_server", "target_id": uuid.NewString(),
 	}})
 	require.NoError(t, err)
 	require.True(t, result.IsError)
@@ -176,4 +183,106 @@ func TestGatewayConnectionSettingsReportsStoredDiscoveryMode(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "future_mode", unsupported.DiscoveryMode)
 	require.Equal(t, "progressive", unsupported.EffectiveDiscoveryMode, "a mode this build does not support is served as Progressive")
+}
+
+func TestGatewayConnectionSettingsReportsReadableProxiedMemberSignIn(t *testing.T) {
+	t.Parallel()
+	ctx, f := seedGatewayFixture(t, "gateway_member_sign_in")
+	readable := f.seedRemoteMember(t, ctx, "Readable")
+	configured := f.seedRemoteMember(t, ctx, "Configured")
+	hidden := f.seedRemoteMember(t, ctx, "Hidden")
+	nonMember := f.seedRemoteMember(t, ctx, "Other")
+	q := authclientsrepo.New(f.conn)
+	client, err := q.CreateAuthClient(ctx, authclientsrepo.CreateAuthClientParams{
+		OrganizationID: f.principal.OrganizationID, ProjectID: uuid.NullUUID{UUID: f.project.ID, Valid: true},
+		ClientType: authz.AuthClientTypePassThrough, Name: "Member credential", CreatedByUserID: conv.ToPGText(f.principal.UserID),
+		RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ClientAttachmentScope: pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
+	_, err = q.AttachAuthClientToServer(ctx, authclientsrepo.AttachAuthClientToServerParams{McpServerID: configured, AuthClientID: client.ID, OrganizationID: f.principal.OrganizationID})
+	require.NoError(t, err)
+	gatewayQueries := metarepo.New(f.conn)
+	gateway, err := gatewayQueries.CreateMetaMCPServer(ctx, metarepo.CreateMetaMCPServerParams{
+		OrganizationID: f.principal.OrganizationID, ProjectID: f.project.ID, Name: "Gateway", Visibility: "public",
+		UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, NetworkAccessMode: conv.ToPGText("public_only"),
+	})
+	require.NoError(t, err)
+	// Seed stored membership directly: the Platform MCP gateway writer does
+	// not create hosted memberships, but the status reader can encounter them.
+	for order, id := range []uuid.UUID{hidden, configured, readable, f.toolsetID} {
+		_, err := gatewayQueries.CreateMetaMCPMember(ctx, metarepo.CreateMetaMCPMemberParams{ProjectID: f.project.ID, MetaMcpServerID: gateway.ID, McpServerID: id, SortOrder: int32(order)})
+		require.NoError(t, err)
+	}
+
+	service := NewMCPConnectionSettingsService(f.conn)
+	input := GetMCPConnectionSettingsInput{ProjectID: f.project.ID.String(), TargetKind: MCPConnectionSettingsGateway, TargetID: gateway.ID.String()}
+	ctx = authz.GrantsToContext(ctx, []authz.Grant{
+		authz.NewGrant(authz.ScopeOrgAdmin, f.principal.OrganizationID),
+		authz.NewGrant(authz.ScopeMCPRead, readable.String()),
+		authz.NewGrant(authz.ScopeMCPRead, configured.String()),
+		authz.NewGrant(authz.ScopeMCPRead, nonMember.String()),
+		authz.NewGrant(authz.ScopeMCPRead, f.toolsetID.String()),
+	})
+	got, err := service.readWithGatewayMemberSignIn(ctx, f.principal, input)
+	require.NoError(t, err)
+	require.NotNil(t, got.GatewayMemberSignIn)
+	require.Equal(t, []MCPGatewayMemberSignIn{
+		{MCPID: configured.String(), Name: "Configured", Status: authclients.StatusConfigured},
+		{MCPID: readable.String(), Name: "Readable", Status: authclients.StatusNoAuthRequired},
+	}, *got.GatewayMemberSignIn)
+	require.Nil(t, got.UpstreamAuthentication)
+
+	direct, err := service.readWithGatewayMemberSignIn(ctx, f.principal, GetMCPConnectionSettingsInput{ProjectID: f.project.ID.String(), TargetKind: MCPConnectionSettingsMCPServer, TargetID: readable.String()})
+	require.NoError(t, err)
+	require.Nil(t, direct.GatewayMemberSignIn)
+	require.NotNil(t, direct.UpstreamAuthentication)
+	require.Equal(t, direct.UpstreamAuthentication.Status, (*got.GatewayMemberSignIn)[1].Status)
+
+	withoutMemberRead := authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeOrgAdmin, f.principal.OrganizationID)})
+	empty, err := service.readWithGatewayMemberSignIn(withoutMemberRead, f.principal, input)
+	require.NoError(t, err)
+	require.NotNil(t, empty.GatewayMemberSignIn)
+	require.Empty(t, *empty.GatewayMemberSignIn)
+	require.Equal(t, got.Version, empty.Version)
+
+	for _, query := range []string{"ListServableMetaMCPMembers", "ListOrganizationMCPServersByID"} {
+		cause := errors.New("gateway test query failed")
+		failing := NewMCPConnectionSettingsService(gatewaySettingsQueryFailure{DBTX: f.conn, query: query, cause: cause})
+		_, err := failing.gatewayMemberSignIn(ctx, f.principal, f.project.ID, gateway.ID)
+		require.ErrorIs(t, err, cause, query)
+		require.ErrorIs(t, err, ErrUnavailable, query)
+		result, handled := mcpConnectionSettingsToolResult(err)
+		require.True(t, handled, query)
+		require.True(t, result.IsError, query)
+		require.Len(t, result.Content, 1, query)
+		message, ok := result.Content[0].(*mcp.TextContent)
+		require.True(t, ok, query)
+		require.Contains(t, message.Text, "temporarily unavailable", query)
+	}
+
+	other := input
+	other.ProjectID = uuid.NewString()
+	_, err = service.readWithGatewayMemberSignIn(ctx, f.principal, other)
+	require.ErrorIs(t, err, ErrMCPConnectionSettingsNotFound)
+	foreign := f.principal
+	foreign.OrganizationID = "other-org"
+	_, err = service.readWithGatewayMemberSignIn(authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeOrgAdmin, foreign.OrganizationID)}), foreign, input)
+	require.ErrorIs(t, err, ErrMCPConnectionSettingsNotFound)
+}
+
+type gatewaySettingsQueryFailure struct {
+	platformrepo.DBTX
+	query string
+	cause error
+}
+
+func (f gatewaySettingsQueryFailure) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error) {
+	if strings.HasPrefix(sql, "-- name: "+f.query+" ") {
+		return nil, f.cause
+	}
+	rows, err := f.DBTX.Query(ctx, sql, args...) //nolint:glint // notestingrawsql: passes through existing SQLc queries without constructing statements.
+	if err != nil {
+		return nil, fmt.Errorf("run generated gateway settings query: %w", err)
+	}
+	return rows, nil
 }

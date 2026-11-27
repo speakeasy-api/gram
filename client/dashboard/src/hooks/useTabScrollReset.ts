@@ -18,7 +18,23 @@ export function useTabScrollReset(
   useLayoutEffect(() => {
     // In-page anchors (e.g. settings section hashes) win over the reset.
     if (hash) return;
-    (ref.current?.closest("[data-page-bound]") ?? window).scrollTo({ top: 0 });
+    const scroller = ref.current?.closest<HTMLElement>("[data-page-bound]");
+    if (!scroller || !ref.current) {
+      window.scrollTo({ top: 0 });
+      return;
+    }
+    // A header that scrolls away above the content stays away: the reset
+    // goes to the content's top, under any sticky strip, not to the header.
+    const padding =
+      parseFloat(getComputedStyle(scroller).scrollPaddingTop) || 0;
+    const contentTop =
+      ref.current.getBoundingClientRect().top -
+      scroller.getBoundingClientRect().top +
+      scroller.scrollTop -
+      padding;
+    scroller.scrollTo({
+      top: Math.min(scroller.scrollTop, Math.max(0, contentTop)),
+    });
   }, [activeTab, hash]);
   return ref;
 }

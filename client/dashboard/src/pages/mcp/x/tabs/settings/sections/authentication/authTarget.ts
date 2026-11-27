@@ -20,19 +20,18 @@ import { useMemo } from "react";
 /**
  * Abstracts the resource a user_session_issuer links to. The auth components
  * (section body, attach sheet, sessions list) only talk to this interface;
- * the implementations below know whether the link lives on
- * mcp_servers.user_session_issuer_id or toolsets.user_session_issuer_id.
+ * the implementations below know which MCP server's
+ * mcp_servers.user_session_issuer_id holds the link.
  */
 export type AuthTarget = {
   /** Seeds auto-derived issuer slugs on first add. */
   slug: string;
   /** Project owning the target. */
   projectId: string;
-  /** Selects the Remote MCP identity surface without changing shared auth UI. */
-  kind: "remote-mcp" | "standard";
+  hosted?: boolean;
   /** Resource identifier used by the target's mcp:write check. */
   permissionResourceId: string;
-  /** The MCP server row id, when the target is one; differs from permissionResourceId for toolset-backed servers. */
+  /** Exact MCP server row id, separate from the permission resource id. */
   mcpServerId?: string;
   /** Whether the target backend accepts organization-owned issuers. */
   supportsOrganizationIssuers: boolean;
@@ -74,7 +73,7 @@ export function useMcpServerAuthTarget(
     () => ({
       slug: mcpServer.slug ?? "mcp",
       projectId: mcpServer.projectId,
-      kind: mcpServer.remoteMcpServerId ? "remote-mcp" : "standard",
+      hosted: mcpServer.toolsetId !== undefined,
       permissionResourceId: mcpServer.toolsetId ?? mcpServer.id,
       mcpServerId: mcpServer.id,
       supportsOrganizationIssuers: true,
@@ -117,8 +116,11 @@ export function useToolsetAuthTarget(toolset: Toolset): AuthTarget {
     () => ({
       slug: toolset.slug,
       projectId: toolset.projectId,
-      kind: "standard",
+      hosted: true,
       permissionResourceId: toolset.id,
+      // The canonical hosted server shares the toolset's ID. Other wrappers
+      // have their own IDs and use useMcpServerAuthTarget instead.
+      mcpServerId: toolset.id,
       supportsOrganizationIssuers: true,
       userSessionIssuerId: toolset.userSessionIssuerId ?? null,
       attachImpactTarget: { toolsetId: toolset.id },
@@ -155,7 +157,6 @@ export function useMetaMcpAuthTarget(
     () => ({
       slug: slugSeed,
       projectId: metaMcpServer.projectId,
-      kind: "standard",
       permissionResourceId: metaMcpServer.projectId,
       supportsOrganizationIssuers: true,
       userSessionIssuerId: metaMcpServer.userSessionIssuerId ?? null,

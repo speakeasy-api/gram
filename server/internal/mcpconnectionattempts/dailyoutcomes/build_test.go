@@ -14,10 +14,13 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/catalogseed"
 	auditrepo "github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -41,9 +44,13 @@ const (
 	daysAgoRepublishFails = 12
 	daysAgoEndingProvider = 27
 	daysAgoAdminReason    = 22
+	daysAgoUsedToken      = 14
 )
 
 const catalogApp = "https://claude.ai/oauth/claude-code-client-metadata"
+
+// staffOrganizationID is the staff organization newFixture's builder configures.
+const staffOrganizationID = "org-staff"
 
 type fixture struct {
 	t     *testing.T
@@ -61,8 +68,9 @@ func newFixture(t *testing.T) *fixture {
 	require.NoError(t, err)
 	db, err := infra.CloneTestDatabase(t, "dailyoutcomes")
 	require.NoError(t, err)
+	require.NoError(t, catalogseed.EnsureCatalog(t.Context(), db))
 	now := time.Now().UTC()
-	return &fixture{t: t, b: NewBuilder(testenv.NewLogger(t), testenv.NewMeterProvider(t), db, ch), ch: ch, db: db, org: "org-" + uuid.NewString(), now: now, today: StartOfDay(now)}
+	return &fixture{t: t, b: NewBuilder(testenv.NewLogger(t), testenv.NewMeterProvider(t), db, ch, staff.NewOrganization(staffOrganizationID)), ch: ch, db: db, org: "org-" + uuid.NewString(), now: now, today: StartOfDay(now)}
 }
 
 func (f *fixture) day(daysAgo int) time.Time {
@@ -145,7 +153,7 @@ func TestBuildDayDecidesHowAttemptsEnded(t *testing.T) {
 	f := newFixture(t)
 	day := f.day(daysAgoOutcomes)
 	server := uuid.New()
-	app := mcpconnectionattempts.AppOf(catalogApp, mcpconnectionattempts.ClientIDAdmitted)
+	app := mcpconnectionattempts.AppOf(aivendors.CompiledSnapshot(), catalogApp, mcpconnectionattempts.ClientIDAdmitted)
 
 	connected := f.attempt(server, app, day.Add(time.Hour))
 	connectedRow := f.row(connected, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultCodeIssued, true, time.Minute)
@@ -394,7 +402,7 @@ func TestDaysToBuild(t *testing.T) {
 	require.NotContains(t, days, old, "a settled day is left alone")
 	require.NotContains(t, days, demoOnly, "the demo organization is left out")
 
-	limited := NewBuilder(testenv.NewLogger(t), testenv.NewMeterProvider(t), f.db, f.ch)
+	limited := NewBuilder(testenv.NewLogger(t), testenv.NewMeterProvider(t), f.db, f.ch, staff.NewOrganization(staffOrganizationID))
 	limited.backfillStart = recent
 	days, err = limited.DaysToBuild(t.Context(), f.now)
 	require.NoError(t, err)
@@ -406,7 +414,7 @@ func TestBuildDayKeepsVendorNamesOnlyWhenSeveralOrganizationsUseThem(t *testing.
 	f := newFixture(t)
 	day := f.day(daysAgoPrivacy)
 	write := func(org, provider, appURL string) {
-		a := mcpconnectionattempts.AttemptAt(uuid.New(), day.Add(time.Hour), mcpconnectionattempts.ServerScope(org, uuid.New(), uuid.New(), mcpconnectionattempts.AppOf(appURL, mcpconnectionattempts.ClientIDAdmitted)))
+		a := mcpconnectionattempts.AttemptAt(uuid.New(), day.Add(time.Hour), mcpconnectionattempts.ServerScope(org, uuid.New(), uuid.New(), mcpconnectionattempts.AppOf(aivendors.CompiledSnapshot(), appURL, mcpconnectionattempts.ClientIDAdmitted)))
 		f.write(f.row(a, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultCodeIssued, true, time.Minute, mcpconnectionattempts.Provider(provider)))
 	}
 	newOrg := func() string { return "org-" + uuid.NewString() }
@@ -416,10 +424,10 @@ func TestBuildDayKeepsVendorNamesOnlyWhenSeveralOrganizationsUseThem(t *testing.
 	}
 	// GitHub and the catalog app are each shared, but only one organization uses them together.
 	write(f.org, "https://github.com", catalogApp)
-	// Speakeasy's own organization does not count toward the threshold.
+	// The staff organization does not count toward the threshold.
 	write(newOrg(), "https://slack.com", "dcr-client")
 	write(newOrg(), "https://slack.com", "dcr-client")
-	write("5a25158b-24dc-4d49-b03d-e85acfbea59c", "https://slack.com", "dcr-client")
+	write(staffOrganizationID, "https://slack.com", "dcr-client")
 	write(newOrg(), "https://linear.app", "https://zed.dev/oauth/client-metadata.json")
 
 	f.build(day)
@@ -550,5 +558,31 @@ func TestBuildDayCountsTheProviderThatEndedTheAttempt(t *testing.T) {
 	f.build(day)
 	require.Equal(t, map[string]uint64{
 		"linear.app|dcr||provider_token|failed|provider_unavailable|": 3,
+	}, f.stored(mcpconnectionattempts.OutcomesDailyTable, day))
+}
+
+// A refused used token names its owner, so the owner's next connection on the same app
+// fixes it, as for every other refused refresh. A day stored before showed it unfixed.
+func TestBuildDayPairsAnAttributedUsedTokenWithTheNextConnection(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	day := f.day(daysAgoUsedToken)
+	subject := urn.NewUserSubject("user-" + uuid.NewString())
+	server := uuid.New()
+	at := day.Add(time.Hour)
+
+	refused := f.attempt(server, mcpconnectionattempts.AppDCR, at)
+	connected := f.attempt(server, mcpconnectionattempts.AppDCR, at.Add(time.Hour))
+	f.write(
+		f.row(refused, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeRefreshTokenUnknownOrAlreadyUsed, true, 0, mcpconnectionattempts.Subject(&subject)),
+		f.row(connected, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultCodeIssued, true, 0, mcpconnectionattempts.Subject(&subject)),
+	)
+	f.insertStored(mcpconnectionattempts.OutcomesDailyTable, day, "|dcr||inbound_token|connected||", 1)
+	f.insertStored(mcpconnectionattempts.OutcomesDailyTable, day, "|dcr||inbound_token|failed|refresh_token_unknown_or_already_used|", 1)
+
+	f.build(day)
+	require.Equal(t, map[string]uint64{
+		"|dcr||inbound_token|connected||":                                        1,
+		"|dcr||inbound_token|failed|refresh_token_unknown_or_already_used|retry": 1,
 	}, f.stored(mcpconnectionattempts.OutcomesDailyTable, day))
 }

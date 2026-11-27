@@ -9,24 +9,22 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"go.opentelemetry.io/otel/metric"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 const (
-	networkIngressMeterScope                  = "github.com/speakeasy-api/gram/server/internal/k8s"
-	networkIngressOperationsMetric            = "gram.network_ingress.provisioner.operations"
-	networkIngressDurationMetric              = "gram.network_ingress.provisioner.operation.duration"
-	networkIngressOperationApply              = "apply"
-	networkIngressOperationObserve            = "observe"
-	networkIngressOperationDelete             = "delete"
-	networkIngressOperationUnknown            = "unknown"
-	networkIngressResultSuccess               = "success"
-	networkIngressResultPending               = "pending"
-	networkIngressResultError                 = "error"
-	networkIngressErrorCodeNone               = "none"
-	networkIngressErrorCodeInternal           = "internal"
-	networkIngressErrorCodeDeletionPending    = "deletion_pending"
-	networkIngressErrorCodeReplacementPending = "replacement_pending"
+	networkIngressMeterScope               = "github.com/speakeasy-api/gram/server/internal/k8s"
+	networkIngressOperationsMetric         = "gram.network_ingress.provisioner.operations"
+	networkIngressDurationMetric           = "gram.network_ingress.provisioner.operation.duration"
+	networkIngressOperationApply           = "apply"
+	networkIngressOperationObserve         = "observe"
+	networkIngressOperationDelete          = "delete"
+	networkIngressOperationUnknown         = "unknown"
+	networkIngressResultSuccess            = "success"
+	networkIngressResultPending            = "pending"
+	networkIngressResultError              = "error"
+	networkIngressErrorCodeNone            = "none"
+	networkIngressErrorCodeInternal        = "internal"
+	networkIngressErrorCodeDeletionPending = "deletion_pending"
 )
 
 type NetworkIngressMetrics struct {
@@ -95,7 +93,31 @@ func ObserveNetworkIngressProvisioner(provider string, provisioner NetworkIngres
 	if logger != nil {
 		logger = logger.With(attr.SlogComponent("network_ingress_provisioner"))
 	}
-	return &observedNetworkIngressProvisioner{provider: provider, provisioner: provisioner, logger: logger, metrics: metrics}
+	observed := &observedNetworkIngressProvisioner{provider: provider, provisioner: provisioner, logger: logger, metrics: metrics}
+	if deleter, ok := provisioner.(NetworkIngressCredentialedDeleter); ok {
+		return &observedCredentialedNetworkIngressProvisioner{observedNetworkIngressProvisioner: observed, deleter: deleter}
+	}
+	return observed
+}
+
+// observedCredentialedNetworkIngressProvisioner wraps providers whose teardown
+// needs credentials, so the executor's interface check keeps its meaning.
+type observedCredentialedNetworkIngressProvisioner struct {
+	*observedNetworkIngressProvisioner
+	deleter NetworkIngressCredentialedDeleter
+}
+
+var _ NetworkIngressCredentialedDeleter = (*observedCredentialedNetworkIngressProvisioner)(nil)
+
+func (p *observedCredentialedNetworkIngressProvisioner) DeleteWithCredentials(ctx context.Context, resources NetworkIngressResourceNames, credentials []byte) (err error) {
+	started := time.Now()
+	defer func() {
+		p.record(ctx, networkIngressOperationDelete, NetworkIngressObservation{Status: "", DNSName: "", ErrorCode: "", ConnectedAt: nil}, err, time.Since(started))
+	}()
+	if err = p.deleter.DeleteWithCredentials(ctx, resources, credentials); err != nil {
+		return fmt.Errorf("delete network ingress resources: %w", err)
+	}
+	return nil
 }
 
 func (p *observedNetworkIngressProvisioner) Apply(ctx context.Context, desired NetworkIngressDesired) (observation NetworkIngressObservation, err error) {
@@ -155,7 +177,7 @@ func (p *observedNetworkIngressProvisioner) record(ctx context.Context, operatio
 		return
 	}
 	if err != nil {
-		// Provider errors can contain Kubernetes request data. Only bounded
+		// Provider errors can contain provider API response data. Only bounded
 		// classifications may leave the provider boundary through telemetry.
 		attrs = append(attrs, attr.SlogError(fmt.Errorf("network ingress provider: %s", errorCode)))
 		p.logger.ErrorContext(ctx, "network ingress provisioner operation failed", attrs...)
@@ -170,29 +192,29 @@ func (p *observedNetworkIngressProvisioner) record(ctx context.Context, operatio
 
 func classifyNetworkIngressError(err error, observationCode string) string {
 	switch {
+	case errors.Is(err, ErrNetworkIngressProviderForbidden):
+		return NetworkIngressErrorProviderForbidden
 	case errors.Is(err, ErrNetworkIngressProviderCredentialsRejected):
 		return NetworkIngressErrorProviderCredentialsRejected
+	case errors.Is(err, ErrNetworkIngressProviderRateLimited):
+		return NetworkIngressErrorProviderRateLimited
+	case errors.Is(err, ErrNetworkIngressProviderAPIUnavailable):
+		return NetworkIngressErrorProviderAPIUnavailable
 	case errors.Is(err, ErrNetworkIngressInvalidDesiredState):
 		return NetworkIngressErrorInvalidDesiredState
 	case errors.Is(err, ErrNetworkIngressUnsupportedProvider):
 		return NetworkIngressErrorUnsupportedProvider
 	}
-	if _, ok := errors.AsType[interface {
-		error
-		k8serrors.APIStatus
-	}](err); ok {
-		return NetworkIngressErrorKubernetes
-	}
-	switch {
-	case errors.Is(err, ErrNetworkIngressDeletionPending):
+	if errors.Is(err, ErrNetworkIngressDeletionPending) {
 		return networkIngressErrorCodeDeletionPending
-	case errors.Is(err, ErrNetworkIngressReplacementPending):
-		return networkIngressErrorCodeReplacementPending
 	}
 	switch observationCode {
 	case NetworkIngressErrorInvalidDesiredState, NetworkIngressErrorUnsupportedProvider,
-		NetworkIngressErrorInvalidCredentials, NetworkIngressErrorKubernetes,
-		NetworkIngressErrorProviderCredentialsRejected:
+		NetworkIngressErrorInvalidCredentials,
+		NetworkIngressErrorProviderCredentialsRejected, NetworkIngressErrorProviderForbidden,
+		NetworkIngressErrorProviderRateLimited, NetworkIngressErrorProviderAPIUnavailable,
+		NetworkIngressErrorProviderServiceNotApproved, NetworkIngressErrorProviderCertificateUnavailable,
+		NetworkIngressErrorEncryptionKeyUnavailable:
 		return observationCode
 	default:
 		return networkIngressErrorCodeInternal
@@ -229,12 +251,15 @@ func clampNetworkIngressErrorCode(value string) string {
 	case networkIngressErrorCodeNone,
 		networkIngressErrorCodeInternal,
 		networkIngressErrorCodeDeletionPending,
-		networkIngressErrorCodeReplacementPending,
 		NetworkIngressErrorProviderCredentialsRejected,
 		NetworkIngressErrorInvalidDesiredState,
 		NetworkIngressErrorUnsupportedProvider,
 		NetworkIngressErrorInvalidCredentials,
-		NetworkIngressErrorKubernetes:
+		NetworkIngressErrorProviderForbidden,
+		NetworkIngressErrorProviderRateLimited,
+		NetworkIngressErrorProviderAPIUnavailable,
+		NetworkIngressErrorProviderServiceNotApproved, NetworkIngressErrorProviderCertificateUnavailable,
+		NetworkIngressErrorEncryptionKeyUnavailable:
 		return value
 	default:
 		return networkIngressErrorCodeInternal

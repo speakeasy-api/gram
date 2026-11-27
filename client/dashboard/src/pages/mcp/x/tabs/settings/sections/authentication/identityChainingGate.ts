@@ -31,7 +31,6 @@ export function identityChainingProviders(
 }
 
 type ChainingRollouts = {
-  externalRollout: boolean;
   /** Speakeasy vouches only where the sign-in has no identity provider. */
   speakeasyRollout: boolean;
   speakeasyIssuer: InternalSessionIssuer | undefined;
@@ -43,7 +42,6 @@ type ChainingRollouts = {
 export function chainingVouchers(
   issuer: UserSessionIssuer,
   {
-    externalRollout,
     speakeasyRollout,
     speakeasyIssuer,
     speakeasyUnknown = false,
@@ -53,7 +51,7 @@ export function chainingVouchers(
   const federated =
     !!issuer.trustedRemoteSessionIssuerId &&
     !!issuer.trustedRemoteSessionClientId;
-  const external = externalRollout && federated;
+  const external = federated;
   const speakeasy =
     speakeasyRollout &&
     !federated &&

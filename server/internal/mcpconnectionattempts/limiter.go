@@ -50,6 +50,9 @@ type onceKey struct {
 	memberID       string
 	method         string
 	fold           string
+
+	// remoteSessionClientID keeps two service connections' repeats apart.
+	remoteSessionClientID string
 }
 
 // onceEntry is one key's limit and the rows it has held back.
@@ -112,13 +115,13 @@ func onceKeyOf(row Row) onceKey {
 	if what == "" {
 		what = row.StepResult
 	}
-	return onceKey{organizationID: row.OrganizationID, serverID: row.ServerID, step: row.Step, what: what, subject: subject, providerHost: row.ProviderHost, memberID: row.MemberID, method: row.foldMethod, fold: row.foldSubjects}
+	return onceKey{organizationID: row.OrganizationID, serverID: row.ServerID, step: row.Step, what: what, subject: subject, providerHost: row.ProviderHost, memberID: row.MemberID, method: row.foldMethod, fold: row.foldSubjects, remoteSessionClientID: row.RemoteSessionClientID}
 }
 
 func (l *onceLimiter) entry(key onceKey) *onceEntry {
 	entry, ok := l.keys.Get(key)
 	if !ok {
-		entry = &onceEntry{limiter: rate.NewLimiter(rate.Every(onceKeyInterval), onceKeyBurst), pending: 0, template: Row{}, foldID: uuid.Nil} //nolint:exhaustruct // the zero row until one is held back
+		entry = &onceEntry{limiter: rate.NewLimiter(rate.Every(onceKeyInterval), onceKeyBurst), pending: 0, template: Row{}, foldID: uuid.Nil} //nolint:exhaustruct_v5 // the zero row until one is held back
 		l.keys.Add(key, entry)
 	}
 	return entry
@@ -171,7 +174,7 @@ func (l *onceLimiter) take(row Row, now time.Time) onceDecision {
 	repeats, foldID := entry.pending, entry.foldID
 	entry.pending = 0
 	entry.foldID = uuid.Nil
-	entry.template = Row{} //nolint:exhaustruct // drops the held-back row
+	entry.template = Row{} //nolint:exhaustruct_v5 // drops the held-back row
 	delete(l.withPending, key)
 	return onceDecision{allowed: true, repeats: repeats, lost: l.takeLost(), foldID: foldID}
 }
@@ -220,7 +223,7 @@ func (l *onceLimiter) pendingRows(now time.Time, last bool) []Row {
 		row.AttemptID = entry.foldID
 		entry.pending = 0
 		entry.foldID = uuid.Nil
-		entry.template = Row{} //nolint:exhaustruct // drops the held-back row
+		entry.template = Row{} //nolint:exhaustruct_v5 // drops the held-back row
 		delete(l.withPending, key)
 		rows = append(rows, row)
 	}

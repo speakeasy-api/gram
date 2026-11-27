@@ -19,6 +19,7 @@ import (
 
 	issuersgen "github.com/speakeasy-api/gram/server/gen/user_session_issuers"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -32,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets/clientsecretstest"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -137,7 +139,7 @@ func newTestServiceWithHosts(t *testing.T, hosts authserver.Hosts, revoker users
 	codeModeEnabled := &atomic.Bool{}
 	codeModeSelection := func(context.Context, string) bool { return codeModeEnabled.Load() }
 	svc := usersessions.NewService(
-		logger,
+		aivendorstest.NewStore(), logger,
 		tracerProvider,
 		testenv.NewMeterProvider(t),
 		conn,
@@ -147,7 +149,7 @@ func newTestServiceWithHosts(t *testing.T, hosts authserver.Hosts, revoker users
 		audit.NewLogger(),
 		guardianPolicy,
 		nil,
-		testenv.NewEncryptionClient(t),
+		testenv.NewEncryptionClient(t), clientsecretstest.New(t, conn, testenv.NewEncryptionClient(t)), nil,
 		usersessions.NewSigner("test-jwt-secret"),
 		testServerURL,
 		hosts,

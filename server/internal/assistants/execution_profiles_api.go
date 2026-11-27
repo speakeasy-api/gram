@@ -23,11 +23,11 @@ func (s *Service) ListExecutionProfiles(ctx context.Context, payload *gen.ListEx
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	assistantID, err := uuid.Parse(payload.AssistantID)
+	assistantID, err := parseAssistantID(payload.AssistantID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid assistant id").LogWarn(ctx, s.logger)
 	}
-	if err := s.authz.Require(ctx, authz.AssistantCheck(authz.ScopeAssistantRead, assistantID.String(), authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.Assistant(authz.AssistantIDOf(assistantID), authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 	record, err := s.core.GetAssistant(ctx, *authCtx.ProjectID, assistantID)
@@ -64,7 +64,7 @@ func (s *Service) SetExecutionProfileChoice(ctx context.Context, payload *gen.Se
 	if authCtx.UserID == "" {
 		return nil, oops.E(oops.CodeUnauthorized, nil, "changing an assistant's credentials requires a user identity")
 	}
-	assistantID, err := uuid.Parse(payload.AssistantID)
+	assistantID, err := parseAssistantID(payload.AssistantID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid assistant id").LogWarn(ctx, s.logger)
 	}
@@ -93,7 +93,7 @@ func (s *Service) SetExecutionProfileChoice(ctx context.Context, payload *gen.Se
 	if modes != 1 {
 		return nil, oops.E(oops.CodeBadRequest, nil, "name exactly one of auth_client_id, no_auth or automatic").LogWarn(ctx, s.logger)
 	}
-	if err := s.authz.Require(ctx, authz.AssistantCheck(authz.ScopeAssistantWrite, assistantID.String(), authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.Assistant(authz.AssistantIDOf(assistantID), authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 	record, err := s.core.GetAssistant(ctx, *authCtx.ProjectID, assistantID)

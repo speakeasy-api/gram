@@ -1,4 +1,4 @@
-//nolint:exhaustruct // Selected-use optional persistence values use documented zero values.
+//nolint:exhaustruct_v5 // Selected-use optional persistence values use documented zero values.
 package platformmcp
 
 import (

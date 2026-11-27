@@ -54,7 +54,7 @@ export type RestoreOktaServerSuggestionMutationError =
  * restore oktaServerSuggestions
  *
  * @remarks
- * Restore a dismissed suggestion currently made to the organization. Requires org:admin and the okta-connections rollout.
+ * Restore a dismissed suggestion currently made to the organization. Requires org:admin.
  */
 export function useRestoreOktaServerSuggestionMutation(
   options?: MutationHookOptions<

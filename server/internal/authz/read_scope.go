@@ -54,7 +54,7 @@ func (e *Engine) ResolveReadScope(ctx context.Context, scope Scope, projectID st
 	if !ok || authCtx == nil {
 		return ReadScope{}, oops.C(oops.CodeUnauthorized)
 	}
-	check := Check{Scope: scope, ResourceKind: "", ResourceID: projectID, Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: ""}
+	check := Check{Scope: scope, ResourceKind: "", ResourceID: projectID, Dimensions: nil, exact: false, representedUser: "", probe: false, group: nil, operation: operationDefault}
 	_, isAssistantCall := contextvalues.GetAssistantPrincipal(ctx)
 	humanMember := authCtx.UserID != "" && authCtx.ExternalUserID == "" && authCtx.APIKeyID == "" && !isAssistantCall
 	if !allowsOwnFallback(scope) || !humanMember {
@@ -63,13 +63,13 @@ func (e *Engine) ResolveReadScope(ctx context.Context, scope Scope, projectID st
 		}
 		return ReadScope{Kind: ReadScopeUnrestricted, UserID: "", UserEmail: "", AgentIDs: nil}, nil
 	}
-	// Evaluate, not Require: a member without the grant is expected, not a
+	// Decide, not Require: a member without the grant is expected, not a
 	// denial to record. It also keeps project-wide reads where RBAC is off.
-	allowed, err := e.Evaluate(ctx, check)
+	allowed, err := e.Decide(WithoutChallenges(ctx), check)
 	if err != nil {
 		return ReadScope{}, oops.E(oops.CodeUnexpected, err, "evaluate read scope")
 	}
-	if allowed {
+	if allowed.AllAllowed {
 		return ReadScope{Kind: ReadScopeUnrestricted, UserID: "", UserEmail: "", AgentIDs: nil}, nil
 	}
 	if e.db == nil {

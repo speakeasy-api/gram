@@ -40,29 +40,93 @@ export const DISPOSITION_COPY: Record<
     badge: "Open World Tools",
     description: "Reach systems outside the server",
   },
+  unannotated: {
+    label: "Unannotated",
+    badge: "Unannotated Tools",
+    description: "Declare none of the annotations above",
+  },
 };
 
 /** Which tools of a server (or of every server) a role can call. */
 export type ToolLimit =
   | { kind: "all" }
   | { kind: "tools"; tools: string[] }
-  | { kind: "annotations"; dispositions: Disposition[] };
+  | {
+      kind: "annotations";
+      dispositions: Disposition[];
+      tools?: string[];
+    };
 
 export type ToolLimitKind = ToolLimit["kind"];
 
+interface ToolHints {
+  readOnlyHint?: boolean | null | undefined;
+  destructiveHint?: boolean | null | undefined;
+  idempotentHint?: boolean | null | undefined;
+  openWorldHint?: boolean | null | undefined;
+}
+
 /**
- * The one disposition the runtime assigns a tool: the first of its hints set
- * to true, in the backend's priority order (server/internal/conv/tools.go).
+ * The one disposition the server assigns a tool (authz.DispositionFromHints):
+ * the first of its hints set to true, except that a tool claiming to be both
+ * read-only and destructive counts as destructive, and a tool with no hint set
+ * is unannotated. disposition-cases.gen.json holds the server's answers, and
+ * the tests check this function against them.
  */
-export function toolDisposition(
-  tool: ServerTool,
-): (typeof DISPOSITIONS)[number] | null {
+export function toolDisposition(tool: {
+  annotations?: ToolHints | null | undefined;
+}): Disposition {
   const hints = tool.annotations;
+  if (hints?.readOnlyHint && hints.destructiveHint) return "destructive";
   if (hints?.readOnlyHint) return "read_only";
   if (hints?.destructiveHint) return "destructive";
   if (hints?.idempotentHint) return "idempotent";
   if (hints?.openWorldHint) return "open_world";
-  return null;
+  return "unannotated";
+}
+
+export function toolLimitReaches(limit: ToolLimit, tool: ServerTool): boolean {
+  switch (limit.kind) {
+    case "all":
+      return true;
+    case "tools":
+      return limit.tools.includes(tool.name);
+    case "annotations":
+      return (
+        limit.dispositions.includes(toolDisposition(tool)) ||
+        (limit.tools ?? []).includes(tool.name)
+      );
+  }
+}
+
+/**
+ * Kinds are kept when a tool is ticked, so tools of that kind added later stay
+ * covered: ticking update_task on read-only tools names it beside them.
+ * Unticking a tool a kind covers turns the rule into a tool list, because a
+ * kind cannot leave one tool out.
+ */
+export function limitAfterToggle(
+  limit: ToolLimit,
+  tools: ServerTool[],
+  name: string,
+  next: string[],
+): ToolLimit {
+  if (limit.kind !== "annotations") {
+    if (next.length === tools.length) return { kind: "all" };
+    return { kind: "tools", tools: next };
+  }
+  const named = limit.tools ?? [];
+  const tool = tools.find((candidate) => candidate.name === name);
+  const kindCovers =
+    tool !== undefined && limit.dispositions.includes(toolDisposition(tool));
+  if (next.includes(name)) {
+    if (kindCovers || named.includes(name)) return limit;
+    return { ...limit, tools: [...named, name] };
+  }
+  if (!kindCovers) {
+    return { ...limit, tools: named.filter((other) => other !== name) };
+  }
+  return { kind: "tools", tools: next };
 }
 
 /**
@@ -84,8 +148,7 @@ export function convertToolLimit(
         .filter((tool) => {
           if (limit.kind === "all") return true;
           if (limit.kind !== "annotations") return false;
-          const disposition = toolDisposition(tool);
-          return !!disposition && limit.dispositions.includes(disposition);
+          return toolLimitReaches(limit, tool);
         })
         .map((tool) => tool.name);
       return { kind: "tools", tools: names };

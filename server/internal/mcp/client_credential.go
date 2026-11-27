@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -141,6 +142,13 @@ func clientCredentialRoutingError(w http.ResponseWriter, err error) error {
 	return clientCredentialMisconfiguredError(err)
 }
 
+// memberAddressOutage is a member stopped by its sign-in provider's address.
+func memberAddressOutage(message string, session error, address guardian.AddressFailure) memberUnavailableError {
+	outage := newMemberUnavailableError(message, session)
+	outage.address = address
+	return outage
+}
+
 // metaMemberClientCredentialError is the member-scoped answer for a gateway
 // member whose credential could not be obtained. An outage is a discovery
 // failure that is not retryable: a request resolves its token map once, so an
@@ -154,6 +162,9 @@ func metaMemberClientCredentialError(member metaMember, err error) error {
 	if errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) {
 		if _, session := errors.AsType[*remotesessions.SessionOutageError](err); session {
 			return linkedMemberOutage(member, err, "")
+		}
+		if address := remotesessions.OutageAddress(err); address != guardian.AddressFine {
+			return memberAddressOutage(address.EndUserMessage(fmt.Sprintf("server %q", member.slug), guardian.SignInAddress), nil, address)
 		}
 		if remotesessions.TokenEndpointCausedOutage(err) {
 			return newMemberUnavailableError(fmt.Sprintf("server %q can't get its credential because its provider isn't available right now. Retry shortly. If it keeps happening, ask your administrator", member.slug), nil)
@@ -214,6 +225,9 @@ func outageWaitWords(wait time.Duration) string {
 
 // linkedMemberOutage offers reconnecting only when the connect page has a Reconnect button for it.
 func linkedMemberOutage(member metaMember, err error, connectURL string) error {
+	if address := remotesessions.OutageAddress(err); address != guardian.AddressFine {
+		return memberAddressOutage(address.EndUserMessage(fmt.Sprintf("server %q", member.slug), guardian.SignInAddress), err, address)
+	}
 	retry := "Retry " + outageWaitWords(remotesessions.RetryAfter(err)) + "."
 	switch remotesessions.OutageKindOf(err) {
 	case remotesessions.RefreshOutageTunnel:
@@ -229,8 +243,12 @@ func linkedMemberOutage(member metaMember, err error, connectURL string) error {
 	return newMemberUnavailableError(fmt.Sprintf("server %q can't renew its sign-in right now. %s If it keeps happening, ask your administrator to contact Speakeasy support", member.slug, retry), err)
 }
 
-// withMemberConnectLink adds the member's connect page to a connection outage.
+// withMemberConnectLink adds the member's connect page to a missing choice or
+// a connection outage.
 func withMemberConnectLink(err error, member metaMember, connectURL string) error {
+	if _, ok := errors.AsType[memberChoiceGapError](err); ok && connectURL != "" {
+		return memberCredentialError{&metaMemberError{message: fmt.Sprintf("server %q has no connection chosen for this session. Ask the user to open %s to connect it. If it is already connected, the app needs to sign in to this gateway again to use it", member.slug, connectURL)}}
+	}
 	if unreadable, ok := errors.AsType[memberSignInUnreadableError](err); ok && connectURL != "" {
 		return newMemberSignInUnreadableError(member, reconnectAskUser(connectURL), unreadable.cause)
 	}
@@ -239,6 +257,12 @@ func withMemberConnectLink(err error, member metaMember, connectURL string) erro
 	}
 	return err
 }
+
+// memberChoiceGapError is a member the credential records no choice for, such
+// as one left out of a session issued before it was connected.
+type memberChoiceGapError struct{ memberCredentialError }
+
+func (e memberChoiceGapError) Unwrap() error { return e.memberCredentialError }
 
 // subjectConnectedClients returns the clients that do not hold their upstream
 // credential for themselves, leaving clients untouched. The consent and

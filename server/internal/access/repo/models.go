@@ -9,6 +9,95 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+// Requests from members for access they were denied, decided by an organization admin. An approval creates a temporary grant.
+type AccessRequest struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// The Speakeasy user who asked for access.
+	// @access: confidential
+	RequesterUserID string
+	// The scope asked for, e.g. "project:read".
+	// @access: confidential
+	Scope string
+	// Where the scope applies, in the shape of principal_grants.selectors.
+	// @access: opaque-restricted
+	Selector []byte
+	// Name of the resource the request is for, as it was when requested.
+	// @access: opaque-confidential
+	ResourceName pgtype.Text
+	// Free-form note from the requester to the admins.
+	// @access: opaque-restricted
+	Message pgtype.Text
+	// pending, approved, denied, expired or withdrawn.
+	// @access: confidential
+	Status string
+	// The admin who approved or denied the request.
+	// @access: confidential
+	DecidedByUserID pgtype.Text
+	// Where the decision came from: dashboard or slack.
+	// @access: confidential
+	DecidedVia pgtype.Text
+	// @access: confidential
+	DecidedAt pgtype.Timestamptz
+	// The principal_grants row an approval created. Soft reference: the grant may be revoked later.
+	// @access: confidential
+	TemporaryGrantID uuid.NullUUID
+	// IDs of the denied challenges in the ClickHouse authz_challenges table that this request covers.
+	// @access: opaque-confidential
+	ChallengeIds []string
+	// How long the requester asked to have the access, in seconds. A suggestion; the approver picks the window.
+	// @access: confidential
+	RequestedDurationSeconds pgtype.Int4
+	// When the requester asked to have the access until. A suggestion; the approver picks the window.
+	// @access: confidential
+	RequestedUntil pgtype.Timestamptz
+	// When a pending request lapses.
+	// @access: confidential
+	ExpiresAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
+// Notifications sent for an access request, such as one Slack DM per admin.
+type AccessRequestMessage struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	AccessRequestID uuid.UUID
+	// @access: confidential
+	Provider string
+	// @access: confidential
+	Kind string
+	// @access: confidential
+	RecipientUserID string
+	// @access: confidential
+	SlackTeamID pgtype.Text
+	// @access: confidential-pii
+	SlackUserID pgtype.Text
+	// @access: confidential
+	SlackChannelID pgtype.Text
+	// @access: confidential
+	SlackMessageTs pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
 // Tracks admin resolutions of authz challenge denials. challenge_id references authz_challenges.id in ClickHouse (soft cross-DB reference).
 type AuthzChallengeResolution struct {
 	// @access: confidential
@@ -27,12 +116,15 @@ type AuthzChallengeResolution struct {
 	ResourceKind string
 	// @access: opaque-confidential
 	ResourceID string
-	// How the challenge was resolved: role_assigned, dismissed.
+	// How the challenge was resolved: role_assigned, temporary_grant, dismissed.
 	// @access: confidential
 	ResolutionType string
 	// When resolution_type=role_assigned, the role slug that was assigned to the principal.
 	// @access: confidential
 	RoleSlug pgtype.Text
+	// When resolution_type=temporary_grant, the principal_grants row that was granted with an expiry. Soft reference: the grant row may be revoked (deleted) later.
+	// @access: confidential
+	TemporaryGrantID uuid.NullUUID
 	// URN of the admin who resolved the challenge.
 	// @access: confidential
 	ResolvedBy string

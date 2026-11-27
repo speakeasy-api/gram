@@ -5,6 +5,7 @@ import {
   invalidateAllOrganizationGateway,
   useOrganizationGateway,
 } from "@gram/client/react-query/organizationGateway.js";
+import { invalidateAllProjectGateway } from "@gram/client/react-query/projectGateway.js";
 import {
   invalidateAllProductFeatures,
   useProductFeatures,
@@ -27,22 +28,28 @@ export type OrganizationGatewaySetting = {
 
 /**
  * The Organization Gateway's on/off state and the switch that changes it. The stored
- * product feature turns the gateway off, so "on" is its inverse. The gateway
- * detail page uses this state.
+ * product feature turns the gateway off, so "on" is its inverse. It also
+ * turns every Project Gateway on or off. Both gateway pages use this state;
+ * `enabled` is false for a reader without organization access, who sees a
+ * Project Gateway but not the setting.
  */
 export function useOrganizationGatewaySetting({
   organizationId,
   isCurrentOrganization,
+  enabled = true,
 }: {
   organizationId: string;
   isCurrentOrganization: () => boolean;
+  enabled?: boolean;
 }): OrganizationGatewaySetting {
   const queryClient = useQueryClient();
   const features = useProductFeatures({ organizationId }, undefined, {
     throwOnError: false,
+    enabled,
   });
   const gateway = useOrganizationGateway(undefined, undefined, {
     throwOnError: false,
+    enabled,
   });
   const mutation = useFeaturesSetMutation({
     onSuccess: async (_, variables) => {
@@ -50,17 +57,18 @@ export function useOrganizationGatewaySetting({
       await Promise.all([
         invalidateAllProductFeatures(queryClient),
         invalidateAllOrganizationGateway(queryClient),
+        invalidateAllProjectGateway(queryClient),
       ]);
       if (!isCurrentOrganization()) return;
       toast.success(
         variables.request.setProductFeatureRequestBody.enabled
-          ? "Organization Gateway turned off"
-          : "Organization Gateway turned on",
+          ? "Gateways turned off"
+          : "Gateways turned on",
       );
     },
     onError: (error) => {
       if (!isCurrentOrganization()) return;
-      handleAPIError(error, "Failed to update the Organization Gateway");
+      handleAPIError(error, "Failed to update the gateways");
     },
   });
 

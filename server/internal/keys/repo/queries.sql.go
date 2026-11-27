@@ -728,6 +728,84 @@ func (q *Queries) ListAPIKeysByOrganization(ctx context.Context, organizationID 
 	return items, nil
 }
 
+const listAPIKeysByOrganizationPage = `-- name: ListAPIKeysByOrganizationPage :many
+SELECT api_keys.id, api_keys.organization_id, api_keys.project_id, api_keys.created_by_user_id, api_keys.name, api_keys.key_prefix, api_keys.key_hash, api_keys.scopes, api_keys.subject_urn, api_keys.delegated_grants, api_keys.delegated_grants_version, api_keys.expires_at, api_keys.created_at, api_keys.updated_at, api_keys.deleted_at, api_keys.deleted, api_keys.last_accessed_at
+FROM api_keys
+WHERE api_keys.organization_id = $1
+  AND api_keys.deleted IS FALSE
+  AND api_keys.subject_urn IS NULL
+  AND (api_keys.created_at, api_keys.id) < ($2::timestamptz, $3::uuid)
+  AND ($4::text IS NULL OR api_keys.name ILIKE $4::text ESCAPE '\')
+  AND NOT EXISTS (
+    SELECT 1
+    FROM litellm_instances li
+    WHERE li.organization_id = api_keys.organization_id
+      AND li.project_id = api_keys.project_id
+      AND li.api_key_id = api_keys.id
+      AND li.deleted IS FALSE
+  )
+ORDER BY api_keys.created_at DESC, api_keys.id DESC
+LIMIT $5::int
+`
+
+type ListAPIKeysByOrganizationPageParams struct {
+	OrganizationID  string
+	CursorCreatedAt pgtype.Timestamptz
+	CursorID        uuid.UUID
+	NamePattern     pgtype.Text
+	PageLimit       pgtype.Int4
+}
+
+// The keys.list page read: the same rows as ListAPIKeysByOrganization (and,
+// like it, deliberately not joined to users), walked newest first by keyset.
+// The page starts after (cursor_created_at, cursor_id). The first page passes
+// 'infinity' and the largest UUID, so the comparison is always present and
+// api_keys_organization_id_created_at_id_idx serves every page. A NULL
+// page_limit means LIMIT ALL; a NULL name_pattern matches every name.
+func (q *Queries) ListAPIKeysByOrganizationPage(ctx context.Context, arg ListAPIKeysByOrganizationPageParams) ([]ApiKey, error) {
+	rows, err := q.db.Query(ctx, listAPIKeysByOrganizationPage,
+		arg.OrganizationID,
+		arg.CursorCreatedAt,
+		arg.CursorID,
+		arg.NamePattern,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ApiKey
+	for rows.Next() {
+		var i ApiKey
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.CreatedByUserID,
+			&i.Name,
+			&i.KeyPrefix,
+			&i.KeyHash,
+			&i.Scopes,
+			&i.SubjectUrn,
+			&i.DelegatedGrants,
+			&i.DelegatedGrantsVersion,
+			&i.ExpiresAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+			&i.LastAccessedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAgentAPIKeys = `-- name: ListAgentAPIKeys :many
 SELECT id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, subject_urn, delegated_grants, delegated_grants_version, expires_at, created_at, updated_at, deleted_at, deleted, last_accessed_at
 FROM api_keys
@@ -958,6 +1036,97 @@ func (q *Queries) RevokePluginHooksAPIKeysByProject(ctx context.Context, arg Rev
 			&i.KeyPrefix,
 			&i.Scopes,
 			&i.ExpiresAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const revokeStalePluginAPIKeys = `-- name: RevokeStalePluginAPIKeys :many
+WITH plugin_keys AS (
+  SELECT id, project_id, name, created_at, last_accessed_at, deleted
+  FROM api_keys
+  WHERE name ~ '^plugins-(mcp|hooks|hooks-download)-[0-9]{8}-[0-9]{6}-[0-9a-f]{6}$'
+    AND right(key_prefix, 5) = left(substring(name from '[0-9a-f]{6}$'), 5)
+),
+last_publish AS (
+  SELECT project_id, max(created_at) AS published_at
+  FROM plugin_keys
+  WHERE project_id IS NOT NULL
+    AND name ~ '^plugins-(mcp|hooks)-[0-9]{8}-'
+  GROUP BY project_id
+),
+stale AS (
+  SELECT k.id
+  FROM plugin_keys k
+  LEFT JOIN last_publish lp ON lp.project_id = k.project_id
+  WHERE k.deleted IS FALSE
+    AND k.created_at < clock_timestamp() - ($1::int * interval '1 day')
+    AND (
+      lp.published_at IS NULL
+      OR k.created_at < lp.published_at - ($1::int * interval '1 day')
+      OR k.created_at > lp.published_at
+    )
+    AND (k.last_accessed_at IS NULL OR k.last_accessed_at < clock_timestamp() - ($1::int * interval '1 day'))
+  ORDER BY k.created_at
+  LIMIT $2
+)
+UPDATE api_keys
+SET deleted_at = clock_timestamp()
+  , updated_at = clock_timestamp()
+WHERE id IN (SELECT id FROM stale)
+  AND deleted IS FALSE
+  -- Rechecked here so a use recorded while this statement waited on the row
+  -- still spares the key.
+  AND (last_accessed_at IS NULL OR last_accessed_at < clock_timestamp() - ($1::int * interval '1 day'))
+RETURNING id, organization_id, project_id, name, scopes
+`
+
+type RevokeStalePluginAPIKeysParams struct {
+	RetentionDays int32
+	BatchSize     int32
+}
+
+type RevokeStalePluginAPIKeysRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+	Name           string
+	Scopes         []string
+}
+
+// Revokes plugin-minted keys nobody needs any more: plugins-hooks-* and
+// plugins-mcp-* (publish) and plugins-hooks-download-* (ZIP download). Claude
+// web keys are left alone because each member already keeps only one. Provenance
+// is proven the same way as the rotation queries above. A key is kept while any
+// of these holds:
+//
+//   - it was created within the retention window;
+//   - it was created within the retention window up to and including the
+//     project's latest publish, so the current plugin generation keeps working
+//     however long ago it shipped. Revoked publish keys still count as
+//     publishes; a download minted after the latest publish gets no extra time;
+//   - it was used within the retention window.
+func (q *Queries) RevokeStalePluginAPIKeys(ctx context.Context, arg RevokeStalePluginAPIKeysParams) ([]RevokeStalePluginAPIKeysRow, error) {
+	rows, err := q.db.Query(ctx, revokeStalePluginAPIKeys, arg.RetentionDays, arg.BatchSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RevokeStalePluginAPIKeysRow
+	for rows.Next() {
+		var i RevokeStalePluginAPIKeysRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.Name,
+			&i.Scopes,
 		); err != nil {
 			return nil, err
 		}

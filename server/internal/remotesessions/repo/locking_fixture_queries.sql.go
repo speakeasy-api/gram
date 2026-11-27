@@ -68,25 +68,6 @@ func (q *Queries) LockingFixtureCountEnabledOAuthChoices(ctx context.Context, ar
 	return count, err
 }
 
-const lockingFixtureCountExternalBindings = `-- name: LockingFixtureCountExternalBindings :one
-SELECT count(*) FROM remote_session_client_user_session_issuers AS binding
-                  JOIN remote_session_clients AS client ON client.id=binding.remote_session_client_id
-                  WHERE client.project_id=$1::uuid AND client.client_id=$2::text AND binding.user_session_issuer_id=$3::uuid
-`
-
-type LockingFixtureCountExternalBindingsParams struct {
-	ProjectID    uuid.UUID
-	ExternalID   string
-	UserIssuerID uuid.UUID
-}
-
-func (q *Queries) LockingFixtureCountExternalBindings(ctx context.Context, arg LockingFixtureCountExternalBindingsParams) (int64, error) {
-	row := q.db.QueryRow(ctx, lockingFixtureCountExternalBindings, arg.ProjectID, arg.ExternalID, arg.UserIssuerID)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
 const lockingFixtureCountHeaderCopies = `-- name: LockingFixtureCountHeaderCopies :one
 SELECT count(*) FROM mcp_auth_client_headers WHERE organization_id=$1::text AND auth_client_id=ANY($2::uuid[]) AND name='X-Mixed-Lock' AND NOT deleted
 `
@@ -98,24 +79,6 @@ type LockingFixtureCountHeaderCopiesParams struct {
 
 func (q *Queries) LockingFixtureCountHeaderCopies(ctx context.Context, arg LockingFixtureCountHeaderCopiesParams) (int64, error) {
 	row := q.db.QueryRow(ctx, lockingFixtureCountHeaderCopies, arg.OrganizationID, arg.AuthClientIds)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
-const lockingFixtureCountIssuerBindings = `-- name: LockingFixtureCountIssuerBindings :one
-SELECT count(*) FROM remote_session_client_user_session_issuers AS binding
-                 JOIN remote_session_clients AS client ON client.id=binding.remote_session_client_id
-                 WHERE client.project_id=$1::uuid AND binding.user_session_issuer_id=$2::uuid
-`
-
-type LockingFixtureCountIssuerBindingsParams struct {
-	ProjectID    uuid.UUID
-	UserIssuerID uuid.UUID
-}
-
-func (q *Queries) LockingFixtureCountIssuerBindings(ctx context.Context, arg LockingFixtureCountIssuerBindingsParams) (int64, error) {
-	row := q.db.QueryRow(ctx, lockingFixtureCountIssuerBindings, arg.ProjectID, arg.UserIssuerID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err

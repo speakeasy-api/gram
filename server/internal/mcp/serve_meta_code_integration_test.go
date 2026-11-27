@@ -20,6 +20,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -396,6 +398,22 @@ func TestCodeModeAvailableFollowsRuntime(t *testing.T) {
 	require.NotContains(t, w.Body.String(), `"isError":true`)
 }
 
+// seedCodeReconnectOffer enables browser reconnect through one exact server
+// and auth client, without granting access to other gateway members.
+func seedCodeReconnectOffer(t *testing.T, ctx context.Context, ti *testInstance, orgID, userID string, projectID, serverID, registrationID uuid.UUID) uuid.UUID {
+	t.Helper()
+	fixtures := authclientfixtures.New(ti.conn)
+	authClientID, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: orgID, ProjectID: conv.ToNullUUID(projectID), ClientType: authz.AuthClientTypeRemoteSession, Source: "admin", RemoteSessionClientID: conv.ToNullUUID(registrationID)})
+	require.NoError(t, err)
+	require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: projectID, OrganizationID: orgID, McpServerID: serverID, AuthClientID: authClientID, Source: "admin"}))
+	seedUserMCPConnectGrant(t, ctx, ti.conn, orgID, userID, serverID.String())
+	selector, err := authz.AuthClientSelector(authClientID.String(), projectID.String()).MarshalJSON()
+	require.NoError(t, err)
+	_, err = accessrepo.New(ti.conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{OrganizationID: orgID, PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeUser, userID), Scope: string(authz.ScopeMCPAuth), Selectors: selector})
+	require.NoError(t, err)
+	return authClientID
+}
+
 // Real Python, gateway dispatch and OAuth token exchange against owned fixtures.
 // The browser-facing handlers run as HTTP requests; no real account is used.
 func TestCodeModeReconnectEndToEnd(t *testing.T) {
@@ -413,17 +431,18 @@ func TestCodeModeReconnectEndToEnd(t *testing.T) {
 	upstream := newRecordingUpstream(t, "ping")
 	var exchanged atomic.Value
 	provider := newConsentExchangeAS(t, &exchanged, "reconnected-token")
-	client := createConsentRemoteClient(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "code-oauth", provider.URL, []uuid.UUID{issuer})
+	client := createConsentRemoteClient(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "code-oauth", provider.URL)
 	remoteIssuer := clientRemoteIssuerID(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, client)
 	member := createMetaMember(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "tracker", upstream.url, conv.ToNullUUID(remoteIssuer), 0)
 	selection := selectionFixture{ti: ti, projectID: *auth.ProjectID, orgID: auth.ActiveOrganizationID}
 	selection.associate(t, ctx, member.mcpServerID, client)
+	authClientID := seedCodeReconnectOffer(t, ctx, ti, auth.ActiveOrganizationID, auth.UserID, *auth.ProjectID, member.mcpServerID, client)
 	bearer := mintGatewayTestSession(t, ctx, ti, gateway.ID, issuer, slug, metamcp.DiscoveryModeCode)
 	claims, err := usersessions.NewSigner("test-jwt-secret").Validate(bearer, urn.NewUserSessionIssuer(issuer).String())
 	require.NoError(t, err)
 	sessionPolicy, err := usersessionsrepo.New(ti.conn).GetUserSessionPolicyByJTI(ctx, usersessionsrepo.GetUserSessionPolicyByJTIParams{UserSessionIssuerID: issuer, Jti: claims.ID})
 	require.NoError(t, err)
-	_, err = usersessionsrepo.New(ti.conn).RecordUpstreamClientSelections(ctx, usersessionsrepo.RecordUpstreamClientSelectionsParams{UserSessionIssuerID: issuer, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: sessionPolicy.CredentialID, Source: upstreamclients.SelectionSourceIssuance, PickedMcpServerIds: []uuid.UUID{member.mcpServerID}, PickedClientIds: []uuid.UUID{client}})
+	_, err = usersessionsrepo.New(ti.conn).RecordUpstreamClientSelections(ctx, usersessionsrepo.RecordUpstreamClientSelectionsParams{UserSessionIssuerID: issuer, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: sessionPolicy.CredentialID, Source: upstreamclients.SelectionSourceIssuance, PickedMcpServerIds: []uuid.UUID{member.mcpServerID}, PickedClientIds: []uuid.UUID{client}, PickedAuthClientIds: []uuid.UUID{authClientID}})
 	require.NoError(t, err)
 	execute := func(code string, restricted bool) codemode.ExecutionResult {
 		t.Helper()
@@ -483,6 +502,11 @@ func TestCodeModeReconnectEndToEnd(t *testing.T) {
 	authorization, err := url.Parse(sent.Header().Get("Location"))
 	require.NoError(t, err)
 	require.Equal(t, provider.URL, authorization.Scheme+"://"+authorization.Host)
+	login, err := ti.service.RemoteLoginState(ctx, authorization.Query().Get("state"))
+	require.NoError(t, err)
+	require.NotNil(t, login.TypedAuthorization)
+	require.Equal(t, authClientID, login.TypedAuthorization.AuthClientID)
+	require.Equal(t, member.mcpServerID, login.TypedAuthorization.ServerID)
 	remoteCallback := httptest.NewRequest(http.MethodGet, "/mcp/remote_login_callback?state="+url.QueryEscape(authorization.Query().Get("state"))+"&code=synthetic-approved-code", nil).WithContext(ctx)
 	remoteCallback.AddCookie(callbackBrowser)
 	completed := httptest.NewRecorder()
@@ -516,8 +540,10 @@ func TestCodeModeReconnectUpdatesFrozenCatalog(t *testing.T) {
 		cancel            bool
 		cancelReadFailure bool
 		otherBrowser      bool
+		orgIssuer         bool
 	}{
 		{name: "all tools"},
+		{name: "organization issuer on a project gateway", orgIssuer: true},
 		{name: "another browser cannot review", otherBrowser: true},
 		{name: "commit failure preserves catalogue", commitFailure: true},
 		{name: "completion failure can retry", completionFailure: true},
@@ -548,24 +574,33 @@ func TestCodeModeReconnectUpdatesFrozenCatalog(t *testing.T) {
 			configureCodeRunner(t, ctx, ti)
 			_, issuerRow, downstream := seedPrivateToolsetWithIssuer(t, ctx, ti)
 			issuer := issuerRow.ID
+			if tc.orgIssuer {
+				issuer = createOrganizationIssuer(t, ctx, ti, auth.ActiveOrganizationID)
+				orgClient, err := usersessionsrepo.New(ti.conn).CreateUserSessionClient(ctx, usersessionsrepo.CreateUserSessionClientParams{
+					UserSessionIssuerID:     issuer,
+					ClientID:                "org-client-" + uuid.NewString()[:8],
+					ClientName:              "org client",
+					RedirectUris:            []string{"http://localhost:3000/callback"},
+					TokenEndpointAuthMethod: "none",
+				})
+				require.NoError(t, err)
+				downstream = orgClient
+			}
 			slug := "code-reconnect-" + uuid.NewString()
 			gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, issuer)
 			upstream := newRecordingUpstream(t, "ping")
 			var exchanged atomic.Value
 			provider := newConsentExchangeAS(t, &exchanged, "reconnected-token")
-			client := createConsentRemoteClient(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "code-oauth", provider.URL, []uuid.UUID{issuer})
+			client := createConsentRemoteClient(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "code-oauth", provider.URL)
 			remoteIssuer := clientRemoteIssuerID(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, client)
 			member := createMetaMember(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "tracker", upstream.url, conv.ToNullUUID(remoteIssuer), 0)
 			selection := selectionFixture{ti: ti, projectID: *auth.ProjectID, orgID: auth.ActiveOrganizationID}
 			selection.associate(t, ctx, member.mcpServerID, client)
+			authClientID := seedCodeReconnectOffer(t, ctx, ti, auth.ActiveOrganizationID, auth.UserID, *auth.ProjectID, member.mcpServerID, client)
 			var permitCallers func() []string
 			if tc.typedAuth {
 				permitCallers = ti.service.RecordAuthClientPermitCallers()
-				fixtures := authclientfixtures.New(ti.conn)
-				authClientID, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: conv.ToNullUUID(*auth.ProjectID), ClientType: "remote_session", Source: "admin", RemoteSessionClientID: conv.ToNullUUID(client)})
-				require.NoError(t, err)
-				require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: member.mcpServerID, AuthClientID: authClientID, Source: "admin"}))
-				_, err = productfeaturesrepo.New(ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: auth.ActiveOrganizationID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
+				_, err := productfeaturesrepo.New(ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: auth.ActiveOrganizationID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
 				require.NoError(t, err)
 			}
 			other := newCatalogUpstream(t, 2)
@@ -590,13 +625,21 @@ func TestCodeModeReconnectUpdatesFrozenCatalog(t *testing.T) {
 				_, err = usersessionsrepo.New(ti.conn).GetReconnectSessionPolicy(ctx, params)
 				require.Error(t, err)
 			}
-			_, err = usersessionsrepo.New(ti.conn).RecordUpstreamClientSelections(ctx, usersessionsrepo.RecordUpstreamClientSelectionsParams{UserSessionIssuerID: issuer, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: sessionPolicy.CredentialID, Source: upstreamclients.SelectionSourceIssuance, PickedMcpServerIds: []uuid.UUID{member.mcpServerID}, PickedClientIds: []uuid.UUID{client}})
-			require.NoError(t, err)
+			recordChoice := func(serverID uuid.UUID) {
+				t.Helper()
+				rows, err := usersessionsrepo.New(ti.conn).RecordIssuedAuthClientChoices(ctx, usersessionsrepo.RecordIssuedAuthClientChoicesParams{
+					UserSessionIssuerID: issuer, CredentialID: sessionPolicy.CredentialID, ScopeMcpServerIds: []uuid.UUID{serverID}, ExcludeMcpServerIds: nil,
+					PickedMcpServerIds: []uuid.UUID{serverID}, PickedClientIds: []uuid.UUID{client}, PickedAuthClientIds: []uuid.UUID{authClientID}, PickedExplicit: []bool{true}, AllowSoleOffer: false,
+				})
+				require.NoError(t, err)
+				require.EqualValues(t, 1, rows)
+			}
+			recordChoice(member.mcpServerID)
 			unrelatedGateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "unrelated-"+uuid.NewString(), issuer)
 			unrelated := createMetaMember(t, ctx, ti.conn, *auth.ProjectID, unrelatedGateway.ID, "unrelated", upstream.url, conv.ToNullUUID(remoteIssuer), 0)
 			selection.associate(t, ctx, unrelated.mcpServerID, client)
-			_, err = usersessionsrepo.New(ti.conn).RecordUpstreamClientSelections(ctx, usersessionsrepo.RecordUpstreamClientSelectionsParams{UserSessionIssuerID: issuer, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: sessionPolicy.CredentialID, Source: upstreamclients.SelectionSourceIssuance, PickedMcpServerIds: []uuid.UUID{unrelated.mcpServerID}, PickedClientIds: []uuid.UUID{client}})
-			require.NoError(t, err)
+			require.NoError(t, authclientfixtures.New(ti.conn).SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: unrelated.mcpServerID, AuthClientID: authClientID, Source: "admin"}))
+			recordChoice(unrelated.mcpServerID)
 			execute := func(code string, restricted bool) codemode.ExecutionResult {
 				t.Helper()
 				args := map[string]any{"code": code}
@@ -668,6 +711,11 @@ func TestCodeModeReconnectUpdatesFrozenCatalog(t *testing.T) {
 			authorization, err := url.Parse(sent.Header().Get("Location"))
 			require.NoError(t, err)
 			require.Equal(t, provider.URL, authorization.Scheme+"://"+authorization.Host)
+			login, err := ti.service.RemoteLoginState(ctx, authorization.Query().Get("state"))
+			require.NoError(t, err)
+			require.NotNil(t, login.TypedAuthorization)
+			require.Equal(t, authClientID, login.TypedAuthorization.AuthClientID)
+			require.Equal(t, member.mcpServerID, login.TypedAuthorization.ServerID)
 			remoteCallbackURL := "/mcp/remote_login_callback?state=" + url.QueryEscape(authorization.Query().Get("state")) + "&code=synthetic-approved-code"
 			if tc.otherBrowser {
 				// Another browser completing the upstream sign-in stores nothing.

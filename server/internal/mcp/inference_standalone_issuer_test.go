@@ -10,11 +10,13 @@ import (
 
 	"github.com/speakeasy-api/gram/dev-idp/pkg/devidptest"
 	issuersgen "github.com/speakeasy-api/gram/server/gen/user_session_issuers"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets/clientsecretstest"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -37,8 +39,8 @@ func TestWorkloadInference_Standalone(t *testing.T) {
 
 	policy, err := guardian.NewUnsafePolicy(ti.tracerProvider, []string{}, guardian.WithTLSRootCAs(issuer.RootCAs()))
 	require.NoError(t, err)
-	service := usersessions.NewService(ti.logger, ti.tracerProvider, testenv.NewMeterProvider(t), ti.conn,
-		ti.sessionManager, ti.chatSessionsManager, ti.authzEngine, ti.audit, policy, nil, ti.enc,
+	service := usersessions.NewService(aivendorstest.NewStore(), ti.logger, ti.tracerProvider, testenv.NewMeterProvider(t), ti.conn,
+		ti.sessionManager, ti.chatSessionsManager, ti.authzEngine, ti.audit, policy, nil, ti.enc, clientsecretstest.New(t, ti.conn, ti.enc), nil,
 		usersessions.NewSigner("test-jwt-secret"), ti.serverURL.String(),
 		authserver.Hosts{ServerURL: ti.serverURL.String()}, nil, nil)
 	created, err := service.CreateUserSessionIssuer(ctx, &issuersgen.CreateUserSessionIssuerPayload{

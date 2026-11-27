@@ -1,14 +1,15 @@
 package gram
 
 import (
-	"github.com/speakeasy-api/gram/server/internal/assistants"
-	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"go.opentelemetry.io/otel/trace"
 	"net/url"
 	"testing"
 
+	"github.com/speakeasy-api/gram/server/internal/assistants"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
 	"github.com/urfave/cli/v2"
+	"go.opentelemetry.io/otel/trace"
 )
 
 func TestATEPreviewEgressHostsAreExplicit(t *testing.T) {
@@ -64,7 +65,7 @@ func TestATEPreviewStartupIsExplicit(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			err := installKitLocalRuntimeFromCLI(kitCLIContext(t, tt.values), nil, nil, nil, nil, nil)
+			err := installKitLocalRuntimeFromCLI(testenv.NewLogger(t), kitCLIContext(t, tt.values), nil, nil, nil, nil, nil)
 			if tt.wantError == "" {
 				require.NoError(t, err)
 			} else {

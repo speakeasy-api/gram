@@ -8,7 +8,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
@@ -21,12 +23,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/executionprofiles"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
-	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remoterepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -45,7 +46,7 @@ func TestPrincipalCredentialsUseActingUserOrWorkloadOwnerUpstreamSessions(t *tes
 	core := newProvisioningCore(t, db)
 	assistant, err := core.CreateAssistant(ctx, "org-test", project, "user-1", "Credentials", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, true, nil, nil)
 	require.NoError(t, err)
-	_, err = toolsetsrepo.New(db).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{OrganizationID: "org-test", ProjectID: project, Name: "Business", Slug: "business", Description: pgtype.Text{}, DefaultEnvironmentSlug: pgtype.Text{}})
+	toolset, err := toolsetsrepo.New(db).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{OrganizationID: "org-test", ProjectID: project, Name: "Business", Slug: "business", Description: pgtype.Text{}, DefaultEnvironmentSlug: pgtype.Text{}})
 	require.NoError(t, err)
 	thread := seedThreadWithEvent(t, db, assistant.ID, "execution-credentials", "execution-credentials", eventStatusPending)
 	redisClient, err := assistantsInfra.NewRedisClient(t, 0)
@@ -69,7 +70,14 @@ func TestPrincipalCredentialsUseActingUserOrWorkloadOwnerUpstreamSessions(t *tes
 	require.NoError(t, err)
 	client, err := q.CreateRemoteSessionClient(ctx, remoterepo.CreateRemoteSessionClientParams{ProjectID: conv.ToNullUUID(project), OrganizationID: conv.ToPGText("org-test"), RemoteSessionIssuerID: upstream.ID, ClientID: "turn-user-client", TokenEndpointAuthMethod: conv.ToPGText("none")})
 	require.NoError(t, err)
-	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remoterepo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: client.ID, UserSessionIssuerID: issuer.ID}))
+	server, err := mcpserversrepo.New(db).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID: uuid.New(), ProjectID: project, Slug: conv.ToPGText("turn-user-upstream"),
+		UserSessionIssuerID: conv.ToNullUUID(issuer.ID), ToolsetID: conv.ToNullUUID(toolset.ID), Visibility: "private",
+	})
+	require.NoError(t, err)
+	require.NoError(t, testrepo.New(db).InsertMCPServerRemoteSessionClientFixture(ctx, testrepo.InsertMCPServerRemoteSessionClientFixtureParams{
+		ProjectID: project, OrganizationID: "org-test", McpServerID: server.ID, RemoteSessionClientID: client.ID,
+	}))
 
 	authenticate := func(source, payload string) context.Context {
 		t.Helper()
@@ -96,7 +104,7 @@ func TestPrincipalCredentialsUseActingUserOrWorkloadOwnerUpstreamSessions(t *tes
 		callers[user] = authenticate(sourceKindDashboard, `{"text":"hi","user_id":"`+user+`"}`)
 		encrypted, err := enc.Encrypt([]byte("private-" + user))
 		require.NoError(t, err)
-		_, err = q.UpsertRemoteSession(ctx, remoterepo.UpsertRemoteSessionParams{SubjectUrn: urn.NewUserSubject(user), UserSessionIssuerID: issuer.ID, RemoteSessionClientID: client.ID, AccessTokenEncrypted: encrypted, Scopes: []string{}, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), Resource: conv.ToPGText(turnUserResource)})
+		_, err = q.UpsertRemoteSessionFixture(ctx, remoterepo.UpsertRemoteSessionFixtureParams{SubjectUrn: urn.NewUserSubject(user), UserSessionIssuerID: issuer.ID, RemoteSessionClientID: client.ID, AccessTokenEncrypted: encrypted, Scopes: []string{}, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), Resource: conv.ToPGText(turnUserResource)})
 		require.NoError(t, err)
 	}
 	for _, user := range []string{"user-1", "user-2"} {
@@ -143,22 +151,34 @@ func TestPrincipalCredentialsUseActingUserOrWorkloadOwnerUpstreamSessions(t *tes
 	require.ErrorIs(t, err, remotesessions.ErrNoValidToken, "revoking the owner's session also revokes cron upstream access")
 }
 
-func TestBindExecutionProfileFailsTheTurnOnlyUnderEnforcement(t *testing.T) {
+func TestMintTurnCredentialFailsWhenProfileCannotBind(t *testing.T) {
 	t.Parallel()
 	db, err := assistantsInfra.CloneTestDatabase(t, "execution_profile_bind")
 	require.NoError(t, err)
 	ctx := t.Context()
 	project := newProvisioningProject(t, db, "execution-profile-bind")
+	seedProjectRead(t, db, "user-1", project)
 	core := newProvisioningCore(t, db)
-	// A target with no trigger cannot bind.
-	target := executionprofiles.Target{OrganizationID: "org-test", ProjectID: project, AssistantID: uuid.New(), TriggerID: uuid.Nil, Context: executionprofiles.ContextUserless}
-
-	version, err := core.bindExecutionProfile(ctx, target)
-	require.NoError(t, err, "the upstream client choice serves the turn, so it runs unbound")
-	require.False(t, version.Valid)
-
-	_, err = productfeaturesrepo.New(db).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: "org-test", FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
+	assistant, err := core.CreateAssistant(ctx, "org-test", project, "user-1", "Execution", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, true, nil, nil)
 	require.NoError(t, err)
-	_, err = core.bindExecutionProfile(ctx, target)
-	require.Error(t, err, "an unbound turn has no choice to serve any proxied server with")
+	triggerID, err := core.executionTrigger(ctx, assistant, assistantThreadEventRecord{})
+	require.NoError(t, err)
+
+	// Identity reads still succeed, but binding the profile cannot write. The
+	// organization does not have enforcement enabled, and no token manager is
+	// installed: attempting to mint an unbound credential would panic.
+	config := db.Config()
+	config.ConnConfig.RuntimeParams["default_transaction_read_only"] = "on"
+	readOnlyDB, err := pgxpool.NewWithConfig(ctx, config)
+	require.NoError(t, err)
+	t.Cleanup(readOnlyDB.Close)
+	core.db = readOnlyDB
+	token, err := core.mintTurnCredential(ctx, assistant, assistantThreadRecord{}, assistantThreadEventRecord{
+		TriggerInstanceID: uuid.NullUUID{UUID: triggerID, Valid: true},
+	}, turnIdentity{})
+	require.Empty(t, token)
+	require.ErrorContains(t, err, "bind execution selection profile")
+	var pgErr *pgconn.PgError
+	require.ErrorAs(t, err, &pgErr)
+	require.Equal(t, "25006", pgErr.Code, "profile writes are attempted in a read-only transaction")
 }

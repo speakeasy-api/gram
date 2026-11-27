@@ -735,10 +735,22 @@ WHERE deleted_at IS NULL
   );
 
 -- name: SeedSupportMethods :exec
+-- The catalog owns a method's name, vendor, plan notes and order, so those
+-- follow the file on every start; staff edit a method's facts and platform
+-- mappings, never the method itself.
 INSERT INTO support_matrix_integration_methods (slug, name, vendor, plan_notes, sort_order)
 SELECT value->>'id', value->>'name', value->>'vendor', value->>'plans', ordinality::integer
 FROM jsonb_array_elements(sqlc.arg(catalog)::jsonb->'methods') WITH ORDINALITY
-ON CONFLICT (slug) DO NOTHING;
+ON CONFLICT (slug) DO UPDATE SET
+    name = EXCLUDED.name,
+    vendor = EXCLUDED.vendor,
+    plan_notes = EXCLUDED.plan_notes,
+    sort_order = EXCLUDED.sort_order,
+    updated_at = clock_timestamp()
+WHERE support_matrix_integration_methods.name IS DISTINCT FROM EXCLUDED.name
+   OR support_matrix_integration_methods.vendor IS DISTINCT FROM EXCLUDED.vendor
+   OR support_matrix_integration_methods.plan_notes IS DISTINCT FROM EXCLUDED.plan_notes
+   OR support_matrix_integration_methods.sort_order IS DISTINCT FROM EXCLUDED.sort_order;
 
 -- name: SeedSupportCapabilities :exec
 INSERT INTO support_matrix_capabilities (slug, name, category, sort_order)
@@ -942,8 +954,7 @@ ALTER TABLE organization_features ADD CONSTRAINT test_reject_entitlements CHECK 
 -- outright: it counts as one, and any other wrapper of that toolset as two.
 -- url_slug is the slug in the /mcp/<slug> path clients call: the primary live
 -- endpoint's (custom domain first, as endpointaddr.PrimaryEndpoint ranks them;
--- a domain root has no such path), else the server's own slug; the caller falls
--- back to the toolset's legacy alias when no other wrapper shares that toolset.
+-- a domain root has no such path), else the server's own slug.
 SELECT
     m.id,
     COALESCE(m.name, t.name, m.slug, m.id::text)::text AS name,
@@ -1031,9 +1042,9 @@ FROM user_sessions
 WHERE user_session_issuer_id = @user_session_issuer_id;
 
 -- name: AdminListIssuerRemoteSessionClients :many
--- Live remote session clients attached to the issuer, with their upstream
--- issuer. Only the columns the health report exposes: no secrets, JWKS bodies
--- or error text.
+-- Live registrations with consent provenance under this downstream issuer,
+-- or used directly for its trusted login. Offered clients are reported by the
+-- separate upstream authentication section. Never expose secrets or errors.
 SELECT
     c.id,
     (c.client_id_metadata_uri IS NOT NULL)::boolean AS is_cimd,
@@ -1059,17 +1070,24 @@ SELECT
     r.metadata_fetched_at AS issuer_metadata_fetched_at,
     r.metadata_last_error_at AS issuer_metadata_last_error_at,
     r.jwks_last_error_at AS issuer_jwks_last_error_at
-FROM remote_session_client_user_session_issuers a
-JOIN remote_session_clients c ON c.id = a.remote_session_client_id AND c.deleted IS FALSE
+FROM user_session_issuers AS usi
+JOIN remote_session_clients AS c ON c.deleted IS FALSE AND (
+  c.id = usi.trusted_remote_session_client_id OR EXISTS (
+    SELECT 1 FROM remote_sessions AS s
+    WHERE s.remote_session_client_id = c.id AND s.user_session_issuer_id = usi.id
+      AND s.deleted IS FALSE
+  )
+)
 JOIN remote_session_issuers r ON r.id = c.remote_session_issuer_id AND r.deleted IS FALSE
-WHERE a.user_session_issuer_id = @user_session_issuer_id
+WHERE usi.id = @user_session_issuer_id
+  AND (c.project_id = @project_id::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = @organization_id::text)))
+  AND (r.project_id = @project_id::uuid OR (r.project_id IS NULL AND (r.organization_id IS NULL OR r.organization_id = @organization_id::text)))
 ORDER BY c.created_at, c.id;
 
 -- name: AdminRemoteSessionStats :many
 -- Per client: distinct users with a live upstream session, fresh
--- authorizations beyond each session's first, and the first link. Keyed on
--- the client alone: a session is one per (subject, client), and its
--- user_session_issuer_id records only which issuer first linked it.
+-- authorizations beyond each session's first, and the first link. Scope
+-- the stats to this downstream issuer's recorded consent provenance.
 SELECT
     remote_session_client_id,
     count(DISTINCT subject_urn) FILTER (WHERE deleted IS FALSE)::bigint AS linked_subjects,
@@ -1077,18 +1095,20 @@ SELECT
     min(created_at)::timestamptz AS first_linked_at
 FROM remote_sessions
 WHERE remote_session_client_id = ANY(@remote_session_client_ids::uuid[])
+  AND user_session_issuer_id = @user_session_issuer_id
 GROUP BY remote_session_client_id;
 
 -- name: AdminRemoteSessionValidationCounts :many
 -- Live sessions per client and last validation status. Sessions never
--- validated have a NULL status and are left out. Keyed on the client alone,
--- as AdminRemoteSessionStats is.
+-- validated have a NULL status and are left out. Use the same provenance
+-- scope as AdminRemoteSessionStats.
 SELECT
     remote_session_client_id,
     validation_status::text AS validation_status,
     count(*)::bigint AS sessions
 FROM remote_sessions
 WHERE remote_session_client_id = ANY(@remote_session_client_ids::uuid[])
+  AND user_session_issuer_id = @user_session_issuer_id
   AND deleted IS FALSE
   AND validation_status IS NOT NULL
 GROUP BY remote_session_client_id, validation_status;
@@ -1204,17 +1224,6 @@ SELECT id, name, slug
 FROM organization_metadata
 WHERE id = ANY(@ids::text[]);
 
--- name: AdminBackfillMCPAuthFromConnect :execrows
--- Grants unrestricted mcp:auth to every principal holding any mcp:connect
--- grant, whatever its selectors. Temporary grants are skipped: a permanent
--- grant must not be derived from access that ends.
-INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
-SELECT DISTINCT g.organization_id, g.principal_urn, 'mcp:auth', '{"resource_kind":"mcp_auth_client","resource_id":"*"}'::jsonb
-FROM principal_grants AS g
-WHERE g.scope = 'mcp:connect'
-  AND g.expires_at IS NULL
-ON CONFLICT (organization_id, principal_urn, scope, selectors) DO NOTHING;
-
 -- name: AdminBackfillMCPConnectFromReadWrite :one
 -- Makes the connect access that mcp:read and mcp:write imply explicit, ahead
 -- of removing that implication. Every unexpired mcp:read or mcp:write grant
@@ -1295,14 +1304,13 @@ SELECT
   (SELECT count(*) FROM taken_over)::bigint AS taken_over;
 
 -- name: AdminInsertPrincipalGrantFixture :exec
--- Test fixture: writes a grant row as stored, including temporary, expired,
--- deny-effect and backdated rows no single writer produces together.
-INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors, expires_at, created_at)
+-- Test fixture: writes a grant row as stored, including temporary, expired
+-- and backdated rows no single writer produces together.
+INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors, expires_at, created_at)
 VALUES (
   @organization_id,
   @principal_urn,
   @scope,
-  sqlc.narg('effect')::text,
   @selectors,
   sqlc.narg('expires_at')::timestamptz,
   COALESCE(sqlc.narg('created_at')::timestamptz, clock_timestamp())
@@ -1416,3 +1424,165 @@ LEFT JOIN users u ON u.id = a.created_by_user_id
 WHERE a.organization_id = @organization_id
   AND a.deleted IS FALSE
 ORDER BY p.name, a.name, a.id;
+
+-- name: AdminListAssistantOrganizations :many
+SELECT o.id, o.name, o.slug, count(*)::bigint AS assistants
+FROM organization_metadata o
+JOIN projects p ON p.organization_id = o.id AND p.deleted IS FALSE
+JOIN assistants a ON a.organization_id = o.id AND a.project_id = p.id AND a.deleted IS FALSE
+GROUP BY o.id, o.name, o.slug
+ORDER BY lower(o.name), o.id;
+
+-- name: AdminListAssistantAgentNames :many
+WITH bound AS (
+ SELECT a.id AS assistant_id, a.project_id, a.name, g.id AS agent_id, g.name AS agent_name,
+ g.owner_user_id, g.owner_reassignment_required_at, g.owner_reassignment_reason,
+ CASE WHEN g.revoked_at IS NOT NULL THEN 'revoked' WHEN g.suspended_at IS NOT NULL THEN 'suspended' ELSE 'active' END::text AS lifecycle
+ FROM assistants a
+ JOIN projects p ON p.id = a.project_id AND p.organization_id = a.organization_id AND p.deleted IS FALSE
+ JOIN assistant_agent_bindings b ON b.assistant_id = a.id AND b.project_id = a.project_id AND b.organization_id = a.organization_id AND b.deleted IS FALSE
+ JOIN agents g ON g.id = b.agent_id AND g.organization_id = a.organization_id AND g.project_id = a.project_id AND g.deleted IS FALSE
+ WHERE a.organization_id = @organization_id AND a.deleted IS FALSE
+)
+SELECT bound.*, CASE
+ WHEN agent_name <> 'Assistant ' || assistant_id::text OR agent_name = name THEN 'not_needed'
+ WHEN EXISTS (SELECT 1 FROM agents other WHERE other.organization_id = @organization_id AND other.deleted IS FALSE AND other.id <> bound.agent_id AND lower(other.name) = lower(bound.name))
+ OR EXISTS (SELECT 1 FROM bound other WHERE other.agent_id <> bound.agent_id AND other.agent_name = 'Assistant ' || other.assistant_id::text AND lower(other.name) = lower(bound.name)) THEN 'conflict'
+ ELSE 'pending' END::text AS repair_state
+FROM bound ORDER BY assistant_id;
+
+-- name: AdminLockAssistantAgentNames :exec
+SELECT a.id FROM assistants a
+JOIN projects p ON p.id = a.project_id AND p.organization_id = a.organization_id AND p.deleted IS FALSE
+JOIN assistant_agent_bindings b ON b.assistant_id = a.id AND b.project_id = a.project_id AND b.organization_id = a.organization_id AND b.deleted IS FALSE
+JOIN agents g ON g.id = b.agent_id AND g.organization_id = a.organization_id AND g.project_id = a.project_id AND g.deleted IS FALSE
+WHERE a.organization_id = @organization_id AND a.deleted IS FALSE
+ORDER BY a.id FOR UPDATE OF a, p, b, g;
+
+-- name: AdminRepairAssistantAgentName :execrows
+UPDATE agents SET name = @name, updated_at = clock_timestamp()
+WHERE id = @agent_id AND organization_id = @organization_id AND project_id = @project_id
+AND deleted IS FALSE AND name = @old_name;
+
+-- name: AdminGetMCPServerSourceToolset :one
+SELECT t.slug, COALESCE(s.tool_variations_group_id, t.tool_variations_group_id, '00000000-0000-0000-0000-000000000000'::uuid)::uuid AS variations_group_id
+FROM mcp_servers s
+JOIN projects p ON p.id = s.project_id AND p.deleted IS FALSE
+JOIN organization_metadata o ON o.id = p.organization_id AND o.disabled_at IS NULL
+LEFT JOIN toolsets t ON t.id = s.toolset_id AND t.project_id = p.id
+    AND t.organization_id = o.id AND t.deleted IS FALSE
+WHERE s.id = @server_id AND s.project_id = @project_id
+    AND o.id = @organization_id AND s.deleted IS FALSE
+    AND (s.toolset_id IS NULL OR t.id IS NOT NULL);
+
+-- name: AdminListMCPServerOpenAPISources :many
+SELECT DISTINCT a.id, a.name, a.url, a.content_type
+FROM http_tool_definitions h
+JOIN deployments_openapiv3_assets d ON d.id = h.openapiv3_document_id
+JOIN assets a ON a.id = d.asset_id
+WHERE h.id = ANY(@tool_ids::uuid[]) AND h.project_id = @project_id
+    AND a.project_id = @project_id AND a.deleted IS FALSE
+    AND h.deleted IS FALSE
+ORDER BY a.name, a.id;
+
+-- name: AdminListHooksPublishState :many
+-- One row per marketplace repository: its organization and the hooks generator
+-- version it last published. Feeds the hooks release progress counts.
+SELECT
+    p.organization_id,
+    o.slug AS organization_slug,
+    COALESCE(c.published_hooks_version, '')::text AS published_hooks_version
+FROM plugin_github_connections c
+JOIN projects p ON p.id = c.project_id AND p.deleted IS FALSE
+JOIN organization_metadata o ON o.id = p.organization_id;
+
+-- name: AdminListTailscaleOAuthMigrationOrganizations :many
+-- Organizations with saved network ingress credentials in either copy,
+-- soft-deleted ingresses included, for the temporary Tailscale OAuth client
+-- move to organization keys.
+SELECT DISTINCT o.id, o.name, o.slug
+FROM network_ingresses AS n
+JOIN organization_metadata AS o ON o.id = n.organization_id
+WHERE n.credentials_encrypted IS NOT NULL
+   OR n.credentials_org_encrypted IS NOT NULL
+ORDER BY o.name, o.id;
+
+-- name: AdminGetTailscaleOAuthMigrationOrganization :one
+-- The organization a Tailscale OAuth client migration step targets.
+SELECT o.id, o.name, o.slug
+FROM organization_metadata AS o
+WHERE o.id = @id;
+
+-- name: AdminListOrganizationEncryptionTransitions :many
+-- Every organization with its transition state for one use case. An
+-- organization without a transition row for the use case is in platform_key,
+-- so the LEFT JOIN reports it there and the state filter matches it.
+--
+-- The caller reads which organizations have values from the use case's copy
+-- stores and passes them as three parallel arrays. with_values_only keeps just
+-- those organizations; sort_by_last_written lists the most recently written
+-- first, then every other organization oldest first. Pages with LIMIT and
+-- OFFSET: the list is staff-only and small.
+WITH organizations_with_values AS (
+  SELECT v.organization_id, v.value_count, v.last_written_at
+  FROM ROWS FROM (
+    unnest(@value_organization_ids::text[]),
+    unnest(@value_counts::bigint[]),
+    unnest(@value_last_written_at::timestamptz[])
+  ) AS v(organization_id, value_count, last_written_at)
+)
+SELECT
+  om.id AS organization_id,
+  om.name,
+  om.slug,
+  (om.disabled_at IS NOT NULL)::boolean AS disabled,
+  COALESCE(t.state, 'platform_key')::text AS state,
+  t.state_changed_at,
+  t.platform_copies_cleared_at,
+  t.last_backfill_started_at,
+  t.last_backfill_completed_at,
+  t.last_backfill_remaining_count,
+  t.last_backfill_unreadable_count,
+  t.last_backfill_error,
+  t.last_verified_at,
+  COALESCE(v.value_count, 0)::bigint AS value_count,
+  v.last_written_at::timestamptz AS last_written_at
+FROM organization_metadata om
+LEFT JOIN organization_encryption_transitions t
+  ON t.organization_id = om.id
+  AND t.use_case = @use_case
+LEFT JOIN organizations_with_values v ON v.organization_id = om.id
+WHERE (NOT @with_values_only::boolean OR v.organization_id IS NOT NULL)
+  AND (
+    sqlc.narg('state')::text IS NULL
+    OR COALESCE(t.state, 'platform_key') = sqlc.narg('state')::text
+  )
+ORDER BY
+  CASE WHEN @sort_by_last_written::boolean THEN v.last_written_at END DESC NULLS LAST,
+  om.created_at,
+  om.id
+LIMIT @limit_value
+OFFSET @offset_value;
+
+-- name: AdminCountOrganizationEncryptionTransitionStates :many
+-- How many organizations are in each transition state for one use case,
+-- counting organizations without a row as platform_key. with_values_only
+-- counts just the organizations in value_organization_ids, as
+-- AdminListOrganizationEncryptionTransitions lists them.
+SELECT
+  COALESCE(t.state, 'platform_key')::text AS state,
+  count(*) AS organizations
+FROM organization_metadata om
+LEFT JOIN organization_encryption_transitions t
+  ON t.organization_id = om.id
+  AND t.use_case = @use_case
+WHERE NOT @with_values_only::boolean
+   OR om.id = ANY(@value_organization_ids::text[])
+GROUP BY 1
+ORDER BY 1;
+
+-- name: AdminTryLockSecretBackfill :one
+-- Takes the transaction-level lock that keeps two runs of one secret backfill
+-- from overlapping, on any admin replica. It reports false, without waiting,
+-- when another run holds it. The lock is released when the transaction ends.
+SELECT pg_try_advisory_xact_lock(hashtextextended('secret-backfill:' || @backfill::text, 0)) AS locked;

@@ -11,6 +11,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/k8s"
 	networkingressrepo "github.com/speakeasy-api/gram/server/internal/networkingress/repo"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -117,9 +118,30 @@ func TestNetworkIngressNextActionNamesTheFirstBlockingStep(t *testing.T) {
 		{"unknown provider otherwise ready", GetNetworkIngressOutput{Entitled: true, Ingress: with(func(i *NetworkIngressSummary) { i.Provider = "future-provider" })}, networkIngressNextUnsupportedProvider},
 		{"unknown provider missing credentials", GetNetworkIngressOutput{Entitled: true, Ingress: with(func(i *NetworkIngressSummary) { i.Provider = "future-provider"; i.CredentialsConfigured = false })}, networkIngressNextUnsupportedProvider},
 		{"missing provider", GetNetworkIngressOutput{Entitled: true, Ingress: with(func(i *NetworkIngressSummary) { i.Provider = "" })}, networkIngressNextUnsupportedProvider},
+		{"row no provider hosts", GetNetworkIngressOutput{Entitled: true, Ingress: with(func(i *NetworkIngressSummary) {
+			i.Status, i.LastError, i.DNSName = "error", "unsupported_provider", ""
+		})}, networkIngressNextUnsupportedProvider},
 		{"missing credentials", GetNetworkIngressOutput{Entitled: true, Ingress: with(func(i *NetworkIngressSummary) { i.CredentialsConfigured = false })}, networkIngressNextAddCredentials},
 		{"disabled", GetNetworkIngressOutput{Entitled: true, Ingress: with(func(i *NetworkIngressSummary) { i.Enabled = false; i.Status = "disabled" })}, networkIngressNextEnable},
 		{"error", GetNetworkIngressOutput{Entitled: true, Ingress: with(func(i *NetworkIngressSummary) { i.Status = "error" })}, networkIngressNextRepair},
+		{"gateway not approved", GetNetworkIngressOutput{Entitled: true, Ingress: with(func(i *NetworkIngressSummary) {
+			i.Status, i.LastError, i.DNSName = "error", "provider_service_not_approved", ""
+		})}, networkIngressNextApproveGateway},
+		{"gateway without a certificate", GetNetworkIngressOutput{Entitled: true, Ingress: with(func(i *NetworkIngressSummary) {
+			i.Status, i.LastError, i.DNSName = "error", "provider_certificate_unavailable", ""
+		})}, networkIngressNextWaitForCertificate},
+		{"organization key unusable", GetNetworkIngressOutput{Entitled: true, Ingress: with(func(i *NetworkIngressSummary) {
+			i.Status, i.LastError, i.DNSName = "error", "encryption_key_unavailable", ""
+		})}, networkIngressNextRestoreKey},
+		{"provider not configured in this environment", GetNetworkIngressOutput{Entitled: true, Ingress: with(func(i *NetworkIngressSummary) {
+			i.Status, i.LastError, i.DNSName = "error", "provider_configuration_unavailable", ""
+		})}, networkIngressNextConfigurationIssue},
+		{"Tailscale rate limiting", GetNetworkIngressOutput{Entitled: true, Ingress: with(func(i *NetworkIngressSummary) {
+			i.Status, i.LastError = "error", "provider_rate_limited"
+		})}, networkIngressNextWait},
+		{"Tailscale API unreachable", GetNetworkIngressOutput{Entitled: true, Ingress: with(func(i *NetworkIngressSummary) {
+			i.Status, i.LastError = "error", "provider_api_unavailable"
+		})}, networkIngressNextWait},
 		{"degraded", GetNetworkIngressOutput{Entitled: true, Ingress: with(func(i *NetworkIngressSummary) { i.Status = "degraded" })}, networkIngressNextRepair},
 		{"pending", GetNetworkIngressOutput{Entitled: true, Ingress: with(func(i *NetworkIngressSummary) { i.Status = "pending" })}, networkIngressNextWait},
 		{"online without DNS", GetNetworkIngressOutput{Entitled: true, Ingress: with(func(i *NetworkIngressSummary) { i.DNSName = "" })}, networkIngressNextWait},
@@ -175,10 +197,13 @@ func TestGetNetworkIngressReportsLiveStateWithoutCredentials(t *testing.T) {
 		CustomDomainID:         uuid.NullUUID{},
 		Enabled:                true,
 		IdentityRequired:       false,
-		CredentialsEncrypted:   pgtype.Text{String: credentialSentinel, Valid: true},
 		AttestorNamespace:      attestor,
 		AttestorServiceAccount: attestor,
 		ProviderResources:      []byte(`{"tailnet_key":"` + resourceSentinel + `"}`),
+	})
+	require.NoError(t, err)
+	created, err = networkingressrepo.New(conn).SetNetworkIngressCredentialCopiesFixture(ctx, networkingressrepo.SetNetworkIngressCredentialCopiesFixtureParams{
+		PlatformCopy: pgtype.Text{String: credentialSentinel, Valid: true}, OrgCopy: pgtype.Text{}, ID: created.ID, OrganizationID: principal.OrganizationID,
 	})
 	require.NoError(t, err)
 	got, err = service.Get(ctx, principal)
@@ -239,9 +264,13 @@ func TestGetNetworkIngressDoesNotReportUnknownProviderReady(t *testing.T) {
 	created, err := networkingressrepo.New(conn).CreateNetworkIngress(ctx, networkingressrepo.CreateNetworkIngressParams{
 		ID: uuid.New(), OrganizationID: principal.OrganizationID,
 		Provider: "future-provider", Hostname: "private-mcp", EndpointNamespaceKind: "platform",
-		Enabled: true, CredentialsEncrypted: pgtype.Text{String: "sentinel-encrypted-credentials", Valid: true},
+		Enabled:           true,
 		AttestorNamespace: attestor, AttestorServiceAccount: attestor,
 		ProviderResources: []byte(`{}`),
+	})
+	require.NoError(t, err)
+	created, err = networkingressrepo.New(conn).SetNetworkIngressCredentialCopiesFixture(ctx, networkingressrepo.SetNetworkIngressCredentialCopiesFixtureParams{
+		PlatformCopy: pgtype.Text{String: "sentinel-encrypted-credentials", Valid: true}, OrgCopy: pgtype.Text{}, ID: created.ID, OrganizationID: principal.OrganizationID,
 	})
 	require.NoError(t, err)
 	updated, err := networkingressrepo.New(conn).RecordNetworkIngressObservation(ctx, networkingressrepo.RecordNetworkIngressObservationParams{
@@ -264,4 +293,22 @@ func TestGetNetworkIngressDoesNotReportUnknownProviderReady(t *testing.T) {
 	require.Equal(t, "private-mcp.example.test", got.Ingress.DNSName)
 	require.False(t, got.ReadyForPrivateAccess)
 	require.Equal(t, networkIngressNextUnsupportedProvider, got.NextAction)
+}
+
+func TestNetworkIngressServiceNotApprovedMatchesReconcilerCode(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, k8s.NetworkIngressErrorProviderServiceNotApproved, networkIngressServiceNotApproved)
+	require.Equal(t, networkIngressServiceNotApproved, safeNetworkIngressErrorCode(networkIngressServiceNotApproved), "the code is returned to clients, not withheld")
+}
+
+func TestNetworkIngressCertificateUnavailableMatchesReconcilerCode(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, k8s.NetworkIngressErrorProviderCertificateUnavailable, networkIngressCertificateUnavailable)
+	require.Equal(t, networkIngressCertificateUnavailable, safeNetworkIngressErrorCode(networkIngressCertificateUnavailable), "the code is returned to clients, not withheld")
+}
+
+func TestNetworkIngressEncryptionKeyUnavailableMatchesReconcilerCode(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, k8s.NetworkIngressErrorEncryptionKeyUnavailable, networkIngressEncryptionKeyUnavailable)
+	require.Equal(t, networkIngressEncryptionKeyUnavailable, safeNetworkIngressErrorCode(networkIngressEncryptionKeyUnavailable), "the code is returned to clients, not withheld")
 }

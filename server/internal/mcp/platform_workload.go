@@ -34,7 +34,7 @@ import (
 // can be granted. It does not consult the process's served toolsets: the token
 // endpoint may run in a process that issues tokens without serving the tools.
 func (s *Service) platformWorkloadResource(resource string) (string, bool) {
-	for _, slug := range []string{platformtools.AssistantsPlatformToolsetSlug, platformtools.ManagedAssistantPlatformToolsetSlug, platformtools.PlatformMCPReadToolsetSlug} {
+	for _, slug := range []string{platformtools.AssistantsPlatformToolsetSlug, platformtools.PlatformMCPReadToolsetSlug} {
 		if resource == platformtools.PlatformToolsetURL(s.serverURL, slug) {
 			return slug, true
 		}
@@ -121,7 +121,7 @@ func (s *Service) handlePlatformWorkloadGrant(ctx context.Context, w http.Respon
 // boundary. Unverified claims are used solely to select this validator; every
 // identity, tenant, ceiling and expiry is subsequently verified and read live.
 func (s *Service) authorizeWorkloadPlatform(ctx context.Context, token, resource string) (context.Context, bool, error) {
-	claims := &jwt.RegisteredClaims{} //nolint:exhaustruct // ParseUnverified populates routing hints; validation below establishes authority
+	claims := &jwt.RegisteredClaims{} //nolint:exhaustruct_v5 // ParseUnverified populates routing hints; validation below establishes authority
 	if _, _, err := jwt.NewParser().ParseUnverified(token, claims); err != nil {
 		return ctx, false, nil
 	}

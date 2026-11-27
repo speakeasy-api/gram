@@ -53,7 +53,7 @@ func updatedClientCredentialState(existing repo.RemoteSessionClient, method *str
 	return clientCredentialState{
 		owner:             CredentialOwner(existing.CredentialOwner),
 		method:            conv.PtrValOr(method, existing.TokenEndpointAuthMethod.String),
-		hasSecret:         newSecret || existing.ClientSecretEncrypted.Valid,
+		hasSecret:         newSecret || hasClientSecret(existing),
 		hasKeySet:         existing.JsonWebKeySetID.Valid,
 		legacyCallbackURL: conv.PtrValOr(legacyCallbackURL, existing.LegacyCallbackUrl),
 	}

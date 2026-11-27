@@ -27,7 +27,7 @@ function RotatedKeyDialogBody({
   return (
     <>
       <Dialog.Header>
-        <Dialog.Title>Tunnel Key Rotated</Dialog.Title>
+        <Dialog.Title>Tunnel key rotated</Dialog.Title>
         <Dialog.Description>
           Copy the new key now. It will not be shown again.
         </Dialog.Description>
@@ -111,7 +111,7 @@ export function TunnelKeySection({
   return (
     <SettingsSection id={MCP_TUNNEL_KEY_SECTION_ID}>
       <SettingsSection.Header>
-        <SettingsSection.Title>Tunnel Key</SettingsSection.Title>
+        <SettingsSection.Title>Tunnel key</SettingsSection.Title>
         <SettingsSection.Description>
           Tunnel agents authenticate to this source with its key. Rotation
           replaces the key; running agents must be restarted with the
@@ -165,7 +165,7 @@ export function TunnelKeySection({
           ) : (
             <>
               <Dialog.Header>
-                <Dialog.Title>Rotate Tunnel Key</Dialog.Title>
+                <Dialog.Title>Rotate tunnel key</Dialog.Title>
                 <Dialog.Description>
                   The current key will stop working for new tunnel connections.
                 </Dialog.Description>

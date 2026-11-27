@@ -47,7 +47,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
-	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	slackclient "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
@@ -189,6 +188,27 @@ func (s *ServiceCore) configuredIdleExpiringBackends() []string {
 	return backends
 }
 
+// RuntimeAvailable reports whether this deployment can admit new assistant
+// runtimes. It is false when the process runs with the disabled runtime
+// provider; callers that would start, drive, or schedule runtime work check it
+// up front and report ErrRuntimeDisabled.
+func (s *ServiceCore) RuntimeAvailable() bool {
+	return s.runtime.Backend() != RuntimeProviderDisabled
+}
+
+// RuntimeHasBackends reports whether any runtime backend is reachable from
+// this process. Every other provider requires its target backend, so this
+// differs from RuntimeAvailable only for the disabled provider: a deployment
+// switched to disabled while a GKE cluster or the local backend is still
+// configured keeps reaping the rows those backends own, and one with no
+// backend at all has no runtime sweep to run.
+func (s *ServiceCore) RuntimeHasBackends() bool {
+	if s.RuntimeAvailable() {
+		return true
+	}
+	return s.runtime.SupportsBackend(runtimeBackendGKE) || s.runtime.SupportsBackend(runtimeBackendLocal)
+}
+
 func assistantValidationError(format string, args ...any) error {
 	return fmt.Errorf("%w: %s", errAssistantValidation, fmt.Sprintf(format, args...))
 }
@@ -201,6 +221,7 @@ type assistantRecord struct {
 	OrganizationID  string
 	CreatedByUserID string
 	Name            string
+	ReasoningEffort string
 	Model           string
 	Instructions    string
 	MCPServers      []assistantMCPServerRow
@@ -272,6 +293,7 @@ type assistantMCPServerRow struct {
 	Visibility             string
 	EndpointSlug           string
 	EndpointDomain         string // custom-domain host; "" for platform endpoints
+	EndpointIsDomainRoot   bool   // the endpoint serves at its custom domain's root
 	DefaultEnvironmentSlug pgtype.Text
 	EnvironmentID          uuid.NullUUID
 	EnvironmentSlug        pgtype.Text
@@ -295,6 +317,7 @@ func assistantRecordFromCreateRow(row assistantrepo.CreateAssistantRow) assistan
 		CreatedByUserID: conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
 		Name:            row.Name,
 		Model:           row.Model,
+		ReasoningEffort: reasoningEffortFromPGText(row.ReasoningEffort),
 		Instructions:    row.Instructions,
 		MCPServers:      nil,
 		Skills:          nil,
@@ -318,6 +341,7 @@ func assistantRecordFromListRow(row assistantrepo.ListAssistantsRow) assistantRe
 		CreatedByUserID: conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
 		Name:            row.Name,
 		Model:           row.Model,
+		ReasoningEffort: reasoningEffortFromPGText(row.ReasoningEffort),
 		Instructions:    row.Instructions,
 		MCPServers:      nil,
 		Skills:          nil,
@@ -341,6 +365,7 @@ func assistantRecordFromGetRow(row assistantrepo.GetAssistantRow) assistantRecor
 		CreatedByUserID: conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
 		Name:            row.Name,
 		Model:           row.Model,
+		ReasoningEffort: reasoningEffortFromPGText(row.ReasoningEffort),
 		Instructions:    row.Instructions,
 		MCPServers:      nil,
 		Skills:          nil,
@@ -364,6 +389,7 @@ func assistantRecordFromDispatchRow(row assistantrepo.GetAssistantForDispatchRow
 		CreatedByUserID: conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
 		Name:            row.Name,
 		Model:           row.Model,
+		ReasoningEffort: reasoningEffortFromPGText(row.ReasoningEffort),
 		Instructions:    row.Instructions,
 		MCPServers:      nil,
 		Skills:          nil,
@@ -387,6 +413,7 @@ func assistantRecordFromUpdateRow(row assistantrepo.UpdateAssistantRow) assistan
 		CreatedByUserID: conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
 		Name:            row.Name,
 		Model:           row.Model,
+		ReasoningEffort: reasoningEffortFromPGText(row.ReasoningEffort),
 		Instructions:    row.Instructions,
 		MCPServers:      nil,
 		Skills:          nil,
@@ -475,6 +502,7 @@ type ServiceCore struct {
 	contextWindow     *openrouter.ContextWindowResolver
 	wakeCanceller     WakeCanceller
 	chatWriter        *chat.ChatMessageWriter
+	turnStream        *chat.TurnStream
 	assetStorage      assets.BlobStore
 	assetSigningKey   string
 	envLoader         toolconfig.EnvironmentLoader
@@ -487,6 +515,12 @@ type ServiceCore struct {
 	// redirect_uri. Authorization servers store both, so it stays fixed when
 	// the server URL moves. Set by SetOutboundCallbackOrigin.
 	outboundOrigin *url.URL
+
+	// managedCeilingsRepaired holds the IDs of assistants whose managed
+	// ceilings this process has repaired, or found not to need them, so a turn
+	// reaches the database for the repair at most once per assistant per
+	// process.
+	managedCeilingsRepaired sync.Map
 }
 
 func NewServiceCore(
@@ -536,6 +570,7 @@ func NewServiceCore(
 		contextWindow:               contextWindow,
 		wakeCanceller:               nil,
 		chatWriter:                  nil,
+		turnStream:                  nil,
 		assetStorage:                nil,
 		assetSigningKey:             "",
 		envLoader:                   nil,
@@ -545,6 +580,7 @@ func NewServiceCore(
 		featureFlags:                nil,
 		turnClassified:              turnClassified,
 		outboundOrigin:              nil,
+		managedCeilingsRepaired:     sync.Map{},
 	}
 }
 
@@ -567,6 +603,11 @@ func (s *ServiceCore) SetDashboardIngestor(i DashboardIngestor) {
 // site. Self-heal is skipped if the writer was never set.
 func (s *ServiceCore) SetChatMessageWriter(w *chat.ChatMessageWriter) {
 	s.chatWriter = w
+}
+
+// SetTurnStream wires the worker's dashboard replay buffer.
+func (s *ServiceCore) SetTurnStream(stream *chat.TurnStream) {
+	s.turnStream = stream
 }
 
 // SetAssetStorage wires the blob store history replay uses to fetch
@@ -734,6 +775,9 @@ type ReapStuckRuntimesResult struct {
 // than locks so a live turn is never interrupted.
 func (s *ServiceCore) ReapStuckRuntimes(ctx context.Context) (ReapStuckRuntimesResult, error) {
 	var out ReapStuckRuntimesResult
+	if !s.RuntimeHasBackends() {
+		return out, nil
+	}
 	var errs []error
 	now := time.Now().UTC()
 	affected := map[uuid.UUID]struct{}{}
@@ -1077,21 +1121,10 @@ func (s *ServiceCore) resolveToolsetRefsForWrite(
 	if len(toolsetSlugs) == 0 {
 		return nil, nil
 	}
-	var aliasCandidates []uuid.UUID
-	for _, row := range toolsetRows {
-		if row.DisabledWrapper && !row.EnablesMcp {
-			aliasCandidates = append(aliasCandidates, row.ID)
-		}
-	}
-	// A disabled hosted server with only its legacy alias still serves once enabled.
-	aliased, err := hasLegacyAlias(ctx, tx, projectID, aliasCandidates)
-	if err != nil {
-		return nil, err
-	}
 	enablesMCP := map[uuid.UUID]bool{}
 	for _, row := range toolsetRows {
 		toolsetIDs[row.Slug] = row.ID
-		enablesMCP[row.ID] = row.EnablesMcp || aliased[row.ID]
+		enablesMCP[row.ID] = row.EnablesMcp
 	}
 	for _, slug := range toolsetSlugs {
 		if _, ok := toolsetIDs[slug]; !ok {
@@ -1303,7 +1336,7 @@ func (s *ServiceCore) loadAssistantMcpServers(ctx context.Context, projectID uui
 	if len(assistantIDs) == 0 {
 		return out, nil
 	}
-	rows, err := loadAssistantMcpServers(ctx, s.db, assistantrepo.LoadAssistantMcpServersParams{
+	rows, err := assistantrepo.New(s.db).LoadAssistantMcpServers(ctx, assistantrepo.LoadAssistantMcpServersParams{
 		AssistantIds: assistantIDs,
 		ProjectID:    projectID,
 	})
@@ -1318,6 +1351,7 @@ func (s *ServiceCore) loadAssistantMcpServers(ctx context.Context, projectID uui
 			Visibility:             row.Visibility,
 			EndpointSlug:           row.EndpointSlug,
 			EndpointDomain:         row.EndpointDomain,
+			EndpointIsDomainRoot:   row.EndpointIsDomainRoot,
 			DefaultEnvironmentSlug: row.DefaultEnvironmentSlug,
 			EnvironmentID:          row.EnvironmentID,
 			EnvironmentSlug:        row.EnvironmentSlug,
@@ -1414,29 +1448,30 @@ func (s *ServiceCore) readableEnvironments(ctx context.Context, projectID uuid.U
 	}
 	checks := make([]authz.Check, 0, len(rows)+1)
 	for _, row := range rows {
-		checks = append(checks, authz.EnvironmentCheck(authz.ScopeEnvironmentRead, row.ID.String(), projectID.String()))
+		checks = append(checks, authz.Environment(authz.EnvironmentIDOf(row.ID), authz.ProjectIDOf(projectID)).Read())
 	}
 	// An unknown slug reports not-found only to callers who can read the project's environments.
 	unresolved := len(rows) < len(slugs)
 	if unresolved {
-		checks = append(checks, authz.EnvironmentCheck(authz.ScopeEnvironmentRead, projectID.String(), projectID.String()))
+		checks = append(checks, authz.Environments(authz.ProjectIDOf(projectID)).Read())
 	}
-	readable, err := s.authz.Filter(ctx, checks)
+	decisions, err := s.authz.Decide(ctx, checks...)
 	if err != nil {
 		return nil, fmt.Errorf("authorize assistant environments: %w", err)
 	}
-	canRead := idSetPredicate(readable)
+	canRead := allowedResources(checks, decisions)
 	if unresolved && !canRead(projectID) {
 		return nil, errEnvironmentBindingForbidden
 	}
 	return canRead, nil
 }
 
-// idSetPredicate reports membership in ids, ignoring any that are not UUIDs.
-func idSetPredicate(ids []string) func(uuid.UUID) bool {
-	allowed := make(map[uuid.UUID]struct{}, len(ids))
-	for _, id := range ids {
-		if parsed, err := uuid.Parse(id); err == nil {
+// allowedResources reports whether a resource's check was allowed, ignoring
+// resource IDs that are not UUIDs.
+func allowedResources(checks []authz.Check, decisions authz.Decisions) func(uuid.UUID) bool {
+	allowed := make(map[uuid.UUID]struct{}, len(checks))
+	for i, decision := range decisions.Each {
+		if parsed, err := uuid.Parse(checks[i].ResourceID); err == nil && decision.Allowed {
 			allowed[parsed] = struct{}{}
 		}
 	}
@@ -1675,6 +1710,7 @@ func toHTTPAssistant(record assistantRecord) (*types.Assistant, error) {
 		CreatedByUserID: conv.PtrEmpty(record.CreatedByUserID),
 		Name:            record.Name,
 		Model:           record.Model,
+		ReasoningEffort: record.ReasoningEffort,
 		Instructions:    record.Instructions,
 		Toolsets:        toolsets,
 		McpServers:      mcpServers,
@@ -1704,7 +1740,21 @@ func (s *ServiceCore) CreateAssistant(
 	provisionIdentity bool,
 	canEnableMCP func(toolsetID uuid.UUID) bool,
 	canBindEnvironment func(environmentID uuid.UUID) bool,
+	reasoningEffort ...string,
 ) (assistantRecord, error) {
+	effort := "medium"
+	if len(reasoningEffort) > 1 {
+		return assistantRecord{}, assistantValidationError("one reasoning effort is required")
+	}
+	if len(reasoningEffort) == 1 {
+		effort = reasoningEffort[0]
+	}
+	if err := validateReasoningEffort(effort); err != nil {
+		return assistantRecord{}, err
+	}
+	if err := validateRuntimeReasoningEffort(s.newAssistantRuntimeVersion, effort); err != nil {
+		return assistantRecord{}, err
+	}
 	if createdByUserID == "" {
 		return assistantRecord{}, fmt.Errorf("create assistant: missing user id")
 	}
@@ -1726,6 +1776,7 @@ func (s *ServiceCore) CreateAssistant(
 		CreatedByUserID: conv.ToPGText(createdByUserID),
 		Name:            name,
 		Model:           model,
+		ReasoningEffort: effort,
 		Instructions:    instructions,
 		WarmTtlSeconds:  int64(warmTTLSeconds),
 		MaxConcurrency:  int64(maxConcurrency),
@@ -1774,7 +1825,11 @@ func (s *ServiceCore) CreateAssistant(
 		if err != nil {
 			return assistantRecord{}, fmt.Errorf("check new assistant Kit eligibility: %w", err)
 		}
-		if eligible {
+		// Automatic eligibility must not override an explicit default-runtime Off preference.
+		if eligible && record.ReasoningEffort != "none" {
+			if err := validateRuntimeReasoningEffort(3, record.ReasoningEffort); err != nil {
+				return assistantRecord{}, err
+			}
 			changed, err := queries.SetAssistantDesiredRuntimeVersion(ctx, assistantrepo.SetAssistantDesiredRuntimeVersionParams{RuntimeVersion: 3, AssistantID: record.ID, ProjectID: projectID, ExpectedRuntimeVersion: record.RuntimeVersion})
 			if err != nil {
 				return assistantRecord{}, fmt.Errorf("select eligible assistant Kit runtime: %w", err)
@@ -1784,6 +1839,9 @@ func (s *ServiceCore) CreateAssistant(
 			}
 			record.RuntimeVersion = 3
 		}
+	}
+	if err := s.auditAssistantReasoning(ctx, tx, record, nil); err != nil {
+		return assistantRecord{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return assistantRecord{}, fmt.Errorf("commit assistant tx: %w", err)
@@ -1879,12 +1937,17 @@ func (s *ServiceCore) UpdateAssistant(
 	canBindEnvironment func(environmentID uuid.UUID) bool,
 	selection ...runtimeSelectionChange,
 ) (assistantRecord, error) {
-	change := runtimeSelectionChange{Version: nil, ExpectedVersion: nil}
+	change := runtimeSelectionChange{Version: nil, ExpectedVersion: nil, ReasoningEffort: nil}
 	if len(selection) > 1 {
 		return assistantRecord{}, fmt.Errorf("%w: one runtime selection is required", errAssistantValidation)
 	}
 	if len(selection) == 1 {
 		change = selection[0]
+	}
+	if change.ReasoningEffort != nil {
+		if err := validateReasoningEffort(*change.ReasoningEffort); err != nil {
+			return assistantRecord{}, err
+		}
 	}
 	if err := validateRuntimeSelection(change); err != nil {
 		return assistantRecord{}, err
@@ -1905,6 +1968,15 @@ func (s *ServiceCore) UpdateAssistant(
 		return assistantRecord{}, fmt.Errorf("lock assistant update: %w", err)
 	}
 
+	var reasoningBefore *audit.AssistantReasoningSnapshot
+	if change.ReasoningEffort != nil && s.audit != nil {
+		before, err := queries.GetAssistant(ctx, assistantrepo.GetAssistantParams{ProjectID: projectID, AssistantID: assistantID})
+		if err != nil {
+			return assistantRecord{}, fmt.Errorf("read assistant reasoning snapshot: %w", err)
+		}
+		reasoningBefore = &audit.AssistantReasoningSnapshot{ReasoningEffort: reasoningEffortFromPGText(before.ReasoningEffort)}
+	}
+
 	// Compare canonical persisted attachments inside this transaction, after
 	// normal resolution. Full-form no-op saves are safe; actual Kit connection
 	// changes must roll back until the resident runtime has been retired.
@@ -1919,7 +1991,7 @@ func (s *ServiceCore) UpdateAssistant(
 			checkKitAttachments = checkKitAttachments || runtime.RuntimeVersion == 3
 		}
 		if checkKitAttachments {
-			kitAttachmentsBefore, err = loadAssistantMcpServers(ctx, tx, assistantrepo.LoadAssistantMcpServersParams{ProjectID: projectID, AssistantIds: []uuid.UUID{assistantID}})
+			kitAttachmentsBefore, err = assistantrepo.New(tx).LoadAssistantMcpServers(ctx, assistantrepo.LoadAssistantMcpServersParams{ProjectID: projectID, AssistantIds: []uuid.UUID{assistantID}})
 			if err != nil {
 				return assistantRecord{}, fmt.Errorf("read Kit attachments before edit: %w", err)
 			}
@@ -1935,14 +2007,15 @@ func (s *ServiceCore) UpdateAssistant(
 		return assistantRecord{}, err
 	}
 	updated, err := queries.UpdateAssistant(ctx, assistantrepo.UpdateAssistantParams{
-		Name:           conv.PtrToPGText(name),
-		Model:          conv.PtrToPGText(model),
-		Instructions:   conv.PtrToPGText(instructions),
-		WarmTtlSeconds: conv.PtrToPGInt8(warmTTLSeconds),
-		MaxConcurrency: conv.PtrToPGInt8(maxConcurrency),
-		Status:         conv.PtrToPGText(status),
-		AssistantID:    assistantID,
-		ProjectID:      projectID,
+		Name:            conv.PtrToPGText(name),
+		Model:           conv.PtrToPGText(model),
+		ReasoningEffort: conv.PtrToPGText(change.ReasoningEffort),
+		Instructions:    conv.PtrToPGText(instructions),
+		WarmTtlSeconds:  conv.PtrToPGInt8(warmTTLSeconds),
+		MaxConcurrency:  conv.PtrToPGInt8(maxConcurrency),
+		Status:          conv.PtrToPGText(status),
+		AssistantID:     assistantID,
+		ProjectID:       projectID,
 	})
 	if err != nil {
 		return assistantRecord{}, fmt.Errorf("update assistant: %w", err)
@@ -1988,7 +2061,7 @@ func (s *ServiceCore) UpdateAssistant(
 	}
 
 	if checkKitAttachments {
-		after, err := loadAssistantMcpServers(ctx, tx, assistantrepo.LoadAssistantMcpServersParams{ProjectID: projectID, AssistantIds: []uuid.UUID{assistantID}})
+		after, err := assistantrepo.New(tx).LoadAssistantMcpServers(ctx, assistantrepo.LoadAssistantMcpServersParams{ProjectID: projectID, AssistantIds: []uuid.UUID{assistantID}})
 		if err != nil {
 			return assistantRecord{}, fmt.Errorf("read Kit attachments after edit: %w", err)
 		}
@@ -1997,6 +2070,11 @@ func (s *ServiceCore) UpdateAssistant(
 		}
 	}
 
+	if reasoningBefore != nil && reasoningBefore.ReasoningEffort != record.ReasoningEffort {
+		if err := s.auditAssistantReasoning(ctx, tx, record, reasoningBefore); err != nil {
+			return assistantRecord{}, err
+		}
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return assistantRecord{}, fmt.Errorf("commit assistant tx: %w", err)
 	}
@@ -2185,6 +2263,9 @@ type ReapInactiveAssistantRuntimesParams struct {
 // never an orphan candidate: inactivity alone does not discard its workspace.
 // The sweep also collects stopped rows on superseded backends and retired Kit rows.
 func (s *ServiceCore) ReapInactiveAssistantRuntimes(ctx context.Context, params ReapInactiveAssistantRuntimesParams) (ReapAssistantRuntimesResult, error) {
+	if !s.RuntimeHasBackends() {
+		return ReapAssistantRuntimesResult{Reaped: 0, Errors: 0}, nil
+	}
 	if params.InactivityThreshold <= 0 {
 		return ReapAssistantRuntimesResult{}, fmt.Errorf("inactivity threshold must be positive")
 	}
@@ -2246,6 +2327,9 @@ type ReapStoppedAssistantRuntimesParams struct {
 // sibling activity on the same assistant. Each backend tears down the
 // stopped runtime resource before its row is marked reaped.
 func (s *ServiceCore) ReapStoppedAssistantRuntimes(ctx context.Context, params ReapStoppedAssistantRuntimesParams) (ReapAssistantRuntimesResult, error) {
+	if !s.RuntimeHasBackends() {
+		return ReapAssistantRuntimesResult{Reaped: 0, Errors: 0}, nil
+	}
 	if params.StoppedTTL <= 0 {
 		return ReapAssistantRuntimesResult{}, fmt.Errorf("stopped TTL must be positive")
 	}
@@ -2339,6 +2423,9 @@ type RecycleAssistantRuntimeImagesParams struct {
 // inactivity janitor to reap it, so without this sweep it would stay on its
 // admission-time image across deploys indefinitely.
 func (s *ServiceCore) RecycleActiveRuntimeImages(ctx context.Context, params RecycleAssistantRuntimeImagesParams) (RecycleAssistantRuntimeImagesResult, error) {
+	if !s.RuntimeAvailable() {
+		return RecycleAssistantRuntimeImagesResult{Recycled: 0, Skipped: 0, Errors: 0}, nil
+	}
 	queries := assistantrepo.New(s.db)
 	rows, err := queries.ListActiveAssistantRuntimes(ctx, runtimeStateActive)
 	if err != nil {
@@ -2523,6 +2610,15 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 	assistantID, err := uuid.Parse(task.TargetRef)
 	if err != nil {
 		return EnqueueResult{}, fmt.Errorf("parse assistant id: %w", err)
+	}
+	if !s.RuntimeAvailable() {
+		// Nothing could ever run the task, so retrying won't help: drop it so
+		// the activity succeeds instead of spending its retry budget.
+		s.logger.WarnContext(ctx, "skipping trigger dispatch: assistants are not available on this deployment",
+			attr.SlogAssistantID(assistantID.String()),
+			attr.SlogTriggerInstanceID(task.TriggerInstanceID),
+		)
+		return EnqueueResult{AssistantID: uuid.Nil, ThreadID: uuid.Nil, ShouldSignal: false}, nil
 	}
 	assistant, err := s.getAssistantForDispatch(ctx, assistantID)
 	switch {
@@ -2860,6 +2956,15 @@ func (s *ServiceCore) AdmitPendingThreads(ctx context.Context, assistantID uuid.
 		return AdmitPendingThreadsResult{}, err
 	}
 	if assistant.Status != StatusActive {
+		return AdmitPendingThreadsResult{ProjectID: assistant.ProjectID, ThreadIDs: nil}, nil
+	}
+	if !s.RuntimeAvailable() {
+		// Pending events stay pending rather than failing, so they run if the
+		// deployment turns assistants back on. Returning an error would only
+		// burn the coordinator's retries.
+		s.logger.WarnContext(ctx, "skipping assistant admission: assistants are not available on this deployment",
+			attr.SlogAssistantID(assistantID.String()),
+		)
 		return AdmitPendingThreadsResult{ProjectID: assistant.ProjectID, ThreadIDs: nil}, nil
 	}
 
@@ -3252,6 +3357,15 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 		s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "turn_start", "assistant turn started", "INFO", nil)
 
 		stopLeaseHeartbeat := s.startProcessingLeaseHeartbeat(turnCtx, thread.ProjectID, runtimeRecord.ID, event.ID)
+		// Reset on the first claim, not on enqueue (the previous turn may
+		// still be running) or retry (the frames belong to this same turn).
+		if thread.SourceKind == sourceKindDashboard && event.Attempts == 1 {
+			if err := s.turnStream.Reset(turnCtx, thread.ChatID); err != nil {
+				// Redis retries transient failures. If they are exhausted,
+				// keep serving the turn rather than fail it on a cache error.
+				s.logger.WarnContext(turnCtx, "reset assistant turn replay", attr.SlogError(err))
+			}
+		}
 		currentSkillSnapshot, runErr := s.processEventTurnWithProtocol(turnCtx, thread, assistant, runtimeRecord, event, protocol)
 		stopLeaseHeartbeat()
 		if runErr != nil {
@@ -3532,7 +3646,7 @@ func (s *ServiceCore) processEventTurnWithProtocol(
 		notice = renderAssistantSkillSetChange(claimedSnapshot, currentSnapshot)
 	}
 
-	mcpServers := s.currentRuntimeMCPServers(ctx, assistant, kitProductionRuntime(runtime.RuntimeVersion, runtime.Backend))
+	mcpServers := s.currentRuntimeMCPServers(ctx, assistant)
 
 	identity, err := s.resolveTurnIdentity(ctx, assistant, thread, event)
 	if err != nil {
@@ -3605,6 +3719,7 @@ func (s *ServiceCore) processEventTurnWithProtocol(
 		CanonicalUserMessageID: canonicalUserMessageID,
 		SourceInstructions:     sourceInstructions,
 		Model:                  assistant.Model,
+		ReasoningEffort:        assistant.ReasoningEffort,
 		ThreadID:               thread.ID,
 		IdempotencyKey:         event.ID.String(),
 		AuthToken:              turnToken,
@@ -3626,12 +3741,12 @@ func (s *ServiceCore) processEventTurnWithProtocol(
 // dispatch a turn with bogus URLs. Platform toolsets must be included so
 // the reconcile target matches what bootstrap granted — otherwise the
 // runner would treat them as removed and disconnect them mid-thread.
-func (s *ServiceCore) currentRuntimeMCPServers(ctx context.Context, assistant assistantRecord, strictVariant bool) []runtimeMCPServer {
+func (s *ServiceCore) currentRuntimeMCPServers(ctx context.Context, assistant assistantRecord) []runtimeMCPServer {
 	serverURL := s.runtime.ServerURL()
 	if serverURL == nil {
 		return nil
 	}
-	platformSlugs, err := s.assistantPlatformSlugs(ctx, assistant, strictVariant)
+	platformSlugs, err := s.assistantPlatformSlugs(ctx, assistant)
 	if err != nil {
 		s.logger.WarnContext(ctx, "resolve platform toolsets for mcp reconcile failed; skipping reconcile",
 			attr.SlogError(err),
@@ -3643,29 +3758,15 @@ func (s *ServiceCore) currentRuntimeMCPServers(ctx context.Context, assistant as
 
 // assistantPlatformSlugs returns the platform toolset slugs granted to this
 // assistant's runtime. Every assistant gets the base assistants toolset; the
-// project's managed assistant additionally gets exactly one managed-only
-// toolset — legacy or Platform MCP, per the rollout variant — which must never
-// be reachable by any other assistant.
-func (s *ServiceCore) assistantPlatformSlugs(ctx context.Context, assistant assistantRecord, strictVariant bool) ([]string, error) {
+// project's managed assistant additionally gets the Platform MCP read toolset
+// (and the Speakeasy Slack toolset when Slack routes to the project), which
+// must never be reachable by any other assistant.
+func (s *ServiceCore) assistantPlatformSlugs(ctx context.Context, assistant assistantRecord) ([]string, error) {
 	platformSlugs := []string{platformtools.AssistantsPlatformToolsetSlug}
 	switch managed, mErr := assistantrepo.New(s.db).GetManagedAssistantByProject(ctx, assistant.ProjectID); {
 	case mErr == nil:
 		if managed.ID == assistant.ID {
-			var variant feature.Variant
-			if strictVariant {
-				resolved, err := s.resolveAssistantToolsVariant(ctx, assistant.ProjectID)
-				if err != nil {
-					return nil, err
-				}
-				variant = resolved
-			} else {
-				variant = s.assistantToolsVariant(ctx, assistant.ProjectID)
-			}
-			if variant == feature.VariantAssistantToolsPlatformMCP {
-				platformSlugs = append(platformSlugs, platformtools.PlatformMCPReadToolsetSlug)
-			} else {
-				platformSlugs = append(platformSlugs, platformtools.ManagedAssistantPlatformToolsetSlug)
-			}
+			platformSlugs = append(platformSlugs, platformtools.PlatformMCPReadToolsetSlug)
 			routed, err := s.speakeasySlackRouted(ctx, assistant)
 			if err != nil {
 				return nil, err
@@ -3680,39 +3781,6 @@ func (s *ServiceCore) assistantPlatformSlugs(ctx context.Context, assistant assi
 		return nil, fmt.Errorf("resolve managed assistant: %w", mErr)
 	}
 	return platformSlugs, nil
-}
-
-// assistantToolsVariant reports which managed-assistant platform toolset the
-// organization owning projectID is on. Evaluation mirrors the Platform MCP
-// organization gate: distinct ID is the org ID with the org-slug PostHog
-// group. Every failure path returns the legacy variant but never aborts the
-// turn — a flag-provider outage must not take down bootstrap or reconcile, nor
-// silently strip the managed assistant's tools.
-func (s *ServiceCore) assistantToolsVariant(ctx context.Context, projectID uuid.UUID) feature.Variant {
-	variant, err := s.resolveAssistantToolsVariant(ctx, projectID)
-	if err != nil {
-		s.logger.WarnContext(ctx, "resolve assistant platform mcp variant", attr.SlogError(err))
-		return feature.VariantAssistantToolsLegacy
-	}
-	return variant
-}
-
-// resolveAssistantToolsVariant reports lookup failures instead of falling back.
-// Kit fingerprints its tool set, so a fallback would read as a configuration
-// change rather than an outage.
-func (s *ServiceCore) resolveAssistantToolsVariant(ctx context.Context, projectID uuid.UUID) (feature.Variant, error) {
-	if s.featureFlags == nil {
-		return feature.VariantAssistantToolsLegacy, nil
-	}
-	project, err := projectsrepo.New(s.db).GetProjectWithOrganizationMetadata(ctx, projectID)
-	if err != nil {
-		return "", fmt.Errorf("resolve organization for assistant tools variant: %w", err)
-	}
-	variant, err := feature.FlagVariant(ctx, s.featureFlags, feature.FlagAssistantPlatformMCP, project.ID, feature.OrgProjectGroups(project.Slug, ""))
-	if err != nil {
-		return "", fmt.Errorf("resolve assistant platform mcp variant: %w", err)
-	}
-	return feature.AssistantToolsVariant(variant), nil
 }
 
 func (s *ServiceCore) startProcessingLeaseHeartbeat(
@@ -3823,6 +3891,7 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 		CreatedByUserID: conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
 		Name:            row.Name,
 		Model:           row.Model,
+		ReasoningEffort: reasoningEffortFromPGText(row.ReasoningEffort),
 		Instructions:    row.Instructions,
 		MCPServers:      nil,
 		Skills:          nil,
@@ -3863,10 +3932,9 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 		return threadBootstrap{}, oops.E(oops.CodeUnexpected, nil, "assistant runtime server url not configured").LogError(ctx, s.logger, logAttrs...)
 	}
 
-	// The managed-assistant platform toolset is granted only to the project's
-	// managed assistant; tools in it must not be reachable by any other
-	// assistant.
-	platformSlugs, err := s.assistantPlatformSlugs(ctx, assistant, false)
+	// The Platform MCP read toolset is granted only to the project's managed
+	// assistant; tools in it must not be reachable by any other assistant.
+	platformSlugs, err := s.assistantPlatformSlugs(ctx, assistant)
 	if err != nil {
 		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "resolve managed assistant").LogError(ctx, s.logger, logAttrs...)
 	}
@@ -3911,17 +3979,18 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 	}
 
 	return threadBootstrap{
-		AssistantID:    assistant.ID.String(),
-		ProjectID:      assistant.ProjectID.String(),
-		Model:          assistant.Model,
-		Instructions:   instructions,
-		CompletionsURL: completionsEndpoint.String(),
-		ChatID:         thread.ChatID.String(),
-		MCPServers:     mcpServers,
-		History:        history,
-		ContextWindow:  s.resolveAssistantContextWindow(ctx, assistant.Model),
-		Compaction:     compaction,
-		SourceRefJSON:  thread.SourceRefJSON,
+		AssistantID:     assistant.ID.String(),
+		ProjectID:       assistant.ProjectID.String(),
+		Model:           assistant.Model,
+		ReasoningEffort: assistant.ReasoningEffort,
+		Instructions:    instructions,
+		CompletionsURL:  completionsEndpoint.String(),
+		ChatID:          thread.ChatID.String(),
+		MCPServers:      mcpServers,
+		History:         history,
+		ContextWindow:   s.resolveAssistantContextWindow(ctx, assistant.Model),
+		Compaction:      compaction,
+		SourceRefJSON:   thread.SourceRefJSON,
 	}, nil
 }
 
@@ -4012,9 +4081,12 @@ func unreachableReason(m assistantMCPServerRow) string {
 	return "disabled"
 }
 
-// endpointURL is the server's own MCP address; platform endpoints live under base.
-// Platform-first selection (not endpointaddr.PrimaryEndpoint) keeps existing URLs stable.
+// endpointURL is the server's own MCP address; platform endpoints live under base. A hosted row's domain root is the
+// bare domain, as endpointaddr.EndpointURL renders it; other rows keep /mcp/{slug} so configured Kit resources match.
 func (m assistantMCPServerRow) endpointURL(base *url.URL) *url.URL {
+	if m.EndpointDomain != "" && m.EndpointIsDomainRoot && m.ToolsetSlug.Valid {
+		return &url.URL{Scheme: "https", Host: m.EndpointDomain}
+	}
 	if m.EndpointDomain != "" {
 		return (&url.URL{Scheme: "https", Host: m.EndpointDomain}).JoinPath("mcp", m.EndpointSlug)
 	}
@@ -4241,6 +4313,7 @@ func (s *ServiceCore) loadThreadContext(ctx context.Context, projectID, threadID
 		CreatedByUserID: conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
 		Name:            row.Name,
 		Model:           row.Model,
+		ReasoningEffort: reasoningEffortFromPGText(row.ReasoningEffort),
 		Instructions:    row.Instructions,
 		MCPServers:      nil,
 		Skills:          nil,
@@ -4704,4 +4777,59 @@ func assistantActor(ctx context.Context, fallbackUserID string) hostedmcp.Actor 
 		actor.UserID = ""
 	}
 	return actor
+}
+
+func validateReasoningEffort(effort string) error {
+	switch effort {
+	case "none", "low", "medium", "high":
+		return nil
+	default:
+		return assistantValidationError("reasoning_effort must be none, low, medium, or high")
+	}
+}
+
+// reasoningEffortFromPGText preserves the effective default for legacy NULL rows.
+func reasoningEffortFromPGText(effort pgtype.Text) string {
+	return normalizeReasoningEffort(conv.FromPGTextOrEmpty[string](effort))
+}
+
+func normalizeReasoningEffort(effort string) string {
+	if effort == "" {
+		return "medium"
+	}
+	return effort
+}
+
+func (s *ServiceCore) auditAssistantReasoning(ctx context.Context, tx pgx.Tx, record assistantRecord, before *audit.AssistantReasoningSnapshot) error {
+	if s.audit == nil {
+		return nil
+	}
+
+	actor, authenticated := contextvalues.AuthenticatedActor(ctx)
+	var displayName *string
+	switch {
+	case authenticated:
+		if actor.Type == urn.PrincipalTypeUser {
+			if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil {
+				displayName = authCtx.Email
+			}
+		}
+	case record.CreatedByUserID != "":
+		// Provisioning can carry the initiating user explicitly without a request context.
+		actor = urn.NewPrincipal(urn.PrincipalTypeUser, record.CreatedByUserID)
+	default:
+		actor = urn.NewSystemPrincipal("assistant-configuration")
+		displayName = new("Assistant configuration")
+		ctx = contextvalues.SetActingSurface(ctx, string(audit.SurfaceSystem))
+	}
+	if err := s.audit.LogAssistantReasoningUpdate(ctx, tx, audit.LogAssistantReasoningUpdateEvent{
+		OrganizationID: record.OrganizationID, ProjectID: record.ProjectID,
+		Actor: actor, ActorDisplayName: displayName,
+		AssistantURN: urn.NewAssistant(record.ID), AssistantName: record.Name,
+		AssistantReasoningSnapshotBefore: before,
+		AssistantReasoningSnapshotAfter:  &audit.AssistantReasoningSnapshot{ReasoningEffort: record.ReasoningEffort},
+	}); err != nil {
+		return fmt.Errorf("audit assistant reasoning preference: %w", err)
+	}
+	return nil
 }

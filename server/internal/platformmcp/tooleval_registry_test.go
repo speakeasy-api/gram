@@ -14,6 +14,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/access"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -68,7 +69,7 @@ func composeToolEvalRegistry(t *testing.T, logger *slog.Logger, pool *pgxpool.Po
 	require.NoError(t, err)
 	routeToggle, err := NewDataExportRouteToggleService(logger, pool, dataexports.NewRouteEnabledCore(auditLogger, encryption), authorizer, budget)
 	require.NoError(t, err)
-	shadowInventory, err := NewShadowInventoryService(stubShadowInventory{}, stubShadowReview{}, flags, slugs, platformrepo.New(pool), budget, key)
+	shadowInventory, err := NewShadowInventoryService(stubShadowInventory{}, stubShadowReview{}, platformrepo.New(pool), budget, key)
 	require.NoError(t, err)
 	reader := NewPostgresReader(logger, pool).
 		WithAuthorization(engine).
@@ -84,8 +85,8 @@ func composeToolEvalRegistry(t *testing.T, logger *slog.Logger, pool *pgxpool.Po
 		WithRiskFindings(NewRiskFindingsService(pool, findings, key), budget).
 		WithRiskFindingList(NewRiskFindingListService(pool, nil, key), budget).
 		WithChatMetadata(NewChatMetadataService(pool, engine, chatfindings.New(pool, findings), budget, key)).
+		WithMCPFeedback(NewMCPFeedbackReadService(&stubMCPFeedbackLister{}, budget)).
 		WithOrganizationGateway(NewOrganizationGatewayService(pool, dashboardURL)).
-		WithGatewayProxy(&recordingGatewayProxy{}, flags).
 		WithToolExposure(toolExposure).
 		WithProjectLifecycle(projectLifecycle).
 		WithShadowInventory(shadowInventory).
@@ -176,6 +177,7 @@ func composeToolEvalRegistry(t *testing.T, logger *slog.Logger, pool *pgxpool.Po
 		distributions, skills, diagnostics, NewWorkflowRunService(logger, &captureWorkflowRunEmitter{}), pluginInventory, sessionRecall, riskMutations,
 		CatalogDescriptor{}, accessReads, accessRoleMutations, nil, signalAuthoring)
 	registrar.withLogger(logger)
+	registrar.withAICatalog(aivendorstest.NewStore())
 	return registrar
 }
 

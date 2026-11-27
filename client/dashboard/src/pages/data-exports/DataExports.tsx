@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Icon } from "@/components/ui/Icon";
 import { MoreActions } from "@/components/ui/MoreActions";
-import { SkeletonTable } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
@@ -72,6 +72,10 @@ const DATA_SOURCE_OPTIONS: DataSourceOption[] = [
   {
     value: DataSource.McpConnectionLogs,
     label: "MCP connection logs",
+  },
+  {
+    value: DataSource.McpFeedback,
+    label: "MCP feedback",
   },
 ];
 
@@ -141,7 +145,11 @@ function renderDataSourceDescription(
   }
 
   if (dataSource === DataSource.McpConnectionLogs) {
-    return "OTLP logs for failed MCP connections, including server problems an admin or service provider needs to fix. You can choose to also send warnings (blocked connections) or info (declined connections). Connections through organization gateways are not included.";
+    return "OTLP logs for failed MCP connections, including server problems an admin or service provider needs to fix. You can choose to also send warnings (blocked connections, and failed sign-in steps that may still recover, such as a saved sign-in the service no longer accepts) or info (declined connections). Connections through organization gateways are not included.";
+  }
+
+  if (dataSource === DataSource.McpFeedback) {
+    return "OTLP logs for the reports agents send through the feedback tool on your MCP servers: one record per report, with its severity and the tool it is about. What the agent wrote and who it was working for are only sent to destinations that include sensitive data. Turn the tool on from an MCP server's Agent Feedback tab.";
   }
 
   return "OTLP data";
