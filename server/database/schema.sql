@@ -16980,6 +16980,24 @@ COMMENT ON COLUMN signup_offers.enabled IS '@access: confidential';
 CREATE UNIQUE INDEX IF NOT EXISTS signup_offers_stripe_promotion_code_id_uidx
   ON signup_offers (stripe_promotion_code_id);
 
+-- Staff-controlled platform-wide switches, one row per key. A missing row
+-- means the switch is off.
+CREATE TABLE IF NOT EXISTS platform_switches (
+  key TEXT PRIMARY KEY,
+  engaged BOOLEAN NOT NULL DEFAULT false,
+  updated_by_user_id TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT platform_switches_key_check CHECK (key <> '')
+);
+
+COMMENT ON COLUMN platform_switches.key IS '@access: confidential';
+COMMENT ON COLUMN platform_switches.engaged IS '@access: confidential';
+COMMENT ON COLUMN platform_switches.updated_by_user_id IS 'Speakeasy users.id of the staff member who last changed the switch.
+@access: confidential';
+COMMENT ON COLUMN platform_switches.created_at IS '@access: confidential';
+COMMENT ON COLUMN platform_switches.updated_at IS '@access: confidential';
+
 -- The top-level steps of a playbook in walking order. Cards under a group
 -- come with the group and are never listed on their own.
 CREATE TABLE IF NOT EXISTS onboarding_playbook_steps (
