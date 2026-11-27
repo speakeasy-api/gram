@@ -160,6 +160,27 @@ describe("ManagedProfileExample auto_update", () => {
     },
   );
 
+  it("points the agent at a host its default does not reach", () => {
+    renderSetup({}, <ManagedProfileExample os="macos" />);
+
+    expect(JSON.parse(agentToken.buildCopyText("spk_org_test"))).toMatchObject({
+      _control_plane_url: "https://app.example.com",
+    });
+    expect(screen.getByText(/Keep/).textContent).toContain(
+      "_control_plane_url",
+    );
+  });
+
+  it("leaves the agent on its default host", () => {
+    serverURL.current = "https://app.getgram.ai";
+    renderSetup({}, <ManagedProfileExample os="macos" />);
+
+    expect(agentToken.buildCopyText("spk_org_test")).not.toContain(
+      "_control_plane_url",
+    );
+    expect(document.body.textContent).not.toContain("_control_plane_url");
+  });
+
   it("uses automatic and calls out Windows when no OS is given", () => {
     renderSetup({}, <ManagedProfileExample />);
 
@@ -210,5 +231,35 @@ describe("macOS install command", () => {
     );
     // The stable snippet has no shell variables, so it runs in fish too.
     expect(screen.queryByText(/Uses bash syntax/)).toBeNull();
+  });
+});
+
+describe("personal sign-in", () => {
+  async function openPersonalSignIn() {
+    renderSetup({});
+    fireEvent.click(screen.getByRole("img", { name: "macOS logo" }));
+    await screen.findByText(`v${RELEASE_VERSION}`);
+    const personal = screen.getByRole("tab", { name: "Personal / PoC" });
+    // Radix tabs activate on mouse down, not click.
+    fireEvent.mouseDown(personal);
+    fireEvent.click(personal);
+  }
+
+  it("sends people to managed.json on a host the agent's default does not reach", async () => {
+    await openPersonalSignIn();
+
+    expect(
+      await screen.findByText("Use managed.json on this Speakeasy host"),
+    ).toBeTruthy();
+  });
+
+  it("offers sign-in alone on the agent's default host", async () => {
+    serverURL.current = "https://app.getgram.ai";
+    await openPersonalSignIn();
+
+    await screen.findByText(/set identity by signing in once/);
+    expect(
+      screen.queryByText("Use managed.json on this Speakeasy host"),
+    ).toBeNull();
   });
 });

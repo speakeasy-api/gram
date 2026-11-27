@@ -1,13 +1,25 @@
 import { CodeBlock } from "@/components/code";
 import { Text } from "@/components/ui/Text";
 import { Stack } from "@/components/ui/Stack";
+import { clientServerURLOverride } from "@/lib/client-host";
 
 export function GettingStartedInstructions(): JSX.Element {
+  // The CLI's default host does not reach this deployment, so it signs in here
+  // first; later commands reuse the saved host.
+  const cliServerURL = clientServerURLOverride("cli");
   const commands = [
     {
       label: "Install the Speakeasy CLI",
       command: "brew install speakeasy-api/tap/cli",
     },
+    ...(cliServerURL
+      ? [
+          {
+            label: "Sign in to this Speakeasy host",
+            command: `speakeasy auth --api-url ${cliServerURL}`,
+          },
+        ]
+      : []),
     {
       label: "Create a new function project",
       command: "speakeasy functions init",
