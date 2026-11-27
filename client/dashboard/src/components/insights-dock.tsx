@@ -1418,6 +1418,9 @@ export function InsightsProvider({
   // chat id from the server on the first send.
   const handleStartFresh = useCallback(() => {
     setRuntimeKey((k) => k + 1);
+    // A prompt still waiting on the old conversation must not land in the
+    // new one.
+    setPendingPrompt(null);
     setHistoryView(false);
   }, []);
 
@@ -1891,15 +1894,15 @@ function PendingPromptBridge({
       return;
     }
     if (firedNonceRef.current === pending.nonce) return;
-    firedNonceRef.current = pending.nonce;
 
-    const { text } = pending;
+    const { text, nonce } = pending;
 
     // On a cold open the main thread is a placeholder (assistant-ui's
     // EMPTY_THREAD_CORE) until the remote thread-list runtime binds the real
     // thread core. The placeholder reports isLoading/isDisabled false but
     // throws on append, so a throw here means nothing was sent — leave the
-    // prompt queued and retry on the next runtime event. A successful append
+    // prompt queued (nonce unmarked) and retry on the next runtime event. A
+    // successful append
     // marks `done` immediately and never retries: the optimistic message lands
     // asynchronously, so a post-append "did it land?" check races and
     // re-appending duplicates the send.
@@ -1907,6 +1910,7 @@ function PendingPromptBridge({
 
     const finish = () => {
       done = true;
+      firedNonceRef.current = nonce;
       onConsume();
     };
 

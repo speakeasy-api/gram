@@ -10,10 +10,14 @@ import { useListChats } from "@gram/client/react-query/listChats.js";
 
 // Resolve the project's Project Assistant and list its conversations. Shared
 // by the pinned, recents, and compact sections so the assistant-resolution
-// logic lives in one place. Pass a pinned state to filter, or `pinnedFirst` to
-// list every chat with pinned ones ahead of the rest.
+// logic lives in one place. Pass a pinned state to filter, `pinnedFirst` to
+// list every chat with pinned ones ahead of the rest, or just a `limit` for the
+// most recent chats regardless of pinning.
 export function useProjectAssistantChats(
-  filter: { pinned: Pinned } | { pinnedFirst: true; limit: number },
+  filter:
+    | { pinned: Pinned }
+    | { pinnedFirst: true; limit: number }
+    | { limit: number },
 ): {
   chats: ChatOverview[];
   loading: boolean;

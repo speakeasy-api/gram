@@ -200,10 +200,7 @@ const RECENT_CHATS_COUNT = 5;
 /** The last few conversations, so the user can pick one back up. */
 const TerminalRecentChats: FC = () => {
   const routes = useRoutes();
-  const { chats } = useProjectAssistantChats({
-    pinnedFirst: true,
-    limit: RECENT_CHATS_COUNT,
-  });
+  const { chats } = useProjectAssistantChats({ limit: RECENT_CHATS_COUNT });
   if (chats.length === 0) return null;
   return (
     <div className="gram-term-tips gram-term-recent">
