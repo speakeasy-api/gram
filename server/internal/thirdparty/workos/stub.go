@@ -4,11 +4,14 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"net/http"
 	"sync"
 	"time"
 
 	"github.com/workos/workos-go/v6/pkg/common"
 	"github.com/workos/workos-go/v6/pkg/events"
+
+	"github.com/speakeasy-api/gram/server/internal/partition"
 )
 
 type StubClient struct {
@@ -28,6 +31,10 @@ type StubClient struct {
 	directoryGroupUsers   map[string][]DirectoryUser
 	next                  int
 	nowFn                 func() time.Time
+
+	// partition marks organizations the stub creates, as
+	// [ClientOpts.Partition] does for the real client.
+	partition partition.Partition
 }
 
 type UserExternalIDUpdate struct {
@@ -68,7 +75,42 @@ func NewStubClient() *StubClient {
 		directoryGroupUsers:   make(map[string][]DirectoryUser),
 		next:                  1,
 		nowFn:                 time.Now,
+		partition:             partition.US,
 	}
+}
+
+// SetPartition sets the partition that marks organizations the stub creates.
+// It defaults to [partition.US].
+func (s *StubClient) SetPartition(p partition.Partition) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	s.partition = p
+}
+
+// SetOrganizationPartition changes the partition marker of a stub
+// organization, leaving its other metadata keys as they are.
+func (s *StubClient) SetOrganizationPartition(_ context.Context, workosOrgID string, p partition.Partition) error {
+	if _, err := partition.Parse(p.String()); err != nil {
+		return fmt.Errorf("set organization partition: %w", err)
+	}
+
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	state, ok := s.orgs[workosOrgID]
+	if !ok {
+		return &APIError{Method: http.MethodPut, Path: "/stub/organizations/" + workosOrgID, StatusCode: http.StatusNotFound, Body: "organization not found"}
+	}
+
+	metadata := maps.Clone(state.organization.Metadata)
+	if metadata == nil {
+		metadata = make(map[string]string, 1)
+	}
+	metadata[PartitionMetadataKey] = p.String()
+	state.organization.Metadata = metadata
+
+	return nil
 }
 
 func (s *StubClient) UpsertOrganization(org Organization) {
@@ -77,6 +119,7 @@ func (s *StubClient) UpsertOrganization(org Organization) {
 
 	state := s.orgState(org.ID)
 	state.organization = org
+	state.organization.Metadata = maps.Clone(org.Metadata)
 }
 
 func (s *StubClient) GetOrganization(_ context.Context, orgID string) (*Organization, error) {
@@ -89,6 +132,7 @@ func (s *StubClient) GetOrganization(_ context.Context, orgID string) (*Organiza
 	}
 
 	org := state.organization
+	org.Metadata = maps.Clone(org.Metadata)
 	return &org, nil
 }
 
@@ -109,7 +153,9 @@ func (s *StubClient) ListOrganizations(_ context.Context) ([]Organization, error
 
 	orgs := make([]Organization, 0, len(s.orgOrder))
 	for _, orgID := range s.orgOrder {
-		orgs = append(orgs, s.orgs[orgID].organization)
+		org := s.orgs[orgID].organization
+		org.Metadata = maps.Clone(org.Metadata)
+		orgs = append(orgs, org)
 	}
 
 	return orgs, nil
@@ -484,10 +530,15 @@ func (s *StubClient) CreateOrganization(_ context.Context, name, _ string) (stri
 	s.mut.Lock()
 	defer s.mut.Unlock()
 
+	if _, err := partition.Parse(s.partition.String()); err != nil {
+		return "", fmt.Errorf("create organization: %w: %w", ErrClientPartitionNotConfigured, err)
+	}
+
 	workosOrgID := fmt.Sprintf("org_workos_%d", s.next)
 	s.next++
 	state := s.orgState(workosOrgID)
 	state.organization.Name = name
+	state.organization.Metadata = map[string]string{PartitionMetadataKey: s.partition.String()}
 
 	return workosOrgID, nil
 }
@@ -547,7 +598,7 @@ func (s *StubClient) orgState(orgID string) *stubOrgState {
 	}
 
 	state = &stubOrgState{
-		organization: Organization{ID: orgID, Name: orgID, ExternalID: "", CreatedAt: stubRoleTimestamp, UpdatedAt: stubRoleTimestamp},
+		organization: Organization{ID: orgID, Name: orgID, ExternalID: "", CreatedAt: stubRoleTimestamp, UpdatedAt: stubRoleTimestamp, Metadata: nil},
 		roles: map[string]Role{
 			"admin":  {ID: "role_admin", Name: "Admin", Slug: "admin", Description: "", Type: "EnvironmentRole", CreatedAt: stubRoleTimestamp, UpdatedAt: stubRoleTimestamp},
 			"member": {ID: "role_member", Name: "Member", Slug: "member", Description: "", Type: "EnvironmentRole", CreatedAt: stubRoleTimestamp, UpdatedAt: stubRoleTimestamp},

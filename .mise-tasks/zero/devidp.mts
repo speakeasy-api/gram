@@ -98,8 +98,9 @@ async function run() {
   }
 
   // Temporary: evolve databases for dev-idp schema changes introduced on
-  // 2026-09-07. Remove this invocation and the temporary evolution path after
-  // 2026-10-15, when local environments can be assumed to have run it.
+  // 2026-09-07 and 2026-11-27. Remove this invocation and the temporary
+  // evolution path after 2027-01-15, when local environments can be assumed to
+  // have run it.
   if (process.env["usage_skip_evolve"] !== "true") {
     await $`mise run db:devidp:evolve`;
   }

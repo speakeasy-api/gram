@@ -15,19 +15,20 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	orgid "github.com/speakeasy-api/gram/server/internal/organizations/id"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
+	"github.com/speakeasy-api/gram/server/internal/partition"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
 const verifiedOrganizationResponse = `{"id":"org_example","name":"example","domains":[{"domain":"www.example.com","state":"verified"}]}`
 
-func organizationHTTPClient(t *testing.T, handler http.HandlerFunc) *workos.Client {
+func organizationHTTPClient(t *testing.T, p partition.Partition, handler http.HandlerFunc) *workos.Client {
 	t.Helper()
 	server := httptest.NewServer(handler)
 	t.Cleanup(server.Close)
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
 	require.NoError(t, err)
-	return workos.NewClient(policy, "test-api-key", workos.ClientOpts{Endpoint: server.URL, ClientID: "test-client"})
+	return workos.NewClient(policy, "test-api-key", workos.ClientOpts{Endpoint: server.URL, ClientID: "test-client", Partition: p})
 }
 
 func TestVerifiedOrganizationRequests(t *testing.T) {
@@ -40,7 +41,7 @@ func TestVerifiedOrganizationRequests(t *testing.T) {
 		err    error
 	}
 	requests := make(chan request, 8)
-	client := organizationHTTPClient(t, func(w http.ResponseWriter, r *http.Request) {
+	client := organizationHTTPClient(t, partition.US, func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
 		requests <- request{method: r.Method, path: r.URL.Path, key: r.Header.Get("Idempotency-Key"), body: body, err: err}
 		w.Header().Set("Content-Type", "application/json")
@@ -61,6 +62,7 @@ func TestVerifiedOrganizationRequests(t *testing.T) {
 	require.JSONEq(t, `[{"domain":"www.example.com","state":"verified"}]`, string(payload["domain_data"]))
 	require.JSONEq(t, `null`, string(payload["domains"]))
 	require.NotContains(t, payload, "external_id")
+	require.JSONEq(t, `{"partition":"us"}`, string(payload["metadata"]))
 	update := <-requests
 	require.NoError(t, update.err)
 	require.Equal(t, http.MethodPut, update.method)
@@ -79,6 +81,7 @@ func TestVerifiedOrganizationRequests(t *testing.T) {
 	require.JSONEq(t, `"Example"`, string(payload["name"]))
 	require.JSONEq(t, `null`, string(payload["domains"]))
 	require.JSONEq(t, `null`, string(payload["domain_data"]))
+	require.JSONEq(t, `{"partition":"us"}`, string(payload["metadata"]))
 	plainUpdate := <-requests
 	require.NoError(t, plainUpdate.err)
 	require.JSONEq(t, string(update.body), string(plainUpdate.body))
@@ -100,7 +103,7 @@ func TestVerifiedOrganizationRejectsUnexpectedResponses(t *testing.T) {
 		`invalid json`,
 	} {
 		var calls atomic.Int32
-		client := organizationHTTPClient(t, func(w http.ResponseWriter, r *http.Request) {
+		client := organizationHTTPClient(t, partition.US, func(w http.ResponseWriter, r *http.Request) {
 			calls.Add(1)
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = io.WriteString(w, response)
@@ -118,7 +121,7 @@ func TestVerifiedOrganizationErrorsDoNotRetry(t *testing.T) {
 	for _, failingMethod := range []string{http.MethodPost, http.MethodPut} {
 		for _, status := range []int{http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden, http.StatusConflict, http.StatusUnprocessableEntity, http.StatusTooManyRequests, http.StatusInternalServerError} {
 			var creates, updates, other atomic.Int32
-			client := organizationHTTPClient(t, func(w http.ResponseWriter, r *http.Request) {
+			client := organizationHTTPClient(t, partition.US, func(w http.ResponseWriter, r *http.Request) {
 				switch r.Method {
 				case http.MethodPost:
 					creates.Add(1)
@@ -160,7 +163,7 @@ func TestVerifiedOrganizationErrorsDoNotRetry(t *testing.T) {
 func TestExistingOrganizationOperationsStillRetry(t *testing.T) {
 	t.Parallel()
 	var creates, updates, reads atomic.Int32
-	client := organizationHTTPClient(t, func(w http.ResponseWriter, r *http.Request) {
+	client := organizationHTTPClient(t, partition.US, func(w http.ResponseWriter, r *http.Request) {
 		var attempts int32
 		switch r.Method {
 		case http.MethodPost:
@@ -203,7 +206,7 @@ func TestVerifiedOrganizationDisplayNamePreservesDomain(t *testing.T) {
 		t.Run(tc.hostname, func(t *testing.T) {
 			t.Parallel()
 			requests := make(chan []byte, 1)
-			client := organizationHTTPClient(t, func(w http.ResponseWriter, r *http.Request) {
+			client := organizationHTTPClient(t, partition.US, func(w http.ResponseWriter, r *http.Request) {
 				body, _ := io.ReadAll(r.Body)
 				requests <- body
 				w.Header().Set("Content-Type", "application/json")

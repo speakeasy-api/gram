@@ -7,7 +7,7 @@
 -- caller gets the existing organization back (with its existing id);
 -- otherwise the new row lands with the supplied @id.
 -- name: CreateOrganization :one
-INSERT INTO organizations (id, name, slug, account_type, workos_id, external_id, domains)
+INSERT INTO organizations (id, name, slug, account_type, workos_id, external_id, domains, metadata)
 VALUES (
   @id,
   @name,
@@ -15,11 +15,16 @@ VALUES (
   COALESCE(sqlc.narg('account_type'), 'enterprise'),
   sqlc.narg('workos_id'),
   sqlc.narg('external_id'),
-  COALESCE(sqlc.narg('domains'), '[]')
+  COALESCE(sqlc.narg('domains'), '[]'),
+  COALESCE(sqlc.narg('metadata'), '{}')
 )
 ON CONFLICT (slug) DO UPDATE SET slug = excluded.slug
 RETURNING *;
 
+-- UpdateOrganization applies a partial update. metadata_patch follows the
+-- WorkOS update semantics: NULL leaves metadata alone, the empty object '{}'
+-- deletes every key, and any other object is merged in, where a JSON null
+-- value deletes that key (json_patch implements RFC 7396 merge patch).
 -- name: UpdateOrganization :one
 UPDATE organizations
 SET
@@ -28,6 +33,11 @@ SET
   account_type = COALESCE(sqlc.narg('account_type'), account_type),
   workos_id = COALESCE(sqlc.narg('workos_id'), workos_id),
   external_id = COALESCE(sqlc.narg('external_id'), external_id),
+  metadata = CASE
+    WHEN CAST(sqlc.narg('metadata_patch') AS TEXT) IS NULL THEN metadata
+    WHEN CAST(sqlc.narg('metadata_patch') AS TEXT) = '{}' THEN '{}'
+    ELSE json_patch(metadata, CAST(sqlc.narg('metadata_patch') AS TEXT))
+  END,
   updated_at = @ts
 WHERE id = @id
 RETURNING *;

@@ -20,6 +20,10 @@ type Organization struct {
 	ExternalID string
 	CreatedAt  string
 	UpdatedAt  string
+
+	// Metadata is the organization's WorkOS metadata. The partition marker is
+	// read from it with [Organization.Partition].
+	Metadata map[string]string
 }
 
 type OrganizationDomainState string
@@ -81,6 +85,7 @@ func (wc *Client) GetOrganization(ctx context.Context, orgID string) (*Organizat
 		ExternalID: o.ExternalID,
 		CreatedAt:  o.CreatedAt,
 		UpdatedAt:  o.UpdatedAt,
+		Metadata:   o.Metadata,
 	}, nil
 }
 
@@ -103,16 +108,22 @@ func (wc *Client) GetOrganizationDomainPolicy(ctx context.Context, orgID string)
 	}, nil
 }
 
-// CreateOrganization creates a WorkOS organization with the given name and
-// sets its external_id to the Speakeasy org ID. Returns the WorkOS org ID.
+// CreateOrganization creates a WorkOS organization with the given name, marked
+// as belonging to this client's partition, and sets its external_id to the
+// Speakeasy org ID. Returns the WorkOS org ID.
 func (wc *Client) CreateOrganization(ctx context.Context, name, gramOrgID string) (string, error) {
+	metadata, err := wc.partitionMetadata()
+	if err != nil {
+		return "", fmt.Errorf("create organization: %w", err)
+	}
+
 	o, err := wc.orgs.CreateOrganization(ctx, organizations.CreateOrganizationOpts{ //nolint:exhaustruct_v5 // deprecated WorkOS fields are intentionally omitted.
 		Name:           name,
 		Domains:        nil,
 		DomainData:     nil,
 		ExternalID:     gramOrgID,
 		IdempotencyKey: gramOrgID,
-		Metadata:       nil,
+		Metadata:       metadata,
 	})
 	if err != nil {
 		return "", fmt.Errorf("create organization: %w", err)
@@ -126,15 +137,21 @@ func (wc *Client) CreateOrganization(ctx context.Context, name, gramOrgID string
 var ErrOrganizationCreationRejected = errors.New("WorkOS rejected organization creation")
 
 // CreateOrganizationWithVerifiedDomain asserts prior administrator verification
-// of hostname. It does not retry because creation has no idempotency key.
+// of hostname. It does not retry because creation has no idempotency key. The
+// organization is marked as belonging to this client's partition.
 func (wc *Client) CreateOrganizationWithVerifiedDomain(ctx context.Context, name, hostname string) (string, error) {
+	metadata, err := wc.partitionMetadata()
+	if err != nil {
+		return "", fmt.Errorf("create organization with verified domain: %w", err)
+	}
+
 	o, err := wc.orgsNoRetry.CreateOrganization(ctx, organizations.CreateOrganizationOpts{ //nolint:exhaustruct_v5 // deprecated WorkOS fields are intentionally omitted.
 		Name:           name,
 		Domains:        nil,
 		DomainData:     []organizations.OrganizationDomainData{{Domain: hostname, State: organizations.Verified}},
 		ExternalID:     "",
 		IdempotencyKey: "",
-		Metadata:       nil,
+		Metadata:       metadata,
 	})
 	if err != nil {
 		// WorkOS documents 400 as malformed parameters and 422 as validation
@@ -232,7 +249,8 @@ func updateOrganizationExternalID(ctx context.Context, client *organizations.Cli
 		DomainData:       nil,
 		ExternalID:       externalID,
 		StripeCustomerID: "",
-		Metadata:         nil,
+		// Nil leaves metadata, including the partition marker, untouched.
+		Metadata: nil,
 	})
 	if err != nil {
 		return fmt.Errorf("update organization external ID: %w", err)
@@ -264,6 +282,7 @@ func (wc *Client) ListOrganizations(ctx context.Context) ([]Organization, error)
 				ExternalID: o.ExternalID,
 				CreatedAt:  o.CreatedAt,
 				UpdatedAt:  o.UpdatedAt,
+				Metadata:   o.Metadata,
 			})
 		}
 

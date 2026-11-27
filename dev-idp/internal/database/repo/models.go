@@ -160,6 +160,7 @@ type Organization struct {
 	WorkosID    sql.NullString
 	ExternalID  sql.NullString
 	Domains     string
+	Metadata    string
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 }

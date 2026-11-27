@@ -876,12 +876,14 @@ func newStripeCatalog(c *cli.Context) metering.StripeCatalog {
 // workosClientOpts builds the ClientOpts threaded into every workos.NewClient
 // call site below. Pulls the optional --workos-endpoint override (env:
 // WORKOS_API_URL) so local dev can point both real-WorkOS callers at
-// the dev-idp's WorkOS emulator without changing any wiring.
-func workosClientOpts(c *cli.Context) workos.ClientOpts {
+// the dev-idp's WorkOS emulator without changing any wiring, and the
+// deployment's partition so every organization it creates is marked with it.
+func workosClientOpts(ctx context.Context, c *cli.Context) workos.ClientOpts {
 	return workos.ClientOpts{
 		Endpoint:    c.String("workos-endpoint"),
 		ClientID:    c.String("idp-client-id"),
 		RetryConfig: nil,
+		Partition:   PullPartition(ctx),
 	}
 }
 
@@ -891,7 +893,7 @@ func newAccessRoleProvider(ctx context.Context, logger *slog.Logger, guardianPol
 	// Local callers authenticate to dev-idp with its client secret; dev-idp owns
 	// any upstream WorkOS API key needed by the selected backend.
 	if c.String("environment") == "local" {
-		opts := workosClientOpts(c)
+		opts := workosClientOpts(ctx, c)
 
 		if opts.Endpoint != "" && idpClientSecret != "" && idpClientSecret != "unset" {
 			logger.InfoContext(ctx, "using dev-idp WorkOS emulator as access role provider")
@@ -903,7 +905,7 @@ func newAccessRoleProvider(ctx context.Context, logger *slog.Logger, guardianPol
 
 	switch {
 	case idpClientSecret != "" && idpClientSecret != "unset":
-		return workos.NewClient(guardianPolicy, idpClientSecret, workosClientOpts(c)), nil
+		return workos.NewClient(guardianPolicy, idpClientSecret, workosClientOpts(ctx, c)), nil
 	default:
 		return nil, errors.New("WorkOS API key not provided")
 	}
@@ -921,7 +923,7 @@ func newAccessRoleProvider(ctx context.Context, logger *slog.Logger, guardianPol
 func newAdminWorkOSOrganizationCreator(ctx context.Context, logger *slog.Logger, guardianPolicy *guardian.Policy, c *cli.Context) orgprovision.WorkOSVerifiedDomainCreator {
 	apiKey := c.String("workos-api-key")
 	haveRealKey := apiKey != "" && apiKey != "unset"
-	opts := workosClientOpts(c)
+	opts := workosClientOpts(ctx, c)
 	idpClientSecret := c.String("idp-client-secret")
 
 	switch {
@@ -991,7 +993,7 @@ func newAdminOpenRouter(
 	)
 }
 
-func newWorkOSClient(guardianPolicy *guardian.Policy, c *cli.Context) (client *workos.Client, workosAvailable bool, err error) {
+func newWorkOSClient(ctx context.Context, guardianPolicy *guardian.Policy, c *cli.Context) (client *workos.Client, workosAvailable bool, err error) {
 	env := c.String("environment")
 	credential := c.String("idp-client-secret")
 
@@ -1004,7 +1006,7 @@ func newWorkOSClient(guardianPolicy *guardian.Policy, c *cli.Context) (client *w
 	if env == "local" {
 		available = c.String("devidp-backend") == "workos"
 	}
-	return workos.NewClient(guardianPolicy, credential, workosClientOpts(c)), available, nil
+	return workos.NewClient(guardianPolicy, credential, workosClientOpts(ctx, c)), available, nil
 }
 
 // newIDPUserManagementClient creates a WorkOS user-management SDK client

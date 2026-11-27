@@ -28,6 +28,9 @@ CREATE TABLE IF NOT EXISTS organizations (
   -- it back through the WorkOS event sync.
   external_id TEXT,
   domains TEXT NOT NULL DEFAULT '[]',
+  -- WorkOS organization metadata as a JSON object of string values. Speakeasy
+  -- records the organization's partition here under the "partition" key.
+  metadata TEXT NOT NULL DEFAULT '{}',
 
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP

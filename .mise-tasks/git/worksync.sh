@@ -222,8 +222,9 @@ if [ "${usage_no_migrate:-false}" = "true" ]; then
 fi
 
 echo
-# Temporary support for dev-idp schema changes introduced on 2026-09-07.
-# Remove after 2026-10-15, when local environments can be assumed evolved.
+# Temporary support for dev-idp schema changes introduced on 2026-09-07 and
+# 2026-11-27. Remove after 2027-01-15, when local environments can be assumed
+# evolved.
 echo "⏳ Evolving dev-idp SQLite schema..."
 mise run db:devidp:evolve
 

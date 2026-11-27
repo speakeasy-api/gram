@@ -665,7 +665,7 @@ func newWorkerCommand() *cli.Command {
 					LoadUserPolicy:                   nil,
 				})
 
-			workosClient, workosAvailable, err := newWorkOSClient(guardianPolicy, c)
+			workosClient, workosAvailable, err := newWorkOSClient(ctx, guardianPolicy, c)
 			if err != nil {
 				return fmt.Errorf("failed to create WorkOS client: %w", err)
 			}

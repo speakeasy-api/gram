@@ -7,6 +7,7 @@ import (
 
 	orgid "github.com/speakeasy-api/gram/server/internal/organizations/id"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
+	"github.com/speakeasy-api/gram/server/internal/partition"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
@@ -61,4 +62,43 @@ func TestCreateInWorkOSWithVerifiedDomain_AgainstMockWorkOS(t *testing.T) {
 	policy, err = client.GetOrganizationDomainPolicy(t.Context(), plain.WorkOSOrganizationID)
 	require.NoError(t, err)
 	require.Empty(t, policy.Domains)
+}
+
+// TestPartitionMarker_AgainstMockWorkOS proves both create paths mark the
+// organization through the dev identity provider, and that the external_id
+// back-fill that follows each create leaves the marker in place.
+func TestPartitionMarker_AgainstMockWorkOS(t *testing.T) {
+	t.Parallel()
+	client := newEmulatorClient(t)
+
+	plain, err := orgprovision.CreateInWorkOS(t.Context(), client, "Acme Local Co")
+	require.NoError(t, err)
+	verified, err := orgprovision.CreateInWorkOSWithVerifiedDomain(t.Context(), client, "example", "www.example.com")
+	require.NoError(t, err)
+
+	for _, workosOrgID := range []string{plain.WorkOSOrganizationID, verified.WorkOSOrganizationID} {
+		org, err := client.GetOrganization(t.Context(), workosOrgID)
+		require.NoError(t, err)
+		require.Equal(t, map[string]string{workos.PartitionMetadataKey: "us"}, org.Metadata)
+	}
+}
+
+// TestSetOrganizationPartition_AgainstMockWorkOS proves changing the marker
+// through the dev identity provider keeps the rest of the organization intact.
+func TestSetOrganizationPartition_AgainstMockWorkOS(t *testing.T) {
+	t.Parallel()
+	client := newEmulatorClient(t)
+
+	created, err := orgprovision.CreateInWorkOS(t.Context(), client, "Acme Local Co")
+	require.NoError(t, err)
+
+	require.NoError(t, client.SetOrganizationPartition(t.Context(), created.WorkOSOrganizationID, partition.EU))
+
+	org, err := client.GetOrganization(t.Context(), created.WorkOSOrganizationID)
+	require.NoError(t, err)
+	got, err := org.Partition()
+	require.NoError(t, err)
+	require.Equal(t, partition.EU, got)
+	require.Equal(t, "Acme Local Co", org.Name)
+	require.Equal(t, created.GramOrganizationID, org.ExternalID)
 }

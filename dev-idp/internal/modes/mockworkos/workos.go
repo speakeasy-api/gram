@@ -672,6 +672,7 @@ func (h *Handler) handleWorkosCreateOrganization(w http.ResponseWriter, r *http.
 			Domain string `json:"domain"`
 			State  string `json:"state"`
 		} `json:"domain_data"`
+		Metadata json.RawMessage `json:"metadata"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeWorkosError(w, http.StatusBadRequest, "invalid request body")
@@ -679,6 +680,12 @@ func (h *Handler) handleWorkosCreateOrganization(w http.ResponseWriter, r *http.
 	}
 	if strings.TrimSpace(body.Name) == "" {
 		writeWorkosError(w, http.StatusBadRequest, "name is required")
+		return
+	}
+
+	metadata, err := decodeCreateMetadata(body.Metadata)
+	if err != nil {
+		writeWorkosError(w, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
 
@@ -716,6 +723,7 @@ func (h *Handler) handleWorkosCreateOrganization(w http.ResponseWriter, r *http.
 		WorkosID:    sql.NullString{String: workosOrgIDFor(id), Valid: true},
 		ExternalID:  nullableString(body.ExternalID),
 		Domains:     sql.NullString{String: string(encodedDomains), Valid: true},
+		Metadata:    metadata,
 	})
 	if err != nil {
 		h.logger.ErrorContext(ctx, "workos create organization", slog.Any("error", err))
@@ -731,6 +739,10 @@ func (h *Handler) handleWorkosCreateOrganization(w http.ResponseWriter, r *http.
 // rather than "set to empty": Speakeasy's external_id back-fill sends external_id
 // and no name, and must not blank the name it just set.
 //
+// metadata matches WorkOS: an absent or null metadata leaves it alone, keys
+// sent are merged in, a null value deletes that key, and an empty object
+// deletes every key.
+//
 // The ID is resolved without auto-association, so an unknown one is a 404
 // rather than a write applied to whichever organization happens to have no
 // workos_id yet. Every caller of this endpoint has just created the
@@ -745,22 +757,30 @@ func (h *Handler) handleWorkosUpdateOrganization(w http.ResponseWriter, r *http.
 	}
 
 	var body struct {
-		Name       string `json:"name"`
-		ExternalID string `json:"external_id"`
+		Name       string          `json:"name"`
+		ExternalID string          `json:"external_id"`
+		Metadata   json.RawMessage `json:"metadata"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeWorkosError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
+	metadataPatch, err := decodeMetadataPatch(body.Metadata)
+	if err != nil {
+		writeWorkosError(w, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
+
 	org, err := repo.New(h.db).UpdateOrganization(ctx, repo.UpdateOrganizationParams{
-		ID:          id,
-		Name:        nullableString(body.Name),
-		Slug:        sql.NullString{String: "", Valid: false},
-		AccountType: sql.NullString{String: "", Valid: false},
-		WorkosID:    sql.NullString{String: "", Valid: false},
-		ExternalID:  nullableString(body.ExternalID),
-		Ts:          time.Now(),
+		ID:            id,
+		Name:          nullableString(body.Name),
+		Slug:          sql.NullString{String: "", Valid: false},
+		AccountType:   sql.NullString{String: "", Valid: false},
+		WorkosID:      sql.NullString{String: "", Valid: false},
+		ExternalID:    nullableString(body.ExternalID),
+		MetadataPatch: metadataPatch,
+		Ts:            time.Now(),
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		writeWorkosError(w, http.StatusNotFound, "organization not found")
@@ -1568,6 +1588,12 @@ func (h *Handler) writeWorkosOrganization(w http.ResponseWriter, r *http.Request
 		writeWorkosError(w, http.StatusInternalServerError, "failed to load organization domains")
 		return
 	}
+	metadata := map[string]string{}
+	if err := json.Unmarshal([]byte(o.Metadata), &metadata); err != nil {
+		h.logger.ErrorContext(r.Context(), "decode organization metadata", slog.Any("error", err))
+		writeWorkosError(w, http.StatusInternalServerError, "failed to load organization metadata")
+		return
+	}
 	writeJSON(w, status, workosOrganization{
 		ID:                               workosOrgID(o),
 		Name:                             o.Name,
@@ -1577,6 +1603,7 @@ func (h *Handler) writeWorkosOrganization(w http.ResponseWriter, r *http.Request
 		CreatedAt:                        o.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt:                        o.UpdatedAt.UTC().Format(time.RFC3339),
 		ExternalID:                       o.ExternalID.String,
+		Metadata:                         metadata,
 	})
 }
 
