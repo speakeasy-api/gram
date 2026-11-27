@@ -79,8 +79,10 @@ type PluginGeneratorRolloutResult struct {
 	// reports a non-zero count here.
 	Conflicted int
 	// Rejected counts candidates whose organization has no member left to
-	// attribute the publish to (see ErrTypePluginActorNotMember). Nothing a
-	// retry can fix, so this is a warning, not a failure.
+	// attribute the publish to (see ErrTypePluginActorNotMember), or was
+	// disabled after the candidates were listed (see
+	// ErrTypeOrganizationDisabled). Nothing a retry can fix, so this is a
+	// warning, not a failure.
 	Rejected int
 	Failed   int
 }
@@ -210,6 +212,11 @@ func PluginGeneratorRolloutWorkflow(ctx workflow.Context, input PluginGeneratorR
 					if errors.As(err, &appErr) && appErr.Type() == bgactivities.ErrTypePluginActorNotMember {
 						result.Rejected++
 						workflow.GetLogger(ctx).Warn("plugin project publish skipped: no organization member to publish as", "error", err)
+						continue
+					}
+					if errors.As(err, &appErr) && appErr.Type() == bgactivities.ErrTypeOrganizationDisabled {
+						result.Rejected++
+						workflow.GetLogger(ctx).Warn("plugin project publish skipped: organization is disabled", "error", err)
 						continue
 					}
 					result.Failed++

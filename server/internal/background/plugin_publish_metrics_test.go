@@ -71,6 +71,7 @@ func TestPluginPublishWorkflow_OutcomeCountsLogicalPublishNotAttempts(t *testing
 		{name: "retry recovery", failures: 2, err: errors.New("transient failure"), outcome: "published", attempts: 3},
 		{name: "unchanged", skipped: true, outcome: "skipped", attempts: 1},
 		{name: "permanent rejection", failures: 1, err: temporal.NewNonRetryableApplicationError("no member", activities.ErrTypePluginActorNotMember, nil), outcome: "rejected", attempts: 1},
+		{name: "disabled organization", failures: 1, err: temporal.NewNonRetryableApplicationError("organization is disabled", activities.ErrTypeOrganizationDisabled, nil), outcome: "rejected", attempts: 1},
 		{name: "permanent conflict", failures: 1, err: temporal.NewNonRetryableApplicationError("repo conflict", activities.ErrTypeGitHubRepoConflict, nil), outcome: "failed", attempts: 1, workflowFails: true},
 		{name: "canceled", failures: 1, err: temporal.NewCanceledError(), outcome: "canceled", attempts: 1, workflowFails: true},
 	} {
