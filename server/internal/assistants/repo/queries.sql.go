@@ -2097,6 +2097,66 @@ func (q *Queries) GetProjectName(ctx context.Context, projectID uuid.UUID) (stri
 	return name, err
 }
 
+const hasAssistantSlackPlatformGrant = `-- name: HasAssistantSlackPlatformGrant :one
+SELECT EXISTS (
+    SELECT 1
+    FROM assistant_agent_bindings b
+    JOIN agents g
+      ON g.id = b.agent_id
+     AND g.organization_id = b.organization_id
+     AND g.project_id = b.project_id
+     AND g.deleted IS FALSE
+     AND g.revoked_at IS NULL
+     AND g.suspended_at IS NULL
+    JOIN principal_grants pg
+      ON pg.organization_id = b.organization_id
+     AND pg.principal_urn = concat('agent:', g.id)
+     AND pg.scope = 'mcp:connect'
+     AND pg.selectors->>'resource_kind' = 'mcp'
+     AND pg.selectors->>'resource_id' = $1::text
+     AND (pg.selectors->>'project_id' IS NULL OR pg.selectors->>'project_id' = b.project_id::text)
+     AND (pg.expires_at IS NULL OR pg.expires_at > clock_timestamp())
+    WHERE b.assistant_id = $2
+      AND b.project_id = $3
+      AND b.organization_id = $4
+      AND b.deleted IS FALSE
+      AND NOT EXISTS (
+          SELECT 1
+          FROM principal_grants bpg
+          WHERE bpg.organization_id = b.organization_id
+            AND bpg.principal_urn = concat('agent:', g.id)
+            AND bpg.scope = 'mcp:blocked_connect'
+            AND bpg.selectors->>'resource_kind' = 'mcp'
+            AND bpg.selectors->>'resource_id' IN ($1::text, '*')
+            AND (bpg.selectors->>'project_id' IS NULL OR bpg.selectors->>'project_id' = b.project_id::text)
+            AND (bpg.expires_at IS NULL OR bpg.expires_at > clock_timestamp())
+      )
+)::boolean AS has_grant
+`
+
+type HasAssistantSlackPlatformGrantParams struct {
+	ToolsetID      string
+	AssistantID    uuid.NullUUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+// Reports whether this assistant's live bound agent holds a non-expired
+// mcp:connect grant on the built-in assistant-slack platform toolset in this
+// project, so the per-server fallback path exposes /platform/mcp/assistant-slack
+// without needing a persisted per-assistant Slack toolset.
+func (q *Queries) HasAssistantSlackPlatformGrant(ctx context.Context, arg HasAssistantSlackPlatformGrantParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasAssistantSlackPlatformGrant,
+		arg.ToolsetID,
+		arg.AssistantID,
+		arg.ProjectID,
+		arg.OrganizationID,
+	)
+	var has_grant bool
+	err := row.Scan(&has_grant)
+	return has_grant, err
+}
+
 const hasPendingKitInterruptRequest = `-- name: HasPendingKitInterruptRequest :one
 SELECT EXISTS (SELECT 1 FROM assistant_kit_interrupt_requests
  WHERE project_id = $1::uuid AND runtime_id = $2::uuid

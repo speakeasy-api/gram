@@ -1,6 +1,7 @@
 package assistants
 
 import (
+	"maps"
 	"testing"
 
 	"github.com/google/uuid"
@@ -19,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -102,12 +104,60 @@ func TestCreateAssistantProvisionsDedicatedAgent(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, allowed, "the agent administers only its own assistant")
 
+	// Ordinary assistants receive an explicit permanent mcp:connect grant for
+	// the assistants built-in toolset and not for managed-only built-ins.
+	require.True(t, hasExactBuiltinConnectGrant(t, grants, project, platformtools.AssistantsPlatformToolsetSlug))
+	require.False(t, hasExactBuiltinConnectGrant(t, grants, project, platformtools.PlatformMCPReadToolsetSlug))
+	require.False(t, hasExactBuiltinConnectGrant(t, grants, project, platformtools.SpeakeasySlackPlatformToolsetSlug))
+
 	provisioned, err := audittest.AuditLogCountByAction(t.Context(), db, audit.ActionAssistantIdentityProvision)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, provisioned)
 	created, err := audittest.AuditLogCountByAction(t.Context(), db, audit.ActionAgentCreate)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, created)
+}
+
+func hasExactBuiltinConnectGrant(t *testing.T, rows []agentrepo.ListAgentPolicyGrantsRow, project uuid.UUID, slug string) bool {
+	t.Helper()
+	want := authz.NewSelector(authz.ScopeMCPConnect, platformtools.PlatformToolsetID(slug).String())
+	want[authz.SelectorKeyProjectID] = project.String()
+	for _, row := range rows {
+		if row.Scope != string(authz.ScopeMCPConnect) || row.ExpiresAt.Valid {
+			continue
+		}
+		got, err := authz.SelectorFromRow(row.Selectors)
+		require.NoError(t, err)
+		if maps.Equal(got, want) {
+			return true
+		}
+	}
+	return false
+}
+
+func TestCreateManagedAssistantProvisionsBuiltinConnectGrants(t *testing.T) {
+	t.Parallel()
+	db, err := assistantsInfra.CloneTestDatabase(t, "identity_managed_builtins")
+	require.NoError(t, err)
+	project := newProvisioningProject(t, db, "identity-managed-builtins")
+	core := newProvisioningCore(t, db)
+
+	managed, err := core.EnableManagedAssistant(t.Context(), "org-test", project, "user-1", true)
+	require.NoError(t, err)
+	require.NotNil(t, managed.AgentID)
+
+	grants, err := agentrepo.New(db).ListAgentPolicyGrants(t.Context(), agentrepo.ListAgentPolicyGrantsParams{
+		OrganizationID: "org-test",
+		AgentID:        uuid.MustParse(*managed.AgentID),
+	})
+	require.NoError(t, err)
+	for _, slug := range []string{
+		platformtools.AssistantsPlatformToolsetSlug,
+		platformtools.PlatformMCPReadToolsetSlug,
+		platformtools.SpeakeasySlackPlatformToolsetSlug,
+	} {
+		require.True(t, hasExactBuiltinConnectGrant(t, grants, project, slug), "managed assistant must get explicit mcp:connect grant for %s", slug)
+	}
 }
 
 func TestAssistantAgentNamesAcrossProjects(t *testing.T) {

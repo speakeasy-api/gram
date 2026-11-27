@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/orghost"
 )
 
 func assistantATERuntimeFlags() []cli.Flag {
@@ -34,7 +35,7 @@ func assistantATERuntimeFlags() []cli.Flag {
 	}
 }
 
-func installKitATERuntimeFromCLI(c *cli.Context, core *assistants.ServiceCore, redisClient *redis.Client, serverURL *url.URL) error {
+func installKitATERuntimeFromCLI(c *cli.Context, core *assistants.ServiceCore, redisClient *redis.Client, serverURL *url.URL, orgHosts *orghost.Resolver) error {
 	if !c.Bool("assistant-ate-enabled") {
 		return nil
 	}
@@ -73,12 +74,10 @@ func installKitATERuntimeFromCLI(c *cli.Context, core *assistants.ServiceCore, r
 		Template:       c.String("assistant-ate-template"),
 		WorkerSelector: workerSelector,
 		KitLocalCompositionConfig: assistants.KitLocalCompositionConfig{
+			OrgHosts:               orgHosts,
 			AllowInsecureInference: false,
-			MCPResource:            nil,
-			MCPIssuer:              nil,
 			MCPUserSessionIssuerID: uuid.Nil,
 			WorkloadNamespace:      "",
-			PersistedMCP:           true,
 			Environment:            c.String("environment"),
 			Image:                  c.String("assistant-ate-image"),
 			Origin:                 &url.URL{Scheme: "https", Host: "ai.speakeasy.com"},

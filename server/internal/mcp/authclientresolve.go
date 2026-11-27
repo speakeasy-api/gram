@@ -44,6 +44,7 @@ const (
 	authClientTypeStaticCredential = authz.AuthClientTypeStaticCredential
 	authClientTypePassThrough      = authz.AuthClientTypePassThrough
 	authClientTypeEMA              = authz.AuthClientTypeEMA
+	authClientTypeSlackApp         = authz.AuthClientTypeSlackApp
 )
 
 // authClientOutcome is how a credential's typed auth client resolves for a
@@ -152,7 +153,7 @@ func (r *authClientResolution) staleNoAuth() bool {
 // whose registration the upstream client choice serves because it may chain
 // an identity. A tunneled server is sent no client headers.
 func (r *authClientResolution) sendsClientHeaders() bool {
-	if r.tunneled {
+	if r.tunneled || r.clientType == authClientTypeSlackApp {
 		return false
 	}
 	return r.outcome == authClientResolved || (r.outcome == authClientLegacy && r.reason == authClientReasonLegacyMayChain)
@@ -440,6 +441,11 @@ func decideAuthClient(row upstreamclientsrepo.GetAuthClientSelectionRow) authCli
 			// identity-provider client has no association to the server.
 			res.choice = upstreamChoice{clientID: row.RegistrationID, remoteSessionIssuerID: row.RegistrationIssuerID}
 		}
+	case authClientTypeSlackApp:
+		// slack_app clients hold internal Slack app secrets for the
+		// assistant-slack built-in toolset and Slack triggers; they are never
+		// resolved or forwarded to upstream MCP servers.
+		res.reason = authClientReasonUnknownType
 	default:
 		res.reason = authClientReasonUnknownType
 	}

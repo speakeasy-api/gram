@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	securityrepo "github.com/speakeasy-api/gram/server/internal/audit/securityevent/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -113,6 +114,7 @@ func kitWorkloadDBFixture(t *testing.T) (*ServiceCore, *pgxpool.Pool, assistantR
 	db, err := assistantsInfra.CloneTestDatabase(t, "kit_workload_trust")
 	require.NoError(t, err)
 	project := newProvisioningProject(t, db, "kit-workload-trust")
+	enableTestOrganizationGateway(t, db, "org-test")
 	seedProjectRead(t, db, "user-1", project)
 	seedMCPConnect(t, db, "user-1", project)
 	selector := authz.NewSelector(authz.ScopeInferenceExecute, authz.WildcardResource)
@@ -122,6 +124,9 @@ func kitWorkloadDBFixture(t *testing.T) (*ServiceCore, *pgxpool.Pool, assistantR
 	grant, err := accessrepo.New(db).UpsertPrincipalGrant(t.Context(), accessrepo.UpsertPrincipalGrantParams{OrganizationID: "org-test", PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeUser, "user-1"), Scope: string(authz.ScopeInferenceExecute), Selectors: raw})
 	require.NoError(t, err)
 	core := newProvisioningCore(t, db)
+	flags := &feature.InMemory{}
+	flags.SetFlag(feature.FlagProjectGatewayMachineAccess, "org-test", true)
+	core.SetFeatureProvider(flags)
 	core.serverURL, err = url.Parse("https://api.example")
 	require.NoError(t, err)
 	assistant, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Workload trust", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, true, nil, nil)
@@ -358,7 +363,7 @@ func TestKitWorkloadDBSavepointRollbackLeavesNoTrust(t *testing.T) {
 		require.NoError(t, provisionErr)
 		// Returning the post-provision composition error rolls back this
 		// savepoint while leaving the outer cleanup transaction committable.
-		_, compositionErr := kitCompositionMCP(c, binding)
+		_, compositionErr := kitCompositionMCP(nil, binding)
 		if compositionErr != nil {
 			return fmt.Errorf("compose test workload: %w", compositionErr)
 		}
@@ -603,33 +608,24 @@ func TestKitWorkloadDBNativeSubjectCannotBeReused(t *testing.T) {
 	require.NotEqual(t, first.IssuerID, second.IssuerID)
 }
 
-func TestKitConfiguredTurnRemovalWithdrawsWorkload(t *testing.T) {
+func TestKitConfiguredTurnEnforcesProjectGatewayMetadata(t *testing.T) {
 	t.Parallel()
 	core, db, r, identity, c, _ := kitWorkloadDBFixture(t)
-	binding, err := core.provisionKitWorkload(t.Context(), r, c, identity, "mcp-removal")
+	binding, err := core.provisionKitWorkload(t.Context(), r, c, identity, "mcp-gateway")
 	require.NoError(t, err)
 	r = kitWorkloadMetadata(t, r, binding)
-	protocol := &kitConfiguredRuntimeProtocol{core: core}
+	protocol := &kitConfiguredRuntimeProtocol{}
+	// Legacy runtimes without MCPProjectGateway: true fail with
+	// errKitMCPConfigurationUnverified so the turn worker revokes and replaces them.
 	err = protocol.RunTurn(t.Context(), r, runTurnRequest{MCPServers: []runtimeMCPServer{}})
 	require.ErrorIs(t, err, errKitMCPConfigurationUnverified)
+	require.ErrorIs(t, err, errKitRuntimeUnrecoverable)
 	preserved, err := workloadrepo.New(db).CountLiveAdmissionsForSubject(t.Context(), workloadrepo.CountLiveAdmissionsForSubjectParams{OrganizationID: identity.OrganizationID, WorkloadIssuerID: binding.IssuerID, Subject: binding.Subject, MatchKind: "exact"})
 	require.NoError(t, err)
-	require.EqualValues(t, 1, preserved, "legacy configuration must pause without revoking rollback authority")
-	binding.MCPDesiredSetHash = kitMCPDesiredSetHash([]runtimeMCPServer{{ID: "attached", URL: "https://mcp.example/mcp/attached"}})
-	r = kitWorkloadMetadata(t, r, binding)
-	err = protocol.RunTurn(t.Context(), r, runTurnRequest{MCPServers: nil})
-	require.ErrorIs(t, err, errKitMCPDiscoveryUnavailable)
-	live, err := workloadrepo.New(db).CountLiveAdmissionsForSubject(t.Context(), workloadrepo.CountLiveAdmissionsForSubjectParams{OrganizationID: identity.OrganizationID, WorkloadIssuerID: binding.IssuerID, Subject: binding.Subject, MatchKind: "exact"})
-	require.NoError(t, err)
-	require.EqualValues(t, 1, live, "omitted desired set must preserve workload admission")
-	err = protocol.RunTurn(t.Context(), r, runTurnRequest{MCPServers: []runtimeMCPServer{}})
-	require.ErrorIs(t, err, ErrKitMCPDesiredSetUnsupported)
-	count, err := workloadrepo.New(db).CountLiveAdmissionsForSubject(t.Context(), workloadrepo.CountLiveAdmissionsForSubjectParams{OrganizationID: identity.OrganizationID, WorkloadIssuerID: binding.IssuerID, Subject: binding.Subject, MatchKind: "exact"})
-	require.NoError(t, err)
-	require.Zero(t, count)
+	require.EqualValues(t, 1, preserved, "legacy configuration must let the turn worker revoke and replace cleanly")
 }
 
-func TestKitAttachmentEditRequiresRetirement(t *testing.T) {
+func TestKitAssistantUpdateDoesNotRequireRetirement(t *testing.T) {
 	t.Parallel()
 	_, db, key, _ := kitSessionFixture(t)
 	core := newProvisioningCore(t, db)
@@ -640,11 +636,14 @@ func TestKitAttachmentEditRequiresRetirement(t *testing.T) {
 	require.NoError(t, err)
 	name := "Updated name"
 	_, err = core.UpdateAssistant(t.Context(), key.ProjectID, key.AssistantID, &name, nil, nil, nil, []*types.AssistantMCPServerRef{{McpServerSlug: "kit-attached"}}, nil, nil, nil, nil, nil)
-	require.NoError(t, err, "normal full-form save with unchanged attachments must work")
-	_, err = core.UpdateAssistant(t.Context(), key.ProjectID, key.AssistantID, nil, nil, nil, []*types.AssistantToolsetRef{}, []*types.AssistantMCPServerRef{}, nil, nil, nil, nil, nil)
-	require.ErrorIs(t, err, errAssistantValidation)
-	require.ErrorContains(t, err, "retire the Kit runtime")
+	require.NoError(t, err, "full-form save with unchanged attachments must succeed")
 	rows, err := assistantrepo.New(db).LoadAssistantMcpServers(t.Context(), assistantrepo.LoadAssistantMcpServersParams{ProjectID: key.ProjectID, AssistantIds: []uuid.UUID{key.AssistantID}})
 	require.NoError(t, err)
-	require.Len(t, rows, 1, "rejected edit must roll back its writes")
+	require.Len(t, rows, 1)
+
+	_, err = core.UpdateAssistant(t.Context(), key.ProjectID, key.AssistantID, nil, nil, nil, []*types.AssistantToolsetRef{}, []*types.AssistantMCPServerRef{}, nil, nil, nil, nil, nil)
+	require.NoError(t, err, "Kit assistants use agent RBAC grants through the Project Gateway rather than persisted attachments")
+	rows, err = assistantrepo.New(db).LoadAssistantMcpServers(t.Context(), assistantrepo.LoadAssistantMcpServersParams{ProjectID: key.ProjectID, AssistantIds: []uuid.UUID{key.AssistantID}})
+	require.NoError(t, err)
+	require.Empty(t, rows)
 }

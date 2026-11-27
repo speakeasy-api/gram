@@ -105,6 +105,18 @@ func (a *App) slackBotToken(ctx context.Context, triggerInstanceID string) (stri
 	if instance.DefinitionSlug == DefinitionSlugSpeakeasySlack {
 		return a.speakeasySlackToken(ctx, instance)
 	}
+	if instance.AuthClientID.Valid {
+		// Auth-client-backed triggers read exclusively from their slack_app
+		// auth client and fail closed if it is unavailable or disabled.
+		if a.slackAppAuthClients == nil {
+			return "", fmt.Errorf("slack_app auth client loader not configured")
+		}
+		creds, err := a.slackAppAuthClients.LoadSlackAppCredentials(ctx, instance.OrganizationID, instance.ProjectID, instance.AuthClientID.UUID)
+		if err != nil {
+			return "", fmt.Errorf("load slack_app auth client: %w", err)
+		}
+		return toolconfig.CIEnvFrom(creds).Get("SLACK_BOT_TOKEN"), nil
+	}
 	if !instance.EnvironmentID.Valid {
 		return "", nil
 	}

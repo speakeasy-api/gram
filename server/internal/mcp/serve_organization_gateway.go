@@ -625,7 +625,7 @@ func (s *Service) listSignInClients(ctx context.Context, endpoint *ResolvedMcpEn
 		// Compatibility inventory is still needed for proxied members outside
 		// typed consent. It cannot add or authorize a hosted registration.
 		proxied := slices.DeleteFunc(slices.Clone(members), func(member metaMember) bool {
-			return member.backend == metaMemberBackendHosted
+			return member.backend == metaMemberBackendHosted || member.backend == metaMemberBackendPlatform
 		})
 		if len(proxied) == 0 {
 			return clients, nil

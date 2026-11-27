@@ -559,6 +559,11 @@ func TestKitLocalRecoveryFencesExactWorkloadBeforeBootstrap(t *testing.T) {
 				}
 				b := kitTestWorkloadBootstrap()
 				b.Workload, b.GatewayToken = binding, []byte(gateway)
+				gatewayURL, _ := url.Parse("https://api.example/mcp/gateway/org-test/projects/proj-test")
+				b.MCPJSON, err = kitCompositionMCP(gatewayURL, binding)
+				if err != nil {
+					return KitLocalBootstrap{}, err
+				}
 				return b, nil
 			}
 			first, err := backend.Ensure(t.Context(), runtime)
