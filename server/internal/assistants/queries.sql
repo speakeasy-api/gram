@@ -2287,9 +2287,10 @@ SELECT EXISTS (
 ) AS busy;
 
 -- name: ListProjectsWithSupersededKitRuntimes :many
--- Internal background reaper query: enumerates projects that hold live Kit v3
--- runtime rows parked on a backend different from the deployment's active Kit
--- target backend so subsequent runtime reads stay strictly project-scoped.
+-- Internal background reaper query: keyset-paginates projects that hold live
+-- Kit v3 runtime rows parked on a backend different from the deployment's
+-- active Kit target backend so subsequent runtime reads stay project-scoped
+-- and busy tenants cannot starve later projects.
 SELECT DISTINCT r.project_id
 FROM assistant_runtimes r
 JOIN projects p ON p.id = r.project_id
@@ -2301,14 +2302,14 @@ WHERE r.runtime_version = 3
   AND r.state IN ('active', 'stopped', 'failed')
   AND p.deleted IS FALSE
   AND a.deleted IS FALSE
+  AND r.project_id > @after_project_id
 ORDER BY r.project_id ASC
 LIMIT @limit_count;
 
 -- name: ListSupersededKitRuntimesByProject :many
 -- Project-scoped Kit v3 runtime rows parked on a backend different from the
--- deployment's active Kit target backend. Used by the switch reaper so idle
--- runtimes on an old backend converge after a backend flip (e.g. GKE -> ATE or
--- rollback) without waiting for another turn.
+-- deployment's active Kit target backend, keyset-paginated by runtime ID so
+-- busy assistants can be skipped without starving idle siblings or projects.
 SELECT r.*
 FROM assistant_runtimes r
 JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
@@ -2319,5 +2320,6 @@ WHERE r.project_id = @project_id
   AND r.ended IS FALSE
   AND r.state IN ('active', 'stopped', 'failed')
   AND a.deleted IS FALSE
-ORDER BY r.updated_at ASC
+  AND r.id > @after_id
+ORDER BY r.id ASC
 LIMIT @limit_count;

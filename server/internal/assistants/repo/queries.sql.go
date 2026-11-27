@@ -3411,20 +3411,23 @@ WHERE r.runtime_version = 3
   AND r.state IN ('active', 'stopped', 'failed')
   AND p.deleted IS FALSE
   AND a.deleted IS FALSE
+  AND r.project_id > $2
 ORDER BY r.project_id ASC
-LIMIT $2
+LIMIT $3
 `
 
 type ListProjectsWithSupersededKitRuntimesParams struct {
-	TargetBackend string
-	LimitCount    int32
+	TargetBackend  string
+	AfterProjectID uuid.UUID
+	LimitCount     int32
 }
 
-// Internal background reaper query: enumerates projects that hold live Kit v3
-// runtime rows parked on a backend different from the deployment's active Kit
-// target backend so subsequent runtime reads stay strictly project-scoped.
+// Internal background reaper query: keyset-paginates projects that hold live
+// Kit v3 runtime rows parked on a backend different from the deployment's
+// active Kit target backend so subsequent runtime reads stay project-scoped
+// and busy tenants cannot starve later projects.
 func (q *Queries) ListProjectsWithSupersededKitRuntimes(ctx context.Context, arg ListProjectsWithSupersededKitRuntimesParams) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, listProjectsWithSupersededKitRuntimes, arg.TargetBackend, arg.LimitCount)
+	rows, err := q.db.Query(ctx, listProjectsWithSupersededKitRuntimes, arg.TargetBackend, arg.AfterProjectID, arg.LimitCount)
 	if err != nil {
 		return nil, err
 	}
@@ -3596,22 +3599,28 @@ WHERE r.project_id = $1
   AND r.ended IS FALSE
   AND r.state IN ('active', 'stopped', 'failed')
   AND a.deleted IS FALSE
-ORDER BY r.updated_at ASC
-LIMIT $3
+  AND r.id > $3
+ORDER BY r.id ASC
+LIMIT $4
 `
 
 type ListSupersededKitRuntimesByProjectParams struct {
 	ProjectID     uuid.UUID
 	TargetBackend string
+	AfterID       uuid.UUID
 	LimitCount    int32
 }
 
 // Project-scoped Kit v3 runtime rows parked on a backend different from the
-// deployment's active Kit target backend. Used by the switch reaper so idle
-// runtimes on an old backend converge after a backend flip (e.g. GKE -> ATE or
-// rollback) without waiting for another turn.
+// deployment's active Kit target backend, keyset-paginated by runtime ID so
+// busy assistants can be skipped without starving idle siblings or projects.
 func (q *Queries) ListSupersededKitRuntimesByProject(ctx context.Context, arg ListSupersededKitRuntimesByProjectParams) ([]AssistantRuntime, error) {
-	rows, err := q.db.Query(ctx, listSupersededKitRuntimesByProject, arg.ProjectID, arg.TargetBackend, arg.LimitCount)
+	rows, err := q.db.Query(ctx, listSupersededKitRuntimesByProject,
+		arg.ProjectID,
+		arg.TargetBackend,
+		arg.AfterID,
+		arg.LimitCount,
+	)
 	if err != nil {
 		return nil, err
 	}

@@ -125,59 +125,82 @@ func (s *ServiceCore) retireSupersededKitBackendRuntimes(ctx context.Context, li
 		return nil, 1
 	}
 	q := assistantrepo.New(s.db)
-	projectIDs, err := q.ListProjectsWithSupersededKitRuntimes(ctx, assistantrepo.ListProjectsWithSupersededKitRuntimesParams{
-		TargetBackend: targetBackend,
-		LimitCount:    limit,
-	})
-	if err != nil {
-		if s.logger != nil {
-			s.logger.WarnContext(ctx, "list projects with superseded Kit runtimes failed", attr.SlogError(err))
-		}
-		return nil, 1
-	}
+	maxRetired := int(limit)
 	var (
-		retired []assistantRuntimeRecord
-		errCnt  int
-		seen    int32
+		retired        []assistantRuntimeRecord
+		errCnt         int
+		afterProjectID = uuid.Nil
 	)
-	for _, projectID := range projectIDs {
-		remaining := limit - seen
-		if remaining <= 0 {
-			break
-		}
-		rows, err := q.ListSupersededKitRuntimesByProject(ctx, assistantrepo.ListSupersededKitRuntimesByProjectParams{
-			ProjectID:     projectID,
-			TargetBackend: targetBackend,
-			LimitCount:    remaining,
+	for len(retired) < maxRetired {
+		projectIDs, err := q.ListProjectsWithSupersededKitRuntimes(ctx, assistantrepo.ListProjectsWithSupersededKitRuntimesParams{
+			TargetBackend:  targetBackend,
+			AfterProjectID: afterProjectID,
+			LimitCount:     limit,
 		})
 		if err != nil {
-			errCnt++
 			if s.logger != nil {
-				s.logger.WarnContext(ctx, "list superseded Kit runtimes for project failed",
-					attr.SlogProjectID(projectID.String()),
-					attr.SlogError(err),
-				)
+				s.logger.WarnContext(ctx, "list projects with superseded Kit runtimes failed", attr.SlogError(err))
 			}
-			continue
+			return retired, errCnt + 1
 		}
-		for _, row := range rows {
-			seen++
-			rec, didRetire, retireErr := s.markSupersededKitRuntimeForRetirement(ctx, row.ProjectID, row.AssistantID, row.ID, targetBackend)
-			if retireErr != nil {
-				errCnt++
-				if s.logger != nil {
-					s.logger.WarnContext(ctx, "mark superseded Kit runtime for retirement failed",
-						attr.SlogAssistantID(row.AssistantID.String()),
-						attr.SlogAssistantRuntimeID(row.ID.String()),
-						attr.SlogAssistantRuntimeBackend(row.Backend),
-						attr.SlogError(retireErr),
-					)
+		if len(projectIDs) == 0 {
+			break
+		}
+		for _, projectID := range projectIDs {
+			afterProjectID = projectID
+			afterRuntimeID := uuid.Nil
+			for len(retired) < maxRetired {
+				rows, err := q.ListSupersededKitRuntimesByProject(ctx, assistantrepo.ListSupersededKitRuntimesByProjectParams{
+					ProjectID:     projectID,
+					TargetBackend: targetBackend,
+					AfterID:       afterRuntimeID,
+					LimitCount:    limit,
+				})
+				if err != nil {
+					errCnt++
+					if s.logger != nil {
+						s.logger.WarnContext(ctx, "list superseded Kit runtimes for project failed",
+							attr.SlogProjectID(projectID.String()),
+							attr.SlogError(err),
+						)
+					}
+					break
 				}
-				continue
+				if len(rows) == 0 {
+					break
+				}
+				for _, row := range rows {
+					afterRuntimeID = row.ID
+					if len(retired) >= maxRetired {
+						break
+					}
+					rec, didRetire, retireErr := s.markSupersededKitRuntimeForRetirement(ctx, row.ProjectID, row.AssistantID, row.ID, targetBackend)
+					if retireErr != nil {
+						errCnt++
+						if s.logger != nil {
+							s.logger.WarnContext(ctx, "mark superseded Kit runtime for retirement failed",
+								attr.SlogAssistantID(row.AssistantID.String()),
+								attr.SlogAssistantRuntimeID(row.ID.String()),
+								attr.SlogAssistantRuntimeBackend(row.Backend),
+								attr.SlogError(retireErr),
+							)
+						}
+						continue
+					}
+					if didRetire {
+						retired = append(retired, rec)
+					}
+				}
+				if len(rows) < maxRetired {
+					break
+				}
 			}
-			if didRetire {
-				retired = append(retired, rec)
+			if len(retired) >= maxRetired {
+				break
 			}
+		}
+		if len(projectIDs) < maxRetired {
+			break
 		}
 	}
 	return retired, errCnt

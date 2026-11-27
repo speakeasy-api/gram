@@ -533,6 +533,7 @@ func TestKitATE_RecordsColdStartAndResumeDurationMetricsAndLogs(t *testing.T) {
 	require.ErrorIs(t, err, ErrKitRuntimeBinding)
 
 	tx := testenv.BeginTx(t, ctx, db)
+	require.NoError(t, assistantrepo.New(tx).AcquireAssistantAdvisoryLock(ctx, runtimeSeed.AssistantID.String()))
 	rec.LifecycleTx = tx
 	readiness, err := ateBackend.PrepareRuntimeSwitch(ctx, assistantRecord{
 		ID: runtimeSeed.AssistantID, ProjectID: runtimeSeed.ProjectID,
@@ -596,6 +597,7 @@ func TestKitATECutover_BusySupersededRuntimeDefersAdmissionAndWarmup(t *testing.
 
 	// Also verify versionedRuntimeBackend.PrepareRuntimeSwitch reaches retiring GKE rows.
 	tx := testenv.BeginTx(t, ctx, db)
+	require.NoError(t, assistantrepo.New(tx).AcquireAssistantAdvisoryLock(ctx, runtimeSeed.AssistantID.String()))
 	coord, ok := core.runtime.(runtimeSwitchCoordinator)
 	require.True(t, ok)
 	ready, err := coord.PrepareRuntimeSwitch(ctx, assistantRecord{
