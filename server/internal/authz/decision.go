@@ -45,20 +45,34 @@ type Decisions struct {
 	row *challengeRow
 }
 
+type recordShape string
+
+const (
+	recordByCheckCount recordShape = "by_check_count"
+	recordAsFilter     recordShape = "filter"
+)
+
+type evalMode string
+
+const (
+	evalAll          evalMode = "all"
+	evalUntilRefusal evalMode = "until_refusal"
+)
+
 // Decide answers each check without refusing or recording anything: a "no" is
 // a branch for the handler, not a denial. Use Require to gate an action, or
 // Filter to narrow a list and record the filter row. Pass the answer to Record
-// when a single check should be recorded later, as the MCP gateway does for a
+// when a decision should be recorded later, as the MCP gateway does for a
 // member admitted up front and named by a later call.
 func (e *Engine) Decide(ctx context.Context, checks ...Check) (Decisions, error) {
-	return e.decide(ctx, checks, false)
+	return e.decide(ctx, checks, recordByCheckCount)
 }
 
 // Filter answers each check in order and records one filter row for the call,
 // even when the list holds a single item, so a one-item list is never recorded
 // as a gate refusal. An empty list records nothing and returns AllAllowed false.
 func (e *Engine) Filter(ctx context.Context, checks ...Check) (Decisions, error) {
-	d, err := e.decide(ctx, checks, true)
+	d, err := e.decide(ctx, checks, recordAsFilter)
 	if err != nil {
 		return d, err
 	}
@@ -66,17 +80,17 @@ func (e *Engine) Filter(ctx context.Context, checks ...Check) (Decisions, error)
 	return d, nil
 }
 
-func (e *Engine) decide(ctx context.Context, checks []Check, asList bool) (Decisions, error) {
+func (e *Engine) decide(ctx context.Context, checks []Check, shape recordShape) (Decisions, error) {
 	q, err := e.prepare(ctx, checks, false)
 	if err != nil {
 		return Decisions{AllAllowed: false, Each: nil, row: nil}, e.mapError(ctx, err)
 	}
 	e.logOtherOrganizations(ctx, q.aboutOtherOrganization, checks)
 
-	verdicts, _, invalidIdx, err := evaluateChecks(q, checks, false)
+	verdicts, _, invalid, err := evaluateChecks(q, checks, evalAll)
 	if err != nil {
 		if q.enforced {
-			e.emitAndWrite(ctx, invalidRow(q, checks, verdicts, checks[invalidIdx], asList))
+			e.emitAndWrite(ctx, invalidRow(q, checks, verdicts, invalid, shape))
 		}
 		return Decisions{AllAllowed: false, Each: nil, row: nil}, e.mapError(ctx, err)
 	}
@@ -86,7 +100,7 @@ func (e *Engine) decide(ctx context.Context, checks []Check, asList bool) (Decis
 		return result, nil
 	}
 	e.reportAllowedAuthorizerRefusals(ctx, q.grants, verdicts)
-	if asList || len(verdicts) > 1 {
+	if shape == recordAsFilter || len(verdicts) > 1 {
 		result.row = listRow(q, verdicts)
 	} else {
 		var refused *verdict
@@ -142,10 +156,10 @@ func (e *Engine) Require(ctx context.Context, checks ...Check) error {
 // grants are not the caller's own, since their refusal says nothing about what
 // the caller lacks.
 func (e *Engine) requireAll(ctx context.Context, q question, checks []Check, explain bool) error {
-	verdicts, refused, invalidIdx, err := evaluateChecks(q, checks, true)
+	verdicts, refused, invalid, err := evaluateChecks(q, checks, evalUntilRefusal)
 	if err != nil {
 		if q.enforced {
-			e.emitAndWrite(ctx, invalidGateRow(q, checks, checks[invalidIdx]))
+			e.emitAndWrite(ctx, invalidGateRow(q, checks, invalid))
 		}
 		return e.mapError(ctx, err)
 	}
@@ -169,22 +183,23 @@ func (e *Engine) requireAll(ctx context.Context, q question, checks []Check, exp
 	return nil
 }
 
-// evaluateChecks decides checks in order. When stopOnRefusal is true it stops
-// at the first denied check so a later invalid check does not hide the refusal.
-// When a check cannot be evaluated, invalidIdx names its position in checks.
-func evaluateChecks(q question, checks []Check, stopOnRefusal bool) (verdicts []verdict, refused *verdict, invalidIdx int, err error) {
+// evaluateChecks decides checks in order. Under evalUntilRefusal it stops at
+// the first denied check so a later invalid check does not hide the refusal.
+// When a check cannot be evaluated, invalid is that check.
+func evaluateChecks(q question, checks []Check, mode evalMode) (verdicts []verdict, refused *verdict, invalid Check, err error) {
+	var none Check
 	verdicts = make([]verdict, 0, len(checks))
-	for i, check := range checks {
+	for _, check := range checks {
 		v, decErr := q.decide(check)
 		if decErr != nil {
-			return verdicts, nil, i, decErr
+			return verdicts, nil, check, decErr
 		}
 		verdicts = append(verdicts, v)
-		if stopOnRefusal && !v.Allowed {
-			return verdicts, &v, -1, nil
+		if mode == evalUntilRefusal && !v.Allowed {
+			return verdicts, &v, none, nil
 		}
 	}
-	return verdicts, nil, -1, nil
+	return verdicts, nil, none, nil
 }
 
 func decisionsFromVerdicts(verdicts []verdict) Decisions {
@@ -223,8 +238,8 @@ func gateOperationAndChecks(checks []Check) (authzrepo.Operation, []Check) {
 
 // invalidRow is the error row for a Decide or Filter call holding a check that
 // could not be evaluated, in the shape its answer would have been recorded in.
-func invalidRow(q question, checks []Check, decided []verdict, invalid Check, asList bool) *challengeRow {
-	if !asList && len(checks) == 1 {
+func invalidRow(q question, checks []Check, decided []verdict, invalid Check, shape recordShape) *challengeRow {
+	if shape == recordByCheckCount && len(checks) == 1 {
 		return invalidGateRow(q, checks, invalid)
 	}
 	return invalidListRow(q, decided, invalid)

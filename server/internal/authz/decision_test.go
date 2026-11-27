@@ -158,6 +158,32 @@ func TestFilter_writesListRowForOneOrMoreChecks(t *testing.T) {
 	}
 }
 
+// Recording a decision about several checks writes one list row, whatever the
+// number of checks.
+func TestRecord_writesOneListRowForSeveralChecks(t *testing.T) {
+	t.Parallel()
+
+	orgID := "org_" + uuid.NewString()
+	ctx := GrantsToContext(enterpriseSessionCtxWithOrg(t, orgID), []Grant{NewGrant(ScopeProjectRead, "proj_a")})
+	conn := newTestDB(t)
+	seedOrganization(t, ctx, conn, orgID)
+	engine := NewEngine(testenv.NewLogger(t), conn, staticChallengeLogging(true), workos.NewStubClient())
+
+	d, err := engine.Decide(ctx, projectRead("proj_a"), projectRead("proj_b"), projectRead("proj_c"))
+	require.NoError(t, err)
+	engine.Record(ctx, d)
+
+	rows := listChallengeOutboxRows(t, conn)
+	require.Len(t, rows, 1)
+	message := &authzv1.Challenge{}
+	require.NoError(t, proto.Unmarshal(rows[0].Message, message))
+	require.Equal(t, string(authzrepo.OperationFilter), message.GetOperation())
+	require.Equal(t, string(authzrepo.OutcomeAllow), message.GetOutcome())
+	require.Equal(t, uint32(3), message.GetFilterCandidateCount())
+	require.Equal(t, uint32(1), message.GetFilterAllowedCount())
+	require.Empty(t, message.GetResourceId())
+}
+
 // Recording a decision about one check writes the row Require writes for it,
 // so a named server's row has the scope and resource the access log offers to
 // grant. Example: proj_b, refused, is recorded as a refused Require on proj_b.
