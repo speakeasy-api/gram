@@ -70,6 +70,12 @@ func (s *Service) ServeAgentGateway(w http.ResponseWriter, r *http.Request) erro
 	ctx = authedCtx
 	s.metrics.RecordAgentGatewayRequest(ctx, authCtx.ActiveOrganizationID, agentID.String())
 
+	// An unserved organization answers as an unknown gateway before any other
+	// policy, so a lockdown cannot answer for it with a different status.
+	if err := s.requireOrganizationServed(ctx, logger, authCtx.ActiveOrganizationID); err != nil {
+		return err
+	}
+
 	// The same lockdown ServePublic applies, at the only scope this
 	// surface has. enforceCustomDomainLockdown takes a project id purely to
 	// read the owning organization off it, and the policy it then applies is
@@ -78,9 +84,6 @@ func (s *Service) ServeAgentGateway(w http.ResponseWriter, r *http.Request) erro
 	// valid key reach the same servers on the platform hostname, outside the
 	// allowlist the org's ingress enforces.
 	if err := s.enforceAgentGatewayCustomDomainLockdown(ctx, logger, authCtx.ActiveOrganizationID); err != nil {
-		return err
-	}
-	if err := s.requireOrganizationServed(ctx, logger, authCtx.ActiveOrganizationID); err != nil {
 		return err
 	}
 

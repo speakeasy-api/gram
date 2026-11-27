@@ -57,7 +57,8 @@ const (
 	// is served on refuses the organization's requests.
 	UnavailabilityCustomDomainOnly Unavailability = "custom_domain_only"
 
-	// UnavailabilityOrganizationDisabled means the organization is disabled.
+	// UnavailabilityOrganizationDisabled means Speakeasy serves none of the
+	// organization's MCP servers: it is disabled, or it is not whitelisted.
 	UnavailabilityOrganizationDisabled Unavailability = "organization_disabled"
 
 	// UnavailabilityTurnedOff means an organization admin turned the gateway
