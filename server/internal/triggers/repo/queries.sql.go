@@ -76,7 +76,7 @@ INSERT INTO trigger_instances (
 ON CONFLICT (project_id, target_ref)
   WHERE definition_slug = 'dashboard' AND status = 'active' AND deleted IS FALSE
 DO NOTHING
-RETURNING id, organization_id, project_id, definition_slug, name, environment_id, target_kind, target_ref, target_display, config_json, status, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, definition_slug, name, environment_id, auth_client_id, target_kind, target_ref, target_display, config_json, status, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateDashboardTriggerInstanceParams struct {
@@ -113,6 +113,7 @@ func (q *Queries) CreateDashboardTriggerInstance(ctx context.Context, arg Create
 		&i.DefinitionSlug,
 		&i.Name,
 		&i.EnvironmentID,
+		&i.AuthClientID,
 		&i.TargetKind,
 		&i.TargetRef,
 		&i.TargetDisplay,
@@ -153,7 +154,7 @@ INSERT INTO trigger_instances (
 ON CONFLICT (project_id, target_ref)
   WHERE definition_slug = 'speakeasy_slack' AND status = 'active' AND deleted IS FALSE
 DO NOTHING
-RETURNING id, organization_id, project_id, definition_slug, name, environment_id, target_kind, target_ref, target_display, config_json, status, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, definition_slug, name, environment_id, auth_client_id, target_kind, target_ref, target_display, config_json, status, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateSpeakeasySlackTriggerInstanceParams struct {
@@ -184,6 +185,7 @@ func (q *Queries) CreateSpeakeasySlackTriggerInstance(ctx context.Context, arg C
 		&i.DefinitionSlug,
 		&i.Name,
 		&i.EnvironmentID,
+		&i.AuthClientID,
 		&i.TargetKind,
 		&i.TargetRef,
 		&i.TargetDisplay,
@@ -220,7 +222,7 @@ INSERT INTO trigger_instances (
     $8,
     $9,
     $10
-) RETURNING id, organization_id, project_id, definition_slug, name, environment_id, target_kind, target_ref, target_display, config_json, status, created_at, updated_at, deleted_at, deleted
+) RETURNING id, organization_id, project_id, definition_slug, name, environment_id, auth_client_id, target_kind, target_ref, target_display, config_json, status, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateTriggerInstanceParams struct {
@@ -257,6 +259,7 @@ func (q *Queries) CreateTriggerInstance(ctx context.Context, arg CreateTriggerIn
 		&i.DefinitionSlug,
 		&i.Name,
 		&i.EnvironmentID,
+		&i.AuthClientID,
 		&i.TargetKind,
 		&i.TargetRef,
 		&i.TargetDisplay,
@@ -278,7 +281,7 @@ SET
 WHERE id = $1
   AND project_id = $2
   AND deleted IS FALSE
-RETURNING id, organization_id, project_id, definition_slug, name, environment_id, target_kind, target_ref, target_display, config_json, status, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, definition_slug, name, environment_id, auth_client_id, target_kind, target_ref, target_display, config_json, status, created_at, updated_at, deleted_at, deleted
 `
 
 type DeleteTriggerInstanceParams struct {
@@ -296,6 +299,7 @@ func (q *Queries) DeleteTriggerInstance(ctx context.Context, arg DeleteTriggerIn
 		&i.DefinitionSlug,
 		&i.Name,
 		&i.EnvironmentID,
+		&i.AuthClientID,
 		&i.TargetKind,
 		&i.TargetRef,
 		&i.TargetDisplay,
@@ -339,7 +343,7 @@ func (q *Queries) DeleteTriggerInstancesByTargetExceptDefinition(ctx context.Con
 }
 
 const getSpeakeasySlackTriggerInstance = `-- name: GetSpeakeasySlackTriggerInstance :one
-SELECT id, organization_id, project_id, definition_slug, name, environment_id, target_kind, target_ref, target_display, config_json, status, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, definition_slug, name, environment_id, auth_client_id, target_kind, target_ref, target_display, config_json, status, created_at, updated_at, deleted_at, deleted
 FROM trigger_instances
 WHERE project_id = $1
   AND definition_slug = 'speakeasy_slack'
@@ -366,6 +370,7 @@ func (q *Queries) GetSpeakeasySlackTriggerInstance(ctx context.Context, arg GetS
 		&i.DefinitionSlug,
 		&i.Name,
 		&i.EnvironmentID,
+		&i.AuthClientID,
 		&i.TargetKind,
 		&i.TargetRef,
 		&i.TargetDisplay,
@@ -380,7 +385,7 @@ func (q *Queries) GetSpeakeasySlackTriggerInstance(ctx context.Context, arg GetS
 }
 
 const getTriggerInstanceByID = `-- name: GetTriggerInstanceByID :one
-SELECT id, organization_id, project_id, definition_slug, name, environment_id, target_kind, target_ref, target_display, config_json, status, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, definition_slug, name, environment_id, auth_client_id, target_kind, target_ref, target_display, config_json, status, created_at, updated_at, deleted_at, deleted
 FROM trigger_instances ti
 WHERE ti.id = $1
   AND ti.project_id = $2
@@ -402,6 +407,7 @@ func (q *Queries) GetTriggerInstanceByID(ctx context.Context, arg GetTriggerInst
 		&i.DefinitionSlug,
 		&i.Name,
 		&i.EnvironmentID,
+		&i.AuthClientID,
 		&i.TargetKind,
 		&i.TargetRef,
 		&i.TargetDisplay,
@@ -416,7 +422,7 @@ func (q *Queries) GetTriggerInstanceByID(ctx context.Context, arg GetTriggerInst
 }
 
 const getTriggerInstanceByIDForUpdate = `-- name: GetTriggerInstanceByIDForUpdate :one
-SELECT id, organization_id, project_id, definition_slug, name, environment_id, target_kind, target_ref, target_display, config_json, status, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, definition_slug, name, environment_id, auth_client_id, target_kind, target_ref, target_display, config_json, status, created_at, updated_at, deleted_at, deleted
 FROM trigger_instances ti
 WHERE ti.id = $1
   AND ti.project_id = $2
@@ -439,6 +445,7 @@ func (q *Queries) GetTriggerInstanceByIDForUpdate(ctx context.Context, arg GetTr
 		&i.DefinitionSlug,
 		&i.Name,
 		&i.EnvironmentID,
+		&i.AuthClientID,
 		&i.TargetKind,
 		&i.TargetRef,
 		&i.TargetDisplay,
@@ -453,7 +460,7 @@ func (q *Queries) GetTriggerInstanceByIDForUpdate(ctx context.Context, arg GetTr
 }
 
 const getTriggerInstanceByIDPublic = `-- name: GetTriggerInstanceByIDPublic :one
-SELECT id, organization_id, project_id, definition_slug, name, environment_id, target_kind, target_ref, target_display, config_json, status, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, definition_slug, name, environment_id, auth_client_id, target_kind, target_ref, target_display, config_json, status, created_at, updated_at, deleted_at, deleted
 FROM trigger_instances ti
 WHERE ti.id = $1
   AND ti.deleted IS FALSE
@@ -469,6 +476,7 @@ func (q *Queries) GetTriggerInstanceByIDPublic(ctx context.Context, id uuid.UUID
 		&i.DefinitionSlug,
 		&i.Name,
 		&i.EnvironmentID,
+		&i.AuthClientID,
 		&i.TargetKind,
 		&i.TargetRef,
 		&i.TargetDisplay,
@@ -554,7 +562,7 @@ func (q *Queries) GetWakeWorkloadSession(ctx context.Context, arg GetWakeWorkloa
 }
 
 const listActiveTriggerInstancesByTarget = `-- name: ListActiveTriggerInstancesByTarget :many
-SELECT id, organization_id, project_id, definition_slug, name, environment_id, target_kind, target_ref, target_display, config_json, status, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, definition_slug, name, environment_id, auth_client_id, target_kind, target_ref, target_display, config_json, status, created_at, updated_at, deleted_at, deleted
 FROM trigger_instances ti
 WHERE ti.project_id = $1
   AND ti.definition_slug = $2
@@ -592,6 +600,7 @@ func (q *Queries) ListActiveTriggerInstancesByTarget(ctx context.Context, arg Li
 			&i.DefinitionSlug,
 			&i.Name,
 			&i.EnvironmentID,
+			&i.AuthClientID,
 			&i.TargetKind,
 			&i.TargetRef,
 			&i.TargetDisplay,
@@ -681,7 +690,7 @@ func (q *Queries) ListTriggerEvents(ctx context.Context, arg ListTriggerEventsPa
 }
 
 const listTriggerInstances = `-- name: ListTriggerInstances :many
-SELECT id, organization_id, project_id, definition_slug, name, environment_id, target_kind, target_ref, target_display, config_json, status, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, definition_slug, name, environment_id, auth_client_id, target_kind, target_ref, target_display, config_json, status, created_at, updated_at, deleted_at, deleted
 FROM trigger_instances ti
 WHERE ti.project_id = $1
   AND ti.deleted IS FALSE
@@ -704,6 +713,7 @@ func (q *Queries) ListTriggerInstances(ctx context.Context, projectID uuid.UUID)
 			&i.DefinitionSlug,
 			&i.Name,
 			&i.EnvironmentID,
+			&i.AuthClientID,
 			&i.TargetKind,
 			&i.TargetRef,
 			&i.TargetDisplay,
@@ -802,7 +812,7 @@ SET
 WHERE id = $2
   AND project_id = $3
   AND deleted IS FALSE
-RETURNING id, organization_id, project_id, definition_slug, name, environment_id, target_kind, target_ref, target_display, config_json, status, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, definition_slug, name, environment_id, auth_client_id, target_kind, target_ref, target_display, config_json, status, created_at, updated_at, deleted_at, deleted
 `
 
 type SetTriggerInstanceStatusParams struct {
@@ -821,6 +831,7 @@ func (q *Queries) SetTriggerInstanceStatus(ctx context.Context, arg SetTriggerIn
 		&i.DefinitionSlug,
 		&i.Name,
 		&i.EnvironmentID,
+		&i.AuthClientID,
 		&i.TargetKind,
 		&i.TargetRef,
 		&i.TargetDisplay,
@@ -842,7 +853,7 @@ SET
 WHERE id = $2
   AND status = $3
   AND deleted IS FALSE
-RETURNING id, organization_id, project_id, definition_slug, name, environment_id, target_kind, target_ref, target_display, config_json, status, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, definition_slug, name, environment_id, auth_client_id, target_kind, target_ref, target_display, config_json, status, created_at, updated_at, deleted_at, deleted
 `
 
 type SetTriggerInstanceStatusByIDParams struct {
@@ -861,6 +872,7 @@ func (q *Queries) SetTriggerInstanceStatusByID(ctx context.Context, arg SetTrigg
 		&i.DefinitionSlug,
 		&i.Name,
 		&i.EnvironmentID,
+		&i.AuthClientID,
 		&i.TargetKind,
 		&i.TargetRef,
 		&i.TargetDisplay,
@@ -926,7 +938,7 @@ SET
 WHERE id = $9
   AND project_id = $10
   AND deleted IS FALSE
-RETURNING id, organization_id, project_id, definition_slug, name, environment_id, target_kind, target_ref, target_display, config_json, status, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, definition_slug, name, environment_id, auth_client_id, target_kind, target_ref, target_display, config_json, status, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateTriggerInstanceParams struct {
@@ -963,6 +975,7 @@ func (q *Queries) UpdateTriggerInstance(ctx context.Context, arg UpdateTriggerIn
 		&i.DefinitionSlug,
 		&i.Name,
 		&i.EnvironmentID,
+		&i.AuthClientID,
 		&i.TargetKind,
 		&i.TargetRef,
 		&i.TargetDisplay,
