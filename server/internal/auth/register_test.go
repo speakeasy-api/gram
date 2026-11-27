@@ -16,7 +16,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/organizations/orgcap"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 )
@@ -75,6 +77,49 @@ func TestService_Register(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, org.CreationSource.Valid)
 		require.Equal(t, orgprovision.SourceSignup, org.CreationSource.String)
+	})
+
+	t.Run("second organization-less session cannot register another organization", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := defaultMockUserInfo()
+		userInfo.Organizations = []MockOrganizationEntry{}
+		ctx, instance := newTestAuthServiceForOrganizationProvisioning(t, userInfo)
+
+		registerWithFreshSession := func(sessionID string) error {
+			session := sessions.Session{
+				SessionID:            sessionID,
+				UserID:               userInfo.UserID,
+				ActiveOrganizationID: "",
+				WorkOSSessionID:      "",
+				ImpersonatorEmail:    "",
+			}
+			require.NoError(t, instance.sessionManager.StoreSession(ctx, session))
+			sessionCtx := contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
+				SessionID:            &session.SessionID,
+				UserID:               session.UserID,
+				ActiveOrganizationID: "",
+				ProjectID:            nil,
+				OrganizationSlug:     "",
+				Email:                &userInfo.Email,
+				AccountType:          "test",
+				ProjectSlug:          nil,
+				APIKeyScopes:         nil,
+			})
+			return instance.service.Register(sessionCtx, &gen.RegisterPayload{OrgName: "Test Organization", SessionToken: nil})
+		}
+
+		require.NoError(t, registerWithFreshSession(t.Name()+"-first"))
+
+		err := registerWithFreshSession(t.Name() + "-second")
+		var oopsErr *oops.ShareableError
+		require.ErrorAs(t, err, &oopsErr)
+		require.Equal(t, oops.CodeInvalid, oopsErr.Code)
+		require.ErrorIs(t, err, orgcap.ErrUserHasOrganization)
+
+		organizations, err := orgRepo.New(instance.conn).ListOrganizationsForUser(ctx, conv.ToPGText(userInfo.UserID))
+		require.NoError(t, err)
+		require.Len(t, organizations, 1)
 	})
 
 	t.Run("register fails when user already has active organization", func(t *testing.T) {

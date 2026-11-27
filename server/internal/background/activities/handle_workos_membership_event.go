@@ -100,7 +100,7 @@ func handleOrganizationMembershipEvent(ctx context.Context, logger *slog.Logger,
 	if err := upsertOrganizationMembership(ctx, dbtx, org.ID, gramUserID, event, payload); err != nil {
 		return none, err
 	}
-	if !known {
+	if firstMembershipEvent(known, lastEventID, org.CreatedAt.Time, time.Now()) {
 		capped, err := orgcap.Enforce(ctx, dbtx, audit.NewLogger(), orgcap.NewMembership{
 			OrganizationID: org.ID,
 			UserID:         gramUserID,
@@ -150,6 +150,22 @@ func upsertOrganizationMembership(ctx context.Context, dbtx pgx.Tx, organization
 	}
 
 	return nil
+}
+
+// recentOrganizationWindow is how long after an organization row is created a
+// membership row that login wrote, before any event reached it, still counts
+// as new. Event processing normally follows within a minute.
+const recentOrganizationWindow = 24 * time.Hour
+
+// firstMembershipEvent reports whether this event is the first to record the
+// membership, so the organization limit applies to it. A row written at login
+// carries no event cursor; for an organization created recently that login
+// only got there before the event did.
+func firstMembershipEvent(known bool, lastEventID *string, organizationCreatedAt, now time.Time) bool {
+	if !known {
+		return true
+	}
+	return lastEventID == nil && now.Sub(organizationCreatedAt) < recentOrganizationWindow
 }
 
 func getMembershipRelationshipCursor(ctx context.Context, repo *orgrepo.Queries, organizationID, gramUserID, workosMembershipID string) (known bool, lastEventID *string, rowUpdatedAt *time.Time, err error) {

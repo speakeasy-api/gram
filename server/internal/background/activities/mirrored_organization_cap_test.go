@@ -3,6 +3,7 @@ package activities_test
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -30,10 +31,18 @@ var mirroredCapEventTime = time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)
 func deliverMembershipCreated(t *testing.T, ctx context.Context, conn *pgxpool.Pool, workosOrgID, workosUserID, suffix string) error {
 	t.Helper()
 
-	stub := newWorkOSClientWithEvents([][]events.Event{{
-		newWorkOSMembershipEvent(t, "organization_membership.created", "event_01HZCAP"+suffix, "mem_01HZCAP"+suffix, workosOrgID, workosUserID, mirroredCapEventTime, "admin"),
-	}})
-	activity := activities.NewProcessWorkOSOrganizationEvents(testenv.NewLogger(t), conn, stub, cache.NoopCache, nil)
+	return deliverEvent(ctx, testenv.NewLogger(t), conn, workosOrgID, membershipCreatedEvent(t, workosOrgID, workosUserID, suffix))
+}
+
+func membershipCreatedEvent(t *testing.T, workosOrgID, workosUserID, suffix string) events.Event {
+	t.Helper()
+
+	return newWorkOSMembershipEvent(t, "organization_membership.created", "event_01HZCAP"+suffix, "mem_01HZCAP"+suffix, workosOrgID, workosUserID, mirroredCapEventTime, "admin")
+}
+
+func deliverEvent(ctx context.Context, logger *slog.Logger, conn *pgxpool.Pool, workosOrgID string, event events.Event) error {
+	stub := newWorkOSClientWithEvents([][]events.Event{{event}})
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil)
 	_, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	if err != nil {
 		return fmt.Errorf("process organization events for %s: %w", workosOrgID, err)
@@ -75,6 +84,41 @@ func TestMirroredOrganizationCap_SecondOrganizationIsDisabled(t *testing.T) {
 	entry, err := audittest.LatestAuditLogByActionAndSubject(ctx, conn, audit.ActionOrganizationDisabledByMembershipCap, "gram_org_cap_second")
 	require.NoError(t, err)
 	require.Equal(t, "gram_org_cap_second", entry.OrganizationID)
+	require.Equal(t, "system", entry.ActorType)
+	require.Equal(t, "organization-cap", entry.ActorID)
+	require.NotNil(t, entry.ActingSurface)
+	require.Equal(t, string(audit.SurfaceSystem), *entry.ActingSurface)
+	beforeSnapshot, err := audittest.DecodeAuditData(entry.BeforeSnapshot)
+	require.NoError(t, err)
+	require.Nil(t, beforeSnapshot["disabled_at"])
+	afterSnapshot, err := audittest.DecodeAuditData(entry.AfterSnapshot)
+	require.NoError(t, err)
+	require.NotNil(t, afterSnapshot["disabled_at"])
+}
+
+func TestMirroredOrganizationCap_MembershipRecordedAtLoginBeforeTheEventIsChecked(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn := newOrgEventsTestConn(t, "mirrored_cap_login_first")
+	seedWorkOSOrganization(t, ctx, conn, "gram_org_cap_login_first", "org_01HZCAPLOGINA")
+	seedWorkOSOrganization(t, ctx, conn, "gram_org_cap_login_second", "org_01HZCAPLOGINB")
+	seedWorkOSUser(t, ctx, conn, "user_cap_login", "user_01HZCAPLOGIN")
+	require.NoError(t, deliverMembershipCreated(t, ctx, conn, "org_01HZCAPLOGINA", "user_01HZCAPLOGIN", "A"))
+
+	_, err := orgrepo.New(conn).SetUserWorkOSMemberships(ctx, orgrepo.SetUserWorkOSMembershipsParams{
+		UserID:              conv.ToPGText("user_cap_login"),
+		PreserveExisting:    true,
+		WorkosOrgIds:        []string{"org_01HZCAPLOGINB"},
+		WorkosMembershipIds: []string{"mem_01HZCAPB"},
+	})
+	require.NoError(t, err)
+	require.False(t, organizationDisabled(t, ctx, conn, "gram_org_cap_login_second"))
+
+	require.NoError(t, deliverMembershipCreated(t, ctx, conn, "org_01HZCAPLOGINB", "user_01HZCAPLOGIN", "B"))
+
+	require.False(t, organizationDisabled(t, ctx, conn, "gram_org_cap_login_first"))
+	require.True(t, organizationDisabled(t, ctx, conn, "gram_org_cap_login_second"))
 }
 
 func TestMirroredOrganizationCap_UserWithoutSpeakeasyAccountIsCappedByIdentityProviderID(t *testing.T) {
@@ -102,6 +146,10 @@ func TestMirroredOrganizationCap_MembershipAlreadyRecordedIsNotChecked(t *testin
 	seedWorkOSUser(t, ctx, conn, "user_cap_known", "user_01HZCAPKNOWN")
 
 	for _, organizationID := range []string{"gram_org_cap_known_first", "gram_org_cap_known_second"} {
+		require.NoError(t, orgrepo.New(conn).BackdateOrganizationCreatedAtForTest(ctx, orgrepo.BackdateOrganizationCreatedAtForTestParams{
+			ID:        organizationID,
+			CreatedAt: conv.ToPGTimestamptz(mirroredCapEventTime.AddDate(0, -6, 0)),
+		}))
 		_, err := orgrepo.New(conn).UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
 			OrganizationID: organizationID,
 			UserID:         conv.ToPGText("user_cap_known"),
@@ -281,10 +329,15 @@ func TestMirroredOrganizationCap_ParallelBurstKeepsExactlyOneOrganization(t *tes
 		seedWorkOSOrganization(t, ctx, conn, organizationIDs[i], workosOrgIDs[i])
 	}
 
+	logger := testenv.NewLogger(t)
+	burstEvents := make([]events.Event, burstOrganizations)
+	for i := range burstOrganizations {
+		burstEvents[i] = membershipCreatedEvent(t, workosOrgIDs[i], "user_01HZCAPBURST", fmt.Sprintf("%02d", i))
+	}
 	var group errgroup.Group
 	for i := range burstOrganizations {
 		group.Go(func() error {
-			return deliverMembershipCreated(t, ctx, conn, workosOrgIDs[i], "user_01HZCAPBURST", fmt.Sprintf("%02d", i))
+			return deliverEvent(ctx, logger, conn, workosOrgIDs[i], burstEvents[i])
 		})
 	}
 	require.NoError(t, group.Wait())

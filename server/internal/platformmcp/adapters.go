@@ -217,7 +217,10 @@ func (a *LiveOrgAdminAuthorizer) RequireLiveMembership(ctx context.Context, prin
 		return ErrForbidden
 	}
 	organization, err := organizationsrepo.New(a.db).GetOrganizationMetadata(ctx, principal.OrganizationID)
-	if err != nil {
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return ErrForbidden
+	case err != nil:
 		return fmt.Errorf("load organization for membership check: %w", err)
 	}
 	if organization.DisabledAt.Valid {

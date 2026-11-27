@@ -165,6 +165,22 @@ func (q *Queries) AttributePartnerSignup(ctx context.Context, arg AttributePartn
 	return result.RowsAffected(), nil
 }
 
+const backdateOrganizationCreatedAtForTest = `-- name: BackdateOrganizationCreatedAtForTest :exec
+UPDATE organization_metadata
+SET created_at = $1
+WHERE id = $2
+`
+
+type BackdateOrganizationCreatedAtForTestParams struct {
+	CreatedAt pgtype.Timestamptz
+	ID        string
+}
+
+func (q *Queries) BackdateOrganizationCreatedAtForTest(ctx context.Context, arg BackdateOrganizationCreatedAtForTestParams) error {
+	_, err := q.db.Exec(ctx, backdateOrganizationCreatedAtForTest, arg.CreatedAt, arg.ID)
+	return err
+}
+
 const clearOnboardingDefaultPlaybook = `-- name: ClearOnboardingDefaultPlaybook :exec
 UPDATE onboarding_playbooks
 SET is_default = false, updated_at = clock_timestamp()
@@ -706,9 +722,10 @@ WHERE target.id = $1
       SELECT 1
       FROM users
       WHERE users.admin IS TRUE
+        AND users.deleted_at IS NULL
         AND (
-            COALESCE(users.id = $2::text, FALSE)
-            OR COALESCE(users.workos_id = $3::text, FALSE)
+            users.id = $2::text
+            OR users.workos_id = $3::text
         )
   )
   AND NOT EXISTS (
@@ -725,12 +742,12 @@ WHERE target.id = $1
       SELECT count(DISTINCT other_org.id)
       FROM organization_user_relationships AS mine
       JOIN organization_metadata AS other_org ON other_org.id = mine.organization_id
-      WHERE mine.deleted_at IS NULL
+      WHERE mine.deleted IS FALSE
         AND other_org.id <> target.id
         AND other_org.disabled_at IS NULL
         AND (
-            COALESCE(mine.user_id = $2::text, FALSE)
-            OR COALESCE(mine.workos_user_id = $3::text, FALSE)
+            mine.user_id = $2::text
+            OR mine.workos_user_id = $3::text
         )
   ) >= $4::int
 RETURNING target.id, target.name, target.slug, target.disabled_at

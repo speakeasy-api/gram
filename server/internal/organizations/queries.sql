@@ -431,6 +431,11 @@ UPDATE organization_invitations
 SET expires_at = clock_timestamp() - interval '1 hour'
 WHERE id = @id;
 
+-- name: BackdateOrganizationCreatedAtForTest :exec
+UPDATE organization_metadata
+SET created_at = @created_at
+WHERE id = @id;
+
 -- name: SetOrganizationDefaultHostForTest :exec
 UPDATE organization_metadata
 SET default_host = @default_host
@@ -962,9 +967,10 @@ WHERE target.id = @organization_id
       SELECT 1
       FROM users
       WHERE users.admin IS TRUE
+        AND users.deleted_at IS NULL
         AND (
-            COALESCE(users.id = sqlc.narg('user_id')::text, FALSE)
-            OR COALESCE(users.workos_id = sqlc.narg('workos_user_id')::text, FALSE)
+            users.id = sqlc.narg('user_id')::text
+            OR users.workos_id = sqlc.narg('workos_user_id')::text
         )
   )
   AND NOT EXISTS (
@@ -981,12 +987,12 @@ WHERE target.id = @organization_id
       SELECT count(DISTINCT other_org.id)
       FROM organization_user_relationships AS mine
       JOIN organization_metadata AS other_org ON other_org.id = mine.organization_id
-      WHERE mine.deleted_at IS NULL
+      WHERE mine.deleted IS FALSE
         AND other_org.id <> target.id
         AND other_org.disabled_at IS NULL
         AND (
-            COALESCE(mine.user_id = sqlc.narg('user_id')::text, FALSE)
-            OR COALESCE(mine.workos_user_id = sqlc.narg('workos_user_id')::text, FALSE)
+            mine.user_id = sqlc.narg('user_id')::text
+            OR mine.workos_user_id = sqlc.narg('workos_user_id')::text
         )
   ) >= @max_organizations::int
 RETURNING target.id, target.name, target.slug, target.disabled_at;

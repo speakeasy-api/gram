@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -46,11 +47,12 @@ type NewMembership struct {
 
 // Enforce disables an organization the user joins from the identity provider
 // when it would take them past MaxOrganizationsPerUser. Call it once, in the
-// transaction that first records the membership.
+// READ COMMITTED transaction that has just written the membership.
 func Enforce(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, membership NewMembership) (bool, error) {
 	if membership.OrganizationID == "" || membership.WorkOSUserID == "" {
 		return false, nil
 	}
+	ctx = contextvalues.SetActingSurface(ctx, string(audit.SurfaceSystem))
 
 	queries := orgrepo.New(tx)
 	if err := queries.LockUserOrganizationCap(ctx, membership.WorkOSUserID); err != nil {
