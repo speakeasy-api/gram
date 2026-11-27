@@ -37,7 +37,7 @@ func (p *KitRuntimeProtocol) CloseNativeThreadSession(ctx context.Context, r ass
 			session = row.AcpSessionID.String
 		}
 	}
-	c, err := p.dial(ctx, r)
+	c, _, err := p.dial(ctx, r)
 	if err != nil {
 		return err
 	}
