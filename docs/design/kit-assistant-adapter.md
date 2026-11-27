@@ -132,8 +132,8 @@ and inserted into that active turn on the owning connection without waiting for
 settlement. Every event carries a stable `idempotencyKey` derived from its
 thread event ID so retries after transport or worker failure converge on a
 single insertion and return the original `messageId`, even after the turn has
-settled. Gateways without `capabilities.session.prompt.delivery.steer` (Kit
-0.2.x) omit `delivery` and keep one-turn-per-event admission.
+settled. Gateways without `capabilities.session.prompt.delivery.steer` omit
+`delivery` and keep one-turn-per-event admission.
 
 Use `kit/session/status` and its authoritative `settled` field while holding
 runtime admission for lifecycle decisions. Foreground `idle` does not establish

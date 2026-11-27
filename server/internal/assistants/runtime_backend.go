@@ -59,9 +59,11 @@ type kitSteerTurn struct {
 	SourceInstructions     string
 	Prompt                 string
 	InputParts             []runtimeContentPart
-	// OnOutcome is called once when Kit either acknowledges prompt insertion
-	// (inserted=true) or withdraws the held prompt before insertion via
-	// $/cancel_request (inserted=false, withdrawn=true).
+	// OnOutcome is called once per claimed steer. It reports inserted=true when
+	// Kit acknowledges insertion, including when ack correlation later fails. It
+	// reports inserted=false, withdrawn=true when the held prompt is withdrawn
+	// via $/cancel_request before insertion. It reports inserted=false,
+	// withdrawn=false when submission or the prompt wait fails before insertion.
 	OnOutcome func(inserted, withdrawn bool)
 }
 

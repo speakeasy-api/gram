@@ -532,6 +532,53 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 		steerMu.Unlock()
 		notifySteerDone()
 	}
+	checkInterruptsPending := func() (bool, error) {
+		steerMu.Lock()
+		events := append([]kitTurnEventRef(nil), turnEvents...)
+		steerMu.Unlock()
+		var firstErr error
+		for _, ev := range events {
+			pending, err := p.kitInterruptPendingForEvent(work, r, ev.eventID, ev.attempt)
+			if err != nil {
+				if firstErr == nil {
+					firstErr = err
+				}
+				continue
+			}
+			if pending {
+				return true, nil
+			}
+		}
+		return false, firstErr
+	}
+	withdrawInFlightSteers := func() {
+		steerMu.Lock()
+		interruptRequested = true
+		var toWithdraw []*kitacp.PendingCall
+		for _, item := range inFlightSteers {
+			if !item.cancelSent {
+				item.cancelSent = true
+				toWithdraw = append(toWithdraw, item.call)
+			}
+		}
+		steerMu.Unlock()
+		for _, pendingCall := range toWithdraw {
+			withdrawCtx, stopWithdraw := context.WithTimeout(work, 2*time.Second)
+			_ = pendingCall.CancelRequest(withdrawCtx)
+			stopWithdraw()
+		}
+	}
+	acknowledgeTurnInterrupts := func(outcome string) error {
+		steerMu.Lock()
+		events := append([]kitTurnEventRef(nil), turnEvents...)
+		steerMu.Unlock()
+		for _, ev := range events {
+			if err := p.acknowledgeKitInterruptForEvent(work, r, ev.eventID, ev.attempt, outcome); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
 	pollSteers := func() error {
 		if !caps.DeliverySteer || req.NextSteerEvent == nil {
 			return nil
@@ -541,6 +588,10 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 			stopped := interruptRequested || steerErr != nil
 			steerMu.Unlock()
 			if stopped {
+				return nil
+			}
+			if pending, mailboxErr := checkInterruptsPending(); mailboxErr == nil && pending {
+				withdrawInFlightSteers()
 				return nil
 			}
 			steer, ok, err := req.NextSteerEvent(work)
@@ -707,53 +758,6 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 	interrupt.arm()
 	if err := pollSteers(); err != nil {
 		return err
-	}
-	checkInterruptsPending := func() (bool, error) {
-		steerMu.Lock()
-		events := append([]kitTurnEventRef(nil), turnEvents...)
-		steerMu.Unlock()
-		var firstErr error
-		for _, ev := range events {
-			pending, err := p.kitInterruptPendingForEvent(work, r, ev.eventID, ev.attempt)
-			if err != nil {
-				if firstErr == nil {
-					firstErr = err
-				}
-				continue
-			}
-			if pending {
-				return true, nil
-			}
-		}
-		return false, firstErr
-	}
-	withdrawInFlightSteers := func() {
-		steerMu.Lock()
-		interruptRequested = true
-		var toWithdraw []*kitacp.PendingCall
-		for _, item := range inFlightSteers {
-			if !item.cancelSent {
-				item.cancelSent = true
-				toWithdraw = append(toWithdraw, item.call)
-			}
-		}
-		steerMu.Unlock()
-		for _, pendingCall := range toWithdraw {
-			withdrawCtx, stopWithdraw := context.WithTimeout(work, 2*time.Second)
-			_ = pendingCall.CancelRequest(withdrawCtx)
-			stopWithdraw()
-		}
-	}
-	acknowledgeTurnInterrupts := func(outcome string) error {
-		steerMu.Lock()
-		events := append([]kitTurnEventRef(nil), turnEvents...)
-		steerMu.Unlock()
-		for _, ev := range events {
-			if err := p.acknowledgeKitInterruptForEvent(work, r, ev.eventID, ev.attempt, outcome); err != nil {
-				return err
-			}
-		}
-		return nil
 	}
 	ticker := time.NewTicker(250 * time.Millisecond)
 	defer ticker.Stop()

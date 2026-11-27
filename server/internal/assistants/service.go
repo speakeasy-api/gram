@@ -3378,8 +3378,11 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 					// it; settle as cancelled so a later transport retry does not
 					// re-deliver an event the user stopped.
 					cancelCtx, stopCancel := context.WithTimeout(context.WithoutCancel(ctx), teardownCapCleanupTimeout)
-					_, _ = s.cancelProcessingEvent(cancelCtx, thread.ProjectID, ev.event.ID, ev.event.Attempts)
+					_, cancelErr := s.cancelProcessingEvent(cancelCtx, thread.ProjectID, ev.event.ID, ev.event.Attempts)
 					stopCancel()
+					if cancelErr != nil {
+						return ProcessThreadEventsResult{}, fmt.Errorf("settle withdrawn steered event: %w", cancelErr)
+					}
 					continue
 				}
 				evCtx := withAssistantLogEvent(ctx, ev.event)
@@ -3894,8 +3897,12 @@ func (s *ServiceCore) processEventTurnWithProtocol(
 
 	var nextSteerEvent func(context.Context) (kitSteerTurn, bool, error)
 	if runtime.RuntimeVersion == 3 {
+		steerPaused := false
 		nextSteerEvent = func(steerCtx context.Context) (kitSteerTurn, bool, error) {
 			var zero kitSteerTurn
+			if steerPaused {
+				return zero, false, nil
+			}
 			hasPending, err := assistantrepo.New(s.db).HasPendingAssistantThreadEvent(steerCtx, assistantrepo.HasPendingAssistantThreadEventParams{
 				ProjectID:     thread.ProjectID,
 				ThreadID:      thread.ID,
@@ -3926,12 +3933,20 @@ func (s *ServiceCore) processEventTurnWithProtocol(
 			if prepErr != nil {
 				// Preparation errors belong to the newly claimed event; settle
 				// or requeue it without disrupting the already-running turn.
-				if errors.Is(prepErr, ErrTurnIdentity) {
+				// Enforce maxEventAttempts here and pause mid-turn steering on
+				// transient requeue so the 250ms poll loop cannot repeatedly
+				// reclaim the same oldest failing event during this turn.
+				switch {
+				case errors.Is(prepErr, ErrTurnIdentity):
 					s.emitAssistantTelemetry(evCtx, assistant, thread, &runtime, &ev, "event_terminal", "assistant event identity rejected", "ERROR", prepErr)
 					_ = s.failEvent(evCtx, thread.ProjectID, ev.ID, prepErr)
-				} else {
+				case ev.Attempts >= maxEventAttempts:
+					s.emitAssistantTelemetry(evCtx, assistant, thread, &runtime, &ev, "event_terminal", "assistant steered event exceeded max attempts", "ERROR", prepErr)
+					_ = s.failEvent(evCtx, thread.ProjectID, ev.ID, fmt.Errorf("exceeded %d attempts: %w", maxEventAttempts, prepErr))
+				default:
 					s.emitAssistantTelemetry(evCtx, assistant, thread, &runtime, &ev, "event_requeued", "assistant steered event requeued for retry", "WARN", prepErr)
 					_ = s.resetEventToPending(evCtx, thread.ProjectID, ev.ID, prepErr)
+					steerPaused = true
 				}
 				return zero, false, nil
 			}
