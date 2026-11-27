@@ -1079,7 +1079,7 @@ SELECT
 FROM skill_edit_suggestions suggestion
 WHERE suggestion.project_id = $4
   AND suggestion.id = $5
-RETURNING id, project_id, suggestion_id, proposed_diff, rationale, position, created_at, updated_at
+RETURNING id, project_id, suggestion_id, proposed_diff, rationale, position, path, created_at, updated_at
 `
 
 type CreateSkillEditSuggestionChangeParams struct {
@@ -1106,6 +1106,7 @@ func (q *Queries) CreateSkillEditSuggestionChange(ctx context.Context, arg Creat
 		&i.ProposedDiff,
 		&i.Rationale,
 		&i.Position,
+		&i.Path,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -2245,7 +2246,7 @@ func (q *Queries) GetSkillDetails(ctx context.Context, arg GetSkillDetailsParams
 }
 
 const getSkillEditSuggestionChange = `-- name: GetSkillEditSuggestionChange :one
-SELECT change.id, change.project_id, change.suggestion_id, change.proposed_diff, change.rationale, change.position, change.created_at, change.updated_at, suggestion.skill_id, suggestion.base_version_id, suggestion.status
+SELECT change.id, change.project_id, change.suggestion_id, change.proposed_diff, change.rationale, change.position, change.path, change.created_at, change.updated_at, suggestion.skill_id, suggestion.base_version_id, suggestion.status
 FROM skill_edit_suggestion_changes change
 JOIN skill_edit_suggestions suggestion
   ON suggestion.project_id = change.project_id
@@ -2266,6 +2267,7 @@ type GetSkillEditSuggestionChangeRow struct {
 	ProposedDiff  string
 	Rationale     string
 	Position      int32
+	Path          pgtype.Text
 	CreatedAt     pgtype.Timestamptz
 	UpdatedAt     pgtype.Timestamptz
 	SkillID       uuid.UUID
@@ -2283,6 +2285,7 @@ func (q *Queries) GetSkillEditSuggestionChange(ctx context.Context, arg GetSkill
 		&i.ProposedDiff,
 		&i.Rationale,
 		&i.Position,
+		&i.Path,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.SkillID,
@@ -4362,7 +4365,7 @@ func (q *Queries) ListSkillDistributionTargetVersions(ctx context.Context, arg L
 
 const listSkillEditSuggestionChanges = `-- name: ListSkillEditSuggestionChanges :many
 SELECT
-  change.id, change.project_id, change.suggestion_id, change.proposed_diff, change.rationale, change.position, change.created_at, change.updated_at,
+  change.id, change.project_id, change.suggestion_id, change.proposed_diff, change.rationale, change.position, change.path, change.created_at, change.updated_at,
   (
     SELECT COUNT(*)
     FROM skill_edit_suggestion_feedback link
@@ -4397,6 +4400,7 @@ type ListSkillEditSuggestionChangesRow struct {
 	ProposedDiff         string
 	Rationale            string
 	Position             int32
+	Path                 pgtype.Text
 	CreatedAt            pgtype.Timestamptz
 	UpdatedAt            pgtype.Timestamptz
 	FeedbackCount        int64
@@ -4419,6 +4423,7 @@ func (q *Queries) ListSkillEditSuggestionChanges(ctx context.Context, arg ListSk
 			&i.ProposedDiff,
 			&i.Rationale,
 			&i.Position,
+			&i.Path,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.FeedbackCount,
