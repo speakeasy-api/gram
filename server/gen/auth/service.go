@@ -27,9 +27,13 @@ type Service interface {
 	EnterDemo(context.Context, *EnterDemoPayload) (res *EnterDemoResult, err error)
 	// Logs out the current user by clearing their session.
 	Logout(context.Context, *LogoutPayload) (res *LogoutResult, err error)
-	// Signs the caller out everywhere: ends every dashboard and identity provider
-	// session, revokes their sign-ins in every organization, and revokes every MCP
-	// grant made from them.
+	// Signs the caller out everywhere in this partition: ends every dashboard
+	// session they hold here, revokes their sign-ins in every organization here,
+	// and revokes every MCP grant made from them. Identity provider sessions are
+	// shared across partitions, so it also ends every one the user holds, and
+	// their next sign-in in any partition asks them to authenticate again.
+	// Dashboard sessions, sign-ins and MCP grants in other partitions are not
+	// affected; signing out everywhere in each partition ends them.
 	LogoutEverywhere(context.Context, *LogoutEverywherePayload) (res *LogoutEverywhereResult, err error)
 	// Register a new org for a user with their session information.
 	Register(context.Context, *RegisterPayload) (err error)

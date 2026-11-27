@@ -156,7 +156,7 @@ export class Auth extends ClientSDK {
    * logoutEverywhere auth
    *
    * @remarks
-   * Signs the caller out everywhere: ends every dashboard and identity provider session, revokes their sign-ins in every organization, and revokes every MCP grant made from them.
+   * Signs the caller out everywhere in this partition: ends every dashboard session they hold here, revokes their sign-ins in every organization here, and revokes every MCP grant made from them. Identity provider sessions are shared across partitions, so it also ends every one the user holds, and their next sign-in in any partition asks them to authenticate again. Dashboard sessions, sign-ins and MCP grants in other partitions are not affected; signing out everywhere in each partition ends them.
    */
   async logoutEverywhere(
     request?: LogoutEverywhereRequest | undefined,
