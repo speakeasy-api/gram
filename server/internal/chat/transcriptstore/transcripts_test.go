@@ -475,7 +475,7 @@ func (f *fixture) insert(t *testing.T, transcripts *Transcripts, id uuid.UUID) c
 	t.Cleanup(func() { _ = tx.Rollback(context.Background()) })
 	ids, err := transcripts.InsertChatMessages(ctx, tx, f.org, f.project, refs, func() ([]uuid.UUID, error) {
 		written = params[0]
-		_, err := chatrepo.New(tx).CreateChatMessage(ctx, params) //nolint:glint // nodirectchatmessageinsert: drives InsertChatMessages with the writer's own insert query.
+		_, err := chatrepo.New(tx).CreateChatMessage(ctx, params)
 		require.NoError(t, err)
 		return []uuid.UUID{id}, nil
 	})

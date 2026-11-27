@@ -11,3 +11,11 @@ func New(db any) *Queries { return &Queries{} }
 func (q *Queries) CreateChatMessage(_ context.Context, _ []CreateChatMessageParams) (int64, error) {
 	return 0, nil
 }
+
+func (q *Queries) CreateExternalChatMessage(_ context.Context, _ CreateChatMessageParams) (int64, error) {
+	return 0, nil
+}
+
+func (q *Queries) GetChat(_ context.Context) error { return nil }
+
+func (q *Queries) SeedChatMessage(_ context.Context) error { return nil }
