@@ -191,7 +191,7 @@ func TestSlackTriggerTokenReadsSlackAppAuthClientAndFailsClosed(t *testing.T) {
 		Value:          pgtype.Text{String: encBot, Valid: true},
 	}))
 
-	// Create an auth-client-backed Slack trigger and a legacy env-backed Slack trigger.
+	// Create an auth-client-backed Slack trigger and an environment-backed Slack trigger.
 	authTrigger, err := triggerrepo.New(conn).CreateTriggerInstance(ctx, triggerrepo.CreateTriggerInstanceParams{
 		OrganizationID: "org-test",
 		ProjectID:      projectID,
@@ -210,16 +210,16 @@ func TestSlackTriggerTokenReadsSlackAppAuthClientAndFailsClosed(t *testing.T) {
 	envRow, err := envrepo.New(conn).CreateEnvironment(ctx, envrepo.CreateEnvironmentParams{
 		OrganizationID: "org-test",
 		ProjectID:      projectID,
-		Name:           "Legacy Slack Env",
-		Slug:           "legacy-slack-env",
+		Name:           "Slack Env",
+		Slug:           "slack-env",
 		Description:    pgtype.Text{},
 	})
 	require.NoError(t, err)
-	legacyTrigger, err := triggerrepo.New(conn).CreateTriggerInstance(ctx, triggerrepo.CreateTriggerInstanceParams{
+	envTrigger, err := triggerrepo.New(conn).CreateTriggerInstance(ctx, triggerrepo.CreateTriggerInstanceParams{
 		OrganizationID: "org-test",
 		ProjectID:      projectID,
 		DefinitionSlug: "slack",
-		Name:           "Legacy Slack",
+		Name:           "Environment Slack",
 		EnvironmentID:  uuid.NullUUID{UUID: envRow.ID, Valid: true},
 		AuthClientID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		TargetKind:     "assistant",
@@ -232,7 +232,7 @@ func TestSlackTriggerTokenReadsSlackAppAuthClientAndFailsClosed(t *testing.T) {
 
 	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendGKE, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
 	core.SetSlackAppCredentials(store)
-	core.envLoader = stubEnvLoader{toolconfig.ID(envRow.ID): {"SLACK_BOT_TOKEN": "xoxb-from-legacy-env"}}
+	core.envLoader = stubEnvLoader{toolconfig.ID(envRow.ID): {"SLACK_BOT_TOKEN": "xoxb-from-env"}}
 
 	thread := assistantThreadRecord{ID: threadID, ProjectID: projectID}
 
@@ -243,12 +243,12 @@ func TestSlackTriggerTokenReadsSlackAppAuthClientAndFailsClosed(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "xoxb-from-auth-client", gotAuth)
 
-	// Legacy trigger continues reading from its environment.
-	gotLegacy, err := core.slackTriggerToken(ctx, thread, assistantThreadEventRecord{
-		TriggerInstanceID: uuid.NullUUID{UUID: legacyTrigger.ID, Valid: true},
+	// Environment-backed trigger reads from its environment.
+	gotEnv, err := core.slackTriggerToken(ctx, thread, assistantThreadEventRecord{
+		TriggerInstanceID: uuid.NullUUID{UUID: envTrigger.ID, Valid: true},
 	})
 	require.NoError(t, err)
-	require.Equal(t, "xoxb-from-legacy-env", gotLegacy)
+	require.Equal(t, "xoxb-from-env", gotEnv)
 
 	// Soft-deleting the slack_app client causes the auth-client trigger to fail closed.
 	require.NoError(t, testrepo.New(conn).SoftDeleteAuthClientFixture(ctx, testrepo.SoftDeleteAuthClientFixtureParams{
