@@ -50,6 +50,14 @@ export type AdminOrganization = {
    */
   disabledAt?: Date | undefined;
   /**
+   * True when no staff-set limit exists and function_timeout_seconds is the platform default. Absent from list results.
+   */
+  functionTimeoutIsDefault?: boolean | undefined;
+  /**
+   * How long one Speakeasy Function invocation may run, in seconds: the staff-set limit, or the platform default when none is set. Absent from list results.
+   */
+  functionTimeoutSeconds?: number | undefined;
+  /**
    * The ID of the organization
    */
   id: string;
@@ -139,6 +147,8 @@ export const AdminOrganization$inboundSchema: z.ZodMiniType<
     disabled_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
+    function_timeout_is_default: z.optional(z.boolean()),
+    function_timeout_seconds: z.optional(z.int()),
     id: z.string(),
     member_count: z.int(),
     name: z.string(),
@@ -173,6 +183,8 @@ export const AdminOrganization$inboundSchema: z.ZodMiniType<
       "created_at": "createdAt",
       "creation_source": "creationSource",
       "disabled_at": "disabledAt",
+      "function_timeout_is_default": "functionTimeoutIsDefault",
+      "function_timeout_seconds": "functionTimeoutSeconds",
       "member_count": "memberCount",
       "stripe_customer_dashboard_url": "stripeCustomerDashboardUrl",
       "stripe_customer_id": "stripeCustomerId",

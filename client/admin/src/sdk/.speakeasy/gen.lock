@@ -147,6 +147,7 @@ trackedFiles:
   src/funcs/adminSaveRegistryEntry.ts: {}
   src/funcs/adminServeImage.ts: {}
   src/funcs/adminSetAdoptionDashboardUrl.ts: {}
+  src/funcs/adminSetFunctionTimeout.ts: {}
   src/funcs/adminSetHooksRolloutDefault.ts: {}
   src/funcs/adminSetInferenceKeyMonthlyLimit.ts: {}
   src/funcs/adminSetMcpServerScopePin.ts: {}
@@ -406,6 +407,7 @@ trackedFiles:
   src/models/components/runupstreamoauthmigrationrequestbody.ts: {}
   src/models/components/saveregistryentryrequestbody.ts: {}
   src/models/components/setadoptiondashboardurlrequestbody.ts: {}
+  src/models/components/setfunctiontimeoutrequestbody.ts: {}
   src/models/components/sethooksrolloutdefaultrequestbody.ts: {}
   src/models/components/setinferencekeymonthlylimitrequestbody.ts: {}
   src/models/components/setmcpserverscopepinrequestbody.ts: {}
@@ -672,6 +674,7 @@ trackedFiles:
   src/react-query/adminServeImage.core.ts: {}
   src/react-query/adminServeImage.ts: {}
   src/react-query/adminSetAdoptionDashboardUrl.ts: {}
+  src/react-query/adminSetFunctionTimeout.ts: {}
   src/react-query/adminSetHooksRolloutDefault.ts: {}
   src/react-query/adminSetInferenceKeyMonthlyLimit.ts: {}
   src/react-query/adminSetMcpServerScopePin.ts: {}
@@ -792,7 +795,7 @@ examples:
         application/json: {"ends_at": "2024-09-15T14:40:01.475Z", "id": "<id>"}
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2025-10-24T16:41:22.781Z", "id": "<id>", "member_count": 148417, "name": "<value>", "slug": "<value>", "updated_at": "2024-01-25T13:15:50.191Z", "whitelisted": false}
+          application/json: {"account_type": "<value>", "created_at": "2025-10-24T16:41:22.781Z", "function_timeout_seconds": 60, "id": "<id>", "member_count": 148417, "name": "<value>", "slug": "<value>", "updated_at": "2024-01-25T13:15:50.191Z", "whitelisted": false}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -880,7 +883,7 @@ examples:
         application/json: {"ownership_confirmed": false, "url": "https://rusty-lay.name/"}
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2026-04-25T22:31:08.399Z", "id": "<id>", "member_count": 479220, "name": "<value>", "slug": "<value>", "updated_at": "2026-02-08T04:37:48.396Z", "whitelisted": false}
+          application/json: {"account_type": "<value>", "created_at": "2026-04-25T22:31:08.399Z", "function_timeout_seconds": 60, "id": "<id>", "member_count": 479220, "name": "<value>", "slug": "<value>", "updated_at": "2026-02-08T04:37:48.396Z", "whitelisted": false}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -990,7 +993,7 @@ examples:
         application/json: {"id": "<id>"}
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2024-08-26T05:04:39.814Z", "id": "<id>", "member_count": 952695, "name": "<value>", "slug": "<value>", "updated_at": "2025-06-25T20:07:54.737Z", "whitelisted": false}
+          application/json: {"account_type": "<value>", "created_at": "2024-08-26T05:04:39.814Z", "function_timeout_seconds": 60, "id": "<id>", "member_count": 952695, "name": "<value>", "slug": "<value>", "updated_at": "2025-06-25T20:07:54.737Z", "whitelisted": false}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -1012,7 +1015,7 @@ examples:
         application/json: {"id": "<id>"}
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2025-11-13T13:09:17.603Z", "id": "<id>", "member_count": 10607, "name": "<value>", "slug": "<value>", "updated_at": "2026-08-01T04:20:06.780Z", "whitelisted": true}
+          application/json: {"account_type": "<value>", "created_at": "2025-11-13T13:09:17.603Z", "function_timeout_seconds": 60, "id": "<id>", "member_count": 10607, "name": "<value>", "slug": "<value>", "updated_at": "2026-08-01T04:20:06.780Z", "whitelisted": true}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -1045,7 +1048,7 @@ examples:
         application/json: {"days": 407458, "id": "<id>"}
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2024-11-25T09:55:18.007Z", "id": "<id>", "member_count": 797561, "name": "<value>", "slug": "<value>", "updated_at": "2025-08-13T19:34:29.924Z", "whitelisted": false}
+          application/json: {"account_type": "<value>", "created_at": "2024-11-25T09:55:18.007Z", "function_timeout_seconds": 60, "id": "<id>", "member_count": 797561, "name": "<value>", "slug": "<value>", "updated_at": "2025-08-13T19:34:29.924Z", "whitelisted": false}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -1283,7 +1286,7 @@ examples:
           id_or_slug: "<value>"
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2026-12-05T06:45:37.658Z", "id": "<id>", "member_count": 207672, "name": "<value>", "slug": "<value>", "updated_at": "2024-12-21T22:32:48.688Z", "whitelisted": false}
+          application/json: {"account_type": "<value>", "created_at": "2026-12-05T06:45:37.658Z", "function_timeout_seconds": 60, "id": "<id>", "member_count": 207672, "name": "<value>", "slug": "<value>", "updated_at": "2024-12-21T22:32:48.688Z", "whitelisted": false}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -1974,7 +1977,7 @@ examples:
         application/json: {"days": 225644, "id": "<id>"}
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2026-07-09T05:13:00.469Z", "id": "<id>", "member_count": 418893, "name": "<value>", "slug": "<value>", "updated_at": "2025-12-04T19:10:44.289Z", "whitelisted": true}
+          application/json: {"account_type": "<value>", "created_at": "2026-07-09T05:13:00.469Z", "function_timeout_seconds": 60, "id": "<id>", "member_count": 418893, "name": "<value>", "slug": "<value>", "updated_at": "2025-12-04T19:10:44.289Z", "whitelisted": true}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -2151,11 +2154,22 @@ examples:
         application/json: {"organization_id": "<id>"}
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2026-08-21T02:59:01.694Z", "id": "<id>", "member_count": 658564, "name": "<value>", "slug": "<value>", "updated_at": "2026-05-07T22:44:29.515Z", "whitelisted": true}
+          application/json: {"account_type": "<value>", "created_at": "2026-08-21T02:59:01.694Z", "function_timeout_seconds": 60, "id": "<id>", "member_count": 658564, "name": "<value>", "slug": "<value>", "updated_at": "2026-05-07T22:44:29.515Z", "whitelisted": true}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  adminSetFunctionTimeout:
+    speakeasy-default-admin-set-function-timeout:
+      requestBody:
+        application/json: {"organization_id": "<id>"}
+      responses:
+        "200":
+          application/json: {"account_type": "<value>", "created_at": "2024-05-08T15:21:37.357Z", "function_timeout_seconds": 60, "id": "<id>", "member_count": 166132, "name": "<value>", "slug": "<value>", "updated_at": "2026-07-29T19:50:30.394Z", "whitelisted": false}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   adminSetHooksRolloutDefault:
     speakeasy-default-admin-set-hooks-rollout-default:
       requestBody:
@@ -2261,7 +2275,7 @@ examples:
         application/json: {"organization_id": "<id>", "stripe_customer_id": "<id>"}
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2025-09-24T05:24:18.891Z", "id": "<id>", "member_count": 989295, "name": "<value>", "slug": "<value>", "updated_at": "2025-01-18T13:20:18.869Z", "whitelisted": false}
+          application/json: {"account_type": "<value>", "created_at": "2025-09-24T05:24:18.891Z", "function_timeout_seconds": 60, "id": "<id>", "member_count": 989295, "name": "<value>", "slug": "<value>", "updated_at": "2025-01-18T13:20:18.869Z", "whitelisted": false}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -2272,7 +2286,7 @@ examples:
         application/json: {"organization_id": "<id>", "stripe_subscription_id": "<id>"}
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2024-07-09T23:44:07.795Z", "id": "<id>", "member_count": 534395, "name": "<value>", "slug": "<value>", "updated_at": "2024-07-03T15:13:04.457Z", "whitelisted": false}
+          application/json: {"account_type": "<value>", "created_at": "2024-07-09T23:44:07.795Z", "function_timeout_seconds": 60, "id": "<id>", "member_count": 534395, "name": "<value>", "slug": "<value>", "updated_at": "2024-07-03T15:13:04.457Z", "whitelisted": false}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -2294,7 +2308,7 @@ examples:
         application/json: {"days": 94695, "id": "<id>"}
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2024-02-28T05:39:12.577Z", "id": "<id>", "member_count": 466443, "name": "<value>", "slug": "<value>", "updated_at": "2026-05-06T05:08:01.892Z", "whitelisted": true}
+          application/json: {"account_type": "<value>", "created_at": "2024-02-28T05:39:12.577Z", "function_timeout_seconds": 60, "id": "<id>", "member_count": 466443, "name": "<value>", "slug": "<value>", "updated_at": "2026-05-06T05:08:01.892Z", "whitelisted": true}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -2371,7 +2385,7 @@ examples:
         application/json: {"id": "<id>"}
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2025-09-23T01:12:49.084Z", "id": "<id>", "member_count": 997342, "name": "<value>", "slug": "<value>", "updated_at": "2026-04-10T17:39:44.868Z", "whitelisted": false}
+          application/json: {"account_type": "<value>", "created_at": "2025-09-23T01:12:49.084Z", "function_timeout_seconds": 60, "id": "<id>", "member_count": 997342, "name": "<value>", "slug": "<value>", "updated_at": "2026-04-10T17:39:44.868Z", "whitelisted": false}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":

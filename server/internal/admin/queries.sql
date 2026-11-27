@@ -616,6 +616,7 @@ SELECT
     t.demoted_at AS trial_demoted_at,
     om.creation_source,
     om.adoption_dashboard_url,
+    om.function_timeout_seconds,
     om.created_at,
     om.updated_at,
     (
@@ -637,6 +638,16 @@ LIMIT 1;
 UPDATE organization_metadata
 SET
     adoption_dashboard_url = sqlc.narg('adoption_dashboard_url')::text,
+    updated_at = clock_timestamp()
+WHERE id = sqlc.arg('id')::text
+RETURNING id;
+
+-- name: AdminSetOrganizationFunctionTimeout :one
+-- NULL restores the platform default. Keyed on id alone, like every other
+-- admin write.
+UPDATE organization_metadata
+SET
+    function_timeout_seconds = sqlc.narg('function_timeout_seconds')::integer,
     updated_at = clock_timestamp()
 WHERE id = sqlc.arg('id')::text
 RETURNING id;

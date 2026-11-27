@@ -671,6 +671,7 @@ SELECT
     t.demoted_at AS trial_demoted_at,
     om.creation_source,
     om.adoption_dashboard_url,
+    om.function_timeout_seconds,
     om.created_at,
     om.updated_at,
     (
@@ -694,25 +695,26 @@ type AdminGetOrganizationParams struct {
 }
 
 type AdminGetOrganizationRow struct {
-	ID                   string
-	Name                 string
-	Slug                 string
-	AccountType          string
-	WorkosID             pgtype.Text
-	StripeCustomerID     pgtype.Text
-	StripeSubscriptionID pgtype.Text
-	Whitelisted          bool
-	DisabledAt           pgtype.Timestamptz
-	TrialState           string
-	TrialTier            pgtype.Text
-	TrialEndsAt          pgtype.Timestamptz
-	TrialConvertedAt     pgtype.Timestamptz
-	TrialDemotedAt       pgtype.Timestamptz
-	CreationSource       pgtype.Text
-	AdoptionDashboardUrl pgtype.Text
-	CreatedAt            pgtype.Timestamptz
-	UpdatedAt            pgtype.Timestamptz
-	MemberCount          int64
+	ID                     string
+	Name                   string
+	Slug                   string
+	AccountType            string
+	WorkosID               pgtype.Text
+	StripeCustomerID       pgtype.Text
+	StripeSubscriptionID   pgtype.Text
+	Whitelisted            bool
+	DisabledAt             pgtype.Timestamptz
+	TrialState             string
+	TrialTier              pgtype.Text
+	TrialEndsAt            pgtype.Timestamptz
+	TrialConvertedAt       pgtype.Timestamptz
+	TrialDemotedAt         pgtype.Timestamptz
+	CreationSource         pgtype.Text
+	AdoptionDashboardUrl   pgtype.Text
+	FunctionTimeoutSeconds pgtype.Int4
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+	MemberCount            int64
 }
 
 // Resolving a slug is opt-in because every admin write is keyed on id alone.
@@ -744,6 +746,7 @@ func (q *Queries) AdminGetOrganization(ctx context.Context, arg AdminGetOrganiza
 		&i.TrialDemotedAt,
 		&i.CreationSource,
 		&i.AdoptionDashboardUrl,
+		&i.FunctionTimeoutSeconds,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.MemberCount,
@@ -3100,6 +3103,29 @@ type AdminSetOrganizationAdoptionDashboardURLParams struct {
 // NULL clears the link. Keyed on id alone, like every other admin write.
 func (q *Queries) AdminSetOrganizationAdoptionDashboardURL(ctx context.Context, arg AdminSetOrganizationAdoptionDashboardURLParams) (string, error) {
 	row := q.db.QueryRow(ctx, adminSetOrganizationAdoptionDashboardURL, arg.AdoptionDashboardUrl, arg.ID)
+	var id string
+	err := row.Scan(&id)
+	return id, err
+}
+
+const adminSetOrganizationFunctionTimeout = `-- name: AdminSetOrganizationFunctionTimeout :one
+UPDATE organization_metadata
+SET
+    function_timeout_seconds = $1::integer,
+    updated_at = clock_timestamp()
+WHERE id = $2::text
+RETURNING id
+`
+
+type AdminSetOrganizationFunctionTimeoutParams struct {
+	FunctionTimeoutSeconds pgtype.Int4
+	ID                     string
+}
+
+// NULL restores the platform default. Keyed on id alone, like every other
+// admin write.
+func (q *Queries) AdminSetOrganizationFunctionTimeout(ctx context.Context, arg AdminSetOrganizationFunctionTimeoutParams) (string, error) {
+	row := q.db.QueryRow(ctx, adminSetOrganizationFunctionTimeout, arg.FunctionTimeoutSeconds, arg.ID)
 	var id string
 	err := row.Scan(&id)
 	return id, err

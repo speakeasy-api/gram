@@ -5138,6 +5138,83 @@ paths:
             tags:
                 - admin
             x-speakeasy-name-override: setAdoptionDashboardUrl
+    /admin/organization.setFunctionTimeout:
+        post:
+            description: Sets or clears the limit on how long one Speakeasy Function invocation may run for an organization. An absent value restores the platform default.
+            operationId: adminSetFunctionTimeout
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetFunctionTimeoutRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminOrganization'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: setFunctionTimeout admin
+            tags:
+                - admin
+            x-speakeasy-name-override: setFunctionTimeout
     /admin/organization.setHooksRollout:
         post:
             tags:
@@ -105022,6 +105099,14 @@ components:
                     type: string
                     description: The time at which the organization was disabled, if any.
                     format: date-time
+                function_timeout_is_default:
+                    type: boolean
+                    description: True when no staff-set limit exists and function_timeout_seconds is the platform default. Absent from list results.
+                function_timeout_seconds:
+                    type: integer
+                    description: 'How long one Speakeasy Function invocation may run, in seconds: the staff-set limit, or the platform default when none is set. Absent from list results.'
+                    example: 60
+                    format: int64
                 id:
                     type: string
                     description: The ID of the organization
@@ -137682,6 +137767,19 @@ components:
                 - execution_context
                 - mcp_server_id
                 - expected_version
+        SetFunctionTimeoutRequestBody:
+            type: object
+            properties:
+                function_timeout_seconds:
+                    type: integer
+                    description: The limit in seconds, or absent to restore the platform default.
+                    format: int64
+                    minimum: 30
+                    maximum: 600
+                organization_id:
+                    type: string
+            required:
+                - organization_id
         SetHooksRolloutDefaultRequestBody:
             type: object
             properties:

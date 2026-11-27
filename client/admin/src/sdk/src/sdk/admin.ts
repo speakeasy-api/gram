@@ -117,6 +117,7 @@ import { adminRunUpstreamOAuthMigration } from "../funcs/adminRunUpstreamOAuthMi
 import { adminSaveRegistryEntry } from "../funcs/adminSaveRegistryEntry.js";
 import { adminServeImage } from "../funcs/adminServeImage.js";
 import { adminSetAdoptionDashboardUrl } from "../funcs/adminSetAdoptionDashboardUrl.js";
+import { adminSetFunctionTimeout } from "../funcs/adminSetFunctionTimeout.js";
 import { adminSetHooksRolloutDefault } from "../funcs/adminSetHooksRolloutDefault.js";
 import { adminSetInferenceKeyMonthlyLimit } from "../funcs/adminSetInferenceKeyMonthlyLimit.js";
 import { adminSetMcpServerScopePin } from "../funcs/adminSetMcpServerScopePin.js";
@@ -270,6 +271,7 @@ import { RunTailscaleOAuthMigrationStepRequestBody } from "../models/components/
 import { RunUpstreamOAuthMigrationRequestBody } from "../models/components/runupstreamoauthmigrationrequestbody.js";
 import { SaveRegistryEntryRequestBody } from "../models/components/saveregistryentryrequestbody.js";
 import { SetAdoptionDashboardURLRequestBody } from "../models/components/setadoptiondashboardurlrequestbody.js";
+import { SetFunctionTimeoutRequestBody } from "../models/components/setfunctiontimeoutrequestbody.js";
 import { SetHooksRolloutDefaultRequestBody } from "../models/components/sethooksrolloutdefaultrequestbody.js";
 import { SetInferenceKeyMonthlyLimitRequestBody } from "../models/components/setinferencekeymonthlylimitrequestbody.js";
 import { SetMcpServerScopePinRequestBody } from "../models/components/setmcpserverscopepinrequestbody.js";
@@ -1365,6 +1367,23 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AdminOrganization> {
     return unwrapAsync(adminSetAdoptionDashboardUrl(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * setFunctionTimeout admin
+   *
+   * @remarks
+   * Sets or clears the limit on how long one Speakeasy Function invocation may run for an organization. An absent value restores the platform default.
+   */
+  async setFunctionTimeout(
+    request: SetFunctionTimeoutRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminOrganization> {
+    return unwrapAsync(adminSetFunctionTimeout(
       this,
       request,
       options,

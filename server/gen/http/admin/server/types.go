@@ -146,6 +146,14 @@ type SetAdoptionDashboardURLRequestBody struct {
 	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
 }
 
+// SetFunctionTimeoutRequestBody is the type of the "admin" service
+// "setFunctionTimeout" endpoint HTTP request body.
+type SetFunctionTimeoutRequestBody struct {
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// The limit in seconds, or absent to restore the platform default.
+	FunctionTimeoutSeconds *int `form:"function_timeout_seconds,omitempty" json:"function_timeout_seconds,omitempty" xml:"function_timeout_seconds,omitempty"`
+}
+
 // CancelStripeSubscriptionRequestBody is the type of the "admin" service
 // "cancelStripeSubscription" endpoint HTTP request body.
 type CancelStripeSubscriptionRequestBody struct {
@@ -1102,6 +1110,13 @@ type UpdateOrganizationResponseBody struct {
 	// Staff-entered link to the organization's adoption dashboard. Absent when
 	// none has been set.
 	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
+	// How long one Speakeasy Function invocation may run, in seconds: the
+	// staff-set limit, or the platform default when none is set. Absent from list
+	// results.
+	FunctionTimeoutSeconds *int `form:"function_timeout_seconds,omitempty" json:"function_timeout_seconds,omitempty" xml:"function_timeout_seconds,omitempty"`
+	// True when no staff-set limit exists and function_timeout_seconds is the
+	// platform default. Absent from list results.
+	FunctionTimeoutIsDefault *bool `form:"function_timeout_is_default,omitempty" json:"function_timeout_is_default,omitempty" xml:"function_timeout_is_default,omitempty"`
 	// Number of active members in the organization.
 	MemberCount int `form:"member_count" json:"member_count" xml:"member_count"`
 	// The flow that created the organization (e.g. signup, assistants,
@@ -1171,6 +1186,13 @@ type DisableOrganizationResponseBody struct {
 	// Staff-entered link to the organization's adoption dashboard. Absent when
 	// none has been set.
 	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
+	// How long one Speakeasy Function invocation may run, in seconds: the
+	// staff-set limit, or the platform default when none is set. Absent from list
+	// results.
+	FunctionTimeoutSeconds *int `form:"function_timeout_seconds,omitempty" json:"function_timeout_seconds,omitempty" xml:"function_timeout_seconds,omitempty"`
+	// True when no staff-set limit exists and function_timeout_seconds is the
+	// platform default. Absent from list results.
+	FunctionTimeoutIsDefault *bool `form:"function_timeout_is_default,omitempty" json:"function_timeout_is_default,omitempty" xml:"function_timeout_is_default,omitempty"`
 	// Number of active members in the organization.
 	MemberCount int `form:"member_count" json:"member_count" xml:"member_count"`
 	// The flow that created the organization (e.g. signup, assistants,
@@ -1229,6 +1251,13 @@ type EnableOrganizationResponseBody struct {
 	// Staff-entered link to the organization's adoption dashboard. Absent when
 	// none has been set.
 	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
+	// How long one Speakeasy Function invocation may run, in seconds: the
+	// staff-set limit, or the platform default when none is set. Absent from list
+	// results.
+	FunctionTimeoutSeconds *int `form:"function_timeout_seconds,omitempty" json:"function_timeout_seconds,omitempty" xml:"function_timeout_seconds,omitempty"`
+	// True when no staff-set limit exists and function_timeout_seconds is the
+	// platform default. Absent from list results.
+	FunctionTimeoutIsDefault *bool `form:"function_timeout_is_default,omitempty" json:"function_timeout_is_default,omitempty" xml:"function_timeout_is_default,omitempty"`
 	// Number of active members in the organization.
 	MemberCount int `form:"member_count" json:"member_count" xml:"member_count"`
 	// The flow that created the organization (e.g. signup, assistants,
@@ -1287,6 +1316,13 @@ type GetOrganizationResponseBody struct {
 	// Staff-entered link to the organization's adoption dashboard. Absent when
 	// none has been set.
 	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
+	// How long one Speakeasy Function invocation may run, in seconds: the
+	// staff-set limit, or the platform default when none is set. Absent from list
+	// results.
+	FunctionTimeoutSeconds *int `form:"function_timeout_seconds,omitempty" json:"function_timeout_seconds,omitempty" xml:"function_timeout_seconds,omitempty"`
+	// True when no staff-set limit exists and function_timeout_seconds is the
+	// platform default. Absent from list results.
+	FunctionTimeoutIsDefault *bool `form:"function_timeout_is_default,omitempty" json:"function_timeout_is_default,omitempty" xml:"function_timeout_is_default,omitempty"`
 	// Number of active members in the organization.
 	MemberCount int `form:"member_count" json:"member_count" xml:"member_count"`
 	// The flow that created the organization (e.g. signup, assistants,
@@ -1404,6 +1440,13 @@ type ExtendTrialResponseBody struct {
 	// Staff-entered link to the organization's adoption dashboard. Absent when
 	// none has been set.
 	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
+	// How long one Speakeasy Function invocation may run, in seconds: the
+	// staff-set limit, or the platform default when none is set. Absent from list
+	// results.
+	FunctionTimeoutSeconds *int `form:"function_timeout_seconds,omitempty" json:"function_timeout_seconds,omitempty" xml:"function_timeout_seconds,omitempty"`
+	// True when no staff-set limit exists and function_timeout_seconds is the
+	// platform default. Absent from list results.
+	FunctionTimeoutIsDefault *bool `form:"function_timeout_is_default,omitempty" json:"function_timeout_is_default,omitempty" xml:"function_timeout_is_default,omitempty"`
 	// Number of active members in the organization.
 	MemberCount int `form:"member_count" json:"member_count" xml:"member_count"`
 	// The flow that created the organization (e.g. signup, assistants,
@@ -1462,6 +1505,13 @@ type CreateOrganizationResponseBody struct {
 	// Staff-entered link to the organization's adoption dashboard. Absent when
 	// none has been set.
 	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
+	// How long one Speakeasy Function invocation may run, in seconds: the
+	// staff-set limit, or the platform default when none is set. Absent from list
+	// results.
+	FunctionTimeoutSeconds *int `form:"function_timeout_seconds,omitempty" json:"function_timeout_seconds,omitempty" xml:"function_timeout_seconds,omitempty"`
+	// True when no staff-set limit exists and function_timeout_seconds is the
+	// platform default. Absent from list results.
+	FunctionTimeoutIsDefault *bool `form:"function_timeout_is_default,omitempty" json:"function_timeout_is_default,omitempty" xml:"function_timeout_is_default,omitempty"`
 	// Number of active members in the organization.
 	MemberCount int `form:"member_count" json:"member_count" xml:"member_count"`
 	// The flow that created the organization (e.g. signup, assistants,
@@ -1520,6 +1570,13 @@ type RearmTrialResponseBody struct {
 	// Staff-entered link to the organization's adoption dashboard. Absent when
 	// none has been set.
 	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
+	// How long one Speakeasy Function invocation may run, in seconds: the
+	// staff-set limit, or the platform default when none is set. Absent from list
+	// results.
+	FunctionTimeoutSeconds *int `form:"function_timeout_seconds,omitempty" json:"function_timeout_seconds,omitempty" xml:"function_timeout_seconds,omitempty"`
+	// True when no staff-set limit exists and function_timeout_seconds is the
+	// platform default. Absent from list results.
+	FunctionTimeoutIsDefault *bool `form:"function_timeout_is_default,omitempty" json:"function_timeout_is_default,omitempty" xml:"function_timeout_is_default,omitempty"`
 	// Number of active members in the organization.
 	MemberCount int `form:"member_count" json:"member_count" xml:"member_count"`
 	// The flow that created the organization (e.g. signup, assistants,
@@ -1643,6 +1700,13 @@ type SetStripeCustomerResponseBody struct {
 	// Staff-entered link to the organization's adoption dashboard. Absent when
 	// none has been set.
 	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
+	// How long one Speakeasy Function invocation may run, in seconds: the
+	// staff-set limit, or the platform default when none is set. Absent from list
+	// results.
+	FunctionTimeoutSeconds *int `form:"function_timeout_seconds,omitempty" json:"function_timeout_seconds,omitempty" xml:"function_timeout_seconds,omitempty"`
+	// True when no staff-set limit exists and function_timeout_seconds is the
+	// platform default. Absent from list results.
+	FunctionTimeoutIsDefault *bool `form:"function_timeout_is_default,omitempty" json:"function_timeout_is_default,omitempty" xml:"function_timeout_is_default,omitempty"`
 	// Number of active members in the organization.
 	MemberCount int `form:"member_count" json:"member_count" xml:"member_count"`
 	// The flow that created the organization (e.g. signup, assistants,
@@ -1701,6 +1765,78 @@ type SetAdoptionDashboardURLResponseBody struct {
 	// Staff-entered link to the organization's adoption dashboard. Absent when
 	// none has been set.
 	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
+	// How long one Speakeasy Function invocation may run, in seconds: the
+	// staff-set limit, or the platform default when none is set. Absent from list
+	// results.
+	FunctionTimeoutSeconds *int `form:"function_timeout_seconds,omitempty" json:"function_timeout_seconds,omitempty" xml:"function_timeout_seconds,omitempty"`
+	// True when no staff-set limit exists and function_timeout_seconds is the
+	// platform default. Absent from list results.
+	FunctionTimeoutIsDefault *bool `form:"function_timeout_is_default,omitempty" json:"function_timeout_is_default,omitempty" xml:"function_timeout_is_default,omitempty"`
+	// Number of active members in the organization.
+	MemberCount int `form:"member_count" json:"member_count" xml:"member_count"`
+	// The flow that created the organization (e.g. signup, assistants,
+	// platform_admin). Absent when nothing recorded one. Informational only.
+	CreationSource *string `form:"creation_source,omitempty" json:"creation_source,omitempty" xml:"creation_source,omitempty"`
+	// The creation date of the organization.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// The last update date of the organization.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// SetFunctionTimeoutResponseBody is the type of the "admin" service
+// "setFunctionTimeout" endpoint HTTP response body.
+type SetFunctionTimeoutResponseBody struct {
+	// The ID of the organization
+	ID string `form:"id" json:"id" xml:"id"`
+	// The name of the organization
+	Name string `form:"name" json:"name" xml:"name"`
+	// The slug of the organization
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// Speakeasy account type (e.g. free, pro, payg, enterprise).
+	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
+	// WorkOS organization ID, if linked.
+	WorkosID *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
+	// Link to the organization in the WorkOS dashboard. Absent when the
+	// organization is not linked to WorkOS or the deployment has no WorkOS
+	// environment configured.
+	WorkosDashboardURL *string `form:"workos_dashboard_url,omitempty" json:"workos_dashboard_url,omitempty" xml:"workos_dashboard_url,omitempty"`
+	// Stripe customer ID, if billing metadata has a customer.
+	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
+	// Current Stripe subscription ID, if subscribed.
+	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Link to the Stripe customer in the Stripe dashboard. Absent when the
+	// organization has no Stripe customer or the deployment has no Stripe API key
+	// configured.
+	StripeCustomerDashboardURL *string `form:"stripe_customer_dashboard_url,omitempty" json:"stripe_customer_dashboard_url,omitempty" xml:"stripe_customer_dashboard_url,omitempty"`
+	// Link to the Stripe subscription in the Stripe dashboard. Absent when the
+	// organization has no Stripe subscription or the deployment has no Stripe API
+	// key configured.
+	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
+	// Whether the organization is whitelisted for full access.
+	Whitelisted bool `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
+	// The time at which the organization was disabled, if any.
+	DisabledAt *string `form:"disabled_at,omitempty" json:"disabled_at,omitempty" xml:"disabled_at,omitempty"`
+	// Lifecycle state of the organization's enterprise trial.
+	TrialState *string `form:"trial_state,omitempty" json:"trial_state,omitempty" xml:"trial_state,omitempty"`
+	// The trial tier. Absent when the organization never trialled.
+	TrialTier *string `form:"trial_tier,omitempty" json:"trial_tier,omitempty" xml:"trial_tier,omitempty"`
+	// The time at which the enterprise trial ends. Absent when the organization
+	// never trialled.
+	TrialEndsAt *string `form:"trial_ends_at,omitempty" json:"trial_ends_at,omitempty" xml:"trial_ends_at,omitempty"`
+	// The time at which the trial converted to a paid plan, if any.
+	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
+	// The time at which the organization was demoted after its trial, if any.
+	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// Staff-entered link to the organization's adoption dashboard. Absent when
+	// none has been set.
+	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
+	// How long one Speakeasy Function invocation may run, in seconds: the
+	// staff-set limit, or the platform default when none is set. Absent from list
+	// results.
+	FunctionTimeoutSeconds *int `form:"function_timeout_seconds,omitempty" json:"function_timeout_seconds,omitempty" xml:"function_timeout_seconds,omitempty"`
+	// True when no staff-set limit exists and function_timeout_seconds is the
+	// platform default. Absent from list results.
+	FunctionTimeoutIsDefault *bool `form:"function_timeout_is_default,omitempty" json:"function_timeout_is_default,omitempty" xml:"function_timeout_is_default,omitempty"`
 	// Number of active members in the organization.
 	MemberCount int `form:"member_count" json:"member_count" xml:"member_count"`
 	// The flow that created the organization (e.g. signup, assistants,
@@ -2218,6 +2354,13 @@ type StartTrialResponseBody struct {
 	// Staff-entered link to the organization's adoption dashboard. Absent when
 	// none has been set.
 	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
+	// How long one Speakeasy Function invocation may run, in seconds: the
+	// staff-set limit, or the platform default when none is set. Absent from list
+	// results.
+	FunctionTimeoutSeconds *int `form:"function_timeout_seconds,omitempty" json:"function_timeout_seconds,omitempty" xml:"function_timeout_seconds,omitempty"`
+	// True when no staff-set limit exists and function_timeout_seconds is the
+	// platform default. Absent from list results.
+	FunctionTimeoutIsDefault *bool `form:"function_timeout_is_default,omitempty" json:"function_timeout_is_default,omitempty" xml:"function_timeout_is_default,omitempty"`
 	// Number of active members in the organization.
 	MemberCount int `form:"member_count" json:"member_count" xml:"member_count"`
 	// The flow that created the organization (e.g. signup, assistants,
@@ -2276,6 +2419,13 @@ type ChangeTrialEndDateResponseBody struct {
 	// Staff-entered link to the organization's adoption dashboard. Absent when
 	// none has been set.
 	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
+	// How long one Speakeasy Function invocation may run, in seconds: the
+	// staff-set limit, or the platform default when none is set. Absent from list
+	// results.
+	FunctionTimeoutSeconds *int `form:"function_timeout_seconds,omitempty" json:"function_timeout_seconds,omitempty" xml:"function_timeout_seconds,omitempty"`
+	// True when no staff-set limit exists and function_timeout_seconds is the
+	// platform default. Absent from list results.
+	FunctionTimeoutIsDefault *bool `form:"function_timeout_is_default,omitempty" json:"function_timeout_is_default,omitempty" xml:"function_timeout_is_default,omitempty"`
 	// Number of active members in the organization.
 	MemberCount int `form:"member_count" json:"member_count" xml:"member_count"`
 	// The flow that created the organization (e.g. signup, assistants,
@@ -2990,6 +3140,13 @@ type SetStripeSubscriptionResponseBody struct {
 	// Staff-entered link to the organization's adoption dashboard. Absent when
 	// none has been set.
 	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
+	// How long one Speakeasy Function invocation may run, in seconds: the
+	// staff-set limit, or the platform default when none is set. Absent from list
+	// results.
+	FunctionTimeoutSeconds *int `form:"function_timeout_seconds,omitempty" json:"function_timeout_seconds,omitempty" xml:"function_timeout_seconds,omitempty"`
+	// True when no staff-set limit exists and function_timeout_seconds is the
+	// platform default. Absent from list results.
+	FunctionTimeoutIsDefault *bool `form:"function_timeout_is_default,omitempty" json:"function_timeout_is_default,omitempty" xml:"function_timeout_is_default,omitempty"`
 	// Number of active members in the organization.
 	MemberCount int `form:"member_count" json:"member_count" xml:"member_count"`
 	// The flow that created the organization (e.g. signup, assistants,
@@ -10403,6 +10560,190 @@ type SetAdoptionDashboardURLUnexpectedResponseBody struct {
 // service "setAdoptionDashboardUrl" endpoint HTTP response body for the
 // "gateway_error" error.
 type SetAdoptionDashboardURLGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetFunctionTimeoutUnauthorizedResponseBody is the type of the "admin"
+// service "setFunctionTimeout" endpoint HTTP response body for the
+// "unauthorized" error.
+type SetFunctionTimeoutUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetFunctionTimeoutForbiddenResponseBody is the type of the "admin" service
+// "setFunctionTimeout" endpoint HTTP response body for the "forbidden" error.
+type SetFunctionTimeoutForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetFunctionTimeoutBadRequestResponseBody is the type of the "admin" service
+// "setFunctionTimeout" endpoint HTTP response body for the "bad_request" error.
+type SetFunctionTimeoutBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetFunctionTimeoutNotFoundResponseBody is the type of the "admin" service
+// "setFunctionTimeout" endpoint HTTP response body for the "not_found" error.
+type SetFunctionTimeoutNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetFunctionTimeoutConflictResponseBody is the type of the "admin" service
+// "setFunctionTimeout" endpoint HTTP response body for the "conflict" error.
+type SetFunctionTimeoutConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetFunctionTimeoutUnsupportedMediaResponseBody is the type of the "admin"
+// service "setFunctionTimeout" endpoint HTTP response body for the
+// "unsupported_media" error.
+type SetFunctionTimeoutUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetFunctionTimeoutInvalidResponseBody is the type of the "admin" service
+// "setFunctionTimeout" endpoint HTTP response body for the "invalid" error.
+type SetFunctionTimeoutInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetFunctionTimeoutInvariantViolationResponseBody is the type of the "admin"
+// service "setFunctionTimeout" endpoint HTTP response body for the
+// "invariant_violation" error.
+type SetFunctionTimeoutInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetFunctionTimeoutUnexpectedResponseBody is the type of the "admin" service
+// "setFunctionTimeout" endpoint HTTP response body for the "unexpected" error.
+type SetFunctionTimeoutUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetFunctionTimeoutGatewayErrorResponseBody is the type of the "admin"
+// service "setFunctionTimeout" endpoint HTTP response body for the
+// "gateway_error" error.
+type SetFunctionTimeoutGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -31000,6 +31341,13 @@ type AdminOrganizationResponseBody struct {
 	// Staff-entered link to the organization's adoption dashboard. Absent when
 	// none has been set.
 	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
+	// How long one Speakeasy Function invocation may run, in seconds: the
+	// staff-set limit, or the platform default when none is set. Absent from list
+	// results.
+	FunctionTimeoutSeconds *int `form:"function_timeout_seconds,omitempty" json:"function_timeout_seconds,omitempty" xml:"function_timeout_seconds,omitempty"`
+	// True when no staff-set limit exists and function_timeout_seconds is the
+	// platform default. Absent from list results.
+	FunctionTimeoutIsDefault *bool `form:"function_timeout_is_default,omitempty" json:"function_timeout_is_default,omitempty" xml:"function_timeout_is_default,omitempty"`
 	// Number of active members in the organization.
 	MemberCount int `form:"member_count" json:"member_count" xml:"member_count"`
 	// The flow that created the organization (e.g. signup, assistants,
@@ -33097,6 +33445,8 @@ func NewUpdateOrganizationResponseBody(res *admin.AdminOrganization) *UpdateOrga
 		TrialConvertedAt:               res.TrialConvertedAt,
 		TrialDemotedAt:                 res.TrialDemotedAt,
 		AdoptionDashboardURL:           res.AdoptionDashboardURL,
+		FunctionTimeoutSeconds:         res.FunctionTimeoutSeconds,
+		FunctionTimeoutIsDefault:       res.FunctionTimeoutIsDefault,
 		MemberCount:                    res.MemberCount,
 		CreationSource:                 res.CreationSource,
 		CreatedAt:                      res.CreatedAt,
@@ -33150,6 +33500,8 @@ func NewDisableOrganizationResponseBody(res *admin.AdminOrganization) *DisableOr
 		TrialConvertedAt:               res.TrialConvertedAt,
 		TrialDemotedAt:                 res.TrialDemotedAt,
 		AdoptionDashboardURL:           res.AdoptionDashboardURL,
+		FunctionTimeoutSeconds:         res.FunctionTimeoutSeconds,
+		FunctionTimeoutIsDefault:       res.FunctionTimeoutIsDefault,
 		MemberCount:                    res.MemberCount,
 		CreationSource:                 res.CreationSource,
 		CreatedAt:                      res.CreatedAt,
@@ -33180,6 +33532,8 @@ func NewEnableOrganizationResponseBody(res *admin.AdminOrganization) *EnableOrga
 		TrialConvertedAt:               res.TrialConvertedAt,
 		TrialDemotedAt:                 res.TrialDemotedAt,
 		AdoptionDashboardURL:           res.AdoptionDashboardURL,
+		FunctionTimeoutSeconds:         res.FunctionTimeoutSeconds,
+		FunctionTimeoutIsDefault:       res.FunctionTimeoutIsDefault,
 		MemberCount:                    res.MemberCount,
 		CreationSource:                 res.CreationSource,
 		CreatedAt:                      res.CreatedAt,
@@ -33210,6 +33564,8 @@ func NewGetOrganizationResponseBody(res *admin.AdminOrganization) *GetOrganizati
 		TrialConvertedAt:               res.TrialConvertedAt,
 		TrialDemotedAt:                 res.TrialDemotedAt,
 		AdoptionDashboardURL:           res.AdoptionDashboardURL,
+		FunctionTimeoutSeconds:         res.FunctionTimeoutSeconds,
+		FunctionTimeoutIsDefault:       res.FunctionTimeoutIsDefault,
 		MemberCount:                    res.MemberCount,
 		CreationSource:                 res.CreationSource,
 		CreatedAt:                      res.CreatedAt,
@@ -33386,6 +33742,8 @@ func NewExtendTrialResponseBody(res *admin.AdminOrganization) *ExtendTrialRespon
 		TrialConvertedAt:               res.TrialConvertedAt,
 		TrialDemotedAt:                 res.TrialDemotedAt,
 		AdoptionDashboardURL:           res.AdoptionDashboardURL,
+		FunctionTimeoutSeconds:         res.FunctionTimeoutSeconds,
+		FunctionTimeoutIsDefault:       res.FunctionTimeoutIsDefault,
 		MemberCount:                    res.MemberCount,
 		CreationSource:                 res.CreationSource,
 		CreatedAt:                      res.CreatedAt,
@@ -33416,6 +33774,8 @@ func NewCreateOrganizationResponseBody(res *admin.AdminOrganization) *CreateOrga
 		TrialConvertedAt:               res.TrialConvertedAt,
 		TrialDemotedAt:                 res.TrialDemotedAt,
 		AdoptionDashboardURL:           res.AdoptionDashboardURL,
+		FunctionTimeoutSeconds:         res.FunctionTimeoutSeconds,
+		FunctionTimeoutIsDefault:       res.FunctionTimeoutIsDefault,
 		MemberCount:                    res.MemberCount,
 		CreationSource:                 res.CreationSource,
 		CreatedAt:                      res.CreatedAt,
@@ -33446,6 +33806,8 @@ func NewRearmTrialResponseBody(res *admin.AdminOrganization) *RearmTrialResponse
 		TrialConvertedAt:               res.TrialConvertedAt,
 		TrialDemotedAt:                 res.TrialDemotedAt,
 		AdoptionDashboardURL:           res.AdoptionDashboardURL,
+		FunctionTimeoutSeconds:         res.FunctionTimeoutSeconds,
+		FunctionTimeoutIsDefault:       res.FunctionTimeoutIsDefault,
 		MemberCount:                    res.MemberCount,
 		CreationSource:                 res.CreationSource,
 		CreatedAt:                      res.CreatedAt,
@@ -33571,6 +33933,8 @@ func NewSetStripeCustomerResponseBody(res *admin.AdminOrganization) *SetStripeCu
 		TrialConvertedAt:               res.TrialConvertedAt,
 		TrialDemotedAt:                 res.TrialDemotedAt,
 		AdoptionDashboardURL:           res.AdoptionDashboardURL,
+		FunctionTimeoutSeconds:         res.FunctionTimeoutSeconds,
+		FunctionTimeoutIsDefault:       res.FunctionTimeoutIsDefault,
 		MemberCount:                    res.MemberCount,
 		CreationSource:                 res.CreationSource,
 		CreatedAt:                      res.CreatedAt,
@@ -33601,6 +33965,40 @@ func NewSetAdoptionDashboardURLResponseBody(res *admin.AdminOrganization) *SetAd
 		TrialConvertedAt:               res.TrialConvertedAt,
 		TrialDemotedAt:                 res.TrialDemotedAt,
 		AdoptionDashboardURL:           res.AdoptionDashboardURL,
+		FunctionTimeoutSeconds:         res.FunctionTimeoutSeconds,
+		FunctionTimeoutIsDefault:       res.FunctionTimeoutIsDefault,
+		MemberCount:                    res.MemberCount,
+		CreationSource:                 res.CreationSource,
+		CreatedAt:                      res.CreatedAt,
+		UpdatedAt:                      res.UpdatedAt,
+	}
+	return body
+}
+
+// NewSetFunctionTimeoutResponseBody builds the HTTP response body from the
+// result of the "setFunctionTimeout" endpoint of the "admin" service.
+func NewSetFunctionTimeoutResponseBody(res *admin.AdminOrganization) *SetFunctionTimeoutResponseBody {
+	body := &SetFunctionTimeoutResponseBody{
+		ID:                             res.ID,
+		Name:                           res.Name,
+		Slug:                           res.Slug,
+		AccountType:                    res.AccountType,
+		WorkosID:                       res.WorkosID,
+		WorkosDashboardURL:             res.WorkosDashboardURL,
+		StripeCustomerID:               res.StripeCustomerID,
+		StripeSubscriptionID:           res.StripeSubscriptionID,
+		StripeCustomerDashboardURL:     res.StripeCustomerDashboardURL,
+		StripeSubscriptionDashboardURL: res.StripeSubscriptionDashboardURL,
+		Whitelisted:                    res.Whitelisted,
+		DisabledAt:                     res.DisabledAt,
+		TrialState:                     res.TrialState,
+		TrialTier:                      res.TrialTier,
+		TrialEndsAt:                    res.TrialEndsAt,
+		TrialConvertedAt:               res.TrialConvertedAt,
+		TrialDemotedAt:                 res.TrialDemotedAt,
+		AdoptionDashboardURL:           res.AdoptionDashboardURL,
+		FunctionTimeoutSeconds:         res.FunctionTimeoutSeconds,
+		FunctionTimeoutIsDefault:       res.FunctionTimeoutIsDefault,
 		MemberCount:                    res.MemberCount,
 		CreationSource:                 res.CreationSource,
 		CreatedAt:                      res.CreatedAt,
@@ -34165,6 +34563,8 @@ func NewStartTrialResponseBody(res *admin.AdminOrganization) *StartTrialResponse
 		TrialConvertedAt:               res.TrialConvertedAt,
 		TrialDemotedAt:                 res.TrialDemotedAt,
 		AdoptionDashboardURL:           res.AdoptionDashboardURL,
+		FunctionTimeoutSeconds:         res.FunctionTimeoutSeconds,
+		FunctionTimeoutIsDefault:       res.FunctionTimeoutIsDefault,
 		MemberCount:                    res.MemberCount,
 		CreationSource:                 res.CreationSource,
 		CreatedAt:                      res.CreatedAt,
@@ -34195,6 +34595,8 @@ func NewChangeTrialEndDateResponseBody(res *admin.AdminOrganization) *ChangeTria
 		TrialConvertedAt:               res.TrialConvertedAt,
 		TrialDemotedAt:                 res.TrialDemotedAt,
 		AdoptionDashboardURL:           res.AdoptionDashboardURL,
+		FunctionTimeoutSeconds:         res.FunctionTimeoutSeconds,
+		FunctionTimeoutIsDefault:       res.FunctionTimeoutIsDefault,
 		MemberCount:                    res.MemberCount,
 		CreationSource:                 res.CreationSource,
 		CreatedAt:                      res.CreatedAt,
@@ -35478,6 +35880,8 @@ func NewSetStripeSubscriptionResponseBody(res *admin.AdminOrganization) *SetStri
 		TrialConvertedAt:               res.TrialConvertedAt,
 		TrialDemotedAt:                 res.TrialDemotedAt,
 		AdoptionDashboardURL:           res.AdoptionDashboardURL,
+		FunctionTimeoutSeconds:         res.FunctionTimeoutSeconds,
+		FunctionTimeoutIsDefault:       res.FunctionTimeoutIsDefault,
 		MemberCount:                    res.MemberCount,
 		CreationSource:                 res.CreationSource,
 		CreatedAt:                      res.CreatedAt,
@@ -41611,6 +42015,148 @@ func NewSetAdoptionDashboardURLUnexpectedResponseBody(res *goa.ServiceError) *Se
 // "admin" service.
 func NewSetAdoptionDashboardURLGatewayErrorResponseBody(res *goa.ServiceError) *SetAdoptionDashboardURLGatewayErrorResponseBody {
 	body := &SetAdoptionDashboardURLGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetFunctionTimeoutUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "setFunctionTimeout" endpoint of the "admin" service.
+func NewSetFunctionTimeoutUnauthorizedResponseBody(res *goa.ServiceError) *SetFunctionTimeoutUnauthorizedResponseBody {
+	body := &SetFunctionTimeoutUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetFunctionTimeoutForbiddenResponseBody builds the HTTP response body
+// from the result of the "setFunctionTimeout" endpoint of the "admin" service.
+func NewSetFunctionTimeoutForbiddenResponseBody(res *goa.ServiceError) *SetFunctionTimeoutForbiddenResponseBody {
+	body := &SetFunctionTimeoutForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetFunctionTimeoutBadRequestResponseBody builds the HTTP response body
+// from the result of the "setFunctionTimeout" endpoint of the "admin" service.
+func NewSetFunctionTimeoutBadRequestResponseBody(res *goa.ServiceError) *SetFunctionTimeoutBadRequestResponseBody {
+	body := &SetFunctionTimeoutBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetFunctionTimeoutNotFoundResponseBody builds the HTTP response body from
+// the result of the "setFunctionTimeout" endpoint of the "admin" service.
+func NewSetFunctionTimeoutNotFoundResponseBody(res *goa.ServiceError) *SetFunctionTimeoutNotFoundResponseBody {
+	body := &SetFunctionTimeoutNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetFunctionTimeoutConflictResponseBody builds the HTTP response body from
+// the result of the "setFunctionTimeout" endpoint of the "admin" service.
+func NewSetFunctionTimeoutConflictResponseBody(res *goa.ServiceError) *SetFunctionTimeoutConflictResponseBody {
+	body := &SetFunctionTimeoutConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetFunctionTimeoutUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "setFunctionTimeout" endpoint of the "admin"
+// service.
+func NewSetFunctionTimeoutUnsupportedMediaResponseBody(res *goa.ServiceError) *SetFunctionTimeoutUnsupportedMediaResponseBody {
+	body := &SetFunctionTimeoutUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetFunctionTimeoutInvalidResponseBody builds the HTTP response body from
+// the result of the "setFunctionTimeout" endpoint of the "admin" service.
+func NewSetFunctionTimeoutInvalidResponseBody(res *goa.ServiceError) *SetFunctionTimeoutInvalidResponseBody {
+	body := &SetFunctionTimeoutInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetFunctionTimeoutInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "setFunctionTimeout" endpoint of the "admin"
+// service.
+func NewSetFunctionTimeoutInvariantViolationResponseBody(res *goa.ServiceError) *SetFunctionTimeoutInvariantViolationResponseBody {
+	body := &SetFunctionTimeoutInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetFunctionTimeoutUnexpectedResponseBody builds the HTTP response body
+// from the result of the "setFunctionTimeout" endpoint of the "admin" service.
+func NewSetFunctionTimeoutUnexpectedResponseBody(res *goa.ServiceError) *SetFunctionTimeoutUnexpectedResponseBody {
+	body := &SetFunctionTimeoutUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetFunctionTimeoutGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "setFunctionTimeout" endpoint of the "admin" service.
+func NewSetFunctionTimeoutGatewayErrorResponseBody(res *goa.ServiceError) *SetFunctionTimeoutGatewayErrorResponseBody {
+	body := &SetFunctionTimeoutGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -58076,6 +58622,18 @@ func NewSetAdoptionDashboardURLPayload(body *SetAdoptionDashboardURLRequestBody,
 	return v
 }
 
+// NewSetFunctionTimeoutPayload builds a admin service setFunctionTimeout
+// endpoint payload.
+func NewSetFunctionTimeoutPayload(body *SetFunctionTimeoutRequestBody, adminSessionToken *string) *admin.SetFunctionTimeoutPayload {
+	v := &admin.SetFunctionTimeoutPayload{
+		OrganizationID:         *body.OrganizationID,
+		FunctionTimeoutSeconds: body.FunctionTimeoutSeconds,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
 // NewGetStripeSubscriptionPayload builds a admin service getStripeSubscription
 // endpoint payload.
 func NewGetStripeSubscriptionPayload(organizationID string, adminSessionToken *string) *admin.GetStripeSubscriptionPayload {
@@ -59806,6 +60364,25 @@ func ValidateSetAdoptionDashboardURLRequestBody(body *SetAdoptionDashboardURLReq
 	if body.AdoptionDashboardURL != nil {
 		if utf8.RuneCountInString(*body.AdoptionDashboardURL) > 2048 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.adoption_dashboard_url", *body.AdoptionDashboardURL, utf8.RuneCountInString(*body.AdoptionDashboardURL), 2048, false))
+		}
+	}
+	return
+}
+
+// ValidateSetFunctionTimeoutRequestBody runs the validations defined on
+// SetFunctionTimeoutRequestBody
+func ValidateSetFunctionTimeoutRequestBody(body *SetFunctionTimeoutRequestBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.FunctionTimeoutSeconds != nil {
+		if *body.FunctionTimeoutSeconds < 30 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.function_timeout_seconds", *body.FunctionTimeoutSeconds, 30, true))
+		}
+	}
+	if body.FunctionTimeoutSeconds != nil {
+		if *body.FunctionTimeoutSeconds > 600 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.function_timeout_seconds", *body.FunctionTimeoutSeconds, 600, false))
 		}
 	}
 	return
