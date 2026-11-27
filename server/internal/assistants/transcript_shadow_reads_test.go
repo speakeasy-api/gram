@@ -88,6 +88,7 @@ func (f shadowHistoryFixture) messages(t *testing.T) []chatrepo.ChatMessage {
 
 func (f shadowHistoryFixture) capture(t *testing.T, messageIDs ...uuid.UUID) {
 	t.Helper()
+	require.NoError(t, f.store.Prepare(t.Context(), "org-test"))
 	tx, err := f.conn.Begin(t.Context()) //nolint:glint // notestingrawsql: Capture runs inside the caller's message transaction; message rows come from generated seed queries.
 	require.NoError(t, err)
 	defer func() { _ = tx.Rollback(t.Context()) }()
