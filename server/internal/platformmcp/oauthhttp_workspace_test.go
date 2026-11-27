@@ -3,6 +3,7 @@ package platformmcp
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -28,6 +29,7 @@ type workspaceTestState struct {
 	provisioned   []string
 	invitations   []WorkspaceInvitation
 	joined        []string
+	provisionErr  error
 }
 
 func (s *workspaceTestState) EligibleOrganizations(context.Context, string) ([]OrganizationOption, error) {
@@ -43,6 +45,9 @@ func (s *workspaceTestState) SuggestedWorkspaceName(context.Context, string) (st
 func (s *workspaceTestState) ProvisionWorkspace(_ context.Context, userID, name, clientName string) (OrganizationOption, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.provisionErr != nil {
+		return OrganizationOption{}, s.provisionErr
+	}
 	// Mirrors the auth service, which refuses while an invitation is pending.
 	if len(s.invitations) > 0 {
 		return OrganizationOption{}, auth.ErrUserHasPendingInvitation
@@ -418,6 +423,26 @@ func TestOAuthHTTPJoinWorkspaceRefusalReturnsToClient(t *testing.T) {
 	require.Equal(t, "access_denied", redirect.Query().Get("error"))
 	require.Equal(t, "client-state", redirect.Query().Get("state"))
 	require.Empty(t, workspaces.joined)
+}
+
+func TestOAuthHTTPCreateWorkspaceRefusesPersonalEmail(t *testing.T) {
+	t.Parallel()
+
+	service := newTestOAuthHTTP(t)
+	workspaces := &workspaceTestState{provisionErr: fmt.Errorf("provision workspace: %w", auth.ErrPersonalEmailDomain)}
+	service.organizations = workspaces
+	service.workspaces = workspaces
+	state := startWorkspaceFlow(t, service)
+	csrf := formValue(t, getSelection(service, state).Body.String(), "csrf_token")
+
+	response := postWorkspace(service, url.Values{"state": {state}, "csrf_token": {csrf}, "workspace_name": {"Acme Inc"}})
+	require.Equal(t, http.StatusFound, response.Code)
+	redirect, err := url.Parse(response.Header().Get("Location"))
+	require.NoError(t, err)
+	require.Equal(t, "access_denied", redirect.Query().Get("error"))
+	require.Contains(t, redirect.Query().Get("error_description"), "work email")
+	require.Equal(t, "client-state", redirect.Query().Get("state"))
+	require.Zero(t, workspaces.provisionedCount())
 }
 
 func TestOAuthHTTPCreateWorkspaceRejectsInvalidState(t *testing.T) {

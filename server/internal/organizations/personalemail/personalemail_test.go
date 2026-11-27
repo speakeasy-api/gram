@@ -20,7 +20,8 @@ func TestIsPersonal(t *testing.T) {
 		"someone@yahoo.co.uk":        true,
 		"someone@mailinator.com":     true,
 		"someone@hey.com":            true,
-		"someone@sub.gmail.com":      true,
+		"someone@sub.gmail.com":      false,
+		"someone@acme.or.ru":         false,
 		"someone@gmail.com.":         true,
 		"someone@example.com":        false,
 		"someone@acme.co.uk":         false,
@@ -34,6 +35,9 @@ func TestIsPersonal(t *testing.T) {
 		"someone@gmail.com.evil.org": false,
 	}
 	for email, want := range cases {
-		require.Equal(t, want, personalemail.IsPersonal(email), email)
+		t.Run(email, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, want, personalemail.IsPersonal(email))
+		})
 	}
 }

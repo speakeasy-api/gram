@@ -25,22 +25,13 @@ var domains = sync.OnceValue(func() map[string]struct{} {
 	return set
 })
 
-// IsPersonalDomain reports whether domain, or any parent of it, is a personal
-// or disposable mailbox provider.
+// IsPersonalDomain reports whether domain is a personal or disposable mailbox
+// provider. Only exact matches count: the lists hold registry-level entries
+// such as or.ru, so matching parents would refuse every company beneath them.
 func IsPersonalDomain(domain string) bool {
 	domain = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(domain)), ".")
-	set := domains()
-	for domain != "" {
-		if _, ok := set[domain]; ok {
-			return true
-		}
-		_, parent, found := strings.Cut(domain, ".")
-		if !found || !strings.Contains(parent, ".") {
-			return false
-		}
-		domain = parent
-	}
-	return false
+	_, ok := domains()[domain]
+	return ok
 }
 
 // IsPersonal reports whether email is at a personal or disposable mailbox

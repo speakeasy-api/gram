@@ -1,5 +1,5 @@
-# Personal and disposable mailbox domains. An address at one of these (or a
-# subdomain of one) cannot create an organization through self-serve signup.
+# Personal and disposable mailbox domains. An address at exactly one of these
+# cannot create an organization through self-serve signup.
 #
 # Sources, merged, lowercased and de-duplicated:
 #   https://github.com/Kikobeats/free-email-domains (MIT)
