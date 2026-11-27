@@ -166,8 +166,12 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
 
   const onboarding = useOnboardingTools();
 
-  const hasToolsets = !!draft.assistant?.toolsets?.length;
-  const hasAttachments = hasToolsets || !!draft.assistant?.mcpServers?.length;
+  const usesProjectMCPAccess = draft.assistant?.runtimeVersion === 3;
+  const hasToolsets =
+    !usesProjectMCPAccess && !!draft.assistant?.toolsets?.length;
+  const hasAttachments =
+    !usesProjectMCPAccess &&
+    (hasToolsets || !!draft.assistant?.mcpServers?.length);
   const scope = { gramProject: project.slug };
   const {
     data: toolsetsData,
@@ -208,38 +212,41 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
       toolset,
     ]),
   );
-  const attachments = [
-    ...(draft.assistant?.toolsets ?? []).flatMap((ref) => {
-      const toolset = toolsetBySlug.get(ref.toolsetSlug);
-      if (!toolset) return [];
-      // Older toolset views may not carry a slug. Resolve the registered
-      // platform endpoint instead of rebuilding the retired legacy URL.
-      const platformEndpoints = endpoints.filter(
-        (endpoint) =>
-          endpoint.mcpServerId &&
-          serverById.get(endpoint.mcpServerId)?.toolsetId === toolset.id,
-      );
-      return [
-        {
-          slug: ref.toolsetSlug,
-          endpointSlug:
-            toolset.mcpSlug ??
-            (platformEndpoints.length === 1
-              ? platformEndpoints[0]?.slug
-              : undefined),
-          matches: (server: { toolsetId?: string }) =>
-            server.toolsetId === toolset.id,
-          environment: ref.environmentSlug ?? draft.assistantEnv?.slug,
-        },
+  const attachments = !hasAttachments
+    ? []
+    : [
+        ...(draft.assistant?.toolsets ?? []).flatMap((ref) => {
+          const toolset = toolsetBySlug.get(ref.toolsetSlug);
+          if (!toolset) return [];
+          // Older toolset views may not carry a slug. Resolve the registered
+          // platform endpoint instead of rebuilding the retired legacy URL.
+          const platformEndpoints = endpoints.filter(
+            (endpoint) =>
+              endpoint.mcpServerId &&
+              serverById.get(endpoint.mcpServerId)?.toolsetId === toolset.id,
+          );
+          return [
+            {
+              slug: ref.toolsetSlug,
+              endpointSlug:
+                toolset.mcpSlug ??
+                (platformEndpoints.length === 1
+                  ? platformEndpoints[0]?.slug
+                  : undefined),
+              matches: (server: { toolsetId?: string }) =>
+                server.toolsetId === toolset.id,
+              environment: ref.environmentSlug ?? draft.assistantEnv?.slug,
+            },
+          ];
+        }),
+        ...(draft.assistant?.mcpServers ?? []).map((ref) => ({
+          slug: ref.mcpServerSlug,
+          endpointSlug: ref.endpointSlug,
+          matches: (server: { slug?: string }) =>
+            server.slug === ref.mcpServerSlug,
+          environment: ref.environmentSlug,
+        })),
       ];
-    }),
-    ...(draft.assistant?.mcpServers ?? []).map((ref) => ({
-      slug: ref.mcpServerSlug,
-      endpointSlug: ref.endpointSlug,
-      matches: (server: { slug?: string }) => server.slug === ref.mcpServerSlug,
-      environment: ref.environmentSlug,
-    })),
-  ];
   const targets = attachments.flatMap((attachment) => {
     if (!attachment.endpointSlug) return [];
     const endpoint = endpointBySlug.get(attachment.endpointSlug);
@@ -346,8 +353,16 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
       snapshot: snapshot ?? undefined,
       skillsEnabled,
       skillMutationsEnabled,
+      usesProjectMCPAccess,
     });
-  }, [mode, ready, snapshot, skillsEnabled, skillMutationsEnabled]);
+  }, [
+    mode,
+    ready,
+    snapshot,
+    skillsEnabled,
+    skillMutationsEnabled,
+    usesProjectMCPAccess,
+  ]);
 
   const welcome = useMemo(
     () =>

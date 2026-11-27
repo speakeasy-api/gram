@@ -922,7 +922,7 @@ func (s *Service) requireGatewayWorkloadMember(ctx context.Context, logger *slog
 	if err != nil {
 		return ctx, nil, workloadGrantStageUnavailable("gateway_member_admission_unavailable", err)
 	}
-	if len(members) == 0 {
+	if len(members) == 0 && !endpoint.IsProjectGateway() {
 		return ctx, nil, refuseWorkloadGrant("gateway_no_reachable_members", errors.New("workload reaches no gateway member"))
 	}
 	servers := make([]consentAuthServer, 0, len(members))

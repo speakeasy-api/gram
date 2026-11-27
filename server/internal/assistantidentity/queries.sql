@@ -7,6 +7,7 @@ SELECT a.id,
        a.organization_id,
        a.name,
        a.created_by_user_id,
+       a.runtime_version,
        EXISTS (
          SELECT 1
          FROM project_managed_assistants pma
