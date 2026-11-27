@@ -9,6 +9,7 @@ package skills
 
 import (
 	"context"
+	"io"
 
 	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
@@ -39,10 +40,20 @@ type Endpoints struct {
 	Share                  goa.Endpoint
 	Unshare                goa.Endpoint
 	GetShared              goa.Endpoint
+	DownloadShared         goa.Endpoint
 	ListDistributions      goa.Endpoint
 	Link                   goa.Endpoint
 	Unlink                 goa.Endpoint
 	ListLinks              goa.Endpoint
+}
+
+// DownloadSharedResponseData holds both the result and the HTTP response body
+// reader of the "downloadShared" method.
+type DownloadSharedResponseData struct {
+	// Result is the method result.
+	Result *DownloadSharedResult
+	// Body streams the HTTP response body.
+	Body io.ReadCloser
 }
 
 // NewEndpoints wraps the methods of the "skills" service with endpoints.
@@ -73,6 +84,7 @@ func NewEndpoints(s Service) *Endpoints {
 		Share:                  NewShareEndpoint(s, a.APIKeyAuth),
 		Unshare:                NewUnshareEndpoint(s, a.APIKeyAuth),
 		GetShared:              NewGetSharedEndpoint(s),
+		DownloadShared:         NewDownloadSharedEndpoint(s),
 		ListDistributions:      NewListDistributionsEndpoint(s, a.APIKeyAuth),
 		Link:                   NewLinkEndpoint(s, a.APIKeyAuth),
 		Unlink:                 NewUnlinkEndpoint(s, a.APIKeyAuth),
@@ -105,6 +117,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.Share = m(e.Share)
 	e.Unshare = m(e.Unshare)
 	e.GetShared = m(e.GetShared)
+	e.DownloadShared = m(e.DownloadShared)
 	e.ListDistributions = m(e.ListDistributions)
 	e.Link = m(e.Link)
 	e.Unlink = m(e.Unlink)
@@ -1415,6 +1428,19 @@ func NewGetSharedEndpoint(s Service) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
 		p := req.(*GetSharedPayload)
 		return s.GetShared(ctx, p)
+	}
+}
+
+// NewDownloadSharedEndpoint returns an endpoint function that calls the method
+// "downloadShared" of service "skills".
+func NewDownloadSharedEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DownloadSharedPayload)
+		res, body, err := s.DownloadShared(ctx, p)
+		if err != nil {
+			return nil, err
+		}
+		return &DownloadSharedResponseData{Result: res, Body: body}, nil
 	}
 }
 

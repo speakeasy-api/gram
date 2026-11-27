@@ -63,6 +63,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
+	"github.com/speakeasy-api/gram/server/internal/skills/skilltree"
 	"github.com/speakeasy-api/gram/server/internal/staff"
 	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -1700,7 +1701,7 @@ func (s *Service) DownloadCodexInstallScript(ctx context.Context, payload *gen.D
 }
 
 // writePluginZip serializes the file map as a deterministic ZIP, marking shell
-// scripts executable so the bootstrapper runs after extraction. The GitHub
+// scripts and skill scripts executable so they run after extraction. The GitHub
 // publish path applies the same rule via Tree mode 100755 in
 // thirdparty/github/repo.go; keep them in sync. Git has no owner-only mode, so
 // only the ZIP marks the key-bearing files (speakeasy.json, the root
@@ -1743,7 +1744,7 @@ func writePluginZip(w io.Writer, files map[string][]byte) error {
 			// The root install script embeds the hooks API key, so it stays
 			// owner-only while still runnable.
 			mode = 0o700
-		case strings.HasSuffix(p, ".sh"):
+		case strings.HasSuffix(p, ".sh"), skilltree.IsPackagedScript(p):
 			mode = 0o755
 		case path.Base(p) == "speakeasy.json":
 			// Carries the hooks API key, so extraction must leave it owner-only.
@@ -3649,6 +3650,22 @@ func (s *Service) resolvePluginInfosInTx(ctx context.Context, tx pgx.Tx, organiz
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list plugin skills").LogError(ctx, s.logger)
 	}
+	skillVersionIDs := make([]uuid.UUID, 0, len(skillRows))
+	for _, sk := range skillRows {
+		skillVersionIDs = append(skillVersionIDs, sk.SkillVersionID)
+	}
+	// Every package path fingerprints and publishes the whole skill
+	// directory, so the files are loaded with their content like SKILL.md.
+	skillFiles := make(map[uuid.UUID][]PluginSkillFile)
+	if len(skillVersionIDs) > 0 {
+		skillFileRows, err := lockedRepo.ListPluginSkillFilesForProject(ctx, repo.ListPluginSkillFilesForProjectParams{ProjectID: projectID, SkillVersionIds: skillVersionIDs})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "list plugin skill files").LogError(ctx, s.logger)
+		}
+		for _, file := range skillFileRows {
+			skillFiles[file.SkillVersionID] = append(skillFiles[file.SkillVersionID], PluginSkillFile{Path: file.Path, Content: file.Content})
+		}
+	}
 	envRows, err := lockedRepo.ListPluginEnvironmentConfigsForProject(ctx, repo.ListPluginEnvironmentConfigsForProjectParams{ProjectID: projectID, PluginIds: pluginIDs})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list plugin environment configs").LogError(ctx, s.logger)
@@ -3770,6 +3787,7 @@ func (s *Service) resolvePluginInfosInTx(ctx context.Context, tx pgx.Tx, organiz
 		pb.info.Skills = append(pb.info.Skills, PluginSkillInfo{
 			Name:    sk.SkillName,
 			Content: sk.SkillContent,
+			Files:   skillFiles[sk.SkillVersionID],
 		})
 	}
 	for _, issue := range compatibilityIssues {

@@ -454,6 +454,95 @@ func TestResolverGet(t *testing.T) {
 	require.ErrorIs(t, err, mcpskills.ErrSkillNotFound, "a skill not linked to the surface cannot be fetched by URI either")
 }
 
+func TestResolverServesSupportingFiles(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newFixture(t)
+	skillID, versionID, _ := servedSkill(t, ctx, f, "pdf")
+	reference := []byte("# Forms\n")
+	logo := []byte{0x89, 'P', 'N', 'G', 0x00}
+	addFile(t, ctx, f, f.projectID, skillID, versionID, "references/FORMS.md", "text/markdown; charset=utf-8", reference)
+	addFile(t, ctx, f, f.projectID, skillID, versionID, "assets/logo.png", "image/png", logo)
+
+	entries, err := f.resolver.List(ctx, f.scope())
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	require.Len(t, entries[0].Files, 2)
+	require.Equal(t, "assets/logo.png", entries[0].Files[0].Path)
+	require.Equal(t, "references/FORMS.md", entries[0].Files[1].Path)
+	require.Equal(t, rawSHA256(string(reference)), entries[0].Files[1].SHA256)
+	require.Nil(t, entries[0].Files[1].Content, "listings carry metadata only")
+	require.Len(t, entries[0].Wire().Resources, 3)
+
+	entry, manifest, err := f.resolver.Read(ctx, f.scope(), f.uri("pdf"))
+	require.NoError(t, err)
+	require.True(t, manifest.IsManifest())
+	require.Equal(t, entry.Content, string(manifest.Content))
+	require.Equal(t, "text/markdown", manifest.MimeType)
+
+	_, text, err := f.resolver.Read(ctx, f.scope(), mcpskills.SkillFileURI(f.projectSlug, "pdf", "references/FORMS.md"))
+	require.NoError(t, err)
+	require.False(t, text.IsManifest())
+	require.True(t, text.Text)
+	require.Equal(t, reference, text.Content)
+	require.Equal(t, "text/markdown; charset=utf-8", text.MimeType)
+
+	_, binary, err := f.resolver.Read(ctx, f.scope(), mcpskills.SkillFileURI(f.projectSlug, "pdf", "assets/logo.png"))
+	require.NoError(t, err)
+	require.False(t, binary.Text)
+	require.Equal(t, logo, binary.Content)
+	require.Equal(t, "image/png", binary.MimeType)
+
+	_, _, err = f.resolver.Read(ctx, f.scope(), mcpskills.SkillFileURI(f.projectSlug, "pdf", "references/MISSING.md"))
+	require.ErrorIs(t, err, mcpskills.ErrSkillNotFound)
+
+	_, _, err = f.resolver.Read(ctx, f.scopeFor(mcpskills.OrganizationGatewayTarget()), mcpskills.SkillFileURI(f.projectSlug, "pdf", "references/FORMS.md"))
+	require.ErrorIs(t, err, mcpskills.ErrSkillNotFound, "a supporting file is served only where its skill is")
+}
+
+func TestResolverServesFilesOfTheResolvedVersion(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newFixture(t)
+	skillID, firstVersion, _ := servedSkill(t, ctx, f, "versioned")
+	addFile(t, ctx, f, f.projectID, skillID, firstVersion, "references/old.md", "text/markdown", []byte("old"))
+	secondVersion := addVersion(t, ctx, f, f.projectID, skillID, skillContent("versioned", "Second version."))
+	addFile(t, ctx, f, f.projectID, skillID, secondVersion, "references/new.md", "text/markdown", []byte("new"))
+
+	entry, err := f.resolver.Get(ctx, f.scope(), f.uri("versioned"))
+	require.NoError(t, err)
+	require.Equal(t, secondVersion, entry.VersionID)
+	require.Len(t, entry.Files, 1)
+	require.Equal(t, "references/new.md", entry.Files[0].Path)
+
+	_, _, err = f.resolver.Read(ctx, f.scope(), mcpskills.SkillFileURI(f.projectSlug, "versioned", "references/old.md"))
+	require.ErrorIs(t, err, mcpskills.ErrSkillNotFound, "files of a version that is not served are not served")
+}
+
+func TestEmbeddedCatalogRead(t *testing.T) {
+	t.Parallel()
+
+	catalog, err := mcpskills.NewEmbeddedCatalog()
+	require.NoError(t, err)
+	entry := catalog.Entries()[0]
+
+	got, manifest, ok := catalog.Read(entry.URI())
+	require.True(t, ok)
+	require.Equal(t, entry.Name, got.Name)
+	require.Equal(t, entry.Content, string(manifest.Content))
+
+	for _, file := range entry.Files {
+		_, resource, ok := catalog.Read(mcpskills.SkillFileURI(mcpskills.EmbeddedProjectSlug, entry.Name, file.Path))
+		require.True(t, ok, file.Path)
+		require.Equal(t, file.Content, resource.Content)
+	}
+
+	_, _, ok = catalog.Read(mcpskills.SkillFileURI(mcpskills.EmbeddedProjectSlug, entry.Name, "references/does-not-exist.md"))
+	require.False(t, ok)
+	_, _, ok = catalog.Read(mcpskills.SkillFileURI("customer", entry.Name, "references/x.md"))
+	require.False(t, ok)
+}
+
 func TestRecordReadIdempotentPerSession(t *testing.T) {
 	t.Parallel()
 

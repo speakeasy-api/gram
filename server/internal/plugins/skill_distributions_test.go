@@ -1,6 +1,10 @@
 package plugins_test
 
 import (
+	"archive/zip"
+	"bytes"
+	"io"
+	"os"
 	"testing"
 
 	"github.com/google/uuid"
@@ -190,4 +194,73 @@ func TestListPluginSkillsForProjectResolvesContent(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, gotPlugin.SkillCount)
 	require.EqualValues(t, 2, *gotPlugin.SkillCount)
+}
+
+func TestDownloadPluginPackageCarriesSkillSupportingFiles(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := *authCtx.ProjectID
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Directory Carrier"})
+	require.NoError(t, err)
+	pluginID := uuid.MustParse(plugin.ID)
+
+	skills := skillsrepo.New(ti.conn)
+	skill, err := skills.CreateSkill(ctx, skillsrepo.CreateSkillParams{
+		ProjectID: projectID, Name: "pdf-tools", DisplayName: "PDF tools", Summary: pgtype.Text{},
+	})
+	require.NoError(t, err)
+	manifest := "---\nname: pdf-tools\ndescription: Work with PDFs.\n---\n\nRun scripts/extract.py.\n"
+	version, err := skills.CreateSkillVersion(ctx, skillsrepo.CreateSkillVersionParams{
+		Content: manifest, CanonicalSha256: uuid.NewString(), RawSha256: uuid.NewString(), Description: pgtype.Text{},
+		Metadata: []byte(`{}`), SpecValid: true, ValidationErrors: []byte(`[]`), CreatedByUserID: authCtx.UserID,
+		ProjectID: projectID, SkillID: skill.ID,
+	})
+	require.NoError(t, err)
+	supporting := map[string][]byte{
+		"scripts/extract.py":      []byte("print('extract')\n"),
+		"references/REFERENCE.md": []byte("# Reference\n"),
+		"assets/logo.png":         {0x89, 'P', 'N', 'G'},
+	}
+	for filePath, content := range supporting {
+		require.NoError(t, skills.CreateSkillVersionFile(ctx, skillsrepo.CreateSkillVersionFileParams{
+			Path: filePath, Content: content, Sha256: "unused", SizeBytes: int64(len(content)), ContentType: "application/octet-stream",
+			ProjectID: projectID, SkillID: skill.ID, SkillVersionID: version.ID,
+		}))
+	}
+	_, err = skills.CreateSkillDistribution(ctx, skillsrepo.CreateSkillDistributionParams{
+		PluginID: uuid.NullUUID{UUID: pluginID, Valid: true}, AssistantID: uuid.NullUUID{}, PinnedVersionID: uuid.NullUUID{},
+		Channel: "plugin", CreatedByUserID: authCtx.UserID, ProjectID: projectID, SkillID: skill.ID,
+	})
+	require.NoError(t, err)
+
+	_, body, err := ti.service.DownloadPluginPackage(ctx, &gen.DownloadPluginPackagePayload{PluginID: plugin.ID, Platform: "claude"})
+	require.NoError(t, err)
+	archive, err := io.ReadAll(body)
+	require.NoError(t, err)
+	require.NoError(t, body.Close())
+	zr, err := zip.NewReader(bytes.NewReader(archive), int64(len(archive)))
+	require.NoError(t, err)
+
+	files := make(map[string][]byte, len(zr.File))
+	modes := make(map[string]os.FileMode, len(zr.File))
+	for _, file := range zr.File {
+		entry, err := file.Open()
+		require.NoError(t, err)
+		content, err := io.ReadAll(entry)
+		require.NoError(t, err)
+		require.NoError(t, entry.Close())
+		files[file.Name] = content
+		modes[file.Name] = file.Mode().Perm()
+	}
+
+	require.Equal(t, []byte(manifest), files["skills/pdf-tools/SKILL.md"])
+	for filePath, content := range supporting {
+		require.Equal(t, content, files["skills/pdf-tools/"+filePath], "supporting file %s ships next to SKILL.md", filePath)
+	}
+	require.Equal(t, os.FileMode(0o755), modes["skills/pdf-tools/scripts/extract.py"], "skill scripts stay executable after unzip")
+	require.Equal(t, os.FileMode(0o644), modes["skills/pdf-tools/references/REFERENCE.md"])
 }

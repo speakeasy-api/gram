@@ -187,6 +187,18 @@ func addVersion(t *testing.T, ctx context.Context, f *fixture, projectID, skillI
 	return version.ID
 }
 
+// addFile stores one supporting file on a skill version.
+func addFile(t *testing.T, ctx context.Context, f *fixture, projectID, skillID, versionID uuid.UUID, filePath, contentType string, content []byte) {
+	t.Helper()
+
+	digest := sha256.Sum256(content)
+	err := skillsrepo.New(f.conn).CreateSkillVersionFile(ctx, skillsrepo.CreateSkillVersionFileParams{
+		Path: filePath, Content: content, Sha256: hex.EncodeToString(digest[:]), SizeBytes: int64(len(content)),
+		ContentType: contentType, ProjectID: projectID, SkillID: skillID, SkillVersionID: versionID,
+	})
+	require.NoError(t, err)
+}
+
 // link links a skill in projectID to target, pinned when pinnedVersionID is
 // non-nil, and returns the link's id.
 func link(t *testing.T, ctx context.Context, f *fixture, projectID, skillID uuid.UUID, target mcpskills.Target, pinnedVersionID *uuid.UUID) uuid.UUID {

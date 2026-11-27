@@ -1155,6 +1155,7 @@ SELECT
   p.slug AS plugin_slug,
   p.description AS plugin_description,
   s.name AS skill_name,
+  resolved.id AS skill_version_id,
   resolved.content AS skill_content
 FROM skill_distributions sd
 JOIN plugins p ON p.id = sd.plugin_id AND p.deleted IS FALSE
@@ -1163,7 +1164,7 @@ JOIN skills s
   AND s.id = sd.skill_id
   AND s.archived_at IS NULL
 JOIN LATERAL (
-  SELECT sv.content
+  SELECT sv.id, sv.content
   FROM skill_versions sv
   LEFT JOIN skill_version_origins svo
     ON svo.project_id = sd.project_id
@@ -1182,6 +1183,16 @@ WHERE sd.project_id = @project_id
   AND sd.assistant_id IS NULL
   AND sd.revoked_at IS NULL
 ORDER BY p.slug ASC, s.name ASC;
+
+-- name: ListPluginSkillFilesForProject :many
+-- The supporting files of the skill versions ListPluginSkillsForProject
+-- resolved, so a plugin package carries each skill's whole directory next to
+-- its SKILL.md.
+SELECT skill_version_id, path, content
+FROM skill_version_files
+WHERE project_id = @project_id
+  AND skill_version_id = ANY(@skill_version_ids::uuid[])
+ORDER BY skill_version_id, path;
 
 -- name: SetPluginAutoCreatedFixture :exec
 -- Fixture for verifying read-only plugin origin metadata in inventory responses.

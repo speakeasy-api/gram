@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -108,10 +109,17 @@ func NewResolver(logger *slog.Logger, db database.DBTX) *Resolver {
 // skill, sorted by project slug and then name. A caller who is not a live member of the
 // organization yields no entries.
 func (r *Resolver) List(ctx context.Context, scope Scope) ([]Entry, error) {
-	return r.resolve(ctx, scope, skillKey{
+	entries, err := r.resolve(ctx, scope, skillKey{
 		projectSlug: pgtype.Text{String: "", Valid: false},
 		name:        pgtype.Text{String: "", Valid: false},
 	})
+	if err != nil {
+		return nil, err
+	}
+	if err := r.attachFiles(ctx, entries); err != nil {
+		return nil, err
+	}
+	return entries, nil
 }
 
 // skillKey narrows a resolution to one skill by its URI segments; unset
@@ -134,6 +142,10 @@ func (r *Resolver) Get(ctx context.Context, scope Scope, uri string) (*Entry, er
 	}
 	if len(entries) == 0 {
 		return nil, fmt.Errorf("%w: %s", ErrSkillNotFound, uri)
+	}
+	entries = entries[:1]
+	if err := r.attachFiles(ctx, entries); err != nil {
+		return nil, err
 	}
 	return &entries[0], nil
 }
@@ -200,6 +212,7 @@ func (r *Resolver) resolve(ctx context.Context, scope Scope, key skillKey) ([]En
 			Content:     row.Content,
 			RawSHA256:   row.RawSha256,
 			Frontmatter: nil,
+			Files:       nil,
 		}
 		if row.PinnedVersions > 1 {
 			r.logger.WarnContext(ctx, "served skill pinned to different versions across links; serving the newest pin",
@@ -237,6 +250,94 @@ func (r *Resolver) resolve(ctx context.Context, scope Scope, key skillKey) ([]En
 		entries = append(entries, entry)
 	}
 	return entries, nil
+}
+
+// attachFiles loads the supporting-file metadata of every entry's served
+// version in one query and sets each entry's Files. resolve leaves Files
+// unset so that reading a SKILL.md, the activation path, never pays for it;
+// List, Get and supporting-file reads attach them.
+func (r *Resolver) attachFiles(ctx context.Context, entries []Entry) error {
+	if len(entries) == 0 {
+		return nil
+	}
+
+	projectIDs := make([]uuid.UUID, 0, len(entries))
+	versionIDs := make([]uuid.UUID, 0, len(entries))
+	for _, entry := range entries {
+		if !slices.Contains(projectIDs, entry.ProjectID) {
+			projectIDs = append(projectIDs, entry.ProjectID)
+		}
+		versionIDs = append(versionIDs, entry.VersionID)
+	}
+
+	rows, err := repo.New(r.db).ListServedSkillFileMetadata(ctx, repo.ListServedSkillFileMetadataParams{
+		ProjectIds:      projectIDs,
+		SkillVersionIds: versionIDs,
+	})
+	if err != nil {
+		return fmt.Errorf("list served skill files: %w", err)
+	}
+
+	byVersion := make(map[uuid.UUID][]File, len(entries))
+	for _, row := range rows {
+		byVersion[row.SkillVersionID] = append(byVersion[row.SkillVersionID], File{
+			Path:        row.Path,
+			SHA256:      row.Sha256,
+			Size:        row.SizeBytes,
+			ContentType: row.ContentType,
+			Content:     nil,
+		})
+	}
+	for i := range entries {
+		entries[i].Files = byVersion[entries[i].VersionID]
+	}
+	return nil
+}
+
+// Read returns the content of the file a skill URI names, SKILL.md or a
+// supporting file, with the served entry it belongs to, or
+// [ErrSkillNotFound]. A supporting file is served under exactly the same
+// rules as its skill's SKILL.md: the caller must be served the skill.
+func (r *Resolver) Read(ctx context.Context, scope Scope, uri string) (*Entry, Resource, error) {
+	var resource Resource
+	projectSlug, name, filePath, ok := ParseSkillResourceURI(uri)
+	if !ok {
+		return nil, resource, fmt.Errorf("%w: %s", ErrSkillNotFound, uri)
+	}
+
+	entries, err := r.resolve(ctx, scope, skillKey{projectSlug: conv.ToPGText(projectSlug), name: conv.ToPGText(name)})
+	if err != nil {
+		return nil, resource, err
+	}
+	if len(entries) == 0 {
+		return nil, resource, fmt.Errorf("%w: %s", ErrSkillNotFound, uri)
+	}
+	entries = entries[:1]
+	entry := &entries[0]
+	if filePath == "" {
+		return entry, entry.ManifestResource(), nil
+	}
+	if err := r.attachFiles(ctx, entries); err != nil {
+		return nil, resource, err
+	}
+
+	file, ok := entry.file(filePath)
+	if !ok {
+		return nil, resource, fmt.Errorf("%w: %s", ErrSkillNotFound, uri)
+	}
+	row, err := repo.New(r.db).GetServedSkillFile(ctx, repo.GetServedSkillFileParams{
+		ProjectID:      entry.ProjectID,
+		SkillID:        entry.SkillID,
+		SkillVersionID: entry.VersionID,
+		Path:           file.Path,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, resource, fmt.Errorf("%w: %s", ErrSkillNotFound, uri)
+	}
+	if err != nil {
+		return nil, resource, fmt.Errorf("get served skill file: %w", err)
+	}
+	return entry, entry.fileResource(file, row.Content), nil
 }
 
 // RecordRead records a resources/read of a served skill as an activation of

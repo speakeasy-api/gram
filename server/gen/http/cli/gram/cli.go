@@ -198,7 +198,7 @@ func UsageCommands() []string {
 		"risk (create-risk-policy|list-risk-policies|list-mcp-platform-toolsets|list-risk-policies-for-mcp-server|list-builtin-exclusions|get-risk-policy|update-risk-policy|delete-risk-policy|list-session-quarantines|release-session-quarantine|list-risk-results|list-risk-results-for-agent|unmask-risk-result|reveal-risk-result-payload|list-risk-results-by-chat|mark-risk-results-false-positive|unmark-risk-results-false-positive|list-dismissed-risk-results|get-risk-overview|list-risk-categories|list-risk-presets|suggest-risk-policy|compile-expr|get-risk-user-breakdown|get-risk-signals|get-risk-mcp-server-counts|get-risk-analysis-status|create-risk-policy-bypass-request|get-risk-policy-bypass-request-target|acknowledge-risk-policy-challenge|get-risk-policy-challenge|decline-risk-policy-challenge|get-risk-block|submit-risk-block-feedback|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|list-risk-policy-approvals|get-risk-policy-approval|decide-risk-policy-approval|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|suggest-exclusion|test-detection-rule|evaluate-prompt-guardrail|save-risk-eval-review|list-risk-eval-reviews|delete-risk-eval-review)",
 		"sigint (create-signal|get-signal|list-signals|update-signal|delete-signal|create-sensor|get-sensor|list-sensors|update-sensor|delete-sensor)",
 		"skill-efficacy (get-settings|upsert-settings|query-insights)",
-		"skills (create|add-version|restore-version|update|list|list-tags|list-suggestions|list-feedback|trigger-suggestion|approve-suggestion|dismiss-suggestion|list-suggestion-feedback|approve-all-suggestions|get|list-unknown-activations|list-versions|get-version-file|archive|distribute|undistribute|share|unshare|get-shared|list-distributions|link|unlink|list-links)",
+		"skills (create|add-version|restore-version|update|list|list-tags|list-suggestions|list-feedback|trigger-suggestion|approve-suggestion|dismiss-suggestion|list-suggestion-feedback|approve-all-suggestions|get|list-unknown-activations|list-versions|get-version-file|archive|distribute|undistribute|share|unshare|get-shared|download-shared|list-distributions|link|unlink|list-links)",
 		"slack-directory-connections (list|sync|list-members|list-person-accounts|get-member|set-mapping|begin|set-default-project|disconnect)",
 		"spend-rules (create-spend-rule|list-spend-rules|get-spend-rule|update-spend-rule|archive-spend-rule|preview-spend-rule|list-spend-rule-events|get-spend-rules-overview|list-actor-attributes)",
 		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-employee-data-flow-graph|get-observability-overview|get-mcp-network-traffic|get-meta-mcp-server-usage|get-project-gateway-overview|get-project-gateway-usage|get-project-overview|get-unproxied-mcp-server-usage|get-unproxied-mcp-server-tool-usage|get-unproxied-mcp-server-user-usage|get-unproxied-mcp-server-client-usage|query|query-tum-details|list-sessions|list-filter-options|list-attribute-keys|get-hooks-summary|get-tool-usage-summary|get-tool-usage-totals|get-tool-usage-targets|get-tool-usage-users|get-tool-usage-clients|get-tool-usage-client-tool-breakdown|get-tool-usage-target-time-series|get-tool-usage-user-time-series|get-tool-usage-users-by-target|get-tool-usage-target-tool-breakdown|list-tool-usage-traces|get-tool-usage-filter-options|get-mcp-server-activity|get-org-mcp-server-activity|list-hooks-traces)",
@@ -3925,6 +3925,9 @@ func ParseEndpoint(
 		skillsGetSharedFlags     = flag.NewFlagSet("get-shared", flag.ExitOnError)
 		skillsGetSharedTokenFlag = skillsGetSharedFlags.String("token", "REQUIRED", "")
 
+		skillsDownloadSharedFlags     = flag.NewFlagSet("download-shared", flag.ExitOnError)
+		skillsDownloadSharedTokenFlag = skillsDownloadSharedFlags.String("token", "REQUIRED", "")
+
 		skillsListDistributionsFlags                = flag.NewFlagSet("list-distributions", flag.ExitOnError)
 		skillsListDistributionsSkillIDFlag          = skillsListDistributionsFlags.String("skill-id", "", "")
 		skillsListDistributionsPluginIDFlag         = skillsListDistributionsFlags.String("plugin-id", "", "")
@@ -6683,6 +6686,7 @@ func ParseEndpoint(
 	skillsShareFlags.Usage = skillsShareUsage
 	skillsUnshareFlags.Usage = skillsUnshareUsage
 	skillsGetSharedFlags.Usage = skillsGetSharedUsage
+	skillsDownloadSharedFlags.Usage = skillsDownloadSharedUsage
 	skillsListDistributionsFlags.Usage = skillsListDistributionsUsage
 	skillsLinkFlags.Usage = skillsLinkUsage
 	skillsUnlinkFlags.Usage = skillsUnlinkUsage
@@ -9629,6 +9633,9 @@ func ParseEndpoint(
 
 			case "get-shared":
 				epf = skillsGetSharedFlags
+
+			case "download-shared":
+				epf = skillsDownloadSharedFlags
 
 			case "list-distributions":
 				epf = skillsListDistributionsFlags
@@ -13200,6 +13207,9 @@ func ParseEndpoint(
 			case "get-shared":
 				endpoint = c.GetShared()
 				data, err = skillsc.BuildGetSharedPayload(*skillsGetSharedTokenFlag)
+			case "download-shared":
+				endpoint = c.DownloadShared()
+				data, err = skillsc.BuildDownloadSharedPayload(*skillsDownloadSharedTokenFlag)
 			case "list-distributions":
 				endpoint = c.ListDistributions()
 				data, err = skillsc.BuildListDistributionsPayload(*skillsListDistributionsSkillIDFlag, *skillsListDistributionsPluginIDFlag, *skillsListDistributionsCursorFlag, *skillsListDistributionsLimitFlag, *skillsListDistributionsSessionTokenFlag, *skillsListDistributionsApikeyTokenFlag, *skillsListDistributionsProjectSlugInputFlag)
@@ -30301,7 +30311,8 @@ func skillsUsage() {
 	fmt.Fprintln(os.Stderr, `    undistribute: Revoke a skill's active distribution to exactly one plugin or assistant. Repeated requests are a no-op.`)
 	fmt.Fprintln(os.Stderr, `    share: Create a public share link for a skill. Repeated requests return the existing active link, so each skill has at most one active share token.`)
 	fmt.Fprintln(os.Stderr, `    unshare: Revoke a skill's active public share link. Repeated requests are a no-op.`)
-	fmt.Fprintln(os.Stderr, `    get-shared: Fetch the publicly shared view of a skill by its share token. This endpoint is unauthenticated and only ever exposes the skill name, display name, summary, and latest content.`)
+	fmt.Fprintln(os.Stderr, `    get-shared: Fetch the publicly shared view of a skill by its share token. This endpoint is unauthenticated and only ever exposes the skill name, display name, summary, latest content, the path, digest, size and media type of each supporting file, and the path of the skill's ZIP download.`)
+	fmt.Fprintln(os.Stderr, `    download-shared: Download a shared skill's whole directory as a ZIP (<name>/SKILL.md plus <name>/<path> for every supporting file) by its share token. Unauthenticated, like getShared.`)
 	fmt.Fprintln(os.Stderr, `    list-distributions: List active plugin skill distributions for the current project.`)
 	fmt.Fprintln(os.Stderr, `    link: Link a skill to exactly one MCP surface that serves it over MCP. Repeating the request for the same skill and target updates the version pin or is a no-op. Requires the skills-over-mcp rollout for the organization.`)
 	fmt.Fprintln(os.Stderr, `    unlink: Remove a skill link so its MCP surface stops serving the skill through it. Removing a link that is already gone is a no-op. Requires the skills-over-mcp rollout for the organization.`)
@@ -30878,7 +30889,7 @@ func skillsGetSharedUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Fetch the publicly shared view of a skill by its share token. This endpoint is unauthenticated and only ever exposes the skill name, display name, summary, and latest content.`)
+	fmt.Fprintln(os.Stderr, `Fetch the publicly shared view of a skill by its share token. This endpoint is unauthenticated and only ever exposes the skill name, display name, summary, latest content, the path, digest, size and media type of each supporting file, and the path of the skill's ZIP download.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -token STRING: `)
@@ -30886,6 +30897,24 @@ func skillsGetSharedUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills get-shared --token \"aaa\"")
+}
+
+func skillsDownloadSharedUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] skills download-shared", os.Args[0])
+	fmt.Fprint(os.Stderr, " -token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Download a shared skill's whole directory as a ZIP (<name>/SKILL.md plus <name>/<path> for every supporting file) by its share token. Unauthenticated, like getShared.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills download-shared --token \"aaa\"")
 }
 
 func skillsListDistributionsUsage() {

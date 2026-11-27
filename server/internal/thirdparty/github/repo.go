@@ -23,6 +23,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/skills/skilltree"
 )
 
 const apiBase = "https://api.github.com"
@@ -452,7 +453,7 @@ func (c *Client) createTreeAttempt(ctx context.Context, installationID int64, ow
 				return fmt.Errorf("blob upload canceled: %w", err)
 			}
 			mode := "100644"
-			if strings.HasSuffix(path, ".sh") {
+			if strings.HasSuffix(path, ".sh") || skilltree.IsPackagedScript(path) {
 				mode = "100755"
 			}
 			entry := map[string]string{"path": path, "mode": mode, "type": "blob"}

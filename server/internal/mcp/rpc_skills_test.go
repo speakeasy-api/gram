@@ -3,6 +3,7 @@ package mcp_test
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -375,6 +376,115 @@ func TestServePublic_Skills_ReadServesMarkdownAndRecordsOneActivationPerSession(
 	}
 	require.Equal(t, sessionA, observations[0].SessionID.String)
 	require.Equal(t, sessionB, observations[1].SessionID.String)
+}
+
+func TestServePublic_Skills_ListsAndReadsSupportingFilesWithoutActivation(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	f := newSkillsFixture(t, ctx, ti)
+	content := skillContent("pdf-tools", "Work with PDFs.")
+	skillsQueries := skillsrepo.New(ti.conn)
+	skill, err := skillsQueries.CreateSkill(ctx, skillsrepo.CreateSkillParams{
+		ProjectID: f.projectID, Name: "pdf-tools", DisplayName: "pdf-tools", Summary: pgtype.Text{},
+	})
+	require.NoError(t, err)
+	version, err := skillsQueries.CreateSkillVersion(ctx, skillsrepo.CreateSkillVersionParams{
+		Content: content, CanonicalSha256: rawSHA256(content), RawSha256: rawSHA256(content), Description: pgtype.Text{},
+		Metadata: []byte("{}"), SpecValid: true, ValidationErrors: []byte("[]"), CreatedByUserID: f.authCtx.UserID,
+		ProjectID: f.projectID, SkillID: skill.ID,
+	})
+	require.NoError(t, err)
+	script := "print('fill')\n"
+	logo := []byte{0x89, 'P', 'N', 'G', 0x00, 0xff}
+	for _, file := range []struct {
+		path, contentType string
+		content           []byte
+	}{
+		{path: "scripts/fill.py", contentType: "text/x-python; charset=utf-8", content: []byte(script)},
+		{path: "assets/logo.png", contentType: "image/png", content: logo},
+	} {
+		require.NoError(t, skillsQueries.CreateSkillVersionFile(ctx, skillsrepo.CreateSkillVersionFileParams{
+			Path: file.path, Content: file.content, Sha256: rawSHA256(string(file.content)), SizeBytes: int64(len(file.content)),
+			ContentType: file.contentType, ProjectID: f.projectID, SkillID: skill.ID, SkillVersionID: version.ID,
+		}))
+	}
+	_, err = mcpskills.CreateLink(ctx, ti.conn, mcpskills.NewLink{
+		OrganizationID: f.organizationID, ProjectID: f.projectID, SkillID: skill.ID, PinnedVersionID: nil,
+		Target: mcpskills.MCPServerTarget(f.serverID), CreatedByUserID: f.authCtx.UserID,
+	})
+	require.NoError(t, err)
+	session := map[string]string{"Mcp-Session-Id": "skills-session-" + uuid.NewString()[:8]}
+
+	w, err := servePublicHTTP(t, ctx, ti, f.mcpSlug, makeMetaRPCBody(t, mcpversions.MethodSkillsGet, map[string]any{"uri": f.uri("pdf-tools")}), "", session)
+	require.NoError(t, err)
+	var got wireSkill
+	require.NoError(t, json.Unmarshal(requireRPCResult(t, w)["skill"], &got))
+	scriptURI := mcpskills.SkillFileURI(f.projectSlug, "pdf-tools", "scripts/fill.py")
+	logoURI := mcpskills.SkillFileURI(f.projectSlug, "pdf-tools", "assets/logo.png")
+	require.Len(t, got.Resources, 3)
+	require.Equal(t, f.uri("pdf-tools"), got.Resources[0].URI)
+	require.Equal(t, "sha256:"+rawSHA256(content), got.Resources[0].Digest, "the SKILL.md digest is unchanged by supporting files")
+	require.Equal(t, logoURI, got.Resources[1].URI)
+	require.Equal(t, scriptURI, got.Resources[2].URI)
+	require.Equal(t, "sha256:"+rawSHA256(script), got.Resources[2].Digest)
+	require.Equal(t, len(script), got.Resources[2].Size)
+
+	type readContent struct {
+		URI      string `json:"uri"`
+		MimeType string `json:"mimeType"`
+		Text     string `json:"text"`
+		Blob     string `json:"blob"`
+	}
+	read := func(uri string) readContent {
+		t.Helper()
+		w, err := servePublicHTTP(t, ctx, ti, f.mcpSlug, makeMetaRPCBody(t, mcpversions.MethodResourcesRead, map[string]any{"uri": uri}), "", session)
+		require.NoError(t, err)
+		var contents []readContent
+		require.NoError(t, json.Unmarshal(requireRPCResult(t, w)["contents"], &contents))
+		require.Len(t, contents, 1)
+		return contents[0]
+	}
+
+	text := read(scriptURI)
+	require.Equal(t, scriptURI, text.URI)
+	require.Equal(t, "text/x-python; charset=utf-8", text.MimeType)
+	require.Equal(t, script, text.Text)
+	require.Empty(t, text.Blob)
+
+	binary := read(logoURI)
+	require.Equal(t, "image/png", binary.MimeType)
+	require.Empty(t, binary.Text)
+	require.Equal(t, base64.StdEncoding.EncodeToString(logo), binary.Blob)
+
+	// An empty file still carries exactly one of text and blob, which MCP
+	// requires of every resource content.
+	for _, file := range []struct{ path, contentType, field, absent string }{
+		{path: "scripts/__init__.py", contentType: "text/x-python", field: "text", absent: "blob"},
+		{path: "assets/empty.bin", contentType: "application/octet-stream", field: "blob", absent: "text"},
+	} {
+		require.NoError(t, skillsQueries.CreateSkillVersionFile(ctx, skillsrepo.CreateSkillVersionFileParams{
+			Path: file.path, Content: []byte{}, Sha256: rawSHA256(""), SizeBytes: 0,
+			ContentType: file.contentType, ProjectID: f.projectID, SkillID: skill.ID, SkillVersionID: version.ID,
+		}))
+		w, err := servePublicHTTP(t, ctx, ti, f.mcpSlug, makeMetaRPCBody(t, mcpversions.MethodResourcesRead, map[string]any{"uri": mcpskills.SkillFileURI(f.projectSlug, "pdf-tools", file.path)}), "", session)
+		require.NoError(t, err)
+		var contents []map[string]json.RawMessage
+		require.NoError(t, json.Unmarshal(requireRPCResult(t, w)["contents"], &contents))
+		require.Len(t, contents, 1)
+		require.JSONEq(t, `""`, string(contents[0][file.field]), "path=%s", file.path)
+		require.NotContains(t, contents[0], file.absent, "path=%s", file.path)
+	}
+
+	observations, err := testrepo.New(ti.conn).ListMCPSkillObservations(ctx, testrepo.ListMCPSkillObservationsParams{
+		ProjectID: f.projectID, Provider: mcpskills.ObservationProvider,
+	})
+	require.NoError(t, err)
+	require.Empty(t, observations, "reading a supporting file is not a skill activation")
+
+	w, err = servePublicHTTP(t, ctx, ti, f.mcpSlug, makeMetaRPCBody(t, mcpversions.MethodResourcesRead, map[string]any{"uri": mcpskills.SkillFileURI(f.projectSlug, "pdf-tools", "scripts/missing.py")}), "", session)
+	require.NoError(t, err)
+	requireRPCErrorCode(t, w, oops.MCPCodeInvalidParams)
 }
 
 func TestServePublic_Skills_ReadWritesSkillLoadToToolUsageLogs(t *testing.T) {

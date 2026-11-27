@@ -744,6 +744,7 @@ trackedFiles:
   src/funcs/skillsCreate.ts: {}
   src/funcs/skillsDismissSuggestion.ts: {}
   src/funcs/skillsDistribute.ts: {}
+  src/funcs/skillsDownloadShared.ts: {}
   src/funcs/skillsGet.ts: {}
   src/funcs/skillsGetShared.ts: {}
   src/funcs/skillsGetVersionFile.ts: {}
@@ -2622,6 +2623,7 @@ trackedFiles:
   src/models/operations/downloadcodexinstallscript.ts: {}
   src/models/operations/downloadobservabilityplugin.ts: {}
   src/models/operations/downloadpluginpackage.ts: {}
+  src/models/operations/downloadsharedskill.ts: {}
   src/models/operations/duplicatebuiltindashboard.ts: {}
   src/models/operations/duplicatedashboard.ts: {}
   src/models/operations/duplicateorganizationremotesessionclient.ts: {}
@@ -4400,6 +4402,8 @@ trackedFiles:
   src/react-query/skillVersions.ts: {}
   src/react-query/skills.core.ts: {}
   src/react-query/skills.ts: {}
+  src/react-query/skillsDownloadShared.core.ts: {}
+  src/react-query/skillsDownloadShared.ts: {}
   src/react-query/slackDirectoryConnections.core.ts: {}
   src/react-query/slackDirectoryConnections.ts: {}
   src/react-query/slackDirectoryMember.core.ts: {}
@@ -7322,6 +7326,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  downloadSharedSkill:
+    speakeasy-default-download-shared-skill:
+      parameters:
+        query:
+          token: "<value>"
+      responses:
+        "200":
+          application/zip: "x-file: example.file"
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   duplicateBuiltInDashboard:
     speakeasy-default-duplicate-built-in-dashboard:
       requestBody:
@@ -9089,7 +9105,7 @@ examples:
           token: "<value>"
       responses:
         "200":
-          application/json: {"content": "<value>", "display_name": "Dawn_Bednar71", "name": "<value>", "updated_at": "2024-12-29T06:19:07.288Z"}
+          application/json: {"content": "<value>", "display_name": "Dawn_Bednar71", "files": [], "name": "<value>", "updated_at": "2024-12-29T06:19:07.288Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":

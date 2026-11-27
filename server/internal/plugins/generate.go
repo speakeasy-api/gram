@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"maps"
 	"net/url"
 	"path"
@@ -20,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/plugins/naming"
 	domainskills "github.com/speakeasy-api/gram/server/internal/skills"
+	"github.com/speakeasy-api/gram/server/internal/skills/skilltree"
 )
 
 // speakeasyHomepageURL is the author and homepage URL written into generated
@@ -59,8 +61,24 @@ type PluginServerInfo struct {
 type PluginSkillInfo struct {
 	// Name is the skill's normalized spec name (lowercase alphanumerics and
 	// single hyphens); it becomes the skill's directory name in the package.
-	Name    string
+	Name string
+
+	// Content is the SKILL.md manifest.
 	Content string
+
+	// Files are the skill's supporting files (scripts/, references/, assets/
+	// and any other file of the skill directory), emitted next to SKILL.md.
+	Files []PluginSkillFile
+}
+
+// PluginSkillFile is one supporting file of a distributed skill.
+type PluginSkillFile struct {
+	// Path is the slash-separated path relative to the skill directory, for
+	// example scripts/extract.py.
+	Path string
+
+	// Content is the exact file bytes.
+	Content []byte
 }
 
 // PluginInfo contains the data needed to generate packages for a single plugin.
@@ -449,10 +467,13 @@ const (
 
 // platformMCPSkillsFS is the single source for reviewed skills distributed with
 // every Platform MCP package and served over MCP by the platform toolset. Add
-// skills as platform_mcp_skills/<canonical-name>/SKILL.md; PlatformMCPSkills
-// validates directory/frontmatter names before any package is generated.
+// skills as platform_mcp_skills/<canonical-name>/SKILL.md, with any
+// supporting files (scripts/, references/, assets/) beside it; files whose
+// names start with "." or "_" are not embedded. PlatformMCPSkills validates
+// directory/frontmatter names and supporting-file paths before any package
+// is generated.
 //
-//go:embed platform_mcp_skills/*/SKILL.md
+//go:embed platform_mcp_skills
 var platformMCPSkillsFS embed.FS
 
 // platformMCPClaudeIcon is the Speakeasy mark the Claude plugin directory uses
@@ -3528,29 +3549,37 @@ func platformMCPManifestVersion(cfg GenerateConfig) string {
 	return "0." + platformMCPGeneratorVersion + "." + conv.Default(cfg.Version, "0")
 }
 
+// PlatformMCPSkill is one reviewed skill embedded in the server: the skill
+// directory the Platform MCP packages ship and the platform toolset serves.
+type PlatformMCPSkill struct {
+	// Manifest is the exact SKILL.md bytes.
+	Manifest []byte
+
+	// Files are the skill's supporting files, validated and sorted by path.
+	Files []skilltree.Entry
+}
+
 // PlatformMCPSkills returns the reviewed skills embedded in the server, keyed
-// by skill name, each the exact SKILL.md bytes the Platform MCP packages ship
-// and the platform toolset serves. Every skill is validated against the
+// by skill name, each the exact skill directory the Platform MCP packages
+// ship and the platform toolset serves. Every skill is validated against the
 // Agent Skills specification with its directory name as the required name, so
-// a caller can rely on frontmatter.name matching the key.
-func PlatformMCPSkills() (map[string][]byte, error) {
-	entries, err := platformMCPSkillsFS.ReadDir("platform_mcp_skills")
+// a caller can rely on frontmatter.name matching the key, and its supporting
+// files pass the same path and size rules as an uploaded skill's.
+func PlatformMCPSkills() (map[string]PlatformMCPSkill, error) {
+	entries, err := platformMCPSkillsFS.ReadDir(platformMCPSkillsDir)
 	if err != nil {
 		return nil, fmt.Errorf("read embedded Platform MCP skills: %w", err)
 	}
-	skills := make(map[string][]byte, len(entries))
+	skills := make(map[string]PlatformMCPSkill, len(entries))
 	for _, entry := range entries {
 		if !entry.IsDir() || !domainskills.ValidSpecName(entry.Name()) {
 			return nil, fmt.Errorf("invalid Platform MCP skill directory %q", entry.Name())
 		}
-		content, err := platformMCPSkillsFS.ReadFile(path.Join("platform_mcp_skills", entry.Name(), "SKILL.md"))
+		skill, err := readPlatformMCPSkill(platformMCPSkillsFS, path.Join(platformMCPSkillsDir, entry.Name()), entry.Name())
 		if err != nil {
-			return nil, fmt.Errorf("read Platform MCP skill %q: %w", entry.Name(), err)
+			return nil, err
 		}
-		if err := domainskills.ValidateSkillManifest(string(content), entry.Name()); err != nil {
-			return nil, fmt.Errorf("validate Platform MCP skill %q: %w", entry.Name(), err)
-		}
-		skills[entry.Name()] = content
+		skills[entry.Name()] = skill
 	}
 	if len(skills) == 0 {
 		return nil, errors.New("platform MCP package must contain at least one reviewed skill")
@@ -3558,13 +3587,64 @@ func PlatformMCPSkills() (map[string][]byte, error) {
 	return skills, nil
 }
 
-func emitPlatformMCPSkills(files map[string][]byte) error {
+// platformMCPSkillsDir is the root of platformMCPSkillsFS.
+const platformMCPSkillsDir = "platform_mcp_skills"
+
+// readPlatformMCPSkill reads and validates the skill directory at root in
+// fsys: its SKILL.md, whose frontmatter name must be name, and every other
+// file beneath root as a supporting file.
+func readPlatformMCPSkill(fsys fs.FS, root, name string) (skill PlatformMCPSkill, err error) {
+	manifest, err := fs.ReadFile(fsys, path.Join(root, skilltree.ManifestPath))
+	if err != nil {
+		return skill, fmt.Errorf("read Platform MCP skill %q: %w", name, err)
+	}
+	if err := domainskills.ValidateSkillManifest(string(manifest), name); err != nil {
+		return skill, fmt.Errorf("validate Platform MCP skill %q: %w", name, err)
+	}
+
+	var files []skilltree.File
+	err = fs.WalkDir(fsys, root, func(filePath string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		relative := strings.TrimPrefix(filePath, root+"/")
+		if relative == skilltree.ManifestPath {
+			return nil
+		}
+		content, err := fs.ReadFile(fsys, filePath)
+		if err != nil {
+			return fmt.Errorf("read %q: %w", relative, err)
+		}
+		files = append(files, skilltree.File{Path: relative, Content: content, ContentType: ""})
+		return nil
+	})
+	if err != nil {
+		return skill, fmt.Errorf("read Platform MCP skill %q files: %w", name, err)
+	}
+	validated, err := skilltree.Validate(files)
+	if err != nil {
+		return skill, fmt.Errorf("validate Platform MCP skill %q files: %w", name, err)
+	}
+	return PlatformMCPSkill{Manifest: manifest, Files: validated}, nil
+}
+
+// emitPlatformMCPSkills writes every embedded skill directory as
+// <root>/skills/<name>/SKILL.md plus <root>/skills/<name>/<path> for each
+// supporting file.
+func emitPlatformMCPSkills(files map[string][]byte, root string) error {
 	skills, err := PlatformMCPSkills()
 	if err != nil {
 		return err
 	}
-	for name, content := range skills {
-		files[path.Join("skills", name, "SKILL.md")] = bytes.Clone(content)
+	for name, skill := range skills {
+		dir := path.Join(root, "skills", name)
+		files[path.Join(dir, skilltree.ManifestPath)] = bytes.Clone(skill.Manifest)
+		for _, file := range skill.Files {
+			files[path.Join(dir, file.Path)] = bytes.Clone(file.Content)
+		}
 	}
 	return nil
 }
@@ -3600,7 +3680,7 @@ func generatePlatformMCPPackage(cfg GenerateConfig, platformURL string) (map[str
 		return nil, fmt.Errorf("marshal Platform MCP .mcp.json: %w", err)
 	}
 	files[".mcp.json"] = mcpConfig
-	if err := emitPlatformMCPSkills(files); err != nil {
+	if err := emitPlatformMCPSkills(files, ""); err != nil {
 		return nil, err
 	}
 	return files, nil
@@ -3645,7 +3725,7 @@ func generatePlatformMCPCursorPackage(cfg GenerateConfig, platformURL string) (m
 		return nil, fmt.Errorf("marshal Platform MCP Cursor manifest: %w", err)
 	}
 	files[".cursor-plugin/plugin.json"] = manifestJSON
-	if err := emitPlatformMCPSkills(files); err != nil {
+	if err := emitPlatformMCPSkills(files, ""); err != nil {
 		return nil, err
 	}
 	return files, nil
@@ -3667,7 +3747,7 @@ func generatePlatformMCPCodexPackage(cfg GenerateConfig, platformURL string) (ma
 		return nil, fmt.Errorf("marshal Platform MCP Codex manifest: %w", err)
 	}
 	files[".codex-plugin/plugin.json"] = manifestJSON
-	if err := emitPlatformMCPSkills(files); err != nil {
+	if err := emitPlatformMCPSkills(files, ""); err != nil {
 		return nil, err
 	}
 	return files, nil
@@ -3679,12 +3759,8 @@ func generatePlatformMCPOpenCodePackage(cfg GenerateConfig, platformURL string) 
 	if err := generateOpenCodePluginInDir(files, "", plugin, cfg); err != nil {
 		return nil, fmt.Errorf("generate Platform MCP OpenCode package: %w", err)
 	}
-	skills, err := PlatformMCPSkills()
-	if err != nil {
+	if err := emitPlatformMCPSkills(files, platformMCPPluginName); err != nil {
 		return nil, err
-	}
-	for name, content := range skills {
-		files[path.Join(platformMCPPluginName, "skills", name, "SKILL.md")] = bytes.Clone(content)
 	}
 	return files, nil
 }
@@ -3731,7 +3807,7 @@ func generatePlatformMCPAgentPackage(cfg GenerateConfig, platformURL string) (ma
 		"plugin.json": manifestJSON,
 		"mcp.json":    mcpJSON,
 	}
-	if err := emitPlatformMCPSkills(files); err != nil {
+	if err := emitPlatformMCPSkills(files, ""); err != nil {
 		return nil, err
 	}
 	return files, nil
@@ -3847,18 +3923,27 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 	return nil
 }
 
-// emitPluginSkills writes the plugin's distributed skills as
-// skills/<name>/SKILL.md under the platform plugin directory — the layout
-// Claude Code, Cursor, and Codex all load plugin skills from. Names are
-// normalized at skill creation, but they become filesystem paths in a
-// published repo — refuse anything that isn't a plain lowercase slug rather
-// than trust the invariant across the DB boundary.
+// emitPluginSkills writes the plugin's distributed skills as whole skill
+// directories, skills/<name>/SKILL.md plus skills/<name>/<path> for every
+// supporting file, under the platform plugin directory — the layout Claude
+// Code, Cursor, and Codex all load plugin skills from. Names and paths are
+// validated when a skill version is written, but they become filesystem
+// paths in a published repo — refuse anything that isn't a plain lowercase
+// slug or a clean relative path rather than trust the invariant across the
+// DB boundary.
 func emitPluginSkills(files map[string][]byte, subdir string, p PluginInfo) {
 	for _, sk := range p.Skills {
 		if !domainskills.ValidSpecName(sk.Name) {
 			continue
 		}
-		files[path.Join(subdir, "skills", sk.Name, "SKILL.md")] = []byte(sk.Content)
+		root := path.Join(subdir, "skills", sk.Name)
+		files[path.Join(root, skilltree.ManifestPath)] = []byte(sk.Content)
+		for _, file := range sk.Files {
+			if skilltree.ValidatePath(file.Path) != nil {
+				continue
+			}
+			files[path.Join(root, file.Path)] = bytes.Clone(file.Content)
+		}
 	}
 }
 

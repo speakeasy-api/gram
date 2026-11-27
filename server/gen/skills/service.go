@@ -9,6 +9,7 @@ package skills
 
 import (
 	"context"
+	"io"
 
 	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
@@ -91,8 +92,17 @@ type Service interface {
 	Unshare(context.Context, *UnsharePayload) (err error)
 	// Fetch the publicly shared view of a skill by its share token. This endpoint
 	// is unauthenticated and only ever exposes the skill name, display name,
-	// summary, and latest content.
+	// summary, latest content, the path, digest, size and media type of each
+	// supporting file, and the path of the skill's ZIP download.
 	GetShared(context.Context, *GetSharedPayload) (res *SharedSkill, err error)
+	// Download a shared skill's whole directory as a ZIP (<name>/SKILL.md plus
+	// <name>/<path> for every supporting file) by its share token.
+	// Unauthenticated, like getShared.
+
+	// If body implements [io.WriterTo], that implementation will be used instead.
+	// Consider [goa.design/goa/v3/pkg.SkipResponseWriter] to adapt existing
+	// implementations.
+	DownloadShared(context.Context, *DownloadSharedPayload) (res *DownloadSharedResult, body io.ReadCloser, err error)
 	// List active plugin skill distributions for the current project.
 	ListDistributions(context.Context, *ListDistributionsPayload) (res *ListSkillDistributionsResult, err error)
 	// Link a skill to exactly one MCP surface that serves it over MCP. Repeating
@@ -128,7 +138,7 @@ const ServiceName = "skills"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [27]string{"create", "addVersion", "restoreVersion", "update", "list", "listTags", "listSuggestions", "listFeedback", "triggerSuggestion", "approveSuggestion", "dismissSuggestion", "listSuggestionFeedback", "approveAllSuggestions", "get", "listUnknownActivations", "listVersions", "getVersionFile", "archive", "distribute", "undistribute", "share", "unshare", "getShared", "listDistributions", "link", "unlink", "listLinks"}
+var MethodNames = [28]string{"create", "addVersion", "restoreVersion", "update", "list", "listTags", "listSuggestions", "listFeedback", "triggerSuggestion", "approveSuggestion", "dismissSuggestion", "listSuggestionFeedback", "approveAllSuggestions", "get", "listUnknownActivations", "listVersions", "getVersionFile", "archive", "distribute", "undistribute", "share", "unshare", "getShared", "downloadShared", "listDistributions", "link", "unlink", "listLinks"}
 
 // AddVersionPayload is the payload type of the skills service addVersion
 // method.
@@ -253,6 +263,23 @@ type DistributePayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
+}
+
+// DownloadSharedPayload is the payload type of the skills service
+// downloadShared method.
+type DownloadSharedPayload struct {
+	// The public share token.
+	Token string
+}
+
+// DownloadSharedResult is the result type of the skills service downloadShared
+// method.
+type DownloadSharedResult struct {
+	ContentType        string
+	ContentDisposition string
+	CacheControl       string
+	XRobotsTag         string
+	ReferrerPolicy     string
 }
 
 // GetPayload is the payload type of the skills service get method.
@@ -588,6 +615,12 @@ type SharedSkill struct {
 	XRobotsTag *string
 	// The Referrer-Policy response header.
 	ReferrerPolicy *string
+	// The supporting files shared with SKILL.md, sorted by path. Empty when the
+	// skill is SKILL.md alone.
+	Files []*types.SkillFile
+	// The server path of a ZIP of the whole skill directory, downloadable without
+	// authentication. Present only when the skill has supporting files.
+	ArchivePath *string
 }
 
 // Activation adoption metrics for a skill.

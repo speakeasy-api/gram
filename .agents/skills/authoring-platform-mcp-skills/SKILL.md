@@ -48,7 +48,9 @@ description: Inspect an explicit AICP project's Platform MCP state before propos
 8. Never ask for or expose API keys, passwords, tokens, OAuth codes, client secrets, secret headers, or MCP credentials. Present only server-returned non-secret setup/provider URLs.
 9. For bounded feedback, ask for consent and use `send_platform_mcp_feedback`; do not add the hooks-backed `speakeasy-skill-feedback` sidecar.
 
-Adding the directory is sufficient for distribution. Do not add another `go:embed` directive, skill-name constant, or renderer branch. The embedded registry loads every `platform_mcp_skills/*/SKILL.md` and emits the same bytes into Claude and portable Agent Plugin packages.
+Adding the directory is sufficient for distribution. Do not add another `go:embed` directive, skill-name constant, or renderer branch. The embedded registry loads every `platform_mcp_skills/<skill-name>/` directory and emits the same bytes into Claude and portable Agent Plugin packages.
+
+A skill may carry supporting files next to `SKILL.md` (`scripts/`, `references/`, `assets/`, or any other relative path), as the Agent Skills specification allows. They ship in every package at `skills/<skill-name>/<path>`, are served over MCP at `skill://speakeasy/<skill-name>/<path>`, and must pass the same path and size rules as an uploaded skill (`server/internal/skills/skilltree`). Files under `scripts/` are marked executable in packages. Files whose names start with `.` or `_` are not embedded.
 
 ## Review checklist
 

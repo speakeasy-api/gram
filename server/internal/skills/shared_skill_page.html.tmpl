@@ -150,6 +150,38 @@
         font-weight: 600;
         margin: 0 0 0.75rem;
       }
+      .files {
+        border-top: 1px solid var(--border);
+        margin-top: 2rem;
+        padding-top: 1.5rem;
+      }
+      .files h2 {
+        font-size: 1rem;
+        font-weight: 600;
+        margin: 0 0 0.75rem;
+      }
+      .files ul {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        font-size: 0.875rem;
+      }
+      .files li {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 0.25rem 0;
+      }
+      .files code {
+        font-family:
+          SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+          "Courier New", monospace;
+        overflow-wrap: anywhere;
+      }
+      .files .size {
+        color: var(--muted);
+        white-space: nowrap;
+      }
       footer {
         text-align: center;
         color: var(--muted);
@@ -178,7 +210,11 @@
         <p class="updated">Updated {{ .UpdatedAt }}</p>
         {{ end }}
         <p class="actions">
+          {{ if .Files }}
+          <a href="{{ .DownloadPath }}" download="{{ .DownloadName }}">Download skill (.zip)</a>
+          {{ else }}
           <a href="{{ .DownloadPath }}" download="SKILL.md">Download SKILL.md</a>
+          {{ end }}
         </p>
       </header>
       <article>
@@ -186,6 +222,16 @@
         <p class="empty">This manifest has no Markdown body.</p>
         {{ end }}
       </article>
+      {{ if .Files }}
+      <section class="files">
+        <h2>Supporting files</h2>
+        <ul>
+          {{ range .Files }}
+          <li><code>{{ .Path }}</code><span class="size">{{ .Size }}</span></li>
+          {{ end }}
+        </ul>
+      </section>
+      {{ end }}
       {{ end }}
     </main>
     <footer>Powered by Speakeasy</footer>

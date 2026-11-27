@@ -9,6 +9,7 @@ package skills
 
 import (
 	"context"
+	"io"
 
 	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
@@ -39,6 +40,7 @@ type Client struct {
 	ShareEndpoint                  goa.Endpoint
 	UnshareEndpoint                goa.Endpoint
 	GetSharedEndpoint              goa.Endpoint
+	DownloadSharedEndpoint         goa.Endpoint
 	ListDistributionsEndpoint      goa.Endpoint
 	LinkEndpoint                   goa.Endpoint
 	UnlinkEndpoint                 goa.Endpoint
@@ -46,7 +48,7 @@ type Client struct {
 }
 
 // NewClient initializes a "skills" service client given the endpoints.
-func NewClient(create, addVersion, restoreVersion, update, list, listTags, listSuggestions, listFeedback, triggerSuggestion, approveSuggestion, dismissSuggestion, listSuggestionFeedback, approveAllSuggestions, get, listUnknownActivations, listVersions, getVersionFile, archive, distribute, undistribute, share, unshare, getShared, listDistributions, link, unlink, listLinks goa.Endpoint) *Client {
+func NewClient(create, addVersion, restoreVersion, update, list, listTags, listSuggestions, listFeedback, triggerSuggestion, approveSuggestion, dismissSuggestion, listSuggestionFeedback, approveAllSuggestions, get, listUnknownActivations, listVersions, getVersionFile, archive, distribute, undistribute, share, unshare, getShared, downloadShared, listDistributions, link, unlink, listLinks goa.Endpoint) *Client {
 	return &Client{
 		CreateEndpoint:                 create,
 		AddVersionEndpoint:             addVersion,
@@ -71,6 +73,7 @@ func NewClient(create, addVersion, restoreVersion, update, list, listTags, listS
 		ShareEndpoint:                  share,
 		UnshareEndpoint:                unshare,
 		GetSharedEndpoint:              getShared,
+		DownloadSharedEndpoint:         downloadShared,
 		ListDistributionsEndpoint:      listDistributions,
 		LinkEndpoint:                   link,
 		UnlinkEndpoint:                 unlink,
@@ -572,6 +575,29 @@ func (c *Client) GetShared(ctx context.Context, p *GetSharedPayload) (res *Share
 		return
 	}
 	return ires.(*SharedSkill), nil
+}
+
+// DownloadShared calls the "downloadShared" endpoint of the "skills" service.
+// DownloadShared may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) DownloadShared(ctx context.Context, p *DownloadSharedPayload) (res *DownloadSharedResult, resp io.ReadCloser, err error) {
+	var ires any
+	ires, err = c.DownloadSharedEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	o := ires.(*DownloadSharedResponseData)
+	return o.Result, o.Body, nil
 }
 
 // ListDistributions calls the "listDistributions" endpoint of the "skills"

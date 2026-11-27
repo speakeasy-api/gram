@@ -134,6 +134,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	// dashboard host).
 	o11y.AttachHandler(mux, http.MethodGet, "/shared/skills/{token}", oops.ErrHandle(service.logger, service.ServeSharedSkillPage).ServeHTTP)
 	o11y.AttachHandler(mux, http.MethodGet, "/shared/skills/{token}/SKILL.md", oops.ErrHandle(service.logger, service.ServeSharedSkillMarkdown).ServeHTTP)
+	o11y.AttachHandler(mux, http.MethodGet, "/shared/skills/{token}/"+sharedSkillArchiveName, oops.ErrHandle(service.logger, service.ServeSharedSkillArchive).ServeHTTP)
 }
 
 func skillsRequestDecoder(r *http.Request) goahttp.Decoder {
@@ -2321,15 +2322,22 @@ func (s *Service) GetShared(ctx context.Context, payload *gen.GetSharedPayload) 
 		return nil, oops.E(oops.CodeUnexpected, err, "get shared skill").LogError(ctx, s.logger)
 	}
 
+	files, archivePath, err := s.sharedSkillFiles(ctx, row.ProjectID, row.SkillID, row.SkillVersionID, payload.Token)
+	if err != nil {
+		return nil, err
+	}
+
 	return &gen.SharedSkill{
 		Name:           row.Name,
 		DisplayName:    row.DisplayName,
 		Summary:        conv.FromPGText[string](row.Summary),
 		Content:        row.Content,
 		UpdatedAt:      conv.FromPGTimestamptz(row.VersionCreatedAt),
-		CacheControl:   conv.PtrEmpty("private, max-age=300"),
-		XRobotsTag:     conv.PtrEmpty("noindex, nofollow"),
-		ReferrerPolicy: conv.PtrEmpty("no-referrer"),
+		CacheControl:   conv.PtrEmpty(sharedSkillCacheControl),
+		XRobotsTag:     conv.PtrEmpty(sharedSkillXRobotsTag),
+		ReferrerPolicy: conv.PtrEmpty(sharedSkillReferrerPolicy),
+		Files:          files,
+		ArchivePath:    archivePath,
 	}, nil
 }
 

@@ -62,6 +62,7 @@ describe("SharedSkillPage", () => {
           summary: "A summary.",
           content: "---\nname: example\n---\n# Body",
           updatedAt: new Date("2026-07-16T00:00:00Z"),
+          files: [],
         },
       },
     };
@@ -69,5 +70,49 @@ describe("SharedSkillPage", () => {
     render(<SharedSkillPage />);
 
     expect(screen.getByText("Example Skill")).toBeDefined();
+    expect(
+      screen.getByRole("button", { name: "Download SKILL.md" }),
+    ).toBeDefined();
+    expect(screen.queryByText("Supporting files")).toBeNull();
+  });
+
+  it("lists supporting files and links the zip download when the skill has files", () => {
+    testState.query = {
+      isPending: false,
+      error: null,
+      data: {
+        result: {
+          name: "example",
+          displayName: "Example Skill",
+          content: "---\nname: example\n---\n# Body",
+          updatedAt: new Date("2026-07-16T00:00:00Z"),
+          files: [
+            {
+              path: "scripts/run.py",
+              sha256: "abc",
+              sizeBytes: 2048,
+              contentType: "text/x-python",
+            },
+          ],
+          archivePath: "/rpc/skills.downloadShared?token=tok_test",
+        },
+      },
+    };
+
+    render(<SharedSkillPage />);
+
+    expect(screen.getByText("Supporting files")).toBeDefined();
+    expect(screen.getByText("scripts/run.py")).toBeDefined();
+    expect(screen.getByText("2.0 KB")).toBeDefined();
+    const download = screen.getByRole("link", {
+      name: "Download skill (.zip)",
+    });
+    expect(download.getAttribute("href")).toMatch(
+      /\/rpc\/skills\.downloadShared\?token=tok_test$/,
+    );
+    expect(download.getAttribute("download")).toBe("example.zip");
+    expect(
+      screen.queryByRole("button", { name: "Download SKILL.md" }),
+    ).toBeNull();
   });
 });

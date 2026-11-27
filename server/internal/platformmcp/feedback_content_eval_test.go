@@ -63,7 +63,7 @@ func feedbackContentEvalArms(t *testing.T) []tooleval.ContentArm {
 	return []tooleval.ContentArm{
 		{Name: "guarded", Description: listMCPFeedbackDescription, Render: renderGuardedFeedback, Context: ""},
 		{Name: "bare", Description: listMCPFeedbackPurpose + " " + listMCPFeedbackAccess, Render: tooleval.RenderFlatFeedback, Context: ""},
-		{Name: "skill", Description: listMCPFeedbackDescription, Render: renderGuardedFeedback, Context: "The user has the Speakeasy AI Control Plane plugin installed. This skill from it is loaded:\n\n" + string(skill)},
+		{Name: "skill", Description: listMCPFeedbackDescription, Render: renderGuardedFeedback, Context: "The user has the Speakeasy AI Control Plane plugin installed. This skill from it is loaded:\n\n" + string(skill.Manifest)},
 	}
 }
 

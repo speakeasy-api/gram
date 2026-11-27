@@ -86,8 +86,8 @@ func firstEmbeddedSkill(t *testing.T) (string, []byte) {
 	sources, err := plugins.PlatformMCPSkills()
 	require.NoError(t, err)
 	require.NotEmpty(t, sources)
-	for name, content := range sources {
-		return name, content
+	for name, source := range sources {
+		return name, source.Manifest
 	}
 	return "", nil
 }

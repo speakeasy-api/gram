@@ -255,6 +255,26 @@ WHERE sd.assistant_id = @assistant_id
   AND sd.revoked_at IS NULL
   AND s.name = @name;
 
+-- name: ListAssistantSkillVersionFileMetadata :many
+-- The supporting files of an attached skill's resolved version, without their
+-- content, so the skills load tool can list them next to SKILL.md.
+SELECT path, sha256, size_bytes, content_type
+FROM skill_version_files
+WHERE project_id = @project_id
+  AND skill_id = @skill_id
+  AND skill_version_id = @skill_version_id
+ORDER BY path;
+
+-- name: GetAssistantSkillVersionFile :one
+-- One supporting file of an attached skill's resolved version, for the skills
+-- load tool's path argument.
+SELECT path, content, sha256, size_bytes, content_type
+FROM skill_version_files
+WHERE project_id = @project_id
+  AND skill_id = @skill_id
+  AND skill_version_id = @skill_version_id
+  AND path = @path;
+
 -- name: ResolveAssistantTurnSkills :many
 SELECT
   s.id AS skill_id,

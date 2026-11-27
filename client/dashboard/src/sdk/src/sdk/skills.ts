@@ -9,6 +9,7 @@ import { skillsArchive } from "../funcs/skillsArchive.js";
 import { skillsCreate } from "../funcs/skillsCreate.js";
 import { skillsDismissSuggestion } from "../funcs/skillsDismissSuggestion.js";
 import { skillsDistribute } from "../funcs/skillsDistribute.js";
+import { skillsDownloadShared } from "../funcs/skillsDownloadShared.js";
 import { skillsGet } from "../funcs/skillsGet.js";
 import { skillsGetShared } from "../funcs/skillsGetShared.js";
 import { skillsGetVersionFile } from "../funcs/skillsGetVersionFile.js";
@@ -70,6 +71,10 @@ import {
   DistributeSkillRequest,
   DistributeSkillSecurity,
 } from "../models/operations/distributeskill.js";
+import {
+  DownloadSharedSkillRequest,
+  DownloadSharedSkillResponse,
+} from "../models/operations/downloadsharedskill.js";
 import {
   GetSharedSkillRequest,
   GetSharedSkillResponse,
@@ -295,6 +300,23 @@ export class Skills extends ClientSDK {
   }
 
   /**
+   * downloadShared skills
+   *
+   * @remarks
+   * Download a shared skill's whole directory as a ZIP (<name>/SKILL.md plus <name>/<path> for every supporting file) by its share token. Unauthenticated, like getShared.
+   */
+  async downloadShared(
+    request: DownloadSharedSkillRequest,
+    options?: RequestOptions,
+  ): Promise<DownloadSharedSkillResponse> {
+    return unwrapAsync(skillsDownloadShared(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
    * get skills
    *
    * @remarks
@@ -317,7 +339,7 @@ export class Skills extends ClientSDK {
    * getShared skills
    *
    * @remarks
-   * Fetch the publicly shared view of a skill by its share token. This endpoint is unauthenticated and only ever exposes the skill name, display name, summary, and latest content.
+   * Fetch the publicly shared view of a skill by its share token. This endpoint is unauthenticated and only ever exposes the skill name, display name, summary, latest content, the path, digest, size and media type of each supporting file, and the path of the skill's ZIP download.
    */
   async getShared(
     request: GetSharedSkillRequest,

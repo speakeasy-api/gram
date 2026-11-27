@@ -56,7 +56,7 @@ export type SharedSkillQueryError =
  * getShared skills
  *
  * @remarks
- * Fetch the publicly shared view of a skill by its share token. This endpoint is unauthenticated and only ever exposes the skill name, display name, summary, and latest content.
+ * Fetch the publicly shared view of a skill by its share token. This endpoint is unauthenticated and only ever exposes the skill name, display name, summary, latest content, the path, digest, size and media type of each supporting file, and the path of the skill's ZIP download.
  */
 export function useSharedSkill(
   request: GetSharedSkillRequest,
@@ -77,7 +77,7 @@ export function useSharedSkill(
  * getShared skills
  *
  * @remarks
- * Fetch the publicly shared view of a skill by its share token. This endpoint is unauthenticated and only ever exposes the skill name, display name, summary, and latest content.
+ * Fetch the publicly shared view of a skill by its share token. This endpoint is unauthenticated and only ever exposes the skill name, display name, summary, latest content, the path, digest, size and media type of each supporting file, and the path of the skill's ZIP download.
  */
 export function useSharedSkillSuspense(
   request: GetSharedSkillRequest,

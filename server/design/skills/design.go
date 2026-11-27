@@ -698,7 +698,7 @@ var _ = Service("skills", func() {
 	})
 
 	Method("getShared", func() {
-		Description("Fetch the publicly shared view of a skill by its share token. This endpoint is unauthenticated and only ever exposes the skill name, display name, summary, and latest content.")
+		Description("Fetch the publicly shared view of a skill by its share token. This endpoint is unauthenticated and only ever exposes the skill name, display name, summary, latest content, the path, digest, size and media type of each supporting file, and the path of the skill's ZIP download.")
 
 		Payload(func() {
 			Attribute("token", String, "The public share token.", func() {
@@ -728,6 +728,48 @@ var _ = Service("skills", func() {
 		Meta("openapi:operationId", "getSharedSkill")
 		Meta("openapi:extension:x-speakeasy-name-override", "getShared")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SharedSkill"}`)
+	})
+
+	Method("downloadShared", func() {
+		Description("Download a shared skill's whole directory as a ZIP (<name>/SKILL.md plus <name>/<path> for every supporting file) by its share token. Unauthenticated, like getShared.")
+
+		Payload(func() {
+			Attribute("token", String, "The public share token.", func() {
+				MinLength(32)
+				MaxLength(128)
+			})
+			Required("token")
+		})
+
+		Result(func() {
+			Attribute("content_type", String)
+			Attribute("content_disposition", String)
+			Attribute("cache_control", String)
+			Attribute("x_robots_tag", String)
+			Attribute("referrer_policy", String)
+			Required("content_type", "content_disposition", "cache_control", "x_robots_tag", "referrer_policy")
+		})
+
+		// Share tokens are unguessable capability URLs, so this endpoint is
+		// public by design, like getShared.
+		NoSecurity()
+
+		HTTP(func() {
+			GET("/rpc/skills.downloadShared")
+			Param("token")
+			Response(StatusOK, func() {
+				ContentType("application/zip")
+				Header("content_type:Content-Type")
+				Header("content_disposition:Content-Disposition")
+				Header("cache_control:Cache-Control")
+				Header("x_robots_tag:X-Robots-Tag")
+				Header("referrer_policy:Referrer-Policy")
+			})
+			SkipResponseBodyEncodeDecode()
+		})
+
+		Meta("openapi:operationId", "downloadSharedSkill")
+		Meta("openapi:extension:x-speakeasy-name-override", "downloadShared")
 	})
 
 	Method("listDistributions", func() {
@@ -1049,7 +1091,9 @@ var SharedSkill = Type("SharedSkill", func() {
 	Attribute("cache_control", String, "The Cache-Control response header.")
 	Attribute("x_robots_tag", String, "The X-Robots-Tag response header.")
 	Attribute("referrer_policy", String, "The Referrer-Policy response header.")
-	Required("name", "display_name", "content", "updated_at")
+	Attribute("files", ArrayOf(SkillFile), "The supporting files shared with SKILL.md, sorted by path. Empty when the skill is SKILL.md alone.")
+	Attribute("archive_path", String, "The server path of a ZIP of the whole skill directory, downloadable without authentication. Present only when the skill has supporting files.")
+	Required("name", "display_name", "content", "updated_at", "files")
 })
 
 var SkillValidationError = Type("SkillValidationError", func() {

@@ -3,7 +3,9 @@ import { Button } from "@/components/ui/Button";
 import { Text } from "@/components/ui/Text";
 import { Markdown } from "@/elements/components/Markdown";
 import { dateTimeFormatters } from "@/lib/dates";
+import { getServerURL } from "@/lib/utils";
 import type { SharedSkill2 } from "@gram/client/models/components/sharedskill2.js";
+import type { SkillFile } from "@gram/client/models/components/skillfile.js";
 import { useSharedSkill } from "@gram/client/react-query/sharedSkill.js";
 import { Icon } from "@/components/ui/Icon";
 import { SplashScreen } from "@/components/ui/LogoLoader";
@@ -97,13 +99,24 @@ function SharedSkillDocument({ skill }: { skill: SharedSkill2 }): JSX.Element {
           >
             Copy markdown
           </Button>
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={() => downloadSkillMarkdown(skill.content)}
-          >
-            Download SKILL.md
-          </Button>
+          {skill.archivePath ? (
+            <Button size="sm" variant="secondary" asChild>
+              <a
+                href={`${getServerURL()}${skill.archivePath}`}
+                download={`${skill.name}.zip`}
+              >
+                Download skill (.zip)
+              </a>
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => downloadSkillMarkdown(skill.content)}
+            >
+              Download SKILL.md
+            </Button>
+          )}
         </div>
       </header>
       <div className="border-t pt-8">
@@ -115,8 +128,42 @@ function SharedSkillDocument({ skill }: { skill: SharedSkill2 }): JSX.Element {
           <Markdown>{body}</Markdown>
         )}
       </div>
+      {skill.files.length > 0 && <SharedSkillFiles files={skill.files} />}
     </article>
   );
+}
+
+function SharedSkillFiles({ files }: { files: SkillFile[] }): JSX.Element {
+  return (
+    <section className="space-y-3 border-t pt-8">
+      <h2 className="text-eyebrow">Supporting files</h2>
+      <ul className="divide-y">
+        {files.map((file) => (
+          <li
+            key={file.path}
+            className="flex items-baseline justify-between gap-4 py-2"
+          >
+            <code className="min-w-0 font-mono text-sm break-all">
+              {file.path}
+            </code>
+            <Text small muted className="shrink-0">
+              {formatFileSize(file.sizeBytes)}
+            </Text>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function SharedSkillUnavailable(): JSX.Element {

@@ -122,6 +122,11 @@ func GetSharedSkillsPath() string {
 	return "/rpc/skills.getShared"
 }
 
+// DownloadSharedSkillsPath returns the URL path to the skills service downloadShared HTTP endpoint.
+func DownloadSharedSkillsPath() string {
+	return "/rpc/skills.downloadShared"
+}
+
 // ListDistributionsSkillsPath returns the URL path to the skills service listDistributions HTTP endpoint.
 func ListDistributionsSkillsPath() string {
 	return "/rpc/skills.listDistributions"

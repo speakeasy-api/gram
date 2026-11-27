@@ -1658,6 +1658,50 @@ func (q *Queries) GetAssistantSkillFeedbackObservation(ctx context.Context, arg 
 	return i, err
 }
 
+const getAssistantSkillVersionFile = `-- name: GetAssistantSkillVersionFile :one
+SELECT path, content, sha256, size_bytes, content_type
+FROM skill_version_files
+WHERE project_id = $1
+  AND skill_id = $2
+  AND skill_version_id = $3
+  AND path = $4
+`
+
+type GetAssistantSkillVersionFileParams struct {
+	ProjectID      uuid.UUID
+	SkillID        uuid.UUID
+	SkillVersionID uuid.UUID
+	Path           string
+}
+
+type GetAssistantSkillVersionFileRow struct {
+	Path        string
+	Content     []byte
+	Sha256      string
+	SizeBytes   int64
+	ContentType string
+}
+
+// One supporting file of an attached skill's resolved version, for the skills
+// load tool's path argument.
+func (q *Queries) GetAssistantSkillVersionFile(ctx context.Context, arg GetAssistantSkillVersionFileParams) (GetAssistantSkillVersionFileRow, error) {
+	row := q.db.QueryRow(ctx, getAssistantSkillVersionFile,
+		arg.ProjectID,
+		arg.SkillID,
+		arg.SkillVersionID,
+		arg.Path,
+	)
+	var i GetAssistantSkillVersionFileRow
+	err := row.Scan(
+		&i.Path,
+		&i.Content,
+		&i.Sha256,
+		&i.SizeBytes,
+		&i.ContentType,
+	)
+	return i, err
+}
+
 const getAssistantThreadIDByCorrelation = `-- name: GetAssistantThreadIDByCorrelation :one
 SELECT id
 FROM assistant_threads
@@ -2446,6 +2490,55 @@ func (q *Queries) ListAssistantRuntimesForSwitch(ctx context.Context, arg ListAs
 			&i.DeletedAt,
 			&i.Deleted,
 			&i.Ended,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAssistantSkillVersionFileMetadata = `-- name: ListAssistantSkillVersionFileMetadata :many
+SELECT path, sha256, size_bytes, content_type
+FROM skill_version_files
+WHERE project_id = $1
+  AND skill_id = $2
+  AND skill_version_id = $3
+ORDER BY path
+`
+
+type ListAssistantSkillVersionFileMetadataParams struct {
+	ProjectID      uuid.UUID
+	SkillID        uuid.UUID
+	SkillVersionID uuid.UUID
+}
+
+type ListAssistantSkillVersionFileMetadataRow struct {
+	Path        string
+	Sha256      string
+	SizeBytes   int64
+	ContentType string
+}
+
+// The supporting files of an attached skill's resolved version, without their
+// content, so the skills load tool can list them next to SKILL.md.
+func (q *Queries) ListAssistantSkillVersionFileMetadata(ctx context.Context, arg ListAssistantSkillVersionFileMetadataParams) ([]ListAssistantSkillVersionFileMetadataRow, error) {
+	rows, err := q.db.Query(ctx, listAssistantSkillVersionFileMetadata, arg.ProjectID, arg.SkillID, arg.SkillVersionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAssistantSkillVersionFileMetadataRow
+	for rows.Next() {
+		var i ListAssistantSkillVersionFileMetadataRow
+		if err := rows.Scan(
+			&i.Path,
+			&i.Sha256,
+			&i.SizeBytes,
+			&i.ContentType,
 		); err != nil {
 			return nil, err
 		}

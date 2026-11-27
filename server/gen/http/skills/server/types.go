@@ -486,6 +486,12 @@ type GetSharedResponseBody struct {
 	Content string `form:"content" json:"content" xml:"content"`
 	// When the shared content was last updated.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// The supporting files shared with SKILL.md, sorted by path. Empty when the
+	// skill is SKILL.md alone.
+	Files []*SkillFileResponseBody `form:"files" json:"files" xml:"files"`
+	// The server path of a ZIP of the whole skill directory, downloadable without
+	// authentication. Present only when the skill has supporting files.
+	ArchivePath *string `form:"archive_path,omitempty" json:"archive_path,omitempty" xml:"archive_path,omitempty"`
 }
 
 // ListDistributionsResponseBody is the type of the "skills" service
@@ -4721,6 +4727,188 @@ type GetSharedGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// DownloadSharedUnauthorizedResponseBody is the type of the "skills" service
+// "downloadShared" endpoint HTTP response body for the "unauthorized" error.
+type DownloadSharedUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DownloadSharedForbiddenResponseBody is the type of the "skills" service
+// "downloadShared" endpoint HTTP response body for the "forbidden" error.
+type DownloadSharedForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DownloadSharedBadRequestResponseBody is the type of the "skills" service
+// "downloadShared" endpoint HTTP response body for the "bad_request" error.
+type DownloadSharedBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DownloadSharedNotFoundResponseBody is the type of the "skills" service
+// "downloadShared" endpoint HTTP response body for the "not_found" error.
+type DownloadSharedNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DownloadSharedConflictResponseBody is the type of the "skills" service
+// "downloadShared" endpoint HTTP response body for the "conflict" error.
+type DownloadSharedConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DownloadSharedUnsupportedMediaResponseBody is the type of the "skills"
+// service "downloadShared" endpoint HTTP response body for the
+// "unsupported_media" error.
+type DownloadSharedUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DownloadSharedInvalidResponseBody is the type of the "skills" service
+// "downloadShared" endpoint HTTP response body for the "invalid" error.
+type DownloadSharedInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DownloadSharedInvariantViolationResponseBody is the type of the "skills"
+// service "downloadShared" endpoint HTTP response body for the
+// "invariant_violation" error.
+type DownloadSharedInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DownloadSharedUnexpectedResponseBody is the type of the "skills" service
+// "downloadShared" endpoint HTTP response body for the "unexpected" error.
+type DownloadSharedUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DownloadSharedGatewayErrorResponseBody is the type of the "skills" service
+// "downloadShared" endpoint HTTP response body for the "gateway_error" error.
+type DownloadSharedGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // ListDistributionsUnauthorizedResponseBody is the type of the "skills"
 // service "listDistributions" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -6243,6 +6431,19 @@ func NewGetSharedResponseBody(res *skills.SharedSkill) *GetSharedResponseBody {
 		Summary:     res.Summary,
 		Content:     res.Content,
 		UpdatedAt:   res.UpdatedAt,
+		ArchivePath: res.ArchivePath,
+	}
+	if res.Files != nil {
+		body.Files = make([]*SkillFileResponseBody, len(res.Files))
+		for i, val := range res.Files {
+			if val == nil {
+				body.Files[i] = nil
+				continue
+			}
+			body.Files[i] = marshalTypesSkillFileToSkillFileResponseBody(val)
+		}
+	} else {
+		body.Files = []*SkillFileResponseBody{}
 	}
 	return body
 }
@@ -9566,6 +9767,147 @@ func NewGetSharedGatewayErrorResponseBody(res *goa.ServiceError) *GetSharedGatew
 	return body
 }
 
+// NewDownloadSharedUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "downloadShared" endpoint of the "skills" service.
+func NewDownloadSharedUnauthorizedResponseBody(res *goa.ServiceError) *DownloadSharedUnauthorizedResponseBody {
+	body := &DownloadSharedUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDownloadSharedForbiddenResponseBody builds the HTTP response body from
+// the result of the "downloadShared" endpoint of the "skills" service.
+func NewDownloadSharedForbiddenResponseBody(res *goa.ServiceError) *DownloadSharedForbiddenResponseBody {
+	body := &DownloadSharedForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDownloadSharedBadRequestResponseBody builds the HTTP response body from
+// the result of the "downloadShared" endpoint of the "skills" service.
+func NewDownloadSharedBadRequestResponseBody(res *goa.ServiceError) *DownloadSharedBadRequestResponseBody {
+	body := &DownloadSharedBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDownloadSharedNotFoundResponseBody builds the HTTP response body from the
+// result of the "downloadShared" endpoint of the "skills" service.
+func NewDownloadSharedNotFoundResponseBody(res *goa.ServiceError) *DownloadSharedNotFoundResponseBody {
+	body := &DownloadSharedNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDownloadSharedConflictResponseBody builds the HTTP response body from the
+// result of the "downloadShared" endpoint of the "skills" service.
+func NewDownloadSharedConflictResponseBody(res *goa.ServiceError) *DownloadSharedConflictResponseBody {
+	body := &DownloadSharedConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDownloadSharedUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "downloadShared" endpoint of the "skills" service.
+func NewDownloadSharedUnsupportedMediaResponseBody(res *goa.ServiceError) *DownloadSharedUnsupportedMediaResponseBody {
+	body := &DownloadSharedUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDownloadSharedInvalidResponseBody builds the HTTP response body from the
+// result of the "downloadShared" endpoint of the "skills" service.
+func NewDownloadSharedInvalidResponseBody(res *goa.ServiceError) *DownloadSharedInvalidResponseBody {
+	body := &DownloadSharedInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDownloadSharedInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "downloadShared" endpoint of the "skills"
+// service.
+func NewDownloadSharedInvariantViolationResponseBody(res *goa.ServiceError) *DownloadSharedInvariantViolationResponseBody {
+	body := &DownloadSharedInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDownloadSharedUnexpectedResponseBody builds the HTTP response body from
+// the result of the "downloadShared" endpoint of the "skills" service.
+func NewDownloadSharedUnexpectedResponseBody(res *goa.ServiceError) *DownloadSharedUnexpectedResponseBody {
+	body := &DownloadSharedUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDownloadSharedGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "downloadShared" endpoint of the "skills" service.
+func NewDownloadSharedGatewayErrorResponseBody(res *goa.ServiceError) *DownloadSharedGatewayErrorResponseBody {
+	body := &DownloadSharedGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListDistributionsUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "listDistributions" endpoint of the "skills" service.
 func NewListDistributionsUnauthorizedResponseBody(res *goa.ServiceError) *ListDistributionsUnauthorizedResponseBody {
@@ -10469,6 +10811,15 @@ func NewUnsharePayload(body *UnshareRequestBody, sessionToken *string, apikeyTok
 // NewGetSharedPayload builds a skills service getShared endpoint payload.
 func NewGetSharedPayload(token string) *skills.GetSharedPayload {
 	v := &skills.GetSharedPayload{}
+	v.Token = token
+
+	return v
+}
+
+// NewDownloadSharedPayload builds a skills service downloadShared endpoint
+// payload.
+func NewDownloadSharedPayload(token string) *skills.DownloadSharedPayload {
+	v := &skills.DownloadSharedPayload{}
 	v.Token = token
 
 	return v
