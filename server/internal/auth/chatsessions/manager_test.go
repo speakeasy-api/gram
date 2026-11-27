@@ -150,7 +150,7 @@ func TestManagerAuthorize_LegacyAPIKeyTokenKeepsExplicitProfile(t *testing.T) {
 	require.Equal(t, "user:"+claims.UserID, actor.String())
 }
 
-func TestManagerValidateToken_RejectsForeignIssuerAndMissingJTI(t *testing.T) {
+func TestManagerValidateToken_RejectsInvalidClaims(t *testing.T) {
 	t.Parallel()
 
 	mgr, _ := newTestManager(t)
@@ -162,7 +162,7 @@ func TestManagerValidateToken_RejectsForeignIssuerAndMissingJTI(t *testing.T) {
 		{
 			name: "non-empty issuer",
 			claims: jwt.MapClaims{
-				"iss":        "gram-assistants",
+				"iss":        "https://other-issuer.example",
 				"jti":        uuid.NewString(),
 				"org_id":     "org-123",
 				"project_id": uuid.NewString(),

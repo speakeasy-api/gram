@@ -259,19 +259,3 @@ func TestAgentBackedTurnsRunWithPrincipalCredentials(t *testing.T) {
 		require.Equal(t, oops.CodeUnauthorized, denied.Code)
 	}
 }
-
-func TestUnconfiguredAssistantTurnFailsWithoutDispatch(t *testing.T) {
-	t.Parallel()
-	db, err := assistantsInfra.CloneTestDatabase(t, "execution_unconfigured_assistant")
-	require.NoError(t, err)
-	project, id, _, _ := insertAssistantFixture(t, db)
-	thread := seedThreadWithEvent(t, db, id, "unconfigured-turn", "unconfigured-turn", eventStatusPending)
-	core := newProvisioningCore(t, db)
-	assistant, err := core.getAssistantForDispatch(t.Context(), id)
-	require.NoError(t, err)
-	var dispatched atomic.Pointer[string]
-	core.runtime = testRuntimeBackend{backend: runtimeBackendGKE, runTurnToken: &dispatched}
-	_, err = core.processEventTurn(t.Context(), assistantThreadRecord{ID: thread, ProjectID: project, AssistantID: id, SourceKind: sourceKindCron}, assistant, assistantRuntimeRecord{}, assistantThreadEventRecord{ID: uuid.New(), EventID: "unconfigured-turn", NormalizedPayloadJSON: []byte(`{}`)})
-	require.ErrorIs(t, err, ErrTurnIdentity)
-	require.Nil(t, dispatched.Load(), "a turn without an agent identity must fail before dispatching to the runtime")
-}

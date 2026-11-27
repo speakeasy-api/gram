@@ -3,6 +3,7 @@ package assistants
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 
 	"github.com/google/uuid"
@@ -79,39 +80,14 @@ func seedProjectRead(t *testing.T, db *pgxpool.Pool, user string, project uuid.U
 	require.NoError(t, err)
 }
 
-func TestResolveTurnIdentityRejectsUnconfiguredAssistant(t *testing.T) {
-	t.Parallel()
-	db, err := assistantsInfra.CloneTestDatabase(t, "turn_identity_unconfigured")
-	require.NoError(t, err)
-	project, assistantID, _, _ := insertAssistantFixture(t, db)
-	core := newProvisioningCore(t, db)
-	assistant := assistantRecord{ID: assistantID, ProjectID: project, OrganizationID: "org-test", CreatedByUserID: "user-1"}
-
-	for _, tc := range []struct {
-		name    string
-		source  string
-		payload string
-	}{
-		{name: "cron", source: sourceKindCron, payload: `{}`},
-		{name: "wake", source: sourceKindWake, payload: `{"identity_version":1,"requester_user_id":"user-1"}`},
-		{name: "speakeasy slack", source: sourceKindSpeakeasySlack, payload: `{"team_id":"T1","user_id":"U1"}`},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			_, err := core.resolveTurnIdentity(t.Context(), assistant, assistantThreadRecord{SourceKind: tc.source}, assistantThreadEventRecord{NormalizedPayloadJSON: []byte(tc.payload)})
-			require.ErrorIs(t, err, ErrTurnIdentity)
-			require.ErrorContains(t, err, "not configured")
-		})
-	}
-}
-
 func TestProcessThreadEventsFailsUnconfiguredAssistantTerminally(t *testing.T) {
 	t.Parallel()
 	conn, err := assistantsInfra.CloneTestDatabase(t, "turn_identity_unconfigured_terminal")
 	require.NoError(t, err)
 	projectID, assistantID, _, threadID := insertAssistantFixture(t, conn)
 	logger := testenv.NewLogger(t)
-	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendGKE}, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
+	var dispatched atomic.Pointer[string]
+	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendGKE, runTurnToken: &dispatched}, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
 
 	_, err = core.AdmitPendingThreads(t.Context(), assistantID)
 	require.NoError(t, err)
@@ -119,6 +95,7 @@ func TestProcessThreadEventsFailsUnconfiguredAssistantTerminally(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, result.RetryAdmission)
 	require.False(t, result.ProcessedAnyEvent)
+	require.Nil(t, dispatched.Load(), "a turn without an agent identity must fail before dispatching to the runtime")
 
 	event, err := assistantsrepo.New(conn).GetLatestAssistantThreadEventByThreadID(t.Context(), assistantsrepo.GetLatestAssistantThreadEventByThreadIDParams{AssistantThreadID: threadID, ProjectID: projectID})
 	require.NoError(t, err)

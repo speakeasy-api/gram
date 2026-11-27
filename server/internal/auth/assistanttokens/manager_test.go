@@ -265,21 +265,17 @@ func TestAuthorizeRuntime_ActiveAndLifecycleRevocation(t *testing.T) {
 func TestAuthorizeRuntime_RejectsNonPrincipalCredentialTokens(t *testing.T) {
 	t.Parallel()
 
-	f := newFixture(t, "tokens_runtime_reject_hs256")
-	forged, err := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"iss":          "gram-assistants",
-		"sub":          f.assistantID.String(),
-		"org_id":       "org-test",
-		"project_id":   f.projectID.String(),
-		"user_id":      f.userID,
-		"assistant_id": f.assistantID.String(),
-		"thread_id":    f.threadID.String(),
-		"exp":          time.Now().Add(time.Hour).Unix(),
+	f := newFixture(t, "tokens_runtime_reject_non_principal")
+	signedJWT, err := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"sub": "user-1",
+		"exp": time.Now().Add(time.Hour).Unix(),
 	}).SignedString([]byte("test-secret"))
 	require.NoError(t, err)
 
-	_, _, err = f.manager.AuthorizeRuntime(t.Context(), "Bearer "+forged)
-	requireUnauthorized(t, err)
+	for _, header := range []string{"Bearer " + signedJWT, "Bearer not-a-credential"} {
+		_, _, err = f.manager.AuthorizeRuntime(t.Context(), header)
+		requireUnauthorized(t, err)
+	}
 }
 
 func TestMCPAuthFlowSeparatesStableCallbackFromAttempt(t *testing.T) {

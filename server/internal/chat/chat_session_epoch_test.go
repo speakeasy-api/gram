@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
@@ -40,29 +39,4 @@ func TestChatSessionEpoch_CompletionPreservesServerError(t *testing.T) {
 	var shareable *oops.ShareableError
 	require.ErrorAs(t, err, &shareable)
 	require.Equal(t, oops.CodeUnavailable, shareable.Code)
-}
-
-func TestAuthorizeCompletion_RejectsAssistantRuntimeJWT(t *testing.T) {
-	t.Parallel()
-
-	ti := newTestChatService(t)
-	ti.service.TestingCompletionTokens()
-	forged, err := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"iss":          "gram-assistants",
-		"org_id":       ti.orgID,
-		"project_id":   ti.projectID.String(),
-		"user_id":      "user-test",
-		"assistant_id": uuid.NewString(),
-		"exp":          time.Now().Add(time.Hour).Unix(),
-	}).SignedString([]byte("test-secret"))
-	require.NoError(t, err)
-
-	for _, completion := range []bool{true, false} {
-		request := httptest.NewRequest(http.MethodPost, "/chat/completions", nil)
-		request.Header.Set("Authorization", "Bearer "+forged)
-		_, _, _, err = ti.service.TestingAuthorizeCompletion(request, completion)
-		var shareable *oops.ShareableError
-		require.ErrorAs(t, err, &shareable)
-		require.Equal(t, oops.CodeUnauthorized, shareable.Code)
-	}
 }

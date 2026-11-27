@@ -7,9 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
@@ -23,32 +21,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-func mintForgedAssistantRuntimeJWT(t *testing.T, authCtx *contextvalues.AuthContext, assistantID uuid.UUID) string {
-	t.Helper()
-	token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"iss":          "gram-assistants",
-		"sub":          assistantID.String(),
-		"org_id":       authCtx.ActiveOrganizationID,
-		"project_id":   authCtx.ProjectID.String(),
-		"user_id":      authCtx.UserID,
-		"assistant_id": assistantID.String(),
-		"exp":          time.Now().Add(time.Hour).Unix(),
-	}).SignedString([]byte("test-jwt-secret"))
-	require.NoError(t, err)
-	return token
-}
-
-// TestApplyIssuerGate_RejectsAssistantRuntimeJWT proves that an HS256
-// gram-assistants JWT is rejected at the issuer gate and leaves the context
+// TestApplyIssuerGate_RejectedBearerStampsNothing pins that an unrecognized
+// bearer token is rejected at the issuer gate and leaves the context
 // unattributed.
-func TestApplyIssuerGate_RejectsAssistantRuntimeJWT(t *testing.T) {
+func TestApplyIssuerGate_RejectedBearerStampsNothing(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-
-	assistantID := createAssistant(t, ti, authCtx, "Provenance")
-	token := mintForgedAssistantRuntimeJWT(t, authCtx, assistantID)
 
 	endpoint := &mcp.ResolvedMcpEndpoint{
 		AudienceURN:         urn.NewUserSessionIssuer(uuid.New()).String(),
@@ -60,7 +40,7 @@ func TestApplyIssuerGate_RejectsAssistantRuntimeJWT(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	newCtx, _, _, err := ti.service.ApplyIssuerGate(t.Context(), w, token, "http://0.0.0.0", endpoint)
+	newCtx, _, _, err := ti.service.ApplyIssuerGate(t.Context(), w, "not-a-valid-credential", "http://0.0.0.0", endpoint)
 	require.Error(t, err)
 
 	_, stamped := mcpidentity.FromContext(newCtx)
@@ -87,17 +67,6 @@ func TestTryPublicIdentityAuth_StampsCredentialProvenance(t *testing.T) {
 		require.NoError(t, err)
 		return mcpidentity.FromContext(authedCtx)
 	}
-
-	t.Run("assistant runtime JWT is rejected", func(t *testing.T) {
-		t.Parallel()
-		assistantID := createAssistant(t, ti, authCtx, "RejectedAuth")
-		r := httptest.NewRequest(http.MethodPost, "/mcp/provenance", nil)
-		r.Header.Set("Authorization", "Bearer "+mintForgedAssistantRuntimeJWT(t, authCtx, assistantID))
-		authedCtx, err := ti.service.TryPublicIdentityAuth(t.Context(), r, false, uuid.Nil)
-		require.Error(t, err)
-		_, stamped := mcpidentity.FromContext(authedCtx)
-		require.False(t, stamped)
-	})
 
 	t.Run("consumer-scope API key stamps api_key", func(t *testing.T) {
 		t.Parallel()

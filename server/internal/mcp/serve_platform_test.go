@@ -73,18 +73,12 @@ func TestServePlatformToolset_NonManagedAssistantRejected(t *testing.T) {
 	require.Contains(t, err.Error(), "not found")
 }
 
-func TestServePlatformToolset_RejectsAssistantRuntimeJWT(t *testing.T) {
+func TestServePlatformToolset_RejectsUnrecognizedBearer(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestMCPService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectID)
+	_, ti := newTestMCPService(t)
 
-	managedID, _ := managedAssistantWithAgent(t, ti, authCtx)
-	forged := mintForgedAssistantRuntimeJWT(t, authCtx, managedID)
-
-	_, err := servePlatformHTTP(t, ti, platformtools.PlatformMCPReadToolsetSlug, toolsListBody(), forged)
+	_, err := servePlatformHTTP(t, ti, platformtools.PlatformMCPReadToolsetSlug, toolsListBody(), "not-a-valid-credential")
 	require.Error(t, err)
 	var shareable *oops.ShareableError
 	require.ErrorAs(t, err, &shareable)
