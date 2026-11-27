@@ -113,8 +113,19 @@ func (r *MirrorReader) Unpublish(ctx context.Context, tunnelID, addr string) err
 	mirrorErr := r.mirror.Unpublish(ctx, tunnelID, addr)
 	bulkCtx, cancel := context.WithTimeout(ctx, bulkCleanupTimeout)
 	defer cancel()
-	return errors.Join(mirrorErr, r.bulk.Unpublish(bulkCtx, tunnelID, addr))
+	bulkErr := r.bulk.Unpublish(bulkCtx, tunnelID, addr)
+	if bulkErr != nil && ctx.Err() == nil && bulkCtx.Err() != nil {
+		// Our own bound expired, not the caller's: report a store failure
+		// rather than a context error, which callers read as their own
+		// cancellation.
+		bulkErr = ErrBulkCleanupTimeout
+	}
+	return errors.Join(mirrorErr, bulkErr)
 }
+
+// ErrBulkCleanupTimeout reports that removing a route from the bulk store did
+// not finish within bulkCleanupTimeout while the caller was still waiting.
+var ErrBulkCleanupTimeout = errors.New("bulk route cleanup timed out")
 
 // Publish writes both stores. Readers do not publish; the method exists so the
 // reader satisfies Store.
