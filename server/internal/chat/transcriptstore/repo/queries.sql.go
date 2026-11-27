@@ -387,6 +387,122 @@ func (q *Queries) Progress(ctx context.Context, arg ProgressParams) (ProgressRow
 	return i, err
 }
 
+const schemaCompatible = `-- name: SchemaCompatible :one
+WITH sidecar AS (
+ SELECT oid FROM pg_catalog.pg_class
+ WHERE oid = pg_catalog.to_regclass('chat_message_transcripts')
+ AND relkind IN ('r', 'p')
+), messages AS (
+ SELECT oid FROM pg_catalog.pg_class
+ WHERE oid = pg_catalog.to_regclass('chat_messages')
+ AND relkind IN ('r', 'p')
+), tool_calls AS (
+ SELECT oid FROM pg_catalog.pg_class
+ WHERE oid = pg_catalog.to_regclass('chat_message_tool_call_ids')
+ AND relkind IN ('r', 'p')
+), required(name, type_oid) AS (
+ VALUES ('message_id', 'uuid'::regtype),
+        ('project_id', 'uuid'::regtype),
+        ('organization_id', 'text'::regtype),
+        ('ciphertext', 'text'::regtype),
+        ('updated_at', 'timestamptz'::regtype)
+), tool_call_arbiters AS (
+ -- InsertToolCallIDs resolves conflicts on (message_id, tool_call_id).
+ SELECT i.indimmediate, i.indisready
+ FROM pg_catalog.pg_index i
+ JOIN tool_calls tc ON tc.oid = i.indrelid
+ WHERE i.indisunique AND i.indisvalid
+   AND i.indpred IS NULL AND i.indexprs IS NULL AND i.indnkeyatts = 2
+   AND (SELECT array_agg(a.attname::text ORDER BY a.attname::text)
+        FROM pg_catalog.pg_attribute a
+        WHERE a.attrelid = i.indrelid AND a.attnum = ANY ((i.indkey::int2[])[0:1])) = ARRAY['message_id', 'tool_call_id']
+), arbiters AS (
+ SELECT i.indimmediate, i.indisready
+ FROM pg_catalog.pg_index i
+ JOIN sidecar s ON s.oid = i.indrelid
+ JOIN pg_catalog.pg_attribute a ON a.attrelid = s.oid AND a.attname = 'message_id'
+ WHERE i.indisunique AND i.indisvalid
+   AND i.indpred IS NULL AND i.indexprs IS NULL
+   AND i.indnkeyatts = 1 AND i.indkey[0] = a.attnum
+)
+SELECT (EXISTS (SELECT 1 FROM sidecar)
+ AND NOT EXISTS (
+ SELECT 1 FROM required r
+ WHERE NOT EXISTS (
+  SELECT 1 FROM pg_catalog.pg_attribute a
+  JOIN sidecar s ON s.oid = a.attrelid
+  WHERE a.attname = r.name AND a.atttypid = r.type_oid
+    AND a.attnotnull AND NOT a.attisdropped
+ ))
+ AND NOT EXISTS (
+ -- Capture supplies only these columns; any other NOT NULL column needs a
+ -- database default.
+ SELECT 1 FROM pg_catalog.pg_attribute a
+ JOIN sidecar s ON s.oid = a.attrelid
+ WHERE a.attnum > 0 AND NOT a.attisdropped AND a.attnotnull
+   AND NOT a.atthasdef AND a.attgenerated = '' AND a.attidentity = ''
+   AND a.attname NOT IN ('message_id', 'project_id', 'organization_id', 'ciphertext')
+ )
+ AND EXISTS (SELECT 1 FROM arbiters WHERE indimmediate AND indisready)
+ AND NOT EXISTS (SELECT 1 FROM arbiters WHERE NOT indimmediate)
+ AND NOT EXISTS (
+ -- Resealing clears the legacy source_hash, and reads skip transcripts that
+ -- still carry it, so it must exist and be nullable.
+ SELECT 1 FROM pg_catalog.pg_attribute a
+ JOIN sidecar s ON s.oid = a.attrelid
+ WHERE a.attname = 'source_hash' AND NOT a.attisdropped
+   AND (a.atttypid <> 'bytea'::regtype OR a.attnotnull)
+ )
+ AND EXISTS (
+ SELECT 1 FROM pg_catalog.pg_attribute a
+ JOIN sidecar s ON s.oid = a.attrelid
+ WHERE a.attname = 'source_hash' AND NOT a.attisdropped
+ )
+ AND NOT EXISTS (
+ -- Sealing writes the metadata to chat_messages.
+ SELECT 1 FROM (VALUES ('tool_call_count', 'integer'::regtype), ('content_bytes', 'integer'::regtype),
+   ('content_raw_bytes', 'integer'::regtype), ('tool_calls_bytes', 'integer'::regtype)) AS column_needed(name, type_oid)
+ WHERE NOT EXISTS (
+  SELECT 1 FROM pg_catalog.pg_attribute a
+  JOIN messages m ON m.oid = a.attrelid
+  WHERE a.attname = column_needed.name AND a.atttypid = column_needed.type_oid AND NOT a.attisdropped
+ ))
+ AND NOT EXISTS (
+ SELECT 1 FROM (VALUES ('message_id', 'uuid'::regtype), ('tool_call_id', 'text'::regtype), ('chat_id', 'uuid'::regtype), ('project_id', 'uuid'::regtype)) AS tool_call(name, type_oid)
+ WHERE NOT EXISTS (
+  SELECT 1 FROM pg_catalog.pg_attribute a
+  JOIN tool_calls tc ON tc.oid = a.attrelid
+  WHERE a.attname = tool_call.name AND a.atttypid = tool_call.type_oid
+    AND a.attnotnull AND NOT a.attisdropped
+ ))
+ AND NOT EXISTS (
+ -- InsertToolCallIDs supplies only these four columns; any other NOT NULL
+ -- column needs a database default.
+ SELECT 1 FROM pg_catalog.pg_attribute a
+ JOIN tool_calls tc ON tc.oid = a.attrelid
+ WHERE a.attnum > 0 AND NOT a.attisdropped AND a.attnotnull
+   AND NOT a.atthasdef AND a.attgenerated = '' AND a.attidentity = ''
+   AND a.attname NOT IN ('message_id', 'tool_call_id', 'chat_id', 'project_id')
+ )
+ AND EXISTS (SELECT 1 FROM tool_call_arbiters WHERE indimmediate AND indisready)
+ AND NOT EXISTS (SELECT 1 FROM tool_call_arbiters WHERE NOT indimmediate))::boolean AS compatible
+`
+
+// Checks what the store reads and writes: the transcript table and its
+// nullable legacy source_hash, the chat_messages metadata columns, and the
+// tool-call ID table with the (message_id, tool_call_id) conflict target its
+// inserts use. It reads only catalogs, never transcript payloads, and resolves
+// tables through the connection's search_path, as the store's queries do.
+// Every NOT NULL column the store omits must have a database default. Every
+// inferred conflict arbiter must be immediate: PostgreSQL rejects even a
+// redundant deferred one.
+func (q *Queries) SchemaCompatible(ctx context.Context) (bool, error) {
+	row := q.db.QueryRow(ctx, schemaCompatible)
+	var compatible bool
+	err := row.Scan(&compatible)
+	return compatible, err
+}
+
 const updateMessageMetadata = `-- name: UpdateMessageMetadata :execrows
 UPDATE chat_messages
 SET tool_call_count = $1::integer, content_bytes = $2::integer,

@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/speakeasy-api/gram/server/internal/chat"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
@@ -189,7 +190,7 @@ ON CONFLICT (message_id) DO UPDATE SET ciphertext = EXCLUDED.ciphertext`)
 			tx, err := db.BeginTx(t.Context(), pgx.TxOptions{AccessMode: pgx.ReadOnly}) //nolint:glint // notestingrawsql: proves preflight is read-only.
 			require.NoError(t, err)
 			defer func() { require.NoError(t, tx.Rollback(t.Context())) }()
-			err = checkTranscriptSchema(t.Context(), tx)
+			err = transcriptstore.CheckSchema(t.Context(), tx)
 			if tc.ok {
 				require.NoError(t, err)
 			} else {
@@ -229,11 +230,11 @@ CREATE TABLE app.chat_message_transcripts (message_id uuid NOT NULL PRIMARY KEY,
 	tx, err := db.BeginTx(t.Context(), pgx.TxOptions{AccessMode: pgx.ReadOnly}) //nolint:glint // notestingrawsql: proves preflight is read-only.
 	require.NoError(t, err)
 	defer func() { require.NoError(t, tx.Rollback(t.Context())) }()
-	require.EqualError(t, checkTranscriptSchema(t.Context(), tx), "chat transcript schema is unavailable or incompatible",
+	require.EqualError(t, transcriptstore.CheckSchema(t.Context(), tx), "chat transcript schema is unavailable or incompatible",
 		"a table outside the search_path is not the one the store would use")
 
 	// Put app first and keep the rest of the path, which still reaches chat_messages.
 	_, err = tx.Exec(t.Context(), "SELECT set_config('search_path', 'app, ' || current_setting('search_path'), true)") //nolint:glint // notestingrawsql: mirrors the deployed connection's search_path.
 	require.NoError(t, err)
-	require.NoError(t, checkTranscriptSchema(t.Context(), tx))
+	require.NoError(t, transcriptstore.CheckSchema(t.Context(), tx))
 }
