@@ -178,7 +178,10 @@ func (a *LiveOrgAdminAuthorizer) RequireLiveMembership(ctx context.Context, prin
 	if a == nil || a.db == nil || principal.UserID == "" || principal.OrganizationID == "" {
 		return ErrUnavailable
 	}
-	member, err := organizationsrepo.New(a.db).HasActiveOrganizationUser(ctx, organizationsrepo.HasActiveOrganizationUserParams{
+	// A disabled organization denies exactly like a lapsed membership. Every
+	// Platform MCP request and OAuth exchange passes through here, so
+	// disabling an organization also cuts off tokens issued before it.
+	member, err := platformrepo.New(a.db).HasActiveMembershipInEnabledOrganization(ctx, platformrepo.HasActiveMembershipInEnabledOrganizationParams{
 		UserID:         principal.UserID,
 		OrganizationID: principal.OrganizationID,
 	})
