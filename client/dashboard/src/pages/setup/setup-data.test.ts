@@ -52,6 +52,30 @@ describe("getAgentPlatforms", () => {
     );
   });
 
+  it("leaves speakeasy-hooks on its default host on a US host", () => {
+    const codes = ["pi", "opencode"].flatMap((id) =>
+      AGENT_PLATFORMS.find((platform) => platform.id === id)!.setupSteps.map(
+        ({ code }) => code ?? "",
+      ),
+    );
+    expect(codes.join("\n")).toContain("speakeasy-hooks install");
+    expect(codes.join("\n")).not.toContain("--server-url");
+  });
+
+  it("points speakeasy-hooks at a host its default does not reach", () => {
+    const platforms = getAgentPlatforms("https://ai.eu.example.com");
+    for (const id of ["pi", "opencode"]) {
+      const install = platforms
+        .find((platform) => platform.id === id)!
+        .setupSteps.find(({ code }) =>
+          code?.includes("speakeasy-hooks install"),
+        )!.code!;
+      expect(install).toContain(
+        `--provider=${id} --dir=. --project={{GRAM_PROJECT_SLUG}} --server-url=https://ai.eu.example.com`,
+      );
+    }
+  });
+
   it("follows the shared setup provider order", () => {
     expect(
       AGENT_PLATFORMS.slice(0, ACTIVE_AGENT_PROVIDER_IDS.setup.length).map(

@@ -1388,7 +1388,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to load risk-windowed messages").LogError(ctx, s.logger)
 		}
-		if err := openTranscriptRows(ctx, s, authCtx, rows, riskWindowedFieldRefs); err != nil {
+		if err := openTranscriptRows(ctx, s, authCtx, rows, riskWindowedTarget); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to open encrypted chat messages").LogError(ctx, s.logger)
 		}
 		resultMessages = make([]*gen.ChatMessage, len(rows))
@@ -1440,7 +1440,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to load search-windowed messages").LogError(ctx, s.logger)
 		}
-		if err := openTranscriptRows(ctx, s, authCtx, rows, searchWindowedFieldRefs); err != nil {
+		if err := openTranscriptRows(ctx, s, authCtx, rows, searchWindowedTarget); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to open encrypted chat messages").LogError(ctx, s.logger)
 		}
 		resultMessages = make([]*gen.ChatMessage, len(rows))
@@ -1490,7 +1490,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		}
 		// We paged forward from an existing anchor, so older messages exist.
 		hasMoreBefore = true
-		if err := openTranscriptRows(ctx, s, authCtx, rows, chatMessageFieldRefs); err != nil {
+		if err := openTranscriptRows(ctx, s, authCtx, rows, chatMessageTarget); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to open encrypted chat messages").LogError(ctx, s.logger)
 		}
 		resultMessages = s.buildGenMessages(ctx, rows)
@@ -1520,7 +1520,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		if isInitialLatest {
 			latestPageRows = rows
 		}
-		if err := openTranscriptRows(ctx, s, authCtx, rows, chatMessageFieldRefs); err != nil {
+		if err := openTranscriptRows(ctx, s, authCtx, rows, chatMessageTarget); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to open encrypted chat messages").LogError(ctx, s.logger)
 		}
 		resultMessages = s.buildGenMessages(ctx, rows)
@@ -1553,7 +1553,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		if isInitialLatest {
 			latestPageRows = rows
 		}
-		if err := openTranscriptRows(ctx, s, authCtx, rows, chatMessageFieldRefs); err != nil {
+		if err := openTranscriptRows(ctx, s, authCtx, rows, chatMessageTarget); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to open encrypted chat messages").LogError(ctx, s.logger)
 		}
 		resultMessages = s.buildGenMessages(ctx, rows)
@@ -2958,29 +2958,21 @@ func (s *Service) SummarizeToolCall(ctx context.Context, payload *gen.SummarizeT
 	}
 
 	// The summary is part of the protected fields, so it goes through UpdateChatMessage,
-	// which writes it to every copy of the protected fields in one transaction. The key
-	// loads before the transaction begins.
-	if err := s.transcripts.Prepare(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "prepare tool call summary transcript").LogError(ctx, s.logger)
-	}
-	tx, err := conn.Begin(ctx)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin tool call summary transaction").LogError(ctx, s.logger)
-	}
-	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
-	_, err = s.transcripts.UpdateChatMessage(ctx, tx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, chatID, messageID, func(m *repo.ChatMessage) error {
-		summaries, err := setToolCallSummary(m.ToolCallSummaries, payload.ToolCallID, encodedRecord)
-		if err != nil {
-			return err
-		}
-		m.ToolCallSummaries = summaries
-		return nil
+	// which writes it to every copy of the protected fields in one transaction. InTx
+	// loads the key before the transaction begins.
+	err = s.transcripts.InTx(ctx, conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, func(tx pgx.Tx) error {
+		_, err := s.transcripts.UpdateChatMessage(ctx, tx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, chatID, messageID, func(m *repo.ChatMessage) error {
+			summaries, err := setToolCallSummary(m.ToolCallSummaries, payload.ToolCallID, encodedRecord)
+			if err != nil {
+				return err
+			}
+			m.ToolCallSummaries = summaries
+			return nil
+		})
+		return err //nolint:wrapcheck // UpdateChatMessage wraps with the message context.
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "persist tool call summary").LogError(ctx, s.logger)
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit tool call summary").LogError(ctx, s.logger)
 	}
 	return &gen.SummarizeToolCallResult{Summary: record.Summary, Impact: record.Impact, Cached: false}, nil
 }

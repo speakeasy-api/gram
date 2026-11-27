@@ -105,9 +105,8 @@ func newTranscriptShadowBackfillCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
-			// The same Transcripts the server builds at startup: it checks the
-			// schema and provisions keys for the projects on the capture
-			// allowlist.
+			// The same Transcripts the server builds at startup: it provisions
+			// keys for the projects on the capture allowlist.
 			transcripts, err := newTranscripts(ctx, c, db, orgEncryption, logger, otel.GetTracerProvider(), otel.GetMeterProvider())
 			if err != nil {
 				return err

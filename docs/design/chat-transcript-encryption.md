@@ -1,24 +1,24 @@
 # Chat transcript encryption (DNO-1573)
 
-Six `chat_messages` columns are protected fields: `content`, `content_raw`, `tool_calls`, `tool_outcome_notes`, `tool_call_summaries` and `storage_error`. `chat_message_transcripts` holds them encrypted with the organization's key. Only `transcriptstore.Transcripts` reads or changes them.
+Six `chat_messages` columns are protected fields: `content`, `content_raw`, `tool_calls`, `tool_outcome_notes`, `tool_call_summaries` and `storage_error`. `chat_message_transcripts` holds them encrypted with the organization's key. `transcriptstore.Transcripts` is their only writer and serves chat loads; other reads stay plaintext until rollout step 5.
 
 ## Modes
 
 - **Plaintext:** no transcript.
-- **Shadow** (`GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS`): plaintext and transcript. Reads and updates decrypt the transcript and compare it with the plaintext; a mismatch is logged by field size, never contents, and plaintext wins, as when there is no transcript. `Backfill` reseals from plaintext; run it before re-adding a removed project.
-- **Encrypted:** transcript only, plaintext columns empty; a missing transcript is an error, and an existing one is never resealed. Not configurable yet.
+- **Shadow** (`GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS`): plaintext and transcript. Reads and updates decrypt the transcript and compare it with the plaintext; a mismatch is logged by field size, never contents, and plaintext wins. `Backfill` reseals from plaintext; run it before re-adding a removed project.
+- **Encrypted:** transcript only, plaintext columns empty; inserts never write plaintext; a missing transcript is an error. Not configurable yet.
 
 ## Writes
 
-Writers call `Prepare` before `BEGIN`, so KMS runs outside the transaction; only the active key is cached. `Seal` encrypts a new message. `UpdateChatMessage` locks the row and transcript, applies the change in Go and writes every copy. A failure rolls back; a sanity-check mismatch is logged.
+Writers open their transaction with `InTx`, which loads the key before `BEGIN`, so KMS runs outside the transaction; only the active key is cached. `transcriptstore` runs every chat message insert, and `UpdateChatMessage` every change. Both use one protector: it reads the protected fields once, writes them (empty in encrypted mode) with their metadata in the same statement, and, outside plaintext mode, seals that same value, all in one transaction. A failure rolls back; a sanity-check mismatch is logged.
 
-Transcripts with the legacy unkeyed `source_hash` are plaintext-equivalent and read as missing until `Backfill` reseals them.
+Legacy transcripts with an unkeyed `source_hash` read as missing until `Backfill` reseals them.
 
 `chat.transcript_shadow.read.messages` and `.update.checks` count every outcome.
 
 ## Backfill
 
-`gram transcript-shadow-backfill --project-id <PROJECT_ID>` reports coverage (`current`, `waiting`, `unattributed`). Add `--apply --confirm-environment "$GRAM_ENVIRONMENT"` to seal. Run it from a server pod: it builds the same `Transcripts` as server startup and seals through `Transcripts.Backfill`, so each message gets the same metadata and `chat_message_tool_call_ids` rows as a live `Seal`.
+`gram transcript-shadow-backfill --project-id <PROJECT_ID>` reports coverage (`current`, `waiting`, `unattributed`). Add `--apply --confirm-environment "$GRAM_ENVIRONMENT"` to seal. Run it from a server pod: it builds the same `Transcripts` as server startup and seals through `Transcripts.Backfill`, so each message gets the same metadata and `chat_message_tool_call_ids` rows as a live insert.
 
 - It refuses a project off the allowlist (`ErrNotEnabled`): that project seals nothing new and its updates leave transcripts stale.
 - Each page (default 200, at most 500) commits whole or not at all and reseals every message in it, which clears `source_hash`.

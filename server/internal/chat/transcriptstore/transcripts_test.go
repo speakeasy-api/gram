@@ -2,12 +2,15 @@ package transcriptstore
 
 import (
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptcrypto"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore/fixturerepo"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -101,24 +104,33 @@ func TestCaptureStoresMetadataAndToolCallIDs(t *testing.T) {
 func TestTranscriptsGateByProject(t *testing.T) {
 	t.Parallel()
 	f := setup(t, true)
-	id := uuid.New()
-	f.add(t, id)
-
 	var none *Transcripts
 	require.False(t, none.Enabled(f.project))
-	require.NoError(t, none.Seal(t.Context(), f.db, f.org, f.project, []uuid.UUID{id}))
+	unlisted := uuid.New()
+	written := f.insert(t, none, unlisted)
+	require.Equal(t, "sensitive example", written.Content, "plaintext mode writes the plaintext")
 
 	other := NewTranscripts(f.store, uuid.New())
 	require.False(t, other.Enabled(f.project))
-	require.NoError(t, other.Seal(t.Context(), f.db, f.org, f.project, []uuid.UUID{id}))
-	_, err := fixturerepo.New(f.db).MessageMetadata(t.Context(), id)
-	require.Error(t, err, "a project off the list captures nothing")
+	offList := uuid.New()
+	f.insert(t, other, offList)
+	for _, id := range []uuid.UUID{unlisted, offList} {
+		_, err := fixturerepo.New(f.db).MessageMetadata(t.Context(), id)
+		require.NoError(t, err, "every mode writes the metadata")
+		_, err = f.store.Load(t.Context(), f.org, f.project, id)
+		require.ErrorIs(t, err, ErrNotFound, "a project off the list seals nothing")
+	}
 
 	enabled := NewTranscripts(f.store, f.project)
 	require.True(t, enabled.Enabled(f.project))
-	require.NoError(t, enabled.Seal(t.Context(), f.db, f.org, f.project, []uuid.UUID{id}))
-	_, err = fixturerepo.New(f.db).MessageMetadata(t.Context(), id)
+	sealed := uuid.New()
+	written = f.insert(t, enabled, sealed)
+	require.Equal(t, "sensitive example", written.Content, "shadow mode keeps the plaintext")
+	_, err := fixturerepo.New(f.db).MessageMetadata(t.Context(), sealed)
 	require.NoError(t, err)
+	opened, err := f.store.Load(t.Context(), f.org, f.project, sealed)
+	require.NoError(t, err)
+	require.Equal(t, "sensitive example", opened.Content)
 }
 
 func TestTranscriptsBackfillGatesByProjectAndFillsMetadata(t *testing.T) {
@@ -166,8 +178,11 @@ type openRow struct {
 	storageError pgtype.Text
 }
 
-func openRowBody(r *openRow) ProtectedFieldRefs {
-	return ProtectedFieldRefs{MessageID: r.id, Content: &r.content, ContentRaw: &r.contentRaw, ToolCalls: &r.toolCalls, ToolOutcomeNotes: &r.notes, ToolCallSummaries: &r.summaries, StorageError: &r.storageError}
+func openRowBody(r *openRow) OpenTarget {
+	return OpenTarget{MessageID: r.id, Set: func(f transcriptcrypto.ProtectedFields) {
+		r.content, r.contentRaw, r.toolCalls, r.summaries = f.Content, f.ContentRaw, f.ToolCalls, f.ToolCallSummaries
+		r.notes, r.storageError = optionalText(f.ToolOutcomeNotes), optionalText(f.StorageError)
+	}}
 }
 
 // plaintextRow is a loaded row whose six body fields all hold placeholder
@@ -200,7 +215,8 @@ func TestOpenRowsServesTranscriptsAndFallsBackToPlaintext(t *testing.T) {
 	require.Equal(t, pgtype.Text{String: "example note", Valid: true}, opened.notes)
 	require.JSONEq(t, `{"example":"summary"}`, string(opened.summaries))
 	require.Equal(t, pgtype.Text{String: "example error", Valid: true}, opened.storageError, "all six fields come from the copy")
-	require.Equal(t, plaintextRow(unsealed), rows[1], "a message with no transcript keeps its plaintext")
+	require.Equal(t, "sensitive example", rows[1].content, "a message with no transcript is served its stored plaintext")
+	require.False(t, rows[1].storageError.Valid, "every field comes from the stored row")
 
 	off := []openRow{plaintextRow(sealed)}
 	require.NoError(t, OpenRows(t.Context(), NewTranscripts(f.store), f.org, f.project, off, openRowBody))
@@ -211,7 +227,7 @@ func TestOpenRowsServesTranscriptsAndFallsBackToPlaintext(t *testing.T) {
 	stale := []openRow{plaintextRow(sealed)}
 	stale[0].content = "changed"
 	require.NoError(t, OpenRows(t.Context(), transcripts, f.org, f.project, stale, openRowBody))
-	require.Equal(t, "changed", stale[0].content, "a disagreeing transcript is logged and the plaintext is kept")
+	require.Equal(t, "changed", stale[0].content, "a disagreeing transcript is logged and the stored plaintext is served")
 }
 
 func TestToolCallIDsStayWithTheirProject(t *testing.T) {
@@ -382,8 +398,7 @@ func TestNewTranscriptsNeedsAStoreForListedProjects(t *testing.T) {
 }
 
 // In encrypted mode the transcript is the only copy of the body: updates start
-// from it and write the plaintext columns empty, Seal empties them in the same
-// transaction, reads serve the transcript without comparison, and a message
+// from it and write the plaintext columns empty, inserts never write them, reads serve the transcript without comparison, and a message
 // without a transcript fails instead of falling back to the empty plaintext.
 func TestEncryptedMode(t *testing.T) {
 	t.Parallel()
@@ -425,16 +440,6 @@ func TestEncryptedMode(t *testing.T) {
 	require.JSONEq(t, `{"example":"summary"}`, string(row.summaries))
 	require.Equal(t, pgtype.Text{}, row.storageError, "no storage error, served as NULL rather than the placeholder")
 
-	// Sealing it again in encrypted mode must not reseal it from the empty
-	// plaintext row.
-	reseal, err := f.db.Begin(ctx) //nolint:glint // notestingrawsql: caller-owned transaction boundary is the behavior under test.
-	require.NoError(t, err)
-	require.NoError(t, encrypted.Seal(ctx, reseal, f.org, f.project, []uuid.UUID{updated}))
-	require.NoError(t, reseal.Commit(ctx))
-	row, err = open(updated)
-	require.NoError(t, err)
-	require.Equal(t, "sensitive example", row.content, "encrypted mode never reseals an existing transcript")
-
 	// A row sealed in shadow mode is emptied by an update that changes nothing.
 	populated := uuid.New()
 	f.add(t, populated)
@@ -442,22 +447,30 @@ func TestEncryptedMode(t *testing.T) {
 	_, err = f.updateBody(t, encrypted, f.chat, populated, func(*chatrepo.ChatMessage) error { return nil })
 	require.NoError(t, err)
 	emptied(populated)
-	meta, err := fixtures.MessageMetadata(ctx, updated)
-	require.NoError(t, err)
-	require.Equal(t, pgtype.Int4{Int32: int32(len("sensitive example")), Valid: true}, meta.ContentBytes, "metadata describes the body, not the empty columns")
+	for _, id := range []uuid.UUID{updated, populated} {
+		meta, err := fixtures.MessageMetadata(ctx, id)
+		require.NoError(t, err)
+		require.Equal(t, pgtype.Int4{Int32: int32(len("sensitive example")), Valid: true}, meta.ContentBytes, "metadata describes the protected fields, not the empty columns")
+	}
 
-	// A new message: Seal empties the plaintext it was sealed from.
+	// A new message: the INSERT itself never sees the plaintext, so it never
+	// reaches chat_messages or its write-ahead log.
 	inserted := uuid.New()
-	f.add(t, inserted)
-	tx, err := f.db.Begin(ctx) //nolint:glint // notestingrawsql: caller-owned transaction boundary is the behavior under test.
-	require.NoError(t, err)
-	defer func() { _ = tx.Rollback(ctx) }()
-	require.NoError(t, encrypted.Seal(ctx, tx, f.org, f.project, []uuid.UUID{inserted}))
-	require.NoError(t, tx.Commit(ctx))
+	written := f.insert(t, encrypted, inserted)
+	require.Empty(t, written.Content, "the INSERT writes empty protected fields")
+	require.Nil(t, written.ContentRaw)
+	require.Nil(t, written.ToolCalls)
+	require.False(t, written.StorageError.Valid)
 	emptied(inserted)
 	row, err = open(inserted)
 	require.NoError(t, err)
 	require.Equal(t, "sensitive example", row.content)
+	require.True(t, sameJSON([]byte(`{"large":9007199254740993,"n":1e2}`), row.contentRaw), "content_raw: %s", row.contentRaw)
+	require.JSONEq(t, `[{"id":"example"}]`, string(row.toolCalls))
+	require.Equal(t, pgtype.Text{String: "example storage error", Valid: true}, row.storageError)
+	meta, err := fixtures.MessageMetadata(ctx, inserted)
+	require.NoError(t, err)
+	require.Equal(t, pgtype.Int4{Int32: int32(len("sensitive example")), Valid: true}, meta.ContentBytes, "metadata describes the sealed fields")
 
 	// No transcript: nothing to serve or change.
 	missing := uuid.New()
@@ -479,4 +492,30 @@ func TestModes(t *testing.T) {
 	var none *Transcripts
 	require.Equal(t, ModePlaintext, none.Mode(shadow))
 	require.Panics(t, func() { NewTranscripts(nil).WithEncryptedProjects(shadow) })
+}
+
+// insert stores one message through InsertChatMessages in its own
+// transaction, as ChatMessageWriter does, and returns the row it stored in
+// chat_messages.
+func (f *fixture) insert(t *testing.T, transcripts *Transcripts, id uuid.UUID) repo.ChatMessage {
+	t.Helper()
+	ctx := t.Context()
+	params := []chatrepo.CreateChatMessageParams{{
+		ID: id, ChatID: f.chat, Role: "assistant", ProjectID: f.project,
+		Content:      "sensitive example",
+		ContentRaw:   []byte(`{"n":1e2,"large":9007199254740993}`),
+		ToolCalls:    []byte(`[{"id":"example"}]`),
+		StorageError: pgtype.Text{String: "example storage error", Valid: true},
+		CreatedAt:    pgtype.Timestamptz{Time: time.Now(), InfinityModifier: pgtype.Finite, Valid: true},
+	}}
+	err := transcripts.InTx(ctx, f.db, f.org, f.project, func(tx pgx.Tx) error {
+		n, err := transcripts.InsertChatMessages(ctx, tx, f.org, f.project, params)
+		require.EqualValues(t, 1, n)
+		return err
+	})
+	require.NoError(t, err)
+	require.Equal(t, "sensitive example", params[0].Content, "the caller's params are never changed")
+	row, err := repo.New(f.db).LockChatMessage(ctx, repo.LockChatMessageParams{MessageID: id, ProjectID: project(f.project), OrganizationID: f.org})
+	require.NoError(t, err)
+	return row.ChatMessage
 }
