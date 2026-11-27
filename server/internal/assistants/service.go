@@ -3916,7 +3916,33 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 		UpdatedAt:       row.UpdatedAt.Time,
 		DeletedAt:       row.DeletedAt,
 	}
-	if assistant.RuntimeVersion != 3 {
+	// Gate on the version of the runtime actually serving the thread (not the
+	// assistant's desired version) so bootstrap and turn dispatch agree during
+	// a pending runtime switch. v2/v3 runtimes are keyed by assistant; v1
+	// runtimes are keyed by thread.
+	servingRuntimeVersion := assistant.RuntimeVersion
+	switch activeRuntime, rErr := assistantrepo.New(s.db).GetAssistantRuntimeV2(ctx, assistantrepo.GetAssistantRuntimeV2Params{
+		ProjectID:   thread.ProjectID,
+		AssistantID: assistant.ID,
+	}); {
+	case rErr == nil:
+		servingRuntimeVersion = activeRuntime.RuntimeVersion
+	case errors.Is(rErr, pgx.ErrNoRows):
+		switch threadRuntime, tErr := assistantrepo.New(s.db).GetActiveAssistantRuntimeByThreadID(ctx, assistantrepo.GetActiveAssistantRuntimeByThreadIDParams{
+			AssistantThreadID: thread.ID,
+			ProjectID:         thread.ProjectID,
+		}); {
+		case tErr == nil:
+			servingRuntimeVersion = threadRuntime.RuntimeVersion
+		case errors.Is(tErr, pgx.ErrNoRows):
+		default:
+			return threadBootstrap{}, oops.E(oops.CodeUnexpected, tErr, "load active thread runtime").LogError(ctx, s.logger, logAttrs...)
+		}
+	default:
+		return threadBootstrap{}, oops.E(oops.CodeUnexpected, rErr, "load active assistant runtime").LogError(ctx, s.logger, logAttrs...)
+	}
+
+	if servingRuntimeVersion != 3 {
 		if err := s.hydrateAssistantToolSources(ctx, assistant.ProjectID, &assistant); err != nil {
 			return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "load assistant tool sources").LogError(ctx, s.logger, logAttrs...)
 		}
@@ -3952,32 +3978,6 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 	platformSlugs, err := s.assistantPlatformSlugs(ctx, assistant)
 	if err != nil {
 		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "resolve managed assistant").LogError(ctx, s.logger, logAttrs...)
-	}
-
-	// Gate on the version of the runtime actually serving the thread (not the
-	// assistant's desired version) so bootstrap and turn dispatch agree during
-	// a pending runtime switch. v2/v3 runtimes are keyed by assistant; v1
-	// runtimes are keyed by thread.
-	servingRuntimeVersion := assistant.RuntimeVersion
-	switch activeRuntime, rErr := assistantrepo.New(s.db).GetAssistantRuntimeV2(ctx, assistantrepo.GetAssistantRuntimeV2Params{
-		ProjectID:   thread.ProjectID,
-		AssistantID: assistant.ID,
-	}); {
-	case rErr == nil:
-		servingRuntimeVersion = activeRuntime.RuntimeVersion
-	case errors.Is(rErr, pgx.ErrNoRows):
-		switch threadRuntime, tErr := assistantrepo.New(s.db).GetActiveAssistantRuntimeByThreadID(ctx, assistantrepo.GetActiveAssistantRuntimeByThreadIDParams{
-			AssistantThreadID: thread.ID,
-			ProjectID:         thread.ProjectID,
-		}); {
-		case tErr == nil:
-			servingRuntimeVersion = threadRuntime.RuntimeVersion
-		case errors.Is(tErr, pgx.ErrNoRows):
-		default:
-			return threadBootstrap{}, oops.E(oops.CodeUnexpected, tErr, "load active thread runtime").LogError(ctx, s.logger, logAttrs...)
-		}
-	default:
-		return threadBootstrap{}, oops.E(oops.CodeUnexpected, rErr, "load active assistant runtime").LogError(ctx, s.logger, logAttrs...)
 	}
 
 	deliveryMode := MCPDeliveryPerServer

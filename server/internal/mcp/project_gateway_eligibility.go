@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 // ProjectGatewayEvaluatorConfig carries the dependencies needed to run
@@ -138,7 +139,12 @@ func (s *Service) EvaluateProjectGatewayForTurnCredential(
 	project := availability.Project
 	rawURL := availability.GatewayURL.String()
 
-	metaServer, endpoint, unavailable, err := s.organizationGatewayRows(ctx, organization, orggateway.Availability)
+	// Reuse the issuer resolved by orggateway.ResolveProjectGateway instead of
+	// querying organization gateway availability a second time.
+	resolvedAvailability := func(context.Context, usersessionsrepo.DBTX, organizations_repo.OrganizationMetadatum) (uuid.UUID, orggateway.Unavailability, error) {
+		return availability.IssuerID, orggateway.UnavailabilityNone, nil
+	}
+	metaServer, endpoint, unavailable, err := s.organizationGatewayRows(ctx, organization, resolvedAvailability)
 	if err != nil {
 		return deny(""), err
 	}

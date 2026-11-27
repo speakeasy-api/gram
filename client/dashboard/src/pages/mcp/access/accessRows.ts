@@ -210,6 +210,10 @@ function standingBlocks(cell: ScopeCell): ResourceAudienceEntry[] {
  * Group the rules deciding access to one server into a row per principal. The
  * API returns one entry per principal and level, widest principal first, and
  * that order is what the list keeps.
+ *
+ * When `subjects` are supplied, rows are seeded for them first (in the order
+ * given) so principals with only inherited access still appear; a seeded
+ * subject's display metadata is kept if a matching entry arrives later.
  */
 export function buildAccessRows(
   entries: ResourceAudienceEntry[],

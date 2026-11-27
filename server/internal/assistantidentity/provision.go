@@ -27,10 +27,12 @@ import (
 // its unbound root triggers bound. The caller owns the transaction; a failed
 // call must roll it back.
 //
-// Legacy agents start with project-wide Connect; Kit agents use explicit
-// server grants plus explicit Connect grants on their built-in toolsets. The
-// persisted runtime controls the initial policy for every caller, including
-// staff provisioning. Existing policies remain unchanged.
+// Legacy agents start with project-wide wildcard Connect; Kit agents omit
+// project-wide wildcard Connect and start with explicit Connect grants only on
+// their built-in toolsets (plus optional assistant-slack when linked), with
+// project MCP server grants managed explicitly afterwards. The persisted
+// runtime controls the initial policy for every caller, including staff
+// provisioning. Existing policies remain unchanged.
 func (s *Service) Provision(ctx context.Context, tx pgx.Tx, p ProvisionParams) error {
 	actor, err := provisionActor(p)
 	if err != nil {

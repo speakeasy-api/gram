@@ -215,10 +215,10 @@ func (s *ServiceCore) kitGKELifecycle(ctx context.Context, r assistantRuntimeRec
 	return operationErr
 }
 
-// kitAssistantEligible retains the legacy default where the Project Gateway is
-// not served for machine access. Tool assignments and backing-agent grants do
-// not affect runtime selection: the Project Gateway evaluates the agent's
-// effective grants live on every request.
+// kitAssistantEligible reports whether the project's Project Gateway is served
+// for machine access, retaining the legacy default otherwise. This predicate
+// itself does not read tool assignments or backing-agent grants (CreateAssistant
+// keeps creates with initial legacy attachments on Default before calling it).
 func (s *ServiceCore) kitAssistantEligible(ctx context.Context, tx pgx.Tx, assistant assistantRecord, hosts *orghost.Resolver) (bool, error) {
 	_, _, err := s.kitProjectGateway(ctx, tx, assistant, hosts)
 	if errors.Is(err, errKitMCPIneligible) {

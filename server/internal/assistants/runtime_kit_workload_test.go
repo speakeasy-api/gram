@@ -635,6 +635,15 @@ func TestKitAssistantUpdateDoesNotRequireRetirement(t *testing.T) {
 	_, err = assistantrepo.New(db).AddAssistantMcpServers(t.Context(), []assistantrepo.AddAssistantMcpServersParams{{AssistantID: key.AssistantID, ProjectID: key.ProjectID, McpServerID: hosted.ID}})
 	require.NoError(t, err)
 	name := "Updated name"
-	_, err = core.UpdateAssistant(t.Context(), key.ProjectID, key.AssistantID, &name, nil, nil, []*types.AssistantToolsetRef{}, []*types.AssistantMCPServerRef{}, nil, nil, nil, nil, nil)
+	_, err = core.UpdateAssistant(t.Context(), key.ProjectID, key.AssistantID, &name, nil, nil, nil, []*types.AssistantMCPServerRef{{McpServerSlug: "kit-attached"}}, nil, nil, nil, nil, nil)
+	require.NoError(t, err, "full-form save with unchanged attachments must succeed")
+	rows, err := assistantrepo.New(db).LoadAssistantMcpServers(t.Context(), assistantrepo.LoadAssistantMcpServersParams{ProjectID: key.ProjectID, AssistantIds: []uuid.UUID{key.AssistantID}})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+
+	_, err = core.UpdateAssistant(t.Context(), key.ProjectID, key.AssistantID, nil, nil, nil, []*types.AssistantToolsetRef{}, []*types.AssistantMCPServerRef{}, nil, nil, nil, nil, nil)
 	require.NoError(t, err, "Kit assistants use agent RBAC grants through the Project Gateway rather than persisted attachments")
+	rows, err = assistantrepo.New(db).LoadAssistantMcpServers(t.Context(), assistantrepo.LoadAssistantMcpServersParams{ProjectID: key.ProjectID, AssistantIds: []uuid.UUID{key.AssistantID}})
+	require.NoError(t, err)
+	require.Empty(t, rows)
 }

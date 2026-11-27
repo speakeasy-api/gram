@@ -285,7 +285,7 @@ func (s *ServiceCore) kitCompositionBootstrap(ctx context.Context, r assistantRu
 // instructions into the model context, so AGENTS.md names the single
 // project-gateway server and its Progressive meta-tools.
 func renderKitAgentsMD(baseInstructions string) string {
-	return "# Speakeasy assistant\n\n" + baseInstructions + "\n\n## Project tools\n\nAll project MCP servers and built-in Speakeasy toolsets (such as `assistants`, and `platform` or Slack toolsets when granted) are exposed through the single `" + kitProjectGatewayServerName + "` MCP server. Use `tool_search` and `tool` to call the `" + kitProjectGatewayServerName + "` tools (`list_servers`, `describe_server`, `describe_tools`, `execute_read_only_tool`, `execute_tool`, `connection_status`). Run `list_servers` again when needed; access can change while the conversation is running.\n"
+	return "# Speakeasy assistant\n\n" + baseInstructions + "\n\n## Project tools\n\nAll project MCP servers and built-in Speakeasy toolsets (such as `assistants`, and `platform` or Slack toolsets when granted) are exposed through the single `" + kitProjectGatewayServerName + "` MCP server. Use the `" + kitProjectGatewayServerName + "` MCP tools (`list_servers`, `describe_server`, `describe_tools`, `execute_read_only_tool`, `execute_tool`, `connection_status`) to discover and invoke them. Run `list_servers` again when needed; access can change while the conversation is running.\n"
 }
 
 // kitProjectGatewayMCPJSON builds Kit's backend-agnostic mcp.json containing

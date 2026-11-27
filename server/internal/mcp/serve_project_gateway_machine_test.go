@@ -461,11 +461,11 @@ func TestServeProjectGateway_KitWorkloadBuiltinsAndLiveGrantChanges(t *testing.T
 	binding := seedAssistantThreadBinding(t, f.ctx, f.ti, authCtx)
 	member, _ := seedExecutableHostedProjectMember(t, f.ctx, f.ti, authCtx, "echo_kit", `{"reply":"kit project tool ok"}`)
 
-	// Grant ONLY the built-in assistants toolset plus the assistant's own
-	// self-admin grant (matching assistantidentity.Provision for a Kit agent
-	// with zero project servers granted yet). The Project Gateway jwt-bearer
-	// exchange must still succeed so a new Kit runtime can start with zero
-	// project servers.
+	// Seed the minimal grant set needed for this test: explicit mcp:connect on
+	// the built-in assistants toolset (zero project servers granted yet), plus
+	// assistant:write on the target assistant for both owner and agent so
+	// thread-keyed built-in calls pass authorization. The Project Gateway
+	// jwt-bearer exchange must succeed even with zero project servers granted.
 	assistantsID := platformtools.PlatformToolsetID(platformtools.AssistantsPlatformToolsetSlug)
 	agentPrincipal := urn.NewPrincipal(urn.PrincipalTypeAgent, f.agentID.String())
 	seedUserMCPConnectGrant(t, f.ctx, f.ti.conn, authCtx.ActiveOrganizationID, authCtx.UserID, assistantsID.String())

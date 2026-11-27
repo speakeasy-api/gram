@@ -251,6 +251,21 @@ func TestKitEligibilityUsesSharedProjectGatewayPredicate(t *testing.T) {
 	require.Equal(t, issuerID, selectedIssuer)
 	require.Equal(t, "https://mcp.example/mcp/gateway/identity-tests/projects/kit_gke_eligibility", gatewayURL.String())
 
+	// Non-nil OrgHosts overrides the gateway host with the resolver's server URL.
+	hostsOrigin, err := url.Parse("https://platform-host.example")
+	require.NoError(t, err)
+	hosts := orghost.New(orghost.Config{
+		ServerURL:                  hostsOrigin,
+		SiteURL:                    nil,
+		PlatformHosts:              nil,
+		LegacyDefaultHost:          nil,
+		NewOrganizationDefaultHost: nil,
+	})
+	check(hosts, true)
+	hostGatewayURL, _, err := f.core.kitProjectGateway(t.Context(), f.db, a, hosts)
+	require.NoError(t, err)
+	require.Equal(t, "https://platform-host.example/mcp/gateway/identity-tests/projects/kit_gke_eligibility", hostGatewayURL.String())
+
 	// Non-HTTPS server URL fails closed.
 	f.core.serverURL, _ = url.Parse("http://mcp.example")
 	check(nil, false)

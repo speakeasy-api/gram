@@ -23,6 +23,9 @@ it("guides Kit assistants through Project Gateway access and built-in Slack setu
   expect(prompt).toContain("Project Gateway");
   expect(prompt).toContain("propose_slack_setup");
   expect(prompt).toContain("request_slack_credentials");
+  expect(prompt).toContain(
+    "MCP server credentials are managed on the server itself",
+  );
   expect(prompt).not.toContain("attach_toolset");
   expect(prompt).not.toContain("attach_mcp_server");
   expect(prompt).not.toContain("legacy-tools");

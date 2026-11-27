@@ -247,17 +247,24 @@ projection rules, and restore constraints in the
 
 ## Platform MCP parity
 
-Kit connects to built-in toolsets with dedicated resource-bound workload tokens,
-not inference tokens. Without automatically attached thread context, tools that
-always need a conversation advertise a required `thread_id`; Slack self-replies
-and wake triggers need it only when `route_replies` is `self` or the trigger
-definition is `wake`. An explicit `thread_id` on a tool that changes state
-requires write access to the target assistant; the current-thread default does
-not add that check. Kit receives the current
-thread ID in per-turn instructions as a convenient default. Explicit targets
-use the existing caller and tool authorization; selecting another authorized
-thread does not require runtime/session attribution. When attached context is
-available, the existing automatic behavior and tool schemas are preserved.
+Kit reaches both project MCP servers and built-in Speakeasy toolsets through the
+single Project Gateway entry using workload authentication, not inference
+tokens. Without automatically attached thread context, tools that always need a
+conversation advertise a required `thread_id`; Slack self-replies and wake
+triggers need it only when `route_replies` is `self` or the trigger definition
+is `wake`. An explicit `thread_id` on a tool that changes state requires write
+access to the target assistant; the current-thread default does not add that
+check. Kit receives the current thread ID in per-turn instructions as a
+convenient default. Explicit targets use the existing caller and tool
+authorization; selecting another authorized thread does not require
+runtime/session attribution. When attached context is available, the existing
+automatic behavior and tool schemas are preserved.
+
+Granting or revoking an agent's direct `mcp:connect` access is a
+security-sensitive authorization policy change and remains dashboard-only (in
+the assistant's **Overview → MCP servers** panel and the Agents access UI);
+Platform MCP intentionally exposes only read-only `get_agent_mcp_access` and
+directs users to the dashboard for policy changes.
 
 An authorized administrator already uses `select_assistant_runtime` to preview
 and confirm the runtime choice for an exact project and assistant. Workload

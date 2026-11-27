@@ -117,4 +117,6 @@ func TestKitBootstrapMultipleRootsAndIndependentEventRevocation(t *testing.T) {
 	_, err = iq.CreateAssistantBinding(t.Context(), identityrepo.CreateAssistantBindingParams{OrganizationID: identity.OrganizationID, ProjectID: r.ProjectID, AssistantID: r.AssistantID, AgentID: identity.AgentID})
 	require.NoError(t, err)
 	require.ErrorIs(t, core.identities.ValidateRuntime(t.Context(), db, second.Workload.Identity), assistantidentity.ErrInvalidIdentity)
+	_, err = core.provisionKitWorkload(t.Context(), r, config, second.Workload.Identity, "stale-binding")
+	require.ErrorIs(t, err, assistantidentity.ErrInvalidIdentity)
 }
