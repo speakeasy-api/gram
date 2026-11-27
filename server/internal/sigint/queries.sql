@@ -400,7 +400,7 @@ SELECT m.id, m.chat_id, m.project_id, m.seq, m.generation, m.created_at,
 FROM chat_messages m
 JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
 JOIN projects p ON p.id = m.project_id
-JOIN organization_metadata om ON om.id = p.organization_id
+LEFT JOIN organization_metadata om ON om.id = p.organization_id
 WHERE m.project_id = @project_id::uuid AND p.organization_id = @organization_id
   AND p.deleted IS FALSE AND c.deleted IS FALSE
   AND om.disabled_at IS NULL

@@ -44,12 +44,8 @@ func NewMetricTransformHandler(
 }
 
 func (h *MetricTransformHandler) Handle(ctx context.Context, item *otelv1.InboundMetric, _ gcp.MessageMetadata) error {
-	if disabled, err := h.orgs.Disabled(ctx, item.GetProvenance().GetOrganizationId()); err != nil {
-		return o11y.LogError(ctx, h.logger, err, "failed to check organization status")
-	} else if disabled {
-		// Acknowledged without publishing: a disabled organization's queued
-		// telemetry is dropped rather than redelivered.
-		return nil
+	if drop, err := h.orgs.Drop(ctx, h.logger, item.GetProvenance().GetOrganizationId()); err != nil || drop {
+		return err
 	}
 
 	out, err := transformInboundMetric(ctx, h.instruments, item, h.enrichers)

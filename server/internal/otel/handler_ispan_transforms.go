@@ -56,12 +56,8 @@ func NewSpanTransformHandler(
 }
 
 func (h *SpanTransformHandler) Handle(ctx context.Context, m *otelv1.InboundSpan, _ gcp.MessageMetadata) error {
-	if disabled, err := h.orgs.Disabled(ctx, m.GetProvenance().GetOrganizationId()); err != nil {
-		return o11y.LogError(ctx, h.logger, err, "failed to check organization status")
-	} else if disabled {
-		// Acknowledged without publishing: a disabled organization's queued
-		// telemetry is dropped rather than redelivered.
-		return nil
+	if drop, err := h.orgs.Drop(ctx, h.logger, m.GetProvenance().GetOrganizationId()); err != nil || drop {
+		return err
 	}
 
 	out, err := transformInboundSpan(ctx, h.instruments, m, h.enrichers)

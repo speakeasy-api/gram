@@ -2680,7 +2680,7 @@ func (q *Queries) IsOrganizationHooksFailOpenEnabled(ctx context.Context, organi
 const isProjectOrganizationDisabled = `-- name: IsProjectOrganizationDisabled :one
 SELECT (om.disabled_at IS NOT NULL)::boolean AS disabled
 FROM projects p
-JOIN organization_metadata om ON om.id = p.organization_id
+LEFT JOIN organization_metadata om ON om.id = p.organization_id
 WHERE p.id = $1
 `
 

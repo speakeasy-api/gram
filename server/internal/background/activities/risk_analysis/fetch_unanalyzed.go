@@ -75,7 +75,7 @@ func (a *FetchUnanalyzed) Do(ctx context.Context, args FetchUnanalyzedArgs) (_ *
 	disabled, err := queries.IsProjectOrganizationDisabled(ctx, args.ProjectID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return empty, nil
+		// An unknown project falls through to the existing queries.
 	case err != nil:
 		return nil, fmt.Errorf("check organization disabled: %w", err)
 	case disabled:

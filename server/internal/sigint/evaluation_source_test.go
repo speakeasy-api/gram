@@ -77,6 +77,9 @@ func TestEvaluationMessageBatchScopesAndSplitProjection(t *testing.T) {
 	require.Empty(t, rows, "a disabled organization's queued messages are not evaluated")
 	_, err = adminrepo.New(ti.conn).AdminEnableOrganization(ctx, auth.ActiveOrganizationID)
 	require.NoError(t, err)
+	rows, err = source.LoadMessages(ctx, auth.ActiveOrganizationID, project, ids)
+	require.NoError(t, err)
+	require.Len(t, rows, 3, "a re-enabled organization's messages are evaluated again")
 
 	require.NoError(t, fixtures.ForceSoftDeleteChat(ctx, chatID))
 
