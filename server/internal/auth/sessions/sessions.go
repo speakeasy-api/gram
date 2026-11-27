@@ -236,7 +236,8 @@ func (s *Manager) Authenticate(ctx context.Context, key string) (context.Context
 }
 
 // CheckUserBlock rejects userID when staff blocked it from the platform.
-// Session-creating paths call it before they mint a session.
+// Authenticate calls it on every dashboard request, and the chat-session
+// token manager on every chat token.
 func (s *Manager) CheckUserBlock(ctx context.Context, userID string) error {
 	if s.userBlock == nil {
 		return nil
