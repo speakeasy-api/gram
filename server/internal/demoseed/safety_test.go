@@ -5,6 +5,7 @@ package demoseed
 import (
 	"regexp"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/aivendors"
@@ -16,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/demoseedtest"
+	platformtoolscore "github.com/speakeasy-api/gram/server/internal/platformtools/core"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -75,9 +77,9 @@ func TestDemoSeedSafety(t *testing.T) {
 
 	// Provision the other tenant with the seed itself, including realistic MCP
 	// server dependents that the demo cleanup must not touch.
-	otherSeed, err := seedPostgres(ctx, logger, db, blob, testenv.NewEncryptionClient(t), testAssistantIssuerURL, testServerURL, otherTenantSpec, aivendors.CompiledSnapshot())
+	otherSeed, err := seedPostgres(ctx, logger, db, blob, testenv.NewEncryptionClient(t), testAssistantIssuerURL, testServerURL, otherTenantSpec, aivendors.CompiledSnapshot(), time.Time{})
 	require.NoError(t, err)
-	require.NoError(t, migrateUpstreamAuth(ctx, logger, db, otherTenantSpec.OrgID))
+	require.NoError(t, upstreamAuthReadiness(ctx, logger, db, otherTenantSpec.OrgID))
 	planted, err := repo.New(db).OrgPlantCustomDomainDependents(ctx, repo.OrgPlantCustomDomainDependentsParams{
 		OrgID: otherTenantSpec.OrgID, ProjectID: uuid.MustParse(otherTenantSpec.ProjectID()),
 	})
@@ -131,6 +133,11 @@ func TestDemoSeedSafety(t *testing.T) {
 	pgBefore, err := demoseedtest.SnapshotPostgres(ctx, db)
 	require.NoError(t, err)
 	fixtureUUIDs := collectUUIDs(addedRows(pgBaseline, pgBefore))
+	// Built-in platform toolset IDs are deterministic, code-owned global
+	// constants shared across every tenant rather than tenant-owned row IDs.
+	for _, slug := range platformtoolscore.AssistantBuiltinToolsetSlugs(true) {
+		delete(fixtureUUIDs, platformtoolscore.PlatformToolsetID(slug).String())
+	}
 	chBefore, err := demoseedtest.SnapshotClickHouse(ctx, ch, constants.DemoOrganizationID, demoProjects)
 	require.NoError(t, err)
 
@@ -143,8 +150,14 @@ func TestDemoSeedSafety(t *testing.T) {
 	}
 	require.True(t, fixtureOutside, "fixture produced no clickhouse rows; the isolation check would be vacuous")
 
+	// Both real runs share one clock. The seed generates rows relative to its
+	// clock (events in the last few minutes, story beats earlier today), so
+	// runs seconds apart can legitimately differ in row count; pinning the
+	// clock makes the count comparison below a pure idempotency check.
+	seedNow := time.Now()
+
 	// First real seed run.
-	require.NoError(t, Run(ctx, logger, db, ch, blob, testenv.NewEncryptionClient(t), testAssistantIssuerURL, testServerURL, DefaultSpec()))
+	require.NoError(t, runAt(ctx, logger, db, ch, blob, testenv.NewEncryptionClient(t), testAssistantIssuerURL, testServerURL, DefaultSpec(), seedNow))
 
 	pgAfter1, err := demoseedtest.SnapshotPostgres(ctx, db)
 	require.NoError(t, err)
@@ -178,7 +191,7 @@ func TestDemoSeedSafety(t *testing.T) {
 		"demo tamper fixture must plant one project-scoped onboarding milestone")
 
 	// Second real seed run.
-	require.NoError(t, Run(ctx, logger, db, ch, blob, testenv.NewEncryptionClient(t), testAssistantIssuerURL, testServerURL, DefaultSpec()))
+	require.NoError(t, runAt(ctx, logger, db, ch, blob, testenv.NewEncryptionClient(t), testAssistantIssuerURL, testServerURL, DefaultSpec(), seedNow))
 
 	pgAfter2, err := demoseedtest.SnapshotPostgres(ctx, db)
 	require.NoError(t, err)

@@ -138,7 +138,7 @@ func (a *App) ProcessSpeakeasySlack(ctx context.Context, instance triggerrepo.Tr
 	if err != nil {
 		return nil, fmt.Errorf("decode trigger config: %w", err)
 	}
-	definition, config, err := a.validateInstance(ctx, instance.ProjectID, uuid.Nil, instance.DefinitionSlug, rawConfig)
+	definition, config, err := a.validateInstance(ctx, instance.OrganizationID, instance.ProjectID, uuid.Nil, uuid.Nil, instance.DefinitionSlug, rawConfig)
 	if err != nil {
 		return nil, fmt.Errorf("validate trigger instance: %w", err)
 	}

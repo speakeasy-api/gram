@@ -150,7 +150,7 @@ func seedSwitchConsent(t *testing.T, tag string, wrap func(cache.Cache) cache.Ca
 		browser:              nil,
 	}
 	registerPageClient(t, ctx, fx.consentActionFixture)
-	fx.clientA = createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, tag, "", []uuid.UUID{issuerID})
+	fx.clientA = createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, tag, "")
 	seedConsentAuthOffer(t, ctx, ti, orgID, projectID, serverID, fx.clientA, authz.AuthClientTypeEMA)
 	_, err := mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID: projectID, McpServerID: conv.ToNullUUID(serverID), Slug: slug,

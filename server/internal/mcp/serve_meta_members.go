@@ -39,6 +39,9 @@ const (
 	metaMemberBackendHosted metaMemberBackend = iota
 	// Remote/tunneled: dispatched through the member's own upstream (AIM-87).
 	metaMemberBackendProxied
+	// Platform built-in toolset: synthetic member served in-process with no
+	// persisted toolsets or mcp_servers row.
+	metaMemberBackendPlatform
 )
 
 // metaMember is one servable, authorized member in a request's snapshot.
@@ -62,6 +65,7 @@ type metaMember struct {
 	toolsetID             uuid.NullUUID
 	remoteServerID        uuid.NullUUID
 	tunneledServerID      uuid.NullUUID
+	platformToolsetSlug   string
 	visibility            string
 	environmentID         uuid.NullUUID
 	toolVariationsGroupID uuid.NullUUID
@@ -84,6 +88,11 @@ type metaMember struct {
 	// records none. Routing accepts a grant qualified to this value; it never
 	// selects across issuers, so it is not an address and is never dialed.
 	tunneledResourceIdentifier string
+
+	// feedbackToolEnabled reports whether the member server has its feedback
+	// tool switched on, read with the member listing. The tool's name and
+	// description are loaded only when it is true.
+	feedbackToolEnabled bool
 
 	// chosenClientID is the upstream client the request's credential chose
 	// for a proxied member, when serving reads credential choices. When set,
@@ -120,7 +129,7 @@ type hostedConsentPresentationKey struct{}
 // probe per listing, so it stays unknown until cached health exists.
 func (s *Service) memberStatus(ctx context.Context, member metaMember) string {
 	switch {
-	case member.backend == metaMemberBackendHosted:
+	case member.backend == metaMemberBackendHosted, member.backend == metaMemberBackendPlatform:
 		return metamcp.StatusAvailable
 	case member.tunneledServerID.Valid:
 		if s.tunnelManager == nil || s.tunnelManager.routes == nil {
@@ -155,10 +164,12 @@ type metaMemberCandidate struct {
 	toolsetID                  uuid.NullUUID
 	remoteServerID             uuid.NullUUID
 	tunneledServerID           uuid.NullUUID
+	platformToolsetSlug        string
 	environmentID              uuid.NullUUID
 	toolVariationsGroupID      uuid.NullUUID
 	upstreamIssuer             upstreamIssuerKeys
 	tunneledResourceIdentifier string
+	feedbackToolEnabled        bool
 }
 
 // memberUpstreamIssuer is a listed member's two upstream issuer sources: its
@@ -216,10 +227,12 @@ func (s *Service) resolveMetaMemberSnapshot(
 			toolsetID:                  row.McpServerToolsetID,
 			remoteServerID:             row.McpServerRemoteMcpServerID,
 			tunneledServerID:           row.McpServerTunneledMcpServerID,
+			platformToolsetSlug:        "",
 			environmentID:              row.McpServerEnvironmentID,
 			toolVariationsGroupID:      row.McpServerToolVariationsGroupID,
 			upstreamIssuer:             memberUpstreamIssuer(row.McpServerRemoteSessionIssuerID, row.McpServerAssociationProviderIds),
 			tunneledResourceIdentifier: row.TunneledResourceIdentifier,
+			feedbackToolEnabled:        row.McpServerFeedbackToolEnabled,
 		})
 	}
 
@@ -292,6 +305,9 @@ func (s *Service) resolveGateMemberSnapshot(ctx context.Context, logger *slog.Lo
 	if err == nil && gate.catalog != nil {
 		ids := make([]uuid.UUID, 0, len(members))
 		for _, member := range members {
+			if member.backend == metaMemberBackendPlatform {
+				continue
+			}
 			ids = append(ids, member.serverID)
 		}
 		hashes, otherHashes, hashErr := s.catalogMemberConfigurations(ctx, gate.organizationID, ids)
@@ -400,11 +416,21 @@ func (s *Service) resolveOrganizationMemberSnapshotWithRecheck(
 			toolsetID:                  row.McpServerToolsetID,
 			remoteServerID:             row.McpServerRemoteMcpServerID,
 			tunneledServerID:           row.McpServerTunneledMcpServerID,
+			platformToolsetSlug:        "",
 			environmentID:              row.McpServerEnvironmentID,
 			toolVariationsGroupID:      row.McpServerToolVariationsGroupID,
 			upstreamIssuer:             memberUpstreamIssuer(row.McpServerRemoteSessionIssuerID, row.McpServerAssociationProviderIds),
 			tunneledResourceIdentifier: row.TunneledResourceIdentifier,
+			feedbackToolEnabled:        row.McpServerFeedbackToolEnabled,
 		})
+	}
+
+	if !organizationGateway && scopeProjectID != uuid.Nil && recheck == nil {
+		platformCandidates, err := s.platformGatewayCandidates(ctx, scopeProjectID)
+		if err != nil {
+			return ctx, nil, nil, err
+		}
+		candidates = append(candidates, platformCandidates...)
 	}
 
 	ctx, members, denied, err := s.admitMetaMembers(ctx, logger, authzSurface, organizationID, candidates)
@@ -585,9 +611,11 @@ func (s *Service) admitMetaMembers(
 	members := make([]metaMember, 0, len(candidates))
 	var denied []metaMember
 	for _, candidate := range candidates {
-		// Only hosted, remote, and tunneled backends have a gateway dispatch path.
+		// Only platform, hosted, remote, and tunneled backends have a gateway dispatch path.
 		var backend metaMemberBackend
 		switch {
+		case candidate.platformToolsetSlug != "":
+			backend = metaMemberBackendPlatform
 		case candidate.toolsetID.Valid:
 			backend = metaMemberBackendHosted
 		case candidate.remoteServerID.Valid || candidate.tunneledServerID.Valid:
@@ -628,6 +656,7 @@ func (s *Service) admitMetaMembers(
 			toolsetID:                      candidate.toolsetID,
 			remoteServerID:                 candidate.remoteServerID,
 			tunneledServerID:               candidate.tunneledServerID,
+			platformToolsetSlug:            candidate.platformToolsetSlug,
 			visibility:                     candidate.visibility,
 			environmentID:                  candidate.environmentID,
 			toolVariationsGroupID:          candidate.toolVariationsGroupID,
@@ -635,6 +664,7 @@ func (s *Service) admitMetaMembers(
 			upstreamIssuer:                 candidate.upstreamIssuer,
 			upstreamIssuerFromAssociations: fromAssociations,
 			tunneledResourceIdentifier:     candidate.tunneledResourceIdentifier,
+			feedbackToolEnabled:            candidate.feedbackToolEnabled,
 			chosenClientID:                 uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 			upstreamNoAuth:                 false,
 			upstreamUnavailable:            nil,
@@ -643,9 +673,10 @@ func (s *Service) admitMetaMembers(
 		}
 		switch {
 		case refusal == nil:
-
 			members = append(members, member)
-			s.recordMemberIssuerParity(ctx, logger, organizationID, member)
+			if member.backend != metaMemberBackendPlatform {
+				s.recordMemberIssuerParity(ctx, logger, organizationID, member)
+			}
 		case candidate.visibility == mcpservers.VisibilityPrivate:
 			// Kept aside so a call that names it records its denied check.
 			// Any other visibility (malformed or future) is simply dropped.

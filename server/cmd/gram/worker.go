@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/authclients"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
@@ -35,7 +36,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
 	"github.com/speakeasy-api/gram/server/internal/control"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/deviceagentversions"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
@@ -45,6 +45,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
 	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
+	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
@@ -795,12 +796,16 @@ func newWorkerCommand() *cli.Command {
 			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemetryLogger, auditLogger, serverURL, nil, nil, slackClient, cache.NewRedisCacheAdapter(redisClient), assistantIdentities)
 			speakeasySlackDirectory := newSpeakeasySlackDirectory(c, db, encryptionClient, guardianPolicy, auditLogger)
 			triggerApp.SetSpeakeasySlackTokens(speakeasySlackDirectory)
+			slackAppCredentials := authclients.NewSlackAppCredentialStore(db, authzEngine, encryptionClient)
+			triggerApp.SetSlackAppAuthClientLoader(slackAppCredentials)
 
 			platformSigner, err := mcpauthz.New(c.String("authz-private-key"), c.String("authz-public-keys"), c.String("authz-issuer-url"), c.String("environment") == "local")
 			if err != nil {
 				return fmt.Errorf("configure principal credential signer: %w", err)
 			}
-			assistantTokenManager := assistanttokens.New(c.String(usersessions.JWTSigningKeyFlag), db, authzEngine, principalcredential.New(platformSigner, db), cache.NewRedisCacheAdapter(redisClient))
+			principalCredentials := principalcredential.New(platformSigner, db)
+			redisCache := cache.NewRedisCacheAdapter(redisClient)
+			assistantTokenManager := assistanttokens.New(c.String(usersessions.JWTSigningKeyFlag), db, authzEngine, principalCredentials, redisCache)
 
 			chatClient := chat.NewAgenticChatClient(completionsClient)
 
@@ -835,14 +840,43 @@ func newWorkerCommand() *cli.Command {
 			assistantsCore.SetDashboardIngestor(triggerApp)
 			assistantsCore.SetChatMessageWriter(chatWriter)
 			assistantsCore.SetTurnStream(chat.NewTurnStream(redisClient))
-			if err := installKitLocalRuntimeFromCLI(logger, c, assistantsCore, db, auditLogger, redisClient, serverURL); err != nil {
-				return err
-			}
 			assistantsCore.SetAssetStorage(assetStorage)
 			assistantsCore.SetAssetSigningKey(c.String(usersessions.JWTSigningKeyFlag))
 			assistantsCore.SetSlackImageInlining(env, slackapi.NewClient("", guardianPolicy.PooledClient()))
 			assistantsCore.SetSpeakeasySlackTokens(speakeasySlackDirectory)
+			assistantsCore.SetSlackAppCredentials(slackAppCredentials)
 			assistantsCore.SetFeatureProvider(featureFlags)
+			mcpAuthenticationHost, err := mcp.NewAuthenticationHost(c.String("authentication-host-url"), serverURL, c.String("environment"))
+			if err != nil {
+				return fmt.Errorf("invalid authentication host: %w", err)
+			}
+			platformHosts, err := parsePlatformHosts(c, mcpAuthenticationHost)
+			if err != nil {
+				return err
+			}
+			orgHosts, err := orgHostResolverFromCLI(c, serverURL, siteURL, c.String("environment"), platformHosts)
+			if err != nil {
+				return err
+			}
+			if err := installKitLocalRuntimeFromCLI(logger, c, assistantsCore, db, auditLogger, redisClient, serverURL, orgHosts); err != nil {
+				return err
+			}
+			assistantsCore.SetProjectGatewayEvaluator(mcp.NewProjectGatewayEvaluator(mcp.ProjectGatewayEvaluatorConfig{
+				Logger:                    logger,
+				MeterProvider:             meterProvider,
+				DB:                        db,
+				Environment:               env,
+				Encryption:                encryptionClient,
+				Cache:                     redisCache,
+				Authz:                     authzEngine,
+				Features:                  featureFlags,
+				PrincipalCredentials:      principalCredentials,
+				AssistantTokens:           assistantTokenManager,
+				ServerURL:                 serverURL,
+				AuthenticationHostBaseURL: mcpAuthenticationHost.BaseURL(),
+				PlatformHosts:             platformHosts,
+				PlatformExtras:            nil,
+			}))
 			// Turns this worker runs relay the connection links the MCP service
 			// issues on the dashboard origin, as the server's turns do.
 			assistantsCore.SetSiteURL(siteURL)
@@ -855,14 +889,6 @@ func newWorkerCommand() *cli.Command {
 
 			piScanner := promptinjection.NewScanner(logger, newPICascade(ctx, logger, tracerProvider, meterProvider, completionsClient, guardianPolicy, openRouter, orEndpoints, db).Classify)
 
-			platformHosts, err := customdomains.ParsePlatformHosts(c.StringSlice(platformHostsFlag))
-			if err != nil {
-				return fmt.Errorf("invalid platform hosts: %w", err)
-			}
-			orgHosts, err := orgHostResolverFromCLI(c, serverURL, siteURL, c.String("environment"), platformHosts)
-			if err != nil {
-				return err
-			}
 			identityResolver.SetNewOrganizationDefaultHost(orgHosts.NewOrganizationDefaultHost())
 			pluginPublisher.WithOrganizationHosts(orgHosts)
 			loopsWorkflowClient := loops.NewWorkflowClient(ctx, logger, guardianPolicy, c.String("loops-api-key"))

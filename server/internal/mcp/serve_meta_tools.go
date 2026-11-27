@@ -364,6 +364,9 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 		}
 		return nil, oops.E(oops.CodeUnavailable, err, "could not verify the approved server; retry shortly").LogError(ctx, logger)
 	}
+	if member.backend == metaMemberBackendPlatform {
+		return s.executePlatformMemberTool(ctx, logger, gate, member, req, toolName, arguments, meta, attempt)
+	}
 	if member.backend != metaMemberBackendHosted {
 		// A hosted member's tool is checked once handleToolsCall resolves it.
 		if attempt.dispositions == memberToolReadOnly {
@@ -677,6 +680,7 @@ func (s *Service) buildMemberDispatch(
 		mcpServerID:           &serverID,
 		mcpEndpointID:         nil,
 		attributionServerID:   nil,
+		feedbackToolEnabled:   member.feedbackToolEnabled,
 		// Meta members keep their toolset-keyed per-tool checks; the meta
 		// surface's RBAC model is outside the wrapper-governance cutover.
 		// Publicness is the hosting state the member was admitted under.

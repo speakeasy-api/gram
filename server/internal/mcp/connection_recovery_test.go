@@ -73,7 +73,7 @@ func newConnectionRecoveryFixtureWithCallback(t *testing.T, callbackBase, asBase
 	}
 	slug := "recovery-" + uuid.NewString()[:6]
 	f.asBase = conv.Default(asBase, "https://"+slug+"-as.example.com")
-	registration := createConsentRemoteClientWithCallback(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, f.asBase, nil, callbackBase)
+	registration := createConsentRemoteClientWithCallback(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, f.asBase, callbackBase)
 	f.fixtures = authclientfixtures.New(ti.conn)
 	remoteID, serverID := uuid.New(), uuid.New()
 	f.upstream = "https://mcp.example.com/" + remoteID.String()[:8]
@@ -263,8 +263,8 @@ func TestConnectionRecoveryBindsACallbackOnAnotherHost(t *testing.T) {
 
 // A link's login stands on the offer it names and asks for the resource that
 // offer decides. It completes and stores
-// the connection whether or not a user session issuer links the registration,
-// and it writes no link.
+// the connection whether or not a registration is reachable from a sign-in,
+// and it does not change that reachability.
 func TestConnectionRecoveryCompletesThroughTheOffer(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -296,7 +296,8 @@ func TestConnectionRecoveryCompletesThroughTheOffer(t *testing.T) {
 			}
 			q := remotesessions_repo.New(f.ti.conn)
 			if tc.linked {
-				require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(f.ctx, remotesessions_repo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: f.link.RegistrationID, UserSessionIssuerID: signIn}))
+				require.NoError(t, f.fixtures.SetServerUserSessionIssuerFixture(f.ctx, authclientfixtures.SetServerUserSessionIssuerFixtureParams{ID: f.link.McpServerID, UserSessionIssuerID: conv.ToNullUUID(signIn)}))
+				associateServerRegistration(t, f.ctx, f.ti.conn, f.link.OrganizationID, f.link.ProjectID, f.link.McpServerID, f.link.RegistrationID)
 			}
 			// A browser's request carries no prepared grants: the person's own decide.
 			f.ctx = t.Context()
@@ -323,7 +324,7 @@ func TestConnectionRecoveryCompletesThroughTheOffer(t *testing.T) {
 			require.Equal(t, f.upstream, session.Resource.String)
 			linked, err := q.CheckRemoteSessionClientBindingForUserSessionIssuer(f.ctx, remotesessions_repo.CheckRemoteSessionClientBindingForUserSessionIssuerParams{RemoteSessionClientID: f.link.RegistrationID, UserSessionIssuerID: signIn, ProjectID: f.link.ProjectID, OrganizationID: f.link.OrganizationID})
 			require.NoError(t, err)
-			require.Equal(t, tc.linked, linked, "the login writes no link of its own")
+			require.Equal(t, tc.linked, linked, "the login does not change sign-in reachability")
 		})
 	}
 }

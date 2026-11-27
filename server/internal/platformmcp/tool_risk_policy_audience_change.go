@@ -50,7 +50,7 @@ func registerChangeRiskPolicyAudience(reg *Registrar, catalogAvailable bool, han
 	description := "Change exact positive user/role grants on a targeted risk policy. Risk policy mutations are not enabled in this rollout."
 	if catalogAvailable && handlers != nil && handlers.Controls != nil && handlers.ChangeAudience != nil {
 		handler = handlers.ChangeAudience
-		description = "Atomically add and remove exact organization user/ROLE principal URNs on one targeted risk policy, preserving settings and unrelated grants. Read get_risk_policy first. Call first with confirmed: false: the same checks as a confirmed call run but nothing is written, and the confirmation_required refusal returns a preview of the policy, its current audience, the principals added and removed, and the resulting audience; any other refusal means the change cannot be made as requested. Show it to the user, then call again with the same input, the same idempotency key, and confirmed: true once they confirm. Both arrays are required (empty allowed), max 100 each, with at least one change; duplicates, overlap, already-present additions and absent removals are refused. The resulting audience must contain 1–100 principals. Everyone deltas are refused. Removal changes only explicit positive grants, not role-derived or inherited coverage, and never creates an exclusion or proves effective non-membership. For removal of the authenticated user use remove_self_from_risk_policy; do not bypass its refusal. Reuse the idempotency key only for the same confirmed request; re-read after writing."
+		description = "Atomically add and remove exact organization user/ROLE principal URNs on one targeted risk policy, preserving settings and unrelated grants. Read get_risk_policy first. Call first with confirmed: false: the same checks as a confirmed call run but nothing is written, and the confirmation_required refusal returns a preview of the policy, its current audience, the principals added and removed, and the resulting audience; any other refusal means the change cannot be made as requested. Show it to the user, then call again with the same input, the same idempotency key, and confirmed: true once they confirm. Both arrays are required (empty allowed), max 100 each, with at least one change; duplicates, overlap, already-present additions and absent removals are refused. The resulting audience must contain 1–100 principals. Everyone deltas are refused. Removal changes only explicit positive grants, not role-derived or inherited coverage, and never creates an exclusion or proves effective non-membership. Removing the authenticated user from a policy is not supported; do not use this tool for that. Reuse the idempotency key only for the same confirmed request; re-read after writing."
 	}
 	principals := func(description string) *jsonschema.Schema {
 		return &jsonschema.Schema{Type: "array", Description: description, Items: stringSchema("Exact organization user or ROLE principal URN; Everyone is not supported.", 1, 0), MaxItems: new(100), UniqueItems: true}
@@ -127,7 +127,7 @@ func validateRiskPolicyAudienceDelta(input changeRiskPolicyAudienceInput) ([]urn
 
 func validateRiskPolicyAudienceDeltaTarget(kind string, audience []string, input changeRiskPolicyAudienceInput) error {
 	if kind != "targeted" {
-		return selfRemovalRefusal("Audience deltas require a targeted audience; Everyone-except-one is not supported.")
+		return invalidRiskPolicyAudienceRefusal("Audience deltas require a targeted audience; Everyone-except-one is not supported.")
 	}
 	remaining := make(map[string]bool, len(audience))
 	for _, value := range audience {
@@ -139,18 +139,18 @@ func validateRiskPolicyAudienceDeltaTarget(kind string, audience []string, input
 	}
 	for _, value := range input.RemovePrincipals {
 		if !remaining[value] {
-			return selfRemovalRefusal("A removal has no exact audience grant. No policy was changed.")
+			return invalidRiskPolicyAudienceRefusal("A removal has no exact audience grant. No policy was changed.")
 		}
 		delete(remaining, value)
 	}
 	for _, value := range input.AddPrincipals {
 		if remaining[value] {
-			return selfRemovalRefusal("An addition already has an exact audience grant. No policy was changed.")
+			return invalidRiskPolicyAudienceRefusal("An addition already has an exact audience grant. No policy was changed.")
 		}
 		remaining[value] = true
 	}
 	if len(remaining) == 0 || len(remaining) > 100 {
-		return selfRemovalRefusal("The resulting targeted audience must contain between 1 and 100 principals. No policy was changed.")
+		return invalidRiskPolicyAudienceRefusal("The resulting targeted audience must contain between 1 and 100 principals. No policy was changed.")
 	}
 	return nil
 }
@@ -164,4 +164,8 @@ func riskPolicyAudienceReplacementSchema() *jsonschema.Schema {
 		}, []string{"type", "principal_urns", "confirm"})
 	}
 	return &jsonschema.Schema{OneOf: []*jsonschema.Schema{branch("everyone", 0, 0), branch("targeted", 1, 100)}}
+}
+
+func invalidRiskPolicyAudienceRefusal(message string) error {
+	return &RiskMutationError{Code: "invalid_request", Message: message, Cause: ErrRiskMutationInvalid}
 }

@@ -10,6 +10,7 @@ import {
   type QueryKey,
 } from "@tanstack/react-query";
 import {
+  getHooksReleaseProgress,
   getHooksRollout,
   getOrganization,
   getOrganizationChatAnalysisSettings,
@@ -138,6 +139,11 @@ export const hooksRolloutQuery = queryOptions({
   queryFn: getHooksRollout,
 });
 
+export const hooksReleaseProgressQuery = queryOptions({
+  queryKey: ["gram-admin-hooks-release-progress"] as const,
+  queryFn: getHooksReleaseProgress,
+});
+
 const ORGANIZATION_HOOKS_ROLLOUT_KEY = "gram-admin-organization-hooks-rollout";
 
 export function organizationHooksRolloutQuery(
@@ -155,6 +161,7 @@ export function organizationHooksRolloutQuery(
 export function invalidateHooksRollout(qc: QueryClient): void {
   void qc.invalidateQueries({ queryKey: hooksRolloutQuery.queryKey });
   void qc.invalidateQueries({ queryKey: [ORGANIZATION_HOOKS_ROLLOUT_KEY] });
+  void qc.invalidateQueries({ queryKey: hooksReleaseProgressQuery.queryKey });
 }
 
 export function organizationProjectsQuery(

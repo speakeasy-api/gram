@@ -11,6 +11,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/orgencryption/orgencryptiontest"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
@@ -260,7 +261,8 @@ func TestBackfillVerifyAndFinalizeMoveSecretsToTheOrganizationKey(t *testing.T) 
 	store := clientsecrets.NewCopyStore(ti.conn)
 	counts, err := store.Count(t.Context(), ti.orgID)
 	require.NoError(t, err)
-	require.Equal(t, orgencryption.CopyCounts{Waiting: 2, Unreadable: 0, Unattributed: 0, PlatformCopies: 2}, counts)
+	require.False(t, counts.LastWrittenAt.IsZero())
+	require.Equal(t, orgencryption.CopyCounts{Waiting: 2, Unreadable: 0, Unattributed: 0, PlatformCopies: 2, Values: 2, LastWrittenAt: counts.LastWrittenAt}, counts)
 
 	ti.enroll(t)
 	result, err := orgencryption.NewRunner(testenv.NewLogger(t), ti.conn, ti.cipher, testenv.NewMeterProvider(t)).Run(t.Context(), ti.orgID, orgencryption.UseCaseOAuthClientSecrets, []orgencryption.CopyStore{store})
@@ -311,7 +313,8 @@ func TestCopyStoreCountsUnreadableSecrets(t *testing.T) {
 
 	counts, err := store.Count(t.Context(), ti.orgID)
 	require.NoError(t, err)
-	require.Equal(t, orgencryption.CopyCounts{Waiting: 0, Unreadable: 1, Unattributed: 0, PlatformCopies: 1}, counts)
+	require.False(t, counts.LastWrittenAt.IsZero())
+	require.Equal(t, orgencryption.CopyCounts{Waiting: 0, Unreadable: 1, Unattributed: 0, PlatformCopies: 1, Values: 1, LastWrittenAt: counts.LastWrittenAt}, counts)
 }
 
 // otherProcessSecrets is Secrets in another process: same database and keys,
@@ -474,4 +477,133 @@ func TestCopyStoreClearPlatformCopiesIsFencedOnGeneration(t *testing.T) {
 	require.NoError(t, err)
 	require.Zero(t, cleared, "a clear decided under a stale generation changes nothing")
 	require.True(t, ti.stored(t, client.ID).ClientSecretEncrypted.Valid)
+}
+
+// setCopies stores the client's secret as the given copies, under generation 0.
+func (ti *testInstance) setCopies(t *testing.T, client repo.RemoteSessionClient, platform pgtype.Text, org pgtype.Text) {
+	t.Helper()
+
+	_, err := repo.New(ti.conn).SetRemoteSessionClientSecret(t.Context(), repo.SetRemoteSessionClientSecretParams{
+		PlatformCopy:          platform,
+		OrgCopy:               org,
+		ClientSecretExpiresAt: noExpiry(),
+		ID:                    client.ID,
+		OrganizationID:        client.OrganizationID,
+		ProjectID:             client.ProjectID,
+		DecidedGeneration:     0,
+	})
+	require.NoError(t, err)
+}
+
+// createOrganization creates another organization and returns its id.
+func (ti *testInstance) createOrganization(t *testing.T) string {
+	t.Helper()
+
+	orgID := "org_" + uuid.NewString()
+	_, err := orgrepo.New(ti.conn).UpsertOrganizationMetadata(t.Context(), orgrepo.UpsertOrganizationMetadataParams{
+		ID:          orgID,
+		Name:        "Client Secrets Other Org",
+		Slug:        "client-secrets-" + uuid.NewString(),
+		WorkosID:    conv.ToPGText(orgID),
+		Whitelisted: pgtype.Bool{Bool: false, Valid: false},
+	})
+	require.NoError(t, err)
+
+	return orgID
+}
+
+// valuesFor returns the organization's entry in organizations.
+func valuesFor(t *testing.T, organizations []orgencryption.OrganizationValues, organizationID string) orgencryption.OrganizationValues {
+	t.Helper()
+
+	for _, entry := range organizations {
+		if entry.OrganizationID == organizationID {
+			return entry
+		}
+	}
+	require.Failf(t, "organization not listed", "%s holds values but is not listed", organizationID)
+
+	return orgencryption.OrganizationValues{}
+}
+
+func TestCopyStoreValuesCountsASecretUnderEitherKey(t *testing.T) {
+	t.Parallel()
+
+	ti := newTestInstance(t)
+	owner := ti.projectOwner()
+	none := pgtype.Text{String: "", Valid: false}
+	platformOnly := ti.createClient(t, owner)
+	orgOnly := ti.createClient(t, owner)
+	both := ti.createClient(t, owner)
+	deleted := ti.createClient(t, owner)
+	ti.setCopies(t, platformOnly, conv.ToPGText("platform-key copy"), none)
+	ti.setCopies(t, orgOnly, none, conv.ToPGText("organization-key copy"))
+	ti.setCopies(t, both, conv.ToPGText("platform-key copy"), conv.ToPGText("organization-key copy"))
+	ti.setCopies(t, deleted, conv.ToPGText("platform-key copy"), conv.ToPGText("organization-key copy"))
+	_, err := repo.New(ti.conn).SoftDeleteRemoteSessionClientFixture(t.Context(), deleted.ID)
+	require.NoError(t, err)
+
+	// Rows without organization_id hold secrets the backfill never reaches.
+	global := ti.createClient(t, clientsecrets.OwnerOf(none, uuid.NullUUID{UUID: uuid.Nil, Valid: false}))
+	ti.setCopies(t, global, conv.ToPGText("platform-key copy"), none)
+	unattributed := ti.createClient(t, clientsecrets.OwnerOf(none, uuid.NullUUID{UUID: ti.projectID, Valid: true}))
+	ti.setCopies(t, unattributed, conv.ToPGText("platform-key copy"), none)
+
+	// Written last, so its updated_at is the latest, but it holds no secret.
+	ti.createClient(t, owner)
+
+	var lastWrittenAt time.Time
+	for _, client := range []repo.RemoteSessionClient{platformOnly, orgOnly, both, deleted} {
+		if stored := ti.stored(t, client.ID).UpdatedAt.Time; stored.After(lastWrittenAt) {
+			lastWrittenAt = stored
+		}
+	}
+
+	store := clientsecrets.NewCopyStore(ti.conn)
+	counted, err := store.Count(t.Context(), ti.orgID)
+	require.NoError(t, err)
+	require.Equal(t, int64(4), counted.Values, "a secret under either key counts, soft-deleted clients included, and a row without organization_id does not")
+	require.True(t, lastWrittenAt.Equal(counted.LastWrittenAt), "want %s, got %s", lastWrittenAt, counted.LastWrittenAt)
+
+	organizations, err := store.ListOrganizationsWithValues(t.Context())
+	require.NoError(t, err)
+	listed := valuesFor(t, organizations, ti.orgID)
+	require.Equal(t, int64(4), listed.Values)
+	require.True(t, lastWrittenAt.Equal(listed.LastWrittenAt), "want %s, got %s", lastWrittenAt, listed.LastWrittenAt)
+	for _, entry := range organizations {
+		require.NotEmpty(t, entry.OrganizationID, "a row without organization_id is never listed")
+	}
+}
+
+func TestCopyStoreValuesListsEachOrganizationApart(t *testing.T) {
+	t.Parallel()
+
+	ti := newTestInstance(t)
+	none := pgtype.Text{String: "", Valid: false}
+	ti.setCopies(t, ti.createClient(t, ti.organizationOwner()), conv.ToPGText("platform-key copy"), none)
+
+	other := clientsecrets.OwnerOf(conv.ToPGText(ti.createOrganization(t)), uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+	for range 2 {
+		ti.setCopies(t, ti.createClient(t, other), none, conv.ToPGText("organization-key copy"))
+	}
+
+	// An organization whose only client has no secret holds nothing.
+	empty := clientsecrets.OwnerOf(conv.ToPGText(ti.createOrganization(t)), uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+	ti.createClient(t, empty)
+
+	store := clientsecrets.NewCopyStore(ti.conn)
+	organizations, err := store.ListOrganizationsWithValues(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, int64(1), valuesFor(t, organizations, ti.orgID).Values)
+	require.Equal(t, int64(2), valuesFor(t, organizations, other.OrganizationID.String).Values)
+	for _, entry := range organizations {
+		require.NotEqual(t, empty.OrganizationID.String, entry.OrganizationID, "an organization without a secret is not listed")
+	}
+
+	for _, organizationID := range []string{empty.OrganizationID.String, "org_" + uuid.NewString()} {
+		counted, err := store.Count(t.Context(), organizationID)
+		require.NoError(t, err)
+		require.Zero(t, counted.Values)
+		require.True(t, counted.LastWrittenAt.IsZero(), "an organization without values has no last write")
+	}
 }

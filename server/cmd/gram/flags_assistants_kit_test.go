@@ -106,13 +106,13 @@ func TestKitGKEProvisionCLIRejectsUnsafeConfiguration(t *testing.T) {
 func TestKitCLIOptInAndProviderValidation(t *testing.T) {
 	t.Parallel()
 	// Unset image preserves legacy composition without needing service dependencies.
-	require.NoError(t, installKitLocalRuntimeFromCLI(testenv.NewLogger(t), kitCLIContext(t, nil), nil, nil, nil, nil, nil))
+	require.NoError(t, installKitLocalRuntimeFromCLI(testenv.NewLogger(t), kitCLIContext(t, nil), nil, nil, nil, nil, nil, nil))
 	c := kitCLIContext(t, map[string]string{"assistant-kit-image": "example.invalid/kit:v1", "assistant-runtime-provider": "local"})
-	require.ErrorContains(t, installKitLocalRuntimeFromCLI(testenv.NewLogger(t), c, nil, nil, nil, nil, nil), "local environment")
+	require.ErrorContains(t, installKitLocalRuntimeFromCLI(testenv.NewLogger(t), c, nil, nil, nil, nil, nil, nil), "local environment")
 	c = kitCLIContext(t, map[string]string{"assistant-kit-image": "example.invalid/kit:v1", "assistant-runtime-provider": "gke", "assistant-kit-gke-project-number": "123456789012", "assistant-kit-gke-organization-id": "987654321098", "assistant-kit-gke-cluster-location": "us-central1", "assistant-kit-gke-cluster-name": "assistants"})
-	require.ErrorContains(t, installKitLocalRuntimeFromCLI(testenv.NewLogger(t), c, nil, nil, nil, nil, nil), "ingress-cidr")
+	require.ErrorContains(t, installKitLocalRuntimeFromCLI(testenv.NewLogger(t), c, nil, nil, nil, nil, nil, nil), "ingress-cidr")
 	c = kitCLIContext(t, map[string]string{"assistant-kit-image": "example.invalid/kit:v1", "assistant-runtime-provider": "gke", "assistant-kit-workload-subject": "local-subject"})
-	require.ErrorContains(t, installKitLocalRuntimeFromCLI(testenv.NewLogger(t), c, nil, nil, nil, nil, nil), "local-only")
+	require.ErrorContains(t, installKitLocalRuntimeFromCLI(testenv.NewLogger(t), c, nil, nil, nil, nil, nil, nil), "local-only")
 }
 
 func TestKitCLIIgnoredWhenRuntimeDisabled(t *testing.T) {
@@ -120,7 +120,7 @@ func TestKitCLIIgnoredWhenRuntimeDisabled(t *testing.T) {
 	// GKE Kit settings that would otherwise demand a cluster endpoint, CA, and
 	// identity flags are skipped before any of them is validated.
 	c := kitCLIContext(t, map[string]string{"assistant-kit-image": "example.invalid/kit:v1", "assistant-runtime-provider": "disabled", "assistant-kit-workload-subject": "local-subject"})
-	require.NoError(t, installKitLocalRuntimeFromCLI(testenv.NewLogger(t), c, nil, nil, nil, nil, nil))
+	require.NoError(t, installKitLocalRuntimeFromCLI(testenv.NewLogger(t), c, nil, nil, nil, nil, nil, nil))
 }
 
 func TestPrivateIngressRegistersAssistantRuntimeFlags(t *testing.T) {
@@ -143,8 +143,8 @@ func TestKitGKERejectsLocalProjectionOptions(t *testing.T) {
 	for _, name := range []string{"assistant-kit-workload-subject", "assistant-kit-workload-assertion-file"} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			c := kitCLIContext(t, map[string]string{"assistant-kit-image": "example.invalid/kit:v0.2.19", "assistant-runtime-provider": "gke", name: "local-projection-value"})
-			require.ErrorContains(t, installKitLocalRuntimeFromCLI(testenv.NewLogger(t), c, nil, nil, nil, nil, nil), name+" is local-only")
+			c := kitCLIContext(t, map[string]string{"assistant-kit-image": "example.invalid/kit:v0.3.1", "assistant-runtime-provider": "gke", name: "local-projection-value"})
+			require.ErrorContains(t, installKitLocalRuntimeFromCLI(testenv.NewLogger(t), c, nil, nil, nil, nil, nil, nil), name+" is local-only")
 		})
 	}
 }
@@ -152,11 +152,11 @@ func TestKitGKERejectsLocalProjectionOptions(t *testing.T) {
 func TestKitGKEIgnoresExternalIssuerOptions(t *testing.T) {
 	t.Parallel()
 	values := kitGKEIdentityCLIValues()
-	values["assistant-kit-image"] = "example.invalid/kit:v0.2.19"
+	values["assistant-kit-image"] = "example.invalid/kit:v0.3.1"
 	values["assistant-runtime-provider"] = "gke"
 	values["assistant-kit-workload-issuer"] = "https://issuer.example.invalid"
 	values["assistant-kit-workload-jwks-url"] = "https://issuer.example.invalid/jwks"
-	require.ErrorContains(t, installKitLocalRuntimeFromCLI(testenv.NewLogger(t), kitCLIContext(t, values), nil, nil, nil, nil, nil), "ingress-cidr")
+	require.ErrorContains(t, installKitLocalRuntimeFromCLI(testenv.NewLogger(t), kitCLIContext(t, values), nil, nil, nil, nil, nil, nil), "ingress-cidr")
 }
 
 func kitGKEIdentityCLIValues() map[string]string {
@@ -188,7 +188,7 @@ func TestKitGKEIdentityCLIRejectsInvalidIdentity(t *testing.T) {
 				values[name] = value
 				values["assistant-kit-image"] = "example.invalid/kit:v1"
 				values["assistant-runtime-provider"] = "gke"
-				require.ErrorContains(t, installKitLocalRuntimeFromCLI(testenv.NewLogger(t), kitCLIContext(t, values), nil, nil, nil, nil, nil), "identity flags")
+				require.ErrorContains(t, installKitLocalRuntimeFromCLI(testenv.NewLogger(t), kitCLIContext(t, values), nil, nil, nil, nil, nil, nil), "identity flags")
 			})
 		}
 	}

@@ -60,6 +60,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
 	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/userblock"
 )
 
 const dispositionAssistants = "assistants"
@@ -446,6 +447,11 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		SkipMembershipSync: supportOrgID != "",
 		Attribution:        attribution,
 	})
+	if errors.Is(err, identity.ErrUserBlocked) {
+		// The generic login failure, so the page does not reveal the block.
+		userblock.LogRefusal(ctx, s.logger, "dashboard_login", idpUser.Sub)
+		return redirectWithError(authErrInit, err)
+	}
 	if err != nil {
 		return redirectWithError(authErrInit, err)
 	}
@@ -1266,33 +1272,24 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		if err != nil {
 			return nil, err
 		}
-		// Build the full list of project IDs, then filter to only those the
-		// user is allowed to see (mirrors the projects.List endpoint).
-		projectIDs := make([]string, 0, len(projectRows))
-		for _, p := range projectRows {
-			projectIDs = append(projectIDs, p.ID.String())
-		}
-
-		allowedIDs := projectIDs
-		if len(projectIDs) > 0 && org.ID == authCtx.ActiveOrganizationID {
-			checks := make([]authz.Check, len(projectIDs))
-			for i, id := range projectIDs {
-				checks[i] = authz.Project(authz.ProjectIDFrom(id)).Read()
+		// Keep only the projects the user is allowed to see (mirrors the
+		// projects.List endpoint).
+		filtered := len(projectRows) > 0 && org.ID == authCtx.ActiveOrganizationID
+		var decisions authz.Decisions
+		if filtered {
+			checks := make([]authz.Check, len(projectRows))
+			for i, project := range projectRows {
+				checks[i] = authz.Project(authz.ProjectIDOf(project.ID)).Read()
 			}
-			allowedIDs, err = s.authz.Filter(ctx, checks)
+			decisions, err = s.authz.Decide(ctx, checks...)
 			if err != nil {
 				return nil, err
 			}
 		}
 
-		allowed := make(map[string]struct{}, len(allowedIDs))
-		for _, id := range allowedIDs {
-			allowed[id] = struct{}{}
-		}
-
-		orgProjects := make([]*gen.ProjectEntry, 0, len(allowedIDs))
-		for _, project := range projectRows {
-			if _, ok := allowed[project.ID.String()]; !ok {
+		orgProjects := make([]*gen.ProjectEntry, 0, len(projectRows))
+		for i, project := range projectRows {
+			if filtered && !decisions.Each[i].Allowed {
 				continue
 			}
 			orgProjects = append(orgProjects, &gen.ProjectEntry{

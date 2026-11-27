@@ -48,14 +48,21 @@ const (
 // Run replaces the data for spec's tenant while holding the shared advisory
 // lock. The Postgres seed runs in one transaction, so a failed run leaves the
 // previous data in place; each statement in it gets its own statement
-// timeout. Once it commits, the tenant's upstream auth is migrated to typed
-// auth clients by the staff migration's own backfills and checked complete
-// (migrateUpstreamAuth). The ClickHouse seed then deletes both source rows and
+// timeout. The tenant's typed auth fixtures and grants are written in that
+// transaction, and checked after it commits. The ClickHouse seed then deletes both source rows and
 // materialized-view targets before its inserts incrementally repopulate the
 // summaries.
 //
 // Pass DefaultSpec() for the shared production demo org.
 func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.Conn, blob assets.BlobStore, enc *encryption.Client, assistantIssuerURL, serverURL string, spec Spec) error {
+	return runAt(ctx, logger, db, ch, blob, enc, assistantIssuerURL, serverURL, spec, time.Time{})
+}
+
+// runAt is Run with the seed clock pinned to now; the zero time means the
+// Postgres transaction time. The generated rows, and how many there are, are
+// a function of that clock, so two runs at the same clock produce the same
+// row set.
+func runAt(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.Conn, blob assets.BlobStore, enc *encryption.Client, assistantIssuerURL, serverURL string, spec Spec, now time.Time) error {
 	logger = logger.With(attr.SlogComponent("demoseed"), attr.SlogOrganizationID(spec.OrgID))
 
 	if err := spec.Validate(); err != nil {
@@ -63,7 +70,7 @@ func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.C
 	}
 
 	// The advisory lock holds one connection for the whole run, and the
-	// upstream auth backfills acquire another while it is held.
+	// typed upstream auth diagnostics acquire another while it is held.
 	if db.Config().MaxConns < 2 {
 		return fmt.Errorf("demo seed needs a postgres pool of at least 2 connections, got %d", db.Config().MaxConns)
 	}
@@ -78,16 +85,16 @@ func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.C
 	}
 
 	return withSeedLock(ctx, logger, db, func(conn *pgxpool.Conn) error {
-		s, err := seedPostgres(ctx, logger, conn, blob, enc, assistantIssuerURL, serverURL, spec, catalog)
+		s, err := seedPostgres(ctx, logger, conn, blob, enc, assistantIssuerURL, serverURL, spec, catalog, now)
 		if err != nil {
 			return err
 		}
 		logger.InfoContext(ctx, "demo seed applied to postgres")
 
-		if err := migrateUpstreamAuth(ctx, logger, db, spec.OrgID); err != nil {
-			return fmt.Errorf("migrate demo seed upstream auth: %w", err)
+		if err := upstreamAuthReadiness(ctx, logger, db, spec.OrgID); err != nil {
+			return fmt.Errorf("check demo seed upstream auth: %w", err)
 		}
-		logger.InfoContext(ctx, "demo seed upstream auth migrated")
+		logger.InfoContext(ctx, "demo seed typed upstream auth ready")
 
 		if err := s.runClickHouse(ctx, ch); err != nil {
 			return fmt.Errorf("apply demo seed to clickhouse: %w", err)
@@ -154,8 +161,9 @@ type txBeginner interface {
 
 // seedPostgres runs the Postgres seed for spec in one transaction on db, so a
 // failed run leaves the previous data in place. It returns the seeder, whose
-// clock the ClickHouse seed reuses.
-func seedPostgres(ctx context.Context, logger *slog.Logger, db txBeginner, blob assets.BlobStore, enc *encryption.Client, assistantIssuerURL, serverURL string, spec Spec, catalog *aivendors.Snapshot) (*seeder, error) {
+// clock the ClickHouse seed reuses. A zero now takes the clock from the
+// transaction time.
+func seedPostgres(ctx context.Context, logger *slog.Logger, db txBeginner, blob assets.BlobStore, enc *encryption.Client, assistantIssuerURL, serverURL string, spec Spec, catalog *aivendors.Snapshot, now time.Time) (*seeder, error) {
 	if enc == nil {
 		return nil, errors.New("demo seed needs the environment's encryption key")
 	}
@@ -167,11 +175,14 @@ func seedPostgres(ctx context.Context, logger *slog.Logger, db txBeginner, blob 
 	if err != nil {
 		return nil, err
 	}
-	s := &seeder{spec: spec, catalog: catalog, enc: enc, assistantIssuer: assistantIssuer, serverURL: server, q: nil, logger: logger, now: time.Time{}, signalSequences: nil}
+	s := &seeder{spec: spec, catalog: catalog, enc: enc, assistantIssuer: assistantIssuer, serverURL: server, q: nil, logger: logger, now: now, signalSequences: nil}
 	if err := pgx.BeginFunc(ctx, db, func(tx pgx.Tx) error {
 		s.q = repo.New(tx)
 		if err := s.runPostgres(ctx); err != nil {
 			return err
+		}
+		if err := seedUpstreamAuthGrants(ctx, tx, spec.OrgID); err != nil {
+			return fmt.Errorf("seed typed upstream grants: %w", err)
 		}
 		return s.uploadOpenAPIDoc(ctx, blob)
 	}); err != nil {

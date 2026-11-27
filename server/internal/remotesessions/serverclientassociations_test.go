@@ -129,31 +129,18 @@ func TestMCPServerUpstreamClientAssociations(t *testing.T) {
 	projectID := *authCtx.ProjectID
 	orgID := authCtx.ActiveOrganizationID
 
-	t.Run("the only server on an issuer is associated with its bound clients", func(t *testing.T) {
+	t.Run("explicit capture associates the only server on an issuer", func(t *testing.T) {
 		t.Parallel()
 
 		userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-assoc-sole")
 		serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "assoc-sole")
-		clientID, _ := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-assoc-sole")
+		clientID, _ := seedActiveClient(t, ctx, ti.conn, projectID, uuid.Nil, orgID, "rsi-assoc-sole")
 
-		resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
+		require.NoError(t, upstreamclients.CaptureSoleConsumers(ctx, ti.conn, orgID, projectID, []uuid.UUID{userIssuerID}, []uuid.UUID{clientID}))
 		require.Equal(t, []uuid.UUID{clientID}, associatedClients(t, ctx, ti.conn, projectID, serverID))
 
 		resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
 		require.Equal(t, []uuid.UUID{clientID}, associatedClients(t, ctx, ti.conn, projectID, serverID), "reconciling again must not duplicate the association")
-	})
-
-	t.Run("a shared issuer's binding proves nothing about its servers", func(t *testing.T) {
-		t.Parallel()
-
-		userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-assoc-shared")
-		first := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "assoc-shared-a")
-		second := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "assoc-shared-b")
-		seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-assoc-shared")
-
-		resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
-		require.Empty(t, associatedClients(t, ctx, ti.conn, projectID, first), "a shared issuer's client must not be copied onto every server")
-		require.Empty(t, associatedClients(t, ctx, ti.conn, projectID, second))
 	})
 
 	t.Run("two servers on one issuer keep different clients", func(t *testing.T) {
@@ -162,8 +149,8 @@ func TestMCPServerUpstreamClientAssociations(t *testing.T) {
 		userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-assoc-two")
 		linear := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "assoc-two-linear")
 		notion := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "assoc-two-notion")
-		linearClient, _ := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-assoc-two-linear")
-		notionClient, _ := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-assoc-two-notion")
+		linearClient, _ := seedActiveClient(t, ctx, ti.conn, projectID, uuid.Nil, orgID, "rsi-assoc-two-linear")
+		notionClient, _ := seedActiveClient(t, ctx, ti.conn, projectID, uuid.Nil, orgID, "rsi-assoc-two-notion")
 
 		require.Equal(t, int64(1), associate(t, ctx, ti.conn, orgID, projectID, linear, linearClient))
 		require.Equal(t, int64(1), associate(t, ctx, ti.conn, orgID, projectID, notion, notionClient))
@@ -179,7 +166,7 @@ func TestMCPServerUpstreamClientAssociations(t *testing.T) {
 		userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-assoc-detach")
 		first := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "assoc-detach-a")
 		second := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "assoc-detach-b")
-		clientID, _ := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-assoc-detach")
+		clientID, _ := seedActiveClient(t, ctx, ti.conn, projectID, uuid.Nil, orgID, "rsi-assoc-detach")
 		associate(t, ctx, ti.conn, orgID, projectID, first, clientID)
 		associate(t, ctx, ti.conn, orgID, projectID, second, clientID)
 
@@ -219,7 +206,7 @@ func TestMCPServerUpstreamClientAssociations(t *testing.T) {
 		userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-assoc-typed")
 		first := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "assoc-typed-a")
 		second := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "assoc-typed-b")
-		clientID, _ := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-assoc-typed")
+		clientID, _ := seedActiveClient(t, ctx, ti.conn, projectID, uuid.Nil, orgID, "rsi-assoc-typed")
 		associate(t, ctx, ti.conn, orgID, projectID, first, clientID)
 		associate(t, ctx, ti.conn, orgID, projectID, second, clientID)
 		recordTypedClients(t, ctx, ti.conn, orgID, first, second)
@@ -242,13 +229,13 @@ func TestMCPServerUpstreamClientAssociations(t *testing.T) {
 			"the other server on the same client keeps what it offers")
 	})
 
-	t.Run("a sole server can detach its offer without unlinking the issuer", func(t *testing.T) {
+	t.Run("a sole server can detach its offer without a legacy link", func(t *testing.T) {
 		t.Parallel()
 
 		userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-assoc-own")
 		serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "assoc-own")
-		clientID, _ := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-assoc-own")
-		resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
+		clientID, _ := seedActiveClient(t, ctx, ti.conn, projectID, uuid.Nil, orgID, "rsi-assoc-own")
+		associateServerClient(t, ctx, ti, serverID, clientID)
 
 		err := ti.service.DetachServerClientAssociation(ctx, &gen.DetachServerClientAssociationPayload{
 			McpServerID:           serverID.String(),
@@ -256,7 +243,6 @@ func TestMCPServerUpstreamClientAssociations(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.Empty(t, associatedClients(t, ctx, ti.conn, projectID, serverID))
-		requireClientBound(t, ctx, ti, clientID, userIssuerID, true)
 	})
 
 	t.Run("unbinding a client from the issuer preserves explicit server associations", func(t *testing.T) {
@@ -265,17 +251,10 @@ func TestMCPServerUpstreamClientAssociations(t *testing.T) {
 		userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-assoc-unbind")
 		first := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "assoc-unbind-a")
 		second := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "assoc-unbind-b")
-		clientID, _ := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-assoc-unbind")
+		clientID, _ := seedActiveClient(t, ctx, ti.conn, projectID, uuid.Nil, orgID, "rsi-assoc-unbind")
 		associate(t, ctx, ti.conn, orgID, projectID, first, clientID)
 		associate(t, ctx, ti.conn, orgID, projectID, second, clientID)
 
-		_, err := repo.New(ti.conn).DetachProjectRemoteSessionClientFromUserSessionIssuer(ctx, repo.DetachProjectRemoteSessionClientFromUserSessionIssuerParams{
-			RemoteSessionClientID: clientID,
-			UserSessionIssuerID:   userIssuerID,
-			ProjectID:             projectID,
-			OrganizationID:        orgID,
-		})
-		require.NoError(t, err)
 		resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
 
 		require.Equal(t, []uuid.UUID{clientID}, associatedClients(t, ctx, ti.conn, projectID, first))
@@ -292,9 +271,9 @@ func TestMCPServerUpstreamClientAssociations(t *testing.T) {
 		otherServer := seedServerOnIssuer(t, ctx, ti.conn, otherProjectID, otherIssuerID, "assoc-orgclient-b")
 
 		remoteIssuerID := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, orgID, "rsi-assoc-orgclient")
-		clientID := seedOrgLevelRemoteClient(t, ctx, ti.conn, orgID, remoteIssuerID, "cid-assoc-orgclient", ownIssuerID, otherIssuerID)
-		resync(t, ctx, ti.conn, orgID, projectID, ownIssuerID)
-		resync(t, ctx, ti.conn, orgID, otherProjectID, otherIssuerID)
+		clientID := seedOrgLevelRemoteClient(t, ctx, ti.conn, orgID, remoteIssuerID, "cid-assoc-orgclient")
+		associateClient(t, ctx, ti.conn, orgID, projectID, ownServer, clientID)
+		associateClient(t, ctx, ti.conn, orgID, otherProjectID, otherServer, clientID)
 		require.Equal(t, []uuid.UUID{clientID}, associatedClients(t, ctx, ti.conn, projectID, ownServer))
 		require.Equal(t, []uuid.UUID{clientID}, associatedClients(t, ctx, ti.conn, otherProjectID, otherServer))
 
@@ -350,7 +329,6 @@ func TestCommitServerIdentityConfigurationAssociatesOnlyTheTargetServer(t *testi
 	require.NoError(t, err)
 
 	require.Equal(t, []uuid.UUID{clientID}, associatedClients(t, ctx, ti.conn, projectID, targetID))
-	requireClientBound(t, ctx, ti, clientID, userIssuerID, false)
 	require.NotEmpty(t, offeredAuthClients(t, ctx, ti.conn, targetID))
 	require.Empty(t, associatedClients(t, ctx, ti.conn, projectID, siblingID), "configuring one server must not associate the issuer's other servers")
 
@@ -408,10 +386,8 @@ func TestDetachServerClientAssociation_EnforcedSoleConsumer(t *testing.T) {
 
 	userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-enforced-own")
 	serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "enforced-own")
-	clientID, _ := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-enforced-own")
-	resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
-	// The fixture binds the client itself, so it captures as a binding writer does.
-	require.NoError(t, upstreamclients.CaptureSoleConsumers(ctx, ti.conn, orgID, projectID, []uuid.UUID{userIssuerID}, []uuid.UUID{clientID}))
+	clientID, _ := seedActiveClient(t, ctx, ti.conn, projectID, uuid.Nil, orgID, "rsi-enforced-own")
+	associateServerClient(t, ctx, ti, serverID, clientID)
 	recordTypedClients(t, ctx, ti.conn, orgID, serverID)
 	require.Equal(t, []uuid.UUID{clientID}, associatedClients(t, ctx, ti.conn, projectID, serverID))
 	offered := offeredAuthClients(t, ctx, ti.conn, serverID)
@@ -431,7 +407,6 @@ func TestDetachServerClientAssociation_EnforcedSoleConsumer(t *testing.T) {
 	require.Equal(t, associationsBefore+1, auditCount(audit.ActionRemoteSessionClientDetachMcpServer))
 
 	require.Empty(t, associatedClients(t, ctx, ti.conn, projectID, serverID))
-	requireClientBound(t, ctx, ti, clientID, userIssuerID, true)
 	require.Equal(t, []uuid.UUID{adminClientID}, offeredAuthClients(t, ctx, ti.conn, serverID),
 		"only the link derived from the association is retired")
 	require.True(t, authClientLive(t, ctx, ti.conn, offered[0]))
@@ -447,9 +422,9 @@ func TestDetachServerClientAssociation_EnforcedSoleConsumer(t *testing.T) {
 	require.Equal(t, oops.CodeNotFound, shareable.Code, "a second detach finds nothing to retire")
 }
 
-// An administrator can attach a backfilled credential independently of the
+// An administrator can attach a typed credential independently of the
 // association it came from. Detach must preserve that administrator-owned link.
-func TestDetachServerClientAssociation_KeepsAdministratorLinkToBackfilledClient(t *testing.T) {
+func TestDetachServerClientAssociation_KeepsAdministratorLinkToTypedClient(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 	auth, ok := contextvalues.GetAuthContext(ctx)
@@ -458,9 +433,8 @@ func TestDetachServerClientAssociation_KeepsAdministratorLinkToBackfilledClient(
 	enforceUpstreamAuth(t, ctx, ti.conn, orgID)
 	issuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-adminlink")
 	serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, issuerID, "adminlink")
-	clientID, _ := seedActiveClient(t, ctx, ti.conn, projectID, issuerID, orgID, "rsi-adminlink")
-	resync(t, ctx, ti.conn, orgID, projectID, issuerID)
-	require.NoError(t, upstreamclients.CaptureSoleConsumers(ctx, ti.conn, orgID, projectID, []uuid.UUID{issuerID}, []uuid.UUID{clientID}))
+	clientID, _ := seedActiveClient(t, ctx, ti.conn, projectID, uuid.Nil, orgID, "rsi-adminlink")
+	associateServerClient(t, ctx, ti, serverID, clientID)
 	recordTypedClients(t, ctx, ti.conn, orgID, serverID)
 	offered := offeredAuthClients(t, ctx, ti.conn, serverID)
 	require.Len(t, offered, 1)

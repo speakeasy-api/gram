@@ -3,7 +3,7 @@ import { Page } from "@/components/page-layout";
 import { useHideInsightsDock } from "@/components/insights-context";
 import { useProject, useSession } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
-import { internalMcpUrl } from "@/hooks/useToolsetUrl";
+import { useUserSessionTokenOptions } from "@/hooks/useUserSessionToken";
 import { DEFAULT_ASSISTANT_MODEL } from "@/lib/models";
 import { getServerURL } from "@/lib/utils";
 import {
@@ -12,6 +12,9 @@ import {
   useThreadId,
   type MCPServerEntry,
 } from "@/elements";
+import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
+import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
+import { useQueries } from "@tanstack/react-query";
 import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate.js";
 import { useConfig as useMoonshineConfig } from "@/components/ui/hooks/useConfig";
@@ -163,44 +166,129 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
 
   const onboarding = useOnboardingTools();
 
-  const { data: toolsetsData } = useListToolsets();
-  const mcps = useMemo<MCPServerEntry[] | undefined>(() => {
-    const fallbackEnv = draft.assistantEnv?.slug;
-    const toolsetBySlug = new Map(
-      (toolsetsData?.toolsets ?? []).map((t) => [t.slug, t]),
-    );
-    const entries: MCPServerEntry[] = [];
-    for (const ref of draft.assistant?.toolsets ?? []) {
-      const toolset = toolsetBySlug.get(ref.toolsetSlug);
-      if (!toolset) continue;
-      const url = internalMcpUrl({ slug: project.slug }, toolset);
-      if (!url) continue;
-      entries.push({
-        url,
-        name: capMcpEntryName(toolset.slug),
-        environment: ref.environmentSlug ?? fallbackEnv,
-      });
-    }
-    // Directly-attached MCP servers (no backing toolset) connect through the
-    // same Speakeasy-hosted /mcp/{endpoint} path the assistant runtime dials. No
-    // fallback environment: most remote servers carry their own connection
-    // auth, so only an explicitly bound environment is sent.
-    for (const ref of draft.assistant?.mcpServers ?? []) {
-      if (!ref.endpointSlug) continue;
-      entries.push({
-        url: `${getServerURL()}/mcp/${ref.endpointSlug}`,
-        name: capMcpEntryName(ref.mcpServerSlug),
-        environment: ref.environmentSlug,
-      });
-    }
-    return entries.length ? entries : undefined;
-  }, [
-    draft.assistant?.toolsets,
-    draft.assistant?.mcpServers,
-    draft.assistantEnv?.slug,
-    toolsetsData?.toolsets,
-    project.slug,
-  ]);
+  const usesProjectMCPAccess = draft.assistant?.runtimeVersion === 3;
+  const hasToolsets =
+    !usesProjectMCPAccess && !!draft.assistant?.toolsets?.length;
+  const hasAttachments =
+    !usesProjectMCPAccess &&
+    (hasToolsets || !!draft.assistant?.mcpServers?.length);
+  const scope = { gramProject: project.slug };
+  const {
+    data: toolsetsData,
+    isError: toolsetsError,
+    isLoading: loadingToolsets,
+  } = useListToolsets(scope, undefined, {
+    enabled: hasToolsets,
+  });
+  const {
+    data: serversData,
+    isError: serversError,
+    isLoading: loadingServers,
+  } = useMcpServers(scope, undefined, {
+    enabled: hasAttachments,
+    throwOnError: false,
+  });
+  const {
+    data: endpointsData,
+    isError: endpointsError,
+    isLoading: loadingEndpoints,
+  } = useMcpEndpoints(scope, undefined, {
+    enabled: hasAttachments,
+    throwOnError: false,
+  });
+  const servers = serversError ? [] : (serversData?.mcpServers ?? []);
+  const endpoints = endpointsError
+    ? []
+    : (endpointsData?.mcpEndpoints ?? []).filter(
+        (endpoint) => !endpoint.customDomainId,
+      );
+  const serverById = new Map(servers.map((server) => [server.id, server]));
+  const endpointBySlug = new Map(
+    endpoints.map((endpoint) => [endpoint.slug, endpoint]),
+  );
+  const toolsetBySlug = new Map(
+    (toolsetsError ? [] : (toolsetsData?.toolsets ?? [])).map((toolset) => [
+      toolset.slug,
+      toolset,
+    ]),
+  );
+  const attachments = !hasAttachments
+    ? []
+    : [
+        ...(draft.assistant?.toolsets ?? []).flatMap((ref) => {
+          const toolset = toolsetBySlug.get(ref.toolsetSlug);
+          if (!toolset) return [];
+          // Older toolset views may not carry a slug. Resolve the registered
+          // platform endpoint instead of rebuilding the retired legacy URL.
+          const platformEndpoints = endpoints.filter(
+            (endpoint) =>
+              endpoint.mcpServerId &&
+              serverById.get(endpoint.mcpServerId)?.toolsetId === toolset.id,
+          );
+          return [
+            {
+              slug: ref.toolsetSlug,
+              endpointSlug:
+                toolset.mcpSlug ??
+                (platformEndpoints.length === 1
+                  ? platformEndpoints[0]?.slug
+                  : undefined),
+              matches: (server: { toolsetId?: string }) =>
+                server.toolsetId === toolset.id,
+              environment: ref.environmentSlug ?? draft.assistantEnv?.slug,
+            },
+          ];
+        }),
+        ...(draft.assistant?.mcpServers ?? []).map((ref) => ({
+          slug: ref.mcpServerSlug,
+          endpointSlug: ref.endpointSlug,
+          matches: (server: { slug?: string }) =>
+            server.slug === ref.mcpServerSlug,
+          environment: ref.environmentSlug,
+        })),
+      ];
+  const targets = attachments.flatMap((attachment) => {
+    if (!attachment.endpointSlug) return [];
+    const endpoint = endpointBySlug.get(attachment.endpointSlug);
+    const server =
+      endpoint?.mcpServerId && serverById.get(endpoint.mcpServerId);
+    if (!server || !attachment.matches(server)) return [];
+    return [
+      {
+        server,
+        entry: {
+          url: `${getServerURL()}/mcp/${attachment.endpointSlug}`,
+          name: capMcpEntryName(attachment.slug),
+          environment: attachment.environment,
+        },
+      },
+    ];
+  });
+  const tokenOptions = useUserSessionTokenOptions();
+  const tokens = useQueries({
+    queries: targets.map(({ server }) =>
+      tokenOptions(
+        { kind: "mcpServer", id: server.id },
+        server.userSessionIssuerId,
+        false,
+      ),
+    ),
+  });
+  const mcps: MCPServerEntry[] | undefined =
+    loadingToolsets ||
+    loadingServers ||
+    loadingEndpoints ||
+    tokens.some((token) => token.isLoading)
+      ? undefined
+      : targets.flatMap(({ server, entry }, index) => {
+          const token = tokens[index];
+          const accessToken = token?.isError
+            ? undefined
+            : token?.data?.accessToken;
+          // A failed mint must not fall back to an unauthenticated connection.
+          if (server.userSessionIssuerId && !accessToken) return [];
+          return [{ ...entry, accessToken }];
+        });
 
   const getSession = useCallback(async () => {
     try {
@@ -265,8 +353,16 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
       snapshot: snapshot ?? undefined,
       skillsEnabled,
       skillMutationsEnabled,
+      usesProjectMCPAccess,
     });
-  }, [mode, ready, snapshot, skillsEnabled, skillMutationsEnabled]);
+  }, [
+    mode,
+    ready,
+    snapshot,
+    skillsEnabled,
+    skillMutationsEnabled,
+    usesProjectMCPAccess,
+  ]);
 
   const welcome = useMemo(
     () =>

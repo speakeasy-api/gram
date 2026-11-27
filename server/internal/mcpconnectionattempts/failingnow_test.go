@@ -270,6 +270,296 @@ func TestFailingNow_AGatewayAppSignInFailureEndsOnAnyOwnRequestThroughIt(t *test
 	}
 }
 
+// unnamedRenewalsFail writes an unnamed app's working renewal four days ago, then expired renewals on the direct server.
+func (f *failingFixture) unnamedRenewalsFail(p urn.SessionSubject, opts ...Option) {
+	f.t.Helper()
+	f.attempt(f.direct(AppDCR), 96*time.Hour, StepInboundToken, ResultRefreshed, append(opts, Subject(&p))...)
+	f.attempt(f.direct(AppDCR), 26*time.Hour, StepInboundToken, CodeRefreshTokenExpired, append(opts, Subject(&p))...)
+	f.attempt(f.direct(AppDCR), 30*time.Minute, StepInboundToken, CodeRefreshTokenExpired, append(opts, Subject(&p), Option{apply: func(r *Row) { r.Repeats = 1 }})...)
+}
+
+// unnamedServed is p's unnamed metadata-URL app's connection to the direct server, as the served table stores it.
+func (f *failingFixture) unnamedServed(p urn.SessionSubject) Served {
+	s := f.onServer(p, AppOtherMetadataURL)
+	s.ClientFamily, s.RemoteSessionClientID = FamilyOther, uuid.NewString()
+	return s
+}
+
+// unnamedFamilies are the client families an unnamed app's rows can carry.
+var unnamedFamilies = []struct{ name, family string }{
+	{"no family", ""},
+	{"other", FamilyOther},
+	{"script", FamilyScript},
+	{"browser", FamilyBrowser},
+}
+
+// An unnamed app that gave up its expired registration and signed in under another one got in.
+func TestFailingNow_AnUnnamedAppSignInFailureEndsOnAnyOwnSignInThere(t *testing.T) {
+	t.Parallel()
+	for _, tc := range unnamedFamilies {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			f := newFailingFixture(t)
+			p := person()
+			f.unnamedRenewalsFail(p, client(tc.family))
+			got := f.failing()
+			require.Len(t, got, 1)
+			require.Equal(t, PartAppSignIn, got[0].Part)
+			require.Equal(t, f.at(96*time.Hour), got[0].LastWorkedAt.UTC())
+
+			f.attempt(f.direct(AppOtherMetadataURL), 20*time.Minute, StepInboundToken, ResultCodeIssued, Subject(&p))
+			require.Empty(t, f.failing())
+		})
+	}
+}
+
+func TestFailingNow_AnUnnamedAppSignInFailureEndsOnAnyOwnServedRequestThere(t *testing.T) {
+	t.Parallel()
+	for _, tc := range unnamedFamilies {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			f := newFailingFixture(t)
+			p := person()
+			f.unnamedRenewalsFail(p, client(tc.family))
+			require.Len(t, f.failing(), 1)
+
+			f.answered(f.unnamedServed(p), 10*time.Minute)
+			require.Empty(t, f.failing())
+		})
+	}
+}
+
+func TestFailingNow_AnUnnamedAppSignInFailureEndsOnANamedAppsSignInThere(t *testing.T) {
+	t.Parallel()
+	f := newFailingFixture(t)
+	p := person()
+	f.unnamedRenewalsFail(p)
+	f.attempt(f.direct(AppOtherMetadataURL), 20*time.Minute, StepInboundToken, ResultCodeIssued, Subject(&p), client(FamilyClaudeCode))
+	require.Empty(t, f.failing())
+}
+
+func TestFailingNow_AnUnnamedAppSignInFailureStaysForOtherServersPeopleAndOrganizations(t *testing.T) {
+	t.Parallel()
+	f := newFailingFixture(t)
+	p, other := person(), person()
+	f.unnamedRenewalsFail(p)
+	f.attempt(ServerScope(f.org, f.project, uuid.New(), AppOtherMetadataURL), 20*time.Minute, StepInboundToken, ResultCodeIssued, Subject(&p))
+	otherServer := f.unnamedServed(p)
+	otherServer.ServerID = uuid.NewString()
+	f.answered(otherServer, 20*time.Minute)
+	f.attempt(f.direct(AppOtherMetadataURL), 20*time.Minute, StepInboundToken, ResultCodeIssued, Subject(&other))
+	f.answered(f.unnamedServed(other), 20*time.Minute)
+	otherOrg := "org-" + uuid.NewString()
+	f.attempt(ServerScope(otherOrg, f.project, f.server, AppOtherMetadataURL), 20*time.Minute, StepInboundToken, ResultCodeIssued, Subject(&p))
+	elsewhere := f.unnamedServed(p)
+	elsewhere.OrganizationID = otherOrg
+	f.answered(elsewhere, 20*time.Minute)
+	require.Len(t, f.failing(), 1, "another server's, person's or organization's success does not end it")
+}
+
+// The dashboard's own sign-in is the person using Speakeasy, not an app getting in.
+func TestFailingNow_AnUnnamedAppSignInFailureStaysAfterTheDashboardSignsIn(t *testing.T) {
+	t.Parallel()
+	f := newFailingFixture(t)
+	p := person()
+	f.unnamedRenewalsFail(p)
+	f.attempt(f.direct(AppFirstParty), 20*time.Minute, StepInboundConsent, ResultComplete, Subject(&p), client(FamilyBrowser))
+	require.Len(t, f.failing(), 1)
+}
+
+func TestFailingNow_AnUnnamedGatewayAppSignInFailureEndsOnAnyOwnRequestThroughAMember(t *testing.T) {
+	t.Parallel()
+	f := newFailingFixture(t)
+	p := person()
+	gateway := uuid.New()
+	f.attempt(GatewayScope(f.org, f.project, gateway, AppDCR), 40*time.Minute, StepInboundToken, CodeRefreshTokenExpired, Subject(&p))
+	require.Len(t, f.failing(), 1)
+
+	s := f.conn(p, serverKindMeta, gateway, AppOtherMetadataURL)
+	s.MemberID, s.ClientFamily = uuid.NewString(), FamilyOther
+	f.answered(s, 20*time.Minute)
+	require.Empty(t, f.failing())
+}
+
+// Another app working mid-run restarts it: only the failures after that count.
+func TestFailingNow_AnotherAppWorkingInAnUnnamedRunRestartsIt(t *testing.T) {
+	t.Parallel()
+	f := newFailingFixture(t)
+	p := person()
+	f.unnamedRenewalsFail(p)
+	f.attempt(f.direct(AppOtherMetadataURL), 2*time.Hour, StepInboundToken, ResultCodeIssued, Subject(&p))
+	got := f.failing()
+	require.Len(t, got, 1)
+	require.Equal(t, f.at(30*time.Minute), got[0].OpenedAt.UTC())
+	require.Equal(t, uint64(2), got[0].Failures, "the 30 minute attempt and its one repeat")
+	require.Equal(t, f.at(2*time.Hour), got[0].LastWorkedAt.UTC())
+}
+
+// A flow that switched account at consent got only the person handed the token in.
+func TestFailingNow_AnAccountSwitchEndsOnlyThePersonHandedTheSignIn(t *testing.T) {
+	t.Parallel()
+	f := newFailingFixture(t)
+	a, b := person(), person()
+	f.unnamedRenewalsFail(a)
+	f.unnamedRenewalsFail(b)
+	attempt := AttemptAt(uuid.New(), f.at(21*time.Minute), f.direct(AppOtherMetadataURL))
+	started, err := RowAt(attempt, StepInboundSignIn, ResultComplete, false, f.at(21*time.Minute), Subject(&a))
+	require.NoError(t, err)
+	issued, err := RowAt(attempt, StepInboundToken, ResultCodeIssued, true, f.at(20*time.Minute), Subject(&b))
+	require.NoError(t, err)
+	require.NoError(t, AppendRows(t.Context(), f.ch, []Row{started, issued}))
+	got := f.failing()
+	require.Len(t, got, 1)
+	require.Equal(t, a.String(), got[0].SubjectURN)
+}
+
+// An ending row naming no one is credited to the attempt's only user, whatever other subjects it carries.
+func TestFailingNow_ASubjectlessSignInIsCreditedToTheAttemptsOnlyUser(t *testing.T) {
+	t.Parallel()
+	f := newFailingFixture(t)
+	p := person()
+	key, agent := urn.NewAPIKeySubject(uuid.New()), urn.NewAgentSubject(uuid.New())
+	f.unnamedRenewalsFail(p)
+	attempt := AttemptAt(uuid.New(), f.at(22*time.Minute), f.direct(AppOtherMetadataURL))
+	var rows []Row
+	for i, who := range []urn.SessionSubject{key, p, agent} {
+		r, err := RowAt(attempt, StepInboundSignIn, ResultComplete, false, f.at(22*time.Minute-time.Duration(i)*time.Second), Subject(&who))
+		require.NoError(t, err)
+		rows = append(rows, r)
+	}
+	issued, err := RowAt(attempt, StepInboundToken, ResultCodeIssued, true, f.at(20*time.Minute))
+	require.NoError(t, err)
+	require.NoError(t, AppendRows(t.Context(), f.ch, append(rows, issued)))
+	require.Empty(t, f.failing())
+}
+
+// A sign-in handed to a non-user, such as an agent approved at consent, never ends a person's failure.
+func TestFailingNow_ASignInHandedToANonUserLeavesThePersonFailing(t *testing.T) {
+	t.Parallel()
+	f := newFailingFixture(t)
+	p := person()
+	agent := urn.NewAgentSubject(uuid.New())
+	f.unnamedRenewalsFail(p)
+	attempt := AttemptAt(uuid.New(), f.at(21*time.Minute), f.direct(AppOtherMetadataURL))
+	consented, err := RowAt(attempt, StepInboundConsent, ResultAccepted, false, f.at(21*time.Minute), Subject(&p))
+	require.NoError(t, err)
+	issued, err := RowAt(attempt, StepInboundToken, ResultCodeIssued, true, f.at(20*time.Minute), Subject(&agent))
+	require.NoError(t, err)
+	require.NoError(t, AppendRows(t.Context(), f.ch, []Row{consented, issued}))
+	got := f.failing()
+	require.Len(t, got, 1)
+	require.Equal(t, p.String(), got[0].SubjectURN)
+}
+
+// A service sign-in is credited to the subject on its own row, so one made after an account switch is the new person's.
+func TestFailingNow_AServiceSignInAfterAnAccountSwitchEndsOnlyThatPersonsFailure(t *testing.T) {
+	t.Parallel()
+	f := newFailingFixture(t)
+	a, b := person(), person()
+	f.attempt(f.direct(AppDCR), 50*time.Minute, StepProviderRefresh, CodeProviderUnavailable, Subject(&a))
+	f.attempt(f.direct(AppDCR), 50*time.Minute, StepProviderRefresh, CodeProviderUnavailable, Subject(&b))
+	require.Len(t, f.failing(), 2)
+
+	attempt := AttemptAt(uuid.New(), f.at(32*time.Minute), f.direct(AppDCR))
+	consent, err := RowAt(attempt, StepInboundConsent, ResultReviewShown, false, f.at(32*time.Minute), Subject(&a))
+	require.NoError(t, err)
+	signedIn, err := RowAt(attempt, StepProviderSignIn, ResultSignedIn, false, f.at(31*time.Minute), Subject(&b), Member(f.server))
+	require.NoError(t, err)
+	issued, err := RowAt(attempt, StepInboundToken, ResultCodeIssued, true, f.at(30*time.Minute), Subject(&b))
+	require.NoError(t, err)
+	require.NoError(t, AppendRows(t.Context(), f.ch, []Row{consent, signedIn, issued}))
+	got := f.failing()
+	require.Len(t, got, 1)
+	require.Equal(t, a.String(), got[0].SubjectURN)
+}
+
+// Later means after the last failed attempt ended; a success at or before it does not end the run.
+func TestFailingNow_AnUnnamedAppSignInFailureStaysAfterAnEarlierSuccess(t *testing.T) {
+	t.Parallel()
+	f := newFailingFixture(t)
+	p := person()
+	f.unnamedRenewalsFail(p)
+	f.attempt(f.direct(AppOtherMetadataURL), 40*time.Minute, StepInboundToken, ResultCodeIssued, Subject(&p))
+	f.answered(f.unnamedServed(p), 30*time.Minute)
+	got := f.failing()
+	require.Len(t, got, 1)
+	require.Equal(t, f.at(30*time.Minute), got[0].LastWorkedAt.UTC())
+}
+
+// A named app that signs in again under another registration got in.
+func TestFailingNow_ANamedAppSignInFailureEndsOnItsSignInUnderAnotherRegistration(t *testing.T) {
+	t.Parallel()
+	f := newFailingFixture(t)
+	p := person()
+	f.attempt(f.direct(AppDCR), 40*time.Minute, StepInboundToken, CodeRefreshTokenExpired, Subject(&p), client(FamilyCodexCLI))
+	f.attempt(f.direct(AppOtherMetadataURL), 20*time.Minute, StepInboundToken, ResultCodeIssued, Subject(&p), client(FamilyCodexCLI))
+	require.Empty(t, f.failing())
+}
+
+// genericThenNamed writes an attempt whose first row is generic and whose failing token row names second, ago before now.
+func (f *failingFixture) genericThenNamed(p urn.SessionSubject, ago time.Duration, second string, secondVersion string) uuid.UUID {
+	f.t.Helper()
+	attempt := AttemptAt(uuid.New(), f.at(ago), f.direct(AppDCR))
+	first, err := RowAt(attempt, StepInboundAuthorize, ResultComplete, false, f.at(ago), Subject(&p), client(FamilyScript), version("1.0"))
+	require.NoError(f.t, err)
+	failed, err := RowAt(attempt, StepInboundToken, CodeRefreshTokenExpired, true, f.at(ago-time.Minute), Subject(&p), client(second), version(secondVersion))
+	require.NoError(f.t, err)
+	require.NoError(f.t, AppendRows(f.t.Context(), f.ch, []Row{first, failed}))
+	return attempt.ID()
+}
+
+// A failure that named its app on a later row is that app's, even after a generic first row.
+func TestFailingNow_AFailureNamedOnALaterRowIsThatAppsEpisode(t *testing.T) {
+	t.Parallel()
+	f := newFailingFixture(t)
+	p := person()
+	id := f.genericThenNamed(p, 41*time.Minute, FamilyCodexCLI, "0.50.0")
+	got := f.failing()
+	require.Len(t, got, 1)
+	require.Equal(t, FamilyCodexCLI, got[0].ClientFamily)
+	require.Equal(t, "0.50.0", got[0].ClientVersion)
+	require.Equal(t, []EpisodeApp{{Key: AppDCR.String(), Family: FamilyCodexCLI, Version: "0.50.0"}}, got[0].Apps)
+
+	var logs []AttemptSummary
+	filter := AttemptFilter{StartedFrom: f.at(time.Hour), StartedBefore: f.now, OrganizationID: f.org}
+	require.NoError(t, ReadAttempts(t.Context(), f.ch, filter, func(s AttemptSummary) { logs = append(logs, s) }))
+	require.Len(t, logs, 1)
+	require.Equal(t, id, logs[0].AttemptID)
+	require.Equal(t, FamilyScript, logs[0].ClientFamily, "Connection Logs keeps the earliest family")
+
+	f.attempt(f.direct(AppOtherMetadataURL), 30*time.Minute, StepInboundToken, ResultCodeIssued, Subject(&p), client(FamilyClaudeCode))
+	require.Len(t, f.failing(), 1, "another named app's sign-in")
+
+	f.attempt(f.direct(AppOtherMetadataURL), 20*time.Minute, StepInboundToken, ResultCodeIssued, Subject(&p), client(FamilyCodexCLI))
+	require.Empty(t, f.failing(), "the same app's sign-in")
+}
+
+func TestFailingNow_AFailureNamingNoAppKeepsItsEarliestFamily(t *testing.T) {
+	t.Parallel()
+	f := newFailingFixture(t)
+	p := person()
+	f.genericThenNamed(p, 41*time.Minute, FamilyOther, "")
+	got := f.failing()
+	require.Len(t, got, 1)
+	require.Equal(t, FamilyScript, got[0].ClientFamily)
+	require.Equal(t, "1.0", got[0].ClientVersion)
+}
+
+// A named app that keeps failing stays listed while another named app works for the same person.
+func TestFailingNow_ANamedAppSignInFailureStaysWhileAnotherNamedAppWorks(t *testing.T) {
+	t.Parallel()
+	f := newFailingFixture(t)
+	p := person()
+	f.attempt(f.direct(AppDCR), 40*time.Minute, StepInboundToken, CodeRefreshTokenExpired, Subject(&p), client(FamilyCodexCLI))
+	f.attempt(f.direct(AppOtherMetadataURL), 20*time.Minute, StepInboundToken, ResultCodeIssued, Subject(&p), client(FamilyClaudeCode))
+	claude := f.onServer(p, AppOtherMetadataURL)
+	claude.ClientFamily = FamilyClaudeCode
+	f.served(claude, 10*time.Minute)
+	got := f.failing()
+	require.Len(t, got, 1)
+	require.Equal(t, FamilyCodexCLI, got[0].ClientFamily)
+}
+
 func TestFailingNow_ASuccessAndALaterFailureOpenANewRun(t *testing.T) {
 	t.Parallel()
 	f := newFailingFixture(t)

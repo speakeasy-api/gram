@@ -2191,6 +2191,7 @@ func unmarshalTriggerInstanceResponseBodyToTypesTriggerInstance(v *TriggerInstan
 		DefinitionSlug: *v.DefinitionSlug,
 		Name:           *v.Name,
 		EnvironmentID:  v.EnvironmentID,
+		AuthClientID:   v.AuthClientID,
 		TargetKind:     *v.TargetKind,
 		TargetRef:      *v.TargetRef,
 		TargetDisplay:  *v.TargetDisplay,

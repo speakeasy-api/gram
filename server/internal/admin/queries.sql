@@ -1224,17 +1224,6 @@ SELECT id, name, slug
 FROM organization_metadata
 WHERE id = ANY(@ids::text[]);
 
--- name: AdminBackfillMCPAuthFromConnect :execrows
--- Grants unrestricted mcp:auth to every principal holding any mcp:connect
--- grant, whatever its selectors. Temporary grants are skipped: a permanent
--- grant must not be derived from access that ends.
-INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
-SELECT DISTINCT g.organization_id, g.principal_urn, 'mcp:auth', '{"resource_kind":"mcp_auth_client","resource_id":"*"}'::jsonb
-FROM principal_grants AS g
-WHERE g.scope = 'mcp:connect'
-  AND g.expires_at IS NULL
-ON CONFLICT (organization_id, principal_urn, scope, selectors) DO NOTHING;
-
 -- name: AdminBackfillMCPConnectFromReadWrite :one
 -- Makes the connect access that mcp:read and mcp:write imply explicit, ahead
 -- of removing that implication. Every unexpired mcp:read or mcp:write grant
@@ -1475,6 +1464,44 @@ UPDATE agents SET name = @name, updated_at = clock_timestamp()
 WHERE id = @agent_id AND organization_id = @organization_id AND project_id = @project_id
 AND deleted IS FALSE AND name = @old_name;
 
+-- name: AdminListAssistantBuiltinGrantTargets :many
+-- Every live assistant of an organization with a live bound dedicated agent,
+-- plus whether it is the project's managed assistant. Locked in assistant ID
+-- order so concurrent backfills serialize cleanly.
+SELECT
+    a.id AS assistant_id,
+    a.project_id,
+    a.name,
+    g.id AS agent_id,
+    g.name AS agent_name,
+    EXISTS (
+        SELECT 1
+        FROM project_managed_assistants pma
+        WHERE pma.project_id = a.project_id
+          AND pma.assistant_id = a.id
+    )::boolean AS is_managed,
+    COALESCE(
+        (
+            SELECT array_agg(DISTINCT ti.auth_client_id ORDER BY ti.auth_client_id)
+            FROM trigger_instances ti
+            WHERE ti.project_id = a.project_id
+              AND ti.definition_slug = 'slack'
+              AND ti.target_kind = 'assistant'
+              AND ti.target_ref = a.id::text
+              AND ti.auth_client_id IS NOT NULL
+              AND ti.deleted IS FALSE
+        ),
+        ARRAY[]::uuid[]
+    )::uuid[] AS slack_auth_client_ids
+FROM assistants a
+JOIN projects p ON p.id = a.project_id AND p.organization_id = a.organization_id AND p.deleted IS FALSE
+JOIN assistant_agent_bindings b ON b.assistant_id = a.id AND b.project_id = a.project_id AND b.organization_id = a.organization_id AND b.deleted IS FALSE
+JOIN agents g ON g.id = b.agent_id AND g.organization_id = a.organization_id AND g.project_id = a.project_id AND g.deleted IS FALSE
+WHERE a.organization_id = @organization_id
+  AND a.deleted IS FALSE
+ORDER BY a.id
+FOR UPDATE OF a, b, g;
+
 -- name: AdminGetMCPServerSourceToolset :one
 SELECT t.slug, COALESCE(s.tool_variations_group_id, t.tool_variations_group_id, '00000000-0000-0000-0000-000000000000'::uuid)::uuid AS variations_group_id
 FROM mcp_servers s
@@ -1496,6 +1523,17 @@ WHERE h.id = ANY(@tool_ids::uuid[]) AND h.project_id = @project_id
     AND h.deleted IS FALSE
 ORDER BY a.name, a.id;
 
+-- name: AdminListHooksPublishState :many
+-- One row per marketplace repository: its organization and the hooks generator
+-- version it last published. Feeds the hooks release progress counts.
+SELECT
+    p.organization_id,
+    o.slug AS organization_slug,
+    COALESCE(c.published_hooks_version, '')::text AS published_hooks_version
+FROM plugin_github_connections c
+JOIN projects p ON p.id = c.project_id AND p.deleted IS FALSE
+JOIN organization_metadata o ON o.id = p.organization_id;
+
 -- name: AdminListTailscaleOAuthMigrationOrganizations :many
 -- Organizations with saved network ingress credentials in either copy,
 -- soft-deleted ingresses included, for the temporary Tailscale OAuth client
@@ -1514,10 +1552,23 @@ FROM organization_metadata AS o
 WHERE o.id = @id;
 
 -- name: AdminListOrganizationEncryptionTransitions :many
--- Every organization with its transition state for one use case, oldest first.
--- An organization without a transition row for the use case is in
--- platform_key, so the LEFT JOIN reports it there and the state filter matches
--- it. Pages with LIMIT and OFFSET: the list is staff-only and small.
+-- Every organization with its transition state for one use case. An
+-- organization without a transition row for the use case is in platform_key,
+-- so the LEFT JOIN reports it there and the state filter matches it.
+--
+-- The caller reads which organizations have values from the use case's copy
+-- stores and passes them as three parallel arrays. with_values_only keeps just
+-- those organizations; sort_by_last_written lists the most recently written
+-- first, then every other organization oldest first. Pages with LIMIT and
+-- OFFSET: the list is staff-only and small.
+WITH organizations_with_values AS (
+  SELECT v.organization_id, v.value_count, v.last_written_at
+  FROM ROWS FROM (
+    unnest(@value_organization_ids::text[]),
+    unnest(@value_counts::bigint[]),
+    unnest(@value_last_written_at::timestamptz[])
+  ) AS v(organization_id, value_count, last_written_at)
+)
 SELECT
   om.id AS organization_id,
   om.name,
@@ -1531,20 +1582,31 @@ SELECT
   t.last_backfill_remaining_count,
   t.last_backfill_unreadable_count,
   t.last_backfill_error,
-  t.last_verified_at
+  t.last_verified_at,
+  COALESCE(v.value_count, 0)::bigint AS value_count,
+  v.last_written_at::timestamptz AS last_written_at
 FROM organization_metadata om
 LEFT JOIN organization_encryption_transitions t
   ON t.organization_id = om.id
   AND t.use_case = @use_case
-WHERE sqlc.narg('state')::text IS NULL
-   OR COALESCE(t.state, 'platform_key') = sqlc.narg('state')::text
-ORDER BY om.created_at, om.id
+LEFT JOIN organizations_with_values v ON v.organization_id = om.id
+WHERE (NOT @with_values_only::boolean OR v.organization_id IS NOT NULL)
+  AND (
+    sqlc.narg('state')::text IS NULL
+    OR COALESCE(t.state, 'platform_key') = sqlc.narg('state')::text
+  )
+ORDER BY
+  CASE WHEN @sort_by_last_written::boolean THEN v.last_written_at END DESC NULLS LAST,
+  om.created_at,
+  om.id
 LIMIT @limit_value
 OFFSET @offset_value;
 
 -- name: AdminCountOrganizationEncryptionTransitionStates :many
 -- How many organizations are in each transition state for one use case,
--- counting organizations without a row as platform_key.
+-- counting organizations without a row as platform_key. with_values_only
+-- counts just the organizations in value_organization_ids, as
+-- AdminListOrganizationEncryptionTransitions lists them.
 SELECT
   COALESCE(t.state, 'platform_key')::text AS state,
   count(*) AS organizations
@@ -1552,5 +1614,219 @@ FROM organization_metadata om
 LEFT JOIN organization_encryption_transitions t
   ON t.organization_id = om.id
   AND t.use_case = @use_case
+WHERE NOT @with_values_only::boolean
+   OR om.id = ANY(@value_organization_ids::text[])
 GROUP BY 1
 ORDER BY 1;
+
+-- name: AdminTryLockSecretBackfill :one
+-- Takes the transaction-level lock that keeps two runs of one secret backfill
+-- from overlapping, on any admin replica. It reports false, without waiting,
+-- when another run holds it. The lock is released when the transaction ends.
+SELECT pg_try_advisory_xact_lock(hashtextextended('secret-backfill:' || @backfill::text, 0)) AS locked;
+
+-- name: AdminListAssistantSlackMigrationTargets :many
+-- Every live assistant in live projects of an organization, with its live bound
+-- dedicated agent ID when present. Locked in assistant ID order so concurrent
+-- Slack migrations serialize cleanly.
+SELECT
+    a.id AS assistant_id,
+    a.project_id,
+    a.name,
+    g.id AS agent_id
+FROM assistants a
+JOIN projects p
+  ON p.id = a.project_id
+ AND p.organization_id = a.organization_id
+ AND p.deleted IS FALSE
+LEFT JOIN assistant_agent_bindings b
+  ON b.assistant_id = a.id
+ AND b.project_id = a.project_id
+ AND b.organization_id = a.organization_id
+ AND b.deleted IS FALSE
+LEFT JOIN agents g
+  ON g.id = b.agent_id
+ AND g.organization_id = a.organization_id
+ AND g.project_id = a.project_id
+ AND g.deleted IS FALSE
+WHERE a.organization_id = @organization_id
+  AND a.deleted IS FALSE
+ORDER BY a.id
+FOR UPDATE OF a;
+
+-- name: AdminListAssistantSlackTriggers :many
+-- Every live Slack trigger instance targeting one assistant in a project.
+SELECT
+    ti.id,
+    ti.organization_id,
+    ti.project_id,
+    ti.definition_slug,
+    ti.name,
+    ti.environment_id,
+    ti.auth_client_id,
+    ti.target_kind,
+    ti.target_ref,
+    ti.target_display,
+    ti.config_json,
+    ti.status,
+    ti.created_at,
+    ti.updated_at
+FROM trigger_instances ti
+WHERE ti.organization_id = @organization_id
+  AND ti.project_id = @project_id
+  AND ti.definition_slug = 'slack'
+  AND ti.target_kind = 'assistant'
+  AND ti.target_ref = @assistant_id::text
+  AND ti.deleted IS FALSE
+ORDER BY ti.created_at, ti.id
+FOR UPDATE OF ti;
+
+-- name: AdminListAssistantSlackToolsets :many
+-- Every hosted toolset attached to one assistant whose latest version includes
+-- at least one tools:platform:slack:* tool URN.
+SELECT
+    ams.mcp_server_id,
+    ams.environment_id AS attachment_environment_id,
+    ts.id AS toolset_id,
+    ts.name AS toolset_name,
+    ts.slug AS toolset_slug,
+    ts.default_environment_slug,
+    latest.tool_urns::text[] AS tool_urns
+FROM assistant_mcp_servers ams
+JOIN mcp_servers ms
+  ON ms.id = ams.mcp_server_id
+ AND ms.project_id = ams.project_id
+ AND ms.deleted IS FALSE
+JOIN toolsets ts
+  ON ts.id = ms.toolset_id
+ AND ts.project_id = ams.project_id
+ AND ts.organization_id = @organization_id
+ AND ts.deleted IS FALSE
+JOIN LATERAL (
+    SELECT tv.tool_urns
+    FROM toolset_versions tv
+    WHERE tv.toolset_id = ts.id
+      AND tv.deleted IS FALSE
+    ORDER BY tv.version DESC
+    LIMIT 1
+) latest ON TRUE
+WHERE ams.assistant_id = @assistant_id
+  AND ams.project_id = @project_id
+  AND EXISTS (
+      SELECT 1
+      FROM unnest(latest.tool_urns) AS u(tool_urn)
+      WHERE u.tool_urn LIKE 'tools:platform:slack:%'
+  )
+ORDER BY ts.id;
+
+-- name: AdminGetEnvironmentIDBySlug :one
+SELECT e.id
+FROM environments e
+WHERE e.organization_id = @organization_id
+  AND e.project_id = @project_id
+  AND e.slug = @slug
+  AND e.deleted IS FALSE;
+
+-- name: AdminListEnvironmentSlackEntries :many
+-- Reads encrypted Slack environment entries for one environment in a project.
+SELECT
+    ee.name,
+    ee.value
+FROM environment_entries ee
+JOIN environments e
+  ON e.id = ee.environment_id
+ AND e.organization_id = @organization_id
+ AND e.project_id = @project_id
+ AND e.deleted IS FALSE
+WHERE ee.environment_id = @environment_id
+  AND upper(ee.name) IN ('SLACK_BOT_TOKEN', 'SLACK_USER_TOKEN', 'SLACK_SIGNING_SECRET', 'SLACK_TOKEN')
+ORDER BY ee.name;
+
+-- name: AdminFindAgentSlackAuthClient :one
+-- Finds an existing live, enabled slack_app auth client in the assistant's
+-- project (or org-shared) that the assistant's backing agent already holds
+-- mcp:auth on.
+SELECT ac.id
+FROM mcp_auth_clients ac
+JOIN principal_grants pg
+  ON pg.organization_id = ac.organization_id
+ AND pg.principal_urn = concat('agent:', @agent_id::uuid)
+ AND pg.scope = 'mcp:auth'
+ AND pg.selectors->>'resource_kind' = 'mcp_auth_client'
+ AND pg.selectors->>'resource_id' = ac.id::text
+ AND (pg.expires_at IS NULL OR pg.expires_at > clock_timestamp())
+WHERE ac.organization_id = @organization_id
+  AND (ac.project_id = @project_id OR ac.project_id IS NULL)
+  AND ac.client_type = 'slack_app'
+  AND ac.enabled IS TRUE
+  AND ac.deleted IS FALSE
+ORDER BY ac.created_at, ac.id
+LIMIT 1;
+
+-- name: AdminListAgentSlackAuthClientGrants :many
+-- Lists all mcp:auth policy grants held by an agent targeting slack_app auth
+-- clients in the organization so migration can consolidate onto one client.
+SELECT
+    pg.id AS grant_id,
+    ac.id AS auth_client_id
+FROM principal_grants pg
+JOIN mcp_auth_clients ac
+  ON ac.organization_id = pg.organization_id
+ AND ac.id::text = pg.selectors->>'resource_id'
+ AND ac.client_type = 'slack_app'
+WHERE pg.organization_id = @organization_id
+  AND pg.principal_urn = concat('agent:', @agent_id::uuid)
+  AND pg.scope = 'mcp:auth'
+  AND pg.selectors->>'resource_kind' = 'mcp_auth_client'
+ORDER BY pg.id;
+
+-- name: AdminRepointSlackTriggerToAuthClient :one
+UPDATE trigger_instances
+SET
+    auth_client_id = @auth_client_id,
+    environment_id = NULL,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+RETURNING
+    id,
+    organization_id,
+    project_id,
+    definition_slug,
+    name,
+    environment_id,
+    auth_client_id,
+    target_kind,
+    target_ref,
+    target_display,
+    config_json,
+    status,
+    created_at,
+    updated_at;
+
+-- name: AdminDetachAssistantMCPServer :execrows
+DELETE FROM assistant_mcp_servers
+WHERE assistant_id = @assistant_id
+  AND mcp_server_id = @mcp_server_id
+  AND project_id = @project_id;
+
+-- name: AdminCountToolsetExternalReferences :one
+-- Counts live references to a hosted toolset / MCP server across assistants,
+-- plugins, meta MCP servers, Slack apps, and offered auth clients so migration
+-- only soft-deletes toolsets that nothing else uses.
+SELECT (
+    (SELECT count(*) FROM assistant_mcp_servers ams
+     JOIN assistants a ON a.id = ams.assistant_id AND a.deleted IS FALSE
+     WHERE ams.mcp_server_id = @mcp_server_id AND ams.project_id = @project_id)
+    + (SELECT count(*) FROM plugin_servers ps
+       WHERE ps.mcp_server_id = @mcp_server_id AND ps.deleted IS FALSE)
+    + (SELECT count(*) FROM meta_mcp_server_members m
+       WHERE m.mcp_server_id = @mcp_server_id AND m.project_id = @project_id AND m.deleted IS FALSE)
+    + (SELECT count(*) FROM slack_app_toolsets sat
+       JOIN slack_apps sa ON sa.id = sat.slack_app_id AND sa.deleted IS FALSE
+       WHERE sat.toolset_id = @toolset_id)
+    + (SELECT count(*) FROM mcp_server_auth_clients msac
+       WHERE msac.mcp_server_id = @mcp_server_id AND msac.project_id = @project_id AND msac.deleted IS FALSE)
+)::bigint AS ref_count;

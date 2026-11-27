@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"maps"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/Masterminds/squirrel"
+	"github.com/google/uuid"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -2881,6 +2883,15 @@ func (q *Queries) GetOverviewSummary(ctx context.Context, arg GetOverviewSummary
 // path off the unfiltered view.
 func (arg GetOverviewSummaryParams) hasFilters() bool {
 	return !arg.User.IsEmpty() || arg.CanonicalUser.Enabled() || arg.ExternalUserID != "" || arg.APIKeyID != "" || arg.ToolsetSlug != "" || arg.RemoteMCPServerID != "" || arg.MCPServerID != "" || arg.MetaMCPServerID != "" || arg.EventSource != "" || arg.HookSource != "" || arg.AccountType != "" || arg.ExternalOrgID != "" || len(arg.ExcludedHookSources) > 0
+}
+
+// toolCallSummariesCanServe reports whether every filter is a column of mcp_tool_call_summaries.
+func (arg GetOverviewSummaryParams) toolCallSummariesCanServe() bool {
+	// Organization gateway rows share the nil project; only a gateway filter tells them apart.
+	if slices.Contains(arg.GramProjectIDs, uuid.Nil.String()) && arg.MetaMCPServerID == "" {
+		return false
+	}
+	return arg.User.IsEmpty() && !arg.CanonicalUser.Enabled() && arg.ExternalUserID == "" && arg.APIKeyID == "" && arg.EventSource == "" && arg.AccountType == "" && arg.ExternalOrgID == ""
 }
 
 // getOverviewSummaryMV builds a query against the pre-aggregated metrics_summaries table.

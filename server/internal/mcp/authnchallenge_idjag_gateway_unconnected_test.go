@@ -106,13 +106,9 @@ func newIDJAGGatewayFixture(t *testing.T) (context.Context, idJAGGatewayFixture)
 // client. bound has the
 // gateway's issuer bind the registration, which lets issuance decide it for a
 // server nobody picked.
-func (f idJAGGatewayFixture) personalClient(t *testing.T, ctx context.Context, serverID uuid.UUID, bound bool) (uuid.UUID, uuid.UUID) {
+func (f idJAGGatewayFixture) personalClient(t *testing.T, ctx context.Context, serverID uuid.UUID) (uuid.UUID, uuid.UUID) {
 	t.Helper()
-	var issuers []uuid.UUID
-	if bound {
-		issuers = []uuid.UUID{f.issuerID}
-	}
-	registration := createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "personal-"+uuid.NewString()[:8], "", issuers)
+	registration := createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "personal-"+uuid.NewString()[:8], "")
 	require.NoError(t, testrepo.New(f.ti.conn).InsertMCPServerRemoteSessionClientFixture(ctx, testrepo.InsertMCPServerRemoteSessionClientFixtureParams{ProjectID: f.projectID, OrganizationID: f.orgID, McpServerID: serverID, RemoteSessionClientID: registration}))
 	clients := authclientsrepo.New(f.ti.conn)
 	client, err := clients.CreateAuthClient(ctx, authclientsrepo.CreateAuthClientParams{OrganizationID: f.orgID, ProjectID: conv.ToNullUUID(f.projectID), Name: "Personal sign-in", ClientType: authz.AuthClientTypeRemoteSession, RemoteSessionClientID: conv.ToNullUUID(registration), ClientAttachmentScope: conv.ToPGText("project:" + f.projectID.String())})
@@ -188,52 +184,46 @@ func (f idJAGGatewayFixture) recordsChoice(t *testing.T, ctx context.Context, sl
 // A gateway member nobody has connected yet leaves only itself out of an
 // ID-JAG session: the session is issued, the connected member serves, and the
 // unconnected one answers with its connect page. The session records no
-// choice for that member, whether or not the issuer binds its registration,
-// so only a later exchange picks up the connection.
+// choice for that member, so only a later exchange picks up the connection.
 func TestIDJAGGatewaySessionSkipsUnconnectedMember(t *testing.T) {
 	t.Parallel()
-	for name, bound := range map[string]bool{"unbound registration": false, "issuer-bound registration": true} {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-			ctx, f := newIDJAGGatewayFixture(t)
+	ctx, f := newIDJAGGatewayFixture(t)
 
-			slug := "id-jag-unconnected-" + uuid.NewString()[:8]
-			meta := createMetaMcpEndpoint(t, ctx, f.ti.conn, f.projectID, f.orgID, slug, f.issuerID)
-			connectedUpstream := newRecordingUpstream(t, "ping")
-			unconnectedUpstream := newRecordingUpstream(t, "ping")
-			connectedID := seedMetaMemberWithUpstream(t, ctx, f.ti.conn, f.projectID, meta.ID, "Connected", "connected", 0, connectedUpstream.url)
-			unconnectedID := seedMetaMemberWithUpstream(t, ctx, f.ti.conn, f.projectID, meta.ID, "Unconnected", "unconnected", 1, unconnectedUpstream.url)
-			connected, _ := f.personalClient(t, ctx, connectedID, bound)
-			f.connect(t, ctx, connected, "token-connected", connectedUpstream.url)
-			unconnected, _ := f.personalClient(t, ctx, unconnectedID, bound)
+	slug := "id-jag-unconnected-" + uuid.NewString()[:8]
+	meta := createMetaMcpEndpoint(t, ctx, f.ti.conn, f.projectID, f.orgID, slug, f.issuerID)
+	connectedUpstream := newRecordingUpstream(t, "ping")
+	unconnectedUpstream := newRecordingUpstream(t, "ping")
+	connectedID := seedMetaMemberWithUpstream(t, ctx, f.ti.conn, f.projectID, meta.ID, "Connected", "connected", 0, connectedUpstream.url)
+	unconnectedID := seedMetaMemberWithUpstream(t, ctx, f.ti.conn, f.projectID, meta.ID, "Unconnected", "unconnected", 1, unconnectedUpstream.url)
+	connected, _ := f.personalClient(t, ctx, connectedID)
+	f.connect(t, ctx, connected, "token-connected", connectedUpstream.url)
+	unconnected, _ := f.personalClient(t, ctx, unconnectedID)
 
-			bearer := f.accessToken(t, ctx, slug)
-			require.True(t, f.recordsChoice(t, ctx, slug, bearer, connectedID), "the connected member's choice is recorded")
-			require.False(t, f.recordsChoice(t, ctx, slug, bearer, unconnectedID), "the deferred member records no choice")
+	bearer := f.accessToken(t, ctx, slug)
+	require.True(t, f.recordsChoice(t, ctx, slug, bearer, connectedID), "the connected member's choice is recorded")
+	require.False(t, f.recordsChoice(t, ctx, slug, bearer, unconnectedID), "the deferred member records no choice")
 
-			text, isError := metaToolResultText(t, executeMetaTool(t, f.ti, slug, bearer, "connected--ping"))
-			require.False(t, isError, text)
-			connectedUpstream.requireToolCallAuth(t, "Bearer token-connected", "the connected member receives its own bearer")
+	text, isError := metaToolResultText(t, executeMetaTool(t, f.ti, slug, bearer, "connected--ping"))
+	require.False(t, isError, text)
+	connectedUpstream.requireToolCallAuth(t, "Bearer token-connected", "the connected member receives its own bearer")
 
-			text, isError = metaToolResultText(t, executeMetaTool(t, f.ti, slug, bearer, "unconnected--ping"))
-			require.True(t, isError)
-			require.Contains(t, text, "/mcp/"+slug+"/connect/first-party?server=unconnected")
+	text, isError = metaToolResultText(t, executeMetaTool(t, f.ti, slug, bearer, "unconnected--ping"))
+	require.True(t, isError)
+	require.Contains(t, text, "/mcp/"+slug+"/connect/first-party?server=unconnected")
 
-			// Connecting does not give the old session a choice for the member;
-			// another exchange picks the connection up.
-			f.connect(t, ctx, unconnected, "token-unconnected", unconnectedUpstream.url)
-			text, isError = metaToolResultText(t, executeMetaTool(t, f.ti, slug, bearer, "unconnected--ping"))
-			require.True(t, isError, "the session issued before connecting records no choice for the member: %s", text)
-			require.Contains(t, text, "needs to sign in to this gateway again")
-			require.False(t, f.recordsChoice(t, ctx, slug, bearer, unconnectedID), "calling the member records no choice for it either")
-			unconnectedUpstream.requireNeverCarried(t, "Bearer token-unconnected", "the old session never reaches the member")
+	// Connecting does not give the old session a choice for the member;
+	// another exchange picks the connection up.
+	f.connect(t, ctx, unconnected, "token-unconnected", unconnectedUpstream.url)
+	text, isError = metaToolResultText(t, executeMetaTool(t, f.ti, slug, bearer, "unconnected--ping"))
+	require.True(t, isError, "the session issued before connecting records no choice for the member: %s", text)
+	require.Contains(t, text, "needs to sign in to this gateway again")
+	require.False(t, f.recordsChoice(t, ctx, slug, bearer, unconnectedID), "calling the member records no choice for it either")
+	unconnectedUpstream.requireNeverCarried(t, "Bearer token-unconnected", "the old session never reaches the member")
 
-			bearer = f.accessToken(t, ctx, slug)
-			text, isError = metaToolResultText(t, executeMetaTool(t, f.ti, slug, bearer, "unconnected--ping"))
-			require.False(t, isError, text)
-			unconnectedUpstream.requireToolCallAuth(t, "Bearer token-unconnected", "the newly connected member receives its own bearer")
-		})
-	}
+	bearer = f.accessToken(t, ctx, slug)
+	text, isError = metaToolResultText(t, executeMetaTool(t, f.ti, slug, bearer, "unconnected--ping"))
+	require.False(t, isError, text)
+	unconnectedUpstream.requireToolCallAuth(t, "Bearer token-unconnected", "the newly connected member receives its own bearer")
 }
 
 // A member whose sign-in is not set up is deferred only when the request
@@ -251,10 +241,10 @@ func TestIDJAGGatewayNamedChoiceForIncompleteMemberIsRefused(t *testing.T) {
 	incompleteUpstream := newRecordingUpstream(t, "ping")
 	connectedID := seedMetaMemberWithUpstream(t, ctx, f.ti.conn, f.projectID, meta.ID, "Connected", "connected", 0, connectedUpstream.url)
 	incompleteID := seedMetaMemberWithUpstream(t, ctx, f.ti.conn, f.projectID, meta.ID, "Incomplete", "incomplete", 1, incompleteUpstream.url)
-	connected, _ := f.personalClient(t, ctx, connectedID, false)
+	connected, _ := f.personalClient(t, ctx, connectedID)
 	f.connect(t, ctx, connected, "token-connected", connectedUpstream.url)
 	// An upstream OAuth client that no auth client offers yet.
-	registration := createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "incomplete-"+uuid.NewString()[:8], "", nil)
+	registration := createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "incomplete-"+uuid.NewString()[:8], "")
 	require.NoError(t, testrepo.New(f.ti.conn).InsertMCPServerRemoteSessionClientFixture(ctx, testrepo.InsertMCPServerRemoteSessionClientFixtureParams{ProjectID: f.projectID, OrganizationID: f.orgID, McpServerID: incompleteID, RemoteSessionClientID: registration}))
 	seedUserMCPConnectGrant(t, ctx, f.ti.conn, f.orgID, mockidp.MockUserID, incompleteID.String())
 
@@ -283,9 +273,9 @@ func TestIDJAGGatewayNamedUnconnectedChoiceRecordsNoSubstitute(t *testing.T) {
 	meta := createMetaMcpEndpoint(t, ctx, f.ti.conn, f.projectID, f.orgID, slug, f.issuerID)
 	upstream := newRecordingUpstream(t, "ping")
 	memberID := seedMetaMemberWithUpstream(t, ctx, f.ti.conn, f.projectID, meta.ID, "Two clients", "two-clients", 0, upstream.url)
-	ready, _ := f.personalClient(t, ctx, memberID, true)
+	ready, _ := f.personalClient(t, ctx, memberID)
 	f.connect(t, ctx, ready, "token-ready", upstream.url)
-	_, named := f.personalClient(t, ctx, memberID, true)
+	_, named := f.personalClient(t, ctx, memberID)
 
 	status, body := f.exchange(t, ctx, slug, url.Values{"upstream_auth_client": {memberID.String() + ":" + named.String()}})
 	require.Equal(t, http.StatusOK, status, body)
@@ -310,7 +300,7 @@ func TestIDJAGSingleServerSessionNeedsItsConnection(t *testing.T) {
 	slug := "id-jag-direct-" + uuid.NewString()[:8]
 	upstream := newRecordingUpstream(t, "ping")
 	server, _ := createRemoteMcpEndpoint(t, ctx, f.ti.conn, f.projectID, upstream.url, slug, "public", f.issuerID)
-	registration, _ := f.personalClient(t, ctx, server.ID, false)
+	registration, _ := f.personalClient(t, ctx, server.ID)
 
 	status, body := f.exchange(t, ctx, slug, nil)
 	require.Equal(t, http.StatusBadRequest, status, body)
@@ -385,7 +375,7 @@ func TestIDJAGSingleServerRefusalsWithoutConnectLink(t *testing.T) {
 		"sign-in not set up": {
 			setup: func(t *testing.T, ctx context.Context, f idJAGGatewayFixture, serverID uuid.UUID, resource string) url.Values {
 				t.Helper()
-				registration := createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "incomplete-"+uuid.NewString()[:8], "", nil)
+				registration := createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "incomplete-"+uuid.NewString()[:8], "")
 				require.NoError(t, testrepo.New(f.ti.conn).InsertMCPServerRemoteSessionClientFixture(ctx, testrepo.InsertMCPServerRemoteSessionClientFixtureParams{ProjectID: f.projectID, OrganizationID: f.orgID, McpServerID: serverID, RemoteSessionClientID: registration}))
 				seedUserMCPConnectGrant(t, ctx, f.ti.conn, f.orgID, mockidp.MockUserID, serverID.String())
 				return nil
@@ -399,7 +389,7 @@ func TestIDJAGSingleServerRefusalsWithoutConnectLink(t *testing.T) {
 			setup: func(t *testing.T, ctx context.Context, f idJAGGatewayFixture, serverID uuid.UUID, resource string) url.Values {
 				t.Helper()
 				for range 2 {
-					registration, _ := f.personalClient(t, ctx, serverID, false)
+					registration, _ := f.personalClient(t, ctx, serverID)
 					f.connect(t, ctx, registration, "token-"+uuid.NewString(), resource)
 				}
 				return nil
@@ -429,7 +419,7 @@ func TestIDJAGSingleServerRefusalsWithoutConnectLink(t *testing.T) {
 		"denied choice": {
 			setup: func(t *testing.T, ctx context.Context, f idJAGGatewayFixture, serverID uuid.UUID, resource string) url.Values {
 				t.Helper()
-				_, _ = f.personalClient(t, ctx, serverID, false)
+				_, _ = f.personalClient(t, ctx, serverID)
 				return url.Values{"upstream_auth_client": {serverID.String() + ":" + uuid.NewString()}}
 			},
 			want: func(uuid.UUID) string {
@@ -496,10 +486,10 @@ func TestIDJAGSingleServerConnectLinkWording(t *testing.T) {
 			}
 			var form url.Values
 			if tc.named {
-				connected, _ := f.personalClient(t, ctx, server.ID, false)
+				connected, _ := f.personalClient(t, ctx, server.ID)
 				f.connect(t, ctx, connected, "token-connected", upstream.url)
 			}
-			_, clientID := f.personalClient(t, ctx, server.ID, false)
+			_, clientID := f.personalClient(t, ctx, server.ID)
 			if tc.named {
 				form = url.Values{"upstream_auth_client": {server.ID.String() + ":" + clientID.String()}}
 			}
@@ -529,7 +519,7 @@ func TestIDJAGSingleServerSignInThatCannotStartHasNoLink(t *testing.T) {
 	slug := "id-jag-no-authorize-" + uuid.NewString()[:8]
 	upstream := newRecordingUpstream(t, "ping")
 	server, _ := createRemoteMcpEndpoint(t, ctx, f.ti.conn, f.projectID, upstream.url, slug, "public", f.issuerID)
-	registration, _ := f.personalClient(t, ctx, server.ID, false)
+	registration, _ := f.personalClient(t, ctx, server.ID)
 	sessions := remotesessionsrepo.New(f.ti.conn)
 	client, err := sessions.GetRemoteSessionClientByID(ctx, remotesessionsrepo.GetRemoteSessionClientByIDParams{ProjectID: f.projectID, OrganizationID: f.orgID, ID: registration})
 	require.NoError(t, err)

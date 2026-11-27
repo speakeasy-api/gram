@@ -209,6 +209,9 @@ func (s *Service) memberSignInStatus(ctx context.Context, logger *slog.Logger, g
 			return signInRow(metamcp.SignInNeedsConsent, "No recorded consent outcome.", nil)
 		}
 	}
+	if member.backend == metaMemberBackendPlatform {
+		return signInRow(metamcp.SignInNotRequired, "", nil)
+	}
 	if member.backend == metaMemberBackendHosted {
 		// The admitted snapshot already has the exact assignment. Token
 		// resolution still rechecks it live, so a changed assignment cannot

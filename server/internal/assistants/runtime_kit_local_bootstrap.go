@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid"
 )
 
-const KitIntegrationImage = "localhost/kit-control-plane:v0.2.19"
+const KitIntegrationImage = "localhost/kit-control-plane:v0.3.1"
 
 // KitWorkloadAssertionPath is an external projection, never part of persistent HOME.
 const KitWorkloadAssertionPath = "/var/run/secrets/speakeasy/workload/assertion"
@@ -58,7 +58,13 @@ func validateKitBootstrap(b KitLocalBootstrap) error {
 	if json.Unmarshal(b.MCPJSON, &mcp) != nil || mcp.Servers == nil {
 		return fmt.Errorf("kit MCP config requires mcpServers object")
 	}
+	if len(mcp.Servers) != 1 {
+		return fmt.Errorf("kit MCP config requires exactly one %q server entry", kitProjectGatewayServerName)
+	}
 	for name, raw := range mcp.Servers {
+		if name != kitProjectGatewayServerName {
+			return fmt.Errorf("kit MCP config only permits %q server entry, got %q", kitProjectGatewayServerName, name)
+		}
 		var server struct {
 			Type    string            `json:"type"`
 			URL     string            `json:"url"`
@@ -82,14 +88,10 @@ func validateKitBootstrap(b KitLocalBootstrap) error {
 		if server.Type != "streamable-http" || server.Auth.Type != "workload_identity" || server.Auth.TokenFile != b.AssertionFile || server.Auth.TokenEndpoint != b.Workload.Audience+"/token" || server.Auth.EndpointMode != "explicit" || server.Auth.Grant != "jwtBearer" || server.Auth.Resource != server.URL {
 			return fmt.Errorf("kit MCP requires the bound generic workload assertion")
 		}
-		// Built-in tokens are minted per project; attached servers bind their
-		// project through the endpoint and take no extensions.
-		if strings.HasPrefix(name, "builtin-") {
-			if len(server.Auth.Extensions) != 1 || server.Auth.Extensions["project_id"] != b.Workload.Identity.ProjectID.String() {
-				return fmt.Errorf("kit built-in MCP connections must name the workload project")
-			}
-		} else if len(server.Auth.Extensions) != 0 {
-			return fmt.Errorf("kit attached MCP connections must not carry extensions")
+		// The Project Gateway binds its project through its resource URL and
+		// never carries OAuth token-exchange extensions.
+		if len(server.Auth.Extensions) != 0 {
+			return fmt.Errorf("kit project gateway resource must not carry extensions")
 		}
 		u, err := url.Parse(server.URL)
 		if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.Fragment != "" || u.RawQuery != "" {
@@ -104,10 +106,10 @@ func validateKitBootstrap(b KitLocalBootstrap) error {
 // contract. Caller must install Bootstrap, Protocol and authenticated Ready.
 func DefaultKitLocalRuntimeConfig(origin *url.URL) KitLocalRuntimeConfig {
 	command, args := KitGatewayCommand(8081)
-	return KitLocalRuntimeConfig{WorkloadAssertionFile: "", Fence: nil, Network: "", Environment: "local", Image: KitIntegrationImage, Command: command, Args: args, GuestPort: 8081, ServerURL: origin, CompatibilityGeneration: "kit-workload-assertion-v1", HomeOwnedByRuntimeUser: true, Env: nil, ExtraCACertFile: "", Bootstrap: nil, Protocol: nil, Ready: nil}
+	return KitLocalRuntimeConfig{WorkloadAssertionFile: "", Fence: nil, Network: "", Environment: "local", Image: KitIntegrationImage, Command: command, Args: args, GuestPort: 8081, ServerURL: origin, CompatibilityGeneration: "kit-project-gateway-v2", HomeOwnedByRuntimeUser: true, Env: nil, ExtraCACertFile: "", Bootstrap: nil, Protocol: nil, Ready: nil}
 }
 
-// kitBootstrapConfig is the public Kit v0.2.19 generic workload contract.
+// kitBootstrapConfig is the public Kit v0.3.1 generic workload contract.
 func kitBootstrapConfig(b KitLocalBootstrap) string {
 	if b.Workload == nil {
 		return ""

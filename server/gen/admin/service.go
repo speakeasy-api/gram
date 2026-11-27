@@ -348,13 +348,11 @@ type Service interface {
 	// Lists every organization the upstream OAuth migration applies to, so staff
 	// can check and migrate them one by one.
 	ListUpstreamOAuthMigrationOrganizations(context.Context, *ListUpstreamOAuthMigrationOrganizationsPayload) (res *AdminUpstreamOAuthMigrationOrganizations, err error)
-	// Reports where one organization stands in the upstream OAuth migration from a
-	// dry run that writes nothing.
+	// Reports typed upstream authentication readiness for one organization without
+	// making changes.
 	GetUpstreamOAuthMigrationStatus(context.Context, *GetUpstreamOAuthMigrationStatusPayload) (res *AdminUpstreamOAuthMigrationStatus, err error)
-	// Migrates one organization's upstream OAuth configuration: records the server
-	// to client associations its configuration proves, then each live credential's
-	// client choice. Idempotent, so it is safe to run again; a server the
-	// configuration does not prove is reported and never guessed.
+	// Retired. Rejects authenticated calls and does not change upstream
+	// authentication configuration.
 	RunUpstreamOAuthMigration(context.Context, *RunUpstreamOAuthMigrationPayload) (res *AdminUpstreamOAuthMigrationRun, err error)
 	// Enables upstream auth enforcement for one organization: its direct proxied
 	// servers and assistant turns are served by the typed auth client resolver,
@@ -371,15 +369,30 @@ type Service interface {
 	// Retired. Older staff clients can still reach this endpoint, but requests are
 	// rejected. Upstream auth enforcement cannot be turned off.
 	DisableUpstreamAuthEnforcement(context.Context, *DisableUpstreamAuthEnforcementPayload) (res *AdminUpstreamOAuthMigrationStatus, err error)
-	// Grants unrestricted mcp:auth to every principal that holds any mcp:connect
-	// grant, in every organization. The connect grant's selectors are ignored.
-	// Safe to run more than once.
+	// Retired. Rejects authenticated calls and does not modify grants.
 	BackfillMcpAuthGrants(context.Context, *BackfillMcpAuthGrantsPayload) (res *AdminBackfillMCPAuthGrantsResult, err error)
 	// Adds an explicit mcp:connect grant, with the same principal, selectors and
 	// expiry, for every unexpired mcp:read or mcp:write grant in every
 	// organization, ahead of read and write no longer implying connect. Never
 	// removes access. Safe to run more than once.
 	BackfillMcpConnectGrants(context.Context, *BackfillMcpConnectGrantsPayload) (res *AdminBackfillMCPConnectGrantsResult, err error)
+	// Previews the temporary secret backfills: what applying each would change
+	// now. Writes nothing.
+	GetSecretBackfills(context.Context, *GetSecretBackfillsPayload) (res *AdminSecretBackfills, err error)
+	// Applies the marketplace token backfill to one organization or to all: gives
+	// each GitHub connection its project's organization, then moves each plaintext
+	// marketplace token to its hash and the copies its organization's transition
+	// state writes, sealed with this process's platform key. Install URLs do not
+	// change. Safe to run again; an interrupted run continues where it stopped.
+	// Refused while another run of it is in progress, and when this process's
+	// platform key fingerprint is not the one the operator checked.
+	RunMarketplaceTokenBackfill(context.Context, *RunMarketplaceTokenBackfillPayload) (res *AdminMarketplaceTokenBackfill, err error)
+	// Applies the runner key organization backfill to one organization or to all:
+	// sets functions_access.organization_id from each runner key's project, in
+	// batches that each commit on their own. Runner keys and deployed function
+	// runners do not change. Safe to run again; an interrupted run continues where
+	// it stopped. Refused while another run of it is in progress.
+	RunRunnerKeyOrganizationBackfill(context.Context, *RunRunnerKeyOrganizationBackfillPayload) (res *AdminRunnerKeyOrganizationBackfill, err error)
 	// Returns what redeploying a project would act on, for review before
 	// redeployProject.
 	GetProjectRedeployPreview(context.Context, *GetProjectRedeployPreviewPayload) (res *AdminProjectRedeployPreview, err error)
@@ -428,6 +441,20 @@ type Service interface {
 	// Repairs exact legacy generated names of live bound agents in one
 	// organization, preserving custom names and reporting conflicts. Safe to retry.
 	RepairOrganizationAssistantAgentNames(context.Context, *RepairOrganizationAssistantAgentNamesPayload) (res *AdminAssistantAgentNameRepairRun, err error)
+	// Grants every live agent-backed assistant in one organization explicit
+	// mcp:connect policy grants for its built-in toolsets (assistants for every
+	// assistant; platform and speakeasy-slack as well for managed assistants).
+	// Idempotent, so it is safe to run again.
+	BackfillOrganizationAssistantBuiltinGrants(context.Context, *BackfillOrganizationAssistantBuiltinGrantsPayload) (res *AdminAssistantBuiltinGrantBackfillRun, err error)
+	// Migrates every live assistant with legacy per-assistant Slack toolsets or
+	// environment-backed Slack triggers in one organization to the built-in
+	// assistant-slack toolset backed by a slack_app typed auth client. Creates or
+	// reuses an encrypted slack_app auth client, grants the assistant's agent
+	// mcp:connect on assistant-slack and mcp:auth on the client, repoints Slack
+	// triggers to the client, and detaches (and soft-deletes if unreferenced)
+	// Slack-only per-assistant toolsets without deleting environments. Idempotent,
+	// so it is safe to run again.
+	MigrateOrganizationAssistantSlack(context.Context, *MigrateOrganizationAssistantSlackPayload) (res *AdminAssistantSlackMigrationRun, err error)
 	// Lists every live assistant of one organization with its identity state,
 	// runtime, and whether its creator is still a member.
 	ListOrganizationAssistants(context.Context, *ListOrganizationAssistantsPayload) (res *AdminOrganizationAssistants, err error)
@@ -450,6 +477,10 @@ type Service interface {
 	// build publishes, the default pin, canary organizations, organization
 	// overrides and recent changes.
 	GetHooksRollout(context.Context, *GetHooksRolloutPayload) (res *AdminHooksRollout, err error)
+	// Returns how far the current hooks release has reached: organizations the
+	// rollout pins clear for it, marketplace repositories republished with it, and
+	// installs reporting its binary version.
+	GetHooksReleaseProgress(context.Context, *GetHooksReleaseProgressPayload) (res *AdminHooksReleaseProgress, err error)
 	// Moves the default hooks rollout pin for every organization without an
 	// override. Customer organizations receive a hooks version on the next rollout
 	// sweep once the pin reaches it. Lowering the pin holds back later versions;
@@ -478,8 +509,9 @@ type Service interface {
 	// Reports an organization's encryption configuration and, for each use case
 	// that moves to organization keys, its transition state with live counts.
 	GetOrganizationEncryption(context.Context, *GetOrganizationEncryptionPayload) (res *AdminOrganizationEncryption, err error)
-	// Lists organizations by transition state for one use case, oldest first.
-	// Organizations never enrolled are in platform_key.
+	// Lists organizations by transition state for one use case. Organizations
+	// never enrolled are in platform_key. By default it lists only organizations
+	// with values for the use case, most recently written first.
 	ListOrganizationEncryptionTransitions(context.Context, *ListOrganizationEncryptionTransitionsPayload) (res *AdminOrganizationEncryptionTransitionList, err error)
 	// Moves one organization's use case from platform_key to dual_write.
 	// Provisions the organization's key and data key first and changes nothing if
@@ -525,7 +557,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [136]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "setAdoptionDashboardUrl", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "setMcpServerScopePin", "getMcpServerToolCalls", "getHookClients", "getOrganizationHookFleet", "listRegistryPromotionCandidates", "getRegistryPromotionCandidate", "promoteRegistryCandidate", "curateRegistryPromotionCandidate", "retryRegistryPromotionDocs", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "listPlatformMcpFeedback", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage", "listUpstreamOAuthMigrationOrganizations", "getUpstreamOAuthMigrationStatus", "runUpstreamOAuthMigration", "enableUpstreamAuthEnforcement", "disableUpstreamAuthEnforcement", "backfillMcpAuthGrants", "backfillMcpConnectGrants", "getProjectRedeployPreview", "redeployProject", "listCustomDomains", "listPlatformExternalCredentials", "getGcpIamPlatformCredential", "createGcpIamPlatformCredential", "updateGcpIamPlatformCredential", "verifyGcpIamPlatformCredential", "deleteGcpIamPlatformCredential", "getMemoryEvalOptions", "listMemoryEvalRuns", "getMemoryEvalRun", "startMemoryEvalRun", "listAssistantOrganizations", "repairOrganizationAssistantAgentNames", "listOrganizationAssistants", "migrateOrganizationAssistantIdentities", "migrateOrganizationAssistantsToKit", "getHooksRollout", "setHooksRolloutDefault", "getOrganizationHooksRollout", "setOrganizationHooksRollout", "clearOrganizationHooksRollout", "listTailscaleOAuthMigration", "runTailscaleOAuthMigrationStep", "getOrganizationEncryption", "listOrganizationEncryptionTransitions", "enrollOrganizationEncryption", "rollbackOrganizationEncryption", "runOrganizationEncryption", "finalizeOrganizationEncryption"}
+var MethodNames = [142]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "setAdoptionDashboardUrl", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "setMcpServerScopePin", "getMcpServerToolCalls", "getHookClients", "getOrganizationHookFleet", "listRegistryPromotionCandidates", "getRegistryPromotionCandidate", "promoteRegistryCandidate", "curateRegistryPromotionCandidate", "retryRegistryPromotionDocs", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "listPlatformMcpFeedback", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage", "listUpstreamOAuthMigrationOrganizations", "getUpstreamOAuthMigrationStatus", "runUpstreamOAuthMigration", "enableUpstreamAuthEnforcement", "disableUpstreamAuthEnforcement", "backfillMcpAuthGrants", "backfillMcpConnectGrants", "getSecretBackfills", "runMarketplaceTokenBackfill", "runRunnerKeyOrganizationBackfill", "getProjectRedeployPreview", "redeployProject", "listCustomDomains", "listPlatformExternalCredentials", "getGcpIamPlatformCredential", "createGcpIamPlatformCredential", "updateGcpIamPlatformCredential", "verifyGcpIamPlatformCredential", "deleteGcpIamPlatformCredential", "getMemoryEvalOptions", "listMemoryEvalRuns", "getMemoryEvalRun", "startMemoryEvalRun", "listAssistantOrganizations", "repairOrganizationAssistantAgentNames", "backfillOrganizationAssistantBuiltinGrants", "migrateOrganizationAssistantSlack", "listOrganizationAssistants", "migrateOrganizationAssistantIdentities", "migrateOrganizationAssistantsToKit", "getHooksRollout", "getHooksReleaseProgress", "setHooksRolloutDefault", "getOrganizationHooksRollout", "setOrganizationHooksRollout", "clearOrganizationHooksRollout", "listTailscaleOAuthMigration", "runTailscaleOAuthMigrationStep", "getOrganizationEncryption", "listOrganizationEncryptionTransitions", "enrollOrganizationEncryption", "rollbackOrganizationEncryption", "runOrganizationEncryption", "finalizeOrganizationEncryption"}
 
 type AdminAssistantAgentNameRepairResult struct {
 	AssistantID string
@@ -542,6 +574,40 @@ type AdminAssistantAgentNameRepairRun struct {
 	Conflicts      int64
 	Failed         int64
 	Results        []*AdminAssistantAgentNameRepairResult
+}
+
+// What the built-in toolset Connect grant backfill did to one agent-backed
+// assistant.
+type AdminAssistantBuiltinGrantBackfillResult struct {
+	// The assistant ID.
+	AssistantID string
+	// The assistant's project ID.
+	ProjectID string
+	// The assistant name.
+	Name string
+	// granted when the run added one or more missing built-in Connect grants,
+	// already_granted when every built-in Connect grant was already present
+	// permanently, and failed when writing failed.
+	Outcome string
+	// How many built-in Connect grants were written or promoted to permanent for
+	// this assistant.
+	GrantsAdded int64
+}
+
+// AdminAssistantBuiltinGrantBackfillRun is the result type of the admin
+// service backfillOrganizationAssistantBuiltinGrants method.
+type AdminAssistantBuiltinGrantBackfillRun struct {
+	// The organization ID.
+	OrganizationID string
+	// Assistants whose agents received one or more built-in Connect grants.
+	Granted int64
+	// Assistants whose agents already held all required permanent built-in Connect
+	// grants.
+	AlreadyGranted int64
+	// Assistants whose backfill failed. Running again retries them.
+	Failed int64
+	// One result per live agent-backed assistant.
+	Results []*AdminAssistantBuiltinGrantBackfillResult
 }
 
 // What the identity migration did to one assistant.
@@ -628,6 +694,52 @@ type AdminAssistantOrganizations struct {
 	Organizations []*AdminAssistantOrganization
 }
 
+// What the assistant Slack migration did to one live assistant.
+type AdminAssistantSlackMigrationResult struct {
+	// The assistant ID.
+	AssistantID string
+	// The assistant's project ID.
+	ProjectID string
+	// The assistant name.
+	Name string
+	// migrated when Slack credentials, grants, triggers, or toolsets were updated;
+	// already_migrated when Slack was already using a slack_app auth client and
+	// built-in grants; no_slack when the assistant has no Slack setup;
+	// needs_identity when the assistant has Slack configured but no live dedicated
+	// agent; failed when migrating this assistant failed.
+	Outcome string
+	// The slack_app auth client created or reused for this assistant.
+	AuthClientID *string
+	// Legacy environment-backed Slack triggers repointed to the slack_app auth
+	// client.
+	TriggersRepointed int64
+	// Per-assistant Slack-only toolsets detached from this assistant.
+	ToolsetsDetached int64
+	// Detached per-assistant Slack-only toolsets soft-deleted because nothing else
+	// referenced them.
+	ToolsetsDeleted int64
+}
+
+// AdminAssistantSlackMigrationRun is the result type of the admin service
+// migrateOrganizationAssistantSlack method.
+type AdminAssistantSlackMigrationRun struct {
+	// The organization ID.
+	OrganizationID string
+	// Assistants migrated in this run.
+	Migrated int64
+	// Assistants already using the built-in assistant-slack toolset and slack_app
+	// auth client.
+	AlreadyMigrated int64
+	// Assistants without any Slack toolset or trigger.
+	NoSlack int64
+	// Assistants with Slack configured that lack a live dedicated agent.
+	NeedsIdentity int64
+	// Assistants whose migration failed. Running again retries them.
+	Failed int64
+	// One result per live assistant.
+	Results []*AdminAssistantSlackMigrationResult
+}
+
 type AdminAuditLog struct {
 	// Internal staff-only audit activity; persisted but never published to the
 	// outbox. Always present in responses; optional in the schema so clients built
@@ -668,7 +780,7 @@ type AdminAuditLog struct {
 // AdminBackfillMCPAuthGrantsResult is the result type of the admin service
 // backfillMcpAuthGrants method.
 type AdminBackfillMCPAuthGrantsResult struct {
-	// How many principals gained the mcp:auth grant.
+	// Legacy response field; the retired endpoint does not grant access.
 	Granted int64
 }
 
@@ -964,6 +1076,68 @@ type AdminHookFleetVersion struct {
 	Installs int64
 }
 
+// Hooks installs across every organization, by binary version.
+type AdminHooksReleaseFleet struct {
+	// Installs count when they sent a hook in this many full UTC days.
+	WindowDays int
+	// Installs seen in the window.
+	Installs int64
+	// Installs reporting exactly the binary version this build ships, on any
+	// endpoint.
+	InstallsOnCurrent int64
+	// Installs per binary version and status, newest first. A version can appear
+	// once per status, for example current and unsupported when some installs
+	// still send to a legacy endpoint.
+	Versions []*AdminHooksReleaseInstallVersion
+}
+
+// Hooks installs reporting one binary version.
+type AdminHooksReleaseInstallVersion struct {
+	// The hooks binary version, or empty for installs that sent no version.
+	Version string
+	// How the version compares to the release Speakeasy ships.
+	Status string
+	// Installs whose latest version is this one.
+	Installs int64
+}
+
+// AdminHooksReleaseProgress is the result type of the admin service
+// getHooksReleaseProgress method.
+type AdminHooksReleaseProgress struct {
+	// The hooks generator version this server build publishes.
+	CurrentVersion int
+	// The hooks binary version this server build ships. Absent when unknown.
+	CurrentBinaryVersion *string
+	// Organizations with at least one marketplace repository.
+	Organizations int64
+	// Of those, organizations whose next publish moves to current_version:
+	// canaries and organizations pinned at or above it.
+	OrganizationsCleared int64
+	// Organizations pinned below current_version.
+	OrganizationsHeld int64
+	// Organizations with no pin, which follow the legacy hooks-rollout PostHog
+	// flag the admin server cannot read.
+	OrganizationsOnLegacyFlag int64
+	// Marketplace repositories.
+	Repos int64
+	// Repositories whose last published hooks plugin carries current_version.
+	ReposOnCurrent int64
+	// Repositories per published hooks generator version, newest first.
+	RepoVersions []*AdminHooksReleaseRepoVersion
+	// Installs running the release. Absent when the hooks fleet is unavailable.
+	Fleet *AdminHooksReleaseFleet
+}
+
+// Marketplace repositories whose last published hooks plugin carries one hooks
+// generator version.
+type AdminHooksReleaseRepoVersion struct {
+	// The hooks generator version last published, or empty for repositories that
+	// have never published the hooks plugin.
+	Version string
+	// Repositories on this version.
+	Repos int64
+}
+
 // AdminHooksRollout is the result type of the admin service getHooksRollout
 // method.
 type AdminHooksRollout struct {
@@ -1157,6 +1331,33 @@ type AdminListUsersResult struct {
 	Total int64
 	Page  int
 	Limit int
+}
+
+// AdminMarketplaceTokenBackfill is the result type of the admin service
+// runMarketplaceTokenBackfill method.
+type AdminMarketplaceTokenBackfill struct {
+	// Connections this run gave an organization. Zero in a preview.
+	Attributed int64
+	// Plaintext tokens this run moved. Zero in a preview.
+	Moved int64
+	// Plaintext tokens that changed between the read and the write, such as when
+	// another run moved them first. Zero in a preview.
+	Skipped int64
+	// Plaintext tokens left in place because their organization's transition state
+	// needs organization encryption this process does not have. Zero in a preview.
+	NeedsOrganizationKey int64
+	// Connections without an organization whose project's organization exists. An
+	// apply gives these one.
+	Unattributed int64
+	// Connections that still hold a plaintext token, not counting those in
+	// missing_organization.
+	Legacy int64
+	// Connections whose token is stored as a hash and sealed copies.
+	Hashed int64
+	// Connections whose project's organization has no metadata row. An apply can't
+	// give them an organization or move their plaintext token, so they stay as
+	// they are.
+	MissingOrganization int64
 }
 
 // MCP server surfaced to admin operators. Covers both server models:
@@ -1849,9 +2050,10 @@ type AdminOrganizationEncryptionTransitionList struct {
 	UseCase string
 	// Every use case that moves from the platform key to organization keys.
 	UseCases []string
-	// The page of organizations, oldest first.
+	// The page of organizations, in the requested order.
 	Organizations []*AdminOrganizationEncryptionTransitionRow
-	// How many organizations are in each state, across every page.
+	// How many organizations the values filter keeps are in each state, across
+	// every page.
 	StateCounts []*AdminOrganizationEncryptionStateCount
 	// Whether another page follows.
 	HasMore bool
@@ -1885,6 +2087,16 @@ type AdminOrganizationEncryptionTransitionRow struct {
 	LastBackfillError *string
 	// When the last clean verification pass started.
 	LastVerifiedAt *string
+	// How many values the organization stores for the use case under either key,
+	// soft-deleted rows included. A row storing values in two columns counts once
+	// in each.
+	ValueCount int64
+	// The latest updated_at of a row storing one of the organization's values. A
+	// change that updates the row's updated_at moves it, such as a session's token
+	// refresh or an OpenRouter key's limit change; a write that leaves updated_at
+	// alone, such as a backfill seal, does not. Absent when the organization has
+	// none.
+	LastWrittenAt *string
 }
 
 // AdminOrganizationEncryptionUseCase is the result type of the admin service
@@ -2284,6 +2496,53 @@ type AdminRegistrySummary struct {
 	Published bool
 	UpdatedAt string
 	Issues    []*AdminRegistryIssue
+}
+
+// AdminRunnerKeyOrganizationBackfill is the result type of the admin service
+// runRunnerKeyOrganizationBackfill method.
+type AdminRunnerKeyOrganizationBackfill struct {
+	// Runner keys this run gave an organization. Zero in a preview.
+	Filled int64
+	// Runner keys without an organization whose project's organization exists. An
+	// apply fills these.
+	Pending int64
+	// Runner keys without an organization whose project is gone or whose project's
+	// organization has no metadata row. They stay without one.
+	MissingOrganization int64
+}
+
+// One organization with secret backfill work left. A GitHub connection or
+// runner key without an organization belongs to its project's organization.
+type AdminSecretBackfillOrganization struct {
+	// The organization ID.
+	OrganizationID string
+	// The organization's name.
+	Name string
+	// The organization's slug.
+	Slug string
+	// Its GitHub connections that still hold a plaintext marketplace token.
+	LegacyTokens int64
+	// Its GitHub connections without an organization.
+	UnattributedConnections int64
+	// Its runner keys without an organization.
+	PendingRunnerKeys int64
+}
+
+// AdminSecretBackfills is the result type of the admin service
+// getSecretBackfills method.
+type AdminSecretBackfills struct {
+	// A preview of the marketplace token backfill.
+	MarketplaceTokens *AdminMarketplaceTokenBackfill
+	// A preview of the runner key organization backfill.
+	RunnerKeyOrganizations *AdminRunnerKeyOrganizationBackfill
+	// Every organization either backfill has work left in, by name. Rows whose
+	// project's organization has no metadata row belong to none of them.
+	Organizations []*AdminSecretBackfillOrganization
+	// The fingerprint of the platform key this admin process seals marketplace
+	// tokens with. It must match the fingerprint every server and worker logs at
+	// startup as "encryption key loaded". Absent when this process has no platform
+	// key, so the marketplace token backfill cannot be applied.
+	PlatformKeyFingerprint *string
 }
 
 // AdminSession is the result type of the admin service getSession method.
@@ -2779,6 +3038,14 @@ type BackfillMcpConnectGrantsPayload struct {
 	CreatedBefore *string
 }
 
+// BackfillOrganizationAssistantBuiltinGrantsPayload is the payload type of the
+// admin service backfillOrganizationAssistantBuiltinGrants method.
+type BackfillOrganizationAssistantBuiltinGrantsPayload struct {
+	AdminSessionToken *string
+	// The organization ID.
+	OrganizationID string
+}
+
 // BulkUpdateAccountTypePayload is the payload type of the admin service
 // bulkUpdateAccountType method.
 type BulkUpdateAccountTypePayload struct {
@@ -3260,6 +3527,12 @@ type GetHookClientsPayload struct {
 	Refresh bool
 }
 
+// GetHooksReleaseProgressPayload is the payload type of the admin service
+// getHooksReleaseProgress method.
+type GetHooksReleaseProgressPayload struct {
+	AdminSessionToken *string
+}
+
 // GetHooksRolloutPayload is the payload type of the admin service
 // getHooksRollout method.
 type GetHooksRolloutPayload struct {
@@ -3446,6 +3719,12 @@ type GetRegistryPromotionCandidatePayload struct {
 	OrganizationID    string
 	ProjectID         string
 	McpServerID       string
+}
+
+// GetSecretBackfillsPayload is the payload type of the admin service
+// getSecretBackfills method.
+type GetSecretBackfillsPayload struct {
+	AdminSessionToken *string
 }
 
 // GetSessionPayload is the payload type of the admin service getSession method.
@@ -3734,6 +4013,14 @@ type ListOrganizationEncryptionTransitionsPayload struct {
 	UseCase *string
 	// Only organizations in this state.
 	State *string
+	// present lists only organizations with at least one value for the use case
+	// under either key, soft-deleted rows included. all lists every organization.
+	Values string
+	// last_written lists the most recently written organizations first, then
+	// organizations without values oldest first. oldest lists the oldest
+	// organizations first. The list pages by offset, so an organization whose last
+	// write changes between page requests can repeat or be skipped.
+	Sort string
 	// Organizations per page.
 	Limit int
 	// Organizations to skip.
@@ -3979,6 +4266,14 @@ type MigrateOrganizationAssistantIdentitiesPayload struct {
 	OrganizationID string
 }
 
+// MigrateOrganizationAssistantSlackPayload is the payload type of the admin
+// service migrateOrganizationAssistantSlack method.
+type MigrateOrganizationAssistantSlackPayload struct {
+	AdminSessionToken *string
+	// The organization ID.
+	OrganizationID string
+}
+
 // MigrateOrganizationAssistantsToKitPayload is the payload type of the admin
 // service migrateOrganizationAssistantsToKit method.
 type MigrateOrganizationAssistantsToKitPayload struct {
@@ -4199,6 +4494,19 @@ type RollbackOrganizationEncryptionPayload struct {
 	UseCase string
 }
 
+// RunMarketplaceTokenBackfillPayload is the payload type of the admin service
+// runMarketplaceTokenBackfill method.
+type RunMarketplaceTokenBackfillPayload struct {
+	AdminSessionToken *string
+	// Limits the run to this organization's GitHub connections. Omit it to run for
+	// every organization. The result's counts then cover only this organization.
+	OrganizationID *string
+	// The platform key fingerprint the operator checked against the servers'
+	// "encryption key loaded" log. The run is refused when this process's platform
+	// key has another fingerprint, such as after a restart with a different key.
+	PlatformKeyFingerprint string
+}
+
 // RunOrganizationEncryptionPayload is the payload type of the admin service
 // runOrganizationEncryption method.
 type RunOrganizationEncryptionPayload struct {
@@ -4207,6 +4515,15 @@ type RunOrganizationEncryptionPayload struct {
 	OrganizationID string
 	// The use case, such as oauth-client-secrets.
 	UseCase string
+}
+
+// RunRunnerKeyOrganizationBackfillPayload is the payload type of the admin
+// service runRunnerKeyOrganizationBackfill method.
+type RunRunnerKeyOrganizationBackfillPayload struct {
+	AdminSessionToken *string
+	// Limits the run to this organization's runner keys. Omit it to run for every
+	// organization. The result's counts then cover only this organization.
+	OrganizationID *string
 }
 
 // RunTailscaleOAuthMigrationStepPayload is the payload type of the admin

@@ -90,6 +90,9 @@ LIMIT @limit_value;
 -- credentials recorded as unreadable count as unreadable only while the
 -- recorded hash still matches the stored platform-key copy. organization_id is
 -- NOT NULL, so nothing is unattributed.
+-- value_count and last_written_at cover every row of the organization storing
+-- a value under either key, soft-deleted rows included, as
+-- ListOrganizationsWith* reports them.
 SELECT
     COUNT(*) FILTER (
         WHERE n.credentials_encrypted IS NOT NULL
@@ -103,7 +106,13 @@ SELECT
     )::bigint AS unreadable,
     COUNT(*) FILTER (
         WHERE n.credentials_encrypted IS NOT NULL
-    )::bigint AS platform_copies
+    )::bigint AS platform_copies,
+    COUNT(*) FILTER (
+        WHERE (n.credentials_encrypted IS NOT NULL OR n.credentials_org_encrypted IS NOT NULL)
+    )::bigint AS value_count,
+    MAX(n.updated_at) FILTER (
+        WHERE (n.credentials_encrypted IS NOT NULL OR n.credentials_org_encrypted IS NOT NULL)
+    )::timestamptz AS last_written_at
 FROM network_ingresses AS n
 LEFT JOIN organization_encryption_unreadable_values AS u
   ON u.organization_id = n.organization_id
@@ -154,3 +163,16 @@ SET credentials_encrypted = sqlc.narg('platform_copy'), credentials_org_encrypte
 WHERE id = @id
   AND organization_id = @organization_id
 RETURNING *;
+
+-- name: ListOrganizationsWithNetworkIngressCredentials :many
+-- Every organization storing a network ingress credential under either key,
+-- soft-deleted rows included, with how many and the latest updated_at of the
+-- rows storing them. Rows without organization_id are left out.
+SELECT
+    n.organization_id::text AS organization_id,
+    COUNT(*)::bigint AS value_count,
+    MAX(n.updated_at)::timestamptz AS last_written_at
+FROM network_ingresses AS n
+WHERE n.organization_id IS NOT NULL
+  AND (n.credentials_encrypted IS NOT NULL OR n.credentials_org_encrypted IS NOT NULL)
+GROUP BY n.organization_id;

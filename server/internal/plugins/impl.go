@@ -409,11 +409,11 @@ func (s *Service) ListPlugins(ctx context.Context, payload *gen.ListPluginsPaylo
 // implying organization scopes. An existing organization reader retains read
 // access even if plugin writes are explicitly excluded.
 func (s *Service) requirePluginRead(ctx context.Context, ac *contextvalues.AuthContext) error {
-	reader, err := s.authz.Evaluate(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Read())
+	decision, err := s.authz.Decide(authz.WithoutChallenges(ctx), authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Read())
 	if err != nil {
 		return fmt.Errorf("evaluate plugin read access: %w", err)
 	}
-	if reader {
+	if decision.AllAllowed {
 		return nil
 	}
 	if err := s.authz.RequirePluginWrite(ctx, ac.ActiveOrganizationID, ac.ProjectID.String()); err != nil {
@@ -425,11 +425,11 @@ func (s *Service) requirePluginRead(ctx context.Context, ac *contextvalues.AuthC
 // filterPluginAudience keeps recipient identities and counts on the same
 // admin-only boundary as the assignment management API, including mutations.
 func (s *Service) filterPluginAudience(ctx context.Context, ac *contextvalues.AuthContext, plugin *gen.Plugin) (*gen.Plugin, error) {
-	admin, err := s.authz.Evaluate(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin())
+	decision, err := s.authz.Decide(authz.WithoutChallenges(ctx), authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin())
 	if err != nil {
 		return nil, fmt.Errorf("evaluate plugin administrator access: %w", err)
 	}
-	if !admin {
+	if !decision.AllAllowed {
 		plugin.Assignments = nil
 		plugin.AssignmentCount = nil
 	}
@@ -1798,7 +1798,7 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 		return nil, err
 	}
 
-	admin, err := s.authz.Evaluate(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin())
+	decision, err := s.authz.Decide(authz.WithoutChallenges(ctx), authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin())
 	if err != nil {
 		return nil, fmt.Errorf("evaluate plugin administrator access: %w", err)
 	}
@@ -1879,7 +1879,7 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 				}
 			}
 			// The marketplace URL contains a bearer token, not just a package location.
-			if stored := marketplacetokens.FromConnection(conn); admin && stored.Has() && s.serverURL != "" {
+			if stored := marketplacetokens.FromConnection(conn); decision.AllAllowed && stored.Has() && s.serverURL != "" {
 				token, err := s.marketplaceTokens.Open(ctx, s.db, stored)
 				if err != nil {
 					return nil, marketplacetokens.OpenError(ctx, s.logger, err, ac.ActiveOrganizationID)
@@ -1901,7 +1901,7 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 			}
 			result.LiveVersion = s.cachedLiveManifestVersion(ctx, ac, conn)
 
-			if admin {
+			if decision.AllAllowed {
 				hasCollaborators, err := s.cachedHasDirectCollaborator(ctx, conn.RepoOwner, conn.RepoName)
 				if err != nil {
 					// Degrade rather than fail the whole status read — the
@@ -2256,6 +2256,11 @@ func requirePluginAPIKeyCreator(ctx context.Context, db usersrepo.DBTX, organiza
 // the same publish cannot change that.
 var ErrPluginAPIKeyCreatorNotMember = errors.New("no organization member is available as the plugin publish actor")
 
+// ErrOrganizationDisabled reports that the project's organization is disabled,
+// so nothing is published for it: no GitHub commit and no new plugin API keys.
+// Retrying is refused the same way until the organization is re-enabled.
+var ErrOrganizationDisabled = errors.New("organization is disabled")
+
 // resolvePublishActor picks the users.id the publish's API keys are attributed
 // to (see ResolvePluginPublishActor). The user who made the change wins while
 // they are a member of the organization; a Speakeasy admin editing another
@@ -2456,6 +2461,16 @@ type publishOutcome struct {
 }
 
 func (s *Service) publishProject(ctx context.Context, input publishProjectInput) (*publishOutcome, error) {
+	// Every publish path ends here, including background publishes that were
+	// queued before the organization was disabled.
+	disabled, err := s.repo.IsOrganizationDisabled(ctx, input.OrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "check organization status").LogError(ctx, s.logger)
+	}
+	if disabled {
+		return nil, oops.E(oops.CodeForbidden, ErrOrganizationDisabled, "organization is disabled")
+	}
+
 	actorID, err := s.resolvePublishActor(ctx, input.ProjectID, input.OrganizationID, input.Actor.CreatedByUserID)
 	if err != nil {
 		return nil, err

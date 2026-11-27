@@ -96,6 +96,18 @@ type SendMessageRequestBody struct {
 	Attachments []*SendMessageAttachmentRequestBody `form:"attachments,omitempty" json:"attachments,omitempty" xml:"attachments,omitempty"`
 }
 
+// InferIntentRequestBody is the type of the "assistants" service "inferIntent"
+// endpoint HTTP request body.
+type InferIntentRequestBody struct {
+	// The Project Assistant the inference is for.
+	AssistantID *string `form:"assistant_id,omitempty" json:"assistant_id,omitempty" xml:"assistant_id,omitempty"`
+	// The dashboard path the user is on, without the organization and project
+	// prefix.
+	CurrentPath *string `form:"current_path,omitempty" json:"current_path,omitempty" xml:"current_path,omitempty"`
+	// The user's recent dashboard activity, oldest first.
+	Activity []*AssistantActivityEntryRequestBody `form:"activity,omitempty" json:"activity,omitempty" xml:"activity,omitempty"`
+}
+
 // InterruptTurnRequestBody is the type of the "assistants" service
 // "interruptTurn" endpoint HTTP request body.
 type InterruptTurnRequestBody struct {
@@ -283,6 +295,27 @@ type SendMessageResponseBody struct {
 	ThreadID *string `form:"thread_id,omitempty" json:"thread_id,omitempty" xml:"thread_id,omitempty"`
 	// Whether the message was accepted and enqueued for processing.
 	Accepted bool `form:"accepted" json:"accepted" xml:"accepted"`
+}
+
+// InferIntentResponseBody is the type of the "assistants" service
+// "inferIntent" endpoint HTTP response body.
+type InferIntentResponseBody struct {
+	// The task the user appears to be working on. Absent when no task can be
+	// inferred.
+	Goal *string `form:"goal,omitempty" json:"goal,omitempty" xml:"goal,omitempty"`
+	// Where the user is in that task.
+	Stage *string `form:"stage,omitempty" json:"stage,omitempty" xml:"stage,omitempty"`
+	// What appears to be stopping the user. Absent when nothing is.
+	Blocker *string `form:"blocker,omitempty" json:"blocker,omitempty" xml:"blocker,omitempty"`
+	// How stuck the user appears to be.
+	Frustration string `form:"frustration" json:"frustration" xml:"frustration"`
+	// A short, specific line the assistant can open with. Absent when there is
+	// nothing specific to say.
+	Opener *string `form:"opener,omitempty" json:"opener,omitempty" xml:"opener,omitempty"`
+	// Up to three short prompts the user can send.
+	SuggestedPrompts []string `form:"suggested_prompts" json:"suggested_prompts" xml:"suggested_prompts"`
+	// How sure the inference is, from 0 to 1.
+	Confidence float64 `form:"confidence" json:"confidence" xml:"confidence"`
 }
 
 // InterruptTurnResponseBody is the type of the "assistants" service
@@ -1518,6 +1551,188 @@ type SendMessageGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// InferIntentUnauthorizedResponseBody is the type of the "assistants" service
+// "inferIntent" endpoint HTTP response body for the "unauthorized" error.
+type InferIntentUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// InferIntentForbiddenResponseBody is the type of the "assistants" service
+// "inferIntent" endpoint HTTP response body for the "forbidden" error.
+type InferIntentForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// InferIntentBadRequestResponseBody is the type of the "assistants" service
+// "inferIntent" endpoint HTTP response body for the "bad_request" error.
+type InferIntentBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// InferIntentNotFoundResponseBody is the type of the "assistants" service
+// "inferIntent" endpoint HTTP response body for the "not_found" error.
+type InferIntentNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// InferIntentConflictResponseBody is the type of the "assistants" service
+// "inferIntent" endpoint HTTP response body for the "conflict" error.
+type InferIntentConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// InferIntentUnsupportedMediaResponseBody is the type of the "assistants"
+// service "inferIntent" endpoint HTTP response body for the
+// "unsupported_media" error.
+type InferIntentUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// InferIntentInvalidResponseBody is the type of the "assistants" service
+// "inferIntent" endpoint HTTP response body for the "invalid" error.
+type InferIntentInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// InferIntentInvariantViolationResponseBody is the type of the "assistants"
+// service "inferIntent" endpoint HTTP response body for the
+// "invariant_violation" error.
+type InferIntentInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// InferIntentUnexpectedResponseBody is the type of the "assistants" service
+// "inferIntent" endpoint HTTP response body for the "unexpected" error.
+type InferIntentUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// InferIntentGatewayErrorResponseBody is the type of the "assistants" service
+// "inferIntent" endpoint HTTP response body for the "gateway_error" error.
+type InferIntentGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // InterruptTurnUnauthorizedResponseBody is the type of the "assistants"
 // service "interruptTurn" endpoint HTTP response body for the "unauthorized"
 // error.
@@ -2621,6 +2836,18 @@ type SendMessageAttachmentRequestBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 }
 
+// AssistantActivityEntryRequestBody is used to define fields on request body
+// types.
+type AssistantActivityEntryRequestBody struct {
+	// When it happened.
+	At *string `form:"at,omitempty" json:"at,omitempty" xml:"at,omitempty"`
+	// What kind of entry this is.
+	Kind *string `form:"kind,omitempty" json:"kind,omitempty" xml:"kind,omitempty"`
+	// A short description, such as a page title, an action and its outcome, or an
+	// error message.
+	Detail *string `form:"detail,omitempty" json:"detail,omitempty" xml:"detail,omitempty"`
+}
+
 // NewListAssistantsResponseBody builds the HTTP response body from the result
 // of the "listAssistants" endpoint of the "assistants" service.
 func NewListAssistantsResponseBody(res *assistants.ListAssistantsResult) *ListAssistantsResponseBody {
@@ -2824,6 +3051,28 @@ func NewSendMessageResponseBody(res *assistants.SendMessageResult) *SendMessageR
 		ChatID:   res.ChatID,
 		ThreadID: res.ThreadID,
 		Accepted: res.Accepted,
+	}
+	return body
+}
+
+// NewInferIntentResponseBody builds the HTTP response body from the result of
+// the "inferIntent" endpoint of the "assistants" service.
+func NewInferIntentResponseBody(res *assistants.AssistantIntent) *InferIntentResponseBody {
+	body := &InferIntentResponseBody{
+		Goal:        res.Goal,
+		Stage:       res.Stage,
+		Blocker:     res.Blocker,
+		Frustration: res.Frustration,
+		Opener:      res.Opener,
+		Confidence:  res.Confidence,
+	}
+	if res.SuggestedPrompts != nil {
+		body.SuggestedPrompts = make([]string, len(res.SuggestedPrompts))
+		for i, val := range res.SuggestedPrompts {
+			body.SuggestedPrompts[i] = val
+		}
+	} else {
+		body.SuggestedPrompts = []string{}
 	}
 	return body
 }
@@ -3854,6 +4103,146 @@ func NewSendMessageGatewayErrorResponseBody(res *goa.ServiceError) *SendMessageG
 	return body
 }
 
+// NewInferIntentUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "inferIntent" endpoint of the "assistants" service.
+func NewInferIntentUnauthorizedResponseBody(res *goa.ServiceError) *InferIntentUnauthorizedResponseBody {
+	body := &InferIntentUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewInferIntentForbiddenResponseBody builds the HTTP response body from the
+// result of the "inferIntent" endpoint of the "assistants" service.
+func NewInferIntentForbiddenResponseBody(res *goa.ServiceError) *InferIntentForbiddenResponseBody {
+	body := &InferIntentForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewInferIntentBadRequestResponseBody builds the HTTP response body from the
+// result of the "inferIntent" endpoint of the "assistants" service.
+func NewInferIntentBadRequestResponseBody(res *goa.ServiceError) *InferIntentBadRequestResponseBody {
+	body := &InferIntentBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewInferIntentNotFoundResponseBody builds the HTTP response body from the
+// result of the "inferIntent" endpoint of the "assistants" service.
+func NewInferIntentNotFoundResponseBody(res *goa.ServiceError) *InferIntentNotFoundResponseBody {
+	body := &InferIntentNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewInferIntentConflictResponseBody builds the HTTP response body from the
+// result of the "inferIntent" endpoint of the "assistants" service.
+func NewInferIntentConflictResponseBody(res *goa.ServiceError) *InferIntentConflictResponseBody {
+	body := &InferIntentConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewInferIntentUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "inferIntent" endpoint of the "assistants" service.
+func NewInferIntentUnsupportedMediaResponseBody(res *goa.ServiceError) *InferIntentUnsupportedMediaResponseBody {
+	body := &InferIntentUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewInferIntentInvalidResponseBody builds the HTTP response body from the
+// result of the "inferIntent" endpoint of the "assistants" service.
+func NewInferIntentInvalidResponseBody(res *goa.ServiceError) *InferIntentInvalidResponseBody {
+	body := &InferIntentInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewInferIntentInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "inferIntent" endpoint of the "assistants" service.
+func NewInferIntentInvariantViolationResponseBody(res *goa.ServiceError) *InferIntentInvariantViolationResponseBody {
+	body := &InferIntentInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewInferIntentUnexpectedResponseBody builds the HTTP response body from the
+// result of the "inferIntent" endpoint of the "assistants" service.
+func NewInferIntentUnexpectedResponseBody(res *goa.ServiceError) *InferIntentUnexpectedResponseBody {
+	body := &InferIntentUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewInferIntentGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "inferIntent" endpoint of the "assistants" service.
+func NewInferIntentGatewayErrorResponseBody(res *goa.ServiceError) *InferIntentGatewayErrorResponseBody {
+	body := &InferIntentGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewInterruptTurnUnauthorizedResponseBody builds the HTTP response body from
 // the result of the "interruptTurn" endpoint of the "assistants" service.
 func NewInterruptTurnUnauthorizedResponseBody(res *goa.ServiceError) *InterruptTurnUnauthorizedResponseBody {
@@ -4738,6 +5127,27 @@ func NewSendMessagePayload(body *SendMessageRequestBody, sessionToken *string, p
 	return v
 }
 
+// NewInferIntentPayload builds a assistants service inferIntent endpoint
+// payload.
+func NewInferIntentPayload(body *InferIntentRequestBody, sessionToken *string, projectSlugInput *string) *assistants.InferIntentPayload {
+	v := &assistants.InferIntentPayload{
+		AssistantID: *body.AssistantID,
+		CurrentPath: body.CurrentPath,
+	}
+	v.Activity = make([]*assistants.AssistantActivityEntry, len(body.Activity))
+	for i, val := range body.Activity {
+		if val == nil {
+			v.Activity[i] = nil
+			continue
+		}
+		v.Activity[i] = unmarshalAssistantActivityEntryRequestBodyToAssistantsAssistantActivityEntry(val)
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewInterruptTurnPayload builds a assistants service interruptTurn endpoint
 // payload.
 func NewInterruptTurnPayload(body *InterruptTurnRequestBody, sessionToken *string, projectSlugInput *string) *assistants.InterruptTurnPayload {
@@ -4933,6 +5343,36 @@ func ValidateSendMessageRequestBody(body *SendMessageRequestBody) (err error) {
 	return
 }
 
+// ValidateInferIntentRequestBody runs the validations defined on
+// InferIntentRequestBody
+func ValidateInferIntentRequestBody(body *InferIntentRequestBody) (err error) {
+	if body.AssistantID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("assistant_id", "body"))
+	}
+	if body.Activity == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("activity", "body"))
+	}
+	if body.AssistantID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.assistant_id", *body.AssistantID, goa.FormatUUID))
+	}
+	if body.CurrentPath != nil {
+		if utf8.RuneCountInString(*body.CurrentPath) > 500 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.current_path", *body.CurrentPath, utf8.RuneCountInString(*body.CurrentPath), 500, false))
+		}
+	}
+	if len(body.Activity) > 60 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.activity", body.Activity, len(body.Activity), 60, false))
+	}
+	for _, e := range body.Activity {
+		if e != nil {
+			if err2 := ValidateAssistantActivityEntryRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
 // ValidateInterruptTurnRequestBody runs the validations defined on
 // InterruptTurnRequestBody
 func ValidateInterruptTurnRequestBody(body *InterruptTurnRequestBody) (err error) {
@@ -5024,6 +5464,34 @@ func ValidateSendMessageAttachmentRequestBody(body *SendMessageAttachmentRequest
 	if body.Name != nil {
 		if utf8.RuneCountInString(*body.Name) > 255 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 255, false))
+		}
+	}
+	return
+}
+
+// ValidateAssistantActivityEntryRequestBody runs the validations defined on
+// AssistantActivityEntryRequestBody
+func ValidateAssistantActivityEntryRequestBody(body *AssistantActivityEntryRequestBody) (err error) {
+	if body.At == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("at", "body"))
+	}
+	if body.Kind == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("kind", "body"))
+	}
+	if body.Detail == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("detail", "body"))
+	}
+	if body.At != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.at", *body.At, goa.FormatDateTime))
+	}
+	if body.Kind != nil {
+		if !(*body.Kind == "page" || *body.Kind == "action" || *body.Kind == "error" || *body.Kind == "signal") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", *body.Kind, []any{"page", "action", "error", "signal"}))
+		}
+	}
+	if body.Detail != nil {
+		if utf8.RuneCountInString(*body.Detail) > 300 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.detail", *body.Detail, utf8.RuneCountInString(*body.Detail), 300, false))
 		}
 	}
 	return

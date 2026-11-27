@@ -147,6 +147,11 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 			fail:  postflightMustEqual(inspectMetadataCount(), fmt.Sprintf("expected %d remote server tool metadata rows, found %%d", inspectMetadataCount())),
 		},
 		{
+			what:  "duplicate MCP server names",
+			count: byProject(s.q.PostflightCountDuplicateMCPServerNames),
+			fail:  postflightMustBeZero("%d MCP server names are duplicated in the demo project"),
+		},
+		{
 			what: "paused Gemini connection without credentials",
 			count: func() (int64, error) {
 				return s.q.ActivityCountSafeGeminiComplianceConfig(ctx, repo.ActivityCountSafeGeminiComplianceConfigParams{OrganizationID: org, ProjectID: proj})
@@ -186,7 +191,7 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 		{
 			what:  "auth client associations",
 			count: byOrg(s.q.PostflightCountAuthClientAssociations),
-			fail:  postflightMustEqual(4, "expected 4 auth client associations, found %d"),
+			fail:  postflightMustEqual(6, "expected 6 auth client associations, found %d"),
 		},
 		{
 			what:  "setup tasks",

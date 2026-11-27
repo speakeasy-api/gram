@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"maps"
 	"testing"
 
 	"github.com/google/uuid"
@@ -393,14 +394,12 @@ func TestOpenKeys_Golden(t *testing.T) {
 		scope Scope
 		keys  openKeys
 	}{
-		{ScopeOrgHooksIngest, openKeys{Probe: project, Connection: nil, PolicyAudience: nil}},
-		{ScopeRiskPolicyBlock, openKeys{Probe: server, Connection: nil, PolicyAudience: nil}},
-		{ScopeRiskPolicyBypass, openKeys{Probe: server, Connection: nil, PolicyAudience: nil}},
-		{ScopeRiskPolicyEvaluate, openKeys{Probe: server, Connection: nil, PolicyAudience: server}},
+		{ScopeOrgHooksIngest, openKeys{Probe: project, Connection: nil}},
+		{ScopeRiskPolicyBlock, openKeys{Probe: server, Connection: nil}},
+		{ScopeRiskPolicyBypass, openKeys{Probe: server, Connection: nil}},
 		{ScopeMCPConnect, openKeys{
-			Probe:          []string{SelectorKeyTool, SelectorKeyDisposition},
-			Connection:     []string{SelectorKeyTool, SelectorKeyDisposition},
-			PolicyAudience: nil,
+			Probe:      []string{SelectorKeyTool, SelectorKeyDisposition},
+			Connection: []string{SelectorKeyTool, SelectorKeyDisposition},
 		}},
 	}
 	want := make(map[Scope]openKeys, len(entries))
@@ -429,7 +428,7 @@ func TestOpenKeys_NoneOnAuthClientsBlocksOrRoot(t *testing.T) {
 func TestOpenKeys_ExactCheckOpensNothing(t *testing.T) {
 	t.Parallel()
 
-	probe := Check{Scope: ScopeMCPConnect, ResourceKind: "", ResourceID: "server-1", Dimensions: nil, exact: false, representedUser: "", probe: true, anyOf: nil, operation: operationDefault}
+	probe := Check{Scope: ScopeMCPConnect, ResourceKind: "", ResourceID: "server-1", Dimensions: nil, exact: false, representedUser: "", probe: true, group: nil, operation: operationDefault}
 	require.True(t, probe.mayOmit(SelectorKeyTool))
 	require.False(t, probe.mayOmit(SelectorKeyProjectID))
 	probe.exact = true
@@ -497,29 +496,27 @@ func TestMatching_MissingKeyNeverMatches(t *testing.T) {
 	}
 }
 
-// Only the connect permission has connections, and only the risk policy
-// audience permission (or its bypass) asks an audience question.
+// Only the connect permission has connections.
 func TestMatching_OmissionStampsBelongToTheirPermission(t *testing.T) {
 	t.Parallel()
 
 	read := MCPServer(MCPServerIDFrom("server-1"), ProjectIDFrom("project-1")).Read()
 	require.NoError(t, validateInput(read))
 	require.ErrorIs(t, validateInput(read.asConnection()), ErrInvalidCheck)
-
-	audience := RiskPolicyEvaluateCheck("policy-1")
-	audience.Scope = ScopeRiskPolicyBlock
-	require.ErrorIs(t, validateInput(audience), ErrInvalidCheck)
 }
 
-// An audience grant limited to one server still places the caller under the
-// policy wherever it is asked: leaving the server out can only apply the
-// policy more widely. A bypass limited to one server exempts nothing the
-// request does not name.
-func TestMatching_RiskPolicyAudienceIgnoresServerLimit(t *testing.T) {
+// A policy's audience is the same on every server, so an evaluate grant
+// cannot name one. A bypass limited to one server exempts only requests to
+// that server.
+func TestMatching_RiskPolicyAudienceHasNoServerLimit(t *testing.T) {
 	t.Parallel()
 
 	audience := NewSelector(ScopeRiskPolicyEvaluate, "policy-1")
-	audience[SelectorKeyServerURL] = "https://one.example.com"
+	for key, value := range map[string]string{SelectorKeyServerURL: "https://one.example.com", SelectorKeyServerIdentity: "one"} {
+		limited := maps.Clone(audience)
+		limited[key] = value
+		require.ErrorContains(t, ValidateSelector(ScopeRiskPolicyEvaluate, limited), "not allowed", key)
+	}
 	bypass := NewSelector(ScopeRiskPolicyBypass, "policy-1")
 	bypass[SelectorKeyServerURL] = "https://one.example.com"
 	grants := []Grant{NewGrantWithSelector(ScopeRiskPolicyEvaluate, audience), NewGrantWithSelector(ScopeRiskPolicyBypass, bypass)}
@@ -556,7 +553,7 @@ func TestMatching_MissingKeyRefusalIsLogged(t *testing.T) {
 	require.Contains(t, logs.String(), SelectorKeyTool)
 
 	logs.Reset()
-	requireForbidden(t, engine.RequireAny(ctx, ref.ToolCall("", DispositionReadOnly)))
+	requireForbidden(t, engine.Require(ctx, Either(ref.ToolCall("", DispositionReadOnly))))
 	require.Contains(t, logs.String(), missingKeyLog)
 
 	logs.Reset()
@@ -582,30 +579,6 @@ func TestMatching_MissingKeysComeFromRefusingPolicies(t *testing.T) {
 
 	refusedForTheKey := grantAuthorization{policies: [][]Grant{searchOnlyConnect(server), allowing}, representedUser: "", representedPolicies: nil, legacyAuthCeiling: false}
 	require.Equal(t, []string{SelectorKeyTool}, refusedForTheKey.keysMissingFrom(call))
-}
-
-// RequireAny still reports a missing key on an alternative that no block
-// refused, even when a block refused another one.
-func TestMatching_RequireAnyLogsUnblockedAlternatives(t *testing.T) {
-	t.Parallel()
-
-	server := uuid.New()
-	blockedServer := uuid.New()
-	project := uuid.New()
-	grants := append(searchOnlyConnect(server),
-		NewGrant(ScopeMCPConnect, blockedServer.String()),
-		NewGrant(ScopeMCPBlockedConnect, blockedServer.String()),
-	)
-
-	var logs bytes.Buffer
-	engine := NewEngine(slog.New(slog.NewTextHandler(&logs, nil)), nil, staticChallengeLogging(false), workos.NewStubClient())
-	ctx := GrantsToContext(enterpriseSessionCtx(t), grants)
-
-	requireForbidden(t, engine.RequireAny(ctx,
-		MCPServer(MCPServerIDOf(blockedServer), ProjectIDOf(project)).Connect(),
-		MCPServer(MCPServerIDOf(server), ProjectIDOf(project)).ToolCall("", DispositionReadOnly),
-	))
-	require.Contains(t, logs.String(), missingKeyLog)
 }
 
 func limitedSelector(scope Scope, key, value string) Selector {

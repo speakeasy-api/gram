@@ -437,11 +437,14 @@ SELECT
   , rc.json_web_key_set_id
   , rc.token_endpoint_auth_method
   , rc.client_secret_generation
+  , (om.disabled_at IS NOT NULL)::boolean AS organization_disabled
 FROM identity_provider_connections AS c
 JOIN okta_identity_provider_connections AS o
   ON o.identity_provider_connection_id = c.id
  AND o.organization_id = c.organization_id
  AND o.deleted IS FALSE
+JOIN organization_metadata AS om
+  ON om.id = c.organization_id
 JOIN remote_session_clients AS rc
   ON rc.id = o.remote_session_client_id
  AND rc.organization_id = c.organization_id
@@ -464,6 +467,7 @@ type GetSyncTargetRow struct {
 	JsonWebKeySetID         uuid.NullUUID
 	TokenEndpointAuthMethod pgtype.Text
 	ClientSecretGeneration  int64
+	OrganizationDisabled    bool
 }
 
 // The credential configuration a run needs; the managed client is the
@@ -482,6 +486,7 @@ func (q *Queries) GetSyncTarget(ctx context.Context, connectionID uuid.UUID) (Ge
 		&i.JsonWebKeySetID,
 		&i.TokenEndpointAuthMethod,
 		&i.ClientSecretGeneration,
+		&i.OrganizationDisabled,
 	)
 	return i, err
 }
@@ -685,6 +690,9 @@ JOIN organization_metadata AS om
 WHERE c.provider = 'okta'
   AND c.deleted IS FALSE
   AND c.status = 'verified'
+  -- A disabled organization's connections stay due without being selected,
+  -- so they sync on the first tick after the organization is re-enabled.
+  AND om.disabled_at IS NULL
   AND (
     o.applications_synced_at IS NULL
     OR o.applications_sync_requested_at > o.applications_synced_at

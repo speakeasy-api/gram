@@ -361,7 +361,7 @@ var Definitions = Registry{
 			Parent:   "project",
 			Category: ScopeCategoryMCPAuthClient,
 			Dimensions: []Dimension{
-				{Key: SelectorKeyClientType, Values: []string{AuthClientTypeRemoteSession, AuthClientTypeServiceAccount, AuthClientTypeStaticCredential, AuthClientTypePassThrough, AuthClientTypeEMA}, Required: false},
+				{Key: SelectorKeyClientType, Values: []string{AuthClientTypeRemoteSession, AuthClientTypeServiceAccount, AuthClientTypeStaticCredential, AuthClientTypePassThrough, AuthClientTypeEMA, AuthClientTypeSlackApp}, Required: false},
 				{Key: SelectorKeyProjectID, Values: nil, Required: false},
 				{Key: SelectorKeyConnectionOwner, Values: nil, Required: false},
 				{Key: SelectorKeyUpstreamClient, Values: nil, Required: false},
@@ -504,13 +504,10 @@ var Definitions = Registry{
 			},
 		},
 		{
-			Kind:     "risk_policy",
-			Parent:   "org",
-			Category: ScopeCategoryRiskPolicy,
-			Dimensions: []Dimension{
-				{Key: SelectorKeyServerURL, Values: nil, Required: false},
-				{Key: SelectorKeyServerIdentity, Values: nil, Required: false},
-			},
+			Kind:       "risk_policy",
+			Parent:     "org",
+			Category:   ScopeCategoryRiskPolicy,
+			Dimensions: nil,
 			Permissions: []Permission{
 				{
 					Action:      ActionEvaluate,
@@ -518,13 +515,10 @@ var Definitions = Registry{
 					Implies:     nil,
 					// An exemption, not a block: direct grants never cancel a
 					// bypass.
-					Exclusions: []Exclusion{{Kind: ExclusionExemption, Action: ActionBypass, Agent: AgentUnsafe(), Subject: ""}},
-					Dimensions: nil,
-					Source:     GrantSourceRiskPolicy,
-					Open: []OpenKeys{
-						{On: OpenOnProbe, Keys: []string{SelectorKeyServerURL, SelectorKeyServerIdentity}},
-						{On: OpenOnPolicyAudience, Keys: []string{SelectorKeyServerURL, SelectorKeyServerIdentity}},
-					},
+					Exclusions:    []Exclusion{{Kind: ExclusionExemption, Action: ActionBypass, Agent: AgentUnsafe(), Subject: ""}},
+					Dimensions:    nil,
+					Source:        GrantSourceRiskPolicy,
+					Open:          nil,
 					DimensionSets: nil,
 					Category:      "",
 					Label:         "Evaluate risk policies",
@@ -537,7 +531,7 @@ var Definitions = Registry{
 					LegacyScope:   "",
 					Implies:       nil,
 					Exclusions:    nil,
-					Dimensions:    nil,
+					Dimensions:    serverDimensions,
 					Source:        GrantSourceRiskPolicy,
 					Open:          []OpenKeys{{On: OpenOnProbe, Keys: []string{SelectorKeyServerURL, SelectorKeyServerIdentity}}},
 					DimensionSets: nil,
@@ -552,7 +546,7 @@ var Definitions = Registry{
 					LegacyScope:   "",
 					Implies:       nil,
 					Exclusions:    nil,
-					Dimensions:    nil,
+					Dimensions:    serverDimensions,
 					Source:        GrantSourceRiskPolicy,
 					Open:          []OpenKeys{{On: OpenOnProbe, Keys: []string{SelectorKeyServerURL, SelectorKeyServerIdentity}}},
 					DimensionSets: nil,
@@ -745,4 +739,12 @@ var Definitions = Registry{
 		},
 	},
 	Retired: []Scope{"mcp_approval:read", "mcp_approval:decide"},
+}
+
+// serverDimensions limit a risk policy bypass or block to one server. Evaluate
+// has none: a policy's audience is the same on every server, so a server limit
+// on evaluate would read as narrower than it is.
+var serverDimensions = []Dimension{
+	{Key: SelectorKeyServerURL, Values: nil, Required: false},
+	{Key: SelectorKeyServerIdentity, Values: nil, Required: false},
 }

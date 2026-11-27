@@ -24,8 +24,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -238,6 +241,7 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 	if err != nil {
 		return err
 	}
+	recordMetaGatewayAttribution(ctx, gate.projectID)
 	r = r.WithContext(ctx)
 	if prepared.empty() {
 		return nil
@@ -700,7 +704,7 @@ func (s *Service) logMetaDiscovery(ctx context.Context, gate *metaGateContext, t
 	params := metaDiscoveryLogParams(ctx, gate, toolName, start, handlerErr)
 	if memberFailure != nil {
 		tm.HTTPLogAttributes(params.Attributes).RecordStatusCode(memberFailure.status)
-		params.Attributes[attr.ErrorMessageKey] = memberFailure.message
+		params.Attributes[attr.ErrorMessageKey] = memberFailure.logMessage
 	}
 	s.telemLogger.Log(ctx, params)
 }
@@ -833,6 +837,24 @@ type metaGateAdmission struct {
 	resolution      mcpversions.Resolution
 }
 
+// recordMetaGatewayAttribution stamps the admitted caller and project on the
+// request span. Initialize requests are the durable session observation, while
+// later requests keep tool-call spans attributable to the same caller. A
+// projectless gateway has no project to stamp and is deliberately left alone.
+func recordMetaGatewayAttribution(ctx context.Context, projectID uuid.UUID) {
+	if projectID == uuid.Nil {
+		return
+	}
+
+	attrs := []attribute.KeyValue{attr.ProjectIDKey.String(projectID.String())}
+	for key, value := range contextvalues.ActorTelemetryAttributes(ctx) {
+		if value != "" {
+			attrs = append(attrs, attribute.Key(key).String(value))
+		}
+	}
+	trace.SpanFromContext(ctx).SetAttributes(attrs...)
+}
+
 // membership says where the members come from. resolvedEndpoint is the
 // issuer-gate endpoint for a gateway that has no mcp_endpoints row behind it,
 // and nil for one that does.
@@ -923,6 +945,14 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *h
 			}
 		}
 	}
+	chatID := request.chatID
+	if boundChatID, ok := assistanttokens.RuntimeChatID(ctx); ok {
+		bound := boundChatID.String()
+		if chatID != "" && chatID != bound {
+			return ctx, nil, oops.E(oops.CodeForbidden, nil, "chat ID does not match bound thread")
+		}
+		chatID = bound
+	}
 	gate := &metaGateContext{
 		caller:           gateCaller,
 		fromRequest:      request.fromRequest,
@@ -954,7 +984,7 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *h
 		discoveryMode:       metamcp.ResolveDiscoveryMode(metaServer.DiscoveryMode),
 		authenticated:       false,
 		sessionID:           request.sessionID,
-		chatID:              request.chatID,
+		chatID:              chatID,
 		userID:              "",
 		externalUserID:      "",
 		apiKeyID:            "",

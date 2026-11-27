@@ -1118,7 +1118,7 @@ func newStartCommand() *cli.Command {
 			telemLogger, shutdown := newTelemetryLogger(ctx, logger, tracerProvider, meterProvider, db, cache.NewRedisCacheAdapter(redisClient), chDB, logsEnabled, toolIOLogsEnabled, telemetryLogPublisher)
 			telemetryLoggerShutdown = shutdown
 
-			telemSvc := tm.NewService(logger, tracerProvider, db, chDB, chReadDB, sessionManager, chatSessionsManager, logsEnabled, sessionCaptureEnabled, posthogClient, authzEngine)
+			telemSvc := tm.NewService(logger, tracerProvider, db, chDB, chReadDB, sessionManager, chatSessionsManager, logsEnabled, sessionCaptureEnabled, posthogClient, authzEngine, featureFlags)
 			analyticsSvc := analytics.NewService(logger, tracerProvider, db, chReadDB, sessionManager, authzEngine, productFeatures)
 
 			// Wrap cache for hooks service in local development
@@ -1200,6 +1200,8 @@ func newStartCommand() *cli.Command {
 			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemLogger, auditLogger, serverURL, siteURL, platformHosts, slackClient, cache.NewRedisCacheAdapter(redisClient), assistantIdentities)
 			speakeasySlackDirectory := newSpeakeasySlackDirectory(c, db, encryptionClient, guardianPolicy, auditLogger)
 			triggerApp.SetSpeakeasySlackTokens(speakeasySlackDirectory)
+			slackAppCredentials := authclients.NewSlackAppCredentialStore(db, authzEngine, encryptionClient)
+			triggerApp.SetSlackAppAuthClientLoader(slackAppCredentials)
 
 			platformFeatureChecker := productFeatures.PlatformFeatureCheck
 
@@ -1342,17 +1344,20 @@ func newStartCommand() *cli.Command {
 			assistantsCore.SetChatMessageWriter(chatWriter)
 			assistantsCore.SetTurnStream(turnStream)
 			assistantsCore.SetTranscriptShadowReads(shadow.Store, shadow.ProjectIDs...)
-			if err := installKitLocalRuntimeFromCLI(logger, c, assistantsCore, db, auditLogger, redisClient, serverURL); err != nil {
+			if err := installKitLocalRuntimeFromCLI(logger, c, assistantsCore, db, auditLogger, redisClient, serverURL, orgHosts); err != nil {
 				return err
 			}
 			assistantsCore.SetAssetStorage(assetStorage)
 			assistantsCore.SetAssetSigningKey(c.String(usersessions.JWTSigningKeyFlag))
 			assistantsCore.SetSlackImageInlining(env, slackapi.NewClient("", guardianPolicy.PooledClient()))
 			assistantsCore.SetSpeakeasySlackTokens(speakeasySlackDirectory)
+			assistantsCore.SetSlackAppCredentials(slackAppCredentials)
 			assistantsCore.SetFeatureProvider(featureFlags)
+			assistantsCore.SetProjectGatewayEvaluator(mcpService)
 			assistantsCore.SetSiteURL(siteURL)
 			assistantsCore.SetOutboundCallbackOrigin(callbackOrigins.Outbound)
 			assistantsSvc := assistants.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, assistantsCore, &background.AssistantWorkflowSignaler{TemporalEnv: temporalEnv}, ratelimit.NewRedisStore(redisClient))
+			assistantsSvc.SetIntentCompleter(chatClient, ratelimit.NewRedisStore(redisClient))
 			triggerApp.RegisterDispatcher(assistantsSvc)
 
 			networkIngressConfig, err := networkIngressConfigFromCLI(c)
@@ -1852,7 +1857,7 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
-			intentPoliciesSvc, err := intentpolicies.NewService(logger, tracerProvider, db, sessionManager, authzEngine, featureFlags, chatWriter, completionsClient, intentPoliciesClassifier)
+			intentPoliciesSvc, err := intentpolicies.NewService(logger, tracerProvider, db, sessionManager, authzEngine, featureFlags, chatWriter, completionsClient, intentPoliciesClassifier, publishers.IntentPolicyAssessments)
 			if err != nil {
 				return fmt.Errorf("create intent policies service: %w", err)
 			}
@@ -2303,6 +2308,7 @@ func newStartCommand() *cli.Command {
 				PlatformMCPReadTools:         assistant_platform_mcp_adapter.ExternalTools(platformMCPAssistant.Tools, platformMCPAssistant.Authorizer),
 				PlatformMCPReadActingContext: assistant_platform_mcp_adapter.ActingContext(platformMCPAssistant.Authorizer),
 				SpeakeasySlackTools:          platformtoolsruntime.SpeakeasySlackTools(guardianPolicy.PooledClient(), triggerApp, speakeasySlackDirectory),
+				AssistantSlackTools:          platformtoolsruntime.AssistantSlackTools(guardianPolicy.PooledClient(), triggerApp, encryptionClient, serverURL, slackAppCredentials),
 			}))
 
 			// Requests get their own base context so the shutdown deadline can
