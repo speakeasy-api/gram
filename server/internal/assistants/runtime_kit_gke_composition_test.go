@@ -32,7 +32,7 @@ func TestKitGKECompositionRejectsLocalAndMissingAuthority(t *testing.T) {
 	valid := KitGKECompositionConfig{
 		KitGKEIdentityConfig: testKitGKEIdentityConfig(),
 		KitLocalCompositionConfig: KitLocalCompositionConfig{
-			Environment: "production", Image: "registry.example/kit:0.2.17", Origin: origin,
+			Environment: "production", Image: "registry.example/kit:0.3.1", Origin: origin,
 			MCPResource: resource, MCPIssuer: issuer, MCPUserSessionIssuerID: uuid.New(),
 			TurnStream:      new(chat.TurnStream),
 			WorkloadJWKSURL: "https://external.example/keys", WorkloadIssuerURL: "https://external.example", WorkloadIssuerBaseURL: "https://issuer.example",
@@ -127,7 +127,7 @@ func TestKitGKEFencePreservesCanonicalSession(t *testing.T) {
 
 func TestKitGKEExplicitVersionTagsRender(t *testing.T) {
 	t.Parallel()
-	for _, image := range []string{"registry.example/kit:0.2.17", "registry.example:5000/kit:release-1", "kit:latest@sha256:" + strings.Repeat("a", 64), "kit:LATEST@sha256:" + strings.Repeat("b", 64)} {
+	for _, image := range []string{"registry.example/kit:0.3.1", "registry.example:5000/kit:release-1", "kit:latest@sha256:" + strings.Repeat("a", 64), "kit:LATEST@sha256:" + strings.Repeat("b", 64)} {
 		t.Run(image, func(t *testing.T) {
 			t.Parallel()
 			in := kitGKEInput()

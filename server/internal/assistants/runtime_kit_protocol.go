@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/assistants/kitacp"
@@ -33,9 +34,24 @@ type KitRuntimeProtocol struct{ config KitRuntimeProtocolConfig }
 var _ runtimeProtocol = (*KitRuntimeProtocol)(nil)
 var _ runtimeSwitchCoordinator = (*KitRuntimeProtocol)(nil)
 
-// kitHistoryDroppedNotice tells a fresh Kit session that the conversation it
-// joins had earlier turns it cannot see. Prior transcript is never replayed.
-const kitHistoryDroppedNotice = "Earlier messages in this conversation are not available to you. Respond to the current message without assuming what was said before."
+const (
+	// kitHistoryDroppedNotice tells a fresh Kit session that the conversation it
+	// joins had earlier turns it cannot see. Prior transcript is never replayed.
+	kitHistoryDroppedNotice = "Earlier messages in this conversation are not available to you. Respond to the current message without assuming what was said before."
+
+	// kitPromptDeliveryQueue preserves Speakeasy's FIFO one-turn-per-event model:
+	// when foreground work is active, Kit waits until it finishes before starting
+	// a new turn, and the gateway withdraws uninserted prompts on detach.
+	kitPromptDeliveryQueue = "queue"
+
+	// kitPromptIdempotencyKeyMaxRunes matches the ACP v2 IdempotencyKey maxLength.
+	kitPromptIdempotencyKeyMaxRunes = 255
+)
+
+type kitProtocolCapabilities struct {
+	// DeliveryQueue reports whether capabilities.session.prompt.delivery.queue is advertised.
+	DeliveryQueue bool
+}
 
 func NewKitRuntimeProtocol(c KitRuntimeProtocolConfig) (*KitRuntimeProtocol, error) {
 	if c.Core == nil || c.Projector == nil || c.Endpoint == nil || c.Endpoint.Path != "/acp/v2" || !filepath.IsAbs(c.CWD) {
@@ -57,23 +73,58 @@ func kitStatusCapability(raw json.RawMessage) bool {
 	var object map[string]json.RawMessage
 	return ok && json.Unmarshal(value, &object) == nil && object != nil
 }
-func (p *KitRuntimeProtocol) dial(ctx context.Context, r assistantRuntimeRecord) (*kitacp.Client, error) {
+
+func kitPromptDeliveryCapability(raw json.RawMessage, mode string) bool {
+	var v struct {
+		Capabilities struct {
+			Session struct {
+				Prompt struct {
+					Delivery map[string]json.RawMessage `json:"delivery"`
+				} `json:"prompt"`
+			} `json:"session"`
+		} `json:"capabilities"`
+	}
+	if json.Unmarshal(raw, &v) != nil {
+		return false
+	}
+	value, ok := v.Capabilities.Session.Prompt.Delivery[mode]
+	var object map[string]json.RawMessage
+	return ok && json.Unmarshal(value, &object) == nil && object != nil
+}
+
+// kitPromptIdempotencyKey derives a stable ACP v2 idempotency key from turn
+// identity so retries across worker attempts or transport reconnects converge
+// on a single prompt insertion.
+func kitPromptIdempotencyKey(req runTurnRequest) (string, error) {
+	key := req.IdempotencyKey
+	if key == "" && req.EventID != uuid.Nil {
+		key = req.EventID.String()
+	}
+	if utf8.RuneCountInString(key) > kitPromptIdempotencyKeyMaxRunes {
+		return "", errors.New("kit prompt idempotency key exceeds ACP limit")
+	}
+	return key, nil
+}
+
+func (p *KitRuntimeProtocol) dial(ctx context.Context, r assistantRuntimeRecord) (*kitacp.Client, kitProtocolCapabilities, error) {
+	var caps kitProtocolCapabilities
 	if r.RuntimeVersion != 3 {
-		return nil, ErrKitRuntimeBinding
+		return nil, caps, ErrKitRuntimeBinding
 	}
 	token := p.config.GatewayToken
 	if token == "" {
-		return nil, ErrKitGatewayTokenNotFound
+		return nil, caps, ErrKitGatewayTokenNotFound
 	}
 	client, init, err := kitacp.Dial(ctx, p.config.Endpoint.String(), token, p.config.HTTPClient, map[string]any{"protocolVersion": 2, "info": map[string]string{"name": "speakeasy", "version": "1"}, "capabilities": map[string]any{}})
 	if err != nil {
-		return nil, fmt.Errorf("kit protocol operation: %w", err)
+		return nil, caps, fmt.Errorf("kit protocol operation: %w", err)
 	}
 	if !kitStatusCapability(init) {
 		closeKitTransport(client)
-		return nil, errors.New("kit authoritative session status capability unavailable")
+		return nil, caps, errors.New("kit authoritative session status capability unavailable")
 	}
-	return client, nil
+	caps.DeliveryQueue = kitPromptDeliveryCapability(init, kitPromptDeliveryQueue)
+	return client, caps, nil
 }
 func closeKitTransport(c *kitacp.Client) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -106,6 +157,10 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 	if _, err := kitReasoningEffort(req.ReasoningEffort); err != nil {
 		return err
 	}
+	idempotencyKey, err := kitPromptIdempotencyKey(req)
+	if err != nil {
+		return err
+	}
 	key := kitSessionKey(r, req.ThreadID)
 	session, found, err := p.config.Core.LoadKitRuntimeSession(ctx, key)
 	if err != nil {
@@ -129,7 +184,7 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 		}
 		servers = append(servers, map[string]any{"type": "http", "name": s.ID, "url": s.URL, "headers": headers})
 	}
-	c, err := p.dial(ctx, r)
+	c, caps, err := p.dial(ctx, r)
 	if err != nil {
 		return fmt.Errorf("kit protocol operation: %w", err)
 	}
@@ -178,6 +233,11 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 	// Set when replay shows this session already received a prompt.
 	promptedBefore := false
 	var pendingEcho *kitacp.Notification
+	// Hold at most one unknown replayed user message until session/prompt
+	// returns its authoritative messageId, so a retry after an interrupted
+	// prompt does not project a duplicate row before correlation is stored.
+	var replayEcho *kitacp.Notification
+	var replayEchoID string
 	work, cancel := context.WithCancel(ctx)
 	defer cancel()
 	projection := make(chan error, 1)
@@ -201,6 +261,29 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 			defer echoMu.Unlock()
 			if envelope.Update.Kind == "user_message" && !awaitingEcho {
 				promptedBefore = true
+				if needsResume && req.CanonicalUserMessageID != uuid.Nil {
+					if _, known := binding.UserEchoes[envelope.Update.ID]; !known && envelope.Update.ID != "" {
+						if replayEcho != nil && replayEchoID != envelope.Update.ID {
+							if _, err := p.config.Projector.Handle(work, binding, *replayEcho); err != nil {
+								return err
+							}
+						}
+						canonical, err := reducer.Apply(n)
+						if err != nil {
+							return err
+						}
+						replayEcho = &canonical
+						replayEchoID = envelope.Update.ID
+						return nil
+					}
+					if replayEcho != nil {
+						if _, err := p.config.Projector.Handle(work, binding, *replayEcho); err != nil {
+							return err
+						}
+						replayEcho = nil
+						replayEchoID = ""
+					}
+				}
 			}
 			if envelope.Update.Kind == "user_message" && awaitingEcho {
 				if _, known := binding.UserEchoes[envelope.Update.ID]; !known {
@@ -244,35 +327,40 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 			return fmt.Errorf("kit session/resume: %w", err)
 		}
 	}
-	selection, _, err := kitProtocolModelOption(startup, req.Model)
-	if err != nil {
-		return fmt.Errorf("kit protocol operation: %w", err)
-	}
-	configured, err := c.Call(work, "session/set_config_option", map[string]string{"sessionId": session.SessionID, "configId": "model", "type": "id", "value": selection}, session.SessionID)
-	if err != nil {
-		return fmt.Errorf("kit session/set_config_option: %w", err)
-	}
-	_, current, err := kitProtocolModelOption(configured, req.Model)
+	configured := startup
+	selection, current, err := kitProtocolModelOption(configured, req.Model)
 	if err != nil {
 		return fmt.Errorf("kit protocol operation: %w", err)
 	}
 	if current != selection {
-		return errors.New("kit did not apply the persisted assistant model")
+		configured, err = c.Call(work, "session/set_config_option", map[string]string{"sessionId": session.SessionID, "configId": "model", "type": "id", "value": selection}, session.SessionID)
+		if err != nil {
+			return fmt.Errorf("kit session/set_config_option: %w", err)
+		}
+		_, current, err = kitProtocolModelOption(configured, req.Model)
+		if err != nil {
+			return fmt.Errorf("kit protocol operation: %w", err)
+		}
+		if current != selection {
+			return errors.New("kit did not apply the persisted assistant model")
+		}
 	}
-	effort, _, err := kitProtocolReasoningOption(configured, req.ReasoningEffort)
+	effort, currentEffort, err := kitProtocolReasoningOption(configured, req.ReasoningEffort)
 	if err != nil {
 		return err
 	}
-	configured, err = c.Call(work, "session/set_config_option", map[string]string{"sessionId": session.SessionID, "configId": "reasoning_effort", "type": "id", "value": effort}, session.SessionID)
-	if err != nil {
-		return fmt.Errorf("kit reasoning session/set_config_option: %w", err)
-	}
-	_, appliedEffort, err := kitProtocolReasoningOption(configured, req.ReasoningEffort)
-	if err != nil {
-		return err
-	}
-	if appliedEffort != effort {
-		return errors.New("kit did not apply the persisted assistant reasoning effort")
+	if currentEffort != effort {
+		configured, err = c.Call(work, "session/set_config_option", map[string]string{"sessionId": session.SessionID, "configId": "reasoning_effort", "type": "id", "value": effort}, session.SessionID)
+		if err != nil {
+			return fmt.Errorf("kit reasoning session/set_config_option: %w", err)
+		}
+		_, appliedEffort, err := kitProtocolReasoningOption(configured, req.ReasoningEffort)
+		if err != nil {
+			return err
+		}
+		if appliedEffort != effort {
+			return errors.New("kit did not apply the persisted assistant reasoning effort")
+		}
 	}
 	// The same-stream configuration response follows startup replay. Drain all
 	// queued history before reserving the single live prompt echo slot. Unknown
@@ -291,14 +379,42 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 		}
 	}
 	// A processing event owns cancellation even before session/new returns.
-	// Startup replay is flushed, and no prompt has yet been submitted.
-	if stopped, err := p.cancelKitTurnBeforePrompt(work, r, req); err != nil || stopped {
-		return err
+	// On a resumed retry, the prior attempt may already have inserted this
+	// prompt, so let session/prompt deduplicate by idempotencyKey and allow
+	// settlement/cancel to determine the true outcome.
+	if req.EventAttempt <= 1 || !needsResume {
+		stopped, err := p.cancelKitTurnBeforePrompt(work, r, req)
+		if err != nil {
+			return err
+		}
+		if stopped {
+			echoMu.Lock()
+			held := replayEcho
+			replayEcho = nil
+			replayEchoID = ""
+			echoMu.Unlock()
+			if held != nil {
+				if _, err := p.config.Projector.Handle(work, binding, *held); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
 	}
 	echoMu.Lock()
 	awaitingEcho = req.CanonicalUserMessageID != uuid.Nil
 	echoMu.Unlock()
-	raw, err := c.Call(work, "session/prompt", map[string]any{"sessionId": session.SessionID, "prompt": prompt}, session.SessionID)
+	promptParams := map[string]any{
+		"sessionId": session.SessionID,
+		"prompt":    prompt,
+	}
+	if caps.DeliveryQueue {
+		promptParams["delivery"] = kitPromptDeliveryQueue
+	}
+	if idempotencyKey != "" {
+		promptParams["idempotencyKey"] = idempotencyKey
+	}
+	raw, err := c.Call(work, "session/prompt", promptParams, session.SessionID)
 	if err != nil {
 		return fmt.Errorf("kit session/prompt: %w", err)
 	}
@@ -322,13 +438,22 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 			if known && existing != req.CanonicalUserMessageID {
 				return errors.New("conflicting Kit user message acknowledgement")
 			}
-			echo := kitProtocolUserEcho{RuntimeID: r.ID, SessionID: session.SessionID, ACPMessageID: ack.MessageID, MessageID: req.CanonicalUserMessageID}
-			if err := p.storeUserEcho(work, key, req.EventID, echo); err != nil {
-				return fmt.Errorf("kit protocol operation: %w", err)
+			if !known {
+				echo := kitProtocolUserEcho{RuntimeID: r.ID, SessionID: session.SessionID, ACPMessageID: ack.MessageID, MessageID: req.CanonicalUserMessageID}
+				if err := p.storeUserEcho(work, key, req.EventID, echo); err != nil {
+					return fmt.Errorf("kit protocol operation: %w", err)
+				}
+				binding.UserEchoes[ack.MessageID] = req.CanonicalUserMessageID
 			}
-			binding.UserEchoes[ack.MessageID] = req.CanonicalUserMessageID
 		}
 		awaitingEcho = false
+		if replayEcho != nil {
+			if _, err := p.config.Projector.Handle(work, binding, *replayEcho); err != nil {
+				return err
+			}
+			replayEcho = nil
+			replayEchoID = ""
+		}
 		if pendingEcho != nil {
 			canonical, err := reducer.Apply(*pendingEcho)
 			if err != nil {
@@ -410,7 +535,7 @@ func (p *KitRuntimeProtocol) InterruptTurn(ctx context.Context, r assistantRunti
 }
 
 func (p *KitRuntimeProtocol) Status(ctx context.Context, r assistantRuntimeRecord) (RuntimeBackendStatus, error) {
-	c, err := p.dial(ctx, r)
+	c, _, err := p.dial(ctx, r)
 	if err != nil {
 		return RuntimeBackendStatus{}, err
 	}
@@ -439,7 +564,7 @@ func (p *KitRuntimeProtocol) PrepareRuntimeSwitch(ctx context.Context, assistant
 	if err != nil {
 		return result, fmt.Errorf("list Kit sessions for switch: %w", err)
 	}
-	c, err := p.dial(ctx, r)
+	c, _, err := p.dial(ctx, r)
 	if err != nil {
 		return result, fmt.Errorf("kit protocol operation: %w", err)
 	}

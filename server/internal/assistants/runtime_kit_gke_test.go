@@ -436,7 +436,7 @@ func TestKitGKERejectsUnboundedOrMutableProvisioning(t *testing.T) {
 
 func TestKitGKEAllowsExplicitReleaseTags(t *testing.T) {
 	t.Parallel()
-	for _, image := range []string{KitIntegrationImage, "registry.invalid:5000/kit:0.2.17"} {
+	for _, image := range []string{KitIntegrationImage, "registry.invalid:5000/kit:0.3.1"} {
 		t.Run(image, func(t *testing.T) {
 			t.Parallel()
 			in := kitGKEInput()
