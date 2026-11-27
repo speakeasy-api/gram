@@ -106,7 +106,7 @@ func (s *Service) authorizeWorkloadCompletion(r *http.Request) (context.Context,
 // caller-controlled source cannot select internal exemptions or assistant keys.
 var workloadInferenceSource = billing.ModelUsageSourcePlayground
 
-// Kit v0.2.19 uses agentkit-adapter-completions 0.11.0, whose request
+// Kit v0.3.1 uses agentkit-adapter-completions 0.11.0, whose request
 // builder puts the ACP session ID in the OpenAI body `user` field.
 // This is only a selector into persisted bindings, never authentication.
 func kitCompletionSessionID(body []byte) (uuid.UUID, error) {

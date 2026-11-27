@@ -143,7 +143,7 @@ func TestKitGKERejectsLocalProjectionOptions(t *testing.T) {
 	for _, name := range []string{"assistant-kit-workload-subject", "assistant-kit-workload-assertion-file"} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			c := kitCLIContext(t, map[string]string{"assistant-kit-image": "example.invalid/kit:v0.2.19", "assistant-runtime-provider": "gke", name: "local-projection-value"})
+			c := kitCLIContext(t, map[string]string{"assistant-kit-image": "example.invalid/kit:v0.3.1", "assistant-runtime-provider": "gke", name: "local-projection-value"})
 			require.ErrorContains(t, installKitLocalRuntimeFromCLI(testenv.NewLogger(t), c, nil, nil, nil, nil, nil, nil), name+" is local-only")
 		})
 	}
@@ -152,7 +152,7 @@ func TestKitGKERejectsLocalProjectionOptions(t *testing.T) {
 func TestKitGKEIgnoresExternalIssuerOptions(t *testing.T) {
 	t.Parallel()
 	values := kitGKEIdentityCLIValues()
-	values["assistant-kit-image"] = "example.invalid/kit:v0.2.19"
+	values["assistant-kit-image"] = "example.invalid/kit:v0.3.1"
 	values["assistant-runtime-provider"] = "gke"
 	values["assistant-kit-workload-issuer"] = "https://issuer.example.invalid"
 	values["assistant-kit-workload-jwks-url"] = "https://issuer.example.invalid/jwks"
