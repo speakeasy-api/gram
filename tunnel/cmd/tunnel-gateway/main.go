@@ -76,6 +76,11 @@ func main() {
 		os.Exit(2)
 	}
 	defer keys.Close()
+	authRoutes, err := buildAuthRouteMirror(ctx, logger, keys)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "tunnel-gateway auth route mirror init failed", slog.Any("error", err))
+		os.Exit(2)
+	}
 
 	collector, stopMetrics := startMetrics(ctx, logger)
 
@@ -87,6 +92,7 @@ func main() {
 		ForwardToken:    forwardToken,
 		AuthzPublicKeys: os.Getenv("GRAM_AUTHZ_PUBLIC_KEYS"),
 		Metrics:         collector,
+		AuthRoutes:      authRoutes,
 	}, keys, routes, logger)
 	if err != nil {
 		logger.ErrorContext(context.Background(), "tunnel-gateway init failed", slog.Any("error", err))
@@ -210,6 +216,42 @@ func buildRouteStore(ctx context.Context, logger *slog.Logger) (route.Store, err
 	}
 	logger.InfoContext(ctx, "tunnel-gateway using redis route store", slog.String("addr", current.Addr))
 	return route.NewRedis(client), nil
+}
+
+// buildAuthRouteMirror connects to the auth role when GRAM_REDIS_AUTH_ADDR is
+// set and returns nil otherwise, leaving the auth role untouched. The client
+// follows the auth role's instance switch, so the mirror moves with the rest of
+// the auth state.
+func buildAuthRouteMirror(ctx context.Context, logger *slog.Logger, eligibility gateway.AuthRouteEligibility) (*gateway.AuthRouteMirror, error) {
+	current := redisconn.EndpointFromEnv("GRAM_REDIS_AUTH_")
+	if current.Addr == "" {
+		return nil, nil
+	}
+	if err := current.Validate(); err != nil {
+		return nil, fmt.Errorf("configure tunnel auth route Redis: %w", err)
+	}
+	next := redisconn.EndpointFromEnv("GRAM_REDIS_AUTH_NEXT_")
+
+	var tokens oauth2.TokenSource
+	if current.Auth == redisconn.AuthIAM || (next.Addr != "" && next.Addr != current.Addr && next.Auth == redisconn.AuthIAM) {
+		var err error
+		tokens, err = redisconn.NewIAMTokenSource(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("initialize tunnel auth route Redis credentials: %w", err)
+		}
+	}
+
+	client, err := redisswitch.NewClient(ctx, logger, &redis.Options{}, redisswitch.Binding{
+		Role:    redisswitch.RoleAuth,
+		Current: current,
+		Next:    next,
+		Tokens:  tokens,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("connect tunnel auth route Redis: %w", err)
+	}
+	logger.InfoContext(ctx, "tunnel-gateway mirroring oauth tunnel routes to the auth role", slog.String("addr", current.Addr))
+	return &gateway.AuthRouteMirror{Routes: route.NewAuthMirror(client), Eligibility: eligibility}, nil
 }
 
 func buildKeyResolver(ctx context.Context) (*gateway.PostgresKeyResolver, error) {

@@ -900,9 +900,12 @@ func TestRouteReconcilerValidatesEachSessionKey(t *testing.T) {
 		return oldAgent.session.IsClosed() && harness.gateway.ActiveSessions() == 1
 	}, time.Second, 5*time.Millisecond)
 	require.False(t, newAgent.session.IsClosed())
-	candidates, err := store.Candidates(t.Context(), tunnelID)
-	require.NoError(t, err)
-	require.Len(t, candidates, 1)
+	// The reconciler publishes asynchronously, so a loaded machine can see the
+	// session change before the route does.
+	require.Eventually(t, func() bool {
+		candidates, err := store.Candidates(t.Context(), tunnelID)
+		return err == nil && len(candidates) == 1
+	}, time.Second, 5*time.Millisecond)
 
 	request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, harness.forward.URL+"/probe", nil)
 	require.NoError(t, err)

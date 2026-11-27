@@ -14,7 +14,6 @@ import (
 	"net/url"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
@@ -48,8 +47,7 @@ type mcpRemoteSessionDependencies struct {
 // calls (token exchange, refresh, revocation, dynamic client registration) for
 // remote session issuers bound to a tunneled MCP server, instead of dialing
 // them from cloud egress.
-// The route store is the tunnel gateway's, on the ops role.
-func newTunnelHTTPClient(c *cli.Context, guardianPolicy *guardian.Policy, opsClient *redis.Client) (*tunnelrouting.HTTPClient, error) {
+func newTunnelHTTPClient(c *cli.Context, guardianPolicy *guardian.Policy, stores *redisStores) (*tunnelrouting.HTTPClient, error) {
 	// guardian.WithAllowedCIDRBlocks silently drops invalid CIDRs, so a typo
 	// here would strand tunnels fail-closed with no signal. Reject
 	// misconfiguration at startup instead.
@@ -59,7 +57,33 @@ func newTunnelHTTPClient(c *cli.Context, guardianPolicy *guardian.Policy, opsCli
 			return nil, fmt.Errorf("invalid tunnel gateway CIDR block %q: %w", cidr, err)
 		}
 	}
-	return tunnelrouting.NewHTTPClient(route.NewRedis(opsClient), c.String("tunnel-forward-token"), guardianPolicy, cidrs), nil
+	return tunnelrouting.NewHTTPClient(tunnelOAuthRoutes(c, stores), c.String("tunnel-forward-token"), guardianPolicy, cidrs), nil
+}
+
+// tunnelAuthRouteMirrorFlagName turns on reading tunneled OAuth routes from
+// the auth role's mirror.
+const tunnelAuthRouteMirrorFlagName = "tunnel-auth-route-mirror"
+
+func tunnelAuthRouteMirrorFlag() cli.Flag {
+	return &cli.BoolFlag{
+		Name:    tunnelAuthRouteMirrorFlagName,
+		Usage:   "Read routes for tunneled OAuth back-channel calls from the auth role's route mirror first, falling back to the ops role's routes. Turn on once the tunnel gateway publishes the mirror",
+		EnvVars: []string{"GRAM_TUNNEL_AUTH_ROUTE_MIRROR"},
+		Value:   false,
+	}
+}
+
+// tunnelOAuthRoutes is the route store for OAuth back-channel calls over a
+// tunnel. Unless the mirror flag is on it is the tunnel gateway's bulk routes
+// on the ops role. With the flag on, a tunnel the gateway mirrors to the auth
+// role is served from there, so tunneled OAuth keeps working while the ops
+// instance is down, full or being moved.
+func tunnelOAuthRoutes(c *cli.Context, stores *redisStores) route.Store {
+	bulk := route.NewRedis(stores.Ops)
+	if !c.Bool(tunnelAuthRouteMirrorFlagName) {
+		return bulk
+	}
+	return route.NewMirrorReader(route.NewAuthMirror(stores.Auth), bulk)
 }
 
 func newMCPRemoteSessionDependencies(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, enc *encryption.Client, guardianPolicy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, stores *redisStores, serverURL *url.URL, callbackOrigins remotesessions.CallbackOrigins, auditLogger *audit.Logger, assertionSigner remotesessions.TokenEndpointAssertionSigner, protectedResources *protectedresource.Prober, features feature.Provider, connections *mcpconnectionattempts.Recorder, orgEncryption orgEncryptionDeps) (*mcpRemoteSessionDependencies, error) {

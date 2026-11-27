@@ -14,17 +14,22 @@ import (
 // Redis stores live routes and snapshots; Postgres owns durable tunnel sources.
 type Redis struct {
 	client redis.UniversalClient
+
+	// routeKey names a tunnel's route set: RouteKey for the bulk routes,
+	// AuthRouteKey for the auth role's mirror.
+	routeKey func(tunnelID string) string
 }
 
 func NewRedis(client redis.UniversalClient) *Redis {
 	return &Redis{
-		client: client,
+		client:   client,
+		routeKey: RouteKey,
 	}
 }
 
 func (r *Redis) Publish(ctx context.Context, tunnelID, addr string, ttl time.Duration) error {
 	expiresAt := time.Now().Add(ttl).UnixMilli()
-	key := RouteKey(tunnelID)
+	key := r.routeKey(tunnelID)
 	_, err := r.client.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
 		pipe.ZAdd(ctx, key, redis.Z{Score: float64(expiresAt), Member: addr})
 		pipe.Expire(ctx, key, ttl)
@@ -37,7 +42,7 @@ func (r *Redis) Publish(ctx context.Context, tunnelID, addr string, ttl time.Dur
 }
 
 func (r *Redis) Candidates(ctx context.Context, tunnelID string) ([]string, error) {
-	key := RouteKey(tunnelID)
+	key := r.routeKey(tunnelID)
 	now := strconv.FormatInt(time.Now().UnixMilli(), 10)
 	var candidatesCmd *redis.StringSliceCmd
 	_, err := r.client.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
@@ -57,14 +62,14 @@ func (r *Redis) Candidates(ctx context.Context, tunnelID string) ([]string, erro
 }
 
 func (r *Redis) Unpublish(ctx context.Context, tunnelID, addr string) error {
-	if err := r.client.ZRem(ctx, RouteKey(tunnelID), addr).Err(); err != nil {
+	if err := r.client.ZRem(ctx, r.routeKey(tunnelID), addr).Err(); err != nil {
 		return fmt.Errorf("unpublish route: %w", err)
 	}
 	return nil
 }
 
 func (r *Redis) Delete(ctx context.Context, tunnelID string) error {
-	if err := r.client.Del(ctx, RouteKey(tunnelID)).Err(); err != nil {
+	if err := r.client.Del(ctx, r.routeKey(tunnelID)).Err(); err != nil {
 		return fmt.Errorf("delete route: %w", err)
 	}
 	return nil

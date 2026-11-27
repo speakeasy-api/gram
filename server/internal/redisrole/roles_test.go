@@ -130,6 +130,7 @@ func TestClassifyKnownFamilies(t *testing.T) {
 			"federated-oidc-metadata:v3:sha",
 			"userInfo:user:",
 			"sessionPolicy:v2:issuer:jti:",
+			"auth_tunnel_routes:tunnel",
 			"rate:ratelimit:workload_issuer_lookup:key",
 			"rate:ratelimit:workload_device_key_lookup:key",
 			"rate:ratelimit:workload_assertion_jwks_refresh:key",

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log/slog"
 	"testing"
 	"time"
@@ -41,6 +42,38 @@ func TestRouteStoreUsesSessionsCredentialsWhenRepointed(t *testing.T) {
 	store, err := buildRouteStore(t.Context(), slog.Default())
 	require.NoError(t, err)
 	require.NoError(t, store.Publish(t.Context(), "test-tunnel", "gateway:8091", time.Minute))
+}
+
+type staticEligibility bool
+
+func (e staticEligibility) CarriesOAuth(context.Context, string) (bool, error) {
+	return bool(e), nil
+}
+
+func TestAuthRouteMirrorIsOffWithoutAuthAddress(t *testing.T) {
+	t.Setenv("GRAM_REDIS_AUTH_ADDR", "")
+	t.Setenv("GRAM_REDIS_AUTH_NEXT_ADDR", "")
+
+	mirror, err := buildAuthRouteMirror(t.Context(), slog.Default(), staticEligibility(true))
+	require.NoError(t, err)
+	require.Nil(t, mirror)
+}
+
+func TestAuthRouteMirrorWritesToAuthEndpoint(t *testing.T) {
+	auth := miniredis.RunT(t)
+	t.Setenv("GRAM_REDIS_AUTH_ADDR", auth.Addr())
+	t.Setenv("GRAM_REDIS_AUTH_AUTH_MODE", "none")
+	t.Setenv("GRAM_REDIS_AUTH_PASSWORD", "")
+	t.Setenv("GRAM_REDIS_AUTH_CA_CERT", "")
+	t.Setenv("GRAM_REDIS_AUTH_NEXT_ADDR", "")
+
+	mirror, err := buildAuthRouteMirror(t.Context(), slog.Default(), staticEligibility(true))
+	require.NoError(t, err)
+	require.NotNil(t, mirror)
+	require.NoError(t, mirror.Routes.Publish(t.Context(), "test-tunnel", "gateway:8091", time.Minute))
+
+	require.True(t, auth.Exists("auth_tunnel_routes:test-tunnel"))
+	require.False(t, auth.Exists("tunnel_routes:test-tunnel"))
 }
 
 func TestParseMaxSessionsDefaultsOnEmptyOrZero(t *testing.T) {

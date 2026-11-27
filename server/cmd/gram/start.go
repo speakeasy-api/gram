@@ -529,6 +529,7 @@ func mcpRuntimeFlags() []cli.Flag {
 			Usage:   "CIDR blocks the tunnel gateway advertise addresses live in (cluster pod range). Allowlisted past the guardian egress policy for tunnel forwards only; unset means tunnels to private addresses fail closed",
 			EnvVars: []string{"GRAM_TUNNEL_GATEWAY_CIDR_BLOCKS"},
 		},
+		tunnelAuthRouteMirrorFlag(),
 		&cli.IntFlag{
 			Name:    "public-tunnels-live-session-cap",
 			Usage:   "Maximum concurrently tracked anonymous MCP sessions per tunnel (0 uses the built-in default)",
@@ -1230,7 +1231,7 @@ func newStartCommand() *cli.Command {
 			issuerGate.SetEnableAuthority(issuerSigner.CheckEnableAuthority)
 			enableIssuerKeyAutoActivation(identityProviderProvisioner, issuerSigner)
 
-			tunnelHTTPClient, err := newTunnelHTTPClient(c, guardianPolicy, stores.Ops)
+			tunnelHTTPClient, err := newTunnelHTTPClient(c, guardianPolicy, stores)
 			if err != nil {
 				return err
 			}

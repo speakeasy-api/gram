@@ -82,7 +82,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
 	userRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
-	"github.com/speakeasy-api/gram/tunnel/route"
 )
 
 func workerRuntimeFlags() []cli.Flag {
@@ -232,6 +231,7 @@ func newWorkerCommand() *cli.Command {
 			Usage:   "CIDR blocks the tunnel gateway advertise addresses live in (cluster pod range). Allowlisted past the guardian egress policy for tunnel forwards only; unset means tunnels to private addresses fail closed",
 			EnvVars: []string{"GRAM_TUNNEL_GATEWAY_CIDR_BLOCKS"},
 		},
+		tunnelAuthRouteMirrorFlag(),
 		&cli.StringFlag{
 			Name:     "polar-api-key",
 			Usage:    "The polar API key",
@@ -821,7 +821,7 @@ func newWorkerCommand() *cli.Command {
 			// of dialing from cloud egress. The refresh sweep runs here, so
 			// the worker needs the same tunnel reach as the HTTP server.
 			tunnelHTTPClient := tunnelrouting.NewHTTPClient(
-				route.NewRedis(stores.Ops),
+				tunnelOAuthRoutes(c, stores),
 				c.String("tunnel-forward-token"),
 				guardianPolicy,
 				tunnelGatewayCIDRs,
