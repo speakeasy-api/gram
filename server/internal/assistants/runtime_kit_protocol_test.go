@@ -52,9 +52,9 @@ func TestKitProtocolPromptDeliveryCapability(t *testing.T) {
 		name, raw, mode string
 		want            bool
 	}{
-		{"queue and steer", `{"capabilities":{"session":{"prompt":{"delivery":{"steer":{},"queue":{}}}}}}`, kitPromptDeliverySteer, true},
+		{"steer with another mode", `{"capabilities":{"session":{"prompt":{"delivery":{"steer":{},"queue":{}}}}}}`, kitPromptDeliverySteer, true},
 		{"steer only", `{"capabilities":{"session":{"prompt":{"delivery":{"steer":{}}}}}}`, kitPromptDeliverySteer, true},
-		{"queue only", `{"capabilities":{"session":{"prompt":{"delivery":{"queue":{}}}}}}`, kitPromptDeliverySteer, false},
+		{"other mode only", `{"capabilities":{"session":{"prompt":{"delivery":{"queue":{}}}}}}`, kitPromptDeliverySteer, false},
 		{"absent delivery", `{"capabilities":{"_meta":{"kit/session/status":{}}}}`, kitPromptDeliverySteer, false},
 		{"null mode", `{"capabilities":{"session":{"prompt":{"delivery":{"steer":null}}}}}`, kitPromptDeliverySteer, false},
 		{"wrong type", `{"capabilities":{"session":{"prompt":{"delivery":{"steer":true}}}}}`, kitPromptDeliverySteer, false},
@@ -850,7 +850,7 @@ func TestKitProtocolPromptDeliveryRetryDeduplicates(t *testing.T) {
 	require.Equal(t, 1, assistantsCount)
 }
 
-func TestKitProtocolLegacyGatewayOmitsDelivery(t *testing.T) {
+func TestKitProtocolOmitsUnadvertisedDelivery(t *testing.T) {
 	t.Parallel()
 	core, db, key, chatID := kitSessionFixture(t)
 	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), db, assetstest.NewTestBlobStore(t))
@@ -880,8 +880,8 @@ func TestKitProtocolLegacyGatewayOmitsDelivery(t *testing.T) {
 				return
 			}
 			if msg.Method == "initialize" {
-				w.Header().Set("Acp-Connection-Id", "legacy-conn")
-				// Kit 0.2.x advertises kit/session/status without prompt delivery capabilities.
+				w.Header().Set("Acp-Connection-Id", "no-delivery-conn")
+				// Harness advertises kit/session/status without prompt delivery capabilities.
 				_, _ = fmt.Fprintf(w, `{"jsonrpc":"2.0","id":%s,"result":{"capabilities":{"_meta":{"kit/session/status":{}}}}}`, msg.ID)
 				return
 			}
@@ -891,18 +891,18 @@ func TestKitProtocolLegacyGatewayOmitsDelivery(t *testing.T) {
 			w.WriteHeader(http.StatusAccepted)
 			switch msg.Method {
 			case "session/new":
-				ch <- fmt.Sprintf("data: {\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":%s}\n\n", msg.ID, strings.TrimSuffix(catalog, "}")+`,"sessionId":"legacy-session"}`)
+				ch <- fmt.Sprintf("data: {\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":%s}\n\n", msg.ID, strings.TrimSuffix(catalog, "}")+`,"sessionId":"no-delivery-session"}`)
 			case "session/prompt":
 				mu.Lock()
 				_, sawDelivery = msg.Params["delivery"]
 				_ = json.Unmarshal(msg.Params["idempotencyKey"], &sawIdempotencyKey)
 				mu.Unlock()
-				ch <- `data: {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"legacy-session","update":{"sessionUpdate":"user_message","messageId":"u1","content":[{"type":"text","text":"hi"}]}}}` + "\n\n"
+				ch <- `data: {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"no-delivery-session","update":{"sessionUpdate":"user_message","messageId":"u1","content":[{"type":"text","text":"hi"}]}}}` + "\n\n"
 				ch <- fmt.Sprintf("data: {\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{\"messageId\":\"u1\"}}\n\n", msg.ID)
 			case "kit/session/status":
-				ch <- `data: {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"legacy-session","update":{"sessionUpdate":"agent_message_chunk","messageId":"a1","content":{"type":"text","text":"ok"}}}}` + "\n\n"
-				ch <- `data: {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"legacy-session","update":{"sessionUpdate":"state_update","state":"idle","stopReason":"end_turn"}}}` + "\n\n"
-				ch <- fmt.Sprintf("data: {\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{\"sessionId\":\"legacy-session\",\"settled\":true,\"foregroundActive\":false,\"backgroundActive\":false,\"pendingBackgroundTerminals\":false,\"activeSubagents\":0}}\n\n", msg.ID)
+				ch <- `data: {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"no-delivery-session","update":{"sessionUpdate":"agent_message_chunk","messageId":"a1","content":{"type":"text","text":"ok"}}}}` + "\n\n"
+				ch <- `data: {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"no-delivery-session","update":{"sessionUpdate":"state_update","state":"idle","stopReason":"end_turn"}}}` + "\n\n"
+				ch <- fmt.Sprintf("data: {\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{\"sessionId\":\"no-delivery-session\",\"settled\":true,\"foregroundActive\":false,\"backgroundActive\":false,\"pendingBackgroundTerminals\":false,\"activeSubagents\":0}}\n\n", msg.ID)
 			}
 		case http.MethodGet:
 			ch := make(chan string, 16)
@@ -944,7 +944,7 @@ func TestKitProtocolLegacyGatewayOmitsDelivery(t *testing.T) {
 		Prompt: "hi", EventID: eventID, IdempotencyKey: eventID.String(),
 	}))
 	mu.Lock()
-	require.False(t, sawDelivery, "must not send unadvertised delivery mode to a Kit 0.2.x gateway")
+	require.False(t, sawDelivery, "must omit delivery when the harness does not advertise it")
 	require.Equal(t, eventID.String(), sawIdempotencyKey)
 	mu.Unlock()
 
@@ -958,7 +958,7 @@ func TestKitProtocolLegacyGatewayOmitsDelivery(t *testing.T) {
 			foundAssistant = true
 		}
 	}
-	require.True(t, foundAssistant, "legacy gateway assistant reply must be projected")
+	require.True(t, foundAssistant, "assistant reply must be projected when delivery is omitted")
 }
 
 func TestKitProtocolInterruptRunningTurnAndSettle(t *testing.T) {
