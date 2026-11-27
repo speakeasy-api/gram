@@ -175,6 +175,22 @@ func ReplaceResourceAudience(ctx context.Context, db repo.DBTX, resource Resourc
 	// The whole replacement is prepared before anything is deleted: a caller
 	// without a transaction would otherwise lose the existing audience to a
 	// selector that never passed validation.
+	roleURNs := make([]string, 0, len(audience))
+	for _, entry := range audience {
+		if entry.Principal.Type == urn.PrincipalTypeRole {
+			roleURNs = append(roleURNs, entry.Principal.String())
+		}
+	}
+	lockedRoles, err := LockedRolePrincipals(ctx, db, roleURNs)
+	if err != nil {
+		return err
+	}
+	for _, roleURN := range roleURNs {
+		if slug, ok := lockedRoles[roleURN]; ok {
+			return fmt.Errorf("%w: %s", ErrLockedRoleGrants, slug)
+		}
+	}
+
 	type pendingGrant struct {
 		principal urn.Principal
 		selector  []byte

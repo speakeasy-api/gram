@@ -546,9 +546,11 @@ func (r *RoleManager) UpdateRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID, wo
 	existingRole := roleViewFromLocalRoleAndGrants(currentRole, existingGrants)
 
 	sysRole := isSystemRole(currentRole.Slug)
+	lockedGrants := authz.IsLocalBuiltInRole(currentRole.Slug)
 	// System role names/descriptions are platform-managed and shared globally
-	// (global_roles), so they stay immutable. Grants are stored per-org and may
-	// be customized, so grant and member changes are allowed below.
+	// (global_roles), so they stay immutable. Legacy system role grants are
+	// stored per-org and may still be customized until migration; locked
+	// built-in roles reject grant edits while still allowing member changes.
 	if sysRole && (payload.Name != nil || payload.Description != nil) {
 		return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeBadRequest, nil, "system role name and description cannot be changed").LogError(ctx, r.logger)
 	}
@@ -559,6 +561,9 @@ func (r *RoleManager) UpdateRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID, wo
 	}
 	addGrants := roleGrantPayloads(payload.AddGrants)
 	removeGrants := roleGrantPayloads(payload.RemoveGrants)
+	if lockedGrants && (len(addGrants) > 0 || len(removeGrants) > 0) {
+		return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeBadRequest, authz.ErrLockedRoleGrants, "built-in role permissions are locked and cannot be changed").LogError(ctx, r.logger)
+	}
 	if err := validateRoleGrants(addGrants); err != nil {
 		return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeBadRequest, err, "invalid access role grant: %s", err).LogError(ctx, r.logger)
 	}
@@ -650,15 +655,19 @@ func (r *RoleManager) UpdateRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID, wo
 	}
 
 	// Grants live in the per-org grant store and are patched the same way for
-	// custom and system roles. WorkOS only tracks role identity/membership, not
-	// Speakeasy scopes, so no grant sync to WorkOS is needed.
-	if payload.AddGrants != nil || payload.RemoveGrants != nil {
+	// custom and legacy system roles. WorkOS only tracks role
+	// identity/membership, not Speakeasy scopes, so no grant sync to WorkOS is
+	// needed. Locked built-in roles never write grant rows.
+	if !lockedGrants && (payload.AddGrants != nil || payload.RemoveGrants != nil) {
 		before, err := roledelivery.Snapshot(ctx, tx, gramOrgID, currentRole.PrincipalURN)
 		if err != nil {
 			return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "snapshot role delivery grants").LogError(ctx, r.logger)
 		}
 		syncedGrants, err := authz.PatchRoleGrantsTx(ctx, tx, gramOrgID, currentRole.Slug, currentRole.PrincipalURN, addGrants, removeGrants)
 		if err != nil {
+			if errors.Is(err, authz.ErrLockedRoleGrants) {
+				return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeBadRequest, err, "built-in role permissions are locked and cannot be changed").LogError(ctx, r.logger)
+			}
 			return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "patch grants for updated role").LogError(ctx, r.logger)
 		}
 		changedProjectIDs, err := roledelivery.RoleChanged(ctx, tx, gramOrgID, currentRole.PrincipalURN, before, r.roleDeliveryGuard)
@@ -2119,6 +2128,7 @@ func roleViewFromLocalRoleAndGrants(role localRole, grants []*gen.RoleGrant) *ge
 		Slug:         role.Slug,
 		Description:  role.Description,
 		IsSystem:     isSystemRole(role.Slug),
+		LockedGrants: authz.IsLocalBuiltInRole(role.Slug),
 		Grants:       grants,
 		MemberCount:  role.MemberCount,
 		AgentIds:     role.AgentIDs,

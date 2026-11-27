@@ -126,6 +126,16 @@ func (s *Service) temporaryGrantRecipient(ctx context.Context, organizationID st
 		return urn.Principal{}, oops.E(oops.CodeUnexpected, err, "validate principal").LogError(ctx, s.logger)
 	}
 
+	if principal.Type == urn.PrincipalTypeRole {
+		slug, locked, err := authz.IsLockedRolePrincipal(ctx, s.db, principal)
+		if err != nil {
+			return urn.Principal{}, oops.E(oops.CodeUnexpected, err, "check locked role principal").LogError(ctx, s.logger)
+		}
+		if locked {
+			return urn.Principal{}, oops.E(oops.CodeBadRequest, authz.ErrLockedRoleGrants, "built-in role %q permissions are locked and cannot hold temporary grants", slug).LogError(ctx, s.logger)
+		}
+	}
+
 	if principal.Type == urn.PrincipalTypeAgent {
 		// A suspended or revoked agent keeps the access it has but cannot be
 		// given more, the same rule audiences follow.

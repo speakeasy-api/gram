@@ -2,6 +2,7 @@ package authz
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -15,6 +16,10 @@ import (
 )
 
 const globalRolePrincipalPrefix = "role:global:"
+
+// ErrLockedRoleGrants reports an attempt to modify permissions on a locked
+// Speakeasy-local built-in role (super_admin, standard_admin, standard_member).
+var ErrLockedRoleGrants = errors.New("built-in role permissions are locked and cannot be changed")
 
 // LocalBuiltInRole describes a built-in role owned by Speakeasy rather than
 // synced from WorkOS. Its row lives in global_roles, and WorkOS role webhooks
@@ -70,6 +75,46 @@ func IsLocalBuiltInRole(slug string) bool {
 // registry.Definitions rather than stored principal_grants rows.
 func IsStandardRole(slug string) bool {
 	return slug == SystemRoleStandardAdmin || slug == SystemRoleStandardMember
+}
+
+// LockedRolePrincipals returns the subset of principalURNs that identify a
+// locked Speakeasy-local built-in role (super_admin, standard_admin,
+// standard_member), keyed by principal URN with the role slug as value. It
+// issues no database query when no global role URNs are present.
+func LockedRolePrincipals(ctx context.Context, db repo.DBTX, principalURNs []string) (map[string]string, error) {
+	slugByURN, _, err := resolveGlobalRoleSlugs(ctx, db, principalURNs)
+	if err != nil {
+		return nil, err
+	}
+	var locked map[string]string
+	for roleURN, slug := range slugByURN {
+		if !IsLocalBuiltInRole(slug) {
+			continue
+		}
+		if locked == nil {
+			locked = make(map[string]string)
+		}
+		locked[roleURN] = slug
+	}
+	return locked, nil
+}
+
+// IsLockedRolePrincipal reports whether principal identifies one of the locked
+// Speakeasy-local built-in roles. Non-global principals issue no database query.
+func IsLockedRolePrincipal(ctx context.Context, db repo.DBTX, principal urn.Principal) (string, bool, error) {
+	if principal.Type != urn.PrincipalTypeRole {
+		return "", false, nil
+	}
+	principalURN := principal.String()
+	if !strings.HasPrefix(principalURN, globalRolePrincipalPrefix) {
+		return "", false, nil
+	}
+	locked, err := LockedRolePrincipals(ctx, db, []string{principalURN})
+	if err != nil {
+		return "", false, err
+	}
+	slug, ok := locked[principalURN]
+	return slug, ok, nil
 }
 
 // StandardRoleScopes returns the canonical scopes for a standard role, or nil

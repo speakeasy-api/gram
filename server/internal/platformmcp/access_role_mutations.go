@@ -280,7 +280,7 @@ func (s *AccessRoleMutationService) Update(ctx context.Context, principal Princi
 		if readErr != nil {
 			return AccessRoleMutationReceiptResult{}, classifyAccessRoleBackendError(readErr)
 		}
-		if current == nil || current.IsSystem {
+		if current == nil || current.IsSystem || current.LockedGrants {
 			return AccessRoleMutationReceiptResult{}, accessRoleMutationNotFound()
 		}
 		version, versionErr := s.roleVersion(current)
@@ -462,7 +462,7 @@ func accessRoleRulesToGenGrants(rules []normalizedMCPAccessRoleRule, projectID u
 // the same transaction, or nil for a creation, so the receipt can name the
 // sensitive permissions the write added the way the audit log does.
 func (s *AccessRoleMutationService) receiptResult(before, state *accessgen.Role, roleSlug, category, reconciliation string) (AccessRoleMutationReceiptResult, error) {
-	if state == nil || state.IsSystem || uuid.Validate(state.ID) != nil || roleSlug == "" {
+	if state == nil || state.IsSystem || state.LockedGrants || uuid.Validate(state.ID) != nil || roleSlug == "" {
 		return AccessRoleMutationReceiptResult{}, accessRoleMutationUnavailable(errors.New("unsafe role backend result"))
 	}
 	version, err := s.roleVersion(state)

@@ -11858,6 +11858,7 @@ func unmarshalRoleResponseBodyToAccessRole(v *RoleResponseBody) *access.Role {
 		Slug:         *v.Slug,
 		Description:  *v.Description,
 		IsSystem:     *v.IsSystem,
+		LockedGrants: *v.LockedGrants,
 		MemberCount:  *v.MemberCount,
 		CreatedAt:    *v.CreatedAt,
 		UpdatedAt:    *v.UpdatedAt,

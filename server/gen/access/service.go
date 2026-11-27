@@ -1660,6 +1660,9 @@ type Role struct {
 	Description string
 	// Whether this is a built-in system role that cannot be deleted.
 	IsSystem bool
+	// Whether this role's permissions are managed by Speakeasy and cannot be
+	// edited.
+	LockedGrants bool
 	// Scope grants assigned to this role.
 	Grants []*RoleGrant
 	// Number of members assigned to this role.

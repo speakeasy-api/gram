@@ -188,10 +188,14 @@ func SeedSystemRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, organizationID 
 }
 
 // PatchRoleGrantsTx applies exact grant additions and removals for a role
-// principal without treating omitted grants as deletes.
+// principal without treating omitted grants as deletes. Locked built-in roles
+// (super_admin, standard_admin, standard_member) reject all grant mutations.
 func PatchRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, orgID string, roleSlug string, rolePrincipalURN string, addGrants []*RoleGrant, removeGrants []*RoleGrant) ([]*ScopedGrant, error) {
 	if orgID == "" {
 		return nil, fmt.Errorf("organization id is required")
+	}
+	if IsLocalBuiltInRole(roleSlug) {
+		return nil, fmt.Errorf("%w: %s", ErrLockedRoleGrants, roleSlug)
 	}
 	if err := RequireUpstreamSelectorWritesForGrants(ctx, orgID, addGrants); err != nil {
 		return nil, err
@@ -200,6 +204,11 @@ func PatchRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, orgID string, roleSl
 	principal, err := loadRolePrincipal(ctx, dbtx, orgID, roleSlug, rolePrincipalURN)
 	if err != nil {
 		return nil, err
+	}
+	if slug, locked, err := IsLockedRolePrincipal(ctx, dbtx, principal); err != nil {
+		return nil, err
+	} else if locked {
+		return nil, fmt.Errorf("%w: %s", ErrLockedRoleGrants, slug)
 	}
 
 	q := repo.New(dbtx)

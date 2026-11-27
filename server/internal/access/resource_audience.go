@@ -204,6 +204,7 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 
 	principalsByLevel := make(map[string][]authz.PrincipalSelectors, len(audienceLevelScopes))
 	seen := make(map[string]struct{}, len(payload.Entries))
+	rolePrincipalURNs := make([]string, 0)
 	for _, entry := range payload.Entries {
 		if entry == nil {
 			continue
@@ -214,6 +215,9 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 		principal, err := parseAudiencePrincipal(entry.PrincipalUrn)
 		if err != nil {
 			return nil, oops.E(oops.CodeInvalid, err, "invalid principal %q", entry.PrincipalUrn)
+		}
+		if principal.Type == urn.PrincipalTypeRole {
+			rolePrincipalURNs = append(rolePrincipalURNs, principal.String())
 		}
 		if principal.Type == urn.PrincipalTypeAgent {
 			if !slices.Contains(agentAudienceLevels, entry.Level) {
@@ -262,6 +266,18 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 			Principal: principal,
 			Selectors: selectors,
 		})
+	}
+
+	if len(rolePrincipalURNs) > 0 {
+		lockedRoles, err := authz.LockedRolePrincipals(ctx, s.db, rolePrincipalURNs)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "check locked role principals").LogError(ctx, s.logger)
+		}
+		for _, roleURN := range rolePrincipalURNs {
+			if slug, locked := lockedRoles[roleURN]; locked {
+				return nil, oops.E(oops.CodeBadRequest, authz.ErrLockedRoleGrants, "built-in role %q permissions are locked and cannot be changed", slug)
+			}
+		}
 	}
 
 	// Lockout guardrail: the administrator role is what undoes a rule written

@@ -1512,7 +1512,7 @@ var ListRoleGrantModel = Type("ListRoleGrant", func() {
 })
 
 var RoleModel = Type("Role", func() {
-	Required("id", "principal_urn", "name", "slug", "description", "is_system", "grants", "member_count", "created_at", "updated_at")
+	Required("id", "principal_urn", "name", "slug", "description", "is_system", "locked_grants", "grants", "member_count", "created_at", "updated_at")
 
 	Attribute("id", String, "Unique role identifier.")
 	Attribute("principal_urn", String, "Canonical principal URN for this role.")
@@ -1520,6 +1520,7 @@ var RoleModel = Type("Role", func() {
 	Attribute("slug", String, "Stable WorkOS role slug.")
 	Attribute("description", String, "Human-readable description.")
 	Attribute("is_system", Boolean, "Whether this is a built-in system role that cannot be deleted.")
+	Attribute("locked_grants", Boolean, "Whether this role's permissions are managed by Speakeasy and cannot be edited.")
 	Attribute("grants", ArrayOf(RoleGrantModel), "Scope grants assigned to this role.")
 	Attribute("member_count", Int, "Number of members assigned to this role.")
 	Attribute("agent_ids", ArrayOf(String), "IDs of the agent principals assigned to this role.")

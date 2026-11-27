@@ -199,6 +199,7 @@ func roleSnapshot(principal urn.Principal, slug string, grants []*authz.ScopedGr
 		Slug:         slug,
 		Description:  "",
 		IsSystem:     true,
+		LockedGrants: authz.IsLocalBuiltInRole(slug),
 		Grants:       view,
 		MemberCount:  0,
 		AgentIds:     nil,

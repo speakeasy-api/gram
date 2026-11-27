@@ -163,7 +163,7 @@ func (s *AccessRoleMutationService) updateRoleGrants(ctx context.Context, princi
 		if readErr != nil {
 			return AccessRoleMutationReceiptResult{}, classifyAccessRoleBackendError(readErr)
 		}
-		if current == nil || current.IsSystem {
+		if current == nil || current.IsSystem || current.LockedGrants {
 			return AccessRoleMutationReceiptResult{}, accessRoleMutationNotFound()
 		}
 		version, versionErr := s.roleVersion(current)
