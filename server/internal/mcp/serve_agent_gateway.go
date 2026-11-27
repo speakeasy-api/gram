@@ -18,6 +18,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"goa.design/goa/v3/security"
 
@@ -36,6 +37,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/orgserving"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -76,6 +78,9 @@ func (s *Service) ServeAgentGateway(w http.ResponseWriter, r *http.Request) erro
 	// valid key reach the same servers on the platform hostname, outside the
 	// allowlist the org's ingress enforces.
 	if err := s.enforceAgentGatewayCustomDomainLockdown(ctx, logger, authCtx.ActiveOrganizationID); err != nil {
+		return err
+	}
+	if err := s.requireOrganizationServed(ctx, logger, authCtx.ActiveOrganizationID); err != nil {
 		return err
 	}
 
@@ -134,6 +139,25 @@ func (s *Service) enforceAgentGatewayCustomDomainLockdown(ctx context.Context, l
 	}
 	if lockedDown {
 		return oops.E(oops.CodeForbidden, nil, "this MCP server is only accessible via its custom domain")
+	}
+	return nil
+}
+
+// requireOrganizationServed answers not found when the organization's MCP
+// servers are not served, exactly as an unknown agent gateway does. The
+// organization is read fresh rather than from the auth context, so revoking
+// access takes effect on the next request.
+func (s *Service) requireOrganizationServed(ctx context.Context, logger *slog.Logger, organizationID string) error {
+	organization, err := s.orgsRepo.GetOrganizationMetadata(ctx, organizationID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return oops.C(oops.CodeNotFound)
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "load agent gateway organization").LogError(ctx, logger)
+	}
+	if refusal := orgserving.Check(organization); refusal != orgserving.RefusalNone {
+		logger.InfoContext(ctx, "agent gateway organization is not served", attr.SlogOrganizationID(organizationID), attr.SlogReason(string(refusal)))
+		return oops.C(oops.CodeNotFound)
 	}
 	return nil
 }

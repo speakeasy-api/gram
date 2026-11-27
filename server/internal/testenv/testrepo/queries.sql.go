@@ -7748,6 +7748,26 @@ func (q *Queries) SetOrgWebhookConfig(ctx context.Context, arg SetOrgWebhookConf
 	return err
 }
 
+const setOrganizationServingStateFixture = `-- name: SetOrganizationServingStateFixture :exec
+UPDATE organization_metadata
+SET whitelisted = $1,
+    disabled_at = CASE WHEN $2::boolean THEN clock_timestamp() ELSE NULL END
+WHERE id = $3
+`
+
+type SetOrganizationServingStateFixtureParams struct {
+	Whitelisted bool
+	Disabled    bool
+	ID          string
+}
+
+// Sets the two flags that decide whether an organization's MCP servers are
+// served at all.
+func (q *Queries) SetOrganizationServingStateFixture(ctx context.Context, arg SetOrganizationServingStateFixtureParams) error {
+	_, err := q.db.Exec(ctx, setOrganizationServingStateFixture, arg.Whitelisted, arg.Disabled, arg.ID)
+	return err
+}
+
 const setOrganizationVerifiedDomainsFixture = `-- name: SetOrganizationVerifiedDomainsFixture :exec
 UPDATE organization_metadata
 SET verified_domains = $1::text[]

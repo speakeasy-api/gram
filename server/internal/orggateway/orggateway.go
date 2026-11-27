@@ -25,6 +25,7 @@ import (
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/orgserving"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	featuresrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -91,7 +92,10 @@ func availability(ctx context.Context, db usersessionsrepo.DBTX, organization or
 // served is every reason an organization is not served a gateway except its
 // issuers.
 func served(ctx context.Context, db usersessionsrepo.DBTX, organization orgrepo.OrganizationMetadatum, isTurnedOff func(context.Context, featuresrepo.IsFeatureEnabledParams) (bool, error)) (Unavailability, error) {
-	if organization.DisabledAt.Valid {
+	// An organization whose MCP servers are not served gets no gateway either.
+	// Not being whitelisted reports as disabled: the dashboard of such an
+	// organization is behind the demo gate, so no other reason would be shown.
+	if orgserving.Check(organization) != orgserving.RefusalNone {
 		return UnavailabilityOrganizationDisabled, nil
 	}
 	turnedOff, err := isTurnedOff(ctx, featuresrepo.IsFeatureEnabledParams{
