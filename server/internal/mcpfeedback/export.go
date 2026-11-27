@@ -91,7 +91,7 @@ func exportRecord(stored storedReport) log.Record {
 	}
 
 	record := newExportRecord(exportEventName, stored.createdAt, severity, severityText, attrs)
-	record.SetBody(log.StringValue(stored.report.Content))
+	record.SetBody(attribute.StringValue(stored.report.Content))
 	return record
 }
 
@@ -110,9 +110,7 @@ func newExportRecord(eventName string, at time.Time, severity log.Severity, seve
 	record.SetTimestamp(at)
 	record.SetSeverity(severity)
 	record.SetSeverityText(severityText)
-	for _, kv := range attrs {
-		record.AddAttributes(log.KeyValueFromAttribute(kv))
-	}
+	record.AddAttributes(attrs...)
 	return record
 }
 

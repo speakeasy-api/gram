@@ -46,7 +46,7 @@ func kitWorkloadSubject(r assistantRuntimeRecord, c KitLocalCompositionConfig, g
 		return "", "", ErrKitRuntimeBinding
 	}
 	if c.ateIdentity != nil {
-		if c.Environment != "dev" || c.nativeIdentity != nil || c.ateIdentity.Atespace == "" || c.ateIdentity.ActorName == "" || !kitATEPreviewIDPattern.MatchString(c.ateIdentity.Atespace) || !kitATEPreviewIDPattern.MatchString(c.ateIdentity.ActorName) {
+		if c.nativeIdentity != nil || c.ateIdentity.Atespace == "" || c.ateIdentity.ActorName == "" || !kitATENamePattern.MatchString(c.ateIdentity.Atespace) || !kitATENamePattern.MatchString(c.ateIdentity.ActorName) {
 			return "", "", ErrKitRuntimeBinding
 		}
 		return "actor/" + c.ateIdentity.Atespace + "/" + c.ateIdentity.ActorName, "", nil

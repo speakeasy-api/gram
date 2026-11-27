@@ -23,6 +23,7 @@ type KitLocalBootstrap struct {
 	Model, ReasoningEffort           string
 	Workload                         *KitWorkloadBinding
 	AssertionFile, InferenceEndpoint string
+	EgressInjectedAuth               bool
 	AgentsMD, MCPJSON, GatewayToken  []byte
 }
 

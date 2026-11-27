@@ -8,8 +8,8 @@ import (
 	"github.com/google/uuid"
 )
 
-// NewUnavailableRuntimeBackend preserves an unconfigured legacy target without
-// redirecting its persisted runtimes to a preview backend. Every operation fails
+// NewUnavailableRuntimeBackend preserves an unconfigured primary runtime provider
+// without redirecting its persisted runtimes to ATE. Every operation fails
 // explicitly; it neither reports resources missing nor acknowledges cleanup.
 func NewUnavailableRuntimeBackend(provider string, serverURL *url.URL) RuntimeBackend {
 	return &unavailableRuntimeBackend{provider: provider, serverURL: serverURL}
@@ -27,7 +27,7 @@ func (b *unavailableRuntimeBackend) SupportsBackend(provider string) bool {
 func (b *unavailableRuntimeBackend) ServerURL() *url.URL { return b.serverURL }
 func (b *unavailableRuntimeBackend) ImageRef() string    { return "" }
 func (b *unavailableRuntimeBackend) unavailable() error {
-	return fmt.Errorf("legacy assistant runtime provider %q is not configured in this ATE preview", b.provider)
+	return fmt.Errorf("assistant runtime provider %q is not configured", b.provider)
 }
 func (b *unavailableRuntimeBackend) Ensure(context.Context, assistantRuntimeRecord) (RuntimeBackendEnsureResult, error) {
 	return RuntimeBackendEnsureResult{}, b.unavailable()

@@ -15,7 +15,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	otellog "go.opentelemetry.io/otel/log"
+	"go.opentelemetry.io/otel/attribute"
 	goahttp "goa.design/goa/v3/http"
 
 	"github.com/speakeasy-api/gram/server/internal/aivendors"
@@ -820,8 +820,8 @@ func TestConnectionOutcome_ChainCheckExportsIneligibleIdentityOnce(t *testing.T)
 	records := exported()
 	require.Len(t, records, 1)
 	var code string
-	records[0].WalkAttributes(func(kv otellog.KeyValue) bool {
-		if kv.Key == string(attr.ErrorTypeKey) {
+	records[0].WalkAttributes(func(kv attribute.KeyValue) bool {
+		if string(kv.Key) == string(attr.ErrorTypeKey) {
 			code = kv.Value.AsString()
 		}
 		return true

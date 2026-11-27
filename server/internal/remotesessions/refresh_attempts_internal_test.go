@@ -18,6 +18,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/attribute"
 	otellog "go.opentelemetry.io/otel/log"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -320,7 +321,7 @@ func (storedBatch) Send() error         { return nil }
 func (storedBatch) Abort() error        { return nil }
 
 // exportRefresh records one failed refresh through a real recorder and returns its exported attributes.
-func exportRefresh(t *testing.T, outcome remotesessionmetrics.RefreshOutcome, err error) map[string]otellog.Value {
+func exportRefresh(t *testing.T, outcome remotesessionmetrics.RefreshOutcome, err error) map[string]attribute.Value {
 	t.Helper()
 
 	sink := &refreshExportSink{mu: sync.Mutex{}, records: nil}
@@ -335,9 +336,9 @@ func exportRefresh(t *testing.T, outcome remotesessionmetrics.RefreshOutcome, er
 	require.NoError(t, recorder.Shutdown(t.Context()))
 
 	require.Len(t, sink.records, 1)
-	got := make(map[string]otellog.Value)
-	sink.records[0].WalkAttributes(func(kv otellog.KeyValue) bool {
-		got[kv.Key] = kv.Value
+	got := make(map[string]attribute.Value)
+	sink.records[0].WalkAttributes(func(kv attribute.KeyValue) bool {
+		got[string(kv.Key)] = kv.Value
 		return true
 	})
 	return got

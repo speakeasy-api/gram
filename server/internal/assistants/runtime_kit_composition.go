@@ -337,7 +337,22 @@ func (s *ServiceCore) kitCompositionBootstrap(ctx context.Context, r assistantRu
 	}
 
 	instructions := []byte("# Speakeasy assistant\n\n" + assistant.Instructions + "\n")
-	bootstrap := KitLocalBootstrap{Model: assistant.Model, ReasoningEffort: assistant.ReasoningEffort, AgentsMD: instructions, MCPJSON: mcpJSON, GatewayToken: []byte(gateway), Workload: workload, AssertionFile: kitCompositionAssertionFile(c), InferenceEndpoint: c.Origin.String() + "/chat/completions"}
+	egressInjected := c.ateIdentity != nil
+	assertionFile := KitWorkloadAssertionPath
+	if egressInjected {
+		assertionFile = ""
+	}
+	bootstrap := KitLocalBootstrap{
+		Model:              assistant.Model,
+		ReasoningEffort:    assistant.ReasoningEffort,
+		AgentsMD:           instructions,
+		MCPJSON:            mcpJSON,
+		GatewayToken:       []byte(gateway),
+		Workload:           workload,
+		AssertionFile:      assertionFile,
+		EgressInjectedAuth: egressInjected,
+		InferenceEndpoint:  c.Origin.String() + "/chat/completions",
+	}
 	if err := validateKitBootstrap(bootstrap); err != nil {
 		return zero, err
 	}
@@ -380,13 +395,6 @@ func kitBuiltinMCPConnections(base *url.URL, projectID uuid.UUID, slugs []string
 	return connections
 }
 
-func kitCompositionAssertionFile(c KitLocalCompositionConfig) string {
-	if c.ateIdentity != nil {
-		return KitATEWorkloadAssertionPath
-	}
-	return KitWorkloadAssertionPath
-}
-
 func kitCompositionMCP(c KitLocalCompositionConfig, binding *KitWorkloadBinding) ([]byte, error) {
 	if binding == nil || binding.Audience == "" || (c.mcpConnections == nil && c.MCPResource == nil) {
 		return nil, errors.New("kit MCP requires workload binding and resource")
@@ -411,16 +419,20 @@ func kitCompositionMCP(c KitLocalCompositionConfig, binding *KitWorkloadBinding)
 		if connection.Environment != "" {
 			headers["Gram-Environment"] = connection.Environment
 		}
-		auth := map[string]any{
-			"type": "workload_identity", "tokenFile": kitCompositionAssertionFile(c), "endpointMode": "explicit", "grant": "jwtBearer",
-			"tokenEndpoint": binding.Audience + "/token", "resource": u.String(), "scope": "mcp:connect",
+		entry := map[string]any{
+			"type": "streamable-http", "url": u.String(), "headers": headers,
 		}
-		if connection.ProjectID != uuid.Nil {
-			auth["extensions"] = map[string]string{"project_id": connection.ProjectID.String()}
+		if c.ateIdentity == nil {
+			auth := map[string]any{
+				"type": "workload_identity", "tokenFile": KitWorkloadAssertionPath, "endpointMode": "explicit", "grant": "jwtBearer",
+				"tokenEndpoint": binding.Audience + "/token", "resource": u.String(), "scope": "mcp:connect",
+			}
+			if connection.ProjectID != uuid.Nil {
+				auth["extensions"] = map[string]string{"project_id": connection.ProjectID.String()}
+			}
+			entry["auth"] = auth
 		}
-		servers[connection.Name] = map[string]any{
-			"type": "streamable-http", "url": u.String(), "headers": headers, "auth": auth,
-		}
+		servers[connection.Name] = entry
 	}
 	data, err := json.Marshal(map[string]any{"mcpServers": servers})
 	if err != nil {

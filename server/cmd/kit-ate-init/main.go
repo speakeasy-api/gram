@@ -4,7 +4,6 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
-	"crypto/subtle"
 	"errors"
 	"fmt"
 	"io"
@@ -20,32 +19,41 @@ import (
 	"time"
 )
 
-const home = "/home/kit"
-const assertionPath = "/var/run/speakeasy/workload/assertion"
-const maxBootstrap = 2 << 20
+const (
+	// home is the Kit actor's persistent home directory inside the sandbox rootfs.
+	home = "/home/kit"
 
-var bootstrapFiles = []string{".kit/AGENTS.md", ".kit/config.toml", ".kit/credentials/mcp.json", ".kit/credentials/gateway-token"}
+	// maxBootstrap bounds the tar archive uploaded to POST /bootstrap.
+	maxBootstrap = 2 << 20 // 2 MiB
+
+	// minGatewayTokenBytes enforces minimum entropy on the per-actor ACP bearer token.
+	minGatewayTokenBytes = 32
+)
+
+// bootstrapFiles lists the exact archive entries accepted by POST /bootstrap:
+// non-secret Kit config plus the per-actor ACP server credential file.
+// Speakeasy API credentials are never delivered into the sandbox; ATE's egress
+// gateway injects the actor JWT on outbound requests.
+var bootstrapFiles = []string{
+	".kit/AGENTS.md",
+	".kit/config.toml",
+	".kit/credentials/mcp.json",
+	".kit/credentials/gateway-token",
+}
 
 type initializer struct {
-	home      string
-	assertion string
-	mu        sync.Mutex
-	started   bool
-	launched  bool
-	launch    chan struct{}
+	home     string
+	mu       sync.Mutex
+	started  bool
+	launched bool
+	launch   chan struct{}
 }
 
-func (s *initializer) token() ([]byte, error) {
-	token, err := os.ReadFile(filepath.Join(s.home, ".kit/credentials/gateway-token"))
-	if err != nil {
-		return nil, fmt.Errorf("read gateway credential: %w", err)
+func (s *initializer) signalLaunchLocked() {
+	if !s.launched {
+		s.launched = true
+		close(s.launch)
 	}
-	return token, nil
-}
-
-func (s *initializer) authorized(r *http.Request) bool {
-	token, err := s.token()
-	return err == nil && len(token) > 0 && subtle.ConstantTimeCompare([]byte(r.Header.Get("Authorization")), append([]byte("Bearer "), token...)) == 1
 }
 
 func (s *initializer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -63,7 +71,7 @@ func (s *initializer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_ = conn.Close()
 		w.WriteHeader(http.StatusOK)
 	case r.Method == http.MethodPost && r.URL.Path == "/bootstrap":
-		// Initial provisioning is reachable only through the authenticated ATE ingress.
+		// Initial write-once provisioning is reachable only through the authenticated ATE ingress.
 		if s.started {
 			w.WriteHeader(http.StatusConflict)
 			return
@@ -74,25 +82,7 @@ func (s *initializer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.started = true
-		w.WriteHeader(http.StatusNoContent)
-	case r.Method == http.MethodPost && r.URL.Path == "/assertion":
-		if !s.started || !s.authorized(r) {
-			w.WriteHeader(http.StatusUnauthorized)
-			return
-		}
-		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 32<<10))
-		if err != nil || len(body) == 0 || bytes.ContainsAny(body, "\r\n\x00") {
-			http.Error(w, "invalid assertion", http.StatusBadRequest)
-			return
-		}
-		if err := atomicWrite(s.assertion, body); err != nil {
-			http.Error(w, "assertion write failed", http.StatusInternalServerError)
-			return
-		}
-		if !s.launched {
-			s.launched = true
-			close(s.launch)
-		}
+		s.signalLaunchLocked()
 		w.WriteHeader(http.StatusNoContent)
 	default:
 		w.WriteHeader(http.StatusNotFound)
@@ -100,7 +90,7 @@ func (s *initializer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func atomicWrite(path string, data []byte) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("create atomic file directory: %w", err)
 	}
 	f, err := os.CreateTemp(filepath.Dir(path), ".ate-init-*")
@@ -108,7 +98,7 @@ func atomicWrite(path string, data []byte) error {
 		return fmt.Errorf("create atomic temporary file: %w", err)
 	}
 	defer func() { _ = os.Remove(f.Name()) }()
-	if err := f.Chmod(0600); err != nil {
+	if err := f.Chmod(0o600); err != nil {
 		_ = f.Close()
 		return fmt.Errorf("set atomic file permissions: %w", err)
 	}
@@ -164,12 +154,12 @@ func (s *initializer) install(body []byte) error {
 	if len(files) != len(bootstrapFiles) {
 		return errors.New("incomplete bootstrap")
 	}
-	if len(files[".kit/credentials/gateway-token"]) < 32 || bytes.ContainsAny(files[".kit/credentials/gateway-token"], " \r\n\x00") {
+	if len(files[".kit/credentials/gateway-token"]) < minGatewayTokenBytes || bytes.ContainsAny(files[".kit/credentials/gateway-token"], " \r\n\x00") {
 		return errors.New("invalid token")
 	}
 	for _, dir := range []string{".kit", ".kit/credentials", "workspace"} {
 		path := filepath.Join(s.home, dir)
-		if err := os.MkdirAll(path, 0700); err != nil {
+		if err := os.MkdirAll(path, 0o700); err != nil {
 			return fmt.Errorf("create bootstrap directory: %w", err)
 		}
 		info, err := os.Lstat(path)
@@ -185,17 +175,38 @@ func (s *initializer) install(body []byte) error {
 	return atomicWrite(filepath.Join(s.home, ".kit/ate-initialized"), []byte("1"))
 }
 
-func run(ctx context.Context) error {
-	state := new(initializer)
-	state.home = home
-	state.assertion = assertionPath
-	state.launch = make(chan struct{})
-	if _, err := os.Stat(filepath.Join(home, ".kit/ate-initialized")); err == nil {
-		state.started = true
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("check initialization marker: %w", err)
+func newInitializer(homeDir string) (*initializer, error) {
+	state := &initializer{
+		home:     homeDir,
+		mu:       sync.Mutex{},
+		started:  false,
+		launched: false,
+		launch:   make(chan struct{}),
 	}
-	server := &http.Server{Addr: ":8082", Handler: state, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 15 * time.Second, MaxHeaderBytes: 8192}
+	if _, err := os.Stat(filepath.Join(homeDir, ".kit/ate-initialized")); err == nil {
+		// Resuming from a durable rootfs snapshot: config is already on disk,
+		// so launch Kit immediately without waiting for POST /bootstrap.
+		state.started = true
+		state.signalLaunchLocked()
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return nil, fmt.Errorf("check initialization marker: %w", err)
+	}
+	return state, nil
+}
+
+func run(ctx context.Context) error {
+	state, err := newInitializer(home)
+	if err != nil {
+		return err
+	}
+	server := &http.Server{
+		Addr:              ":8082",
+		Handler:           state,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      15 * time.Second,
+		MaxHeaderBytes:    8192,
+	}
 	errs := make(chan error, 2)
 	go func() { errs <- server.ListenAndServe() }()
 	defer func() { _ = server.Close() }()

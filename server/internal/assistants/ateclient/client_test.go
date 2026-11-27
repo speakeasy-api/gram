@@ -19,51 +19,75 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+	ateapiv1 "go.ate.dev/substrate/api/ateapi/v1"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/reflection"
-	reflectionv1 "google.golang.org/grpc/reflection/grpc_reflection_v1"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/reflect/protodesc"
-	"google.golang.org/protobuf/reflect/protoregistry"
-	"google.golang.org/protobuf/types/descriptorpb"
-	"google.golang.org/protobuf/types/dynamicpb"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 )
 
-func testConfig(t *testing.T) (Config, tls.Certificate, *x509.CertPool) {
+func testConfig(t *testing.T, dnsNames ...string) (Config, tls.Certificate, *x509.CertPool) {
 	t.Helper()
+	if len(dnsNames) == 0 {
+		dnsNames = []string{"router.test"}
+	}
+
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err != nil {
-		t.Fatal(err)
+	require.NoError(t, err)
+
+	template := &x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		Subject:               pkix.Name{CommonName: dnsNames[0]},
+		DNSNames:              dnsNames,
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(time.Hour),
+		IsCA:                  true,
+		BasicConstraintsValid: true,
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
 	}
-	template := &x509.Certificate{SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "router.test"}, DNSNames: []string{"router.test"}, NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour), IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth}}
 	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+
 	keyDER, err := x509.MarshalECPrivateKey(key)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+
 	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
 	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER})
+
 	dir := t.TempDir()
-	certFile, keyFile, tokenFile := filepath.Join(dir, "cert.pem"), filepath.Join(dir, "key.pem"), filepath.Join(dir, "token")
+	certFile := filepath.Join(dir, "cert.pem")
+	keyFile := filepath.Join(dir, "key.pem")
+	tokenFile := filepath.Join(dir, "token")
 	for path, data := range map[string][]byte{certFile: certPEM, keyFile: keyPEM, tokenFile: []byte("test-token")} {
-		if err := os.WriteFile(path, data, 0600); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, os.WriteFile(path, data, 0o600))
 	}
+
 	cert, err := tls.X509KeyPair(certPEM, keyPEM)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+
 	pool := x509.NewCertPool()
 	pool.AppendCertsFromPEM(certPEM)
-	return Config{ServiceCAFile: certFile, ClientCertFile: certFile, ClientKeyFile: keyFile, AudienceJWTFile: tokenFile, Atespace: "test-space", APIServerName: "router.test", RouterServerName: "router.test", ConnectTimeout: time.Second, RPCTimeout: time.Second}, cert, pool
+
+	return Config{
+		ServiceCAFile:        certFile,
+		ClientCertFile:       certFile,
+		ClientKeyFile:        keyFile,
+		AudienceJWTFile:      tokenFile,
+		Atespace:             "test-space",
+		APIServerName:        dnsNames[0],
+		RouterServerName:     dnsNames[0],
+		ConnectTimeout:       time.Second,
+		ConnectRetryInterval: 5 * time.Millisecond,
+		ConnectRetryTimeout:  200 * time.Millisecond,
+		RPCTimeout:           time.Second,
+	}, cert, pool
 }
 
 func TestActorTunnel(t *testing.T) {
@@ -83,9 +107,9 @@ func TestActorTunnel(t *testing.T) {
 			t.Parallel()
 			cfg, cert, pool := testConfig(t)
 			server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.Method != "CONNECT" || r.Host != "actor-one:8081" || r.Header.Get("ate-target-actor") != "test-space/actor-one" || r.Header.Get("Authorization") != "Bearer rotated-token" || len(r.TLS.PeerCertificates) == 0 {
+				if r.Method != http.MethodConnect || r.Host != "actor-one:8081" || r.Header.Get("ate-target-actor") != "test-space/actor-one" || r.Header.Get("Authorization") != "Bearer rotated-token" || len(r.TLS.PeerCertificates) == 0 {
 					t.Error("invalid CONNECT identity")
-					w.WriteHeader(403)
+					w.WriteHeader(http.StatusForbidden)
 					return
 				}
 				hijacker, ok := w.(http.Hijacker)
@@ -99,7 +123,6 @@ func TestActorTunnel(t *testing.T) {
 					return
 				}
 				defer func() { _ = conn.Close() }()
-				// Wait for the tunneled request before sending its HTTP response.
 				_, _ = rw.WriteString("HTTP/1.1 200 Connection Established\r\n" + tc.header + "\r\n")
 				_ = rw.Flush()
 				if tc.reject {
@@ -115,141 +138,340 @@ func TestActorTunnel(t *testing.T) {
 				_, _ = rw.WriteString("HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello")
 				_ = rw.Flush()
 			}))
-			server.TLS = &tls.Config{Certificates: []tls.Certificate{cert}, ClientCAs: pool, ClientAuth: tls.RequireAndVerifyClientCert, MinVersion: tls.VersionTLS12}
+			server.TLS = &tls.Config{
+				Certificates: []tls.Certificate{cert},
+				ClientCAs:    pool,
+				ClientAuth:   tls.RequireAndVerifyClientCert,
+				MinVersion:   tls.VersionTLS12,
+			}
 			server.StartTLS()
 			defer server.Close()
+
 			cfg.RouterAddress = strings.TrimPrefix(server.URL, "https://")
-			client := &Client{config: cfg, tlsConfig: &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12, GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) { return &cert, nil }}}
-			if err := os.WriteFile(cfg.AudienceJWTFile, []byte("rotated-token"), 0600); err != nil {
-				t.Fatal(err)
+			client := &Client{
+				config: cfg,
+				tlsConfig: &tls.Config{
+					RootCAs:    pool,
+					MinVersion: tls.VersionTLS12,
+					GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
+						return &cert, nil
+					},
+				},
 			}
+			require.NoError(t, os.WriteFile(cfg.AudienceJWTFile, []byte("rotated-token"), 0o600))
+
 			httpClient, err := client.ActorHTTPClient("actor-one", 8081)
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
+
 			for _, target := range []string{"http://other:8081/acp", "http://actor-one:80/acp", "https://actor-one:8081/acp"} {
 				if response, err := httpClient.Get(target); err == nil {
 					_ = response.Body.Close()
 					t.Fatalf("allowed %s", target)
 				}
 			}
-			req, _ := http.NewRequest("POST", "http://actor-one:8081/acp", strings.NewReader("{}"))
+
+			req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, "http://actor-one:8081/acp", strings.NewReader("{}"))
+			require.NoError(t, err)
 			response, err := httpClient.Do(req)
 			if tc.reject {
 				if response != nil {
 					_ = response.Body.Close()
 				}
-				if _, ok := errors.AsType[*ConnectError](err); !ok {
-					t.Fatalf("expected CONNECT rejection, got %v", err)
-				}
+				_, ok := errors.AsType[*ConnectError](err)
+				require.True(t, ok, "expected CONNECT rejection, got %v", err)
 				return
 			}
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			defer func() { _ = response.Body.Close() }()
+
 			data, err := io.ReadAll(response.Body)
-			if err != nil || string(data) != "hello" {
-				t.Fatalf("buffered response: %q, %v", data, err)
-			}
+			require.NoError(t, err)
+			require.Equal(t, "hello", string(data))
 		})
 	}
 }
 
-func TestReflectionAndStrictInvocation(t *testing.T) {
+func TestActorTunnelRetries503WhileActorResumes(t *testing.T) {
 	t.Parallel()
 	cfg, cert, pool := testConfig(t)
-	file, err := protodesc.NewFile(&descriptorpb.FileDescriptorProto{
-		Name: new("control_test.proto"), Package: new("substrate.ateapi.v1"), Syntax: new("proto3"),
-		MessageType: []*descriptorpb.DescriptorProto{{Name: new("Actor"), Field: []*descriptorpb.FieldDescriptorProto{{Name: new("name"), Number: proto.Int32(1), Type: descriptorpb.FieldDescriptorProto_TYPE_STRING.Enum()}}}},
-		Service:     []*descriptorpb.ServiceDescriptorProto{{Name: new("Control"), Method: []*descriptorpb.MethodDescriptorProto{{Name: new("GetActor"), InputType: new(".substrate.ateapi.v1.Actor"), OutputType: new(".substrate.ateapi.v1.Actor")}, {Name: new("SuspendActor"), InputType: new(".substrate.ateapi.v1.Actor"), OutputType: new(".substrate.ateapi.v1.Actor")}}}},
-	}, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	registry := new(protoregistry.Files)
-	if err := registry.RegisterFile(file); err != nil {
-		t.Fatal(err)
-	}
-	message := file.Messages().Get(0)
-	sni := make(chan string, 1)
-	deadlines := make(chan time.Time, 1)
-	server := grpc.NewServer(grpc.Creds(credentials.NewTLS(&tls.Config{GetConfigForClient: func(hello *tls.ClientHelloInfo) (*tls.Config, error) { sni <- hello.ServerName; return nil, nil }, Certificates: []tls.Certificate{cert}, ClientCAs: pool, ClientAuth: tls.RequireAndVerifyClientCert, MinVersion: tls.VersionTLS12})), grpc.UnaryInterceptor(func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-		return handler(ctx, req)
-	}))
-	handler := func(_ any, ctx context.Context, decode func(any) error, _ grpc.UnaryServerInterceptor) (any, error) {
-		request := dynamicpb.NewMessage(message)
-		if err := decode(request); err != nil {
-			return nil, err
+
+	var attempts atomic.Int32
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := attempts.Add(1)
+		if n <= 2 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
 		}
-		deadline, _ := ctx.Deadline()
-		deadlines <- deadline
-		return request, nil
+		hijacker, ok := w.(http.Hijacker)
+		if !ok {
+			t.Error("response writer cannot hijack")
+			return
+		}
+		conn, rw, err := hijacker.Hijack()
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		defer func() { _ = conn.Close() }()
+		_, _ = rw.WriteString("HTTP/1.1 200 Connection Established\r\n\r\n")
+		_ = rw.Flush()
+		inner, err := http.ReadRequest(rw.Reader)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		_, _ = io.Copy(io.Discard, inner.Body)
+		_ = inner.Body.Close()
+		_, _ = rw.WriteString("HTTP/1.1 200 OK\r\nContent-Length: 7\r\n\r\nresumed")
+		_ = rw.Flush()
+	}))
+	server.TLS = &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		ClientCAs:    pool,
+		ClientAuth:   tls.RequireAndVerifyClientCert,
+		MinVersion:   tls.VersionTLS12,
 	}
-	server.RegisterService(&grpc.ServiceDesc{ServiceName: controlService, HandlerType: (*any)(nil), Metadata: "control_test.proto", Methods: []grpc.MethodDesc{{MethodName: "GetActor", Handler: handler}, {MethodName: "SuspendActor", Handler: handler}}}, struct{}{})
-	reflectionv1.RegisterServerReflectionServer(server, reflection.NewServerV1(reflection.ServerOptions{Services: server, DescriptorResolver: registry}))
+	server.StartTLS()
+	defer server.Close()
+
+	cfg.RouterAddress = strings.TrimPrefix(server.URL, "https://")
+	client := &Client{
+		config: cfg,
+		tlsConfig: &tls.Config{
+			RootCAs:    pool,
+			MinVersion: tls.VersionTLS12,
+			GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
+				return &cert, nil
+			},
+		},
+	}
+
+	httpClient, err := client.ActorHTTPClient("actor-one", 8081)
+	require.NoError(t, err)
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, "http://actor-one:8081/acp", strings.NewReader("{}"))
+	require.NoError(t, err)
+	resp, err := httpClient.Do(req)
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.Equal(t, "resumed", string(body))
+	require.Equal(t, int32(3), attempts.Load())
+}
+
+func TestActorTunnelDoesNotRetryNon503(t *testing.T) {
+	t.Parallel()
+	cfg, cert, pool := testConfig(t)
+
+	var attempts atomic.Int32
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		attempts.Add(1)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	server.TLS = &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		ClientCAs:    pool,
+		ClientAuth:   tls.RequireAndVerifyClientCert,
+		MinVersion:   tls.VersionTLS12,
+	}
+	server.StartTLS()
+	defer server.Close()
+
+	cfg.RouterAddress = strings.TrimPrefix(server.URL, "https://")
+	client := &Client{
+		config: cfg,
+		tlsConfig: &tls.Config{
+			RootCAs:    pool,
+			MinVersion: tls.VersionTLS12,
+			GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
+				return &cert, nil
+			},
+		},
+	}
+
+	httpClient, err := client.ActorHTTPClient("actor-one", 8081)
+	require.NoError(t, err)
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://actor-one:8081/acp", nil)
+	require.NoError(t, err)
+	resp, err := httpClient.Do(req)
+	if resp != nil {
+		_ = resp.Body.Close()
+	}
+	connectErr, ok := errors.AsType[*ConnectError](err)
+	require.True(t, ok, "expected ConnectError, got %v", err)
+	require.Equal(t, http.StatusNotFound, connectErr.StatusCode)
+	require.False(t, connectErr.Retryable())
+	require.Equal(t, int32(1), attempts.Load())
+}
+
+type fakeControlServer struct {
+	ateapiv1.UnimplementedControlServer
+	deadlines chan time.Time
+	auth      chan string
+}
+
+func (s *fakeControlServer) GetActor(ctx context.Context, req *ateapiv1.GetActorRequest) (*ateapiv1.Actor, error) {
+	if md, ok := metadata.FromIncomingContext(ctx); ok {
+		if vals := md.Get("authorization"); len(vals) > 0 {
+			s.auth <- vals[0]
+		}
+	}
+	deadline, _ := ctx.Deadline()
+	s.deadlines <- deadline
+	if req.GetActor().GetName() == "missing" {
+		return nil, status.Error(codes.NotFound, "sensitive backend detail") //nolint:wrapcheck // gRPC server handler returns status.Error directly.
+	}
+	return &ateapiv1.Actor{
+		Metadata: &ateapiv1.ResourceMetadata{
+			Atespace: req.GetActor().GetAtespace(),
+			Name:     req.GetActor().GetName(),
+			Uid:      "uid-1",
+		},
+	}, nil
+}
+
+func (s *fakeControlServer) SuspendActor(ctx context.Context, req *ateapiv1.SuspendActorRequest) (*ateapiv1.SuspendActorResponse, error) {
+	deadline, _ := ctx.Deadline()
+	s.deadlines <- deadline
+	return &ateapiv1.SuspendActorResponse{
+		Actor: &ateapiv1.Actor{
+			Metadata: &ateapiv1.ResourceMetadata{
+				Atespace: req.GetActor().GetAtespace(),
+				Name:     req.GetActor().GetName(),
+				Uid:      "uid-1",
+			},
+			Status: &ateapiv1.ActorStatus{
+				State: ateapiv1.ActorState_ACTOR_STATE_SUSPENDED,
+			},
+		},
+	}, nil
+}
+
+func TestControlClientHonorsAPIServerNameAndDeadlines(t *testing.T) {
+	t.Parallel()
+	// Certificate is valid ONLY for api.ate.test (not 127.0.0.1), so dialing
+	// 127.0.0.1:<port> succeeds only if APIServerName is passed as the gRPC
+	// authority and used in TLS SNI / peer certificate verification.
+	cfg, cert, pool := testConfig(t, "api.ate.test")
+
+	sni := make(chan string, 1)
+	deadlines := make(chan time.Time, 4)
+	auth := make(chan string, 4)
+
+	server := grpc.NewServer(grpc.Creds(credentials.NewTLS(&tls.Config{
+		GetConfigForClient: func(hello *tls.ClientHelloInfo) (*tls.Config, error) {
+			select {
+			case sni <- hello.ServerName:
+			default:
+			}
+			return nil, nil
+		},
+		Certificates: []tls.Certificate{cert},
+		ClientCAs:    pool,
+		ClientAuth:   tls.RequireAndVerifyClientCert,
+		MinVersion:   tls.VersionTLS12,
+	})))
+	ateapiv1.RegisterControlServer(server, &fakeControlServer{deadlines: deadlines, auth: auth})
+
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	go func() { _ = server.Serve(listener) }()
 	defer server.Stop()
+
 	cfg.APIAddress = listener.Addr().String()
 	cfg.RouterAddress = cfg.APIAddress
-	client, err := New(context.Background(), cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
+	client, err := New(t.Context(), cfg)
+	require.NoError(t, err)
 	defer func() { _ = client.Close() }()
-	if got := <-sni; got != cfg.APIServerName {
-		t.Fatalf("API SNI = %q, want %q", got, cfg.APIServerName)
-	}
-	out, err := client.Invoke(context.Background(), "GetActor", []byte(`{"name":"actor-one"}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(out), "actor-one") {
-		t.Fatalf("unexpected response %s", out)
-	}
-	if remaining := time.Until(<-deadlines); remaining <= 0 || remaining > cfg.RPCTimeout {
-		t.Fatalf("ordinary RPC deadline %v", remaining)
-	}
-	if _, err := client.Invoke(context.Background(), "SuspendActor", []byte(`{"name":"actor-one"}`)); err != nil {
-		t.Fatal(err)
-	}
-	if remaining := time.Until(<-deadlines); remaining < 179*time.Second || remaining > 3*time.Minute {
-		t.Fatalf("suspend deadline %v", remaining)
-	}
-	callerCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+
+	actor, err := client.GetActor(t.Context(), &ateapiv1.GetActorRequest{
+		Actor: &ateapiv1.ObjectRef{Atespace: "test-space", Name: "actor-one"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "actor-one", actor.GetMetadata().GetName())
+	require.Equal(t, "api.ate.test", <-sni)
+	require.Equal(t, "Bearer test-token", <-auth)
+
+	remaining := time.Until(<-deadlines)
+	require.Greater(t, remaining, time.Duration(0))
+	require.LessOrEqual(t, remaining, cfg.RPCTimeout)
+
+	// NotFound status code is preserved while remote detail text is sanitized.
+	_, err = client.GetActor(t.Context(), &ateapiv1.GetActorRequest{
+		Actor: &ateapiv1.ObjectRef{Atespace: "test-space", Name: "missing"},
+	})
+	require.Equal(t, codes.NotFound, status.Code(err))
+	require.NotContains(t, err.Error(), "sensitive backend detail")
+	<-auth
+	<-deadlines
+
+	// SuspendActor gets the extended 3-minute checkpoint budget.
+	_, err = client.SuspendActor(t.Context(), &ateapiv1.SuspendActorRequest{
+		Actor: &ateapiv1.ObjectRef{Atespace: "test-space", Name: "actor-one"},
+	})
+	require.NoError(t, err)
+	remaining = time.Until(<-deadlines)
+	require.GreaterOrEqual(t, remaining, 179*time.Second)
+	require.LessOrEqual(t, remaining, suspendRPCTimeout)
+
+	// Earlier caller deadline still wins over the suspend budget.
+	callerCtx, cancel := context.WithTimeout(t.Context(), time.Second)
 	defer cancel()
-	if _, err := client.Invoke(callerCtx, "SuspendActor", []byte(`{"name":"actor-one"}`)); err != nil {
-		t.Fatal(err)
-	}
-	if remaining := time.Until(<-deadlines); remaining <= 0 || remaining > time.Second {
-		t.Fatalf("caller deadline not honored: %v", remaining)
-	}
-	for _, tc := range []struct{ method, input string }{{"DeleteWorker", `{}`}, {"GetActor", `{"unexpected":true}`}} {
-		if _, err := client.Invoke(context.Background(), tc.method, []byte(tc.input)); err == nil {
-			t.Fatalf("accepted %s %s", tc.method, tc.input)
-		}
-	}
+	_, err = client.SuspendActor(callerCtx, &ateapiv1.SuspendActorRequest{
+		Actor: &ateapiv1.ObjectRef{Atespace: "test-space", Name: "actor-one"},
+	})
+	require.NoError(t, err)
+	remaining = time.Until(<-deadlines)
+	require.Greater(t, remaining, time.Duration(0))
+	require.LessOrEqual(t, remaining, time.Second)
+}
+
+func TestControlClientRejectsMismatchedAPIServerName(t *testing.T) {
+	t.Parallel()
+	cfg, cert, pool := testConfig(t, "api.ate.test")
+
+	server := grpc.NewServer(grpc.Creds(credentials.NewTLS(&tls.Config{
+		Certificates: []tls.Certificate{cert},
+		ClientCAs:    pool,
+		ClientAuth:   tls.RequireAndVerifyClientCert,
+		MinVersion:   tls.VersionTLS12,
+	})))
+	ateapiv1.RegisterControlServer(server, &fakeControlServer{
+		deadlines: make(chan time.Time, 1),
+		auth:      make(chan string, 1),
+	})
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	go func() { _ = server.Serve(listener) }()
+	defer server.Stop()
+
+	cfg.APIAddress = listener.Addr().String()
+	cfg.RouterAddress = cfg.APIAddress
+	cfg.APIServerName = "wrong.ate.test"
+	client, err := New(t.Context(), cfg)
+	require.NoError(t, err)
+	defer func() { _ = client.Close() }()
+
+	_, err = client.GetActor(t.Context(), &ateapiv1.GetActorRequest{
+		Actor: &ateapiv1.ObjectRef{Atespace: "test-space", Name: "actor-one"},
+	})
+	require.Error(t, err)
 }
 
 func TestTokenBoundsAndRotation(t *testing.T) {
 	t.Parallel()
 	cfg, _, _ := testConfig(t)
-	bearer := fileBearer{cfg.AudienceJWTFile}
-	for _, token := range []string{"", strings.Repeat("x", 16385), "injected\r\nheader"} {
-		if err := os.WriteFile(cfg.AudienceJWTFile, []byte(token), 0600); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := bearer.GetRequestMetadata(context.Background()); err == nil {
-			t.Fatal("accepted invalid token")
-		}
+	bearer := fileBearer{path: cfg.AudienceJWTFile}
+	for _, token := range []string{"", strings.Repeat("x", maxAudienceJWTBytes+1), "injected\r\nheader"} {
+		require.NoError(t, os.WriteFile(cfg.AudienceJWTFile, []byte(token), 0o600))
+		_, err := bearer.GetRequestMetadata(t.Context())
+		require.Error(t, err)
 	}
-	if !bearer.RequireTransportSecurity() {
-		t.Fatal("bearer must require TLS")
-	}
+	require.True(t, bearer.RequireTransportSecurity())
 }
 
 // Ensure the connection wrapper does not discard prefetched bytes.
@@ -263,15 +485,16 @@ func TestBufferedConn(t *testing.T) {
 		_, _ = b.Write([]byte("header\nbody"))
 		_ = b.Close()
 	}()
-	if _, err := reader.ReadString('\n'); err != nil {
-		t.Fatal(err)
-	}
+	_, err := reader.ReadString('\n')
+	require.NoError(t, err)
+
 	data := make([]byte, 4)
 	conn := &bufferedConn{Conn: a, reader: reader}
-	if _, err := io.ReadFull(conn, data); err != nil || string(data) != "body" {
-		t.Fatalf("%q %v", data, err)
-	}
-	if n, err := conn.Read(data); n != 0 || err != io.EOF { //nolint:errorlint // net/http requires the unwrapped EOF sentinel.
-		t.Fatalf("end of tunnel = %d, %v; want 0, io.EOF", n, err)
-	}
+	_, err = io.ReadFull(conn, data)
+	require.NoError(t, err)
+	require.Equal(t, "body", string(data))
+
+	n, err := conn.Read(data)
+	require.Equal(t, 0, n)
+	require.Equal(t, io.EOF, err)
 }

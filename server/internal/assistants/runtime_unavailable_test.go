@@ -7,12 +7,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestUnavailableLegacyRuntimeFailsClosed(t *testing.T) {
+func TestUnavailableRuntimeFailsClosed(t *testing.T) {
 	t.Parallel()
 	backend := NewUnavailableRuntimeBackend(runtimeBackendGKE, nil)
 	r := assistantRuntimeRecord{Backend: runtimeBackendGKE, RuntimeVersion: 2}
 	_, err := backend.Ensure(t.Context(), r)
-	require.ErrorContains(t, err, "not configured in this ATE preview")
+	require.ErrorContains(t, err, "is not configured")
 	_, err = backend.RecycleImage(t.Context(), r)
 	require.Error(t, err)
 	require.Error(t, backend.RunTurn(t.Context(), r, runTurnRequest{}))

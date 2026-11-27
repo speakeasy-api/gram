@@ -4,34 +4,52 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/speakeasy-api/gram/server/internal/assistants"
-	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 	"github.com/urfave/cli/v2"
 	"go.opentelemetry.io/otel/trace"
+
+	"github.com/speakeasy-api/gram/server/internal/assistants"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-func TestATEPreviewEgressHostsAreExplicit(t *testing.T) {
+func TestATEEgressHostsAreExplicit(t *testing.T) {
 	t.Parallel()
 	c := kitCLIContext(t, map[string]string{"assistant-ate-egress-host": "tools.example.com"})
 	require.Equal(t, []string{"tools.example.com"}, c.StringSlice("assistant-ate-egress-host"))
 }
 
-func TestATEOnlyRuntimeConstruction(t *testing.T) {
+func TestATEOnlyRuntimeConstructionInAnyEnvironment(t *testing.T) {
 	t.Parallel()
 	serverURL, err := url.Parse("https://1.1.1.1")
 	require.NoError(t, err)
 	tp := trace.NewNoopTracerProvider()
 	policy := guardian.NewDefaultPolicy(tp)
+
 	for _, tt := range []struct {
 		name      string
 		values    map[string]string
 		wantError string
 	}{
-		{name: "ATE only has explicit unavailable legacy", values: map[string]string{"environment": "dev", "assistant-ate-enabled": "true", "assistant-ate-preview-id": "preview-one", "assistant-runtime-image-tag": "test"}},
-		{name: "legacy still requires a backend", values: map[string]string{"environment": "dev", "assistant-runtime-image-tag": "test"}, wantError: "requires at least one backend"},
-		{name: "configured GKE is not discarded", values: map[string]string{"environment": "dev", "assistant-ate-enabled": "true", "assistant-ate-preview-id": "preview-one", "assistant-runtime-image-tag": "test", "assistant-runtime-gke-cluster-endpoint": "https://cluster.example.com", "assistant-runtime-gke-cluster-ca": "not-base64"}, wantError: "decode --assistant-runtime-gke-cluster-ca"},
+		{
+			name:   "ATE enabled in production without GKE cluster uses unavailable primary",
+			values: map[string]string{"environment": "production", "assistant-ate-enabled": "true", "assistant-runtime-image-tag": "test"},
+		},
+		{
+			name:   "ATE enabled in dev without GKE cluster uses unavailable primary",
+			values: map[string]string{"environment": "dev", "assistant-ate-enabled": "true", "assistant-runtime-image-tag": "test"},
+		},
+		{
+			name:      "default GKE provider without ATE still requires a backend",
+			values:    map[string]string{"environment": "production", "assistant-runtime-image-tag": "test"},
+			wantError: "requires at least one backend",
+		},
+		{
+			name:      "configured GKE cluster is preserved alongside ATE",
+			values:    map[string]string{"environment": "production", "assistant-ate-enabled": "true", "assistant-runtime-image-tag": "test", "assistant-runtime-gke-cluster-endpoint": "https://cluster.example.com", "assistant-runtime-gke-cluster-ca": "not-base64"},
+			wantError: "decode --assistant-runtime-gke-cluster-ca",
+		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
@@ -50,32 +68,64 @@ func TestATEOnlyRuntimeConstruction(t *testing.T) {
 	}
 }
 
-func TestATEPreviewStartupIsExplicit(t *testing.T) {
+func TestATEStartupValidationAndDisabledProvider(t *testing.T) {
 	t.Parallel()
-	for _, tt := range []struct {
-		name      string
-		values    map[string]string
-		wantError string
-	}{
-		{name: "disabled preserves legacy"},
-		{name: "production refused", values: map[string]string{"assistant-ate-enabled": "true", "assistant-ate-preview-id": "preview-one"}, wantError: "dev environment"},
-		{name: "local refused", values: map[string]string{"environment": "local", "assistant-ate-enabled": "true", "assistant-ate-preview-id": "preview-one"}, wantError: "dev environment"},
-		{name: "unnamed dev refused", values: map[string]string{"environment": "dev", "assistant-ate-enabled": "true"}, wantError: "preview identifier"},
-		{name: "implicit enable refused", values: map[string]string{"environment": "dev", "assistant-ate-preview-id": "preview-one"}, wantError: "explicit assistant ATE enablement"},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			err := installKitLocalRuntimeFromCLI(testenv.NewLogger(t), kitCLIContext(t, tt.values), nil, nil, nil, nil, nil)
-			if tt.wantError == "" {
-				require.NoError(t, err)
-			} else {
-				require.ErrorContains(t, err, tt.wantError)
-			}
+	serverURL, err := url.Parse("https://api.example.com")
+	require.NoError(t, err)
+
+	t.Run("disabled ATE preserves default path", func(t *testing.T) {
+		t.Parallel()
+		err := installKitLocalRuntimeFromCLI(testenv.NewLogger(t), kitCLIContext(t, nil), nil, nil, nil, nil, serverURL)
+		require.NoError(t, err)
+	})
+
+	t.Run("disabled runtime provider ignores ATE settings", func(t *testing.T) {
+		t.Parallel()
+		c := kitCLIContext(t, map[string]string{
+			"environment":                "production",
+			"assistant-runtime-provider": assistants.RuntimeProviderDisabled,
+			"assistant-ate-enabled":      "true",
 		})
-	}
+		err := installKitLocalRuntimeFromCLI(testenv.NewLogger(t), c, nil, nil, nil, nil, serverURL)
+		require.NoError(t, err)
+	})
+
+	t.Run("enabled ATE validates required flags at startup via inv.Require", func(t *testing.T) {
+		t.Parallel()
+		c := kitCLIContext(t, map[string]string{
+			"environment":           "production",
+			"assistant-ate-enabled": "true",
+		})
+		require.Panics(t, func() {
+			_ = installKitLocalRuntimeFromCLI(testenv.NewLogger(t), c, nil, nil, nil, nil, serverURL)
+		})
+	})
+
+	t.Run("enabled ATE in production passes composition root config check when all flags set", func(t *testing.T) {
+		t.Parallel()
+		c := kitCLIContext(t, map[string]string{
+			"environment":                     "production",
+			"assistant-ate-enabled":           "true",
+			"assistant-kit-image":             "ghcr.io/speakeasy-api/kit-ate@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+			"assistant-kit-workload-issuer":   "https://ate.example.com",
+			"assistant-kit-workload-jwks-url": "https://ate.example.com/.well-known/jwks.json",
+			"assistant-ate-api-address":       "127.0.0.1:1",
+			"assistant-ate-router-address":    "127.0.0.1:2",
+			"assistant-ate-service-ca-file":   "/nonexistent/ca.pem",
+			"assistant-ate-client-cert-file":  "/nonexistent/cert.pem",
+			"assistant-ate-client-key-file":   "/nonexistent/key.pem",
+			"assistant-ate-audience-jwt-file": "/nonexistent/token",
+			"assistant-ate-atespace":          "prod-assistants",
+			"assistant-ate-template":          "kit-v1",
+		})
+		// Reaches ServiceCore.InstallKitATERuntime (does not panic on inv.Require
+		// and does not fail on any environment == "dev" gate).
+		err := installKitLocalRuntimeFromCLI(testenv.NewLogger(t), c, &assistants.ServiceCore{}, nil, nil, redis.NewClient(&redis.Options{Addr: "127.0.0.1:0"}), serverURL)
+		require.ErrorContains(t, err, "ATE requires guarded HTTP")
+	})
 }
 
-func TestATEPreviewFlagsHaveNoEnablementDefaults(t *testing.T) {
+func TestATEFlagsHaveNoEnablementDefaults(t *testing.T) {
 	t.Parallel()
 	for _, flag := range assistantATERuntimeFlags() {
 		switch f := flag.(type) {

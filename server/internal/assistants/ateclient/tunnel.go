@@ -15,21 +15,40 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-
-	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"time"
 
 	"google.golang.org/grpc/status"
+
+	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
+)
+
+const (
+	// maxConnectResponseHeaderBytes bounds the HTTP CONNECT response headers from the ATE router.
+	maxConnectResponseHeaderBytes = 32 << 10 // 32 KiB
+
+	// tunnelReadBufferBytes sizes the buffered reader shared between CONNECT response parsing and tunneled HTTP.
+	tunnelReadBufferBytes = 4 << 10 // 4 KiB
 )
 
 func sanitizedRPCError(err error) error {
 	return fmt.Errorf("ATE control RPC: %w", status.Error(status.Code(err), "ATE control RPC failed"))
 }
 
-type ConnectError struct{ StatusCode int }
+// ConnectError reports a rejected HTTP CONNECT tunnel handshake with the ATE router.
+type ConnectError struct {
+	// StatusCode is the HTTP status code returned by the ATE router.
+	StatusCode int
+}
 
 func (e *ConnectError) Error() string {
 	return fmt.Sprintf("ATE CONNECT rejected (status %d)", e.StatusCode)
+}
+
+// Retryable reports whether the router rejection is transient (for example 503
+// while an actor resumes or the router sheds under capacity).
+func (e *ConnectError) Retryable() bool {
+	return e != nil && e.StatusCode == http.StatusServiceUnavailable
 }
 
 var namePattern = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`)
@@ -46,8 +65,9 @@ func ActorEndpoint(actor string, port uint16) (string, error) {
 }
 
 // ActorHTTPClient restricts all requests to exactly actor:port. It does not follow
-// redirects, use proxy environment variables, retry POSTs, or time out SSE bodies.
-// Request context cancellation remains the caller's responsibility.
+// redirects, use proxy environment variables, retry sent POSTs, or time out SSE bodies.
+// Transient 503 responses during CONNECT establishment (before any inner HTTP request
+// bytes are written) are retried automatically while an actor resumes.
 func (c *Client) ActorHTTPClient(actor string, port uint16) (*guardian.HTTPClient, error) {
 	endpoint, err := ActorEndpoint(actor, port)
 	if err != nil {
@@ -55,19 +75,21 @@ func (c *Client) ActorHTTPClient(actor string, port uint16) (*guardian.HTTPClien
 	}
 	parsed, _ := url.Parse(endpoint)
 	authority := parsed.Host
+
 	transport := &http.Transport{
 		Proxy:                  nil,
 		DisableKeepAlives:      true,
 		ForceAttemptHTTP2:      false,
 		ResponseHeaderTimeout:  c.config.RPCTimeout,
-		MaxResponseHeaderBytes: 32 << 10,
+		MaxResponseHeaderBytes: maxConnectResponseHeaderBytes,
 		DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
 			if network != "tcp" || address != authority {
 				return nil, errors.New("ATE actor destination rejected")
 			}
-			return c.connect(ctx, actor, authority)
+			return c.connectWithRetry(ctx, actor, authority)
 		},
 	}
+
 	return &guardian.HTTPClient{
 		Transport:     actorTransport{authority: authority, transport: transport},
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
@@ -94,6 +116,7 @@ func (t actorTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 	return response, nil
 }
+
 func (t actorTransport) CloseIdleConnections() { t.transport.CloseIdleConnections() }
 
 type bufferedConn struct {
@@ -112,36 +135,87 @@ func (c *bufferedConn) Read(p []byte) (int, error) {
 	return n, nil
 }
 
-func (c *Client) connect(ctx context.Context, actor, authority string) (net.Conn, error) {
-	ctx, cancel := context.WithTimeout(ctx, c.config.ConnectTimeout)
+// connectWithRetry retries router 503 CONNECT responses before any inner request
+// is written, so actor resume in ATE v1.0.1 is transparent to callers.
+func (c *Client) connectWithRetry(ctx context.Context, actor, authority string) (net.Conn, error) {
+	retryTimeout := c.config.ConnectRetryTimeout
+	if retryTimeout <= 0 {
+		retryTimeout = defaultConnectRetryTimeout
+	}
+	retryCtx, cancel := context.WithTimeout(ctx, retryTimeout)
 	defer cancel()
+
+	delay := c.config.ConnectRetryInterval
+	if delay <= 0 {
+		delay = defaultConnectRetryInterval
+	}
+
+	for {
+		conn, err := c.connect(retryCtx, actor, authority)
+		if err == nil {
+			return conn, nil
+		}
+
+		var connectErr *ConnectError
+		if !errors.As(err, &connectErr) || !connectErr.Retryable() {
+			return nil, err
+		}
+
+		timer := time.NewTimer(delay)
+		select {
+		case <-retryCtx.Done():
+			timer.Stop()
+			return nil, err
+		case <-timer.C:
+		}
+
+		if delay < maxConnectRetryInterval {
+			delay = min(delay*2, maxConnectRetryInterval)
+		}
+	}
+}
+
+func (c *Client) connect(ctx context.Context, actor, authority string) (net.Conn, error) {
+	connectTimeout := c.config.ConnectTimeout
+	if connectTimeout <= 0 {
+		connectTimeout = defaultConnectTimeout
+	}
+	ctx, cancel := context.WithTimeout(ctx, connectTimeout)
+	defer cancel()
+
 	tlsConfig := c.tlsConfig.Clone()
 	tlsConfig.ServerName = c.config.RouterServerName
 	if tlsConfig.ServerName == "" {
 		tlsConfig.ServerName, _, _ = net.SplitHostPort(c.config.RouterAddress)
 	}
 	tlsConfig.NextProtos = []string{"http/1.1"}
+
 	dialer := tls.Dialer{NetDialer: &net.Dialer{}, Config: tlsConfig}
 	conn, err := dialer.DialContext(ctx, "tcp", c.config.RouterAddress)
 	if err != nil {
 		return nil, errors.New("connect ATE router")
 	}
+
 	success := false
 	defer func() {
 		if !success {
 			_ = conn.Close()
 		}
 	}()
+
 	stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
 	defer stop()
+
 	deadline, _ := ctx.Deadline()
 	if err := conn.SetDeadline(deadline); err != nil {
 		return nil, errors.New("set ATE CONNECT deadline")
 	}
-	metadata, err := (fileBearer{c.config.AudienceJWTFile}).GetRequestMetadata(ctx)
+
+	metadata, err := (fileBearer{path: c.config.AudienceJWTFile}).GetRequestMetadata(ctx)
 	if err != nil {
 		return nil, err
 	}
+
 	request, err := http.NewRequestWithContext(ctx, http.MethodConnect, "http://"+authority, nil)
 	if err != nil {
 		return nil, errors.New("create ATE CONNECT request")
@@ -153,11 +227,12 @@ func (c *Client) connect(ctx context.Context, actor, authority string) (net.Conn
 	if err := request.Write(conn); err != nil {
 		return nil, errors.New("write ATE CONNECT")
 	}
-	reader := bufio.NewReaderSize(conn, 4096)
+
+	reader := bufio.NewReaderSize(conn, tunnelReadBufferBytes)
 	var headers bytes.Buffer
 	for {
 		line, err := reader.ReadSlice('\n')
-		if err != nil || headers.Len()+len(line) > 32<<10 {
+		if err != nil || headers.Len()+len(line) > maxConnectResponseHeaderBytes {
 			return nil, errors.New("invalid ATE CONNECT response headers")
 		}
 		headers.Write(line)
@@ -165,6 +240,7 @@ func (c *Client) connect(ctx context.Context, actor, authority string) (net.Conn
 			break
 		}
 	}
+
 	// The standard response parser removes explicit Connection: close headers.
 	// Inspect the original MIME headers, not response.Close (also true for a
 	// valid unframed CONNECT response).
@@ -176,14 +252,17 @@ func (c *Client) connect(ctx context.Context, actor, authority string) (net.Conn
 	if err != nil {
 		return nil, errors.New("invalid ATE CONNECT response headers")
 	}
+
 	response, err := http.ReadResponse(bufio.NewReader(bytes.NewReader(headers.Bytes())), request)
 	if err != nil {
 		return nil, errors.New("invalid ATE CONNECT response")
 	}
-	defer func() { _ = response.Body.Close() }()
+	defer o11y.NoLogDefer(func() error { return response.Body.Close() })
+
 	if response.ProtoMajor != 1 || response.StatusCode != http.StatusOK || len(response.TransferEncoding) != 0 || response.ContentLength > 0 || hasCloseToken(http.Header(rawHeaders)) {
 		return nil, &ConnectError{StatusCode: response.StatusCode}
 	}
+
 	// Stop cancellation before handing the socket to net/http. A cancellation that
 	// already ran closes the connection, which is safe; it cannot escape the tunnel.
 	if !stop() || ctx.Err() != nil {
@@ -192,6 +271,7 @@ func (c *Client) connect(ctx context.Context, actor, authority string) (net.Conn
 	if err := conn.SetDeadline(time.Time{}); err != nil {
 		return nil, errors.New("clear ATE CONNECT deadline")
 	}
+
 	success = true
 	return &bufferedConn{Conn: conn, reader: reader}, nil
 }

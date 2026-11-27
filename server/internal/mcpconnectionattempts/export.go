@@ -349,9 +349,7 @@ func newExportRecord(eventName string, at time.Time, severity log.Severity, seve
 	record.SetTimestamp(at)
 	record.SetSeverity(severity)
 	record.SetSeverityText(severityText)
-	for _, kv := range attrs {
-		record.AddAttributes(log.KeyValueFromAttribute(kv))
-	}
+	record.AddAttributes(attrs...)
 	return record
 }
 

@@ -28,59 +28,54 @@ import (
 	workloadrepo "github.com/speakeasy-api/gram/server/internal/workloadpolicy/repo"
 )
 
-// KitATEWorkloadAssertionPath stays outside container-managed secrets mounts.
-const KitATEWorkloadAssertionPath = "/var/run/speakeasy/workload/assertion"
+const (
+	// maxATEDNSLabelLen is the RFC 1123 DNS-label length limit for ATE names.
+	maxATEDNSLabelLen = 63
 
-// KitATECompositionConfig is an explicit development-preview opt-in. It is
-// separate from provider selection so legacy runtimes retain their backend.
+	// ateBrokerJWKSTimeout bounds startup verification that the ATE JWKS URL is reachable.
+	ateBrokerJWKSTimeout = 10 * time.Second
+
+	// ateLifecycleCommitTimeout bounds committing the lifecycle advisory transaction.
+	ateLifecycleCommitTimeout = 30 * time.Second
+)
+
+// KitATECompositionConfig configures the ATE Kit v3 runtime backend.
 type KitATECompositionConfig struct {
 	KitLocalCompositionConfig
-	Enabled      bool
-	PreviewID    string
+
+	// Enabled selects the ATE backend when true.
+	Enabled bool
+
+	// ClientConfig holds ATE control-plane and router connection settings.
 	ClientConfig ateclient.Config
-	Atespace     string
-	Template     string
-	EgressHosts  []string
+
+	// Atespace is the target ATE namespace.
+	Atespace string
+
+	// Template is the target ATE ActorTemplate name.
+	Template string
+
+	// EgressHosts lists operator-approved extra DNS hostnames for actor egress.
+	EgressHosts []string
 }
 
 type kitATEWorkloadIdentity struct {
 	Atespace, ActorName string
 }
 
-var kitATEPreviewIDPattern = regexp.MustCompile(`^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$`)
-
-// ValidateKitATEPreview rejects production, local and unnamed preview startup.
-// Neither an API URL nor a template implicitly enables the preview.
-func ValidateKitATEPreview(environment string, enabled bool, previewID string) error {
-	if !enabled {
-		if previewID != "" {
-			return errors.New("ATE preview identifier requires explicit assistant ATE enablement")
-		}
-		return nil
-	}
-	if environment != "dev" {
-		return errors.New("assistant ATE preview requires the dev environment")
-	}
-	if len(previewID) > 63 || !kitATEPreviewIDPattern.MatchString(previewID) {
-		return errors.New("assistant ATE preview requires an explicit DNS-label preview identifier")
-	}
-	return nil
-}
+var kitATENamePattern = regexp.MustCompile(`^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$`)
 
 func validateKitATEComposition(c KitATECompositionConfig) error {
-	if err := ValidateKitATEPreview(c.Environment, c.Enabled, c.PreviewID); err != nil {
-		return err
-	}
 	if !c.Enabled {
-		return errors.New("assistant ATE preview is not enabled")
+		return errors.New("assistant ATE runtime is not enabled")
 	}
 	for _, name := range []string{c.Atespace, c.Template} {
-		if len(name) > 63 || !kitATEPreviewIDPattern.MatchString(name) {
+		if len(name) > maxATEDNSLabelLen || !kitATENamePattern.MatchString(name) {
 			return errors.New("assistant ATE requires explicit DNS-label atespace and template names")
 		}
 	}
 	if c.nativeIdentity != nil || c.WorkloadSubject != "" || c.WorkloadAssertionFile != "" || c.Network != "" || c.ExtraCACertFile != "" || c.AllowInsecureInference {
-		return errors.New("assistant ATE rejects GKE identity, operator assertions and local network or TLS overrides")
+		return errors.New("assistant ATE rejects GKE identity, operator assertions, and local network or TLS overrides")
 	}
 	if !kitGKEExplicitImage(c.Image) {
 		return errors.New("assistant ATE requires an explicit non-latest image tag or digest")
@@ -92,45 +87,60 @@ func validateKitATEComposition(c KitATECompositionConfig) error {
 }
 
 // InstallKitATERuntime installs only the version-3 dispatch branch. The backend
-// must create actors lazily when the thread is known, not during Ensure.
+// creates actors lazily when the thread is known, not during Ensure.
 func (s *ServiceCore) InstallKitATERuntime(ctx context.Context, c KitATECompositionConfig) error {
 	if err := validateKitATEComposition(c); err != nil {
 		return err
 	}
 	if s.guardianPolicy == nil || s.chatWriter == nil || s.assistantTokens == nil || s.encryptionClient == nil {
-		return errors.New("ATE requires guarded HTTP, transcript, inference and encrypted gateway credential services")
+		return errors.New("ATE requires guarded HTTP, transcript, inference, and encrypted gateway credential services")
 	}
 	if err := s.validateKitATEBrokerKeys(ctx, c.WorkloadJWKSURL); err != nil {
 		return err
 	}
+
 	c.ClientConfig.Atespace = c.Atespace
 	client, err := ateclient.New(ctx, c.ClientConfig)
 	if err != nil {
 		return fmt.Errorf("create ATE control client: %w", err)
 	}
+
 	backend, err := NewKitATERuntimeBackend(KitATERuntimeConfig{
-		Environment: c.Environment, PreviewID: c.PreviewID, Image: c.Image, Atespace: c.Atespace, Template: c.Template, ServerURL: s.serverURL, Client: client, EgressHosts: append(slices.Clone(c.EgressHosts), c.Origin.Hostname(), s.serverURL.Hostname()),
-		Bootstrap: s.kitATECompositionBootstrap(c), Token: s.kitATEToken, Protocol: s.kitATEProtocolFactory(c), Lifecycle: s.kitATELifecycle, Revoke: s.kitATERevoke, CheckSettled: s.kitATECheckSettled,
+		Image:              c.Image,
+		Atespace:           c.Atespace,
+		Template:           c.Template,
+		ServerURL:          s.serverURL,
+		Client:             client,
+		EgressHosts:        append(slices.Clone(c.EgressHosts), c.Origin.Hostname(), s.serverURL.Hostname()),
+		Bootstrap:          s.kitATECompositionBootstrap(c),
+		Token:              s.kitATEToken,
+		Protocol:           s.kitATEProtocolFactory(c),
+		Lifecycle:          s.kitATELifecycle,
+		Revoke:             s.kitATERevoke,
+		CheckSettled:       s.kitATECheckSettled,
+		HelperPollInterval: 0,
 	})
 	if err != nil {
 		_ = client.Close()
 		return err
 	}
+
 	if err := s.installKitRuntime(backend); err != nil {
 		_ = client.Close()
 		return err
 	}
+
 	s.newAssistantRuntimeEligible = func(ctx context.Context, tx pgx.Tx, assistant assistantRecord) (bool, error) {
 		return s.kitGKEAssistantEligible(ctx, tx, assistant, c.KitLocalCompositionConfig)
 	}
 	return nil
 }
 
-// kitATEActorToken derives an actor-only gateway credential from the encrypted
-// runtime generation secret. Actor names must never be reused after deletion.
-func kitATEActorToken(root, actorName string) string {
+// kitATEActorToken derives a per-thread ACP credential from the encrypted
+// runtime generation secret. Actor names are never reused after deletion.
+func kitATEActorToken(root, threadID string) string {
 	mac := hmac.New(sha256.New, []byte(root))
-	_, _ = mac.Write([]byte("speakeasy-kit-ate-actor-v1\x00" + actorName))
+	_, _ = mac.Write([]byte("speakeasy-kit-ate-actor-v1\x00" + threadID))
 	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 }
 
@@ -141,7 +151,7 @@ func (s *ServiceCore) validateKitATEBrokerKeys(ctx context.Context, raw string) 
 	if err != nil {
 		return fmt.Errorf("configure ATE broker JWKS: %w", err)
 	}
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, ateBrokerJWKSTimeout)
 	defer cancel()
 	resolver := jwks.NewResolver(s.guardianPolicy, noop.NewMeterProvider(), s.logger)
 	var initialCache jwks.CacheState
@@ -173,7 +183,10 @@ func (s *ServiceCore) kitATECheckSettled(ctx context.Context, r assistantRuntime
 	if r.LifecycleTx == nil || r.RuntimeVersion != 3 || r.Backend != runtimeBackendATE {
 		return ErrKitRuntimeBinding
 	}
-	busy, err := assistantrepo.New(r.LifecycleTx).AssistantHasUnsettledEvents(ctx, assistantrepo.AssistantHasUnsettledEventsParams{ProjectID: r.ProjectID, AssistantID: r.AssistantID})
+	busy, err := assistantrepo.New(r.LifecycleTx).AssistantHasUnsettledEvents(ctx, assistantrepo.AssistantHasUnsettledEventsParams{
+		ProjectID:   r.ProjectID,
+		AssistantID: r.AssistantID,
+	})
 	if err != nil {
 		return fmt.Errorf("check ATE unsettled events and wakes: %w", err)
 	}
@@ -195,9 +208,14 @@ func (s *ServiceCore) validateKitATEBootstrapWorkload(ctx context.Context, r ass
 	if b.Generation != fmt.Sprintf("%x", digest[:16]) {
 		return ErrKitRuntimeBinding
 	}
+
 	project := uuid.NullUUID{UUID: r.ProjectID, Valid: true}
 	q := workloadrepo.New(r.LifecycleTx)
-	issuer, err := q.GetWorkloadIssuer(ctx, workloadrepo.GetWorkloadIssuerParams{OrganizationID: identity.OrganizationID, ProjectID: project, ID: b.IssuerID})
+	issuer, err := q.GetWorkloadIssuer(ctx, workloadrepo.GetWorkloadIssuerParams{
+		OrganizationID: identity.OrganizationID,
+		ProjectID:      project,
+		ID:             b.IssuerID,
+	})
 	if err != nil {
 		return fmt.Errorf("load recovered ATE workload issuer: %w", err)
 	}
@@ -208,7 +226,11 @@ func (s *ServiceCore) validateKitATEBootstrapWorkload(ctx context.Context, r ass
 	if issuer.ProjectID != project || !kitOwnedWorkloadIssuer(issuer, canonicalIssuer.String(), c.WorkloadJWKSURL) {
 		return ErrKitRuntimeBinding
 	}
-	admissions, err := q.ListWorkloadAdmissions(ctx, workloadrepo.ListWorkloadAdmissionsParams{OrganizationID: identity.OrganizationID, ProjectID: project})
+
+	admissions, err := q.ListWorkloadAdmissions(ctx, workloadrepo.ListWorkloadAdmissionsParams{
+		OrganizationID: identity.OrganizationID,
+		ProjectID:      project,
+	})
 	if err != nil {
 		return fmt.Errorf("load recovered ATE admissions: %w", err)
 	}
@@ -221,7 +243,13 @@ func (s *ServiceCore) validateKitATEBootstrapWorkload(ctx context.Context, r ass
 	if !admitted {
 		return ErrKitRuntimeBinding
 	}
-	assignments, err := q.GetWorkloadAgentAssignmentForSubject(ctx, workloadrepo.GetWorkloadAgentAssignmentForSubjectParams{OrganizationID: identity.OrganizationID, WorkloadIssuerID: b.IssuerID, Subject: b.Subject, MatchKind: "exact"})
+
+	assignments, err := q.GetWorkloadAgentAssignmentForSubject(ctx, workloadrepo.GetWorkloadAgentAssignmentForSubjectParams{
+		OrganizationID:   identity.OrganizationID,
+		WorkloadIssuerID: b.IssuerID,
+		Subject:          b.Subject,
+		MatchKind:        "exact",
+	})
 	if err != nil {
 		return fmt.Errorf("load recovered ATE agent assignments: %w", err)
 	}
@@ -233,6 +261,7 @@ func (s *ServiceCore) validateKitATEBootstrapWorkload(ctx context.Context, r ass
 			return ErrKitRuntimeBinding
 		}
 	}
+
 	shared, err := usersessionsrepo.New(r.LifecycleTx).GetSharedUserSessionIssuerByID(ctx, c.MCPUserSessionIssuerID)
 	if err != nil {
 		return fmt.Errorf("load recovered ATE broker issuer: %w", err)
@@ -240,7 +269,11 @@ func (s *ServiceCore) validateKitATEBootstrapWorkload(ctx context.Context, r ass
 	if shared.ResolvedOrganizationID != identity.OrganizationID || (shared.UserSessionIssuer.ProjectID.Valid && shared.UserSessionIssuer.ProjectID.UUID != r.ProjectID) {
 		return ErrKitRuntimeBinding
 	}
-	audience, err := (authserver.Hosts{ServerURL: s.serverURL.String(), AuthenticationHostBaseURL: c.WorkloadIssuerBaseURL, PlatformHosts: nil}).SharedIssuerURL(shared.UserSessionIssuer)
+	audience, err := (authserver.Hosts{
+		ServerURL:                 s.serverURL.String(),
+		AuthenticationHostBaseURL: c.WorkloadIssuerBaseURL,
+		PlatformHosts:             nil,
+	}).SharedIssuerURL(shared.UserSessionIssuer)
 	if err != nil {
 		return fmt.Errorf("resolve recovered ATE broker audience: %w", err)
 	}
@@ -261,36 +294,48 @@ func (s *ServiceCore) kitATELifecycle(ctx context.Context, r assistantRuntimeRec
 		r.LifecycleTx = existing
 		return operation(ctx, r)
 	}
+
 	tx, release, err := beginKitLifecycleTransaction(ctx, s.db, r.AssistantID.String())
 	if err != nil {
 		return fmt.Errorf("begin Kit ATE lifecycle: %w", err)
 	}
 	defer release()
+
 	q := assistantrepo.New(tx)
 	row, err := q.GetAssistantRuntime(ctx, assistantrepo.GetAssistantRuntimeParams{ProjectID: r.ProjectID, ID: r.ID})
 	if err != nil {
 		return fmt.Errorf("reload Kit ATE lifecycle: %w", err)
 	}
-	if row.AssistantID != r.AssistantID || row.RuntimeVersion != 3 || row.Backend != "ate" {
+	if row.AssistantID != r.AssistantID || row.RuntimeVersion != 3 || row.Backend != runtimeBackendATE {
 		return ErrKitRuntimeBinding
 	}
 	r.RuntimeVersion, r.Backend, r.State = row.RuntimeVersion, row.Backend, row.State
 	r.BackendMetadataJSON, r.WarmUntil, r.LifecycleTx = row.BackendMetadataJson, row.WarmUntil, tx
-	assistant, err := q.GetAssistantIgnoringDeleted(ctx, assistantrepo.GetAssistantIgnoringDeletedParams{AssistantID: r.AssistantID, ProjectID: r.ProjectID})
+
+	assistant, err := q.GetAssistantIgnoringDeleted(ctx, assistantrepo.GetAssistantIgnoringDeletedParams{
+		AssistantID: r.AssistantID,
+		ProjectID:   r.ProjectID,
+	})
 	if err != nil {
 		return fmt.Errorf("read Kit ATE lifecycle assistant: %w", err)
 	}
 	r.Retired = row.Ended || row.Deleted || assistant.DeletedAt.Valid
+
 	ctx = context.WithValue(ctx, runtimeSwitchQueriesKey{}, q)
 	ctx = context.WithValue(ctx, kitLifecycleTxKey{}, r.LifecycleTx)
 	ctx = context.WithValue(ctx, kitAdmissionProgressKey{}, kitAdmissionProgressWriter(func(progressCtx context.Context, raw []byte) error {
-		if err := q.UpdateAssistantRuntimeMetadata(progressCtx, assistantrepo.UpdateAssistantRuntimeMetadataParams{ProjectID: r.ProjectID, RuntimeID: r.ID, BackendMetadataJson: raw}); err != nil {
+		if err := q.UpdateAssistantRuntimeMetadata(progressCtx, assistantrepo.UpdateAssistantRuntimeMetadataParams{
+			ProjectID:           r.ProjectID,
+			RuntimeID:           r.ID,
+			BackendMetadataJson: raw,
+		}); err != nil {
 			return fmt.Errorf("update Kit ATE admission progress: %w", err)
 		}
 		return tx.Publish(progressCtx)
 	}))
+
 	operationErr := operation(ctx, r)
-	commitCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+	commitCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), ateLifecycleCommitTimeout)
 	defer cancel()
 	if err := tx.Commit(commitCtx); err != nil {
 		return errors.Join(operationErr, fmt.Errorf("commit Kit ATE lifecycle: %w", err))
@@ -314,7 +359,7 @@ func (s *ServiceCore) kitATEToken(ctx context.Context, r assistantRuntimeRecord,
 
 func (s *ServiceCore) kitATECompositionBootstrap(c KitATECompositionConfig) func(context.Context, assistantRuntimeRecord, uuid.UUID, string) (KitLocalBootstrap, error) {
 	return func(ctx context.Context, r assistantRuntimeRecord, threadID uuid.UUID, actorName string) (KitLocalBootstrap, error) {
-		if threadID == uuid.Nil || len(actorName) > 63 || !kitATEPreviewIDPattern.MatchString(actorName) {
+		if threadID == uuid.Nil || len(actorName) > maxATEDNSLabelLen || !kitATENamePattern.MatchString(actorName) {
 			return KitLocalBootstrap{}, ErrKitRuntimeBinding
 		}
 		if r.LifecycleTx == nil {
@@ -324,9 +369,10 @@ func (s *ServiceCore) kitATECompositionBootstrap(c KitATECompositionConfig) func
 		if err != nil {
 			return KitLocalBootstrap{}, err
 		}
+
 		local := c.KitLocalCompositionConfig
 		var metadata kitATEMetadata
-		if err := json.Unmarshal(r.BackendMetadataJSON, &metadata); err != nil || metadata.RuntimeID != r.ID || metadata.AssistantID != r.AssistantID || metadata.ProjectID != r.ProjectID || metadata.PreviewID != c.PreviewID || metadata.Atespace != c.Atespace || metadata.Template != c.Template {
+		if err := json.Unmarshal(r.BackendMetadataJSON, &metadata); err != nil || metadata.RuntimeID != r.ID || metadata.AssistantID != r.AssistantID || metadata.ProjectID != r.ProjectID || metadata.Atespace != c.Atespace || metadata.Template != c.Template {
 			return KitLocalBootstrap{}, ErrKitRuntimeBinding
 		}
 		if prior, ok := metadata.Threads[threadID.String()]; ok && prior.Workload != nil {
@@ -343,7 +389,12 @@ func (s *ServiceCore) kitATECompositionBootstrap(c KitATECompositionConfig) func
 
 func (s *ServiceCore) kitATEProtocolFactory(c KitATECompositionConfig) func(context.Context, assistantRuntimeRecord, uuid.UUID, string, *url.URL, *guardian.HTTPClient, string) (runtimeProtocol, error) {
 	projector := NewKitTranscriptProjector(s.db, s.chatWriter, c.TurnStream, func(ctx context.Context, tx pgx.Tx, b KitTranscriptBinding) error {
-		bound, err := s.ValidateKitRuntimeSessionInTx(ctx, tx, kitRuntimeSessionKey{ProjectID: b.ProjectID, AssistantID: b.AssistantID, RuntimeID: b.RuntimeID, ThreadID: b.ThreadID}, b.SessionID)
+		bound, err := s.ValidateKitRuntimeSessionInTx(ctx, tx, kitRuntimeSessionKey{
+			ProjectID:   b.ProjectID,
+			AssistantID: b.AssistantID,
+			RuntimeID:   b.RuntimeID,
+			ThreadID:    b.ThreadID,
+		}, b.SessionID)
 		if err != nil {
 			return err
 		}
@@ -356,7 +407,14 @@ func (s *ServiceCore) kitATEProtocolFactory(c KitATECompositionConfig) func(cont
 		if threadID == uuid.Nil || actorName == "" || endpoint == nil || endpoint.Path != "/acp" || client == nil || token == "" {
 			return nil, ErrKitRuntimeBinding
 		}
-		p, err := NewKitRuntimeProtocol(KitRuntimeProtocolConfig{Core: s, Endpoint: endpoint, HTTPClient: client, Projector: projector, CWD: KitWorkspacePath, GatewayToken: token})
+		p, err := NewKitRuntimeProtocol(KitRuntimeProtocolConfig{
+			Core:         s,
+			Endpoint:     endpoint,
+			HTTPClient:   client,
+			Projector:    projector,
+			CWD:          KitWorkspacePath,
+			GatewayToken: token,
+		})
 		if err != nil {
 			return nil, err
 		}

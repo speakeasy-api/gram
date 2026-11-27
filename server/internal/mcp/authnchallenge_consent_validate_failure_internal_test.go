@@ -16,7 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
-	otellog "go.opentelemetry.io/otel/log"
+	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -139,9 +139,9 @@ func TestProbeRemoteSession_NoVerdictExportOmitsProviderHost(t *testing.T) {
 	require.NoError(t, recorder.Shutdown(t.Context()))
 
 	require.Len(t, sink.records, 1)
-	sink.records[0].WalkAttributes(func(kv otellog.KeyValue) bool {
-		require.NotEqual(t, string(attr.ServerAddressKey), kv.Key)
-		require.NotEqual(t, string(attr.ServerPortKey), kv.Key)
+	sink.records[0].WalkAttributes(func(kv attribute.KeyValue) bool {
+		require.NotEqual(t, string(attr.ServerAddressKey), string(kv.Key))
+		require.NotEqual(t, string(attr.ServerPortKey), string(kv.Key))
 		return true
 	})
 }

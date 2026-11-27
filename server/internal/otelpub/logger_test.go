@@ -73,13 +73,13 @@ func testLogger(publisher gcp.Publisher[*otelv1.InboundLogRecord]) *Logger {
 	return NewLogger(publisher, resource.NewSchemaless(semconv.ServiceName("gram-server")), testScope)
 }
 
-func toolCallRecord(at time.Time, attrs ...log.KeyValue) log.Record {
+func toolCallRecord(at time.Time, attrs ...attribute.KeyValue) log.Record {
 	var record log.Record
 	record.SetEventName("gram.tool_call.started")
 	record.SetTimestamp(at)
 	record.SetSeverity(log.SeverityInfo)
-	record.SetBody(log.StringValue("tool call started"))
-	record.AddAttributes(log.String("gram.tool_call.id", "call-1"))
+	record.SetBody(attribute.StringValue("tool call started"))
+	record.AddAttributes(attribute.String("gram.tool_call.id", "call-1"))
 	record.AddAttributes(attrs...)
 	return record
 }
@@ -194,7 +194,7 @@ func TestLogRefusesTheReservedNamespace(t *testing.T) {
 
 	publisher, published := capture(t, gcp.NewSuccessPublishResult())
 
-	err := testLogger(publisher).Log(authenticated(t.Context()), toolCallRecord(time.Unix(1_700_000_000, 0), log.String(string(enrich.AgentEventTypeKey), "tool_call")))
+	err := testLogger(publisher).Log(authenticated(t.Context()), toolCallRecord(time.Unix(1_700_000_000, 0), attribute.String(string(enrich.AgentEventTypeKey), "tool_call")))
 
 	require.ErrorContains(t, err, "reserved namespace")
 	require.Empty(t, *published)
@@ -205,7 +205,7 @@ func TestLogRefusesTheDirectoryNamespace(t *testing.T) {
 
 	publisher, published := capture(t, gcp.NewSuccessPublishResult())
 
-	err := testLogger(publisher).Log(authenticated(t.Context()), toolCallRecord(time.Unix(1_700_000_000, 0), log.String("directory.department", "engineering")))
+	err := testLogger(publisher).Log(authenticated(t.Context()), toolCallRecord(time.Unix(1_700_000_000, 0), attribute.String("directory.department", "engineering")))
 
 	require.ErrorContains(t, err, "reserved namespace")
 	require.Empty(t, *published)
@@ -228,7 +228,7 @@ func TestLogRefusesARecordThatBreaksTheIngestContract(t *testing.T) {
 
 	publisher, published := capture(t, gcp.NewSuccessPublishResult())
 
-	err := testLogger(publisher).Log(authenticated(t.Context()), toolCallRecord(time.Unix(1_700_000_000, 0), log.String("payload", strings.Repeat("x", 4*constants.MiB))))
+	err := testLogger(publisher).Log(authenticated(t.Context()), toolCallRecord(time.Unix(1_700_000_000, 0), attribute.String("payload", strings.Repeat("x", 4*constants.MiB))))
 
 	require.ErrorContains(t, err, "exceeds maximum size")
 	require.Empty(t, *published)
@@ -250,8 +250,8 @@ func TestLogKeepsEmptyAndNilBytesValues(t *testing.T) {
 	publisher, published := capture(t, gcp.NewSuccessPublishResult())
 
 	err := testLogger(publisher).Log(authenticated(t.Context()), toolCallRecord(time.Unix(1_700_000_000, 0),
-		log.Slice("list", log.StringValue("a"), log.Value{}),
-		log.Bytes("raw", nil),
+		attribute.Slice("list", attribute.StringValue("a"), attribute.Value{}),
+		attribute.ByteSlice("raw", nil),
 	))
 
 	require.NoError(t, err)
@@ -357,7 +357,7 @@ func TestLogMapsTheRecordsErrorToExceptionAttributes(t *testing.T) {
 	record.SetErr(fmt.Errorf("call failed: %w", typedError{}))
 	require.NoError(t, logger.Log(ctx, record))
 
-	stated := toolCallRecord(time.Unix(1_700_000_000, 0), log.String("exception.message", "stated"))
+	stated := toolCallRecord(time.Unix(1_700_000_000, 0), attribute.String("exception.message", "stated"))
 	stated.SetErr(errors.New("ignored"))
 	require.NoError(t, logger.Log(ctx, stated))
 
@@ -451,7 +451,7 @@ func connectionRecordWith(key string) log.Record {
 	var record log.Record
 	record.SetEventName("speakeasy.mcp_connection")
 	record.SetTimestamp(time.Unix(1_700_000_000, 0))
-	record.AddAttributes(log.String(key, "value"))
+	record.AddAttributes(attribute.String(key, "value"))
 	return record
 }
 
