@@ -1146,6 +1146,32 @@ WHERE project_id = @project_id
   AND status = @pending_status
   AND deleted IS FALSE;
 
+-- name: HasPendingAssistantThreadEvent :one
+SELECT EXISTS (
+  SELECT 1
+  FROM assistant_thread_events
+  WHERE project_id = @project_id
+    AND assistant_thread_id = @thread_id
+    AND deleted IS FALSE
+    AND status = @pending_status
+)::boolean AS has_pending;
+
+-- name: CancelProcessingAssistantThreadEvent :execrows
+-- Settles a claimed mid-turn steer that was withdrawn before Kit inserted it
+-- (via ACP $/cancel_request during a turn interrupt) without advancing the
+-- thread's skill snapshot.
+UPDATE assistant_thread_events
+SET
+  status = @cancelled_status,
+  processed_at = clock_timestamp(),
+  last_error = NULL,
+  updated_at = clock_timestamp()
+WHERE id = @event_id
+  AND project_id = @project_id
+  AND status = @processing_status
+  AND attempts = @claimed_attempt
+  AND deleted IS FALSE;
+
 -- name: ResetAssistantThreadEventToPending :exec
 WITH ingestion_fence AS MATERIALIZED (
   SELECT e.id, pg_advisory_xact_lock(hashtext('asst:' || e.assistant_id::text))

@@ -33,12 +33,21 @@ func (s *kitInterruptState) observe(raw json.RawMessage) {
 		return
 	}
 	u := envelope.Update
-	if u.Kind != "state_update" || u.State != "idle" {
+	if u.Kind != "state_update" {
 		return
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if !s.armed {
+		return
+	}
+	if u.State == "running" {
+		if !s.sent {
+			s.terminal = false
+		}
+		return
+	}
+	if u.State != "idle" {
 		return
 	}
 	s.terminal = true

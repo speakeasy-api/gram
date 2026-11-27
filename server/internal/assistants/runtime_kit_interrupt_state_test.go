@@ -97,3 +97,21 @@ func TestKitInterruptAmbiguousSendKeepsObserving(t *testing.T) {
 		t.Fatal("late terminal not observed")
 	}
 }
+
+func TestKitInterruptStateReopensOnSteeredRunning(t *testing.T) {
+	t.Parallel()
+	s := &kitInterruptState{}
+	s.arm()
+	s.observe(json.RawMessage(`{"update":{"sessionUpdate":"state_update","state":"idle","stopReason":"end_turn"}}`))
+	if s.beginSend() {
+		t.Fatal("cancelled while idle")
+	}
+	s.observe(json.RawMessage(`{"update":{"sessionUpdate":"state_update","state":"running"}}`))
+	if !s.beginSend() {
+		t.Fatal("steered running turn did not reopen cancellation")
+	}
+	s.observe(json.RawMessage(`{"update":{"sessionUpdate":"state_update","state":"idle","stopReason":"cancelled"}}`))
+	if s.outcome() != "cancelled" {
+		t.Fatalf("unexpected outcome: %s", s.outcome())
+	}
+}

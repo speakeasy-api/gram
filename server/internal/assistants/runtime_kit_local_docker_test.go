@@ -18,7 +18,7 @@ import (
 
 func TestKitLocalAssertionDirectoryMountSupportsAtomicRotation(t *testing.T) {
 	t.Parallel()
-	spec := kitLocalContainerSpec{WorkloadAssertionFile: "/operator/projection/assertion", Command: []string{"kit"}, Image: "kit:v0.2.19"}
+	spec := kitLocalContainerSpec{WorkloadAssertionFile: "/operator/projection/assertion", Command: []string{"kit"}, Image: "kit:v0.3.1"}
 	args := kitLocalCreateArgs(8081, spec)
 	require.Contains(t, args, "type=bind,src=/operator/projection,dst=/var/run/secrets/speakeasy/workload,readonly")
 	require.NotContains(t, strings.Join(args, " "), "src=/operator/projection/assertion")
@@ -141,7 +141,7 @@ func TestKitLocalProjectionAccessUsesDaemonMapping(t *testing.T) {
 	for _, readable := range []bool{false, true} {
 		t.Run(map[bool]string{false: "unmapped-owner", true: "mapped-owner"}[readable], func(t *testing.T) {
 			t.Parallel()
-			spec := kitLocalContainerSpec{WorkloadAssertionFile: "/operator/projection/assertion", Image: "kit:v0.2.19"}
+			spec := kitLocalContainerSpec{WorkloadAssertionFile: "/operator/projection/assertion", Image: "kit:v0.3.1"}
 			denied := fmt.Errorf("docker run: %w", kitProjectionExitError(1))
 			called := false
 			err := checkKitLocalProjectionAccess(t.Context(), spec, func(_ context.Context, args ...string) (string, error) {
@@ -197,7 +197,7 @@ func TestKitLocalProjectionAccessClassifiesFailures(t *testing.T) {
 				cancel()
 			}
 			wrapped := fmt.Errorf("docker run: %w", tc.cause)
-			err := checkKitLocalProjectionAccess(ctx, kitLocalContainerSpec{WorkloadAssertionFile: "/operator/projection/assertion", Image: "kit:v0.2.19"}, func(context.Context, ...string) (string, error) { return "", wrapped })
+			err := checkKitLocalProjectionAccess(ctx, kitLocalContainerSpec{WorkloadAssertionFile: "/operator/projection/assertion", Image: "kit:v0.3.1"}, func(context.Context, ...string) (string, error) { return "", wrapped })
 			require.ErrorIs(t, err, tc.cause)
 			if tc.ownership {
 				require.ErrorContains(t, err, "ownership mapped to guest UID 1000")
