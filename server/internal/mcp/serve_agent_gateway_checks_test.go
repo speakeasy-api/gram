@@ -63,7 +63,7 @@ func recordChallenges(t *testing.T, ti *testInstance) {
 // An agent gateway admits members by evaluating every private server in the
 // organization. Recording each of those decisions listed every server the
 // agent has no grant for as a denied check on every request. Only a call that
-// names a server records its check, once per request.
+// names a server records its check.
 func TestServeAgentGateway_RecordsChecksOnlyForNamedServers(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPService(t)
@@ -96,17 +96,16 @@ func TestServeAgentGateway_RecordsChecksOnlyForNamedServers(t *testing.T) {
 	call("list_servers", map[string]any{})
 	require.Empty(t, takeRecordedMCPConnectChecks(t, ti, seen))
 
-	// Naming the granted server records its allowed check once, though the
-	// request checks it again to read its tools.
+	// Naming the granted server records its allowed check.
 	call("describe_server", map[string]any{"server": fx.granted})
 	require.Equal(t, []recordedCheck{{resourceID: granted, outcome: "allow"}}, takeRecordedMCPConnectChecks(t, ti, seen))
 
-	// Naming the ungranted server records the real denial, once.
+	// Naming the ungranted server records the real denial.
 	require.Contains(t, call("describe_server", map[string]any{"server": fx.denied}), "unknown server")
 	require.Equal(t, []recordedCheck{{resourceID: denied, outcome: "deny"}}, takeRecordedMCPConnectChecks(t, ti, seen))
 
-	// One request naming both servers, the granted one twice, records one
-	// check for each.
+	// One request naming both servers, the granted one twice, looks each
+	// server up once and so records one check for each.
 	call("describe_tools", map[string]any{"tools": []string{fx.granted + "--a", fx.granted + "--b", fx.denied + "--c"}})
 	require.ElementsMatch(t, []recordedCheck{{resourceID: granted, outcome: "allow"}, {resourceID: denied, outcome: "deny"}}, takeRecordedMCPConnectChecks(t, ti, seen))
 
@@ -117,7 +116,7 @@ func TestServeAgentGateway_RecordsChecksOnlyForNamedServers(t *testing.T) {
 
 // A public server whose own toolset is private needs a grant on that toolset,
 // which the caller here lacks. On every gateway mode a listing records nothing
-// for it, and a call that names it records the toolset's denial once.
+// for it, and a call that names it records the toolset's denial.
 func TestGateways_RecordPrivateToolsetDenialOnlyWhenNamed(t *testing.T) {
 	t.Parallel()
 
