@@ -45,6 +45,7 @@ func validTestRegistry(types ...ResourceType) Registry {
 		Types:       types,
 		SystemRoles: nil,
 		Retired:     nil,
+		Renamed:     nil,
 	}
 }
 
@@ -304,6 +305,76 @@ func TestRegistryValidate_RejectsBrokenModels(t *testing.T) {
 				validTestPermission("bypass"),
 			)),
 			want: `thing.evaluate: at most one exclusion per permission`,
+		},
+		{
+			name: "rename of a scope that is still declared",
+			model: func() Registry {
+				r := validTestRegistry(validTestType("thing", validTestPermission("read"), validTestPermission("write")))
+				r.Renamed = []ScopeRename{{From: "thing:read", To: "thing:write", WildcardResource: false}}
+				return r
+			}(),
+			want: `rename: "thing:read" is still declared by thing.read`,
+		},
+		{
+			name: "rename to an undeclared scope",
+			model: func() Registry {
+				r := validTestRegistry(validTestType("thing", validTestPermission("read")))
+				r.Renamed = []ScopeRename{{From: "old:read", To: "thing:list", WildcardResource: false}}
+				return r
+			}(),
+			want: `rename: "old:read" is renamed to "thing:list", which is not declared`,
+		},
+		{
+			name: "rename to a block",
+			model: func() Registry {
+				r := validTestRegistry(validTestType("thing", withExclusions(validTestPermission("read"), Blocked(AgentUnsafe(), "thing read access")...)))
+				r.Renamed = []ScopeRename{{From: "old:read", To: "thing:blocked_read", WildcardResource: false}}
+				return r
+			}(),
+			want: `rename: "old:read" is renamed to "thing:blocked_read", which is not a grantable permission`,
+		},
+		{
+			name: "rename of a retired scope",
+			model: func() Registry {
+				r := validTestRegistry(validTestType("thing", validTestPermission("read")))
+				r.Retired = []Scope{"old:read"}
+				r.Renamed = []ScopeRename{{From: "old:read", To: "thing:read", WildcardResource: false}}
+				return r
+			}(),
+			want: `rename: "old:read" is retired`,
+		},
+		{
+			name: "scope renamed twice",
+			model: func() Registry {
+				r := validTestRegistry(validTestType("thing", validTestPermission("read"), validTestPermission("write")))
+				r.Renamed = []ScopeRename{
+					{From: "old:read", To: "thing:read", WildcardResource: false},
+					{From: "old:read", To: "thing:write", WildcardResource: false},
+				}
+				return r
+			}(),
+			want: `rename: "old:read" is renamed twice`,
+		},
+		{
+			name: "rename chain",
+			model: func() Registry {
+				r := validTestRegistry(validTestType("thing", validTestPermission("read")))
+				r.Renamed = []ScopeRename{
+					{From: "older:read", To: "old:read", WildcardResource: false},
+					{From: "old:read", To: "thing:read", WildcardResource: false},
+				}
+				return r
+			}(),
+			want: `rename: "older:read" is renamed to "old:read", which is not declared`,
+		},
+		{
+			name: "rename from a name that is not resource:action",
+			model: func() Registry {
+				r := validTestRegistry(validTestType("thing", validTestPermission("read")))
+				r.Renamed = []ScopeRename{{From: "oldread", To: "thing:read", WildcardResource: false}}
+				return r
+			}(),
+			want: `rename: "oldread" is not resource:action`,
 		},
 		{
 			name: "system role names a scope twice",

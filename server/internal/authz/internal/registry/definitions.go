@@ -739,6 +739,7 @@ var Definitions = Registry{
 		},
 	},
 	Retired: []Scope{"mcp_approval:read", "mcp_approval:decide"},
+	Renamed: nil,
 }
 
 // serverDimensions limit a risk policy bypass or block to one server. Evaluate

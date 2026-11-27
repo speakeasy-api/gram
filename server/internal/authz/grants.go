@@ -365,7 +365,8 @@ func ScopeCoverageTx(ctx context.Context, dbtx repo.DBTX, orgID string, principa
 			return nil, err
 		}
 		principal := row.PrincipalUrn.String()
-		scope := Scope(row.Scope)
+		canonical := CanonicalGrant(Grant{PrincipalUrn: principal, Scope: Scope(row.Scope), Selector: selector, Inferred: row.Inferred})
+		scope, selector := canonical.Scope, canonical.Selector
 		held := coverage[principal]
 		at, ok := index[key{principal, scope}]
 		if !ok {
@@ -391,12 +392,12 @@ func scopedGrantsFromGrantRows(rows []repo.GetPrincipalGrantsRow) ([]*ScopedGran
 		if err != nil {
 			return nil, err
 		}
-		grantRows = append(grantRows, Grant{
+		grantRows = append(grantRows, CanonicalGrant(Grant{
 			PrincipalUrn: row.PrincipalUrn.String(),
 			Scope:        scope,
 			Selector:     selectors,
 			Inferred:     false,
-		})
+		}))
 	}
 
 	return GrantsToScopedGrants(grantRows), nil

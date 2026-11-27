@@ -135,6 +135,14 @@ every block or exemption, must carry each key a grant names.`,
 knows, retired tombstones included.`,
 		},
 		{
+			name:   "scopeRenames",
+			goType: "map[Scope]scopeRename",
+			value:  r.DeriveScopeRenames(),
+			doc: `scopeRenames maps a stored scope name that was renamed to the declared scope
+it now means. Grants are read through it until the data migration rewrites
+the stored rows.`,
+		},
+		{
 			name:   "scopeCatalog",
 			goType: "[]ScopeEntry",
 			value:  r.DeriveCatalog(),

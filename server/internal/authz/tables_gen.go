@@ -391,6 +391,11 @@ var agentEligibilityByScope = map[Scope]DerivedAgentEligibility{
 	"workload:write":            {SafeSince: 0, Retired: false},
 }
 
+// scopeRenames maps a stored scope name that was renamed to the declared scope
+// it now means. Grants are read through it until the data migration rewrites
+// the stored rows.
+var scopeRenames = map[Scope]scopeRename{}
+
 // scopeCatalog lists every scope a role can hold, in the order the catalogue
 // presents them: by category, then as declared, each block after its
 // permission. ScopeRoot is deliberately absent: it is the engine's own bypass,

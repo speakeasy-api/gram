@@ -205,7 +205,18 @@ func withoutOrganizationRead(grants []authz.Grant) []authz.Grant {
 
 func normalizeAgentPolicyGrant(row accessrepo.GetPrincipalGrantsRow) (authz.Grant, bool) {
 	var invalid authz.Grant
-	scope := authz.Scope(row.Scope)
+	selector, err := authz.SelectorFromRow(row.Selectors)
+	if err != nil {
+		return invalid, false
+	}
+	// A grant stored under a renamed scope is validated as its new name.
+	grant := authz.CanonicalGrant(authz.Grant{
+		PrincipalUrn: row.PrincipalUrn.String(),
+		Scope:        authz.Scope(row.Scope),
+		Selector:     selector,
+		Inferred:     row.Inferred,
+	})
+	scope := grant.Scope
 	// MCP exclusions restrict live parent policy; they never become delegated
 	// allow grants. Keep them so broad direct or role allows can be revoked
 	// on one server, or for one auth client on every server using it, without
@@ -214,14 +225,8 @@ func normalizeAgentPolicyGrant(row accessrepo.GetPrincipalGrantsRow) (authz.Gran
 	if !isMCPRestriction && ValidateRuntimeScope(CurrentRuntimeScopeRegistryVersion, scope) != nil {
 		return invalid, false
 	}
-	selector, err := authz.SelectorFromRow(row.Selectors)
-	if err != nil || authz.ValidateSelector(scope, selector) != nil {
+	if authz.ValidateSelector(scope, grant.Selector) != nil {
 		return invalid, false
 	}
-	return authz.Grant{
-		PrincipalUrn: row.PrincipalUrn.String(),
-		Scope:        scope,
-		Selector:     selector,
-		Inferred:     row.Inferred,
-	}, true
+	return grant, true
 }

@@ -235,6 +235,33 @@ func (r Registry) Validate() error {
 		}
 	}
 
+	// To must be declared and From must not be, so a rename never leads to
+	// another rename: a reader resolves a stored name in one step.
+	seenFrom := make(map[Scope]bool, len(r.Renamed))
+	for _, rename := range r.Renamed {
+		prefix, action := rename.From.split()
+		if prefix == "" || action == "" || strings.Count(string(rename.From), ":") != 1 {
+			fail("rename: %q is not resource:action", rename.From)
+		}
+		if seenFrom[rename.From] {
+			fail("rename: %q is renamed twice", rename.From)
+		}
+		seenFrom[rename.From] = true
+		if owner, ok := scopes[rename.From]; ok {
+			fail("rename: %q is still declared by %s", rename.From, owner)
+		}
+		if slices.Contains(r.Retired, rename.From) {
+			fail("rename: %q is retired", rename.From)
+		}
+		owner, ok := scopes[rename.To]
+		switch {
+		case !ok:
+			fail("rename: %q is renamed to %q, which is not declared", rename.From, rename.To)
+		case strings.HasSuffix(owner, "(block)") || owner == "root":
+			fail("rename: %q is renamed to %q, which is not a grantable permission", rename.From, rename.To)
+		}
+	}
+
 	for role, roleScopes := range r.SystemRoles {
 		seen := make(map[Scope]bool)
 		for _, scope := range roleScopes {

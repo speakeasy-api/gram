@@ -357,6 +357,22 @@ func (r Registry) DeriveAgentEligibility() map[Scope]ScopeAgentEligibility {
 	return out
 }
 
+// RenameTarget is where a renamed stored scope now points. The generator
+// writes each as an authz.scopeRename, field for field.
+type RenameTarget struct {
+	To               Scope
+	WildcardResource bool
+}
+
+// DeriveScopeRenames maps each renamed stored scope to its target.
+func (r Registry) DeriveScopeRenames() map[Scope]RenameTarget {
+	out := make(map[Scope]RenameTarget, len(r.Renamed))
+	for _, rename := range r.Renamed {
+		out[rename.From] = RenameTarget{To: rename.To, WildcardResource: rename.WildcardResource}
+	}
+	return out
+}
+
 func lowerFirst(s string) string {
 	r, size := utf8.DecodeRuneInString(s)
 	if r == utf8.RuneError {
