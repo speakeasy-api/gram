@@ -57,6 +57,12 @@ func NewTemporaryError(err error, httpCode int) *MethodError {
 	return NewMethodError(err, httpCode, false, true, false)
 }
 
+// NewTimeoutError reports work that ran out of time. It is not temporary: the
+// work already ran, so repeating it is not safe to assume.
+func NewTimeoutError(err error, httpCode int) *MethodError {
+	return NewMethodError(err, httpCode, true, false, false)
+}
+
 func NewTemporaryTimeoutError(err error, httpCode int) *MethodError {
 	return NewMethodError(err, httpCode, true, true, false)
 }

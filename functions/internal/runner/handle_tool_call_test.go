@@ -143,6 +143,7 @@ func TestCallTool_DeliversCallerIdentityToUserCode(t *testing.T) {
 			ClientInfo:    &MCPClientInfo{Name: "claude-code", Version: "2.1"},
 			OAuthClientID: "client-abc",
 		},
+		TimeoutSeconds: 0,
 	}, recorder)
 	require.NoError(t, err)
 
@@ -176,6 +177,7 @@ func TestCallTool_ClientWithoutOAuthReachesUserCode(t *testing.T) {
 			ClientInfo:    &MCPClientInfo{Name: "claude-code", Version: "2.1"},
 			OAuthClientID: "",
 		},
+		TimeoutSeconds: 0,
 	}, recorder)
 	require.NoError(t, err)
 
@@ -212,10 +214,11 @@ func TestCallTool_DeliversInputLargerThanArgumentLimits(t *testing.T) {
 	require.NoError(t, err)
 
 	err = svc.callTool(t.Context(), svc.logger, CallToolPayload{
-		ToolName:    "upload",
-		Input:       input,
-		Environment: nil,
-		Meta:        nil,
+		ToolName:       "upload",
+		Input:          input,
+		Environment:    nil,
+		Meta:           nil,
+		TimeoutSeconds: 0,
 	}, recorder)
 	require.NoError(t, err)
 
@@ -257,10 +260,11 @@ func TestCallTool_UnknownCallerReachesUserCodeAsEmpty(t *testing.T) {
 	recorder := httptest.NewRecorder()
 
 	err := svc.callTool(t.Context(), svc.logger, CallToolPayload{
-		ToolName:    "whoami",
-		Input:       json.RawMessage(`{}`),
-		Environment: nil,
-		Meta:        nil,
+		ToolName:       "whoami",
+		Input:          json.RawMessage(`{}`),
+		Environment:    nil,
+		Meta:           nil,
+		TimeoutSeconds: 0,
 	}, recorder)
 	require.NoError(t, err)
 

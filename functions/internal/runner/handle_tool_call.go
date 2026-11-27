@@ -52,6 +52,10 @@ type CallToolPayload struct {
 	Input       json.RawMessage   `json:"input"`
 	Environment map[string]string `json:"environment,omitempty,omitzero"`
 	Meta        *ToolCallMeta     `json:"_meta,omitempty"`
+	// TimeoutSeconds is how long the invocation may run. Zero means the
+	// runner default; values above the runner's ceiling are capped. It never
+	// reaches the entrypoint.
+	TimeoutSeconds int `json:"timeout_seconds,omitempty"`
 }
 
 // ToolCallMeta describes the caller of one tool call, keyed the way MCP keys
@@ -86,6 +90,9 @@ type callRequest struct {
 	// requestType tells the entrypoint which handler to call: "tool" or
 	// "resource".
 	requestType string
+
+	// timeout bounds the subprocess's run time.
+	timeout time.Duration
 }
 
 func (s *Service) executeRequest(ctx context.Context, logger *slog.Logger, req callRequest, w http.ResponseWriter) error {
@@ -98,7 +105,7 @@ func (s *Service) executeRequest(ctx context.Context, logger *slog.Logger, req c
 	}
 	defer o11y.LogDefer(ctx, logger, "failed to remove tool call fifo", func() error { return cleanup() })
 
-	timeoutCtx, timeoutCancel := context.WithTimeout(ctx, 5*time.Minute)
+	timeoutCtx, timeoutCancel := context.WithTimeout(ctx, req.timeout)
 	defer timeoutCancel()
 
 	var logwg sync.WaitGroup
@@ -185,6 +192,9 @@ func (s *Service) executeRequest(ctx context.Context, logger *slog.Logger, req c
 			http.StatusRequestTimeout,
 		)
 	case err := <-waitch:
+		if terr := timeoutError(ctx, timeoutCtx, req.timeout); terr != nil {
+			return terr
+		}
 		if err == nil {
 			return svc.NewPermanentError(
 				fmt.Errorf("sub-process exited before opening response pipe"),
@@ -207,6 +217,9 @@ func (s *Service) executeRequest(ctx context.Context, logger *slog.Logger, req c
 
 	response, err := http.ReadResponse(bufio.NewReader(pipe), nil)
 	if err != nil {
+		if terr := timeoutError(ctx, timeoutCtx, req.timeout); terr != nil {
+			return terr
+		}
 		return svc.NewPermanentError(
 			fmt.Errorf("read response: %w", err),
 			http.StatusInternalServerError,
@@ -308,6 +321,7 @@ func (s *Service) callTool(ctx context.Context, logger *slog.Logger, payload Cal
 
 	reqCopy := payload
 	reqCopy.Environment = nil
+	reqCopy.TimeoutSeconds = 0
 	request, err := json.Marshal(reqCopy)
 	if err != nil {
 		return svc.NewPermanentError(
@@ -327,6 +341,7 @@ func (s *Service) callTool(ctx context.Context, logger *slog.Logger, payload Cal
 		request:     request,
 		environment: payload.Environment,
 		requestType: "tool",
+		timeout:     executionTimeout(payload.TimeoutSeconds),
 	}, w)
 }
 
