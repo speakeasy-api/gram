@@ -70,8 +70,8 @@ type CanonicalJSONRow struct {
 	ToolCallSummaries string
 }
 
-// The text form Postgres stores for jsonb values, so an encrypted-mode body is
-// sealed and measured exactly as a plaintext row would hold it. NULL comes
+// The text form Postgres stores for jsonb values, so encrypted-mode protected fields are
+// sealed and measured exactly as a plaintext row would hold them. NULL comes
 // back as the empty string, which no JSON value is.
 func (q *Queries) CanonicalJSON(ctx context.Context, arg CanonicalJSONParams) (CanonicalJSONRow, error) {
 	row := q.db.QueryRow(ctx, canonicalJSON, arg.ContentRaw, arg.ToolCalls, arg.ToolCallSummaries)
@@ -122,7 +122,7 @@ type CurrentCiphertextParams struct {
 }
 
 // The transcript an update decrypts and changes, locked until the transaction
-// ends. Every transcript writer takes Snapshot's message lock first, so this
+// ends. Every transcript writer takes LockChatMessage's message lock first, so this
 // lock only states the intent; take them in that order. A legacy transcript
 // with source_hash may be stale, so it is not returned and the update starts
 // from the plaintext row.
@@ -199,7 +199,7 @@ type LoadRow struct {
 	Ciphertext        string
 }
 
-// A transcript that still carries the legacy source_hash was sealed before body
+// A transcript that still carries the legacy source_hash was sealed before protected fields
 // updates resealed it, so it may be stale: it reads as missing until backfill
 // reseals it.
 func (q *Queries) Load(ctx context.Context, arg LoadParams) (LoadRow, error) {
@@ -279,35 +279,7 @@ func (q *Queries) LoadMany(ctx context.Context, arg LoadManyParams) ([]LoadManyR
 	return items, nil
 }
 
-const progress = `-- name: Progress :one
-SELECT count(*) FILTER (WHERE m.project_id = c.project_id AND t.message_id IS NOT NULL AND t.source_hash IS NULL)::bigint AS current,
-       count(*) FILTER (WHERE m.project_id = c.project_id AND (t.message_id IS NULL OR t.source_hash IS NOT NULL))::bigint AS waiting,
-       count(*) FILTER (WHERE m.project_id IS DISTINCT FROM c.project_id)::bigint AS unattributed
-FROM chats c JOIN projects p ON p.id = c.project_id
-JOIN chat_messages m ON m.chat_id = c.id
-LEFT JOIN chat_message_transcripts t ON t.message_id = m.id AND t.project_id = c.project_id AND t.organization_id = p.organization_id
-WHERE c.project_id = $1 AND p.organization_id = $2
-`
-
-type ProgressParams struct {
-	ProjectID      uuid.UUID
-	OrganizationID string
-}
-
-type ProgressRow struct {
-	Current      int64
-	Waiting      int64
-	Unattributed int64
-}
-
-func (q *Queries) Progress(ctx context.Context, arg ProgressParams) (ProgressRow, error) {
-	row := q.db.QueryRow(ctx, progress, arg.ProjectID, arg.OrganizationID)
-	var i ProgressRow
-	err := row.Scan(&i.Current, &i.Waiting, &i.Unattributed)
-	return i, err
-}
-
-const snapshot = `-- name: Snapshot :one
+const lockChatMessage = `-- name: LockChatMessage :one
 SELECT m.id, m.seq, m.chat_id, m.project_id, m.role, m.content, m.content_raw, m.content_asset_url, m.model, m.message_id, m.finish_reason, m.tool_calls, m.prompt_tokens, m.completion_tokens, m.total_tokens, m.storage_error, m.user_id, m.external_user_id, m.external_message_id, m.origin, m.user_agent, m.ip_address, m.source, m.tool_call_id, m.tool_urn, m.tool_outcome, m.tool_outcome_notes, m.tool_call_summaries, m.content_hash, m.generation, m.capture_kind, m.original_message_id, m.replayed, m.created_at, m.risk_analyzed_at, m.tool_call_count, m.content_bytes, m.content_raw_bytes, m.tool_calls_bytes,
        COALESCE((SELECT t.ciphertext FROM chat_message_transcripts t
         WHERE t.message_id = m.id AND t.project_id = m.project_id
@@ -321,27 +293,27 @@ FOR NO KEY UPDATE OF m
 FOR SHARE OF c, p
 `
 
-type SnapshotParams struct {
+type LockChatMessageParams struct {
 	MessageID      uuid.UUID
 	ProjectID      uuid.NullUUID
 	OrganizationID string
 }
 
-type SnapshotRow struct {
+type LockChatMessageRow struct {
 	ChatMessage       ChatMessage
 	CurrentCiphertext string
 }
 
 // Reads the whole message row and its current transcript in one statement and
-// locks both for the rest of the caller's transaction, so no body update can
+// locks both for the rest of the caller's transaction, so no protected fields update can
 // land between this read and the copies written from it. A legacy transcript
 // with source_hash is not current: the column is empty for it, as for a message
 // with no transcript (a real ciphertext is never empty). Every writer takes
 // these locks through this statement, so they are always taken in the same
 // order.
-func (q *Queries) Snapshot(ctx context.Context, arg SnapshotParams) (SnapshotRow, error) {
-	row := q.db.QueryRow(ctx, snapshot, arg.MessageID, arg.ProjectID, arg.OrganizationID)
-	var i SnapshotRow
+func (q *Queries) LockChatMessage(ctx context.Context, arg LockChatMessageParams) (LockChatMessageRow, error) {
+	row := q.db.QueryRow(ctx, lockChatMessage, arg.MessageID, arg.ProjectID, arg.OrganizationID)
+	var i LockChatMessageRow
 	err := row.Scan(
 		&i.ChatMessage.ID,
 		&i.ChatMessage.Seq,
@@ -387,6 +359,34 @@ func (q *Queries) Snapshot(ctx context.Context, arg SnapshotParams) (SnapshotRow
 	return i, err
 }
 
+const progress = `-- name: Progress :one
+SELECT count(*) FILTER (WHERE m.project_id = c.project_id AND t.message_id IS NOT NULL AND t.source_hash IS NULL)::bigint AS current,
+       count(*) FILTER (WHERE m.project_id = c.project_id AND (t.message_id IS NULL OR t.source_hash IS NOT NULL))::bigint AS waiting,
+       count(*) FILTER (WHERE m.project_id IS DISTINCT FROM c.project_id)::bigint AS unattributed
+FROM chats c JOIN projects p ON p.id = c.project_id
+JOIN chat_messages m ON m.chat_id = c.id
+LEFT JOIN chat_message_transcripts t ON t.message_id = m.id AND t.project_id = c.project_id AND t.organization_id = p.organization_id
+WHERE c.project_id = $1 AND p.organization_id = $2
+`
+
+type ProgressParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+type ProgressRow struct {
+	Current      int64
+	Waiting      int64
+	Unattributed int64
+}
+
+func (q *Queries) Progress(ctx context.Context, arg ProgressParams) (ProgressRow, error) {
+	row := q.db.QueryRow(ctx, progress, arg.ProjectID, arg.OrganizationID)
+	var i ProgressRow
+	err := row.Scan(&i.Current, &i.Waiting, &i.Unattributed)
+	return i, err
+}
+
 const updateMessageMetadata = `-- name: UpdateMessageMetadata :execrows
 UPDATE chat_messages
 SET tool_call_count = $1::integer, content_bytes = $2::integer,
@@ -404,7 +404,7 @@ type UpdateMessageMetadataParams struct {
 }
 
 // Plaintext-free metadata measured from the snapshot just sealed, in the same
-// transaction, while Snapshot's lock keeps the body unchanged.
+// transaction, while Snapshot's lock keeps the protected fields unchanged.
 func (q *Queries) UpdateMessageMetadata(ctx context.Context, arg UpdateMessageMetadataParams) (int64, error) {
 	result, err := q.db.Exec(ctx, updateMessageMetadata,
 		arg.ToolCallCount,
@@ -420,7 +420,7 @@ func (q *Queries) UpdateMessageMetadata(ctx context.Context, arg UpdateMessageMe
 	return result.RowsAffected(), nil
 }
 
-const writeMessage = `-- name: WriteMessage :one
+const writeChatMessage = `-- name: WriteChatMessage :one
 UPDATE chat_messages AS m
 SET content = $1, content_raw = $2, tool_calls = $3,
     tool_outcome_notes = $4, tool_call_summaries = $5,
@@ -431,7 +431,7 @@ WHERE m.id = $11 AND m.project_id = $12
 RETURNING m.id, m.seq, m.chat_id, m.project_id, m.role, m.content, m.content_raw, m.content_asset_url, m.model, m.message_id, m.finish_reason, m.tool_calls, m.prompt_tokens, m.completion_tokens, m.total_tokens, m.storage_error, m.user_id, m.external_user_id, m.external_message_id, m.origin, m.user_agent, m.ip_address, m.source, m.tool_call_id, m.tool_urn, m.tool_outcome, m.tool_outcome_notes, m.tool_call_summaries, m.content_hash, m.generation, m.capture_kind, m.original_message_id, m.replayed, m.created_at, m.risk_analyzed_at, m.tool_call_count, m.content_bytes, m.content_raw_bytes, m.tool_calls_bytes
 `
 
-type WriteMessageParams struct {
+type WriteChatMessageParams struct {
 	Content           string
 	ContentRaw        []byte
 	ToolCalls         []byte
@@ -446,13 +446,13 @@ type WriteMessageParams struct {
 	ProjectID         uuid.NullUUID
 }
 
-// The only statement that changes an existing message's body: the six body
-// columns, plus the non-body columns a body change may come with. Call it only
-// through Transcripts.UpdateMessage, which locks the row, applies the change
+// The only statement that changes an existing message's protected fields: the six protected fields
+// columns, plus the non-protected fields the protected fields change may come with. Call it only
+// through Transcripts.UpdateChatMessage, which locks the row, applies the change
 // in Go and writes the encrypted transcript from what this returns, in the
 // same transaction.
-func (q *Queries) WriteMessage(ctx context.Context, arg WriteMessageParams) (ChatMessage, error) {
-	row := q.db.QueryRow(ctx, writeMessage,
+func (q *Queries) WriteChatMessage(ctx context.Context, arg WriteChatMessageParams) (ChatMessage, error) {
+	row := q.db.QueryRow(ctx, writeChatMessage,
 		arg.Content,
 		arg.ContentRaw,
 		arg.ToolCalls,

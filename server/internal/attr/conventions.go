@@ -1236,10 +1236,10 @@ const (
 	// Anthropic inference frame.
 	InferenceMessageCountKey = attribute.Key("gram.inference.message_count")
 	// TranscriptShadowMessageCountKey is the number of chat messages in one
-	// encrypted transcript shadow capture batch.
+	// encrypted transcript capture batch.
 	TranscriptShadowMessageCountKey = attribute.Key("gram.transcript_shadow.message_count")
 	// TranscriptShadowPlaintextFallbackCountKey is the number of messages in
-	// one encrypted transcript read that had no shadow and were served from
+	// one encrypted transcript read that had no transcript and were served from
 	// plaintext.
 	TranscriptShadowPlaintextFallbackCountKey = attribute.Key("gram.transcript_shadow.plaintext_fallback_count")
 	// TranscriptShadowMismatchKey lists the body fields on which an encrypted

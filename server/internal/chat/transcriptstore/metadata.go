@@ -10,9 +10,9 @@ import (
 
 // metadata is the plaintext-free description of a message that sealing writes
 // to chat_messages, so readers can count, budget and look up tool calls
-// without reading or decrypting the body. It is derived from the same snapshot
+// without reading or decrypting the protected fields. It is derived from the same snapshot
 // that is sealed, in the same transaction, while the message row is locked, so
-// the two always describe the same body.
+// the two always describe the same protected fields.
 type metadata struct {
 	toolCallCount   int32
 	contentBytes    int32

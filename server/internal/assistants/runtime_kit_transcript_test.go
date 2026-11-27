@@ -217,12 +217,12 @@ func TestKitTranscriptReplayPatchAndRuntimeFence(t *testing.T) {
 	organizationID, err := chatrepo.New(db).GetProjectOrganizationID(t.Context(), project)
 	require.NoError(t, err)
 	for _, field := range []string{"raw content", "tool calls"} {
-		// A kit patch changes the row through UpdateMessage in one transaction;
+		// A kit patch changes the row through UpdateChatMessage in one transaction;
 		// a body change clears the risk mark.
 		tx, err := db.Begin(t.Context()) //nolint:glint // notestingrawsql: one transaction around the update, as ProjectMessage runs it.
 		require.NoError(t, err)
 		var transcripts *transcriptstore.Transcripts
-		_, err = transcripts.UpdateMessage(t.Context(), tx, organizationID, project, chatID, row.ID, func(m *chatrepo.ChatMessage) error {
+		_, err = transcripts.UpdateChatMessage(t.Context(), tx, organizationID, project, chatID, row.ID, func(m *chatrepo.ChatMessage) error {
 			m.RiskAnalyzedAt = pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
 			if field == "raw content" {
 				m.ContentRaw = []byte(`[{"type":"text","text":"updated raw"}]`)

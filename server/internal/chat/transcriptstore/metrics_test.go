@@ -93,7 +93,7 @@ func TestLoadManyOpensAPageAndRecordsReadMetrics(t *testing.T) {
 	require.Equal(t, map[string]int64{"success": 3}, countsByOutcome(t, collected, meterReadMessages))
 }
 
-func TestLoadManyLeavesOutMessagesWithoutAShadow(t *testing.T) {
+func TestLoadManyLeavesOutMessagesWithoutATranscript(t *testing.T) {
 	t.Parallel()
 	f := setup(t, true)
 	captured, uncaptured := uuid.New(), uuid.New()
@@ -149,7 +149,7 @@ func TestLoadManyIsScopedToTheProjectAndOrganization(t *testing.T) {
 	f.add(t, id)
 	f.capture(t, id)
 
-	// Another tenant's scope sees no shadow, so it opens nothing.
+	// Another tenant's scope sees no transcript, so it opens nothing.
 	opened, err := f.store.LoadMany(t.Context(), "org_other", f.project, []uuid.UUID{id})
 	require.NoError(t, err)
 	require.Empty(t, opened)

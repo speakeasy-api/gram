@@ -23,7 +23,7 @@ func TestChatTranscripts_TenantIsolationAndKeyLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	identity := transcriptcrypto.Identity{ProjectID: uuid.New(), ChatID: uuid.New(), MessageID: uuid.New()}
 	notes := "EXAMPLE tool outcome"
-	message := transcriptcrypto.Message{
+	message := transcriptcrypto.ProtectedFields{
 		Content:           "EXAMPLE transcript message",
 		ContentRaw:        json.RawMessage(`{"type":"text","text":"EXAMPLE rich content"}`),
 		ToolCalls:         json.RawMessage(`[{"id":"example-call","function":{"name":"example","arguments":"{}"}}]`),
@@ -50,7 +50,7 @@ func TestChatTranscripts_TenantIsolationAndKeyLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	opened, err = otherCodec.Decrypt(ctx, identity, ciphertext)
 	require.ErrorIs(t, err, orgencryption.ErrInvalidCiphertext)
-	require.Equal(t, transcriptcrypto.Message{}, opened)
+	require.Equal(t, transcriptcrypto.ProtectedFields{}, opened)
 
 	// A different use case and a different storage column cannot open it.
 	ti.provision(t)
@@ -79,7 +79,7 @@ func TestChatTranscripts_TenantIsolationAndKeyLifecycle(t *testing.T) {
 	require.Empty(t, failed)
 	opened, err = codec.Decrypt(ctx, identity, ciphertext)
 	require.ErrorIs(t, err, orgencryption.ErrSuspended)
-	require.Equal(t, transcriptcrypto.Message{}, opened)
+	require.Equal(t, transcriptcrypto.ProtectedFields{}, opened)
 }
 
 func TestChatTranscripts_StorageMigrationUnavailable(t *testing.T) {

@@ -63,12 +63,12 @@ func (f *fixture) summaries(t *testing.T, id uuid.UUID) string {
 	return string(opened.ToolCallSummaries)
 }
 
-// UpdateMessage writes the plaintext row and the transcript in the caller's
+// UpdateChatMessage writes the plaintext row and the transcript in the caller's
 // transaction, so a failure at any step, rolled back, leaves both copies with
 // the old body and nothing stale.
 func TestFailedUpdateMessageRollsBack(t *testing.T) {
 	t.Parallel()
-	for _, step := range []string{"WriteMessage", "Capture", "UpdateMessageMetadata", "DeleteToolCallIDs", "InsertToolCallIDs"} {
+	for _, step := range []string{"WriteChatMessage", "Capture", "UpdateMessageMetadata", "DeleteToolCallIDs", "InsertToolCallIDs"} {
 		t.Run(step, func(t *testing.T) {
 			t.Parallel()
 			f := setup(t, true)
@@ -80,7 +80,7 @@ func TestFailedUpdateMessageRollsBack(t *testing.T) {
 			tx, err := f.db.Begin(t.Context()) //nolint:glint // notestingrawsql: caller-owned transaction boundary is the behavior under test.
 			require.NoError(t, err)
 			defer func() { _ = tx.Rollback(t.Context()) }()
-			_, err = NewTranscripts(f.store, f.project).UpdateMessage(t.Context(), &failAt{DBTX: tx, name: step}, f.org, f.project, f.chat, id, summaryChange("new summary"))
+			_, err = NewTranscripts(f.store, f.project).UpdateChatMessage(t.Context(), &failAt{DBTX: tx, name: step}, f.org, f.project, f.chat, id, summaryChange("new summary"))
 			require.ErrorIs(t, err, errInjected)
 			require.NoError(t, tx.Rollback(t.Context()))
 
@@ -107,7 +107,7 @@ func TestBodyChangeCommittedWithoutItsTranscript(t *testing.T) {
 		tx, err := f.db.Begin(t.Context()) //nolint:glint // notestingrawsql: caller-owned transaction boundary is the behavior under test.
 		require.NoError(t, err)
 		defer func() { _ = tx.Rollback(t.Context()) }()
-		_, err = NewTranscripts(f.store, f.project).UpdateMessage(t.Context(), &failAt{DBTX: tx, name: "Capture"}, f.org, f.project, f.chat, id, summaryChange("new summary"))
+		_, err = NewTranscripts(f.store, f.project).UpdateChatMessage(t.Context(), &failAt{DBTX: tx, name: "Capture"}, f.org, f.project, f.chat, id, summaryChange("new summary"))
 		require.ErrorIs(t, err, errInjected)
 		// A Go-side failure does not abort the Postgres transaction, so a
 		// caller that drops the error can still commit the plaintext write.
@@ -128,7 +128,7 @@ func TestBodyChangeCommittedWithoutItsTranscript(t *testing.T) {
 		tx, err := f.db.Begin(t.Context()) //nolint:glint // notestingrawsql: caller-owned transaction boundary is the behavior under test.
 		require.NoError(t, err)
 		defer func() { _ = tx.Rollback(t.Context()) }()
-		_, err = off.UpdateMessage(t.Context(), tx, f.org, f.project, f.chat, id, summaryChange("new summary"))
+		_, err = off.UpdateChatMessage(t.Context(), tx, f.org, f.project, f.chat, id, summaryChange("new summary"))
 		require.NoError(t, err, "plaintext mode writes only the plaintext row")
 		require.NoError(t, tx.Commit(t.Context()))
 
@@ -180,7 +180,7 @@ func TestUpdateMessageCountsConsistencyChecks(t *testing.T) {
 		if wrapped, ok := db.(*staleCiphertext); ok {
 			wrapped.DBTX = tx
 		}
-		_, err = transcripts.UpdateMessage(ctx, db, f.org, f.project, f.chat, id, setNotes(notes))
+		_, err = transcripts.UpdateChatMessage(ctx, db, f.org, f.project, f.chat, id, setNotes(notes))
 		require.NoError(t, err)
 		require.NoError(t, tx.Commit(ctx))
 	}

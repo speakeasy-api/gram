@@ -22,7 +22,7 @@ import (
 // lookup that opening needs runs once per project per process, on the first
 // shadow read, and is cached after that.
 type joinedRow struct {
-	body       Body
+	body       ProtectedFieldRefs
 	chatID     uuid.UUID
 	ciphertext pgtype.Text
 	current    bool
@@ -30,7 +30,7 @@ type joinedRow struct {
 	// shape repeats in Go what the query does to a body field in SQL, such as
 	// truncating it or blanking it over a size cap, so the opened shadow is
 	// served in the same shape and compares equal to the plaintext column.
-	shape func(*transcriptcrypto.Message)
+	shape func(*transcriptcrypto.ProtectedFields)
 }
 
 // openJoined replaces each row's body with its opened shadow when the project
@@ -132,7 +132,7 @@ func (t *Transcripts) organization(ctx context.Context, db plainrepo.DBTX, proje
 
 // plain returns the opened message with every loaded field replaced by the
 // plaintext row's value, so comparing the two compares the loaded fields only.
-func (b Body) plain(m transcriptcrypto.Message) transcriptcrypto.Message {
+func (b ProtectedFieldRefs) plain(m transcriptcrypto.ProtectedFields) transcriptcrypto.ProtectedFields {
 	if b.Content != nil {
 		m.Content = *b.Content
 	}
@@ -162,7 +162,7 @@ func textPointer(v pgtype.Text) *string {
 }
 
 // assign writes the opened message into every loaded field.
-func (b Body) assign(m transcriptcrypto.Message) {
+func (b ProtectedFieldRefs) assign(m transcriptcrypto.ProtectedFields) {
 	if b.Content != nil {
 		*b.Content = m.Content
 	}

@@ -84,8 +84,8 @@ func TestService_SummarizeToolCall_ResealsTheTranscript(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	store, reader := newMeteredTranscriptShadowStore(t, ti)
-	captureTranscriptShadows(t, ti, store, messageID, result)
+	store, reader := newMeteredTranscriptStore(t, ti)
+	sealTranscripts(t, ti, store, messageID, result)
 	ti.service.WithTranscripts(transcriptstore.NewTranscripts(store, ti.projectID))
 
 	_, err = ti.service.SummarizeToolCall(ctx, &gen.SummarizeToolCallPayload{

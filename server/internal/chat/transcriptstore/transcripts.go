@@ -12,7 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore/repo"
 )
 
-// Transcripts is the one entry point for the bodies of chat messages. It owns
+// Transcripts is the one entry point for the protected fields of chat messages. It owns
 // the decision a caller would otherwise repeat: whether a project has encrypted
 // transcripts, so its messages are sealed on write and opened on read. Today
 // that is the projects on GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS. Every other
@@ -44,7 +44,7 @@ func NewTranscripts(store *Store, projectIDs ...uuid.UUID) *Transcripts {
 }
 
 // WithEncryptedProjects puts projects in encrypted mode: the transcript is the
-// only copy of each body, and the plaintext body columns are written empty.
+// only copy of each message's protected fields, and the plaintext columns are written empty.
 // Nothing in configuration selects it yet; message inserts, reads and the
 // remaining plaintext SQL (search, counts, lookups) must all move to the
 // transcript before a real project can use it.
@@ -84,10 +84,11 @@ func (t *Transcripts) Seal(ctx context.Context, db repo.DBTX, organizationID str
 	if !t.Enabled(projectID) {
 		return nil
 	}
-	if err := t.store.Capture(ctx, db, organizationID, projectID, messageIDs); err != nil {
+	encrypted := t.Mode(projectID) == ModeEncrypted
+	if err := t.store.captureIn(ctx, db, encrypted, organizationID, projectID, messageIDs); err != nil {
 		return fmt.Errorf("seal chat transcript: %w", err)
 	}
-	if t.Mode(projectID) != ModeEncrypted {
+	if !encrypted {
 		return nil
 	}
 	if err := emptyPlaintext(ctx, repo.New(db), organizationID, projectID, messageIDs); err != nil {
@@ -96,21 +97,21 @@ func (t *Transcripts) Seal(ctx context.Context, db repo.DBTX, organizationID str
 	return nil
 }
 
-// Mode is how a project stores message bodies.
+// Mode is how a project stores protected fields.
 type Mode int
 
 const (
-	// ModePlaintext keeps bodies in the plaintext columns only.
+	// ModePlaintext keeps protected fields in the plaintext columns only.
 	ModePlaintext Mode = iota
 	// ModeShadow keeps the plaintext columns and an encrypted transcript of
-	// the same body. Reads open the transcript; writes keep both current.
+	// the same protected fields. Reads open the transcript; writes keep both current.
 	ModeShadow
-	// ModeEncrypted keeps the body only in the encrypted transcript; the
-	// plaintext body columns are empty. See WithEncryptedProjects.
+	// ModeEncrypted keeps the protected fields only in the encrypted transcript; the
+	// plaintext protected fields are empty. See WithEncryptedProjects.
 	ModeEncrypted
 )
 
-// Mode reports how the project stores message bodies.
+// Mode reports how the project stores protected fields.
 func (t *Transcripts) Mode(projectID uuid.UUID) Mode {
 	if t == nil || t.store == nil {
 		return ModePlaintext
@@ -124,35 +125,35 @@ func (t *Transcripts) Mode(projectID uuid.UUID) Mode {
 	return ModePlaintext
 }
 
-// UpdateMessage is the one way to change an existing message's body: content,
+// UpdateChatMessage is the one way to change an existing message's protected fields: content,
 // content_raw, tool_calls, tool_outcome_notes, tool_call_summaries and
 // storage_error. Inside the caller's transaction it locks the row and its
-// transcript, hands apply the whole row with its body filled in (from the
+// transcript, hands apply the whole row with its protected fields filled in (from the
 // decrypted transcript outside plaintext mode), and writes what apply changed
-// to every copy the project keeps. Besides the body, apply may change only
+// to every copy the project keeps. Besides the protected fields, apply may change only
 // tool_outcome, finish_reason, content_hash and risk_analyzed_at; any other
 // change fails. It reports whether anything changed. Call Prepare before
 // beginning the transaction, and roll back on error.
-func (t *Transcripts) UpdateMessage(ctx context.Context, db repo.DBTX, organizationID string, projectID, chatID, messageID uuid.UUID, apply func(*chatrepo.ChatMessage) error) (bool, error) {
+func (t *Transcripts) UpdateChatMessage(ctx context.Context, db repo.DBTX, organizationID string, projectID, chatID, messageID uuid.UUID, apply func(*chatrepo.ChatMessage) error) (bool, error) {
 	mode := t.Mode(projectID)
 	if mode == ModePlaintext {
-		changed, err := updateMessage(ctx, db, nil, false, organizationID, projectID, chatID, messageID, apply)
+		changed, err := updateChatMessage(ctx, db, nil, false, organizationID, projectID, chatID, messageID, apply)
 		if err != nil {
 			return false, fmt.Errorf("update chat message: %w", err)
 		}
 		return changed, nil
 	}
-	changed, err := t.store.updateMessageIn(ctx, db, mode == ModeEncrypted, organizationID, projectID, chatID, messageID, apply)
+	changed, err := t.store.updateChatMessageIn(ctx, db, mode == ModeEncrypted, organizationID, projectID, chatID, messageID, apply)
 	if err != nil {
 		return false, fmt.Errorf("update chat message: %w", err)
 	}
 	return changed, nil
 }
 
-// Body points at the body fields of one loaded message, so Open can replace
+// ProtectedFieldRefs points at the protected fields of one loaded message, so Open can replace
 // them with the opened copy whatever query loaded the row. A nil field was
 // not loaded and is left alone.
-type Body struct {
+type ProtectedFieldRefs struct {
 	MessageID         uuid.UUID
 	Content           *string
 	ContentRaw        *[]byte
@@ -162,27 +163,27 @@ type Body struct {
 	StorageError      *pgtype.Text
 }
 
-// Open replaces each body with its decrypted transcript, in one query per
+// Open replaces each message's protected fields with its decrypted transcript, in one query per
 // page; in plaintext mode it reads no transcript. In shadow mode a message with
 // no transcript yet keeps its plaintext and counts as plaintext_fallback, and a
 // transcript that disagrees with its plaintext row is logged, counted as stale,
-// and the plaintext is kept, the same rule UpdateMessage follows. In encrypted
+// and the plaintext is kept, the same rule UpdateChatMessage follows. In encrypted
 // mode the transcript is served without comparison, and a message without one
 // fails the read with ErrMissingTranscript. A transcript that cannot be
 // decrypted fails the read in either mode.
-func (t *Transcripts) Open(ctx context.Context, organizationID string, projectID uuid.UUID, bodies []Body) error {
-	if len(bodies) == 0 || !t.Enabled(projectID) {
+func (t *Transcripts) Open(ctx context.Context, organizationID string, projectID uuid.UUID, refs []ProtectedFieldRefs) error {
+	if len(refs) == 0 || !t.Enabled(projectID) {
 		return nil
 	}
-	ids := make([]uuid.UUID, len(bodies))
-	for i, b := range bodies {
+	ids := make([]uuid.UUID, len(refs))
+	for i, b := range refs {
 		ids[i] = b.MessageID
 	}
 	opened, err := t.store.open(ctx, organizationID, projectID, ids, t.Mode(projectID) == ModeEncrypted)
 	if err != nil {
 		return fmt.Errorf("open encrypted chat transcript: %w", err)
 	}
-	for _, b := range bodies {
+	for _, b := range refs {
 		message, ok := opened[b.MessageID]
 		if !ok {
 			continue
@@ -192,17 +193,17 @@ func (t *Transcripts) Open(ctx context.Context, organizationID string, projectID
 	return nil
 }
 
-// OpenRows is Open for a page of rows of any sqlc row type. body maps a row to
-// pointers at its body fields.
-func OpenRows[T any](ctx context.Context, t *Transcripts, organizationID string, projectID uuid.UUID, rows []T, body func(*T) Body) error {
+// OpenRows is Open for a page of rows of any sqlc row type. refsOf maps a row
+// to pointers at its protected fields.
+func OpenRows[T any](ctx context.Context, t *Transcripts, organizationID string, projectID uuid.UUID, rows []T, refsOf func(*T) ProtectedFieldRefs) error {
 	if len(rows) == 0 || !t.Enabled(projectID) {
 		return nil
 	}
-	bodies := make([]Body, len(rows))
+	refs := make([]ProtectedFieldRefs, len(rows))
 	for i := range rows {
-		bodies[i] = body(&rows[i])
+		refs[i] = refsOf(&rows[i])
 	}
-	return t.Open(ctx, organizationID, projectID, bodies)
+	return t.Open(ctx, organizationID, projectID, refs)
 }
 
 func optionalText(v *string) pgtype.Text {

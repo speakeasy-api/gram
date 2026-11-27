@@ -101,7 +101,7 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 		return fmt.Errorf("failed to analyze segment with LLM: %w", err)
 	}
 
-	// Outcome notes are part of the message body, which may be encrypted, so the
+	// Outcome notes are part of the protected fields, which may be encrypted, so the
 	// key loads before the transaction below begins, but only when some outcome
 	// will be written. A segment that writes none must not fail on the key.
 	var prepared error
@@ -140,11 +140,11 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 		return fmt.Errorf("prepare tool call outcome notes: %w", prepared)
 	}
 	// Write each message's outcome and notes as one change to its row.
-	// UpdateMessage locks the row and keeps every copy of the body, which holds
+	// UpdateChatMessage locks the row and keeps every copy of the protected fields, which holds
 	// the notes, in step.
 	for _, msgID := range updated {
 		tc := judged[msgID]
-		_, err := a.transcripts.UpdateMessage(ctx, tx, args.OrgID, args.ProjectID, args.ChatID, msgID, func(m *repo.ChatMessage) error {
+		_, err := a.transcripts.UpdateChatMessage(ctx, tx, args.OrgID, args.ProjectID, args.ChatID, msgID, func(m *repo.ChatMessage) error {
 			m.ToolOutcome = conv.ToPGText(tc.Outcome)
 			m.ToolOutcomeNotes = conv.ToPGText(tc.Notes)
 			return nil

@@ -119,13 +119,13 @@ func (q *Queries) CreateProject(ctx context.Context, iD uuid.UUID, organizationI
 	return result.RowsAffected(), nil
 }
 
-const insertShadow = `-- name: InsertShadow :execrows
+const insertTranscript = `-- name: InsertTranscript :execrows
 INSERT INTO chat_message_transcripts(message_id,project_id,organization_id,ciphertext,source_hash)
 VALUES($1,$2,$3,'test ciphertext',decode(repeat('00',32),'hex'))
 `
 
-func (q *Queries) InsertShadow(ctx context.Context, messageID uuid.UUID, projectID uuid.UUID, organizationID string) (int64, error) {
-	result, err := q.db.Exec(ctx, insertShadow, messageID, projectID, organizationID)
+func (q *Queries) InsertTranscript(ctx context.Context, messageID uuid.UUID, projectID uuid.UUID, organizationID string) (int64, error) {
+	result, err := q.db.Exec(ctx, insertTranscript, messageID, projectID, organizationID)
 	if err != nil {
 		return 0, err
 	}
@@ -153,6 +153,29 @@ func (q *Queries) MakeLegacyCopy(ctx context.Context, iD uuid.UUID, projectID uu
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const messageMetadata = `-- name: MessageMetadata :one
+SELECT tool_call_count, content_bytes, content_raw_bytes, tool_calls_bytes FROM chat_messages WHERE id=$1 AND tool_call_count IS NOT NULL
+`
+
+type MessageMetadataRow struct {
+	ToolCallCount   pgtype.Int4
+	ContentBytes    pgtype.Int4
+	ContentRawBytes pgtype.Int4
+	ToolCallsBytes  pgtype.Int4
+}
+
+func (q *Queries) MessageMetadata(ctx context.Context, id uuid.UUID) (MessageMetadataRow, error) {
+	row := q.db.QueryRow(ctx, messageMetadata, id)
+	var i MessageMetadataRow
+	err := row.Scan(
+		&i.ToolCallCount,
+		&i.ContentBytes,
+		&i.ContentRawBytes,
+		&i.ToolCallsBytes,
+	)
+	return i, err
 }
 
 const messageSnapshot = `-- name: MessageSnapshot :one
@@ -278,35 +301,12 @@ func (q *Queries) SetToolCalls(ctx context.Context, toolCalls []byte, iD uuid.UU
 	return result.RowsAffected(), nil
 }
 
-const shadowMetadata = `-- name: ShadowMetadata :one
-SELECT tool_call_count, content_bytes, content_raw_bytes, tool_calls_bytes FROM chat_messages WHERE id=$1 AND tool_call_count IS NOT NULL
-`
-
-type ShadowMetadataRow struct {
-	ToolCallCount   pgtype.Int4
-	ContentBytes    pgtype.Int4
-	ContentRawBytes pgtype.Int4
-	ToolCallsBytes  pgtype.Int4
-}
-
-func (q *Queries) ShadowMetadata(ctx context.Context, id uuid.UUID) (ShadowMetadataRow, error) {
-	row := q.db.QueryRow(ctx, shadowMetadata, id)
-	var i ShadowMetadataRow
-	err := row.Scan(
-		&i.ToolCallCount,
-		&i.ContentBytes,
-		&i.ContentRawBytes,
-		&i.ToolCallsBytes,
-	)
-	return i, err
-}
-
-const shadowToolCallIDs = `-- name: ShadowToolCallIDs :many
+const toolCallIDs = `-- name: ToolCallIDs :many
 SELECT tool_call_id FROM chat_message_tool_call_ids WHERE message_id=$1 ORDER BY tool_call_id
 `
 
-func (q *Queries) ShadowToolCallIDs(ctx context.Context, messageID uuid.UUID) ([]string, error) {
-	rows, err := q.db.Query(ctx, shadowToolCallIDs, messageID)
+func (q *Queries) ToolCallIDs(ctx context.Context, messageID uuid.UUID) ([]string, error) {
+	rows, err := q.db.Query(ctx, toolCallIDs, messageID)
 	if err != nil {
 		return nil, err
 	}
