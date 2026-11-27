@@ -8,11 +8,11 @@ Each project has a mode, set by `GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS`:
 
 - **Plaintext:** plaintext columns only. No transcript is read or written.
 - **Shadow:** plaintext and transcript. Reads and updates decrypt the transcript and compare it with the plaintext row. If they agree, the transcript is used; if not, the error is logged with each differing field's size, never its contents, and the plaintext wins.
-- **Encrypted (later):** transcript only.
+- **Encrypted:** transcript only, with empty plaintext columns; a missing transcript is an error. Not configurable yet.
 
 ## Writes
 
-Writers call `Prepare` before `BEGIN`, so no KMS call runs inside a transaction. `Prepare` caches only the active key; a transcript sealed under an older key must have that key cached, or the update fails.
+Writers call `Prepare` before `BEGIN`, so no KMS call runs inside a transaction. `Prepare` caches only the active key; a transcript under an older key needs that key cached.
 
 - **New message:** `Seal` locks the row, encrypts it and upserts the transcript.
 - **Existing message:** `UpdateBody` locks the row, reads the body, applies the change in Go, writes the plaintext, transcript, metadata and tool-call IDs, then runs a sanity check that decrypts what it stored.
@@ -25,4 +25,4 @@ Transcripts sealed before this design carry an unkeyed `source_hash`, which is p
 
 ## Metrics
 
-`chat.transcript_shadow.read.messages` and `chat.transcript_shadow.update.checks` count every outcome, including each mismatch.
+`chat.transcript_shadow.read.messages` and `chat.transcript_shadow.update.checks` count every outcome.

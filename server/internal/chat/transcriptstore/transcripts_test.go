@@ -342,3 +342,81 @@ func TestNewTranscriptsNeedsAStoreForListedProjects(t *testing.T) {
 	require.Panics(t, func() { NewTranscripts(nil, uuid.New()) })
 	require.NotPanics(t, func() { require.False(t, NewTranscripts(nil).Enabled(uuid.New())) })
 }
+
+// In encrypted mode the transcript is the only copy of the body: updates start
+// from it and write the plaintext columns empty, Seal empties them in the same
+// transaction, reads serve the transcript without comparison, and a message
+// without a transcript fails instead of falling back to the empty plaintext.
+func TestEncryptedMode(t *testing.T) {
+	t.Parallel()
+	f := setup(t, true)
+	ctx := t.Context()
+	encrypted := NewTranscripts(f.store).WithEncryptedProjects(f.project)
+	require.Equal(t, ModeEncrypted, encrypted.Mode(f.project))
+	require.True(t, encrypted.Enabled(f.project))
+	fixtures := fixturerepo.New(f.db)
+	open := func(id uuid.UUID) (openRow, error) {
+		t.Helper()
+		rows := []openRow{plaintextRow(id)}
+		err := OpenRows(ctx, encrypted, f.org, f.project, rows, openRowBody)
+		return rows[0], err
+	}
+	emptied := func(id uuid.UUID) {
+		t.Helper()
+		snapshot, err := fixtures.MessageSnapshot(ctx, id, project(f.project))
+		require.NoError(t, err)
+		for _, want := range []string{`"content": ""`, `"content_raw": null`, `"tool_calls": null`, `"tool_outcome_notes": null`, `"tool_call_summaries": null`, `"storage_error": null`} {
+			require.Contains(t, snapshot, want, "the plaintext body columns are empty")
+		}
+	}
+
+	// A message sealed in shadow mode, then updated in encrypted mode.
+	updated := uuid.New()
+	f.add(t, updated)
+	f.capture(t, updated)
+	changed, err := f.updateBody(t, encrypted, f.chat, updated, setNotes("encrypted note"))
+	require.NoError(t, err)
+	require.True(t, changed)
+	emptied(updated)
+	row, err := open(updated)
+	require.NoError(t, err)
+	require.Equal(t, "sensitive example", row.content, "the body comes from the transcript")
+	require.Equal(t, pgtype.Text{String: "encrypted note", Valid: true}, row.notes)
+	meta, err := fixtures.ShadowMetadata(ctx, updated)
+	require.NoError(t, err)
+	require.Equal(t, pgtype.Int4{Int32: int32(len("sensitive example")), Valid: true}, meta.ContentBytes, "metadata describes the body, not the empty columns")
+
+	// A new message: Seal empties the plaintext it was sealed from.
+	inserted := uuid.New()
+	f.add(t, inserted)
+	tx, err := f.db.Begin(ctx) //nolint:glint // notestingrawsql: caller-owned transaction boundary is the behavior under test.
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback(ctx) }()
+	require.NoError(t, encrypted.Seal(ctx, tx, f.org, f.project, []uuid.UUID{inserted}))
+	require.NoError(t, tx.Commit(ctx))
+	emptied(inserted)
+	row, err = open(inserted)
+	require.NoError(t, err)
+	require.Equal(t, "sensitive example", row.content)
+
+	// No transcript: nothing to serve or change.
+	missing := uuid.New()
+	f.add(t, missing)
+	_, err = f.updateBody(t, encrypted, f.chat, missing, setNotes("lost"))
+	require.ErrorIs(t, err, ErrMissingTranscript)
+	_, err = open(missing)
+	require.ErrorIs(t, err, ErrMissingTranscript)
+}
+
+// Until a project is put in it, encrypted mode is unreachable from config.
+func TestModes(t *testing.T) {
+	t.Parallel()
+	f := setup(t, false)
+	shadow, other := uuid.New(), uuid.New()
+	transcripts := NewTranscripts(f.store, shadow)
+	require.Equal(t, ModeShadow, transcripts.Mode(shadow))
+	require.Equal(t, ModePlaintext, transcripts.Mode(other))
+	var none *Transcripts
+	require.Equal(t, ModePlaintext, none.Mode(shadow))
+	require.Panics(t, func() { NewTranscripts(nil).WithEncryptedProjects(shadow) })
+}

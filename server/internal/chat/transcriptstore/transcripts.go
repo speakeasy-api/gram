@@ -18,8 +18,9 @@ import (
 // project reads plaintext: Seal and Open do nothing for it. A nil *Transcripts
 // means no project has encrypted transcripts.
 type Transcripts struct {
-	store    *Store
-	projects map[uuid.UUID]struct{}
+	store     *Store
+	projects  map[uuid.UUID]struct{}
+	encrypted map[uuid.UUID]struct{}
 }
 
 // NewTranscripts encrypts transcripts for the listed projects only. An empty list
@@ -34,16 +35,28 @@ func NewTranscripts(store *Store, projectIDs ...uuid.UUID) *Transcripts {
 	for _, projectID := range projectIDs {
 		projects[projectID] = struct{}{}
 	}
-	return &Transcripts{store: store, projects: projects}
+	return &Transcripts{store: store, projects: projects, encrypted: map[uuid.UUID]struct{}{}}
 }
 
-// Enabled reports whether the project has encrypted transcripts.
-func (t *Transcripts) Enabled(projectID uuid.UUID) bool {
-	if t == nil || t.store == nil {
-		return false
+// WithEncryptedProjects puts projects in encrypted mode: the transcript is the
+// only copy of each body, and the plaintext body columns are written empty.
+// Nothing in configuration selects it yet; message inserts, reads and the
+// remaining plaintext SQL (search, counts, lookups) must all move to the
+// transcript before a real project can use it.
+func (t *Transcripts) WithEncryptedProjects(projectIDs ...uuid.UUID) *Transcripts {
+	if t.store == nil && len(projectIDs) > 0 {
+		panic("transcriptstore: WithEncryptedProjects needs a store")
 	}
-	_, ok := t.projects[projectID]
-	return ok
+	for _, projectID := range projectIDs {
+		t.encrypted[projectID] = struct{}{}
+	}
+	return t
+}
+
+// Enabled reports whether the project has encrypted transcripts, in shadow or
+// encrypted mode.
+func (t *Transcripts) Enabled(projectID uuid.UUID) bool {
+	return t.Mode(projectID) != ModePlaintext
 }
 
 // Prepare loads the organization's transcript key into the process cache
@@ -69,6 +82,12 @@ func (t *Transcripts) Seal(ctx context.Context, db repo.DBTX, organizationID str
 	if err := t.store.Capture(ctx, db, organizationID, projectID, messageIDs); err != nil {
 		return fmt.Errorf("seal chat transcript: %w", err)
 	}
+	if t.Mode(projectID) != ModeEncrypted {
+		return nil
+	}
+	if err := emptyPlaintext(ctx, repo.New(db), projectID, messageIDs); err != nil {
+		return fmt.Errorf("empty sealed plaintext: %w", err)
+	}
 	return nil
 }
 
@@ -81,14 +100,20 @@ const (
 	// ModeShadow keeps the plaintext columns and an encrypted transcript of
 	// the same body. Reads open the transcript; writes keep both current.
 	ModeShadow
-	// ModeEncrypted keeps the body only in the encrypted transcript. It is not
-	// available yet: no project is put in it.
+	// ModeEncrypted keeps the body only in the encrypted transcript; the
+	// plaintext body columns are empty. See WithEncryptedProjects.
 	ModeEncrypted
 )
 
 // Mode reports how the project stores message bodies.
 func (t *Transcripts) Mode(projectID uuid.UUID) Mode {
-	if t.Enabled(projectID) {
+	if t == nil || t.store == nil {
+		return ModePlaintext
+	}
+	if _, ok := t.encrypted[projectID]; ok {
+		return ModeEncrypted
+	}
+	if _, ok := t.projects[projectID]; ok {
 		return ModeShadow
 	}
 	return ModePlaintext
@@ -103,22 +128,15 @@ func (t *Transcripts) Mode(projectID uuid.UUID) Mode {
 // transaction, and roll back on error. Non-body columns stay in the caller's
 // own statements in the same transaction.
 func (t *Transcripts) UpdateBody(ctx context.Context, db repo.DBTX, organizationID string, projectID, chatID, messageID uuid.UUID, apply func(*transcriptcrypto.Message) error) (bool, error) {
-	var store *Store
-	switch t.Mode(projectID) {
-	case ModePlaintext:
-	case ModeShadow:
-		store = t.store
-	case ModeEncrypted:
-		return false, fmt.Errorf("update chat message body: %w", ErrUnsupported)
-	}
-	if store == nil {
-		changed, err := updateBody(ctx, db, nil, organizationID, projectID, chatID, messageID, apply)
+	mode := t.Mode(projectID)
+	if mode == ModePlaintext {
+		changed, err := updateBody(ctx, db, nil, false, organizationID, projectID, chatID, messageID, apply)
 		if err != nil {
 			return false, fmt.Errorf("update chat message body: %w", err)
 		}
 		return changed, nil
 	}
-	changed, err := store.UpdateBody(ctx, db, organizationID, projectID, chatID, messageID, apply)
+	changed, err := t.store.updateBodyIn(ctx, db, mode == ModeEncrypted, organizationID, projectID, chatID, messageID, apply)
 	if err != nil {
 		return false, fmt.Errorf("update chat message body: %w", err)
 	}
@@ -152,7 +170,7 @@ func (t *Transcripts) Open(ctx context.Context, organizationID string, projectID
 	for i, b := range bodies {
 		ids[i] = b.MessageID
 	}
-	opened, err := t.store.LoadMany(ctx, organizationID, projectID, ids)
+	opened, err := t.store.open(ctx, organizationID, projectID, ids, t.Mode(projectID) == ModeEncrypted)
 	if err != nil {
 		return fmt.Errorf("open encrypted chat transcript: %w", err)
 	}
