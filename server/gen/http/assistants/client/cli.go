@@ -350,6 +350,73 @@ func BuildSendMessagePayload(assistantsSendMessageBody string, assistantsSendMes
 	return v, nil
 }
 
+// BuildInferIntentPayload builds the payload for the assistants inferIntent
+// endpoint from CLI flags.
+func BuildInferIntentPayload(assistantsInferIntentBody string, assistantsInferIntentSessionToken string, assistantsInferIntentProjectSlugInput string) (*assistants.InferIntentPayload, error) {
+	var err error
+	var body InferIntentRequestBody
+	{
+		err = json.Unmarshal([]byte(assistantsInferIntentBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"activity\": [\n         {\n            \"at\": \"1970-01-01T00:00:01Z\",\n            \"detail\": \"aaa\",\n            \"kind\": \"action\"\n         },\n         {\n            \"at\": \"1970-01-01T00:00:01Z\",\n            \"detail\": \"aaa\",\n            \"kind\": \"action\"\n         },\n         {\n            \"at\": \"1970-01-01T00:00:01Z\",\n            \"detail\": \"aaa\",\n            \"kind\": \"action\"\n         }\n      ],\n      \"assistant_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"current_path\": \"aaa\"\n   }'")
+		}
+		if body.Activity == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("activity", "body"))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.assistant_id", body.AssistantID, goa.FormatUUID))
+		if body.CurrentPath != nil {
+			if utf8.RuneCountInString(*body.CurrentPath) > 500 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.current_path", *body.CurrentPath, utf8.RuneCountInString(*body.CurrentPath), 500, false))
+			}
+		}
+		if len(body.Activity) > 60 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.activity", body.Activity, len(body.Activity), 60, false))
+		}
+		for _, e := range body.Activity {
+			if e != nil {
+				if err2 := ValidateAssistantActivityEntryRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if assistantsInferIntentSessionToken != "" {
+			sessionToken = &assistantsInferIntentSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if assistantsInferIntentProjectSlugInput != "" {
+			projectSlugInput = &assistantsInferIntentProjectSlugInput
+		}
+	}
+	v := &assistants.InferIntentPayload{
+		AssistantID: body.AssistantID,
+		CurrentPath: body.CurrentPath,
+	}
+	if body.Activity != nil {
+		v.Activity = make([]*assistants.AssistantActivityEntry, len(body.Activity))
+		for i, val := range body.Activity {
+			if val == nil {
+				v.Activity[i] = nil
+				continue
+			}
+			v.Activity[i] = marshalAssistantActivityEntryRequestBodyToAssistantsAssistantActivityEntry(val)
+		}
+	} else {
+		v.Activity = []*assistants.AssistantActivityEntry{}
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildInterruptTurnPayload builds the payload for the assistants
 // interruptTurn endpoint from CLI flags.
 func BuildInterruptTurnPayload(assistantsInterruptTurnBody string, assistantsInterruptTurnSessionToken string, assistantsInterruptTurnProjectSlugInput string) (*assistants.InterruptTurnPayload, error) {

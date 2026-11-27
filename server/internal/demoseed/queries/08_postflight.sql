@@ -596,3 +596,14 @@ WHERE project_id = @project_id::uuid AND deleted IS FALSE;
 -- name: PostflightCountAccessRequests :one
 SELECT count(*) FROM access_requests
 WHERE organization_id = @org_id::text AND deleted IS FALSE;
+
+-- name: PostflightCountDuplicateMCPServerNames :one
+-- Every seeded MCP server in the demo project must have a unique display name
+-- so server pickers never present ambiguous rows.
+SELECT count(*) FROM (
+  SELECT lower(name)
+  FROM mcp_servers
+  WHERE project_id = @project_id::uuid AND deleted IS FALSE
+  GROUP BY lower(name)
+  HAVING count(*) > 1
+) duplicates;

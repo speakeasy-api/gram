@@ -1,5 +1,11 @@
 # dashboard
 
+## 0.157.1
+
+### Patch Changes
+
+- 5eef061: Gateway edit controls now check write access in the gateway's own project, so a grant limited to another project no longer shows them as editable.
+
 ## 0.157.0
 
 ### Minor Changes
