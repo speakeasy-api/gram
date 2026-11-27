@@ -294,6 +294,13 @@ func (s *Service) resolveFederatedHuman(ctx context.Context, endpoint *ResolvedM
 	if err != nil || userID == "" {
 		return "", oops.E(oops.CodeForbidden, nil, "Your account is not provisioned for this organization. Contact your administrator")
 	}
+	blocked, err := s.sessions.IsUserBlocked(ctx, userID)
+	if err != nil {
+		return "", oops.E(oops.CodeUnavailable, err, "Identity verification is temporarily unavailable. Restart login")
+	}
+	if blocked {
+		return "", oops.E(oops.CodeForbidden, nil, "This account is disabled. Contact support@speakeasy.com")
+	}
 	return userID, nil
 }
 

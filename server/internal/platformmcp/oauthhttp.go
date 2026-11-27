@@ -568,6 +568,10 @@ func (s *OAuthHTTP) IDPCallbackHandler() http.Handler {
 			return
 		}
 		login, err := s.identity.CompleteIDPLogin(r.Context(), idpUser, identity.IDPLoginOptions{SkipMembershipSync: false, Attribution: nil})
+		if errors.Is(err, identity.ErrUserBlocked) {
+			writeBrowserOAuthError(r.Context(), w, http.StatusForbidden, oautherr.CodeAccessDenied, "this account is disabled", oauthui.ReasonDefault)
+			return
+		}
 		if err != nil {
 			writeBrowserOAuthError(r.Context(), w, http.StatusInternalServerError, "server_error", "login could not be completed", oauthui.ReasonDefault)
 			return

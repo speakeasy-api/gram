@@ -38,6 +38,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 // Status is the lifecycle state of an approval request.
@@ -602,6 +603,15 @@ func (s *Service) Decide(ctx context.Context, input DecideInput) (repo.RiskPolic
 }
 
 func (s *Service) requireApprover(ctx context.Context, organizationID, userID string, config *policycore.ApprovalConfig) error {
+	// An approver staff blocked from the platform approves nothing, from the
+	// dashboard or from Slack.
+	blocked, err := usersrepo.New(s.db).IsUserBlacklisted(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("check approver block state: %w", err)
+	}
+	if blocked {
+		return ErrNotApprover
+	}
 	principals, err := s.ApproverPrincipals(ctx, organizationID, userID)
 	if err != nil {
 		return err

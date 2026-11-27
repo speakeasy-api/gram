@@ -901,6 +901,16 @@ func (s *Service) contextForSessionSubject(
 	}
 	switch subject.Kind {
 	case urn.SessionSubjectKindUser:
+		// A user staff blocked from the platform loses every MCP session and
+		// grant at once: access tokens, consent, refresh and ID-JAG all stamp
+		// the subject here.
+		blocked, err := s.sessions.IsUserBlocked(ctx, subject.ID)
+		if err != nil {
+			return nil, fmt.Errorf("session subject block state: %w", err)
+		}
+		if blocked {
+			return nil, fmt.Errorf("%w: %w", errCredentialRejected, oops.E(oops.CodeForbidden, nil, "this account is disabled"))
+		}
 		authCtx.UserID = subject.ID
 		// Resolve the validated Speakeasy subject through the session manager's
 		// cached database profile. Request-authentication profile values may

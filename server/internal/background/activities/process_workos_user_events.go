@@ -166,6 +166,32 @@ type workosUserEventPayload struct {
 	CreatedAt         time.Time `json:"created_at"`
 	UpdatedAt         time.Time `json:"updated_at"`
 	DeletedAt         time.Time `json:"deleted_at"`
+	// Metadata is the WorkOS user's custom metadata. Staff block a user from
+	// the platform by setting workosUserDisabledMetadataKey on it.
+	Metadata map[string]string `json:"metadata"`
+}
+
+// workosUserDisabledMetadataKey is the WorkOS user metadata key staff set to
+// block a user from the platform: "true" sets users.blacklisted_at, "false"
+// clears it, and an absent key leaves it unchanged so a block made another
+// way survives unrelated profile updates.
+const workosUserDisabledMetadataKey = "speakeasy_disabled"
+
+// workosUserDisabledState reads the block state staff set in WorkOS metadata.
+// ok is false when the metadata does not say.
+func workosUserDisabledState(metadata map[string]string) (disabled bool, ok bool) {
+	value, present := metadata[workosUserDisabledMetadataKey]
+	if !present {
+		return false, false
+	}
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "true":
+		return true, true
+	case "false":
+		return false, true
+	default:
+		return false, false
+	}
 }
 
 func (p *ProcessWorkOSUserEvents) handleUserEvent(ctx context.Context, logger *slog.Logger, dbtx pgx.Tx, workosUserID string, event events.Event) (*workosUserExternalIDUpdate, error) {
@@ -204,7 +230,7 @@ func (p *ProcessWorkOSUserEvents) handleUserUpsert(ctx context.Context, logger *
 		}
 	}
 
-	if _, err := userQueries.UpsertSyncedUser(ctx, usersrepo.UpsertSyncedUserParams{
+	applied, err := userQueries.UpsertSyncedUser(ctx, usersrepo.UpsertSyncedUserParams{
 		ID:              resolved.userID,
 		Email:           payload.Email,
 		DisplayName:     displayNameFromWorkOSUser(payload),
@@ -212,8 +238,24 @@ func (p *ProcessWorkOSUserEvents) handleUserUpsert(ctx context.Context, logger *
 		WorkosID:        conv.ToPGText(payload.ID),
 		WorkosCreatedAt: conv.ToPGTimestamptz(payload.CreatedAt),
 		WorkosUpdatedAt: conv.ToPGTimestamptz(payload.UpdatedAt),
-	}); err != nil {
+	})
+	if err != nil {
 		return nil, fmt.Errorf("upsert synced user: %w", err)
+	}
+	// Only an event newer than the stored profile may change the block state,
+	// so a replayed older event cannot undo a newer block or unblock.
+	if disabled, ok := workosUserDisabledState(payload.Metadata); ok && applied > 0 {
+		if err := userQueries.SetUserBlacklisted(ctx, usersrepo.SetUserBlacklistedParams{
+			Blacklisted: disabled,
+			ID:          resolved.userID,
+		}); err != nil {
+			return nil, fmt.Errorf("set user block from workos metadata: %w", err)
+		}
+		message := "unblocked user from workos metadata"
+		if disabled {
+			message = "blocked user from workos metadata"
+		}
+		logger.InfoContext(ctx, message, attr.SlogUserID(resolved.userID), attr.SlogWorkOSUserID(payload.ID))
 	}
 	if err := linkDirectoryUsersToUser(ctx, dbtx, resolved.userID, payload.ID, payload.Email); err != nil {
 		return nil, err

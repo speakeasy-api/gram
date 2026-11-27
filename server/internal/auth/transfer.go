@@ -467,6 +467,13 @@ func (s *Service) transferInCallback(ctx context.Context, logger *slog.Logger, c
 	if !isMember {
 		return nil, failTransfer(signinTransferAccessChanged, "not_a_member", nil)
 	}
+	blocked, err := s.sessions.IsUserBlocked(ctx, record.UserID)
+	if err != nil {
+		return nil, failTransfer(signinTransferTemporaryError, "user_block_lookup_failed", err)
+	}
+	if blocked {
+		return nil, failTransfer(signinTransferAccessChanged, "user_disabled", nil)
+	}
 	issuedAt, known := time.UnixMicro(record.SourceIssuedAt), record.SourceIssuedAt != 0
 	predates, err := s.sessions.IssuedBeforeEpoch(ctx, record.UserID, issuedAt, known)
 	if err != nil {

@@ -349,6 +349,9 @@ func (m *Manager) Authorize(ctx context.Context, tokenString string) (context.Co
 	if err != nil {
 		return ctx, nil, oops.E(oops.CodeUnauthorized, err, "unable to load assistant owner")
 	}
+	if owner.BlacklistedAt.Valid {
+		return ctx, nil, oops.E(oops.CodeForbidden, nil, "assistant owner is disabled")
+	}
 
 	if err := m.checkRevocation(ctx, projectID, assistantID, threadID); err != nil {
 		return ctx, nil, err

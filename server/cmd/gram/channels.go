@@ -86,6 +86,9 @@ func (a channelsAdmission) PrepareContext(ctx context.Context, identity authn.Id
 	if !member {
 		return ctx, errors.New("channels organization membership required")
 	}
+	if err := a.engine.CheckUsersBlocked(ctx, identity.Principal.ID); err != nil {
+		return ctx, fmt.Errorf("channels user: %w", err)
+	}
 	organization, err := organizationsrepo.New(a.db).GetOrganizationMetadata(ctx, identity.OrganizationID)
 	if err != nil {
 		return ctx, fmt.Errorf("load channels organization: %w", err)

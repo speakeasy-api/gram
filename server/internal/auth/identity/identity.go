@@ -543,6 +543,16 @@ func (r *Resolver) CompleteIDPLogin(ctx context.Context, idpUser *IDPUserInfo, o
 	if err != nil {
 		return IDPLoginResult{}, err
 	}
+	// A user staff blocked from the platform gets no session on any login
+	// surface, and membership sync below must not create organizations or
+	// memberships for them. Read uncached so a fresh block applies at once.
+	blocked, err := r.userRepo.IsUserBlacklisted(ctx, upserted.UserID)
+	if err != nil {
+		return IDPLoginResult{}, fmt.Errorf("check user block: %w", err)
+	}
+	if blocked {
+		return IDPLoginResult{}, ErrUserBlocked
+	}
 
 	var membershipRoles []IDPMembershipRole
 	if !opts.SkipMembershipSync && idpUser.Sub != "" {

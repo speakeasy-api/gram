@@ -228,6 +228,9 @@ func (s *Service) memberFor(ctx context.Context, vouchedEmail *string, what stri
 
 	organizationID := authCtx.ActiveOrganizationID
 	principals, err := plugins.ResolveDeliveryPrincipals(ctx, s.db, organizationID, email, "")
+	if errors.Is(err, plugins.ErrDeliveryUserBlocked) {
+		return agentMember{}, oops.E(oops.CodeForbidden, err, "this account is disabled")
+	}
 	if err != nil {
 		return agentMember{}, oops.E(oops.CodeUnexpected, err, "error resolving agent plugin delivery principals").LogError(ctx, s.logger)
 	}

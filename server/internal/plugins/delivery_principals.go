@@ -14,6 +14,10 @@ import (
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
+// ErrDeliveryUserBlocked marks a delivery refused because the person is a user
+// staff blocked from the platform (users.blacklisted_at).
+var ErrDeliveryUserBlocked = errors.New("plugin delivery user is blocked from the platform")
+
 // ResolveDeliveryPrincipals returns the principal URNs used to decide which
 // plugins are delivered to one person. Email and wildcard assignments apply
 // even when userID is empty. A known active member additionally receives their
@@ -48,6 +52,13 @@ func ResolveDeliveryPrincipals(ctx context.Context, db database.DBTX, organizati
 		}
 	}
 	if userID != "" {
+		blocked, err := usersrepo.New(db).IsUserBlacklisted(ctx, userID)
+		if err != nil {
+			return nil, fmt.Errorf("check plugin delivery user block state: %w", err)
+		}
+		if blocked {
+			return nil, ErrDeliveryUserBlocked
+		}
 		resolved, err := authz.ResolveUserPrincipals(ctx, db, organizationID, userID)
 		if err != nil {
 			return nil, fmt.Errorf("resolve plugin delivery user principals: %w", err)

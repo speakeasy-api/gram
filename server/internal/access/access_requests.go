@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 const (
@@ -396,6 +397,15 @@ func (s *Service) DecideAccessRequestAs(ctx context.Context, input DecideAccessR
 	}
 	if current.AccessRequest.RequesterUserID == input.DeciderUserID {
 		return nil, ErrAccessRequestSelfDecision
+	}
+	// A decider staff blocked from the platform decides nothing, from the
+	// dashboard or from Slack.
+	blocked, err := usersrepo.New(s.db).IsUserBlacklisted(ctx, input.DeciderUserID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "check decider block state").LogError(ctx, logger)
+	}
+	if blocked {
+		return nil, ErrAccessRequestNotAdmin
 	}
 	admin, err := isOrganizationAdmin(ctx, s.db, input.OrganizationID, input.DeciderUserID)
 	if err != nil {

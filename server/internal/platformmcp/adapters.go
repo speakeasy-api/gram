@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/userblock"
 )
 
 // JWTAuthenticator validates Platform MCP access tokens. A token is accepted
@@ -35,6 +36,7 @@ type JWTAuthenticator struct {
 	signer      *sessiontokens.Signer
 	store       *platformrepo.Queries
 	credentials *CredentialCodec
+	userBlock   *userblock.Gate
 
 	// baseURL is the configured server URL, whose resource applies to
 	// requests that carry no platform origin.
@@ -53,6 +55,7 @@ func NewJWTAuthenticator(signer *sessiontokens.Signer, db *pgxpool.Pool, encrypt
 		signer:      signer,
 		store:       platformrepo.New(db),
 		credentials: credentials,
+		userBlock:   userblock.NewGate(db),
 		baseURL:     baseURL,
 	}, nil
 }
@@ -85,6 +88,15 @@ func (a *JWTAuthenticator) Authenticate(ctx context.Context, token string) (Prin
 	}
 	if session.SubjectUrn != subject.String() || session.ClientID != claims.ClientID || session.ConnectionGeneration != session.ActiveGeneration {
 		return Principal{}, ErrUnauthorized
+	}
+	if a.userBlock != nil {
+		blocked, err := a.userBlock.Blocked(ctx, subject.ID)
+		if err != nil {
+			return Principal{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
+		}
+		if blocked {
+			return Principal{}, ErrForbidden
+		}
 	}
 
 	return Principal{

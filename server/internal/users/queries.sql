@@ -180,3 +180,26 @@ WHERE u.id = @user_id OR EXISTS (
     SELECT 1 FROM organization_user_relationships m
     WHERE m.user_id = u.id AND m.organization_id = ANY(@organization_ids::text[])
 );
+
+-- Whether staff blocked this user from the platform. Authentication paths
+-- read it on every request (through a short in-process cache), so a block
+-- applies within seconds. An unknown user is not blocked; the caller's own
+-- user lookup rejects it.
+-- name: IsUserBlacklisted :one
+SELECT EXISTS (
+  SELECT 1
+  FROM users
+  WHERE id = @id
+    AND blacklisted_at IS NOT NULL
+)::boolean AS blacklisted;
+
+-- Applies the block state staff set through WorkOS user metadata. Keeps the
+-- original timestamp when the user is already blocked.
+-- name: SetUserBlacklisted :exec
+UPDATE users
+SET blacklisted_at = CASE
+    WHEN @blacklisted::boolean THEN COALESCE(blacklisted_at, clock_timestamp())
+    ELSE NULL
+  END,
+  updated_at = clock_timestamp()
+WHERE id = @id;

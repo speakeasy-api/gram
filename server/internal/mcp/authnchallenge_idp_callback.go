@@ -414,6 +414,10 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (ret
 			return oops.E(oops.CodeBadRequest, err, "failed to exchange IDP code").LogWarn(ctx, logger)
 		}
 		login, err := s.identityResolver.CompleteIDPLogin(ctx, idpUser, identity.IDPLoginOptions{SkipMembershipSync: false, Attribution: nil})
+		if errors.Is(err, identity.ErrUserBlocked) {
+			t.Refuse(ctx, mcpconnectionattempts.CodeAccessDenied, mcpconnectionattempts.Detail("user_disabled"))
+			return oops.E(oops.CodeForbidden, err, "this account is disabled").LogWarn(ctx, logger)
+		}
 		if err != nil {
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
 			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)

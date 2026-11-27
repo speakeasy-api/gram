@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/userblock"
 )
 
 type APIKeyScope int
@@ -264,6 +265,7 @@ type ByKey struct {
 	orgRepo     *orgRepo.Queries
 	logger      *slog.Logger
 	billingRepo billing.Repository
+	userBlock   *userblock.Gate
 }
 
 func NewKeyAuth(db *pgxpool.Pool, logger *slog.Logger, billingRepo billing.Repository) *ByKey {
@@ -272,6 +274,7 @@ func NewKeyAuth(db *pgxpool.Pool, logger *slog.Logger, billingRepo billing.Repos
 		orgRepo:     orgRepo.New(db),
 		logger:      logger,
 		billingRepo: billingRepo,
+		userBlock:   userblock.NewGate(db),
 	}
 }
 
@@ -334,6 +337,12 @@ func (k *ByKey) KeyBasedAuth(ctx context.Context, key string, requiredScopes []s
 
 	if org.DisabledAt.Valid {
 		return ctx, oops.E(oops.CodeUnauthorized, nil, "this organization is disabled, please reach out to support@speakeasy.com for more information")
+	}
+
+	// Reject a key whose creator or, for a principal key, whose authorizing
+	// user staff blocked from the platform.
+	if err := k.userBlock.Check(ctx, apiKey.CreatedByUserID, credential.AuthorizerUserID); err != nil {
+		return ctx, fmt.Errorf("api key user: %w", err)
 	}
 
 	var projectID *uuid.UUID

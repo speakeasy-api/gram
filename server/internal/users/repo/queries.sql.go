@@ -484,6 +484,26 @@ func (q *Queries) IsPlatformAdminEmail(ctx context.Context, email string) (bool,
 	return is_admin, err
 }
 
+const isUserBlacklisted = `-- name: IsUserBlacklisted :one
+SELECT EXISTS (
+  SELECT 1
+  FROM users
+  WHERE id = $1
+    AND blacklisted_at IS NOT NULL
+)::boolean AS blacklisted
+`
+
+// Whether staff blocked this user from the platform. Authentication paths
+// read it on every request (through a short in-process cache), so a block
+// applies within seconds. An unknown user is not blocked; the caller's own
+// user lookup rejects it.
+func (q *Queries) IsUserBlacklisted(ctx context.Context, id string) (bool, error) {
+	row := q.db.QueryRow(ctx, isUserBlacklisted, id)
+	var blacklisted bool
+	err := row.Scan(&blacklisted)
+	return blacklisted, err
+}
+
 const lockUserForPlatformAdminCheck = `-- name: LockUserForPlatformAdminCheck :one
 SELECT id, email, display_name, photo_url, admin, last_login, workos_id, workos_created_at, workos_updated_at, workos_deleted_at, deleted_at, blacklisted_at, created_at, updated_at FROM users
 WHERE id = $1
@@ -545,6 +565,28 @@ type SetOrganizationUserEmailFixtureParams struct {
 
 func (q *Queries) SetOrganizationUserEmailFixture(ctx context.Context, arg SetOrganizationUserEmailFixtureParams) error {
 	_, err := q.db.Exec(ctx, setOrganizationUserEmailFixture, arg.Email, arg.UserID, arg.OrganizationID)
+	return err
+}
+
+const setUserBlacklisted = `-- name: SetUserBlacklisted :exec
+UPDATE users
+SET blacklisted_at = CASE
+    WHEN $1::boolean THEN COALESCE(blacklisted_at, clock_timestamp())
+    ELSE NULL
+  END,
+  updated_at = clock_timestamp()
+WHERE id = $2
+`
+
+type SetUserBlacklistedParams struct {
+	Blacklisted bool
+	ID          string
+}
+
+// Applies the block state staff set through WorkOS user metadata. Keeps the
+// original timestamp when the user is already blocked.
+func (q *Queries) SetUserBlacklisted(ctx context.Context, arg SetUserBlacklistedParams) error {
+	_, err := q.db.Exec(ctx, setUserBlacklisted, arg.Blacklisted, arg.ID)
 	return err
 }
 

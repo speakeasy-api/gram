@@ -1909,6 +1909,18 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 		redirectError("failed to create user account")
 		return
 	}
+	// A user staff blocked from the platform cannot join an organization or
+	// get a session through an invite link.
+	blocked, err := userrepo.New(s.db).IsUserBlacklisted(ctx, gramUserID)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "invite callback: failed to check user block state", attr.SlogError(err))
+		redirectError("failed to create user account")
+		return
+	}
+	if blocked {
+		redirectError("this account is disabled")
+		return
+	}
 	span.SetAttributes(
 		attr.UserID(gramUserID),
 		attr.OrganizationID(invite.OrganizationID),

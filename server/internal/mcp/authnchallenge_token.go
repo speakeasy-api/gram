@@ -1384,6 +1384,23 @@ func (s *Service) rotateRefreshToken(
 			admittedAgentSessionID = refreshSession.ID
 		}
 	}
+	// A user staff blocked from the platform cannot mint new MCP access tokens,
+	// and neither can an agent they authorized.
+	if lookupErr == nil {
+		blockedUserID := refreshSession.AuthorizerUserID.String
+		if refreshSession.SubjectUrn.Kind == urn.SessionSubjectKindUser {
+			blockedUserID = refreshSession.SubjectUrn.ID
+		}
+		blocked, blockErr := s.sessions.IsUserBlocked(ctx, blockedUserID)
+		if blockErr != nil {
+			return true, oops.E(oops.CodeUnexpected, blockErr, "check refresh token user").LogError(ctx, logger)
+		}
+		if blocked {
+			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "user_disabled")
+			writeErr := writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidGrant, "this account is disabled")
+			return true, refuseInboundRefresh(ctx, tracker, r, writeErr, "user_disabled", mcpconnectionattempts.Subject(&refreshSession.SubjectUrn))
+		}
+	}
 	upstreamCheck := upstreamRefreshServed
 	if lookupErr == nil &&
 		refreshSession.UserSessionClientID.Valid && refreshSession.UserSessionClientID.UUID == clientRow.ID &&
