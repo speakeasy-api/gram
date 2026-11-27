@@ -107,7 +107,9 @@ describe("FunctionTimeout", () => {
 
     expect(screen.getByText("1 minute")).toBeTruthy();
     expect(screen.getByText("(default)")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Edit" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Edit function timeout" }),
+    ).toBeTruthy();
   });
 
   it("shows a staff-set limit without the default marker", async () => {
@@ -122,7 +124,9 @@ describe("FunctionTimeout", () => {
     async (value) => {
       await renderTimeout();
 
-      fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+      fireEvent.click(
+        screen.getByRole("button", { name: "Edit function timeout" }),
+      );
       enterSeconds(value);
       save();
 
@@ -142,7 +146,9 @@ describe("FunctionTimeout", () => {
     // The save invalidates the record; the refetch answers with the new value.
     mocks.getOrganization.mockResolvedValue(RAISED);
 
-    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Edit function timeout" }),
+    );
     expect(screen.queryByRole("button", { name: "Use default" })).toBeNull();
     enterSeconds("300");
     save();
@@ -161,7 +167,9 @@ describe("FunctionTimeout", () => {
     const { announce } = await renderTimeout(RAISED);
     mocks.getOrganization.mockResolvedValue(ORG);
 
-    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Edit function timeout" }),
+    );
     fireEvent.click(screen.getByRole("button", { name: "Use default" }));
 
     expect(await screen.findByText("(default)")).toBeTruthy();
@@ -176,7 +184,9 @@ describe("FunctionTimeout", () => {
   it("leaves the saved value alone on cancel", async () => {
     await renderTimeout(RAISED);
 
-    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Edit function timeout" }),
+    );
     enterSeconds("45");
     fireEvent.keyDown(field(), { key: "Escape" });
 
@@ -191,7 +201,9 @@ describe("FunctionTimeout", () => {
     const { qc } = await renderTimeout();
     const invalidate = vi.spyOn(qc, "invalidateQueries");
 
-    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Edit function timeout" }),
+    );
     enterSeconds("120");
     save();
 

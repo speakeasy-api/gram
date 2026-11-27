@@ -183,7 +183,13 @@ export function FunctionTimeout({
       {isDefault ? (
         <span className="text-muted-foreground text-sm">(default)</span>
       ) : null}
-      <Button type="button" size="xs" variant="outline" onClick={startEditing}>
+      <Button
+        type="button"
+        size="xs"
+        variant="outline"
+        aria-label="Edit function timeout"
+        onClick={startEditing}
+      >
         Edit
       </Button>
     </div>

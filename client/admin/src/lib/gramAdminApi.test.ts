@@ -426,6 +426,20 @@ describe("organization billing endpoints", () => {
     );
   });
 
+  it("omits the function timeout to restore the default", async () => {
+    const fetch = stubFetch();
+
+    await setFunctionTimeout({ organization_id: "org_1" });
+
+    expect(fetch).toHaveBeenCalledWith(
+      "/admin/organization.setFunctionTimeout",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ organization_id: "org_1" }),
+      }),
+    );
+  });
+
   it("posts the initial Stripe customer ID to the guarded organization endpoint", async () => {
     const fetch = stubFetch();
 
