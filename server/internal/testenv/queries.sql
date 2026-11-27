@@ -2835,3 +2835,11 @@ UPDATE ai_product_cimd_documents
 SET url = @url, display_name = @display_name, enabled = @enabled,
     deleted_at = sqlc.narg('deleted_at')
 WHERE id = @id;
+
+-- name: SetOrganizationServingStateFixture :exec
+-- Sets the two flags that decide whether an organization's MCP servers are
+-- served at all.
+UPDATE organization_metadata
+SET whitelisted = @whitelisted,
+    disabled_at = CASE WHEN @disabled::boolean THEN clock_timestamp() ELSE NULL END
+WHERE id = @id;

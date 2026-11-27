@@ -452,10 +452,14 @@ func (s *Service) describeCachedMember(ctx context.Context, gate *metaGateContex
 		if private {
 			resourceID := member.serverID
 			disposition := dispositions[name]
-			if member.backend == metaMemberBackendHosted {
+			switch member.backend {
+			case metaMemberBackendHosted:
 				resourceID = member.toolsetID.UUID
 				// Cached discovery keeps consented annotations; execution checks the live tool disposition.
 				disposition = dispositionFromAnnotations(entry.Annotations)
+			case metaMemberBackendPlatform:
+				disposition = dispositionFromAnnotations(entry.Annotations)
+			case metaMemberBackendProxied:
 			}
 			checks = append(checks, authz.MCPServer(authz.MCPServerIDOf(resourceID), authz.ProjectIDOf(member.projectID)).ToolCall(name, disposition))
 		}
