@@ -1,4 +1,4 @@
-h1:pbMB5Ho14hgW6AVKJEEKow+QxwnfW4Y4HN+1nBqrgz8=
+h1:v1R3HWosziI21k6pbNH2fXNhhMYiyeK9tolH4jZa0L4=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -570,5 +570,6 @@ h1:pbMB5Ho14hgW6AVKJEEKow+QxwnfW4Y4HN+1nBqrgz8=
 20261126174645_restrict_asset_content_digests.sql h1:PE7vhw1+SWZSuqPH1YcI3u586xTJLcQiG8txcOgCCiI=
 20261126183517_chat-messages-transcript-metadata.sql h1:wP9HZsXsFg40GQ9v1cE0aUlhhfYv59vELCN1MG8XEcs=
 20261126183541_drop-chat-transcript-shadow-metadata.sql h1:64ZzcvrhWKbxhtEOGvnMIH14iYB4tDPiQKddpN6IJ+0=
-20261127020752_trigger-instances-add-auth-client.sql h1:MvDIFSz23k4WDuHm7I9ieDHINSaNXPwsVs8dI7bE2yw=
-20261127060031_add-assistant-ate-actors.sql h1:ForgOuOKJgWvQWURCxyhcDhFN/5YWBxd6D2m1VgBbI8=
+20261127170611_users-add-blacklisted-at.sql h1:VFhfJAeXWsuIhuK4MQetOWaGUsj3Xnwaru1BKCyPomc=
+20261127181003_trigger-instances-add-auth-client.sql h1:mIFZ75XD24sLQfTRKXMLC3JernTnayKEULuq3p1FyjQ=
+20261127185130_add-assistant-ate-actors.sql h1:zTa4vnp4N6orJ9d/VzopjhyBEktcDWryoszXD7i0HoM=
