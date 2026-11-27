@@ -184,7 +184,9 @@ func (w *ChatMessageWriter) sealTranscripts(ctx context.Context, db repo.DBTX, o
 // UpdateChatMessage changes an existing message through
 // Transcripts.UpdateChatMessage, inside the caller's transaction, so every copy
 // of the row the project keeps gets the same value. apply receives the whole
-// row, with its protected fields decrypted outside plaintext mode. Besides the
+// row. Its protected fields come from the decrypted transcript in encrypted
+// mode, and in shadow mode when the transcript agrees with the plaintext;
+// otherwise they are the plaintext columns. Besides the
 // protected fields it may change only tool_outcome, finish_reason,
 // content_hash and risk_analyzed_at; any other change fails. Call
 // PrepareTranscripts before beginning the transaction. A nil writer updates

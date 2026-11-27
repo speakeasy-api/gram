@@ -344,8 +344,7 @@ func TestTranscriptWriterEncryptedRepatchKeepsRiskAnalysis(t *testing.T) {
 	require.True(t, changed)
 
 	require.NoError(t, f.writer.PrepareTranscripts(t.Context(), f.projectID))
-	tx, err := f.conn.Begin(t.Context()) //nolint:glint // notestingrawsql: caller-owned transaction boundary is the behavior under test.
-	require.NoError(t, err)
+	tx := testenv.BeginTx(t, t.Context(), f.conn)
 	_, err = f.writer.UpdateChatMessage(t.Context(), tx, f.orgID, f.projectID, f.chatID, m.Params.ID, func(row *chatrepo.ChatMessage) error {
 		row.RiskAnalyzedAt = pgtype.Timestamptz{Time: time.Now(), InfinityModifier: pgtype.Finite, Valid: true}
 		return nil
