@@ -1351,6 +1351,20 @@ func (q *Queries) IsDefaultProject(ctx context.Context, arg IsDefaultProjectPara
 	return is_default, err
 }
 
+const isOrganizationDisabled = `-- name: IsOrganizationDisabled :one
+SELECT (disabled_at IS NOT NULL)::boolean AS disabled FROM organization_metadata WHERE id = $1
+`
+
+// Reports whether the organization is disabled. Every publish reads it first,
+// so a disabled organization's marketplace gets no new commits and no newly
+// minted plugin API keys.
+func (q *Queries) IsOrganizationDisabled(ctx context.Context, id string) (bool, error) {
+	row := q.db.QueryRow(ctx, isOrganizationDisabled, id)
+	var disabled bool
+	err := row.Scan(&disabled)
+	return disabled, err
+}
+
 const isOrganizationFeatureEnabled = `-- name: IsOrganizationFeatureEnabled :one
 SELECT EXISTS (
   SELECT 1
@@ -2072,6 +2086,7 @@ WITH candidate_projects AS MATERIALIZED (
     SELECT dp.project_id FROM plugins dp WHERE dp.is_default IS TRUE AND dp.deleted IS FALSE AND dp.project_id > $1
   ) cp
   JOIN projects p ON p.id = cp.project_id AND p.deleted IS FALSE
+  JOIN organization_metadata o ON o.id = p.organization_id AND o.disabled_at IS NULL
   ORDER BY cp.project_id ASC
   LIMIT $2
 )
@@ -2138,7 +2153,8 @@ type ListPluginPublishCandidatesRow struct {
 // ResolvePluginPublishActor. Page before resolving actors; key lookups use
 // the existing (organization_id, project_id, id) index prefix.
 // This is a deliberate cross-project sweep, so unlike the tenant-scoped
-// queries it is not constrained to a single project_id.
+// queries it is not constrained to a single project_id. Projects of disabled
+// organizations are left out: nothing is published for them.
 func (q *Queries) ListPluginPublishCandidates(ctx context.Context, arg ListPluginPublishCandidatesParams) ([]ListPluginPublishCandidatesRow, error) {
 	rows, err := q.db.Query(ctx, listPluginPublishCandidates, arg.AfterProjectID, arg.ResultLimit)
 	if err != nil {
