@@ -14,6 +14,15 @@ func TestStripLeadingEnvelopesRemovesAssistantRuntimeFraming(t *testing.T) {
 	require.Equal(t, "How do I reduce my token usage?", chat.StripLeadingEnvelopes(input))
 }
 
+// The dashboard's Project Assistant prepends the page and recent activity the
+// user asked from; titles and summaries must see only the question.
+func TestStripLeadingEnvelopesRemovesDashboardContext(t *testing.T) {
+	t.Parallel()
+
+	input := "<dashboard_context>\nPage: /mcp/billing-api/authentication\n<user_activity>\n21:19:20 error: Request failed\n</user_activity>\n</dashboard_context>\n\nhow can i see if this worked"
+	require.Equal(t, "how can i see if this worked", chat.StripLeadingEnvelopes(input))
+}
+
 // Other harnesses prepend their own envelopes (e.g. Claude Code background
 // tasks return <notification>…</notification>); the strip is generic so the
 // model isn't polluted by envelopes we don't control.
