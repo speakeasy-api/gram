@@ -697,6 +697,55 @@ func TestCodeReconnectNoUpstreamSignInMemberReviewsAndUpdatesCatalog(t *testing.
 		require.NotEqual(t, uuid.Nil, state.CodeReconnect.CatalogID)
 		require.False(t, state.CodeReconnect.ReviewReady, "OAuth member must wait for upstream callback before opening review")
 	})
+
+	t.Run("setup-incomplete member keeps client reconnect fallback", func(t *testing.T) {
+		t.Parallel()
+		mock := memberMock()
+		mock.buildAuthURLResult, _ = url.Parse("https://login.example.test/authorize")
+		ctx, ti := newTestMCPServiceWithIdentityResolver(t, mock)
+		auth, _ := contextvalues.GetAuthContext(ctx)
+		mock.upsertResult = auth.UserID
+		ti.service.manual = true
+		_, issuer, downstream := seedPrivateToolsetWithIssuer(t, ctx, ti)
+		slug := "code-setup-incomplete-" + uuid.NewString()[:8]
+		gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, issuer.ID)
+		existing := newCatalogUpstream(t, 1)
+		seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Existing", "existing", 1, existing.url)
+
+		mcp.SetTestCodeExecutor(ti.service.Service, &recordingCodeExecutor{})
+		enableCodeMode(t, ctx, ti)
+		connection := approveGatewayCatalog(t, ctx, ti, issuer.ID, downstream, gateway.ID, slug, toolfilter.CatalogModeCached, metamcp.DiscoveryModeCode, nil)
+
+		// Attach a member with a legacy OAuth association but no typed auth client offer yet.
+		brokenUpstream := newRecordingUpstream(t, "ping")
+		provider := newConsentExchangeAS(t, nil, "unused")
+		remoteClient := createConsentRemoteClient(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "incomplete-oauth", provider.URL)
+		remoteIssuer := clientRemoteIssuerID(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, remoteClient)
+		brokenMember := createMetaMember(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "incomplete", brokenUpstream.url, conv.ToNullUUID(remoteIssuer), 2)
+		selection := selectionFixture{ti: ti, projectID: *auth.ProjectID, orgID: auth.ActiveOrganizationID}
+		selection.associate(t, ctx, brokenMember.mcpServerID, remoteClient)
+
+		var action *codemode.ConnectionAction
+		runCodeHost(t, ctx, ti, slug, connection.token, func(runCtx context.Context, host codemode.Host) {
+			var err error
+			action, err = host.Connect(runCtx, "incomplete")
+			require.NoError(t, err)
+			require.True(t, action.ClientReconnectRequired)
+			require.Equal(t, "consent_required", action.Reason)
+			require.Contains(t, action.Instructions, "reconnect this gateway")
+		})
+
+		stateID, browserCookie, _, idpErr := startCodeReconnectBrowserFlow(t, ctx, ti, mock, slug, action.AuthorizationURL)
+		require.NoError(t, idpErr)
+		state, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
+		require.NoError(t, err)
+		require.Equal(t, uuid.Nil, state.CodeReconnect.CatalogID)
+		require.False(t, state.CodeReconnect.ReviewReady)
+		page := consentGetPageWithContext(t, ctx, ti, slug, stateID, browserCookie)
+		require.Contains(t, page, "Reconnect this gateway in your AI client to approve its tools.")
+		require.NotContains(t, page, "data-gateway-back")
+		require.NotContains(t, page, "data-auto-close")
+	})
 }
 
 func TestCodeModeCachedCatalogToolSelectionVisibility(t *testing.T) {

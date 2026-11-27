@@ -164,17 +164,30 @@ func TestShouldAutoCloseCodeReconnect(t *testing.T) {
 	disconnected := remoteSessionCard{Connected: false}
 	catalogID := uuid.New()
 
-	require.False(t, shouldAutoCloseCodeReconnect(nil, true, nil))
-	require.True(t, shouldAutoCloseCodeReconnect(nil, true, []remoteSessionCard{connected}))
-	require.False(t, shouldAutoCloseCodeReconnect(&CodeReconnectBinding{CatalogID: catalogID}, true, nil), "pending catalog review stays open")
-	require.False(t, shouldAutoCloseCodeReconnect(&CodeReconnectBinding{CatalogID: catalogID}, true, []remoteSessionCard{connected}), "pending catalog review stays open even with connected cards")
-	require.False(t, shouldAutoCloseCodeReconnect(&CodeReconnectBinding{CatalogID: catalogID, CatalogComplete: true, CatalogCanceled: true}, true, nil), "canceled catalog review never auto-closes")
-	require.False(t, shouldAutoCloseCodeReconnect(&CodeReconnectBinding{CatalogID: catalogID, CatalogComplete: true, CatalogCanceled: true}, true, []remoteSessionCard{connected}), "canceled catalog review with cards never auto-closes")
-	require.True(t, shouldAutoCloseCodeReconnect(&CodeReconnectBinding{CatalogID: catalogID, CatalogComplete: true}, true, nil), "approved no-sign-in catalog review auto-closes")
-	require.False(t, shouldAutoCloseCodeReconnect(&CodeReconnectBinding{CatalogID: catalogID, CatalogComplete: true}, false, nil), "non-first-party never auto-closes")
-	require.True(t, shouldAutoCloseCodeReconnect(&CodeReconnectBinding{CatalogID: catalogID, CatalogComplete: true}, true, []remoteSessionCard{connected}), "approved OAuth catalog review auto-closes when cards are connected")
-	require.False(t, shouldAutoCloseCodeReconnect(&CodeReconnectBinding{CatalogID: catalogID, CatalogComplete: true}, true, []remoteSessionCard{disconnected}), "approved OAuth catalog review stays open if a card is disconnected")
-	require.False(t, shouldAutoCloseCodeReconnect(&CodeReconnectBinding{}, true, nil), "unbound no-sign-in reconnect stays open")
+	for _, tc := range []struct {
+		name       string
+		binding    *CodeReconnectBinding
+		firstParty bool
+		cards      []remoteSessionCard
+		want       bool
+	}{
+		{name: "nil binding without cards", binding: nil, firstParty: true, cards: nil, want: false},
+		{name: "nil binding with connected card", binding: nil, firstParty: true, cards: []remoteSessionCard{connected}, want: true},
+		{name: "pending catalog review without cards", binding: &CodeReconnectBinding{CatalogID: catalogID}, firstParty: true, cards: nil, want: false},
+		{name: "pending catalog review with connected card", binding: &CodeReconnectBinding{CatalogID: catalogID}, firstParty: true, cards: []remoteSessionCard{connected}, want: false},
+		{name: "canceled catalog review without cards", binding: &CodeReconnectBinding{CatalogID: catalogID, CatalogComplete: true, CatalogCanceled: true}, firstParty: true, cards: nil, want: false},
+		{name: "canceled catalog review with connected card", binding: &CodeReconnectBinding{CatalogID: catalogID, CatalogComplete: true, CatalogCanceled: true}, firstParty: true, cards: []remoteSessionCard{connected}, want: false},
+		{name: "approved no-sign-in catalog review", binding: &CodeReconnectBinding{CatalogID: catalogID, CatalogComplete: true}, firstParty: true, cards: nil, want: true},
+		{name: "approved non-first-party catalog review", binding: &CodeReconnectBinding{CatalogID: catalogID, CatalogComplete: true}, firstParty: false, cards: nil, want: false},
+		{name: "approved OAuth catalog review with connected card", binding: &CodeReconnectBinding{CatalogID: catalogID, CatalogComplete: true}, firstParty: true, cards: []remoteSessionCard{connected}, want: true},
+		{name: "approved OAuth catalog review with disconnected card", binding: &CodeReconnectBinding{CatalogID: catalogID, CatalogComplete: true}, firstParty: true, cards: []remoteSessionCard{disconnected}, want: false},
+		{name: "unbound no-sign-in reconnect", binding: &CodeReconnectBinding{}, firstParty: true, cards: nil, want: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, shouldAutoCloseCodeReconnect(tc.binding, tc.firstParty, tc.cards))
+		})
+	}
 }
 
 func TestConsentTemplateFocusLockedHidesBackToAllServers(t *testing.T) {

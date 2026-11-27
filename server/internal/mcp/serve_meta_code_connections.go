@@ -137,6 +137,11 @@ func (b *metaCodeBackend) Connect(ctx context.Context, server string) (*codemode
 			needsConsent = true
 		} else {
 			hasUpstreamSignIn = boundSignIn
+			if ticket.CodeReconnect.CatalogID == uuid.Nil {
+				// An unbound or setup-incomplete member cannot update the cached
+				// catalog in place, so signal a full client reconnect fallback.
+				needsConsent = true
+			}
 		}
 	}
 	if err := b.service.authnChallengeCache.Store(ctx, ticket); err != nil {
