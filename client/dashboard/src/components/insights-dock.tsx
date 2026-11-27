@@ -42,6 +42,17 @@ import {
   INSIGHTS_DOCK_VT_CLASS,
   useInsightsDockCta,
 } from "@/hooks/useInsightsDockCta";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
+import {
+  formatActivityContext,
+  getActivity,
+  projectRelativePath,
+} from "@/lib/activity-journal";
+import {
+  useAssistantIntent,
+  useRecordDashboardActivity,
+} from "@/components/assistant-activity";
 import { useLocation } from "react-router";
 import { useRoutes } from "@/routes";
 import { motion } from "motion/react";
@@ -390,6 +401,12 @@ interface InsightsDockProps {
    *  tool mentions); until then it falls back to a plain input so the dock is
    *  never a dead control. */
   runtimeReady: boolean;
+  /** One line naming what the user seems to be doing, shown above the
+   *  suggestions when the composer opens. */
+  opener?: string | undefined;
+  /** Reports when the composer opens or closes, so the provider can work out
+   *  what the user is doing only when they are about to ask. */
+  onComposerExpandedChange?: (expanded: boolean) => void;
 }
 
 /** Width of the dock card across its states: chat panel open, composer
@@ -427,6 +444,8 @@ function InsightsDock({
   onOpenHistory,
   panel,
   runtimeReady,
+  opener,
+  onComposerExpandedChange,
 }: InsightsDockProps): ReactElement {
   const [value, setValue] = useState("");
   // Expansion is sticky state, not a focus mirror: it must survive the input
@@ -557,6 +576,15 @@ function InsightsDock({
   // the same rule: a non-empty draft holds the dock open even without focus.
   const hasDraft = value.trim().length > 0 || sharedDraft;
   const composerExpanded = !open && (expanded || hasDraft);
+  useEffect(() => {
+    onComposerExpandedChange?.(composerExpanded);
+  }, [composerExpanded, onComposerExpandedChange]);
+  // The dock unmounts when a page hides it or the user dismisses it; it is
+  // then closed, whatever it last reported.
+  useEffect(
+    () => () => onComposerExpandedChange?.(false),
+    [onComposerExpandedChange],
+  );
 
   const shortcutAria = isMacPlatform() ? "Meta+/" : "Control+/";
 
@@ -729,7 +757,7 @@ function InsightsDock({
               >
                 {/* Suggestion chips — revealed above the input on focus, same
                   grid-rows technique. */}
-                {suggestions.length > 0 && (
+                {(suggestions.length > 0 || opener) && (
                   <div
                     aria-hidden={!composerExpanded}
                     className={cn(
@@ -738,6 +766,11 @@ function InsightsDock({
                     )}
                   >
                     <div className="overflow-hidden">
+                      {opener && (
+                        <p className="text-foreground px-2.5 pt-1.5 pb-2 text-sm">
+                          {opener}
+                        </p>
+                      )}
                       {/* Chips are keyed by title: a route change swaps the
                           old set out instantly (no exit animation — exiting
                           ghosts looked like artifacts) and staggers the new
@@ -1015,6 +1048,37 @@ export function InsightsProvider({
   });
   const hideTrigger = pageHidesTrigger || !assistantAllowed;
 
+  // What the user just did and saw, so the assistant can tell what they are
+  // trying to do. Recording is local and free; the server is asked for an
+  // inferred goal only when the docked composer opens.
+  const activityContextEnabled =
+    useFeatureFlag(FEATURE_FLAGS.assistantActivityContext).status === "enabled";
+  const activityScope = `${organization.slug}/${mcpConfig.projectSlug}`;
+  useRecordDashboardActivity(activityScope, activityContextEnabled);
+  const [dockComposerExpanded, setDockComposerExpanded] = useState(false);
+  const intent = useAssistantIntent({
+    assistantId: managedAssistantId || undefined,
+    projectSlug: mcpConfig.projectSlug,
+    scope: activityScope,
+    enabled: activityContextEnabled && assistantAllowed,
+    active: dockComposerExpanded && !isExpanded,
+  });
+  // Prompts written for what the user is doing come first; the page's own
+  // suggestions fill the rest.
+  const dockSuggestions = useMemo<InsightsSuggestion[]>(() => {
+    const inferred = (intent?.suggestedPrompts ?? []).map(
+      (prompt): InsightsSuggestion => ({
+        title: prompt,
+        label: prompt,
+        prompt,
+        icon: "sparkles",
+      }),
+    );
+    if (inferred.length === 0) return suggestions;
+    const titles = new Set(inferred.map((s) => s.title));
+    return [...inferred, ...suggestions.filter((s) => !titles.has(s.title))];
+  }, [intent, suggestions]);
+
   const skillsQuery = useSkillsInfinite(
     { limit: 200, gramProject: mcpConfig.projectSlug },
     undefined,
@@ -1147,6 +1211,16 @@ export function InsightsProvider({
   // re-create the transport identity on every parent re-render.
   const contextInfoRef = useRef(contextInfo);
   contextInfoRef.current = contextInfo;
+  const activityContextRef = useRef({
+    enabled: activityContextEnabled,
+    pathname,
+    intent,
+  });
+  activityContextRef.current = {
+    enabled: activityContextEnabled,
+    pathname,
+    intent,
+  };
 
   // Wrap the server transport so the dashboard context (date range, chart
   // identity for "Explore with AI" clicks) reaches the model. The server owns
@@ -1161,7 +1235,19 @@ export function InsightsProvider({
       const inner = serverTransport(ctx);
       return {
         sendMessages: async (args) => {
-          const ctxText = contextInfoRef.current;
+          const activityContext = activityContextRef.current;
+          const ctxText = [
+            contextInfoRef.current,
+            activityContext.enabled
+              ? formatActivityContext(
+                  projectRelativePath(activityContext.pathname),
+                  getActivity(),
+                  activityContext.intent,
+                )
+              : undefined,
+          ]
+            .filter(Boolean)
+            .join("\n\n");
           if (!ctxText) {
             return inner.sendMessages(args);
           }
@@ -1340,12 +1426,15 @@ export function InsightsProvider({
   // Bump the runtime key so a fresh conversation opens, then queue the prompt
   // for the bridge to append once the new runtime mounts. Nonce defeats
   // reference-equality skipping when the same chart is clicked twice in a row.
-  const handleSendPrompt = useCallback((text: string) => {
-    setRuntimeKey((k) => k + 1);
-    setPendingPrompt({ text, nonce: Date.now() });
-    // Sending always drops into the live conversation, never the history list.
-    setHistoryView(false);
-  }, []);
+  const handleSendPrompt = useCallback(
+    (text: string, options?: { newConversation?: boolean }) => {
+      if (options?.newConversation !== false) setRuntimeKey((k) => k + 1);
+      setPendingPrompt({ text, nonce: Date.now() });
+      // Sending always drops into the live conversation, never the history list.
+      setHistoryView(false);
+    },
+    [],
+  );
 
   // Docked-pill "Continue chat": reopen the recent conversation as its own
   // full page. Navigating (rather than reopening the dock panel) loads the
@@ -1415,6 +1504,9 @@ export function InsightsProvider({
   // chat id from the server on the first send.
   const handleStartFresh = useCallback(() => {
     setRuntimeKey((k) => k + 1);
+    // A prompt still waiting on the old conversation must not land in the
+    // new one.
+    setPendingPrompt(null);
     setHistoryView(false);
   }, []);
 
@@ -1701,7 +1793,7 @@ export function InsightsProvider({
       {!hideTrigger && !dockDismissed && (
         <div className="pointer-events-none sticky bottom-0 z-30 mt-auto h-0 shrink-0">
           <InsightsDock
-            suggestions={suggestions}
+            suggestions={dockSuggestions}
             open={isExpanded}
             focusKey={focusComposerKey}
             onSubmitPrompt={handleDockSubmit}
@@ -1711,6 +1803,8 @@ export function InsightsProvider({
             onOpenHistory={handleOpenHistory}
             panel={panelContent}
             runtimeReady={runtimeMounted}
+            opener={intent?.opener}
+            onComposerExpandedChange={setDockComposerExpanded}
           />
         </div>
       )}
@@ -1876,20 +1970,27 @@ function PendingPromptBridge({
   const isThreadReady = useAuiState(
     ({ thread }) => !thread.isLoading && !thread.isDisabled,
   );
+  const isRunning = useAuiState(({ thread }) => thread.isRunning);
   const firedNonceRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!pending || !isThreadReady) return;
+    // A new prompt interrupts a running reply, like the composer's stop
+    // button; the effect runs again once the run has stopped.
+    if (isRunning) {
+      thread.cancelRun();
+      return;
+    }
     if (firedNonceRef.current === pending.nonce) return;
-    firedNonceRef.current = pending.nonce;
 
-    const { text } = pending;
+    const { text, nonce } = pending;
 
     // On a cold open the main thread is a placeholder (assistant-ui's
     // EMPTY_THREAD_CORE) until the remote thread-list runtime binds the real
     // thread core. The placeholder reports isLoading/isDisabled false but
     // throws on append, so a throw here means nothing was sent — leave the
-    // prompt queued and retry on the next runtime event. A successful append
+    // prompt queued (nonce unmarked) and retry on the next runtime event. A
+    // successful append
     // marks `done` immediately and never retries: the optimistic message lands
     // asynchronously, so a post-append "did it land?" check races and
     // re-appending duplicates the send.
@@ -1897,6 +1998,7 @@ function PendingPromptBridge({
 
     const finish = () => {
       done = true;
+      firedNonceRef.current = nonce;
       onConsume();
     };
 
@@ -1919,7 +2021,7 @@ function PendingPromptBridge({
     return () => {
       done = true;
     };
-  }, [pending, isThreadReady, thread, onConsume]);
+  }, [pending, isThreadReady, isRunning, thread, onConsume]);
 
   return null;
 }
