@@ -95,7 +95,8 @@ type RunnerBaseRequest struct {
 	Environment map[string]string
 
 	// TimeoutSeconds is how long the invocation may run. The runner caps it
-	// at its own ceiling.
+	// at its own ceiling. Zero leaves the field off the runner request, so the
+	// runner applies its own 5-minute default; the gateway always sets it.
 	TimeoutSeconds int
 }
 

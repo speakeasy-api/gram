@@ -98,8 +98,19 @@ func TestToolProxy_Do_FunctionTool_DefaultsTimeout(t *testing.T) {
 
 	// A plan without a limit, or with one outside the allowed range, gets the
 	// platform default rather than the runner's own.
-	for _, planSeconds := range []int{0, 5, 3600} {
-		require.Equal(t, 60, callFunctionToolWithTimeout(t, planSeconds), "plan seconds %d", planSeconds)
+	cases := []struct {
+		name        string
+		planSeconds int
+	}{
+		{name: "unset", planSeconds: 0},
+		{name: "below range", planSeconds: 5},
+		{name: "above range", planSeconds: 3600},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, 60, callFunctionToolWithTimeout(t, tc.planSeconds))
+		})
 	}
 }
 

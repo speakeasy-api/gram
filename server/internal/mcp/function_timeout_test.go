@@ -2,6 +2,7 @@ package mcp_test
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"sync/atomic"
 	"testing"
@@ -60,9 +61,15 @@ func callFunctionToolAndResource(t *testing.T, storedSeconds *int) (toolSeconds,
 func TestFunctionCallsUseOrganizationTimeout(t *testing.T) {
 	t.Parallel()
 
-	toolSeconds, resourceSeconds := callFunctionToolAndResource(t, new(240))
-	require.Equal(t, 240, toolSeconds)
-	require.Equal(t, 240, resourceSeconds)
+	// 600 sits above the runner's old 5-minute cap, so a clamp there fails.
+	for _, stored := range []int{30, 240, 600} {
+		t.Run(fmt.Sprintf("%d seconds", stored), func(t *testing.T) {
+			t.Parallel()
+			toolSeconds, resourceSeconds := callFunctionToolAndResource(t, new(stored))
+			require.Equal(t, stored, toolSeconds)
+			require.Equal(t, stored, resourceSeconds)
+		})
+	}
 }
 
 func TestFunctionCallsDefaultToOneMinute(t *testing.T) {
