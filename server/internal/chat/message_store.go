@@ -155,8 +155,8 @@ func (w *ChatMessageWriter) WithTranscripts(transcripts *transcriptstore.Transcr
 }
 
 // Begin opens a transaction for writes that store or change a message's
-// protected fields (WriteInTx, UpdateChatMessage). It loads the project's
-// transcript key before the transaction begins, so sealing makes no KMS call
+// protected fields (WriteInTx, UpdateChatMessage). It loads the transcript key
+// of the project's organization before the transaction begins, so sealing makes no KMS call
 // while the transaction is open, and a key that will not load fails before
 // anything is written. The caller defers Rollback and commits.
 func (w *ChatMessageWriter) Begin(ctx context.Context, projectID uuid.UUID) (pgx.Tx, error) {

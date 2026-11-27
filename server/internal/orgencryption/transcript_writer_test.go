@@ -136,6 +136,7 @@ func TestTranscriptWriterCallerTransaction(t *testing.T) {
 			m := f.message("EXAMPLE transactional content")
 			tx, err := f.writer.Begin(t.Context(), f.projectID)
 			require.NoError(t, err)
+			t.Cleanup(func() { _ = tx.Rollback(context.Background()) })
 			n, err := f.writer.WriteInTx(t.Context(), tx, []chat.MessageWrite{m})
 			require.NoError(t, err)
 			require.EqualValues(t, 1, n)
@@ -344,6 +345,7 @@ func TestTranscriptWriterEncryptedRepatchKeepsRiskAnalysis(t *testing.T) {
 
 	tx, err := f.writer.Begin(t.Context(), f.projectID)
 	require.NoError(t, err)
+	t.Cleanup(func() { _ = tx.Rollback(context.Background()) })
 	_, err = f.writer.UpdateChatMessage(t.Context(), tx, f.orgID, f.projectID, f.chatID, m.Params.ID, func(row *chatrepo.ChatMessage) error {
 		row.RiskAnalyzedAt = pgtype.Timestamptz{Time: time.Now(), InfinityModifier: pgtype.Finite, Valid: true}
 		return nil
