@@ -184,8 +184,8 @@ func TestKitGKELifecycleReloadsAndCommitsRecoveryEvidence(t *testing.T) {
 }
 
 // enableTestOrganizationGateway opts orgID into the organization/project
-// gateway by inserting and soft-deleting the default-on disabled flag, matching
-// production opt-in semantics.
+// gateway by inserting and soft-deleting the default-on disabled flag, and
+// sets its serving state to whitelisted and enabled (clearing disabled_at).
 func enableTestOrganizationGateway(t *testing.T, db *pgxpool.Pool, orgID string) {
 	t.Helper()
 	q := productfeaturesrepo.New(db)
