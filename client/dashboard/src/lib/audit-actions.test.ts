@@ -97,7 +97,7 @@ describe("AUDIT_ACTIONS", () => {
       "disabled organization access for",
     );
     expect(staticActionPhrase("organization:disabled_by_membership_cap")).toBe(
-      "disabled organization access, over the per-user organization limit, for",
+      "disabled organization access over the per-user limit for",
     );
   });
 

@@ -136,6 +136,30 @@ func TestMirroredOrganizationCap_UserWithoutSpeakeasyAccountIsCappedByIdentityPr
 	require.True(t, organizationDisabled(t, ctx, conn, "gram_org_cap_unlinked_second"))
 }
 
+func TestMirroredOrganizationCap_UpdateForMembershipRecordedAtLoginIsNotChecked(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn := newOrgEventsTestConn(t, "mirrored_cap_login_then_update")
+	seedWorkOSOrganization(t, ctx, conn, "gram_org_cap_update_first", "org_01HZCAPUPDATEA")
+	seedWorkOSOrganization(t, ctx, conn, "gram_org_cap_update_team", "org_01HZCAPUPDATEB")
+	seedWorkOSUser(t, ctx, conn, "user_cap_update", "user_01HZCAPUPDATE")
+	require.NoError(t, deliverMembershipCreated(t, ctx, conn, "org_01HZCAPUPDATEA", "user_01HZCAPUPDATE", "A"))
+
+	_, err := orgrepo.New(conn).SetUserWorkOSMemberships(ctx, orgrepo.SetUserWorkOSMembershipsParams{
+		UserID:              conv.ToPGText("user_cap_update"),
+		PreserveExisting:    true,
+		WorkosOrgIds:        []string{"org_01HZCAPUPDATEB"},
+		WorkosMembershipIds: []string{"mem_01HZCAPB"},
+	})
+	require.NoError(t, err)
+
+	updated := newWorkOSMembershipEvent(t, "organization_membership.updated", "event_01HZCAPB", "mem_01HZCAPB", "org_01HZCAPUPDATEB", "user_01HZCAPUPDATE", mirroredCapEventTime, "member")
+	require.NoError(t, deliverEvent(ctx, testenv.NewLogger(t), conn, "org_01HZCAPUPDATEB", updated))
+
+	require.False(t, organizationDisabled(t, ctx, conn, "gram_org_cap_update_team"))
+}
+
 func TestMirroredOrganizationCap_MembershipAlreadyRecordedIsNotChecked(t *testing.T) {
 	t.Parallel()
 
@@ -148,7 +172,7 @@ func TestMirroredOrganizationCap_MembershipAlreadyRecordedIsNotChecked(t *testin
 	for _, organizationID := range []string{"gram_org_cap_known_first", "gram_org_cap_known_second"} {
 		require.NoError(t, orgrepo.New(conn).BackdateOrganizationCreatedAtForTest(ctx, orgrepo.BackdateOrganizationCreatedAtForTestParams{
 			ID:        organizationID,
-			CreatedAt: conv.ToPGTimestamptz(mirroredCapEventTime.AddDate(0, -6, 0)),
+			CreatedAt: conv.ToPGTimestamptz(time.Now().AddDate(0, -6, 0)),
 		}))
 		_, err := orgrepo.New(conn).UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
 			OrganizationID: organizationID,

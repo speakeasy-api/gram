@@ -814,7 +814,7 @@ export function staticActionPhrase(action: AuditAction): string {
     case "organization:disabled":
       return "disabled organization access for";
     case "organization:disabled_by_membership_cap":
-      return "disabled organization access, over the per-user organization limit, for";
+      return "disabled organization access over the per-user limit for";
     case "organization:whitelist_updated":
       return "changed demo-access whitelisting for";
     case "organization:webhooks_enabled":
