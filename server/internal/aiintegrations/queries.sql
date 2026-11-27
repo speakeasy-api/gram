@@ -201,6 +201,9 @@ WHERE c.enabled IS TRUE
   AND (c.api_key_encrypted IS NOT NULL OR c.api_key_org_encrypted IS NOT NULL)
   AND s.auto_paused_at IS NULL
   AND s.disabled_at IS NULL
+  -- A disabled organization's syncs stay due without being selected, so they
+  -- run on the first tick after the organization is re-enabled.
+  AND om.disabled_at IS NULL
   AND s.next_poll_after <= @poll_due_before
 ORDER BY s.next_poll_after ASC, c.organization_id ASC, s.schedule ASC
 LIMIT @limit_count;
@@ -221,8 +224,10 @@ SELECT
   , s.last_cursor_id
   , s.created_at AS sync_created_at
   , s.updated_at AS sync_updated_at
+  , (om.disabled_at IS NOT NULL)::boolean AS organization_disabled
 FROM ai_integration_syncs s
 JOIN ai_integration_configs c ON c.id = s.ai_integration_config_id
+JOIN organization_metadata om ON om.id = c.organization_id
 WHERE s.id = @sync_id
   AND c.enabled IS TRUE
   AND c.deleted IS FALSE
@@ -244,10 +249,12 @@ SELECT
   , s.last_cursor_id
   , s.created_at AS sync_created_at
   , s.updated_at AS sync_updated_at
+  , (om.disabled_at IS NOT NULL)::boolean AS organization_disabled
 FROM ai_integration_configs c
 JOIN ai_integration_syncs s
   ON s.ai_integration_config_id = c.id
  AND s.schedule = c.provider
+JOIN organization_metadata om ON om.id = c.organization_id
 WHERE c.id = @ai_integration_config_id
   AND c.enabled IS TRUE
   AND c.deleted IS FALSE
@@ -268,10 +275,12 @@ SELECT
   , s.last_cursor_id
   , s.created_at AS sync_created_at
   , s.updated_at AS sync_updated_at
+  , (om.disabled_at IS NOT NULL)::boolean AS organization_disabled
 FROM ai_integration_configs c
 JOIN ai_integration_syncs s
   ON s.ai_integration_config_id = c.id
  AND s.schedule = @schedule
+JOIN organization_metadata om ON om.id = c.organization_id
 WHERE c.id = @ai_integration_config_id
   AND c.enabled IS TRUE
   AND c.deleted IS FALSE
@@ -449,9 +458,14 @@ WHERE organization_id = @organization_id
 
 -- The random endpoint identifier is the credential lookup key before signature
 -- verification; it does not itself authorize ingestion.
+-- organization_disabled is returned rather than filtered so the webhook can
+-- answer a disabled organization's signed requests with a fail-closed deny
+-- instead of the not-found response Anthropic may treat as allow.
 -- name: GetAnthropicInferenceConfigByID :one
-SELECT c.* FROM ai_integration_configs c
+SELECT sqlc.embed(c), (om.disabled_at IS NOT NULL)::boolean AS organization_disabled
+FROM ai_integration_configs c
 JOIN projects p ON p.id = c.project_id AND p.organization_id = c.organization_id
+JOIN organization_metadata om ON om.id = c.organization_id
 WHERE c.id = @id AND c.provider = 'anthropic_inference'
   AND c.deleted IS FALSE AND p.deleted IS FALSE;
 

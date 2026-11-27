@@ -147,6 +147,12 @@ func (p *PollAIData) Do(ctx context.Context, input string) (err error) {
 			cfg, schedule, err = p.integrations.GetProviderUsagePollConfig(ctx, id)
 		}
 	}
+	if errors.Is(err, aiintegrations.ErrOrganizationDisabled) {
+		// The organization was disabled after candidate selection. Returning
+		// nil completes the activity without a retry or a recorded failure.
+		p.logger.InfoContext(ctx, "skip ai integration usage poll for disabled organization", attr.SlogReason("organization_disabled"))
+		return nil
+	}
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to load ai integration configuration")
 	}

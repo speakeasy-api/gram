@@ -241,6 +241,37 @@ func TestAttachTagsProcessingErrorsWithComponent(t *testing.T) {
 	require.Equal(t, "anthropic-inference", record[string(attr.ComponentKey)])
 }
 
+func TestHandlerDeniesDisabledOrganizationWithoutEvaluating(t *testing.T) {
+	t.Parallel()
+	var logs bytes.Buffer
+	processor := &testProcessor{calls: 0, verdict: allowVerdict(), err: nil}
+	h := newTestHandler(t, processor)
+	h.config.OrganizationDisabled = true
+	h.logger = slog.New(&o11y.ContextHandler{Handler: slog.NewJSONHandler(&logs, nil)})
+
+	response := serveSigned(h, `{"type":"prompt","request_id":"request-example","tenant_id":"tenant-example"}`)
+	require.Equal(t, http.StatusOK, response.Code)
+	require.JSONEq(t, `{"action":"deny","deny_reason":"`+organizationDisabledDenyReason+`"}`, response.Body.String())
+	require.Equal(t, 0, processor.calls)
+
+	var record map[string]any
+	require.NoError(t, json.Unmarshal(logs.Bytes(), &record))
+	require.Equal(t, slog.LevelInfo.String(), record[slog.LevelKey])
+	require.Equal(t, "organization_disabled", record[string(attr.ReasonKey)])
+	require.Equal(t, "org_example", record[string(attr.OrganizationIDKey)])
+}
+
+// An unsigned caller learns nothing about the organization's state.
+func TestHandlerRejectsUnsignedRequestForDisabledOrganization(t *testing.T) {
+	t.Parallel()
+	h := newTestHandler(t, &testProcessor{calls: 0, verdict: allowVerdict(), err: nil})
+	h.config.OrganizationDisabled = true
+	response := httptest.NewRecorder()
+	h.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"type":"prompt"}`)))
+	require.Equal(t, http.StatusUnauthorized, response.Code)
+	require.NotContains(t, response.Body.String(), organizationDisabledDenyReason)
+}
+
 func TestAttachMissingIntegrationReturnsNotFound(t *testing.T) {
 	t.Parallel()
 	mux := goahttp.NewMuxer()
