@@ -27,8 +27,10 @@ import (
 // Go with the same ILIKE semantics the SQL used. A shadowed message never
 // brings its plaintext body to the scan, so it is matched on the shadow only.
 // A message with no shadow is matched on its plaintext, the same fallback every
-// read applies. Each call scans a bounded number of messages and returns a
-// cursor, so the caller decides whether to keep going. A project off the list
+// read applies. The rows a search returns are read or compared with
+// plaintext, so in shadow mode a disagreeing transcript is logged and its
+// plaintext served, as in every read. Each call scans a bounded number of
+// messages and returns a cursor, so the caller decides whether to keep going. A project off the list
 // keeps the single SQL ILIKE query and finishes in one call.
 
 // SearchChunkMessages is how many messages one chunk scans. It matches the
@@ -49,15 +51,15 @@ type scanRow struct {
 	id         uuid.UUID
 	chatID     uuid.UUID
 	ciphertext pgtype.Text
-	fallback   transcriptcrypto.Message
+	fallback   transcriptcrypto.ProtectedFields
 }
 
 // openScan returns the searchable text of each scanned row. A shadow is opened
 // without reading its plaintext source, not even to hash it, so the match is
-// decided on the shadow alone. The rows a search returns are checked for
-// staleness when they are read for display. A row with no shadow keeps its
+// decided on the shadow alone. The rows a search returns are compared with
+// their plaintext when they are read for display. A row with no shadow keeps its
 // plaintext and counts as plaintext_fallback.
-func (t *Transcripts) openScan(ctx context.Context, db plainrepo.DBTX, projectID uuid.UUID, rows []scanRow) ([]transcriptcrypto.Message, error) {
+func (t *Transcripts) openScan(ctx context.Context, db plainrepo.DBTX, projectID uuid.UUID, rows []scanRow) ([]transcriptcrypto.ProtectedFields, error) {
 	s := t.store
 	ctx, span := s.tracer.Start(ctx, "transcriptstore.Scan", trace.WithAttributes(
 		attr.ProjectID(projectID.String()),
@@ -82,8 +84,8 @@ func (t *Transcripts) openScan(ctx context.Context, db plainrepo.DBTX, projectID
 	return opened, nil
 }
 
-func (t *Transcripts) openScanRows(ctx context.Context, db plainrepo.DBTX, projectID uuid.UUID, rows []scanRow) ([]transcriptcrypto.Message, int, error) {
-	opened := make([]transcriptcrypto.Message, len(rows))
+func (t *Transcripts) openScanRows(ctx context.Context, db plainrepo.DBTX, projectID uuid.UUID, rows []scanRow) ([]transcriptcrypto.ProtectedFields, int, error) {
+	opened := make([]transcriptcrypto.ProtectedFields, len(rows))
 	missing := 0
 	for i, row := range rows {
 		if !row.ciphertext.Valid {
@@ -284,7 +286,7 @@ func (t *Transcripts) scanChatChunk(ctx context.Context, db DBTX, s ChatSearch, 
 
 	scan := make([]scanRow, len(chunk))
 	for i, r := range chunk {
-		scan[i] = scanRow{id: r.ID, chatID: r.ChatID, ciphertext: r.ShadowCiphertext, fallback: transcriptcrypto.Message{Content: r.FallbackContent, ContentRaw: r.FallbackContentRaw, ToolCalls: r.FallbackToolCalls, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}}
+		scan[i] = scanRow{id: r.ID, chatID: r.ChatID, ciphertext: r.ShadowCiphertext, fallback: transcriptcrypto.ProtectedFields{Content: r.FallbackContent, ContentRaw: r.FallbackContentRaw, ToolCalls: r.FallbackToolCalls, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}}
 	}
 	opened, err := t.openScan(ctx, db, s.ProjectID, scan)
 	if err != nil {
@@ -331,7 +333,8 @@ func countsAsEntry(role string, toolCalls []byte) bool {
 }
 
 // listSearchMatchWindows reads the windows around matches for display and
-// opens them with the usual checks, so a stale shadow still fails the read.
+// opens them with the usual checks, so a disagreeing transcript is logged and
+// its plaintext served.
 func (t *Transcripts) listSearchMatchWindows(ctx context.Context, db DBTX, s ChatSearch, matches []uuid.UUID, bridge int64) ([]ListSearchWindowedMessagesRow, error) {
 	windowed, err := plainrepo.New(db).ListSearchMatchWindows(ctx, plainrepo.ListSearchMatchWindowsParams{
 		OpenShadows: t.Enabled(s.ProjectID),
@@ -350,7 +353,7 @@ func (t *Transcripts) listSearchMatchWindows(ctx context.Context, db DBTX, s Cha
 	for i := range windowed {
 		rows[i] = ListSearchWindowedMessagesRow(windowed[i])
 		r := &rows[i]
-		joined[i] = joinedRow{body: Body{MessageID: r.ID, Content: &r.Content, ContentRaw: &r.ContentRaw, ToolCalls: &r.ToolCalls, ToolOutcomeNotes: &r.ToolOutcomeNotes, ToolCallSummaries: &r.ToolCallSummaries, StorageError: &r.StorageError}, chatID: r.ChatID, ciphertext: r.ShadowCiphertext, current: r.ShadowCurrent, shape: nil}
+		joined[i] = joinedRow{body: ProtectedFieldRefs{MessageID: r.ID, Content: &r.Content, ContentRaw: &r.ContentRaw, ToolCalls: &r.ToolCalls, ToolOutcomeNotes: &r.ToolOutcomeNotes, ToolCallSummaries: &r.ToolCallSummaries, StorageError: &r.StorageError}, chatID: r.ChatID, ciphertext: r.ShadowCiphertext, current: r.ShadowCurrent, shape: nil}
 	}
 	if err := t.openJoined(ctx, db, s.ProjectID, joined); err != nil {
 		return nil, err
@@ -415,8 +418,8 @@ func (t *Transcripts) scanPlatformChats(ctx context.Context, db DBTX, s Platform
 	pattern := compileLike(p.Pattern)
 	q := plainrepo.New(db)
 	page := PlatformChatSearchPage{Rows: []SearchPlatformChatMessagesRow{}, More: false, NextCreatedAt: pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}, NextID: uuid.Nil, ScanIncomplete: false, Scanned: 0}
-	// shadowed lists the hits matched on a shadow, which are checked for
-	// staleness before the page is returned.
+	// shadowed lists the hits matched on a transcript, which are compared with
+	// their plaintext rows before the page is returned.
 	shadowed := make([]uuid.UUID, 0)
 	hasCursor, cursorAt, cursorID := p.HasCursor, p.CursorAt, p.CursorID
 	for page.Scanned < s.ScanBudget {
@@ -434,7 +437,7 @@ func (t *Transcripts) scanPlatformChats(ctx context.Context, db DBTX, s Platform
 		}
 		scan := make([]scanRow, len(chunk))
 		for i, r := range chunk {
-			scan[i] = scanRow{id: r.ID, chatID: r.ChatID, ciphertext: r.ShadowCiphertext, fallback: transcriptcrypto.Message{Content: r.FallbackContent, ContentRaw: r.FallbackContentRaw, ToolCalls: r.FallbackToolCalls, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}}
+			scan[i] = scanRow{id: r.ID, chatID: r.ChatID, ciphertext: r.ShadowCiphertext, fallback: transcriptcrypto.ProtectedFields{Content: r.FallbackContent, ContentRaw: r.FallbackContentRaw, ToolCalls: r.FallbackToolCalls, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}}
 		}
 		opened, err := t.openScan(ctx, db, p.ProjectID, scan)
 		if err != nil {
@@ -463,7 +466,7 @@ func (t *Transcripts) scanPlatformChats(ctx context.Context, db DBTX, s Platform
 					// last hit this page returns.
 					last := page.Rows[len(page.Rows)-1]
 					page.More, page.NextCreatedAt, page.NextID = true, last.CreatedAt, last.ID
-					return page, t.checkScanHits(ctx, db, p.ProjectID, shadowed)
+					return page, t.checkScanHits(ctx, db, p.ProjectID, page.Rows, shadowed)
 				}
 				page.Rows = append(page.Rows, SearchPlatformChatMessagesRow{
 					ID: r.ID, ChatID: r.ChatID, Seq: r.Seq, CreatedAt: r.CreatedAt, Role: r.Role, Generation: r.Generation,
@@ -481,30 +484,55 @@ func (t *Transcripts) scanPlatformChats(ctx context.Context, db DBTX, s Platform
 		}
 		if len(chunk) < size {
 			// The messages ran out: the search is complete.
-			return page, t.checkScanHits(ctx, db, p.ProjectID, shadowed)
+			return page, t.checkScanHits(ctx, db, p.ProjectID, page.Rows, shadowed)
 		}
 	}
 	// The scan budget is spent and messages may remain after the last one
 	// scanned, whether or not it was a hit.
 	page.More, page.ScanIncomplete, page.NextCreatedAt, page.NextID = true, true, cursorAt, cursorID
-	return page, t.checkScanHits(ctx, db, p.ProjectID, shadowed)
+	return page, t.checkScanHits(ctx, db, p.ProjectID, page.Rows, shadowed)
 }
 
-// checkScanHits fails the search when a hit's shadow no longer matches its
-// source row, as every read of a stale shadow does. Only the hits are
-// checked, so the scan never hashes the plaintext of every message it reads.
-func (t *Transcripts) checkScanHits(ctx context.Context, db DBTX, projectID uuid.UUID, ids []uuid.UUID) error {
-	if len(ids) == 0 {
+// checkScanHits compares each hit matched on a transcript with its plaintext
+// row in shadow mode, as every read does. A hit whose transcript disagrees is
+// logged, counted as stale and served from plaintext, capped the same way.
+// Only the hits are compared, so the scan never reads the plaintext of every
+// message. Encrypted mode has no plaintext to compare.
+func (t *Transcripts) checkScanHits(ctx context.Context, db DBTX, projectID uuid.UUID, rows []SearchPlatformChatMessagesRow, ids []uuid.UUID) error {
+	if len(ids) == 0 || t.Mode(projectID) != ModeShadow {
 		return nil
 	}
-	current, err := plainrepo.New(db).ListShadowsCurrent(ctx, plainrepo.ListShadowsCurrentParams{ProjectID: projectID, MessageIds: ids})
+	plain, err := plainrepo.New(db).ListSearchHitFields(ctx, plainrepo.ListSearchHitFieldsParams{ProjectID: projectID, MessageIds: ids})
 	if err != nil {
-		return fmt.Errorf("check searched transcript shadows: %w", safe(err))
+		return fmt.Errorf("check searched transcripts: %w", safe(err))
 	}
-	for _, c := range current {
-		if !c.Current {
-			return fmt.Errorf("open encrypted chat transcript for search: %w", ErrStale)
+	byID := make(map[uuid.UUID]plainrepo.ListSearchHitFieldsRow, len(plain))
+	for _, p := range plain {
+		byID[p.ID] = p
+	}
+	stale := 0
+	for i := range rows {
+		p, ok := byID[rows[i].ID]
+		if !ok {
+			continue
 		}
+		r := &rows[i]
+		served := transcriptcrypto.ProtectedFields{Content: r.Content, ContentRaw: r.ContentRaw, ToolCalls: r.ToolCalls, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}
+		source := transcriptcrypto.ProtectedFields{Content: p.Content, ContentRaw: p.ContentRaw, ToolCalls: p.ToolCalls, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}
+		// Plaintext JSON arrives in jsonb's text form, which the cap measures.
+		over := platformOversized{
+			content:    len(source.Content) > platformBodyBytes,
+			toolCalls:  len(source.ToolCalls) > platformBodyBytes,
+			contentRaw: len(source.ContentRaw) > platformBodyBytes,
+		}
+		platformShape(over)(&source)
+		if t.store.agrees(ctx, "search", projectID, r.ID, served, source) {
+			continue
+		}
+		stale++
+		r.Content, r.ContentRaw, r.ToolCalls = source.Content, source.ContentRaw, source.ToolCalls
+		r.Oversized, r.ContentOversized, r.ToolCallsOversized, r.ContentRawOversized = over.content || over.toolCalls || over.contentRaw, over.content, over.toolCalls, over.contentRaw
 	}
+	t.store.metrics.read.recordMessages(ctx, projectID, stale, outcomeStale)
 	return nil
 }

@@ -491,6 +491,14 @@ func TestCommitExplicitReplaceMovesEveryServerToTheNewClient(t *testing.T) {
 	require.Equal(t, map[string]string{second.String(): "resignin"}, impactsByServer(impact))
 	require.Zero(t, impact.HiddenServerCount)
 
+	// A caller who cannot read the other server is told one is hidden, not
+	// which.
+	firstOnlyCtx := withExactAccessGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPWrite, first.String()))
+	impact, err = ti.service.GetServerIdentityImpact(firstOnlyCtx, preview)
+	require.NoError(t, err)
+	require.Empty(t, impact.Servers)
+	require.Equal(t, 1, impact.HiddenServerCount)
+
 	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientDetachMcpServer)
 	require.NoError(t, err)
 

@@ -6,9 +6,9 @@ SELECT organization_id FROM projects WHERE id = @project_id;
 -- name: ListLatestGenerationChatMessages :many
 -- Returns only the latest-generation rows; older generations are audit-only.
 SELECT sqlc.embed(m), t.ciphertext AS shadow_ciphertext,
-       COALESCE(t.ciphertext IS NOT NULL AND CASE WHEN t.source_updated_at IS NULL AND t.source_hash IS NOT NULL THEN t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')) ELSE t.source_updated_at IS NOT DISTINCT FROM m.source_updated_at END, false)::boolean AS shadow_current
+       (t.ciphertext IS NOT NULL)::boolean AS shadow_current
 FROM chat_messages m
-LEFT JOIN chat_message_transcripts t ON t.message_id = m.id AND t.project_id = m.project_id AND @open_shadows::boolean
+LEFT JOIN chat_message_transcripts t ON t.source_hash IS NULL AND t.message_id = m.id AND t.project_id = m.project_id AND @open_shadows::boolean
 WHERE m.chat_id = @chat_id
   AND m.project_id = @project_id::uuid
   AND m.generation = (SELECT MAX(generation) FROM chat_messages WHERE chat_id = @chat_id AND project_id = @project_id::uuid)
@@ -19,9 +19,9 @@ ORDER BY m.created_at ASC, m.seq ASC;
 -- multiple reads (e.g. across Temporal activities) so indices stay stable
 -- even if a new generation is appended mid-workflow.
 SELECT sqlc.embed(m), t.ciphertext AS shadow_ciphertext,
-       COALESCE(t.ciphertext IS NOT NULL AND CASE WHEN t.source_updated_at IS NULL AND t.source_hash IS NOT NULL THEN t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')) ELSE t.source_updated_at IS NOT DISTINCT FROM m.source_updated_at END, false)::boolean AS shadow_current
+       (t.ciphertext IS NOT NULL)::boolean AS shadow_current
 FROM chat_messages m
-LEFT JOIN chat_message_transcripts t ON t.message_id = m.id AND t.project_id = m.project_id AND @open_shadows::boolean
+LEFT JOIN chat_message_transcripts t ON t.source_hash IS NULL AND t.message_id = m.id AND t.project_id = m.project_id AND @open_shadows::boolean
 WHERE m.chat_id = @chat_id
   AND m.project_id = @project_id::uuid
   AND m.generation = @generation::integer
@@ -35,9 +35,9 @@ ORDER BY m.created_at ASC, m.seq ASC;
 -- @after_seq is NULL. Fetch @lim = pageSize+1 to detect whether more newer
 -- rows remain.
 SELECT sqlc.embed(m), t.ciphertext AS shadow_ciphertext,
-       COALESCE(t.ciphertext IS NOT NULL AND CASE WHEN t.source_updated_at IS NULL AND t.source_hash IS NOT NULL THEN t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')) ELSE t.source_updated_at IS NOT DISTINCT FROM m.source_updated_at END, false)::boolean AS shadow_current
+       (t.ciphertext IS NOT NULL)::boolean AS shadow_current
 FROM chat_messages m
-LEFT JOIN chat_message_transcripts t ON t.message_id = m.id AND t.project_id = m.project_id AND @open_shadows::boolean
+LEFT JOIN chat_message_transcripts t ON t.source_hash IS NULL AND t.message_id = m.id AND t.project_id = m.project_id AND @open_shadows::boolean
 WHERE m.chat_id = @chat_id
   AND m.project_id = @project_id::uuid
   AND m.generation = @generation::integer
@@ -73,9 +73,9 @@ LIMIT @lim::integer;
 -- ascending for display. Fetch @lim = pageSize+1 to detect whether more older
 -- rows remain.
 SELECT sqlc.embed(m), t.ciphertext AS shadow_ciphertext,
-       COALESCE(t.ciphertext IS NOT NULL AND CASE WHEN t.source_updated_at IS NULL AND t.source_hash IS NOT NULL THEN t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')) ELSE t.source_updated_at IS NOT DISTINCT FROM m.source_updated_at END, false)::boolean AS shadow_current
+       (t.ciphertext IS NOT NULL)::boolean AS shadow_current
 FROM chat_messages m
-LEFT JOIN chat_message_transcripts t ON t.message_id = m.id AND t.project_id = m.project_id AND @open_shadows::boolean
+LEFT JOIN chat_message_transcripts t ON t.source_hash IS NULL AND t.message_id = m.id AND t.project_id = m.project_id AND @open_shadows::boolean
 WHERE m.chat_id = @chat_id
   AND m.project_id = @project_id::uuid
   AND m.generation = @generation::integer
@@ -143,9 +143,9 @@ SELECT
   o.*,
   EXISTS (SELECT 1 FROM risk_rns r WHERE r.rn = o.rn) AS is_risk,
   t.ciphertext AS shadow_ciphertext,
-       COALESCE(t.ciphertext IS NOT NULL AND CASE WHEN t.source_updated_at IS NULL AND t.source_hash IS NOT NULL THEN t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,o.content,o.content_raw IS NULL,o.content_raw,o.tool_calls IS NULL,o.tool_calls,o.tool_outcome_notes,o.tool_call_summaries IS NULL,o.tool_call_summaries,o.storage_error)::text,'UTF8')) ELSE t.source_updated_at IS NOT DISTINCT FROM o.source_updated_at END, false)::boolean AS shadow_current
+       (t.ciphertext IS NOT NULL)::boolean AS shadow_current
 FROM ordered o
-LEFT JOIN chat_message_transcripts t ON t.message_id = o.id AND t.project_id = o.project_id AND @open_shadows::boolean
+LEFT JOIN chat_message_transcripts t ON t.source_hash IS NULL AND t.message_id = o.id AND t.project_id = o.project_id AND @open_shadows::boolean
 WHERE EXISTS (
   SELECT 1 FROM risk_rns r
   WHERE o.rn BETWEEN r.rn - @context_size::bigint AND r.rn + @context_size::bigint
@@ -185,9 +185,9 @@ SELECT
   o.*,
   EXISTS (SELECT 1 FROM match_rns m WHERE m.rn = o.rn) AS is_match,
   t.ciphertext AS shadow_ciphertext,
-       COALESCE(t.ciphertext IS NOT NULL AND CASE WHEN t.source_updated_at IS NULL AND t.source_hash IS NOT NULL THEN t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,o.content,o.content_raw IS NULL,o.content_raw,o.tool_calls IS NULL,o.tool_calls,o.tool_outcome_notes,o.tool_call_summaries IS NULL,o.tool_call_summaries,o.storage_error)::text,'UTF8')) ELSE t.source_updated_at IS NOT DISTINCT FROM o.source_updated_at END, false)::boolean AS shadow_current
+       (t.ciphertext IS NOT NULL)::boolean AS shadow_current
 FROM ordered o
-LEFT JOIN chat_message_transcripts t ON t.message_id = o.id AND t.project_id = o.project_id AND @open_shadows::boolean
+LEFT JOIN chat_message_transcripts t ON t.source_hash IS NULL AND t.message_id = o.id AND t.project_id = o.project_id AND @open_shadows::boolean
 WHERE EXISTS (
   SELECT 1 FROM match_rns m
   WHERE o.rn BETWEEN m.rn - @context_size::bigint AND m.rn + @context_size::bigint
@@ -209,7 +209,7 @@ SELECT m.id, m.chat_id, m.created_at, m.seq, m.role,
        CASE WHEN t.message_id IS NULL THEN m.tool_calls END::jsonb AS fallback_tool_calls,
        CASE WHEN t.message_id IS NULL THEN m.content_raw END::jsonb AS fallback_content_raw
 FROM chat_messages m
-LEFT JOIN chat_message_transcripts t ON t.message_id = m.id AND t.project_id = m.project_id
+LEFT JOIN chat_message_transcripts t ON t.source_hash IS NULL AND t.message_id = m.id AND t.project_id = m.project_id
 WHERE m.chat_id = @chat_id
   AND m.project_id = @project_id::uuid
   AND m.generation = @generation::integer
@@ -246,9 +246,9 @@ SELECT
   o.*,
   EXISTS (SELECT 1 FROM match_rns m WHERE m.rn = o.rn) AS is_match,
   t.ciphertext AS shadow_ciphertext,
-       COALESCE(t.ciphertext IS NOT NULL AND CASE WHEN t.source_updated_at IS NULL AND t.source_hash IS NOT NULL THEN t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,o.content,o.content_raw IS NULL,o.content_raw,o.tool_calls IS NULL,o.tool_calls,o.tool_outcome_notes,o.tool_call_summaries IS NULL,o.tool_call_summaries,o.storage_error)::text,'UTF8')) ELSE t.source_updated_at IS NOT DISTINCT FROM o.source_updated_at END, false)::boolean AS shadow_current
+  (t.ciphertext IS NOT NULL)::boolean AS shadow_current
 FROM ordered o
-LEFT JOIN chat_message_transcripts t ON t.message_id = o.id AND t.project_id = o.project_id AND @open_shadows::boolean
+LEFT JOIN chat_message_transcripts t ON t.source_hash IS NULL AND t.message_id = o.id AND t.project_id = o.project_id AND @open_shadows::boolean
 WHERE EXISTS (
   SELECT 1 FROM match_rns m
   WHERE o.rn BETWEEN m.rn - @context_size::bigint AND m.rn + @context_size::bigint
@@ -313,9 +313,9 @@ FROM ordered;
 SELECT m.id, m.role, m.content, m.tool_call_id, m.tool_calls, m.original_message_id,
   COALESCE(m.capture_kind, CASE WHEN m.generation = 0 THEN 'original' ELSE 'unknown' END)::text AS capture_kind,
   t.ciphertext AS shadow_ciphertext,
-  COALESCE(t.ciphertext IS NOT NULL AND CASE WHEN t.source_updated_at IS NULL AND t.source_hash IS NOT NULL THEN t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')) ELSE t.source_updated_at IS NOT DISTINCT FROM m.source_updated_at END, false)::boolean AS shadow_current
+  (t.ciphertext IS NOT NULL)::boolean AS shadow_current
 FROM chat_messages m
-LEFT JOIN chat_message_transcripts t ON t.message_id = m.id AND t.project_id = m.project_id AND @open_shadows::boolean
+LEFT JOIN chat_message_transcripts t ON t.source_hash IS NULL AND t.message_id = m.id AND t.project_id = m.project_id AND @open_shadows::boolean
 WHERE m.chat_id = @chat_id
   AND m.project_id = @project_id::uuid
   AND m.generation = @generation
@@ -323,9 +323,9 @@ ORDER BY m.created_at ASC, m.seq ASC;
 
 -- name: GetKitProjectionMessage :one
 SELECT sqlc.embed(m), t.ciphertext AS shadow_ciphertext,
-  COALESCE(t.ciphertext IS NOT NULL AND CASE WHEN t.source_updated_at IS NULL AND t.source_hash IS NOT NULL THEN t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')) ELSE t.source_updated_at IS NOT DISTINCT FROM m.source_updated_at END, false)::boolean AS shadow_current
+  (t.ciphertext IS NOT NULL)::boolean AS shadow_current
 FROM chat_messages m
-LEFT JOIN chat_message_transcripts t ON t.message_id = m.id AND t.project_id = m.project_id AND @open_shadows::boolean
+LEFT JOIN chat_message_transcripts t ON t.source_hash IS NULL AND t.message_id = m.id AND t.project_id = m.project_id AND @open_shadows::boolean
 WHERE m.project_id = @project_id AND m.id = @id;
 
 -- name: GetToolCallSummaryContext :one
@@ -338,9 +338,9 @@ SELECT
   results.id AS result_message_id,
   results.content::text AS result_content,
   tc.ciphertext AS calls_shadow_ciphertext,
-  COALESCE(tc.ciphertext IS NOT NULL AND CASE WHEN tc.source_updated_at IS NULL AND tc.source_hash IS NOT NULL THEN tc.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,calls.content,calls.content_raw IS NULL,calls.content_raw,calls.tool_calls IS NULL,calls.tool_calls,calls.tool_outcome_notes,calls.tool_call_summaries IS NULL,calls.tool_call_summaries,calls.storage_error)::text,'UTF8')) ELSE tc.source_updated_at IS NOT DISTINCT FROM calls.source_updated_at END, false)::boolean AS calls_shadow_current,
+  (tc.ciphertext IS NOT NULL)::boolean AS calls_shadow_current,
   tr.ciphertext AS result_shadow_ciphertext,
-  COALESCE(tr.ciphertext IS NOT NULL AND CASE WHEN tr.source_updated_at IS NULL AND tr.source_hash IS NOT NULL THEN tr.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,results.content,results.content_raw IS NULL,results.content_raw,results.tool_calls IS NULL,results.tool_calls,results.tool_outcome_notes,results.tool_call_summaries IS NULL,results.tool_call_summaries,results.storage_error)::text,'UTF8')) ELSE tr.source_updated_at IS NOT DISTINCT FROM results.source_updated_at END, false)::boolean AS result_shadow_current
+  (tr.ciphertext IS NOT NULL)::boolean AS result_shadow_current
 FROM chat_messages AS calls
 JOIN chat_messages AS results
   ON results.chat_id = calls.chat_id
@@ -348,8 +348,8 @@ JOIN chat_messages AS results
   AND results.tool_call_id = @tool_call_id
   AND results.generation = calls.generation
   AND results.role = 'tool'
-LEFT JOIN chat_message_transcripts tc ON tc.message_id = calls.id AND tc.project_id = calls.project_id AND @open_shadows::boolean
-LEFT JOIN chat_message_transcripts tr ON tr.message_id = results.id AND tr.project_id = results.project_id AND @open_shadows::boolean
+LEFT JOIN chat_message_transcripts tc ON tc.source_hash IS NULL AND tc.message_id = calls.id AND tc.project_id = calls.project_id AND @open_shadows::boolean
+LEFT JOIN chat_message_transcripts tr ON tr.source_hash IS NULL AND tr.message_id = results.id AND tr.project_id = results.project_id AND @open_shadows::boolean
 WHERE calls.id = @message_id
   AND calls.chat_id = @chat_id
   AND calls.project_id = @project_id::uuid
@@ -359,9 +359,9 @@ LIMIT 1;
 
 -- name: ListClaudeUserMessagesForPromptAttachmentParent :many
 SELECT m.id, m.content, t.ciphertext AS shadow_ciphertext,
-  COALESCE(t.ciphertext IS NOT NULL AND CASE WHEN t.source_updated_at IS NULL AND t.source_hash IS NOT NULL THEN t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')) ELSE t.source_updated_at IS NOT DISTINCT FROM m.source_updated_at END, false)::boolean AS shadow_current
+  (t.ciphertext IS NOT NULL)::boolean AS shadow_current
 FROM chat_messages m
-LEFT JOIN chat_message_transcripts t ON t.message_id = m.id AND t.project_id = m.project_id AND @open_shadows::boolean
+LEFT JOIN chat_message_transcripts t ON t.source_hash IS NULL AND t.message_id = m.id AND t.project_id = m.project_id AND @open_shadows::boolean
 WHERE m.chat_id = @chat_id
   AND m.project_id = @project_id::uuid
   AND m.role = 'user'
@@ -396,9 +396,9 @@ SELECT
   cm.tool_outcome,
   cm.tool_outcome_notes,
   t.ciphertext AS shadow_ciphertext,
-  COALESCE(t.ciphertext IS NOT NULL AND CASE WHEN t.source_updated_at IS NULL AND t.source_hash IS NOT NULL THEN t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,cm.content,cm.content_raw IS NULL,cm.content_raw,cm.tool_calls IS NULL,cm.tool_calls,cm.tool_outcome_notes,cm.tool_call_summaries IS NULL,cm.tool_call_summaries,cm.storage_error)::text,'UTF8')) ELSE t.source_updated_at IS NOT DISTINCT FROM cm.source_updated_at END, false)::boolean AS shadow_current
+  (t.ciphertext IS NOT NULL)::boolean AS shadow_current
 FROM chat_messages cm
-LEFT JOIN chat_message_transcripts t ON t.message_id = cm.id AND t.project_id = cm.project_id AND @open_shadows::boolean
+LEFT JOIN chat_message_transcripts t ON t.source_hash IS NULL AND t.message_id = cm.id AND t.project_id = cm.project_id AND @open_shadows::boolean
 WHERE cm.chat_id = @chat_id
   AND cm.project_id = @project_id::uuid
   AND (
@@ -411,29 +411,6 @@ WHERE cm.chat_id = @chat_id
   )
 ORDER BY cm.created_at DESC, cm.seq DESC, cm.id DESC
 LIMIT @lim::integer;
-
--- name: PatchKitProjectionMessage :execrows
--- A body change stamps source_updated_at, so an encrypted copy of the old body
--- reads as stale, and drops the metadata and tool-call IDs measured from it
--- until the message is sealed again.
-WITH body_changed AS (
-  SELECT cm.id FROM chat_messages cm
-  WHERE cm.project_id = @project_id AND cm.chat_id = @chat_id AND cm.id = @id AND cm.source = 'kit'
-    AND (cm.content IS DISTINCT FROM @content OR cm.content_raw IS DISTINCT FROM @content_raw OR cm.tool_calls IS DISTINCT FROM @tool_calls)
-), stale_tool_call_ids AS (
-  DELETE FROM chat_message_tool_call_ids tc
-  WHERE tc.project_id = @project_id AND tc.message_id IN (SELECT bc.id FROM body_changed bc)
-)
-UPDATE chat_messages AS m SET content = @content, content_raw = @content_raw,
- tool_calls = @tool_calls, content_hash = @content_hash, finish_reason = @finish_reason,
- risk_analyzed_at = CASE WHEN m.id IN (SELECT bc.id FROM body_changed bc) THEN NULL ELSE m.risk_analyzed_at END,
- source_updated_at = CASE WHEN m.id IN (SELECT bc.id FROM body_changed bc) THEN clock_timestamp() ELSE m.source_updated_at END,
- tool_call_count = CASE WHEN m.id IN (SELECT bc.id FROM body_changed bc) THEN NULL ELSE m.tool_call_count END,
- content_bytes = CASE WHEN m.id IN (SELECT bc.id FROM body_changed bc) THEN NULL ELSE m.content_bytes END,
- content_raw_bytes = CASE WHEN m.id IN (SELECT bc.id FROM body_changed bc) THEN NULL ELSE m.content_raw_bytes END,
- tool_calls_bytes = CASE WHEN m.id IN (SELECT bc.id FROM body_changed bc) THEN NULL ELSE m.tool_calls_bytes END
-WHERE m.project_id = @project_id AND m.chat_id = @chat_id AND m.id = @id AND m.source = 'kit'
-AND (m.content IS DISTINCT FROM @content OR m.content_raw IS DISTINCT FROM @content_raw OR m.tool_calls IS DISTINCT FROM @tool_calls OR m.finish_reason IS DISTINCT FROM @finish_reason);
 
 -- name: UpsertCorrelatedChatMessage :one
 -- Returns persisted metering fields and distinguishes initial inserts from
@@ -510,30 +487,6 @@ WHERE chat_messages.project_id = EXCLUDED.project_id
   AND chat_messages.source = 'litellm'
 RETURNING id, content, tool_calls, model, user_id, external_user_id, source, user_agent, (xmax = 0) AS inserted;
 
--- name: StoreToolCallSummary :one
--- Preserve summaries for sibling calls carried by the same assistant message.
--- A body update stamps source_updated_at so an encrypted copy of the old body
--- reads as stale.
-UPDATE chat_messages
-SET tool_call_summaries = jsonb_set(
-  COALESCE(tool_call_summaries, '{}'::jsonb),
-  ARRAY[@tool_call_id::text],
-  @summary::jsonb
-),
-    source_updated_at = clock_timestamp()
-WHERE id = @message_id
-  AND chat_id = @chat_id
-  AND project_id = @project_id::uuid
-RETURNING (tool_call_summaries -> @tool_call_id::text)::text AS summary;
-
--- name: UpdateToolCallOutcome :exec
--- tool_outcome_notes is a body field: changing it stamps source_updated_at.
-UPDATE chat_messages
-SET tool_outcome = @tool_outcome,
-    tool_outcome_notes = @tool_outcome_notes,
-    source_updated_at = CASE WHEN tool_outcome_notes IS DISTINCT FROM @tool_outcome_notes THEN clock_timestamp() ELSE source_updated_at END
-WHERE id = @id AND project_id = @project_id::uuid;
-
 -- name: GetMessageContentBatch :many
 -- The scanned user's id rides along so the LLM judge's completion telemetry
 -- can attribute scanning volume to whose traffic was analyzed. Same
@@ -565,11 +518,11 @@ SELECT cm.id, cm.chat_id, cm.role, cm.content, cm.tool_calls, cm.created_at, cm.
   COALESCE(prior_user_request.id, '00000000-0000-0000-0000-000000000000'::uuid)::uuid AS prior_user_request_id,
   COALESCE(recent_tool.id, '00000000-0000-0000-0000-000000000000'::uuid)::uuid AS recent_untrusted_content_id,
   t.ciphertext AS shadow_ciphertext,
-  COALESCE(t.ciphertext IS NOT NULL AND CASE WHEN t.source_updated_at IS NULL AND t.source_hash IS NOT NULL THEN t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,cm.content,cm.content_raw IS NULL,cm.content_raw,cm.tool_calls IS NULL,cm.tool_calls,cm.tool_outcome_notes,cm.tool_call_summaries IS NULL,cm.tool_call_summaries,cm.storage_error)::text,'UTF8')) ELSE t.source_updated_at IS NOT DISTINCT FROM cm.source_updated_at END, false)::boolean AS shadow_current,
+  (t.ciphertext IS NOT NULL)::boolean AS shadow_current,
   tp.ciphertext AS prior_shadow_ciphertext,
-  COALESCE(tp.ciphertext IS NOT NULL AND CASE WHEN tp.source_updated_at IS NULL AND tp.source_hash IS NOT NULL THEN tp.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,mp.content,mp.content_raw IS NULL,mp.content_raw,mp.tool_calls IS NULL,mp.tool_calls,mp.tool_outcome_notes,mp.tool_call_summaries IS NULL,mp.tool_call_summaries,mp.storage_error)::text,'UTF8')) ELSE tp.source_updated_at IS NOT DISTINCT FROM mp.source_updated_at END, false)::boolean AS prior_shadow_current,
+  (tp.ciphertext IS NOT NULL)::boolean AS prior_shadow_current,
   tr.ciphertext AS recent_shadow_ciphertext,
-  COALESCE(tr.ciphertext IS NOT NULL AND CASE WHEN tr.source_updated_at IS NULL AND tr.source_hash IS NOT NULL THEN tr.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,mr.content,mr.content_raw IS NULL,mr.content_raw,mr.tool_calls IS NULL,mr.tool_calls,mr.tool_outcome_notes,mr.tool_call_summaries IS NULL,mr.tool_call_summaries,mr.storage_error)::text,'UTF8')) ELSE tr.source_updated_at IS NOT DISTINCT FROM mr.source_updated_at END, false)::boolean AS recent_shadow_current
+  (tr.ciphertext IS NOT NULL)::boolean AS recent_shadow_current
 FROM chat_messages cm
 JOIN chats c ON c.id = cm.chat_id
   AND c.project_id = cm.project_id
@@ -594,10 +547,10 @@ LEFT JOIN LATERAL (
   ORDER BY prev.created_at DESC, prev.seq DESC
   LIMIT 1
 ) recent_tool ON TRUE
-LEFT JOIN chat_message_transcripts t ON t.message_id = cm.id AND t.project_id = cm.project_id AND @open_shadows::boolean
-LEFT JOIN chat_message_transcripts tp ON tp.message_id = prior_user_request.id AND tp.project_id = cm.project_id AND @open_shadows::boolean
+LEFT JOIN chat_message_transcripts t ON t.source_hash IS NULL AND t.message_id = cm.id AND t.project_id = cm.project_id AND @open_shadows::boolean
+LEFT JOIN chat_message_transcripts tp ON tp.source_hash IS NULL AND tp.message_id = prior_user_request.id AND tp.project_id = cm.project_id AND @open_shadows::boolean
 LEFT JOIN chat_messages mp ON mp.id = tp.message_id
-LEFT JOIN chat_message_transcripts tr ON tr.message_id = recent_tool.id AND tr.project_id = cm.project_id AND @open_shadows::boolean
+LEFT JOIN chat_message_transcripts tr ON tr.source_hash IS NULL AND tr.message_id = recent_tool.id AND tr.project_id = cm.project_id AND @open_shadows::boolean
 LEFT JOIN chat_messages mr ON mr.id = tr.message_id
 WHERE cm.id = ANY(@ids::uuid[])
   AND cm.project_id = @project_id;
@@ -611,9 +564,9 @@ WHERE cm.id = ANY(@ids::uuid[])
 -- authorization check when the ClickHouse row carries no denormalized chat id.
 SELECT cm.id, cm.chat_id, cm.role, cm.content, cm.tool_calls, cm.created_at,
   t.ciphertext AS shadow_ciphertext,
-  COALESCE(t.ciphertext IS NOT NULL AND CASE WHEN t.source_updated_at IS NULL AND t.source_hash IS NOT NULL THEN t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,cm.content,cm.content_raw IS NULL,cm.content_raw,cm.tool_calls IS NULL,cm.tool_calls,cm.tool_outcome_notes,cm.tool_call_summaries IS NULL,cm.tool_call_summaries,cm.storage_error)::text,'UTF8')) ELSE t.source_updated_at IS NOT DISTINCT FROM cm.source_updated_at END, false)::boolean AS shadow_current
+  (t.ciphertext IS NOT NULL)::boolean AS shadow_current
 FROM chat_messages cm
-LEFT JOIN chat_message_transcripts t ON t.message_id = cm.id AND t.project_id = cm.project_id AND @open_shadows::boolean
+LEFT JOIN chat_message_transcripts t ON t.source_hash IS NULL AND t.message_id = cm.id AND t.project_id = cm.project_id AND @open_shadows::boolean
 WHERE cm.id = @id
   AND cm.project_id = @project_id
   -- Nothing in the schema ties a message's project_id to its chat's, so a
@@ -643,7 +596,7 @@ WITH target AS (
 )
 SELECT evidence.id, evidence.chat_id, evidence.role, evidence.content, evidence.tool_calls,
   t.ciphertext AS shadow_ciphertext,
-  COALESCE(t.ciphertext IS NOT NULL AND CASE WHEN t.source_updated_at IS NULL AND t.source_hash IS NOT NULL THEN t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')) ELSE t.source_updated_at IS NOT DISTINCT FROM m.source_updated_at END, false)::boolean AS shadow_current
+  (t.ciphertext IS NOT NULL)::boolean AS shadow_current
 FROM (
 SELECT n.id, n.chat_id, n.project_id, n.role, n.content, n.tool_calls, n.created_at, n.seq FROM target t
 JOIN LATERAL (
@@ -670,7 +623,7 @@ UNION ALL
      WHERE latest.chat_id = @chat_id::uuid AND latest.project_id = @project_id::uuid)
  ORDER BY recent.created_at DESC, recent.seq DESC LIMIT 4)
 ) evidence
-LEFT JOIN chat_message_transcripts t ON t.message_id = evidence.id AND t.project_id = evidence.project_id AND @open_shadows::boolean
+LEFT JOIN chat_message_transcripts t ON t.source_hash IS NULL AND t.message_id = evidence.id AND t.project_id = evidence.project_id AND @open_shadows::boolean
 LEFT JOIN chat_messages m ON m.id = t.message_id
 ORDER BY evidence.created_at, evidence.seq;
 
@@ -693,11 +646,11 @@ SELECT m.id, m.chat_id, m.seq, m.created_at, m.role, m.generation,
        (COALESCE(octet_length(m.tool_calls::text), 0) > 131072)::boolean AS tool_calls_oversized,
        (COALESCE(octet_length(m.content_raw::text), 0) > 131072)::boolean AS content_raw_oversized,
        t.ciphertext AS shadow_ciphertext,
-       COALESCE(t.ciphertext IS NOT NULL AND CASE WHEN t.source_updated_at IS NULL AND t.source_hash IS NOT NULL THEN t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')) ELSE t.source_updated_at IS NOT DISTINCT FROM m.source_updated_at END, false)::boolean AS shadow_current
+       (t.ciphertext IS NOT NULL)::boolean AS shadow_current
 FROM chat_messages m
 JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
 JOIN projects p ON p.id = c.project_id
-LEFT JOIN chat_message_transcripts t ON t.message_id = m.id AND t.project_id = m.project_id AND @open_shadows::boolean
+LEFT JOIN chat_message_transcripts t ON t.source_hash IS NULL AND t.message_id = m.id AND t.project_id = m.project_id AND @open_shadows::boolean
 WHERE m.project_id = @project_id::uuid
   AND c.organization_id = @organization_id AND p.organization_id = @organization_id
   AND c.deleted IS FALSE AND p.deleted IS FALSE
@@ -758,7 +711,7 @@ SELECT m.id, m.chat_id, m.seq, m.created_at, m.role, m.generation,
 FROM chat_messages m
 JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
 JOIN projects p ON p.id = c.project_id
-LEFT JOIN chat_message_transcripts t ON t.message_id = m.id AND t.project_id = m.project_id
+LEFT JOIN chat_message_transcripts t ON t.source_hash IS NULL AND t.message_id = m.id AND t.project_id = m.project_id
 WHERE m.project_id = @project_id::uuid
   AND c.organization_id = @organization_id AND p.organization_id = @organization_id
   AND c.deleted IS FALSE AND p.deleted IS FALSE
@@ -784,15 +737,12 @@ ORDER BY CASE WHEN @oldest_first THEN m.created_at END ASC,
          CASE WHEN NOT @oldest_first THEN m.id END DESC
 LIMIT @row_limit::integer;
 
--- name: ListShadowsCurrent :many
--- Whether each listed message's copy is still current (source_updated_at, or
--- the legacy source_hash for a copy sealed before it existed), for
--- results a chunked search found on shadows it opened without reading the
--- plaintext. A message with no shadow is not returned.
-SELECT m.id,
-       (CASE WHEN t.source_updated_at IS NULL AND t.source_hash IS NOT NULL THEN t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')) ELSE t.source_updated_at IS NOT DISTINCT FROM m.source_updated_at END)::boolean AS current
+-- name: ListSearchHitFields :many
+-- The plaintext fields of the hits a chunked Platform MCP search matched on
+-- transcripts it opened without reading plaintext. In shadow mode the store
+-- compares each hit with its plaintext row, which stays the source of truth.
+SELECT m.id, m.content, m.tool_calls, m.content_raw
 FROM chat_messages m
-JOIN chat_message_transcripts t ON t.message_id = m.id AND t.project_id = m.project_id
 WHERE m.project_id = @project_id::uuid
   AND m.id = ANY(@message_ids::uuid[]);
 
@@ -836,9 +786,9 @@ SELECT n.id, n.chat_id, n.seq, n.created_at, n.role, n.generation,
                ORDER BY cp.provider, cp.provider_user_id, cp.id LIMIT 5) cp
        ), '[]')::jsonb AS participants,
        t.ciphertext AS shadow_ciphertext,
-       COALESCE(t.ciphertext IS NOT NULL AND CASE WHEN t.source_updated_at IS NULL AND t.source_hash IS NOT NULL THEN t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,n.content,n.content_raw IS NULL,n.content_raw,n.tool_calls IS NULL,n.tool_calls,n.tool_outcome_notes,n.tool_call_summaries IS NULL,n.tool_call_summaries,n.storage_error)::text,'UTF8')) ELSE t.source_updated_at IS NOT DISTINCT FROM n.source_updated_at END, false)::boolean AS shadow_current
+       (t.ciphertext IS NOT NULL)::boolean AS shadow_current
 FROM neighbors n
-LEFT JOIN chat_message_transcripts t ON t.message_id = n.id AND t.project_id = n.project_id AND @open_shadows::boolean
+LEFT JOIN chat_message_transcripts t ON t.source_hash IS NULL AND t.message_id = n.id AND t.project_id = n.project_id AND @open_shadows::boolean
 ORDER BY n.seq;
 
 -- name: ListOwnedChatTranscriptMessagesForRecall :many
@@ -853,10 +803,10 @@ ORDER BY n.seq;
 -- masking, not at the read.
 SELECT cm.id, cm.seq, cm.created_at, cm.role, cm.content, cm.content_asset_url, cm.tool_calls, cm.tool_call_id, cm.tool_urn, cm.source, cm.risk_analyzed_at,
        t.ciphertext AS shadow_ciphertext,
-       COALESCE(t.ciphertext IS NOT NULL AND CASE WHEN t.source_updated_at IS NULL AND t.source_hash IS NOT NULL THEN t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,cm.content,cm.content_raw IS NULL,cm.content_raw,cm.tool_calls IS NULL,cm.tool_calls,cm.tool_outcome_notes,cm.tool_call_summaries IS NULL,cm.tool_call_summaries,cm.storage_error)::text,'UTF8')) ELSE t.source_updated_at IS NOT DISTINCT FROM cm.source_updated_at END, false)::boolean AS shadow_current
+       (t.ciphertext IS NOT NULL)::boolean AS shadow_current
 FROM chat_messages cm
 JOIN chats c ON c.id = cm.chat_id
-LEFT JOIN chat_message_transcripts t ON t.message_id = cm.id AND t.project_id = cm.project_id AND @open_shadows::boolean
+LEFT JOIN chat_message_transcripts t ON t.source_hash IS NULL AND t.message_id = cm.id AND t.project_id = cm.project_id AND @open_shadows::boolean
 LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
 WHERE cm.chat_id = @chat_id
   AND cm.project_id = @project_id
@@ -892,11 +842,11 @@ SELECT m.id, m.chat_id, m.project_id, m.seq, m.generation, m.created_at,
                AND cp.parent_chat_message_id = m.id AND cp.deleted IS FALSE
              ORDER BY cp.created_at, cp.id)::text[] AS attachment_uris,
        t.ciphertext AS shadow_ciphertext,
-       COALESCE(t.ciphertext IS NOT NULL AND CASE WHEN t.source_updated_at IS NULL AND t.source_hash IS NOT NULL THEN t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')) ELSE t.source_updated_at IS NOT DISTINCT FROM m.source_updated_at END, false)::boolean AS shadow_current
+       (t.ciphertext IS NOT NULL)::boolean AS shadow_current
 FROM chat_messages m
 JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
 JOIN projects p ON p.id = m.project_id
-LEFT JOIN chat_message_transcripts t ON t.message_id = m.id AND t.project_id = m.project_id AND @open_shadows::boolean
+LEFT JOIN chat_message_transcripts t ON t.source_hash IS NULL AND t.message_id = m.id AND t.project_id = m.project_id AND @open_shadows::boolean
 WHERE m.project_id = @project_id::uuid AND p.organization_id = @organization_id
   AND p.deleted IS FALSE AND c.deleted IS FALSE
   AND m.role <> 'system'
@@ -962,9 +912,9 @@ SELECT m.id,
               ORDER BY cp.created_at, cp.id)::text[] END AS attachment_uris,
         m.content_too_large,
         t.ciphertext AS shadow_ciphertext,
-       COALESCE(t.ciphertext IS NOT NULL AND CASE WHEN t.source_updated_at IS NULL AND t.source_hash IS NOT NULL THEN t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,src.content,src.content_raw IS NULL,src.content_raw,src.tool_calls IS NULL,src.tool_calls,src.tool_outcome_notes,src.tool_call_summaries IS NULL,src.tool_call_summaries,src.storage_error)::text,'UTF8')) ELSE t.source_updated_at IS NOT DISTINCT FROM src.source_updated_at END, false)::boolean AS shadow_current
+       (t.ciphertext IS NOT NULL)::boolean AS shadow_current
 FROM bounded m
-LEFT JOIN chat_message_transcripts t ON t.message_id = m.id AND t.project_id = m.project_id AND @open_shadows::boolean
+LEFT JOIN chat_message_transcripts t ON t.source_hash IS NULL AND t.message_id = m.id AND t.project_id = m.project_id AND @open_shadows::boolean
 LEFT JOIN chat_messages src ON src.id = t.message_id
 ORDER BY m.created_at DESC, m.seq DESC;
 

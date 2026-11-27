@@ -333,7 +333,7 @@ func TestUnavailableRiskToolRegistrationSurvivesCatalogFailure(t *testing.T) {
 		})
 	})
 	require.Equal(t, 1, buildCalls)
-	require.Len(t, reg.Descriptors(), 11, "three reads, six policy/exclusion writes, two finding writes")
+	require.Len(t, reg.Descriptors(), 10, "three reads, five policy/exclusion writes, two finding writes")
 	for _, name := range []string{operationMarkRiskFindingsFalsePositive, operationUnmarkRiskFindingsFalsePositive} {
 		_, err := descriptorByName(t, reg, name).Invoke(ContextWithPrincipal(t.Context(), testRiskPrincipal("user")), json.RawMessage(`{"project_slug":"project","finding_ids":["`+uuid.NewString()+`"],"confirmed":true,"idempotency_key":"key"}`))
 		var refusal *ToolRefusalError
@@ -380,13 +380,13 @@ func TestRiskToolRegistrationAndStableStubs(t *testing.T) {
 
 	wanted := map[string]ProjectScope{
 		"list_risk_policies": ProjectScopeDefaultable, "get_risk_policy": ProjectScopeDefaultable, "list_risk_exclusions": ProjectScopeDefaultable, "get_risk_analysis_status": ProjectScopeDefaultable,
-		"change_risk_policy_audience": ProjectScopeExplicit, "remove_self_from_risk_policy": ProjectScopeExplicit, "create_risk_policy": ProjectScopeExplicit, "update_risk_policy": ProjectScopeExplicit, "create_risk_exclusion": ProjectScopeExplicit, "update_risk_exclusion": ProjectScopeExplicit,
+		"change_risk_policy_audience": ProjectScopeExplicit, "create_risk_policy": ProjectScopeExplicit, "update_risk_policy": ProjectScopeExplicit, "create_risk_exclusion": ProjectScopeExplicit, "update_risk_exclusion": ProjectScopeExplicit,
 		"mark_risk_findings_false_positive": ProjectScopeExplicit, "unmark_risk_findings_false_positive": ProjectScopeExplicit,
 	}
 	require.Len(t, reg.Descriptors(), len(wanted))
 	for _, descriptor := range reg.Descriptors() {
 		require.Equal(t, wanted[descriptor.Name], descriptor.Meta.ProjectScope, descriptor.Name)
-		if descriptor.Name == operationRemoveSelfFromRiskPolicy || descriptor.Name == "change_risk_policy_audience" {
+		if descriptor.Name == "change_risk_policy_audience" {
 			require.Equal(t, []Audience{AudienceExternal}, descriptor.Meta.Audiences)
 		} else {
 			require.ElementsMatch(t, bothAudiences, descriptor.Meta.Audiences, descriptor.Name)

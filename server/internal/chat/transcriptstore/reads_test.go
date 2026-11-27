@@ -44,11 +44,12 @@ func TestJoinedReadsServeShadowsInOneQuery(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, plain, 2)
 
-	// Plaintext edited behind the shadow fails the read instead of serving it.
+	// Plaintext edited behind the shadow is logged, and the plaintext served.
 	_, err = fixturerepo.New(f.db).ChangeContent(t.Context(), shadowed, project(f.project))
 	require.NoError(t, err)
-	_, err = transcripts.ListLatestGenerationChatMessages(t.Context(), f.db, f.project, f.chat)
-	require.ErrorIs(t, err, ErrStale)
+	edited, err := transcripts.ListLatestGenerationChatMessages(t.Context(), f.db, f.project, f.chat)
+	require.NoError(t, err)
+	require.Contains(t, []string{edited[0].Content, edited[1].Content}, "changed")
 
 	// The same read for a project off the list still serves the edited plaintext.
 	plain, err = NewTranscripts(f.store, uuid.New()).ListLatestGenerationChatMessages(t.Context(), f.db, f.project, f.chat)
@@ -137,13 +138,15 @@ func TestEvaluationReadsServeShadowsAndBlankOverBudget(t *testing.T) {
 	require.Nil(t, rows[0].ContentRaw)
 	require.Nil(t, rows[0].ToolCalls)
 
-	// Plaintext edited behind a shadow fails both reads.
+	// Plaintext edited behind a shadow is served by both reads.
 	_, err = fixturerepo.New(f.db).ChangeContent(t.Context(), earlier, project(f.project))
 	require.NoError(t, err)
-	_, err = history(1 << 20)
-	require.ErrorIs(t, err, ErrStale)
-	_, err = transcripts.LoadEvaluationMessages(t.Context(), f.db, LoadEvaluationMessagesParams{OpenShadows: false, ProjectID: f.project, OrganizationID: f.org, MessageIds: []uuid.UUID{earlier}})
-	require.ErrorIs(t, err, ErrStale)
+	rows, err = history(1 << 20)
+	require.NoError(t, err)
+	require.Equal(t, "changed", rows[0].Content)
+	messages, err = transcripts.LoadEvaluationMessages(t.Context(), f.db, LoadEvaluationMessagesParams{OpenShadows: false, ProjectID: f.project, OrganizationID: f.org, MessageIds: []uuid.UUID{earlier}})
+	require.NoError(t, err)
+	require.Equal(t, "changed", messages[0].Content)
 }
 
 func TestPlatformReadBlanksJSONOverTheCapLikeSQL(t *testing.T) {
@@ -181,7 +184,7 @@ func TestLeftRunesMatchesPostgresLeft(t *testing.T) {
 
 func TestPlatformShapeBlanksOversizedFields(t *testing.T) {
 	t.Parallel()
-	m := transcriptcrypto.Message{Content: "body", ContentRaw: []byte(`"raw"`), ToolCalls: []byte(`[]`)}
+	m := transcriptcrypto.ProtectedFields{Content: "body", ContentRaw: []byte(`"raw"`), ToolCalls: []byte(`[]`)}
 	platformShape(platformOversized{content: true, toolCalls: false, contentRaw: true})(&m)
 	require.Empty(t, m.Content)
 	require.Nil(t, m.ContentRaw)

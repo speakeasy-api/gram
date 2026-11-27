@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -13,6 +14,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	intentpolicyv1 "github.com/speakeasy-api/gram/infra/gen/gram/intentpolicy/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -110,7 +113,7 @@ func newTestService(t *testing.T, jev classifier.Classifier) (context.Context, *
 
 func newTestServiceWithFlags(t *testing.T, jev classifier.Classifier, flags feature.Provider) (context.Context, *intentpolicies.Service) {
 	t.Helper()
-	ctx, svc, _ := newTestServiceWithShadows(t, jev, flags, false)
+	ctx, svc, _, _ := newTestServiceWith(t, jev, flags, false)
 	return ctx, svc
 }
 
@@ -118,6 +121,40 @@ func newTestServiceWithFlags(t *testing.T, jev classifier.Classifier, flags feat
 // caller's project keeps encrypted transcript shadows: uploads capture them
 // and analysis reads through them.
 func newTestServiceWithShadows(t *testing.T, jev classifier.Classifier, flags feature.Provider, shadows bool) (context.Context, *intentpolicies.Service, *pgxpool.Pool) {
+	t.Helper()
+	ctx, svc, conn, _ := newTestServiceWith(t, jev, flags, shadows)
+	return ctx, svc, conn
+}
+
+// recordingPublisher captures published assessments and settles every publish
+// successfully.
+type recordingPublisher struct {
+	mu       sync.Mutex
+	messages []*intentpolicyv1.Assessment
+}
+
+func (p *recordingPublisher) Publish(_ context.Context, msg *intentpolicyv1.Assessment, _ ...gcp.PublishOption) gcp.PublishResult {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.messages = append(p.messages, msg)
+	return gcp.NewErrPublishResult(nil)
+}
+
+func (p *recordingPublisher) Stop(context.Context) error { return nil }
+
+func (p *recordingPublisher) published() []*intentpolicyv1.Assessment {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return append([]*intentpolicyv1.Assessment(nil), p.messages...)
+}
+
+func newTestServiceWithResults(t *testing.T, jev classifier.Classifier, flags feature.Provider) (context.Context, *intentpolicies.Service, *recordingPublisher) {
+	t.Helper()
+	ctx, svc, _, results := newTestServiceWith(t, jev, flags, false)
+	return ctx, svc, results
+}
+
+func newTestServiceWith(t *testing.T, jev classifier.Classifier, flags feature.Provider, shadows bool) (context.Context, *intentpolicies.Service, *pgxpool.Pool, *recordingPublisher) {
 	t.Helper()
 	ctx := t.Context()
 	logger := testenv.NewLogger(t)
@@ -138,13 +175,14 @@ func newTestServiceWithShadows(t *testing.T, jev classifier.Classifier, flags fe
 	)
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
+	results := &recordingPublisher{mu: sync.Mutex{}, messages: nil}
 	writer, shutdown := chat.NewChatMessageWriter(logger, conn, nil)
 	t.Cleanup(func() { _ = shutdown(context.Background()) })
 
-	svc, err := intentpolicies.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, flags, writer, geminiStub{CompletionClient: nil, body: geminiBenign}, jev)
+	svc, err := intentpolicies.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, flags, writer, geminiStub{CompletionClient: nil, body: geminiBenign}, jev, results)
 	require.NoError(t, err)
 	if !shadows {
-		return ctx, svc, conn
+		return ctx, svc, conn, results
 	}
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -152,12 +190,12 @@ func newTestServiceWithShadows(t *testing.T, jev classifier.Classifier, flags fe
 	require.NotNil(t, authCtx.ProjectID)
 	keys := orgencryptiontest.New(t, conn)
 	require.NoError(t, keys.Provisioner.EnsureUseCase(ctx, authCtx.ActiveOrganizationID, orgencryption.UseCaseChatTranscripts, orgencryption.SystemActor()))
-	store, err := transcriptstore.New(conn, keys.Service, tracerProvider, testenv.NewMeterProvider(t))
+	store, err := transcriptstore.New(conn, keys.Service, logger, tracerProvider, testenv.NewMeterProvider(t))
 	require.NoError(t, err)
 	transcripts := transcriptstore.NewTranscripts(store, *authCtx.ProjectID)
 	writer.WithTranscripts(transcripts)
 	svc.WithTranscripts(transcripts)
-	return ctx, svc, conn
+	return ctx, svc, conn, results
 }
 
 func requireOopsCode(t *testing.T, err error, code oops.Code) {

@@ -1268,6 +1268,13 @@ SELECT
     s.environment_id AS mcp_server_environment_id,
     s.tool_variations_group_id AS mcp_server_tool_variations_group_id,
     s.remote_session_issuer_id AS mcp_server_remote_session_issuer_id,
+    EXISTS (
+        SELECT 1
+        FROM mcp_server_feedback_configs AS feedback
+        WHERE feedback.mcp_server_id = s.id
+          AND feedback.project_id = s.project_id
+          AND feedback.enabled
+    ) AS mcp_server_feedback_tool_enabled,
     ARRAY(
         SELECT DISTINCT c.remote_session_issuer_id
         FROM mcp_server_remote_session_clients AS a
@@ -1321,6 +1328,7 @@ type ListServableMetaMCPMembersRow struct {
 	McpServerEnvironmentID          uuid.NullUUID
 	McpServerToolVariationsGroupID  uuid.NullUUID
 	McpServerRemoteSessionIssuerID  uuid.NullUUID
+	McpServerFeedbackToolEnabled    bool
 	McpServerAssociationProviderIds []uuid.UUID
 	TunneledResourceIdentifier      string
 }
@@ -1361,6 +1369,7 @@ func (q *Queries) ListServableMetaMCPMembers(ctx context.Context, arg ListServab
 			&i.McpServerEnvironmentID,
 			&i.McpServerToolVariationsGroupID,
 			&i.McpServerRemoteSessionIssuerID,
+			&i.McpServerFeedbackToolEnabled,
 			&i.McpServerAssociationProviderIds,
 			&i.TunneledResourceIdentifier,
 		); err != nil {

@@ -82,6 +82,36 @@ function amendSettings(settingsJSON: string): string {
     );
   }
 
+  edited["gopls"] ??= {};
+
+  // A cold gopls start parses and type-checks every workspace package and
+  // holds the results until the first pass finishes, peaking near 8 GB RSS
+  // on this repo. A soft memory limit makes the Go runtime collect harder
+  // near the ceiling instead of letting the heap double: about 5 GB peak,
+  // with no measurable slowdown on a cold start. Unlike GOMEMLIMIT in
+  // go.toolsEnvVars, this applies to gopls alone, not to the tests, builds
+  // and debuggees the extension also launches. The task keeps a value that
+  // is already set, so change it in .vscode/settings.json.
+  edited["gopls"]["memoryLimit"] ??= 5 * 1024 ** 3;
+
+  // The Goa-generated HTTP clients and CLI are about a fifth of the Go source
+  // gopls would otherwise index, and most of them are imported nowhere.
+  // Filtering them out of the workspace still lets the few imported ones
+  // resolve as dependencies. Setting directoryFilters replaces gopls's
+  // default, so node_modules has to be listed again. gopls applies the last
+  // matching filter, so existing filters go after these and can re-include
+  // a path.
+  edited["gopls"]["build.directoryFilters"] = [
+    ...new Set([
+      "-**/node_modules",
+      "-server/gen/http/**/client",
+      "-server/gen/http/cli",
+      ...(Array.isArray(edited["gopls"]["build.directoryFilters"])
+        ? edited["gopls"]["build.directoryFilters"]
+        : []),
+    ]),
+  ];
+
   edited["workbench.editorAssociations"] ??= {};
   edited["workbench.editorAssociations"]["*.md"] ??= "default";
 

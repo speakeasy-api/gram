@@ -32,6 +32,12 @@ func (s *Service) SetFeedback(recorder *mcpfeedback.Recorder) {
 // feedbackLocalTools offers a server's feedback tool, when it has one on.
 func feedbackLocalTools(recorder *mcpfeedback.Recorder) localToolSource {
 	return func(ctx context.Context, server localToolServer) ([]localTool, error) {
+		// The query that loaded the server says whether the tool is on, so a
+		// server without it costs no settings read.
+		if !server.feedbackToolEnabled {
+			return nil, nil
+		}
+
 		tool, ok, err := recorder.Tool(ctx, server.projectID, server.mcpServerID)
 		if err != nil {
 			return nil, fmt.Errorf("load mcp feedback tool: %w", err)

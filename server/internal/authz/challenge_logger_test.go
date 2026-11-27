@@ -440,7 +440,7 @@ func TestWithoutChallenges_recordsNothing(t *testing.T) {
 
 	require.NoError(t, engine.Require(silent, MCPServer(MCPServerIDFrom(granted), ProjectIDFrom(testProjectID)).Connect()))
 	require.Error(t, engine.Require(silent, mcpCheck(ScopeMCPConnect, uuid.NewString(), "")))
-	matched, err := engine.FindMatched(silent, []Check{MCPServer(MCPServerIDFrom(granted), ProjectIDFrom(testProjectID)).Connect()})
+	matched, err := allowedEach(silent, engine, []Check{MCPServer(MCPServerIDFrom(granted), ProjectIDFrom(testProjectID)).Connect()})
 	require.NoError(t, err)
 	require.Equal(t, []bool{true}, matched)
 
@@ -457,10 +457,10 @@ func TestWithOneChallengePerResource_batchesDoNotTakeAResourcesSlot(t *testing.T
 	// A batch filtering the server's tools records, but leaves the server's
 	// own denial to be recorded when a call names it. Once that is recorded,
 	// a later batch about the server records nothing.
-	_, err := engine.FindMatched(ctx, []Check{MCPServer(MCPServerIDFrom(ungranted), ProjectIDFrom(testProjectID)).ToolCall("search", "")})
+	_, err := allowedEach(ctx, engine, []Check{MCPServer(MCPServerIDFrom(ungranted), ProjectIDFrom(testProjectID)).ToolCall("search", "")})
 	require.NoError(t, err)
 	require.Error(t, engine.Require(ctx, MCPServer(MCPServerIDFrom(ungranted), ProjectIDFrom(testProjectID)).Connect()))
-	_, err = engine.FindMatched(ctx, []Check{MCPServer(MCPServerIDFrom(ungranted), ProjectIDFrom(testProjectID)).ToolCall("search", "")})
+	_, err = allowedEach(ctx, engine, []Check{MCPServer(MCPServerIDFrom(ungranted), ProjectIDFrom(testProjectID)).ToolCall("search", "")})
 	require.NoError(t, err)
 
 	// A batch row names no single resource.

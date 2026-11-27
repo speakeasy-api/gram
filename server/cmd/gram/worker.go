@@ -680,7 +680,7 @@ func newWorkerCommand() *cli.Command {
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
 			chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(logger, db, assetStorage)
-			transcripts, err := configureTranscripts(ctx, c, db, chatWriter, orgEncryption, tracerProvider, meterProvider)
+			transcripts, err := configureTranscripts(ctx, c, db, chatWriter, orgEncryption, logger, tracerProvider, meterProvider)
 			if err != nil {
 				return err
 			}

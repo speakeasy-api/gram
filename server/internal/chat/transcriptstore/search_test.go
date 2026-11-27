@@ -242,11 +242,13 @@ func TestSearchChatMatchesShadowNotTamperedPlaintext(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, page.Rows)
 
-	// Showing the match reads the message for display, which refuses the
-	// stale shadow as every read does.
+	// Showing the match reads the message for display, which logs the
+	// disagreeing transcript and serves its plaintext, as every read does.
 	search.Query = "shadow text 1"
-	_, err = transcripts.SearchChat(t.Context(), f.db, search)
-	require.ErrorIs(t, err, ErrStale)
+	page, err = transcripts.SearchChat(t.Context(), f.db, search)
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{ids[1]}, matchedIDs(page))
+	require.Equal(t, "plaintext decoy", page.Rows[0].Content)
 
 	// A project off the list matches the plaintext in SQL.
 	search.Query = "decoy"

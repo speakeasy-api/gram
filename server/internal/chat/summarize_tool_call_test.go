@@ -10,6 +10,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/chat"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
@@ -54,5 +55,52 @@ func TestService_SummarizeToolCall_GeneratesAndCachesSeparately(t *testing.T) {
 	require.True(t, second.Cached)
 	require.Equal(t, first.Summary, second.Summary)
 	require.Equal(t, first.Impact, second.Impact)
+	client.AssertExpectations(t)
+}
+
+// A summary is part of the message body, so storing one reseals the encrypted
+// transcript in the same transaction: the next load still opens the message
+// from its transcript, with no plaintext fallback.
+func TestService_SummarizeToolCall_ResealsTheTranscript(t *testing.T) {
+	t.Parallel()
+
+	client := &mockCompletionClient{}
+	client.On("GetCompletion", mock.Anything, mock.Anything).Return(assistantTextResponse(`{"summary":"Looked up the account.","impact":"read_only"}`), nil).Once()
+
+	ti := newTestChatServiceWithCompletion(t, client)
+	ctx := grantOrgAdminWithChatRead(t, initSessionCtx(t, ti))
+	chatID := seedChat(t, ctx, ti, "", "ext-user", "Sealed tool summary")
+
+	queries := repo.New(ti.conn)
+	messageID, err := queries.CreateChatMessageReturningID(ctx, repo.CreateChatMessageReturningIDParams{
+		ChatID: chatID, ProjectID: uuid.NullUUID{UUID: ti.projectID, Valid: true}, Role: "assistant", Content: "",
+		ToolCalls:  []byte(`[{"id":"call_test","type":"function","function":{"name":"lookup_account","arguments":{}}}]`),
+		ToolCallID: pgtype.Text{},
+	})
+	require.NoError(t, err)
+	result, err := queries.CreateChatMessageReturningID(ctx, repo.CreateChatMessageReturningIDParams{
+		ChatID: chatID, ProjectID: uuid.NullUUID{UUID: ti.projectID, Valid: true}, Role: "tool", Content: "Account found",
+		ToolCalls: nil, ToolCallID: pgtype.Text{String: "call_test", Valid: true},
+	})
+	require.NoError(t, err)
+
+	store, reader := newMeteredTranscriptStore(t, ti)
+	sealTranscripts(t, ti, store, messageID, result)
+	ti.service.WithTranscripts(transcriptstore.NewTranscripts(store, ti.projectID))
+
+	_, err = ti.service.SummarizeToolCall(ctx, &gen.SummarizeToolCallPayload{
+		ID: chatID.String(), MessageID: messageID.String(), ToolCallID: "call_test",
+	})
+	require.NoError(t, err)
+
+	opened, err := store.Load(ctx, ti.orgID, ti.projectID, messageID)
+	require.NoError(t, err)
+	require.Contains(t, string(opened.ToolCallSummaries), "Looked up the account.")
+	_, err = ti.service.LoadChat(ctx, loadPayload(chatID.String()))
+	require.NoError(t, err)
+	// Every read opened a transcript; none fell back to plaintext.
+	outcomes := readMessagesByOutcome(t, reader)
+	require.NotContains(t, outcomes, "plaintext_fallback")
+	require.Positive(t, outcomes["success"])
 	client.AssertExpectations(t)
 }

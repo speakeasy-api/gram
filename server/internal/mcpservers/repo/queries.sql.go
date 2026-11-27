@@ -604,6 +604,63 @@ func (q *Queries) GetMCPServerByToolsetID(ctx context.Context, arg GetMCPServerB
 	return i, err
 }
 
+const getServableMCPServerByIDAndProjectID = `-- name: GetServableMCPServerByIDAndProjectID :one
+SELECT
+    s.id, s.project_id, s.name, s.slug, s.environment_id, s.user_session_issuer_id, s.remote_session_issuer_id, s.remote_mcp_server_id, s.tunneled_mcp_server_id, s.toolset_id, s.unproxied_mcp_server_id, s.builtin_backend, s.tool_variations_group_id, s.visibility, s.network_access_mode, s.requires_upstream_auth, s.setup_guide_completed_at, s.created_at, s.updated_at, s.deleted_at, s.deleted,
+    EXISTS (
+        SELECT 1
+        FROM mcp_server_feedback_configs AS feedback
+        WHERE feedback.mcp_server_id = s.id
+          AND feedback.project_id = s.project_id
+          AND feedback.enabled
+    ) AS feedback_tool_enabled
+FROM mcp_servers AS s
+WHERE s.id = $1 AND s.project_id = $2 AND s.deleted IS FALSE
+`
+
+type GetServableMCPServerByIDAndProjectIDParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+type GetServableMCPServerByIDAndProjectIDRow struct {
+	McpServer           McpServer
+	FeedbackToolEnabled bool
+}
+
+// GetMCPServerByIDAndProjectID for an endpoint being served, plus whether the
+// server offers the feedback tool, so the gateway reads the tool's settings
+// only for servers that do.
+func (q *Queries) GetServableMCPServerByIDAndProjectID(ctx context.Context, arg GetServableMCPServerByIDAndProjectIDParams) (GetServableMCPServerByIDAndProjectIDRow, error) {
+	row := q.db.QueryRow(ctx, getServableMCPServerByIDAndProjectID, arg.ID, arg.ProjectID)
+	var i GetServableMCPServerByIDAndProjectIDRow
+	err := row.Scan(
+		&i.McpServer.ID,
+		&i.McpServer.ProjectID,
+		&i.McpServer.Name,
+		&i.McpServer.Slug,
+		&i.McpServer.EnvironmentID,
+		&i.McpServer.UserSessionIssuerID,
+		&i.McpServer.RemoteSessionIssuerID,
+		&i.McpServer.RemoteMcpServerID,
+		&i.McpServer.TunneledMcpServerID,
+		&i.McpServer.ToolsetID,
+		&i.McpServer.UnproxiedMcpServerID,
+		&i.McpServer.BuiltinBackend,
+		&i.McpServer.ToolVariationsGroupID,
+		&i.McpServer.Visibility,
+		&i.McpServer.NetworkAccessMode,
+		&i.McpServer.RequiresUpstreamAuth,
+		&i.McpServer.SetupGuideCompletedAt,
+		&i.McpServer.CreatedAt,
+		&i.McpServer.UpdatedAt,
+		&i.McpServer.DeletedAt,
+		&i.McpServer.Deleted,
+		&i.FeedbackToolEnabled,
+	)
+	return i, err
+}
+
 const hasLiveMCPServerInOrganization = `-- name: HasLiveMCPServerInOrganization :one
 SELECT EXISTS(
   SELECT 1
@@ -1687,6 +1744,13 @@ SELECT
     s.environment_id AS mcp_server_environment_id,
     s.tool_variations_group_id AS mcp_server_tool_variations_group_id,
     s.remote_session_issuer_id AS mcp_server_remote_session_issuer_id,
+    EXISTS (
+        SELECT 1
+        FROM mcp_server_feedback_configs AS feedback
+        WHERE feedback.mcp_server_id = s.id
+          AND feedback.project_id = s.project_id
+          AND feedback.enabled
+    ) AS mcp_server_feedback_tool_enabled,
     ARRAY(
         SELECT DISTINCT c.remote_session_issuer_id
         FROM mcp_server_remote_session_clients AS a
@@ -1747,6 +1811,7 @@ type ListServableMCPServersByOrganizationIDRow struct {
 	McpServerEnvironmentID          uuid.NullUUID
 	McpServerToolVariationsGroupID  uuid.NullUUID
 	McpServerRemoteSessionIssuerID  uuid.NullUUID
+	McpServerFeedbackToolEnabled    bool
 	McpServerAssociationProviderIds []uuid.UUID
 	TunneledResourceIdentifier      string
 	HasPlatformTool                 bool
@@ -1802,6 +1867,7 @@ func (q *Queries) ListServableMCPServersByOrganizationID(ctx context.Context, or
 			&i.McpServerEnvironmentID,
 			&i.McpServerToolVariationsGroupID,
 			&i.McpServerRemoteSessionIssuerID,
+			&i.McpServerFeedbackToolEnabled,
 			&i.McpServerAssociationProviderIds,
 			&i.TunneledResourceIdentifier,
 			&i.HasPlatformTool,

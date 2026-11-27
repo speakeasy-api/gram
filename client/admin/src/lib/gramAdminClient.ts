@@ -37,6 +37,12 @@ import { buildAdminRunTailscaleOAuthMigrationStepMutation } from "@gram/admin-cl
 import type { AdminTailscaleOAuthMigrationOrganization } from "@gram/admin-client/models/components/admintailscaleoauthmigrationorganization";
 import type { AdminTailscaleOAuthMigrationOrganizations } from "@gram/admin-client/models/components/admintailscaleoauthmigrationorganizations";
 import type { Step as TailscaleOAuthMigrationStep } from "@gram/admin-client/models/components/runtailscaleoauthmigrationsteprequestbody";
+import { buildAdminGetSecretBackfillsQuery } from "@gram/admin-client/react-query/adminGetSecretBackfills.core";
+import { buildAdminRunMarketplaceTokenBackfillMutation } from "@gram/admin-client/react-query/adminRunMarketplaceTokenBackfill";
+import { buildAdminRunRunnerKeyOrganizationBackfillMutation } from "@gram/admin-client/react-query/adminRunRunnerKeyOrganizationBackfill";
+import type { AdminMarketplaceTokenBackfill } from "@gram/admin-client/models/components/adminmarketplacetokenbackfill";
+import type { AdminRunnerKeyOrganizationBackfill } from "@gram/admin-client/models/components/adminrunnerkeyorganizationbackfill";
+import type { AdminSecretBackfills } from "@gram/admin-client/models/components/adminsecretbackfills";
 import { buildAdminGetOrganizationEncryptionQuery } from "@gram/admin-client/react-query/adminGetOrganizationEncryption.core";
 import { buildAdminListOrganizationEncryptionTransitionsQuery } from "@gram/admin-client/react-query/adminListOrganizationEncryptionTransitions.core";
 import { buildAdminEnrollOrganizationEncryptionMutation } from "@gram/admin-client/react-query/adminEnrollOrganizationEncryption";
@@ -1153,6 +1159,52 @@ export function runTailscaleOAuthMigrationStep(
   return redirecting(
     generatedRunTailscaleOAuthMigrationStepMutation.mutationFn({
       request: { organizationId: organizationID, step },
+    }),
+  );
+}
+
+export function secretBackfillsQuery(): UseQueryOptions<AdminSecretBackfills> {
+  const generated = buildAdminGetSecretBackfillsQuery(redirectingClient, {
+    retries: { strategy: "none" },
+  });
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+    retry: false,
+  });
+}
+
+const generatedRunMarketplaceTokenBackfillMutation =
+  buildAdminRunMarketplaceTokenBackfillMutation(redirectingClient, {
+    retries: { strategy: "none" },
+  });
+
+// The server refuses the run when its platform key fingerprint is not the one
+// the operator checked. Without an organization ID, the run covers every
+// organization.
+export function runMarketplaceTokenBackfill(
+  platformKeyFingerprint: string,
+  organizationId?: string,
+): Promise<AdminMarketplaceTokenBackfill> {
+  return redirecting(
+    generatedRunMarketplaceTokenBackfillMutation.mutationFn({
+      request: { platformKeyFingerprint, organizationId },
+    }),
+  );
+}
+
+const generatedRunRunnerKeyOrganizationBackfillMutation =
+  buildAdminRunRunnerKeyOrganizationBackfillMutation(redirectingClient, {
+    retries: { strategy: "none" },
+  });
+
+// Without an organization ID, the run covers every organization.
+export function runRunnerKeyOrganizationBackfill(
+  organizationId?: string,
+): Promise<AdminRunnerKeyOrganizationBackfill> {
+  return redirecting(
+    generatedRunRunnerKeyOrganizationBackfillMutation.mutationFn({
+      request: { organizationId },
     }),
   );
 }

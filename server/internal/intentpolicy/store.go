@@ -75,6 +75,12 @@ func StoreTranscript(ctx context.Context, db *pgxpool.Pool, writer *chat.ChatMes
 		chatID = id
 	}
 
+	// Sealing inside the transaction takes the key only from the cache, so load
+	// it before the transaction begins.
+	if err := writer.PrepareTranscripts(ctx, p.ProjectID); err != nil {
+		return uuid.Nil, fmt.Errorf("prepare transcript key: %w", err)
+	}
+
 	// One transaction, so a failed message write leaves no empty chat behind.
 	tx, err := db.Begin(ctx)
 	if err != nil {

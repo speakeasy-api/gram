@@ -33,8 +33,9 @@ func shadowChatSearch(t *testing.T) (chatSearchFixture, []uuid.UUID) {
 
 	keys := orgencryptiontest.New(t, f.db)
 	require.NoError(t, keys.Provisioner.EnsureUseCase(t.Context(), f.principal.OrganizationID, orgencryption.UseCaseChatTranscripts, orgencryption.SystemActor()))
-	store, err := transcriptstore.New(f.db, keys.Service, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t))
+	store, err := transcriptstore.New(f.db, keys.Service, testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t))
 	require.NoError(t, err)
+	require.NoError(t, store.Prepare(t.Context(), f.principal.OrganizationID), "writers load the key before the transaction")
 	tx, err := f.db.Begin(t.Context()) //nolint:glint // notestingrawsql: Capture runs inside the caller's message transaction; message rows come from generated seed queries.
 	require.NoError(t, err)
 	defer func() { _ = tx.Rollback(t.Context()) }()
@@ -95,22 +96,27 @@ func TestChatSearchScansEncryptedTranscriptsInBoundedCalls(t *testing.T) {
 	require.Equal(t, plain, all)
 }
 
-func TestChatSearchRefusesAStaleShadowHit(t *testing.T) {
+func TestChatSearchServesPlaintextForAStaleShadowHit(t *testing.T) {
 	t.Parallel()
 	f, ids := shadowChatSearch(t)
 	ctx := f.context(t.Context())
 	_, err := fixturerepo.New(f.db).SetContent(t.Context(), "scan_needle edited behind the shadow", ids[1], uuid.NullUUID{UUID: f.project.ID, Valid: true})
 	require.NoError(t, err)
 
-	// The match is decided on the shadow, and the stale hit fails the search
-	// instead of being served.
-	_, err = f.service.Search(ctx, f.principal, f.toolSearch("scan_needle"))
-	require.ErrorIs(t, err, transcriptstore.ErrStale)
+	// The match is decided on the transcript. The hit disagrees with its
+	// plaintext row, so it is logged and served from plaintext, the source of
+	// truth in shadow mode.
+	stale := f.toolSearch("scan_needle")
+	stale.SortOrder = chatSearchSortOldestFirst
+	page, err := f.service.Search(ctx, f.principal, stale)
+	require.NoError(t, err)
+	require.Equal(t, []string{ids[1].String(), ids[8].String(), ids[10].String()}, hitIDs(page.Hits))
+	require.Equal(t, "scan_needle edited behind the shadow", page.Hits[0].Text)
 	// A message the edit does not touch is still found.
 	input := f.toolSearch("scan_needle")
 	input.SortOrder = chatSearchSortOldestFirst
 	input.From = f.base.Add(5 * time.Second).Format(time.RFC3339)
-	page, err := f.service.Search(ctx, f.principal, input)
+	page, err = f.service.Search(ctx, f.principal, input)
 	require.NoError(t, err)
 	require.Equal(t, []string{ids[8].String(), ids[10].String()}, hitIDs(page.Hits))
 }

@@ -108,6 +108,88 @@ pubsub:
       type: PROTOCOL_BUFFER
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-intentpolicy-v1-assessment
+    name: gram-intentpolicy-v1-assessment
+    spec:
+      definition: |
+        edition = "2024";
+        message Assessment {
+          message Actor {
+            string user_id = 1;
+            string user_email = 2;
+          }
+          message ToolCall {
+            string chat_id = 1;
+            int32 generation = 2;
+            string message_id = 3;
+            int64 sequence = 4;
+            string tool_call_id = 5;
+            string tool_name = 6;
+            string mcp_server = 7;
+            string mcp_function = 8;
+            int64 arguments_bytes = 9;
+            string occurred_at = 10;
+          }
+          message Evaluator {
+            string kind = 1;
+            string provider = 2;
+            string model = 3;
+            string prompt_version = 4;
+          }
+          message Guardrail {
+            string id = 1;
+            string version = 2;
+          }
+          message Usage {
+            int64 input_tokens = 1;
+            int64 output_tokens = 2;
+            double cost_usd = 3;
+            int64 latency_ms = 4;
+          }
+          message Label {
+            enum Kind {
+              KIND_UNSPECIFIED = 0;
+              KIND_NOUL = 1;
+              KIND_CHOICE = 2;
+              KIND_MULTI_NOUL = 3;
+            }
+            string key = 1;
+            Kind kind = 2;
+            bool bool_value = 3;
+            string choice_value = 4;
+            repeated string members = 5;
+            int32 rank = 6;
+            double probability = 7;
+            map<string, double> distribution = 8;
+            string rationale = 9;
+          }
+          message ContractOutcome {
+            string contract_id = 1;
+            string result = 2;
+            string error = 3;
+            map<string, string> inputs = 4;
+          }
+          string id = 1;
+          string analysis_id = 2;
+          string organization_id = 3;
+          string project_id = 4;
+          Actor actor = 5;
+          ToolCall tool_call = 6;
+          Guardrail guardrail = 7;
+          Evaluator evaluator = 8;
+          string decision = 9;
+          repeated string decided_by = 10;
+          repeated ContractOutcome contracts = 11;
+          repeated Label labels = 12;
+          string evaluator_error = 13;
+          Usage usage = 14;
+          string trigger_kind = 15;
+          string analysis_requested_at = 16;
+          string evaluated_at = 17;
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-metering-v1-meter-reading
     name: gram-metering-v1-meter-reading
     spec:
@@ -1844,6 +1926,20 @@ pubsub:
         name: gram-authz-v1-challenge
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-intentpolicy-v1-lake-primary
+      topic_proto_message: gram-intentpolicy-v1-assessment
+    name: gram-intentpolicy-v1-lake-primary
+    spec:
+      ackDeadlineSeconds: 60
+      messageRetentionDuration: 345600s
+      retainAckedMessages: false
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-intentpolicy-v1-assessment
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-metering-v1-meter-reading-ch-writer
       topic_proto_message: gram-metering-v1-meter-reading
     name: gram-metering-v1-meter-reading-ch-writer
@@ -2469,6 +2565,16 @@ pubsub:
         encoding: BINARY
         schemaRef:
           name: gram-conversation-v1-message-event
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-intentpolicy-v1-assessment
+    name: gram-intentpolicy-v1-assessment
+    spec:
+      messageRetentionDuration: 345600s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-intentpolicy-v1-assessment
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-metering-v1-meter-reading
