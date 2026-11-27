@@ -247,8 +247,7 @@ func (a *roleAdapter) ScanKeys(ctx context.Context, prefix string) ([]string, er
 		return nil, err
 	}
 	return slices.DeleteFunc(keys, func(key string) bool {
-		family := redisrole.Classify(key)
-		return family.Control || family.Role != a.role
+		return redisrole.Classify(key).Role != a.role
 	}), nil
 }
 

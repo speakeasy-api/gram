@@ -29,8 +29,6 @@ from gram_infra.pubsub import (
     pubsub_publisher_for_message_async,
 )
 from redis import asyncio as redis_asyncio
-from redis.asyncio.retry import Retry as RedisRetry
-from redis.backoff import NoBackoff
 
 from pystreams import attr
 from pystreams.deps import logging, otel, redisconn
@@ -43,7 +41,6 @@ from pystreams.risk.fingerprint import parse_pepper_keyring
 from pystreams.risk.handler import PresidioHandler
 from pystreams.risk.metering import METER_PUBLISH_TIMEOUT_SECONDS
 from pystreams.risk.presidio_enforce_handler import PresidioEnforceHandler
-from pystreams.risk.redisswitch import DEFAULT_ROLE, ROLE_OPS, RedisSwitch
 from pystreams.risk.replywriter import ReplyWriter
 
 from . import (
@@ -111,8 +108,6 @@ async def multi(
     # Enforcement lane options
     redis_addr: str | None,
     redis_password: str | None,
-    redis_next_addr: str | None,
-    redis_next_password: str | None,
     risk_fingerprint_pepper_keyring: str | None,
 ):
     logging.configure_logging(
@@ -128,25 +123,11 @@ async def multi(
     logger: structlog.stdlib.BoundLogger = structlog.get_logger()
 
     redis_addr = (redis_addr or "").strip() or None
-    redis_next_addr = (redis_next_addr or "").strip() or None
     ops_addr = os.getenv("GRAM_REDIS_OPS_ADDR", "").strip()
-    ops_next_addr = os.getenv("GRAM_REDIS_OPS_NEXT_ADDR", "").strip()
     if ops_addr == redis_addr:
         ops_addr = ""
-    # An Ops next instance equal to its current one means no Ops move, as in
-    # the server: the legacy Sessions switch, if any, still applies.
-    if ops_next_addr == (ops_addr or redis_addr or ""):
-        ops_next_addr = ""
-    switch_role = ROLE_OPS if ops_addr or ops_next_addr else DEFAULT_ROLE
     if ops_addr:
         redis_addr = ops_addr
-    if switch_role == ROLE_OPS:
-        redis_next_addr = ops_next_addr or None
-
-    # A next instance equal to the current one means the move is over: the
-    # client is an ordinary one.
-    if redis_next_addr and redis_next_addr == redis_addr:
-        redis_next_addr = None
 
     if role == "enforcement" and (
         not redis_addr or not risk_fingerprint_pepper_keyring
@@ -215,49 +196,22 @@ async def multi(
             # pepper keyring are configured; validated before the scan pool
             # exists so a startup failure cannot leak pool workers.
             enforce_redis = None
-            enforce_switch = None
             enforce_fingerprinter = None
             if role in ("all", "enforcement") and (
                 redis_addr and risk_fingerprint_pepper_keyring
             ):
-                armed = bool(redis_next_addr)
                 ops = _ops_endpoint("GRAM_REDIS_OPS_", ops_addr) if ops_addr else None
-                next_ops = (
-                    _ops_endpoint("GRAM_REDIS_OPS_NEXT_", ops_next_addr)
-                    if redis_next_addr and ops_next_addr
-                    else None
-                )
-                credentials = None
-                if any(
-                    endpoint and endpoint.auth is redisconn.AuthMode.IAM
-                    for endpoint in (ops, next_ops)
-                ):
-                    credentials = await redisconn.default_iam_credential_provider()
                 if ops:
-                    enforce_redis = _ops_redis_client(ops, credentials, armed=armed)
+                    credentials = None
+                    if ops.auth is redisconn.AuthMode.IAM:
+                        credentials = await redisconn.default_iam_credential_provider()
+                    enforce_redis = _ops_redis_client(ops, credentials)
                 else:
-                    enforce_redis = _enforce_redis_client(
-                        redis_addr, redis_password, armed=armed
-                    )
+                    enforce_redis = _enforce_redis_client(redis_addr, redis_password)
                 stack.push_async_callback(enforce_redis.aclose)
                 # Fail startup, not per-message: consuming without a reachable
                 # reply store would ACK requests while losing their replies.
                 await enforce_redis.ping()
-                if redis_next_addr:
-                    if next_ops:
-                        next_redis = _ops_redis_client(
-                            next_ops, credentials, armed=True
-                        )
-                    else:
-                        next_redis = _enforce_redis_client(
-                            redis_next_addr, redis_next_password, armed=True
-                        )
-                    stack.push_async_callback(next_redis.aclose)
-                    await next_redis.ping()
-                    enforce_switch = RedisSwitch(
-                        enforce_redis, next_redis, logger, role=switch_role
-                    )
-                    await enforce_switch.start()
                 enforce_fingerprinter = parse_pepper_keyring(
                     risk_fingerprint_pepper_keyring
                 )
@@ -300,7 +254,7 @@ async def multi(
             if enforce_redis is not None and enforce_fingerprinter is not None:
                 enforce_handler = PresidioEnforceHandler(
                     logger,
-                    ReplyWriter(enforce_redis, enforce_switch),
+                    ReplyWriter(enforce_redis),
                     meter_publisher,
                     presidio_scanner,
                     enforce_fingerprinter,
@@ -364,28 +318,20 @@ def _ops_endpoint(prefix: str, addr: str) -> redisconn.Endpoint:
 def _ops_redis_client(
     endpoint: redisconn.Endpoint,
     credentials: redisconn.GoogleIAMCredentialProvider | None,
-    *,
-    armed: bool,
 ) -> redis_asyncio.Redis:
-    kwargs = {"retry": RedisRetry(NoBackoff(), 0)} if armed else {}
     return redisconn.client(
         endpoint,
         credential_provider=credentials,
         socket_connect_timeout=3.0,
         socket_timeout=2.0,
-        **kwargs,
     )
 
 
-def _enforce_redis_client(
-    addr: str, password: str | None, *, armed: bool
-) -> redis_asyncio.Redis:
+def _enforce_redis_client(addr: str, password: str | None) -> redis_asyncio.Redis:
     """Build the reply-inbox client for a host:port address.
 
-    An armed client follows the Redis instance switch: it never retries, so a
-    write interrupted by the move is not replayed on the other instance. It
-    does not name its connections: an instance may reject the CLIENT command,
-    and a named client then cannot connect to it.
+    It does not name its connections: an instance may reject the CLIENT
+    command, and a named client then cannot connect to it.
     """
     host, sep, port = addr.rpartition(":")
     if not sep or "]" in port or (":" in host and "[" not in host):
@@ -395,21 +341,12 @@ def _enforce_redis_client(
     host = host.strip("[]")
     # Bounded timeouts: a Redis stall surfaces as an ACKed write failure
     # instead of hanging past the ack deadline.
-    if not armed:
-        return redis_asyncio.Redis(
-            host=host or addr,
-            port=int(port) if port else 6379,
-            password=password or None,
-            socket_connect_timeout=1.0,
-            socket_timeout=2.0,
-        )
     return redis_asyncio.Redis(
         host=host or addr,
         port=int(port) if port else 6379,
         password=password or None,
         socket_connect_timeout=1.0,
         socket_timeout=2.0,
-        retry=RedisRetry(NoBackoff(), 0),
     )
 
 

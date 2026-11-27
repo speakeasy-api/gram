@@ -46,8 +46,6 @@ func newRiskEnforcementDispatcher(
 	// Failures return an untyped nil so the scanner's nil check sees no dispatcher.
 	inbox, err := enforcereply.New(ctx, logger, tracerProvider, meterProvider, enforcereply.Config{
 		RedisOptions: *stores.Ops.Options(),
-		SwitchRole:   stores.OpsSwitchRole,
-		Standalone:   stores.OpsSwitchRole == "",
 		ReplicaID:    "",
 		PollInterval: 0,
 		DrainGate:    nil,

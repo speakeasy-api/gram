@@ -75,8 +75,6 @@ async def test_blocking_detection_starts_after_scanner_initialization(
             max_inflight=None,
             redis_addr=None,
             redis_password=None,
-            redis_next_addr=None,
-            redis_next_password=None,
             risk_fingerprint_pepper_keyring=None,
         )
 
@@ -144,10 +142,10 @@ async def test_role_registers_only_its_receivers(
     assert receivers.subscriptions == expected_subscriptions
 
 
-async def test_next_instance_equal_to_current_builds_an_unarmed_client(
+async def test_enforcement_ignores_a_leftover_next_instance(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    built: list[tuple[str, bool]] = []
+    built: list[str] = []
 
     @asynccontextmanager
     async def fake_otel_sdk(*_args, **_kwargs):
@@ -156,10 +154,13 @@ async def test_next_instance_equal_to_current_builds_an_unarmed_client(
     async def fake_publisher(*_args, **_kwargs):
         return object()
 
-    def fake_client(addr, _password, *, armed):
-        built.append((addr, armed))
+    def fake_client(addr, _password):
+        built.append(addr)
         raise _StopAfterActivation
 
+    monkeypatch.delenv("GRAM_REDIS_OPS_ADDR", raising=False)
+    monkeypatch.setenv("GRAM_REDIS_NEXT_ADDR", "10.0.0.2:6379")
+    monkeypatch.setenv("GRAM_REDIS_OPS_NEXT_ADDR", "10.0.0.2:6379")
     monkeypatch.setattr(multi_mod.logging, "configure_logging", lambda **_kwargs: None)
     monkeypatch.setattr(multi_mod.otel, "otel_sdk", fake_otel_sdk)
     monkeypatch.setattr(multi_mod, "_build_broker", lambda **_kwargs: _Broker())
@@ -189,12 +190,10 @@ async def test_next_instance_equal_to_current_builds_an_unarmed_client(
             max_inflight=None,
             redis_addr="10.0.0.1:6379",
             redis_password=None,
-            redis_next_addr="10.0.0.1:6379",
-            redis_next_password=None,
             risk_fingerprint_pepper_keyring=_PEPPER_KEYRING,
         )
 
-    assert built == [("10.0.0.1:6379", False)]
+    assert built == ["10.0.0.1:6379"]
 
 
 _PEPPER_KEYRING = '{"current": "k1", "keys": {"k1": "c2VjcmV0"}}'
@@ -231,7 +230,5 @@ async def test_enforcement_role_requires_redis_and_pepper(
             max_inflight=None,
             redis_addr=None,
             redis_password=None,
-            redis_next_addr=None,
-            redis_next_password=None,
             risk_fingerprint_pepper_keyring=None,
         )

@@ -29,7 +29,6 @@ var redisConstructors = map[string]bool{
 	"redis.NewClient":                true,
 	"redisrole.EvictableClient":      true,
 	"newRedisClient":                 true,
-	"redisswitch.NewClient":          true,
 }
 
 // TestRedisStoresAreBuiltOnlyInDeps keeps the role split from being bypassed

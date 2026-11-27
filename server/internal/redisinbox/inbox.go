@@ -24,7 +24,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/tunnel/redisswitch"
 )
 
 const (
@@ -75,15 +74,6 @@ func (c Codec[R]) validate() error {
 type Config[R any] struct {
 	// RedisOptions are copied before inbox settings are applied.
 	RedisOptions redis.Options
-
-	// SwitchRole names the role of the instance switch the client that
-	// RedisOptions came from follows, so the inbox's own client follows the
-	// same switch. Empty finds the switch by address alone, which fails once
-	// a process follows more than one role on that instance.
-	SwitchRole string
-
-	// Standalone selects a client with no switch binding.
-	Standalone bool
 
 	// ReplicaID identifies the process in reply URNs and Redis inbox keys.
 	ReplicaID string
@@ -232,14 +222,7 @@ func New[R any](
 	redisOptions := cfg.RedisOptions
 	redisOptions.PoolSize = defaultPoolSize
 	redisOptions.DisableIdentity = true
-	var client *redis.Client
-	if cfg.Standalone {
-		client = redis.NewClient(&redisOptions)
-	} else if cfg.SwitchRole != "" {
-		client = redisswitch.WrapRole(&redisOptions, cfg.SwitchRole)
-	} else {
-		client = redisswitch.Wrap(&redisOptions)
-	}
+	client := redis.NewClient(&redisOptions)
 	if err := client.Ping(ctx).Err(); err != nil {
 		_ = client.Close()
 		return nil, fmt.Errorf("ping reply inbox redis: %w", err)

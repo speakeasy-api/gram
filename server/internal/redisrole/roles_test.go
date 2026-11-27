@@ -219,7 +219,6 @@ func TestClassifyKnownFamilies(t *testing.T) {
 				t.Parallel()
 				got := redisrole.Classify(key)
 				require.True(t, got.Classified)
-				require.False(t, got.Control)
 				require.Equal(t, role, got.Role)
 				require.True(t, strings.HasPrefix(key, got.Prefix), "matched %q", got.Prefix)
 			})
@@ -234,15 +233,6 @@ func TestClassifyUnclassifiedKeyIsOps(t *testing.T) {
 	require.False(t, got.Classified)
 	require.Equal(t, redisrole.RoleOps, got.Role, "an unclassified key is never stored on the auth role")
 	require.Equal(t, redisrole.UnclassifiedPrefix, got.Prefix)
-}
-
-func TestClassifySwitchKeysAreControl(t *testing.T) {
-	t.Parallel()
-
-	for _, key := range []string{"gram:redis-switch:state:auth", "gram:redis-switch:hold"} {
-		got := redisrole.Classify(key)
-		require.True(t, got.Control, key)
-	}
 }
 
 // TestScriptedGroupsShareARole pins the families of each multi-key script,

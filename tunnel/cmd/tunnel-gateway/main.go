@@ -22,7 +22,6 @@ import (
 
 	"github.com/speakeasy-api/gram/tunnel/gateway"
 	"github.com/speakeasy-api/gram/tunnel/redisconn"
-	"github.com/speakeasy-api/gram/tunnel/redisswitch"
 	"github.com/speakeasy-api/gram/tunnel/route"
 )
 
@@ -174,30 +173,19 @@ func serveHTTP(ctx context.Context, errCh chan<- error, logger *slog.Logger, nam
 
 func buildRouteStore(ctx context.Context, logger *slog.Logger) (route.Store, error) {
 	current := redisconn.EndpointFromEnv("GRAM_REDIS_OPS_")
-	next := redisconn.EndpointFromEnv("GRAM_REDIS_OPS_NEXT_")
 	fallbackAddr := strings.TrimSpace(os.Getenv("TUNNEL_REDIS_ADDR"))
 	if current.Addr == fallbackAddr {
 		current = redisconn.Endpoint{}
-	}
-	role := redisswitch.RoleOps
-	if current.Addr != "" {
-		if err := current.Validate(); err != nil {
-			return nil, fmt.Errorf("configure tunnel route Redis: %w", err)
-		}
 	}
 	if current.Addr == "" {
 		if fallbackAddr == "" {
 			return nil, errors.New("GRAM_REDIS_OPS_ADDR or TUNNEL_REDIS_ADDR is required")
 		}
 		current = redisconn.PasswordEndpoint(fallbackAddr, os.Getenv("TUNNEL_REDIS_PASSWORD"))
-		if next.Addr == "" {
-			role = redisswitch.DefaultRole
-			next = redisswitch.NextFromEnv()
-		}
 	}
 
 	var tokens oauth2.TokenSource
-	if current.Auth == redisconn.AuthIAM || (next.Addr != "" && next.Addr != current.Addr && next.Auth == redisconn.AuthIAM) {
+	if current.Auth == redisconn.AuthIAM {
 		var err error
 		tokens, err = redisconn.NewIAMTokenSource(ctx)
 		if err != nil {
@@ -205,35 +193,25 @@ func buildRouteStore(ctx context.Context, logger *slog.Logger) (route.Store, err
 		}
 	}
 
-	client, err := redisswitch.NewClient(ctx, logger, &redis.Options{}, redisswitch.Binding{
-		Role:    role,
-		Current: current,
-		Next:    next,
-		Tokens:  tokens,
-	})
+	connector, err := redisconn.NewConnector(current, tokens)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("configure tunnel route Redis: %w", err)
 	}
+	client := redis.NewClient(connector.Options(&redis.Options{}))
 	logger.InfoContext(ctx, "tunnel-gateway using redis route store", slog.String("addr", current.Addr))
 	return route.NewRedis(client), nil
 }
 
 // buildAuthRouteMirror connects to the auth role when GRAM_REDIS_AUTH_ADDR is
-// set and returns nil otherwise, leaving the auth role untouched. The client
-// follows the auth role's instance switch, so the mirror moves with the rest of
-// the auth state.
+// set and returns nil otherwise, leaving the auth role untouched.
 func buildAuthRouteMirror(ctx context.Context, logger *slog.Logger, eligibility gateway.AuthRouteEligibility) (*gateway.AuthRouteMirror, error) {
 	current := redisconn.EndpointFromEnv("GRAM_REDIS_AUTH_")
 	if current.Addr == "" {
 		return nil, nil
 	}
-	if err := current.Validate(); err != nil {
-		return nil, fmt.Errorf("configure tunnel auth route Redis: %w", err)
-	}
-	next := redisconn.EndpointFromEnv("GRAM_REDIS_AUTH_NEXT_")
 
 	var tokens oauth2.TokenSource
-	if current.Auth == redisconn.AuthIAM || (next.Addr != "" && next.Addr != current.Addr && next.Auth == redisconn.AuthIAM) {
+	if current.Auth == redisconn.AuthIAM {
 		var err error
 		tokens, err = redisconn.NewIAMTokenSource(ctx)
 		if err != nil {
@@ -241,15 +219,11 @@ func buildAuthRouteMirror(ctx context.Context, logger *slog.Logger, eligibility 
 		}
 	}
 
-	client, err := redisswitch.NewClient(ctx, logger, &redis.Options{}, redisswitch.Binding{
-		Role:    redisswitch.RoleAuth,
-		Current: current,
-		Next:    next,
-		Tokens:  tokens,
-	})
+	connector, err := redisconn.NewConnector(current, tokens)
 	if err != nil {
-		return nil, fmt.Errorf("connect tunnel auth route Redis: %w", err)
+		return nil, fmt.Errorf("configure tunnel auth route Redis: %w", err)
 	}
+	client := redis.NewClient(connector.Options(&redis.Options{}))
 	logger.InfoContext(ctx, "tunnel-gateway mirroring oauth tunnel routes to the auth role", slog.String("addr", current.Addr))
 	return &gateway.AuthRouteMirror{Routes: route.NewAuthMirror(client), Eligibility: eligibility}, nil
 }

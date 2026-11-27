@@ -114,7 +114,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/tunnel/redisconn"
-	"github.com/speakeasy-api/gram/tunnel/redisswitch"
 )
 
 func noopShutdown(context.Context) error { return nil }
@@ -497,11 +496,6 @@ type redisStores struct {
 	// locks and the rate limits that are not on auth paths.
 	Ops *redis.Client
 
-	// OpsSwitchRole is the role of the instance switch the Ops client follows,
-	// so a client cloned from its options (the reply inbox) follows the same
-	// one.
-	OpsSwitchRole string
-
 	// OpsCache is the cache adapter over Ops. It checks every key against the
 	// ops families.
 	OpsCache *cache.RoleRedisAdapter
@@ -540,18 +534,10 @@ func (s *redisStores) Close() error {
 	return errors.Join(errs...)
 }
 
-// newRedisStores builds the three roles. Roles without an endpoint or
-// an armed switch share the client configured by the cache flags.
+// newRedisStores builds the three roles. Roles without an endpoint share the
+// client configured by the cache flags.
 func newRedisStores(ctx context.Context, logger *slog.Logger, meterProvider metric.MeterProvider, opts redisClientOptions) (*redisStores, error) {
-	type roleBinding struct {
-		prefix string
-		role   string
-	}
-	bindings := []roleBinding{
-		{prefix: "GRAM_REDIS_AUTH_", role: redisswitch.RoleAuth},
-		{prefix: "GRAM_REDIS_OPS_", role: redisswitch.RoleOps},
-		{prefix: "GRAM_REDIS_EVICTABLE_", role: ""},
-	}
+	prefixes := []string{"GRAM_REDIS_AUTH_", "GRAM_REDIS_OPS_", "GRAM_REDIS_EVICTABLE_"}
 	environment := opts.environment
 	if environment == "" {
 		environment = os.Getenv("GRAM_ENVIRONMENT")
@@ -565,74 +551,49 @@ func newRedisStores(ctx context.Context, logger *slog.Logger, meterProvider metr
 		return nil, fmt.Errorf("GRAM_REDIS_ROLE_GUARD: %w", err)
 	}
 	guard := redisrole.NewGuard(logger, meterProvider, mode)
-	stores := &redisStores{Auth: nil, AuthCache: nil, Ops: nil, OpsSwitchRole: "", OpsCache: nil, Evictable: redisrole.EvictableClient{Client: nil}, EvictableCache: nil}
+	stores := &redisStores{Auth: nil, AuthCache: nil, Ops: nil, OpsCache: nil, Evictable: redisrole.EvictableClient{Client: nil}, EvictableCache: nil}
 	destinations := []**redis.Client{&stores.Auth, &stores.Ops, &stores.Evictable.Client}
 	fallback := redisconn.PasswordEndpoint(strings.TrimSpace(opts.redisAddr), opts.redisPassword)
-	fallbackNext := redisswitch.NextFromEnv()
 	requiresExplicitAddress := environment == "dev" || environment == "prod"
-	for _, binding := range bindings {
-		requiresExplicitAddress = requiresExplicitAddress || redisconn.EndpointFromEnv(binding.prefix).Addr != ""
+	for _, prefix := range prefixes {
+		requiresExplicitAddress = requiresExplicitAddress || redisconn.EndpointFromEnv(prefix).Addr != ""
 	}
 	var shared *redis.Client
 	var tokens oauth2.TokenSource
-	for i, binding := range bindings {
-		current := redisconn.EndpointFromEnv(binding.prefix)
+	for i, prefix := range prefixes {
+		current := redisconn.EndpointFromEnv(prefix)
 		if current.Addr == fallback.Addr {
 			current = redisconn.Endpoint{Addr: "", Auth: redisconn.AuthNone, Password: "", CACertPEM: "", ServerName: ""}
 		}
-		var next redisconn.Endpoint
-		if binding.role != "" {
-			next = redisconn.EndpointFromEnv(binding.prefix + "NEXT_")
-		}
-		effectiveAddr := current.Addr
-		if effectiveAddr == "" {
-			effectiveAddr = fallback.Addr
-		}
-		if next.Addr == effectiveAddr {
-			next = redisconn.Endpoint{Addr: "", Auth: redisconn.AuthNone, Password: "", CACertPEM: "", ServerName: ""}
-		}
-		role := binding.role
-		if current.Addr == "" && next.Addr == "" {
+		if current.Addr == "" {
 			if fallback.Addr == "" && requiresExplicitAddress {
-				return nil, errors.Join(fmt.Errorf("%sADDR is required without a Sessions fallback", binding.prefix), stores.Close())
+				return nil, errors.Join(fmt.Errorf("%sADDR is required without a Sessions fallback", prefix), stores.Close())
 			}
-			role = redisswitch.DefaultRole
-			next = fallbackNext
 			if shared == nil {
 				var err error
-				shared, err = newRedisClient(ctx, opts.enableTracing, redisswitch.Binding{
-					Role: role, Current: fallback, Next: next, Tokens: nil,
-				})
+				shared, err = newRedisClient(opts.enableTracing, fallback, nil)
 				if err != nil {
 					return nil, errors.Join(err, stores.Close())
 				}
 			}
 			*destinations[i] = shared
-		} else {
-			if current.Addr == "" {
-				current = fallback
-			}
-			if err := current.Validate(); err != nil {
-				return nil, errors.Join(fmt.Errorf("configure %s endpoint: %w", binding.prefix, err), stores.Close())
-			}
-			if tokens == nil && (current.Auth == redisconn.AuthIAM || (next.Addr != "" && next.Auth == redisconn.AuthIAM)) {
-				var err error
-				tokens, err = redisconn.NewIAMTokenSource(ctx)
-				if err != nil {
-					return nil, errors.Join(fmt.Errorf("initialize Redis credentials: %w", err), stores.Close())
-				}
-			}
-			client, err := newRedisClient(ctx, opts.enableTracing, redisswitch.Binding{
-				Role: role, Current: current, Next: next, Tokens: tokens,
-			})
+			continue
+		}
+		if err := current.Validate(); err != nil {
+			return nil, errors.Join(fmt.Errorf("configure %s endpoint: %w", prefix, err), stores.Close())
+		}
+		if tokens == nil && current.Auth == redisconn.AuthIAM {
+			var err error
+			tokens, err = redisconn.NewIAMTokenSource(ctx)
 			if err != nil {
-				return nil, errors.Join(fmt.Errorf("initialize %s endpoint: %w", binding.prefix, err), stores.Close())
+				return nil, errors.Join(fmt.Errorf("initialize Redis credentials: %w", err), stores.Close())
 			}
-			*destinations[i] = client
 		}
-		if binding.role == redisswitch.RoleOps && next.Addr != "" && next.Addr != effectiveAddr {
-			stores.OpsSwitchRole = role
+		client, err := newRedisClient(opts.enableTracing, current, tokens)
+		if err != nil {
+			return nil, errors.Join(fmt.Errorf("initialize %s endpoint: %w", prefix, err), stores.Close())
 		}
+		*destinations[i] = client
 	}
 	if err := stores.Auth.Ping(ctx).Err(); err != nil {
 		return nil, errors.Join(fmt.Errorf("connect to Auth Redis: %w", err), stores.Close())
@@ -655,18 +616,26 @@ func newRedisStores(ctx context.Context, logger *slog.Logger, meterProvider metr
 	return stores, nil
 }
 
-func newRedisClient(ctx context.Context, enableTracing bool, binding redisswitch.Binding) (*redis.Client, error) {
+// newRedisClient returns a client of endpoint. tokens supplies access tokens
+// for an IAM endpoint and may be nil otherwise. An unconfigured plaintext
+// address uses go-redis's default, as local tools expect.
+func newRedisClient(enableTracing bool, endpoint redisconn.Endpoint, tokens oauth2.TokenSource) (*redis.Client, error) {
+	if endpoint.Addr == "" && !endpoint.TLS() && endpoint.Auth != redisconn.AuthIAM {
+		endpoint.Addr = "localhost:6379"
+	}
+	connector, err := redisconn.NewConnector(endpoint, tokens)
+	if err != nil {
+		return nil, fmt.Errorf("create redis client: %w", err)
+	}
+
 	db := 0
-	redisClient, err := redisswitch.NewClient(ctx, slog.Default(), &redis.Options{
+	redisClient := redis.NewClient(connector.Options(&redis.Options{
 		DB:              db,
 		DialTimeout:     3 * time.Second,
 		ReadTimeout:     300 * time.Millisecond,
 		WriteTimeout:    1 * time.Second,
 		DisableIdentity: true,
-	}, binding)
-	if err != nil {
-		return nil, fmt.Errorf("create redis client: %w", err)
-	}
+	}))
 
 	if enableTracing {
 		attrs := redisotel.WithAttributes(

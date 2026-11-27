@@ -10,11 +10,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestRouteStoreUsesPinnedOperationsEndpoint(t *testing.T) {
+func TestRouteStoreUsesOperationsEndpoint(t *testing.T) {
 	ops := miniredis.RunT(t)
 	t.Setenv("TUNNEL_REDIS_ADDR", "")
 	t.Setenv("GRAM_REDIS_OPS_ADDR", ops.Addr())
-	t.Setenv("GRAM_REDIS_OPS_NEXT_ADDR", ops.Addr())
+	// A leftover next address from the instance switch is ignored.
+	t.Setenv("GRAM_REDIS_OPS_NEXT_ADDR", "127.0.0.1:1")
 	t.Setenv("GRAM_REDIS_OPS_PASSWORD", "")
 	t.Setenv("GRAM_REDIS_OPS_AUTH_MODE", "none")
 	t.Setenv("GRAM_REDIS_OPS_CA_CERT", "")
@@ -36,8 +37,6 @@ func TestRouteStoreUsesSessionsCredentialsWhenRepointed(t *testing.T) {
 	t.Setenv("GRAM_REDIS_OPS_ADDR", sessions.Addr())
 	t.Setenv("GRAM_REDIS_OPS_AUTH_MODE", "iam")
 	t.Setenv("GRAM_REDIS_OPS_CA_CERT", "stale Valkey CA")
-	t.Setenv("GRAM_REDIS_OPS_NEXT_ADDR", sessions.Addr())
-	t.Setenv("GRAM_REDIS_OPS_NEXT_AUTH_MODE", "iam")
 
 	store, err := buildRouteStore(t.Context(), slog.Default())
 	require.NoError(t, err)
