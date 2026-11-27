@@ -1,0 +1,54 @@
+.changeset/lock-builtin-role-grants.md
+  h_2620cc60cfd1e9 1-5
+server/cmd/tools/migrations/assistantrolegrants/runner_test.go
+  h_2620cc60cfd1e9 202
+server/design/access/design.go
+  h_2620cc60cfd1e9 1515,1523
+server/gen/access/service.go
+  h_2620cc60cfd1e9 1663-1665
+server/gen/http/access/client/encode_decode.go
+  h_2620cc60cfd1e9 11861
+server/gen/http/access/client/types.go
+  h_2620cc60cfd1e9 321-323,349-351,377-379,10337-10339,12013,12192,12375,20394-20396,20446-20448,20498-20500,33783-33785
+server/gen/http/access/server/encode_decode.go
+  h_2620cc60cfd1e9 10952
+server/gen/http/access/server/types.go
+  h_2620cc60cfd1e9 321-323,349-351,377-379,10341-10343,11493,11529,11565
+server/gen/http/openapi3.yaml
+  h_2620cc60cfd1e9 135489-135491,135515
+server/internal/access/builtin_roles_test.go
+  h_2620cc60cfd1e9 7-8,15,17,36-39,65-66,144-262
+server/internal/access/impl.go
+  h_2620cc60cfd1e9 646
+server/internal/access/resource_audience.go
+  h_2620cc60cfd1e9 207,219-221,271-282
+server/internal/access/role_manager.go
+  h_2620cc60cfd1e9 549,551-553,564-566,658-661,668-670,2131
+server/internal/access/temporary_grants.go
+  h_2620cc60cfd1e9 129-138
+server/internal/authz/builtin_roles.go
+  h_2620cc60cfd1e9 5,20-23,80-119
+server/internal/authz/builtin_roles_test.go
+  h_2620cc60cfd1e9 175-242
+server/internal/authz/grants.go
+  h_2620cc60cfd1e9 191-192,197-199,208-212
+server/internal/authz/resource_grants.go
+  h_2620cc60cfd1e9 178-193
+server/internal/platformmcp/access_role_mutations.go
+  h_2620cc60cfd1e9 283,465
+server/internal/platformmcp/access_role_mutations_test.go
+  h_2620cc60cfd1e9 160-165
+server/internal/platformmcp/inference_access_role.go
+  h_2620cc60cfd1e9 166
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "65e111e5205bc3552aaec6a073bf8254fc518e91",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
