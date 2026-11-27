@@ -375,34 +375,28 @@ func (p *protector) hydrate(ctx context.Context, row repo.LockChatMessageRow) (f
 	if p.store == nil {
 		return plain, true, nil
 	}
-	s := p.store
 	// LockChatMessage read and locked the current transcript with the row.
-	ciphertext := row.CurrentCiphertext
-	if p.encrypted && ciphertext == "" {
+	id := transcriptcrypto.Identity{ProjectID: p.projectID, ChatID: row.ChatMessage.ChatID, MessageID: row.ChatMessage.ID}
+	o, err := p.store.resolve(ctx, p.codec, p.encrypted, "update", id, plain, row.CurrentCiphertext)
+	if errors.Is(err, ErrMissingTranscript) {
 		p.check(ctx, outcomeMissingTranscript)
-		return plain, false, ErrMissingTranscript
+		return plain, false, err
 	}
-	if ciphertext == "" {
-		s.logger.ErrorContext(ctx, "message has no current encrypted transcript to update, using the plaintext row",
+	if err != nil {
+		p.check(ctx, outcomeError)
+		return plain, false, err
+	}
+	if o.outcome == outcomePlaintextFallback {
+		p.store.logger.ErrorContext(ctx, "message has no current encrypted transcript to update, using the plaintext row",
 			attr.SlogProjectID(p.projectID.String()), attr.SlogMessageID(row.ChatMessage.ID.String()))
 		p.check(ctx, outcomeMissingTranscript)
 		return plain, false, nil
 	}
-	opened, err := p.codec.Decrypt(ctx, transcriptcrypto.Identity{ProjectID: p.projectID, ChatID: row.ChatMessage.ChatID, MessageID: row.ChatMessage.ID}, ciphertext)
-	if err != nil {
-		p.check(ctx, outcomeError)
-		return plain, false, safe(err)
-	}
-	// In encrypted mode the plaintext columns are empty, so there is nothing
-	// to compare with: the transcript is the protected fields.
-	if p.encrypted {
-		return opened, true, nil
-	}
-	if !s.agrees(ctx, "update", p.projectID, row.ChatMessage.ID, opened, plain) {
+	if o.outcome == outcomeStale {
 		p.check(ctx, outcomeHydrateMismatch)
 		return plain, false, nil
 	}
-	return opened, true, nil
+	return o.fields, true, nil
 }
 
 // fieldMismatch describes one protected field that differs between the plaintext
@@ -670,7 +664,8 @@ func (s *Store) loadMany(ctx context.Context, organizationID string, projectID u
 	}
 	opened := make(map[uuid.UUID]opening, len(rows))
 	for _, row := range rows {
-		o, err := s.openRow(ctx, codec, projectID, row, encrypted)
+		plain := message(row.Content, row.ContentRaw, row.ToolCalls, row.ToolOutcomeNotes, row.ToolCallSummaries, row.StorageError)
+		o, err := s.resolve(ctx, codec, encrypted, "read", transcriptcrypto.Identity{ProjectID: projectID, ChatID: row.ChatID, MessageID: row.ID}, plain, row.Ciphertext)
 		if err != nil {
 			return nil, err
 		}
@@ -679,21 +674,25 @@ func (s *Store) loadMany(ctx context.Context, organizationID string, projectID u
 	return opened, nil
 }
 
-// openRow decides what one message serves. In shadow mode the plaintext row
-// is the source of truth while both copies exist.
-func (s *Store) openRow(ctx context.Context, codec *transcriptcrypto.Codec, projectID uuid.UUID, row repo.LoadManyRow, encrypted bool) (opening, error) {
-	plain := message(row.Content, row.ContentRaw, row.ToolCalls, row.ToolOutcomeNotes, row.ToolCallSummaries, row.StorageError)
-	if row.Ciphertext == "" && encrypted {
+// resolve decides what one message serves, on reads and updates alike: its
+// decrypted transcript, or in shadow mode its plaintext row when the
+// transcript is missing (plaintext_fallback) or disagrees with the row
+// (stale), since the plaintext stays the source of truth while both copies
+// exist. In encrypted mode the plaintext row is empty, so the transcript is
+// served without comparison, and a missing one is ErrMissingTranscript. path
+// names the caller in the mismatch log.
+func (s *Store) resolve(ctx context.Context, codec *transcriptcrypto.Codec, encrypted bool, path string, id transcriptcrypto.Identity, plain transcriptcrypto.ProtectedFields, ciphertext string) (opening, error) {
+	if ciphertext == "" && encrypted {
 		return opening{}, ErrMissingTranscript
 	}
-	if row.Ciphertext == "" {
+	if ciphertext == "" {
 		return opening{fields: plain, outcome: outcomePlaintextFallback}, nil
 	}
-	msg, err := codec.Decrypt(ctx, transcriptcrypto.Identity{ProjectID: projectID, ChatID: row.ChatID, MessageID: row.ID}, row.Ciphertext)
+	msg, err := codec.Decrypt(ctx, id, ciphertext)
 	if err != nil {
 		return opening{}, safe(err)
 	}
-	if !encrypted && !s.agrees(ctx, "read", projectID, row.ID, msg, plain) {
+	if !encrypted && !s.agrees(ctx, path, id.ProjectID, id.MessageID, msg, plain) {
 		return opening{fields: plain, outcome: outcomeStale}, nil
 	}
 	return opening{fields: msg, outcome: outcomeSuccess}, nil
