@@ -300,13 +300,16 @@ func migrateOneAssistantSlack(
 			OrganizationID: organizationID,
 			ProjectID:      uuid.NullUUID{UUID: row.ProjectID, Valid: true},
 		})
-		if getErr == nil && candidate.Enabled {
-			authClientID = candidate.ID
-			break
-		}
 		if getErr != nil && !errors.Is(getErr, pgx.ErrNoRows) {
 			return nil, fmt.Errorf("validate linked slack_app auth client %s: %w", trig.AuthClientID.UUID, getErr)
 		}
+		if getErr != nil || !candidate.Enabled {
+			continue
+		}
+		if authClientID != uuid.Nil && authClientID != candidate.ID {
+			return nil, fmt.Errorf("assistant has multiple distinct live slack_app auth clients (%s and %s) linked across triggers; reconcile manually before migrating", authClientID, candidate.ID)
+		}
+		authClientID = candidate.ID
 	}
 	if authClientID == uuid.Nil && existingAgentClientID.Valid {
 		authClientID = existingAgentClientID.UUID
