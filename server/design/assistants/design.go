@@ -428,8 +428,15 @@ var AssistantIntent = Type("AssistantIntent", func() {
 		Enum("none", "low", "medium", "high")
 	})
 	Attribute("opener", String, "A short, specific line the assistant can open with. Absent when there is nothing specific to say.")
-	Attribute("suggested_prompts", ArrayOf(String), "Up to three short prompts the user can send.")
-	Attribute("confidence", Float64, "How sure the inference is, from 0 to 1.")
+	Attribute("suggested_prompts", ArrayOf(String, func() {
+		MaxLength(120)
+	}), "Up to three short prompts the user can send.", func() {
+		MaxLength(3)
+	})
+	Attribute("confidence", Float64, "How sure the inference is, from 0 to 1.", func() {
+		Minimum(0)
+		Maximum(1)
+	})
 	Required("frustration", "suggested_prompts", "confidence")
 })
 

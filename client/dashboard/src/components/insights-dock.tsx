@@ -579,6 +579,12 @@ function InsightsDock({
   useEffect(() => {
     onComposerExpandedChange?.(composerExpanded);
   }, [composerExpanded, onComposerExpandedChange]);
+  // The dock unmounts when a page hides it or the user dismisses it; it is
+  // then closed, whatever it last reported.
+  useEffect(
+    () => () => onComposerExpandedChange?.(false),
+    [onComposerExpandedChange],
+  );
 
   const shortcutAria = isMacPlatform() ? "Meta+/" : "Control+/";
 
@@ -1047,11 +1053,13 @@ export function InsightsProvider({
   // inferred goal only when the docked composer opens.
   const activityContextEnabled =
     useFeatureFlag(FEATURE_FLAGS.assistantActivityContext).status === "enabled";
-  useRecordDashboardActivity(mcpConfig.projectSlug, activityContextEnabled);
+  const activityScope = `${organization.slug}/${mcpConfig.projectSlug}`;
+  useRecordDashboardActivity(activityScope, activityContextEnabled);
   const [dockComposerExpanded, setDockComposerExpanded] = useState(false);
   const intent = useAssistantIntent({
     assistantId: managedAssistantId || undefined,
     projectSlug: mcpConfig.projectSlug,
+    scope: activityScope,
     enabled: activityContextEnabled && assistantAllowed,
     active: dockComposerExpanded && !isExpanded,
   });

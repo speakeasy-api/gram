@@ -122,7 +122,7 @@ describe("formatActivityContext", () => {
 
     const block = formatActivityContext("/mcp", getActivity());
 
-    expect(block.length).toBeLessThan(3100);
+    expect(block.length).toBeLessThanOrEqual(3000);
     expect(block).toContain("19 xxx");
     expect(block).not.toContain(": 0 xxx");
   });

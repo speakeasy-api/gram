@@ -94046,6 +94046,8 @@ components:
           type: number
           description: How sure the inference is, from 0 to 1.
           format: double
+          minimum: 0
+          maximum: 1
         frustration:
           type: string
           description: How stuck the user appears to be.
@@ -94067,7 +94069,9 @@ components:
           type: array
           items:
             type: string
+            maxLength: 120
           description: Up to three short prompts the user can send.
+          maxItems: 3
       description: What the user appears to be trying to do, inferred from their recent activity.
       required:
         - frustration

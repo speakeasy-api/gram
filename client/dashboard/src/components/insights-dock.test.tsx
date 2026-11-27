@@ -74,6 +74,7 @@ const mocks = vi.hoisted(() => ({
     suggestedPrompts: string[];
   } | null,
   intentActive: vi.fn((_active: boolean) => undefined),
+  activityFlag: "enabled" as "enabled" | "disabled",
 }));
 
 vi.mock("@/elements", async () => {
@@ -187,10 +188,23 @@ vi.mock("@/hooks/useServerAssistantTransport", () => ({
 }));
 vi.mock("@/components/assistant-activity", () => ({
   useRecordDashboardActivity: vi.fn(),
-  useAssistantIntent: ({ active }: { active: boolean }) => {
+  // Mirrors the real hook's gates: no intent without the feature or a
+  // managed assistant.
+  useAssistantIntent: ({
+    active,
+    enabled,
+    assistantId,
+  }: {
+    active: boolean;
+    enabled: boolean;
+    assistantId: string | undefined;
+  }) => {
     mocks.intentActive(active);
-    return mocks.intent;
+    return enabled && assistantId ? mocks.intent : null;
   },
+}));
+vi.mock("@/hooks/useFeatureFlag", () => ({
+  useFeatureFlag: () => ({ status: mocks.activityFlag }),
 }));
 vi.mock("@/hooks/useDrainInfiniteQuery", () => ({
   useDrainInfiniteQuery: vi.fn(),
@@ -270,6 +284,7 @@ afterEach(cleanup);
 beforeEach(() => {
   mocks.intent = null;
   mocks.intentActive.mockClear();
+  mocks.activityFlag = "enabled";
   mocks.recentChats = undefined;
   mocks.listeners.clear();
   mocks.elementsConfig.mockClear();
@@ -859,14 +874,12 @@ describe("InsightsProvider", () => {
     });
 
     it("opens with what the user seems to be doing", () => {
-      mocks.assistantReady = false;
       mocks.intent = {
         opener: "Discover keeps failing for billing-api. Want me to check it?",
         suggestedPrompts: ["Why does Discover fail?"],
       };
       render(page());
-      const input = screen.getByLabelText("Ask the Project Assistant");
-      act(() => input.focus());
+      act(() => screen.getByLabelText("Shared composer").focus());
       expect(mocks.intentActive).toHaveBeenLastCalledWith(true);
       expect(
         screen.getByText(
@@ -876,6 +889,24 @@ describe("InsightsProvider", () => {
       expect(
         screen.getByRole("button", { name: "Why does Discover fail?" }),
       ).toBeTruthy();
+    });
+
+    it("keeps the page suggestions when activity context is off", () => {
+      mocks.activityFlag = "disabled";
+      mocks.intent = {
+        opener: "Discover keeps failing for billing-api. Want me to check it?",
+        suggestedPrompts: ["Why does Discover fail?"],
+      };
+      render(page());
+      act(() => screen.getByLabelText("Shared composer").focus());
+      expect(
+        screen.queryByText(
+          "Discover keeps failing for billing-api. Want me to check it?",
+        ),
+      ).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: "Why does Discover fail?" }),
+      ).toBeNull();
     });
 
     it("does not replay the focus shortcut when connection hands over a draft", () => {

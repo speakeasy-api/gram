@@ -5515,6 +5515,24 @@ func ValidateInferIntentResponseBody(body *InferIntentResponseBody) (err error) 
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.frustration", *body.Frustration, []any{"none", "low", "medium", "high"}))
 		}
 	}
+	if len(body.SuggestedPrompts) > 3 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.suggested_prompts", body.SuggestedPrompts, len(body.SuggestedPrompts), 3, false))
+	}
+	for _, e := range body.SuggestedPrompts {
+		if utf8.RuneCountInString(e) > 120 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.suggested_prompts[*]", e, utf8.RuneCountInString(e), 120, false))
+		}
+	}
+	if body.Confidence != nil {
+		if *body.Confidence < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.confidence", *body.Confidence, 0, true))
+		}
+	}
+	if body.Confidence != nil {
+		if *body.Confidence > 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.confidence", *body.Confidence, 1, false))
+		}
+	}
 	return
 }
 

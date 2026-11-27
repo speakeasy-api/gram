@@ -16,10 +16,11 @@ import {
 /**
  * Records the pages the user opens and the outcome of every API call they
  * make, for the Project Assistant's activity log. The log is per project:
- * switching project starts a fresh one.
+ * switching project starts a fresh one. `scope` names the organization and
+ * project, since project slugs repeat across organizations.
  */
 export function useRecordDashboardActivity(
-  projectSlug: string | undefined,
+  scope: string,
   enabled: boolean,
 ): void {
   const { pathname } = useLocation();
@@ -27,7 +28,7 @@ export function useRecordDashboardActivity(
 
   useEffect(() => {
     if (enabled) clearActivity();
-  }, [projectSlug, enabled]);
+  }, [scope, enabled]);
 
   useEffect(() => {
     if (enabled) recordActivity("page", projectRelativePath(pathname));
@@ -53,11 +54,14 @@ export function useRecordDashboardActivity(
 export function useAssistantIntent({
   assistantId,
   projectSlug,
+  scope,
   enabled,
   active,
 }: {
   assistantId: string | undefined;
   projectSlug: string | undefined;
+  /** Organization and project; a change discards the last answer. */
+  scope: string;
   enabled: boolean;
   active: boolean;
 }): AssistantIntent | null {
@@ -70,10 +74,12 @@ export function useAssistantIntent({
     onError: () => undefined,
   });
 
+  // A new scope, or turning the feature off, drops the last answer. Clearing
+  // askedAtRevision also makes any request still in flight land nowhere.
   useEffect(() => {
     setIntent(null);
     askedAtRevision.current = null;
-  }, [projectSlug]);
+  }, [scope, enabled]);
 
   useEffect(() => {
     if (!enabled || !active || !assistantId) return;
@@ -81,11 +87,11 @@ export function useAssistantIntent({
     if (askedAtRevision.current === revision) return;
     askedAtRevision.current = revision;
 
+    // The last answer describes older activity, so it must not ride along
+    // with a message sent before the new one arrives.
+    setIntent(null);
     const activity = getActivity();
-    if (activity.length === 0) {
-      setIntent(null);
-      return;
-    }
+    if (activity.length === 0) return;
     mutate(
       {
         request: {

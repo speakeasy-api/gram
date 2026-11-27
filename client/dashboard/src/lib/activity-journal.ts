@@ -183,31 +183,33 @@ export function formatActivityContext(
   inferred?: InferredGoal | null,
   maxEntries = 20,
 ): string {
-  const lines = [`Current page: ${escapeContext(currentPath)}`];
+  const lines = [`Current page: ${clip(escapeContext(currentPath))}`];
   if (inferred?.goal) {
-    lines.push(`Likely goal: ${escapeContext(inferred.goal)}`);
+    lines.push(`Likely goal: ${clip(escapeContext(inferred.goal))}`);
   }
   if (inferred?.blocker) {
-    lines.push(`Likely blocker: ${escapeContext(inferred.blocker)}`);
+    lines.push(`Likely blocker: ${clip(escapeContext(inferred.blocker))}`);
   }
-  const header = lines.join("\n");
+  const render = (recent: string[]) => {
+    const body =
+      recent.length > 0
+        ? [...lines, "Recent activity, oldest first:", ...recent]
+        : lines;
+    return `<user_activity>\n${body.join("\n")}\n</user_activity>`;
+  };
   // The block rides inside the user's message, which the server caps, so the
-  // oldest entries give way first.
+  // oldest entries give way first. Every header line is clipped, so the
+  // header alone always fits.
   let recent = activity.slice(-maxEntries).map((entry) => {
     const time = entry.at.slice(11, 19);
     return `${time} ${entry.kind}: ${escapeContext(entry.detail)}`;
   });
-  while (
-    recent.length > 0 &&
-    header.length + recent.join("\n").length > MAX_CONTEXT_LENGTH
-  ) {
+  let block = render(recent);
+  while (recent.length > 0 && block.length > MAX_CONTEXT_LENGTH) {
     recent = recent.slice(1);
+    block = render(recent);
   }
-  const body =
-    recent.length > 0
-      ? `${header}\nRecent activity, oldest first:\n${recent.join("\n")}`
-      : header;
-  return `<user_activity>\n${body}\n</user_activity>`;
+  return block;
 }
 
 /** Test-only: resets module state between tests. */
