@@ -13,6 +13,10 @@ vi.mock("@/hooks/useFeatureFlag", () => ({
 vi.mock("@/components/home/HomeTerminal", () => ({
   HomeTerminal: () => <div data-testid="home-terminal" />,
 }));
+vi.mock("@/components/home/HomeSections", () => ({
+  HomeSections: () => <div data-testid="home-sections" />,
+  HomeSectionLeads: () => null,
+}));
 vi.mock("@/components/home/HomeWidgets", () => ({
   HomeWidgets: () => <div data-testid="home-widgets" />,
 }));
@@ -101,7 +105,7 @@ describe("Home", () => {
     state.terminalHome = "enabled";
     renderHome();
     expect(screen.getByTestId("home-terminal")).toBeTruthy();
-    expect(screen.getByTestId("home-widgets")).toBeTruthy();
+    expect(screen.getAllByTestId("home-widgets").length).toBeGreaterThan(0);
     expect(screen.queryByTestId("project-dashboard")).toBeNull();
   });
 

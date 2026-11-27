@@ -1,5 +1,5 @@
 import { StatTile } from "@/components/chart/stat-tile";
-import type { HomeWidgetId } from "./home-widget-data";
+import { HOME_WIDGET_IDS, type HomeWidgetId } from "./home-widget-data";
 import {
   buildHeatmap,
   computeMovers,
@@ -7,11 +7,9 @@ import {
   heatmapKey,
 } from "./home-widget-data";
 import { useTrendColors } from "@/components/chart/useSeriesColors";
-import { useInsightsState } from "@/components/insights-context";
 import { buildProjectOverviewQuery } from "@/components/project/projectOverviewQuery";
 import { Card } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { useOrganization } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import { ToolUsageIdentity } from "@/components/tool-usage-identity";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
@@ -24,69 +22,39 @@ import { useRoutes } from "@/routes";
 import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
 import { telemetryGetToolUsageUsers } from "@gram/client/funcs/telemetryGetToolUsageUsers";
 import { useAccessRequests } from "@gram/client/react-query/accessRequests.js";
-import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useRiskSignals } from "@gram/client/react-query/riskSignals.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronRight, Maximize2, Minimize2, User } from "lucide-react";
+import { Maximize2, Minimize2, User } from "lucide-react";
 import {
   createContext,
-  useCallback,
   useContext,
   useMemo,
   useState,
   type ComponentProps,
-  type ReactNode,
 } from "react";
-import { Link } from "react-router";
+import {
+  ActionRow,
+  AskButton,
+  LOAD_ERROR,
+  ListSkeleton,
+  LoadError,
+  LogsOff,
+  ViewAllLink,
+  WIDGET_BODY_CLASS,
+  WIDGET_CLASS,
+  WIDGET_HEADER_CLASS,
+} from "./home-widget-parts";
+import {
+  useAskTerminal,
+  useLogsEnabled,
+  useWeekWindow,
+} from "./home-widget-hooks";
 
-const HOUR_MS = 60 * 60 * 1000;
-const DAY_MS = 24 * HOUR_MS;
 // Rows in the most active list.
 const MOST_ACTIVE_LIMIT = 5;
-// Widgets live in fixed-height grid rows on wide screens: the card clips and
-// its body scrolls.
-const WIDGET_CLASS = "min-h-0 overflow-hidden";
-const WIDGET_BODY_CLASS = "min-h-0 flex-1 overflow-y-auto";
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
-/**
- * The last 168 whole hours. Exactly 7 days keeps the overview's buckets
- * hourly (the server switches to 6h buckets past 168h), and an hour-aligned
- * window keeps the query key stable within the hour.
- */
-function useWeekWindow(): { from: Date; to: Date; prevFrom: Date } {
-  const hour = Math.floor(Date.now() / HOUR_MS) * HOUR_MS;
-  return useMemo(
-    () => ({
-      from: new Date(hour - 7 * DAY_MS),
-      to: new Date(hour),
-      prevFrom: new Date(hour - 14 * DAY_MS),
-    }),
-    [hour],
-  );
-}
-
-function useLogsEnabled(): {
-  enabled: boolean;
-  pending: boolean;
-  error: boolean;
-  /** Confirmed off, not just unknown after a failed request. */
-  off: boolean;
-} {
-  const organization = useOrganization();
-  const { data, isPending, isError } = useProductFeatures({
-    organizationId: organization.id,
-  });
-  const enabled = data?.logsEnabled === true;
-  return {
-    enabled,
-    pending: isPending,
-    error: isError,
-    off: !isPending && !isError && !enabled,
-  };
-}
 
 function useWeekOverview() {
   const client = useGramContext();
@@ -122,14 +90,28 @@ type ExpandState = {
 };
 const ExpandContext = createContext<ExpandState | null>(null);
 
+const WIDGETS: Record<
+  HomeWidgetId,
+  (props: { className?: string }) => JSX.Element
+> = {
+  attention: NeedsAttention,
+  spend: SpendWidget,
+  movers: MoversWidget,
+  active: MostActiveWidget,
+  heatmap: HeatmapWidget,
+};
+
 /** Widgets around the homepage terminal, in grid order. */
 export function HomeWidgets({
-  classNames,
+  ids = HOME_WIDGET_IDS,
+  classNames = {},
   expanded = null,
   onToggleExpand,
 }: {
-  /** Grid placement for each widget, in order. */
-  classNames: [string, string, string, string, string];
+  /** Which widgets to render, in order. Defaults to all of them. */
+  ids?: readonly HomeWidgetId[];
+  /** Placement classes per widget. */
+  classNames?: Partial<Record<HomeWidgetId, string>>;
   /** The widget shown large; the others collapse to their title bars. */
   expanded?: HomeWidgetId | null;
   onToggleExpand?: (id: HomeWidgetId) => void;
@@ -140,11 +122,10 @@ export function HomeWidgets({
   );
   return (
     <ExpandContext.Provider value={expand}>
-      <NeedsAttention className={classNames[0]} />
-      <SpendWidget className={classNames[1]} />
-      <MoversWidget className={classNames[2]} />
-      <MostActiveWidget className={classNames[3]} />
-      <HeatmapWidget className={classNames[4]} />
+      {ids.map((id) => {
+        const Widget = WIDGETS[id];
+        return <Widget key={id} className={classNames[id]} />;
+      })}
     </ExpandContext.Provider>
   );
 }
@@ -669,15 +650,6 @@ function HeatmapWidget({ className }: { className?: string }): JSX.Element {
 // ---------------------------------------------------------------------------
 // Shared bits
 
-/** Asks the terminal beside the widgets, continuing its conversation. */
-function useAskTerminal(): (prompt: string) => void {
-  const { sendPrompt } = useInsightsState();
-  return useCallback(
-    (prompt: string) => sendPrompt(prompt, { newConversation: false }),
-    [sendPrompt],
-  );
-}
-
 /**
  * A widget card with an expand toggle. While another widget is expanded this
  * one collapses to its title bar; its toggle then switches the focus to it.
@@ -698,7 +670,7 @@ function HomeCard({
         action={action}
         className={className}
         bodyClassName={bodyClassName}
-        headerClassName={headerClassName}
+        headerClassName={cn(WIDGET_HEADER_CLASS, headerClassName)}
       />
     );
   }
@@ -709,7 +681,11 @@ function HomeCard({
       {...props}
       className={cn(className, collapsed && "h-auto shrink-0")}
       bodyClassName={cn(bodyClassName, collapsed && "hidden")}
-      headerClassName={cn(headerClassName, collapsed && "border-b-0 py-3")}
+      headerClassName={cn(
+        WIDGET_HEADER_CLASS,
+        headerClassName,
+        collapsed && "border-b-0",
+      )}
       action={
         <div className="flex items-center gap-4">
           {!collapsed && action}
@@ -731,89 +707,6 @@ function HomeCard({
         </div>
       }
     />
-  );
-}
-
-/** One row that sends its question to the terminal beside every widget. */
-function ActionRow({
-  children,
-  prompt,
-}: {
-  children: ReactNode;
-  prompt: string;
-}): JSX.Element {
-  const sendPrompt = useAskTerminal();
-  return (
-    <button
-      type="button"
-      className="group hover:bg-muted/50 flex w-full items-start gap-3 px-6 py-3 text-left"
-      onClick={() => sendPrompt(prompt)}
-    >
-      {children}
-      <span className="text-muted-foreground mt-0.5 shrink-0 text-xs opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100">
-        Ask ›
-      </span>
-    </button>
-  );
-}
-
-function AskButton({
-  prompt,
-  className,
-}: {
-  prompt: string;
-  className?: string;
-}): JSX.Element {
-  const sendPrompt = useAskTerminal();
-  return (
-    <button
-      type="button"
-      onClick={() => sendPrompt(prompt)}
-      className={cn(
-        "text-muted-foreground hover:text-foreground shrink-0 text-xs",
-        className,
-      )}
-    >
-      Ask ›
-    </button>
-  );
-}
-
-function ViewAllLink({ to }: { to: string }): JSX.Element {
-  return (
-    <Link
-      to={to}
-      className="text-muted-foreground hover:text-foreground flex items-center gap-0.5 text-xs no-underline"
-    >
-      View all
-      <ChevronRight className="size-3" />
-    </Link>
-  );
-}
-
-function ListSkeleton(): JSX.Element {
-  return (
-    <div className="space-y-3 px-6 py-5">
-      {Array.from({ length: 4 }).map((_, i) => (
-        <Skeleton key={i} className="h-8 w-full" />
-      ))}
-    </div>
-  );
-}
-
-const LOAD_ERROR = "Couldn't load this data. Try reloading the page.";
-
-function LoadError(): JSX.Element {
-  return (
-    <p className="text-muted-foreground px-6 py-5 text-sm">{LOAD_ERROR}</p>
-  );
-}
-
-function LogsOff(): JSX.Element {
-  return (
-    <p className="text-muted-foreground px-6 py-5 text-sm">
-      Turn on logs for this organization to see activity.
-    </p>
   );
 }
 
