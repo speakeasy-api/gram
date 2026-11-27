@@ -237,9 +237,10 @@ type Permission struct {
 	// authorizes role, member and audience changes, so a temporary holder could
 	// turn it into permanent access before it expires. mcp:auth is provisioned
 	// through auth client audiences. Risk policy, plugin, inference, agent
-	// credential and machine scopes are left out because other subsystems
-	// derive standing configuration from who holds them, which an expiring
-	// grant would leave stale. Blocks only withdraw access and never take it.
+	// credential, workload:write and device agent scopes are left out because
+	// other subsystems derive standing configuration from who holds them,
+	// which an expiring grant would leave stale. Blocks only withdraw access
+	// and never take it.
 	TemporaryAccess bool
 }
 
