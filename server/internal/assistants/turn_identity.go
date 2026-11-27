@@ -246,25 +246,26 @@ func (s *ServiceCore) resolveTurnIdentity(ctx context.Context, assistant assista
 		}
 		if thread.SourceKind != sourceKindSpeakeasySlack && eventSource != sourceKindSpeakeasySlack {
 			initiator := ateThreadInitiator{UserID: "", Resolution: ATEInitiatorNoUser}
-			if thread.SourceKind == sourceKindDashboard {
-				var payload dashboardEventPayload
-				if err := json.Unmarshal(event.NormalizedPayloadJSON, &payload); err == nil && payload.UserID != "" {
-					initiator = ateThreadInitiator{UserID: payload.UserID, Resolution: ATEInitiatorDashboardSender}
-				}
+			if selectedUser, known, resolution, selErr := selectTurnUserWithResolution(ctx, assistant, thread.SourceKind, event, slackrepo.New(s.db).ResolveSlackMappingUser); selErr == nil && known {
+				initiator = ateThreadInitiator{UserID: selectedUser, Resolution: resolution}
 			}
 			return turnIdentity{UserID: legacyTurnUserID(assistant, thread, event), AgentBacked: false, HumanKnown: false, Initiator: initiator}, nil
 		}
 		// Speakeasy Slack app turns act as the linked sender even without a
 		// dedicated agent.
-		user, resolution, err := s.checkedTurnUser(ctx, assistant, thread, event)
+		user, known, resolution, err := s.checkedTurnUser(ctx, assistant, thread, event)
 		if err != nil {
 			return turnIdentity{}, err
+		}
+		initiator := ateThreadInitiator{UserID: "", Resolution: ATEInitiatorNoUser}
+		if known {
+			initiator = ateThreadInitiator{UserID: user, Resolution: resolution}
 		}
 		return turnIdentity{
 			UserID:      user,
 			AgentBacked: false,
-			HumanKnown:  true,
-			Initiator:   ateThreadInitiator{UserID: user, Resolution: resolution},
+			HumanKnown:  known,
+			Initiator:   initiator,
 		}, nil
 	case assistantidentity.Active:
 	default:
@@ -286,18 +287,18 @@ func (s *ServiceCore) resolveTurnIdentity(ctx context.Context, assistant assista
 }
 
 // checkedTurnUser selects the turn user and checks it may act in the project.
-func (s *ServiceCore) checkedTurnUser(ctx context.Context, assistant assistantRecord, thread assistantThreadRecord, event assistantThreadEventRecord) (string, string, error) {
+func (s *ServiceCore) checkedTurnUser(ctx context.Context, assistant assistantRecord, thread assistantThreadRecord, event assistantThreadEventRecord) (string, bool, string, error) {
 	user, known, resolution, err := selectTurnUserWithResolution(ctx, assistant, thread.SourceKind, event, slackrepo.New(s.db).ResolveSlackMappingUser)
 	if err != nil {
-		return "", "", fmt.Errorf("%w: %w", ErrTurnIdentity, err)
+		return "", false, "", fmt.Errorf("%w: %w", ErrTurnIdentity, err)
 	}
 	if err := s.checkTurnActor(ctx, assistant, user); err != nil {
-		return "", "", err
+		return "", false, "", err
 	}
 	if !known {
 		resolution = ATEInitiatorNoUser
 	}
-	return user, resolution, nil
+	return user, known, resolution, nil
 }
 
 func (s *ServiceCore) checkTurnActor(ctx context.Context, assistant assistantRecord, user string) error {

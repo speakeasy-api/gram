@@ -1945,7 +1945,6 @@ SELECT initiating_user_id, initiating_user_resolution
 FROM assistant_ate_actors
 WHERE project_id = $1
   AND assistant_thread_id = $2
-  AND initiating_user_resolution <> 'not_recorded'
 ORDER BY created_at ASC, id ASC
 LIMIT 1
 `
@@ -1961,8 +1960,10 @@ type GetEarliestAssistantATEActorInitiatorForThreadRow struct {
 }
 
 // Returns the thread's earliest recorded ATE actor initiator across all
-// runtimes (including soft-deleted rows) so replacement actors inherit the
-// original initiating user immutably. Uses assistant_ate_actors_project_thread_idx.
+// runtimes (including soft-deleted and legacy not_recorded rows) so replacement
+// actors inherit the original initiating user immutably and legacy unrecorded
+// threads fail closed instead of adopting a later sender. Uses
+// assistant_ate_actors_project_thread_idx.
 func (q *Queries) GetEarliestAssistantATEActorInitiatorForThread(ctx context.Context, arg GetEarliestAssistantATEActorInitiatorForThreadParams) (GetEarliestAssistantATEActorInitiatorForThreadRow, error) {
 	row := q.db.QueryRow(ctx, getEarliestAssistantATEActorInitiatorForThread, arg.ProjectID, arg.ThreadID)
 	var i GetEarliestAssistantATEActorInitiatorForThreadRow
