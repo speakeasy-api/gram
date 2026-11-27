@@ -313,6 +313,7 @@ var validAuthClientTypes = map[string]bool{
 	"pass_through":      true,
 	"remote_session":    true,
 	"service_account":   true,
+	"slack_app":         true,
 	"static_credential": true,
 }
 

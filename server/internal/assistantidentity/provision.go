@@ -74,7 +74,14 @@ func (s *Service) Provision(ctx context.Context, tx pgx.Tx, p ProvisionParams) e
 	if err != nil {
 		return err
 	}
-	grants := initialGrants(p.ProjectID, p.AssistantID, assistant.IsManaged)
+	slackAuthClients, err := q.ListAssistantSlackAuthClientIDs(ctx, repo.ListAssistantSlackAuthClientIDsParams{
+		ProjectID:   p.ProjectID,
+		AssistantID: p.AssistantID.String(),
+	})
+	if err != nil {
+		return fmt.Errorf("list assistant slack auth clients: %w", err)
+	}
+	grants := initialGrants(p.ProjectID, p.AssistantID, assistant.IsManaged, slackAuthClients)
 	// A dedicated agent may inherit inference only within this project and
 	// only when everyone delegating it already has it: the provisioning user
 	// and the owner, or the owner alone when staff provision.
@@ -186,6 +193,20 @@ func (s *Service) createAgent(ctx context.Context, tx pgx.Tx, p ProvisionParams,
 	return agent, nil
 }
 
+// BuiltinConnectGrant builds the explicit mcp:connect policy grant for one
+// built-in platform toolset in project.
+func BuiltinConnectGrant(project uuid.UUID, slug string) authz.Grant {
+	selector := authz.NewSelector(authz.ScopeMCPConnect, platformtoolscore.PlatformToolsetID(slug).String())
+	selector[authz.SelectorKeyProjectID] = project.String()
+	return authz.NewGrantWithSelector(authz.ScopeMCPConnect, selector)
+}
+
+// AssistantSlackAuthGrant builds the explicit mcp:auth policy grant targeting
+// one slack_app typed auth client.
+func AssistantSlackAuthGrant(authClientID uuid.UUID) authz.Grant {
+	return authz.NewGrantWithSelector(authz.ScopeMCPAuth, authz.AuthClientSelector(authClientID.String(), ""))
+}
+
 // BuiltinConnectGrants returns the explicit mcp:connect policy grants for an
 // assistant's built-in toolsets in project. Ordinary assistants receive the
 // assistants toolset; managed assistants also receive platform and
@@ -194,17 +215,17 @@ func BuiltinConnectGrants(project uuid.UUID, managed bool) []authz.Grant {
 	slugs := platformtoolscore.AssistantBuiltinToolsetSlugs(managed)
 	grants := make([]authz.Grant, 0, len(slugs))
 	for _, slug := range slugs {
-		selector := authz.NewSelector(authz.ScopeMCPConnect, platformtoolscore.PlatformToolsetID(slug).String())
-		selector[authz.SelectorKeyProjectID] = project.String()
-		grants = append(grants, authz.NewGrantWithSelector(authz.ScopeMCPConnect, selector))
+		grants = append(grants, BuiltinConnectGrant(project, slug))
 	}
 	return grants
 }
 
 // initialGrants is the dedicated agent's starting ceiling: every MCP server
 // and skill in the assistant's project, explicit Connect grants on the
-// assistant's built-in toolsets, plus administration of the assistant itself.
-func initialGrants(project, assistant uuid.UUID, managed bool) []authz.Grant {
+// assistant's built-in toolsets, optional assistant-slack grants when Slack
+// auth-client triggers are already linked, plus administration of the
+// assistant itself.
+func initialGrants(project, assistant uuid.UUID, managed bool, slackAuthClients []uuid.NullUUID) []authz.Grant {
 	projectMCP := authz.NewSelector(authz.ScopeMCPConnect, authz.WildcardResource)
 	projectMCP[authz.SelectorKeyProjectID] = project.String()
 	grants := []authz.Grant{
@@ -215,6 +236,14 @@ func initialGrants(project, assistant uuid.UUID, managed bool) []authz.Grant {
 		authz.NewGrant(authz.ScopeSkillRead, project.String()),
 	}
 	grants = append(grants, BuiltinConnectGrants(project, managed)...)
+	if len(slackAuthClients) > 0 {
+		grants = append(grants, BuiltinConnectGrant(project, platformtoolscore.AssistantSlackPlatformToolsetSlug))
+		for _, clientID := range slackAuthClients {
+			if clientID.Valid {
+				grants = append(grants, AssistantSlackAuthGrant(clientID.UUID))
+			}
+		}
+	}
 	return append(grants, assistantSelfAdminGrants(assistant)...)
 }
 

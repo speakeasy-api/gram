@@ -22,6 +22,8 @@ type CreateTriggerInstanceRequestBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The linked environment ID.
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
+	// The linked slack_app auth client ID. Mutually exclusive with environment_id.
+	AuthClientID *string `form:"auth_client_id,omitempty" json:"auth_client_id,omitempty" xml:"auth_client_id,omitempty"`
 	// The trigger target kind.
 	TargetKind *string `form:"target_kind,omitempty" json:"target_kind,omitempty" xml:"target_kind,omitempty"`
 	// The opaque target reference.
@@ -43,6 +45,8 @@ type UpdateTriggerInstanceRequestBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The linked environment ID.
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
+	// The linked slack_app auth client ID. Mutually exclusive with environment_id.
+	AuthClientID *string `form:"auth_client_id,omitempty" json:"auth_client_id,omitempty" xml:"auth_client_id,omitempty"`
 	// The trigger target kind.
 	TargetKind *string `form:"target_kind,omitempty" json:"target_kind,omitempty" xml:"target_kind,omitempty"`
 	// The opaque target reference.
@@ -89,6 +93,8 @@ type GetTriggerInstanceResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The linked environment ID.
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
+	// The linked slack_app auth client ID. Mutually exclusive with environment_id.
+	AuthClientID *string `form:"auth_client_id,omitempty" json:"auth_client_id,omitempty" xml:"auth_client_id,omitempty"`
 	// The target kind for the trigger instance.
 	TargetKind string `form:"target_kind" json:"target_kind" xml:"target_kind"`
 	// The opaque target reference.
@@ -120,6 +126,8 @@ type CreateTriggerInstanceResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The linked environment ID.
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
+	// The linked slack_app auth client ID. Mutually exclusive with environment_id.
+	AuthClientID *string `form:"auth_client_id,omitempty" json:"auth_client_id,omitempty" xml:"auth_client_id,omitempty"`
 	// The target kind for the trigger instance.
 	TargetKind string `form:"target_kind" json:"target_kind" xml:"target_kind"`
 	// The opaque target reference.
@@ -151,6 +159,8 @@ type UpdateTriggerInstanceResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The linked environment ID.
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
+	// The linked slack_app auth client ID. Mutually exclusive with environment_id.
+	AuthClientID *string `form:"auth_client_id,omitempty" json:"auth_client_id,omitempty" xml:"auth_client_id,omitempty"`
 	// The target kind for the trigger instance.
 	TargetKind string `form:"target_kind" json:"target_kind" xml:"target_kind"`
 	// The opaque target reference.
@@ -182,6 +192,8 @@ type PauseTriggerInstanceResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The linked environment ID.
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
+	// The linked slack_app auth client ID. Mutually exclusive with environment_id.
+	AuthClientID *string `form:"auth_client_id,omitempty" json:"auth_client_id,omitempty" xml:"auth_client_id,omitempty"`
 	// The target kind for the trigger instance.
 	TargetKind string `form:"target_kind" json:"target_kind" xml:"target_kind"`
 	// The opaque target reference.
@@ -213,6 +225,8 @@ type ResumeTriggerInstanceResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The linked environment ID.
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
+	// The linked slack_app auth client ID. Mutually exclusive with environment_id.
+	AuthClientID *string `form:"auth_client_id,omitempty" json:"auth_client_id,omitempty" xml:"auth_client_id,omitempty"`
 	// The target kind for the trigger instance.
 	TargetKind string `form:"target_kind" json:"target_kind" xml:"target_kind"`
 	// The opaque target reference.
@@ -1974,6 +1988,8 @@ type TriggerInstanceResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The linked environment ID.
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
+	// The linked slack_app auth client ID. Mutually exclusive with environment_id.
+	AuthClientID *string `form:"auth_client_id,omitempty" json:"auth_client_id,omitempty" xml:"auth_client_id,omitempty"`
 	// The target kind for the trigger instance.
 	TargetKind string `form:"target_kind" json:"target_kind" xml:"target_kind"`
 	// The opaque target reference.
@@ -2078,6 +2094,7 @@ func NewGetTriggerInstanceResponseBody(res *types.TriggerInstance) *GetTriggerIn
 		DefinitionSlug: res.DefinitionSlug,
 		Name:           res.Name,
 		EnvironmentID:  res.EnvironmentID,
+		AuthClientID:   res.AuthClientID,
 		TargetKind:     res.TargetKind,
 		TargetRef:      res.TargetRef,
 		TargetDisplay:  res.TargetDisplay,
@@ -2106,6 +2123,7 @@ func NewCreateTriggerInstanceResponseBody(res *types.TriggerInstance) *CreateTri
 		DefinitionSlug: res.DefinitionSlug,
 		Name:           res.Name,
 		EnvironmentID:  res.EnvironmentID,
+		AuthClientID:   res.AuthClientID,
 		TargetKind:     res.TargetKind,
 		TargetRef:      res.TargetRef,
 		TargetDisplay:  res.TargetDisplay,
@@ -2134,6 +2152,7 @@ func NewUpdateTriggerInstanceResponseBody(res *types.TriggerInstance) *UpdateTri
 		DefinitionSlug: res.DefinitionSlug,
 		Name:           res.Name,
 		EnvironmentID:  res.EnvironmentID,
+		AuthClientID:   res.AuthClientID,
 		TargetKind:     res.TargetKind,
 		TargetRef:      res.TargetRef,
 		TargetDisplay:  res.TargetDisplay,
@@ -2162,6 +2181,7 @@ func NewPauseTriggerInstanceResponseBody(res *types.TriggerInstance) *PauseTrigg
 		DefinitionSlug: res.DefinitionSlug,
 		Name:           res.Name,
 		EnvironmentID:  res.EnvironmentID,
+		AuthClientID:   res.AuthClientID,
 		TargetKind:     res.TargetKind,
 		TargetRef:      res.TargetRef,
 		TargetDisplay:  res.TargetDisplay,
@@ -2190,6 +2210,7 @@ func NewResumeTriggerInstanceResponseBody(res *types.TriggerInstance) *ResumeTri
 		DefinitionSlug: res.DefinitionSlug,
 		Name:           res.Name,
 		EnvironmentID:  res.EnvironmentID,
+		AuthClientID:   res.AuthClientID,
 		TargetKind:     res.TargetKind,
 		TargetRef:      res.TargetRef,
 		TargetDisplay:  res.TargetDisplay,
@@ -3602,6 +3623,7 @@ func NewCreateTriggerInstancePayload(body *CreateTriggerInstanceRequestBody, ses
 		DefinitionSlug: *body.DefinitionSlug,
 		Name:           *body.Name,
 		EnvironmentID:  body.EnvironmentID,
+		AuthClientID:   body.AuthClientID,
 		TargetKind:     *body.TargetKind,
 		TargetRef:      *body.TargetRef,
 		TargetDisplay:  *body.TargetDisplay,
@@ -3626,6 +3648,7 @@ func NewUpdateTriggerInstancePayload(body *UpdateTriggerInstanceRequestBody, ses
 		ID:            *body.ID,
 		Name:          body.Name,
 		EnvironmentID: body.EnvironmentID,
+		AuthClientID:  body.AuthClientID,
 		TargetKind:    body.TargetKind,
 		TargetRef:     body.TargetRef,
 		TargetDisplay: body.TargetDisplay,
@@ -3702,6 +3725,9 @@ func ValidateCreateTriggerInstanceRequestBody(body *CreateTriggerInstanceRequest
 	if body.EnvironmentID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.environment_id", *body.EnvironmentID, goa.FormatUUID))
 	}
+	if body.AuthClientID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.auth_client_id", *body.AuthClientID, goa.FormatUUID))
+	}
 	if body.TargetKind != nil {
 		if !(*body.TargetKind == "assistant" || *body.TargetKind == "noop") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_kind", *body.TargetKind, []any{"assistant", "noop"}))
@@ -3726,6 +3752,9 @@ func ValidateUpdateTriggerInstanceRequestBody(body *UpdateTriggerInstanceRequest
 	}
 	if body.EnvironmentID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.environment_id", *body.EnvironmentID, goa.FormatUUID))
+	}
+	if body.AuthClientID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.auth_client_id", *body.AuthClientID, goa.FormatUUID))
 	}
 	if body.TargetKind != nil {
 		if !(*body.TargetKind == "assistant" || *body.TargetKind == "noop") {

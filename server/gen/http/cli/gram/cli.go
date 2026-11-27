@@ -33103,7 +33103,7 @@ func triggersCreateTriggerInstanceUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "triggers create-trigger-instance --body '{\n      \"config\": {\n         \"abc123\": \"abc123\"\n      },\n      \"definition_slug\": \"abc123\",\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"status\": \"paused\",\n      \"target_display\": \"abc123\",\n      \"target_kind\": \"noop\",\n      \"target_ref\": \"abc123\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "triggers create-trigger-instance --body '{\n      \"auth_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"config\": {\n         \"abc123\": \"abc123\"\n      },\n      \"definition_slug\": \"abc123\",\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"status\": \"paused\",\n      \"target_display\": \"abc123\",\n      \"target_kind\": \"noop\",\n      \"target_ref\": \"abc123\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func triggersUpdateTriggerInstanceUsage() {
@@ -33125,7 +33125,7 @@ func triggersUpdateTriggerInstanceUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "triggers update-trigger-instance --body '{\n      \"config\": {\n         \"abc123\": \"abc123\"\n      },\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"status\": \"paused\",\n      \"target_display\": \"abc123\",\n      \"target_kind\": \"noop\",\n      \"target_ref\": \"abc123\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "triggers update-trigger-instance --body '{\n      \"auth_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"config\": {\n         \"abc123\": \"abc123\"\n      },\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"status\": \"paused\",\n      \"target_display\": \"abc123\",\n      \"target_kind\": \"noop\",\n      \"target_ref\": \"abc123\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func triggersDeleteTriggerInstanceUsage() {

@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
 )
 
 func builtinGrantIDsBySlug(t *testing.T, rows []agentrepo.ListAgentPolicyGrantsRow, project uuid.UUID) map[string]agentrepo.ListAgentPolicyGrantsRow {
@@ -27,6 +28,7 @@ func builtinGrantIDsBySlug(t *testing.T, rows []agentrepo.ListAgentPolicyGrantsR
 		platformtools.AssistantsPlatformToolsetSlug,
 		platformtools.PlatformMCPReadToolsetSlug,
 		platformtools.SpeakeasySlackPlatformToolsetSlug,
+		platformtools.AssistantSlackPlatformToolsetSlug,
 	} {
 		want := authz.NewSelector(authz.ScopeMCPConnect, platformtools.PlatformToolsetID(slug).String())
 		want[authz.SelectorKeyProjectID] = project.String()
@@ -281,4 +283,116 @@ func TestBackfillOrganizationAssistantBuiltinGrantsConcurrent(t *testing.T) {
 	}
 	require.Equal(t, int64(1), granted, "concurrent backfills grant and audit at most once")
 	require.Equal(t, int64(1), alreadyGranted)
+}
+
+func TestBackfillOrganizationAssistantBuiltinGrants_AssistantSlackOnlyWhenLinked(t *testing.T) {
+	t.Parallel()
+	svc, db := newAssistantMigrationService(t)
+	ctx := contextvalues.SetAdminAuthContext(t.Context(), &contextvalues.AdminAuthContext{
+		SessionID:   "staff-session",
+		OIDCSubject: "staff-subject",
+		Email:       "staff@example.invalid",
+		Name:        "Staff Member",
+		HD:          testAdminHD,
+	})
+	org := newAssistantMigrationOrg(t, db, "assistant-builtin-slack")
+	owner := org.member(true)
+	withSlack := org.legacyAssistant("With Slack", owner)
+	withoutSlack := org.legacyAssistant("Without Slack", owner)
+
+	slackClientID, err := testrepo.New(db).CreateAuthClientFixture(t.Context(), testrepo.CreateAuthClientFixtureParams{
+		OrganizationID: org.id,
+		ProjectID:      uuid.NullUUID{UUID: org.project, Valid: true},
+		ClientType:     authz.AuthClientTypeSlackApp,
+		Name:           "Assistant Slack app",
+	})
+	require.NoError(t, err)
+	_, err = triggerrepo.New(db).CreateTriggerInstance(t.Context(), triggerrepo.CreateTriggerInstanceParams{
+		OrganizationID: org.id,
+		ProjectID:      org.project,
+		DefinitionSlug: "slack",
+		Name:           "Slack trigger",
+		EnvironmentID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		AuthClientID:   uuid.NullUUID{UUID: slackClientID, Valid: true},
+		TargetKind:     "assistant",
+		TargetRef:      withSlack.String(),
+		TargetDisplay:  "With Slack",
+		ConfigJson:     []byte(`{}`),
+		Status:         "active",
+	})
+	require.NoError(t, err)
+
+	// Provisioning grants assistant-slack + mcp:auth only to the assistant with a Slack auth client trigger.
+	_, err = svc.MigrateOrganizationAssistantIdentities(ctx, &gen.MigrateOrganizationAssistantIdentitiesPayload{OrganizationID: org.id})
+	require.NoError(t, err)
+
+	states, err := assistantidentity.States(t.Context(), db, org.project, []uuid.UUID{withSlack, withoutSlack})
+	require.NoError(t, err)
+	agents := agentrepo.New(db)
+
+	withSlackRows, err := agents.ListAgentPolicyGrants(t.Context(), agentrepo.ListAgentPolicyGrantsParams{OrganizationID: org.id, AgentID: *states[withSlack].AgentID})
+	require.NoError(t, err)
+	require.Contains(t, builtinGrantIDsBySlug(t, withSlackRows, org.project), platformtools.AssistantSlackPlatformToolsetSlug)
+	require.True(t, hasMCPAuthGrantForClient(t, withSlackRows, slackClientID), "provisioning must grant mcp:auth for the linked slack_app client")
+
+	withoutSlackRows, err := agents.ListAgentPolicyGrants(t.Context(), agentrepo.ListAgentPolicyGrantsParams{OrganizationID: org.id, AgentID: *states[withoutSlack].AgentID})
+	require.NoError(t, err)
+	require.NotContains(t, builtinGrantIDsBySlug(t, withoutSlackRows, org.project), platformtools.AssistantSlackPlatformToolsetSlug)
+	require.False(t, hasMCPAuthGrantForClient(t, withoutSlackRows, slackClientID))
+
+	// Removing builtin connect and mcp:auth grants and running the backfill restores both ONLY on withSlack.
+	deleteAllBuiltinGrants(t, agents, org.id, *states[withSlack].AgentID, org.project)
+	deleteAllMCPAuthGrants(t, agents, org.id, *states[withSlack].AgentID)
+	deleteAllBuiltinGrants(t, agents, org.id, *states[withoutSlack].AgentID, org.project)
+
+	run, err := svc.BackfillOrganizationAssistantBuiltinGrants(ctx, &gen.BackfillOrganizationAssistantBuiltinGrantsPayload{OrganizationID: org.id})
+	require.NoError(t, err)
+	require.Equal(t, int64(2), run.Granted)
+	require.Zero(t, run.Failed)
+
+	withSlackAfter, err := agents.ListAgentPolicyGrants(t.Context(), agentrepo.ListAgentPolicyGrantsParams{OrganizationID: org.id, AgentID: *states[withSlack].AgentID})
+	require.NoError(t, err)
+	require.Contains(t, builtinGrantIDsBySlug(t, withSlackAfter, org.project), platformtools.AssistantSlackPlatformToolsetSlug)
+	require.True(t, hasMCPAuthGrantForClient(t, withSlackAfter, slackClientID), "backfill must restore mcp:auth for the linked slack_app client")
+
+	withoutSlackAfter, err := agents.ListAgentPolicyGrants(t.Context(), agentrepo.ListAgentPolicyGrantsParams{OrganizationID: org.id, AgentID: *states[withoutSlack].AgentID})
+	require.NoError(t, err)
+	require.NotContains(t, builtinGrantIDsBySlug(t, withoutSlackAfter, org.project), platformtools.AssistantSlackPlatformToolsetSlug)
+	require.False(t, hasMCPAuthGrantForClient(t, withoutSlackAfter, slackClientID))
+}
+
+func hasMCPAuthGrantForClient(t *testing.T, rows []agentrepo.ListAgentPolicyGrantsRow, clientID uuid.UUID) bool {
+	t.Helper()
+	want := authz.AuthClientSelector(clientID.String(), "")
+	for _, row := range rows {
+		if row.Scope != string(authz.ScopeMCPAuth) {
+			continue
+		}
+		got, err := authz.SelectorFromRow(row.Selectors)
+		require.NoError(t, err)
+		if maps.Equal(got, want) && !row.ExpiresAt.Valid {
+			return true
+		}
+	}
+	return false
+}
+
+func deleteAllMCPAuthGrants(t *testing.T, agents *agentrepo.Queries, orgID string, agentID uuid.UUID) {
+	t.Helper()
+	rows, err := agents.ListAgentPolicyGrants(t.Context(), agentrepo.ListAgentPolicyGrantsParams{
+		OrganizationID: orgID,
+		AgentID:        agentID,
+	})
+	require.NoError(t, err)
+	for _, row := range rows {
+		if row.Scope != string(authz.ScopeMCPAuth) {
+			continue
+		}
+		_, err := agents.DeleteAgentPolicyGrant(t.Context(), agentrepo.DeleteAgentPolicyGrantParams{
+			OrganizationID: orgID,
+			AgentID:        agentID,
+			GrantID:        row.ID,
+		})
+		require.NoError(t, err)
+	}
 }

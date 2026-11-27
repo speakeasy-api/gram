@@ -508,6 +508,7 @@ type ServiceCore struct {
 	envLoader         toolconfig.EnvironmentLoader
 	slackImages       slackImageFetcher
 	speakeasySlack    SpeakeasySlackTokens
+	slackAppCreds     SlackAppCredentialLoader
 	dashboardIngestor DashboardIngestor
 	featureFlags      feature.Provider
 	turnClassified    metric.Int64Counter
@@ -576,6 +577,7 @@ func NewServiceCore(
 		envLoader:                   nil,
 		slackImages:                 nil,
 		speakeasySlack:              nil,
+		slackAppCreds:               nil,
 		dashboardIngestor:           nil,
 		featureFlags:                nil,
 		turnClassified:              turnClassified,

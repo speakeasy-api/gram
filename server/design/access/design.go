@@ -1449,7 +1449,7 @@ var SelectorModel = Type("Selector", func() {
 	})
 	Attribute("client_type", String, func() {
 		Description("Auth client type filter (mcp:auth and mcp:blocked_auth only).")
-		Enum("remote_session", "service_account", "static_credential", "pass_through", "ema", "*")
+		Enum("remote_session", "service_account", "static_credential", "pass_through", "ema", "slack_app", "*")
 	})
 	Attribute("connection_owner", String, func() {
 		Description("Personal connection owner filter (mcp:auth and mcp:blocked_auth on remote_session clients only). A user ID, '*', or '$represented_user' for the user the request acts for. Never lets a caller use another user's connection.")

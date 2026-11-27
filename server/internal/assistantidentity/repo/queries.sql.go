@@ -322,6 +322,42 @@ func (q *Queries) ListAssistantRoots(ctx context.Context, arg ListAssistantRoots
 	return items, nil
 }
 
+const listAssistantSlackAuthClientIDs = `-- name: ListAssistantSlackAuthClientIDs :many
+SELECT DISTINCT auth_client_id
+FROM trigger_instances
+WHERE project_id = $1
+  AND target_kind = 'assistant' AND target_ref = $2::text
+  AND definition_slug = 'slack'
+  AND auth_client_id IS NOT NULL
+  AND deleted IS FALSE
+ORDER BY auth_client_id
+`
+
+type ListAssistantSlackAuthClientIDsParams struct {
+	ProjectID   uuid.UUID
+	AssistantID string
+}
+
+func (q *Queries) ListAssistantSlackAuthClientIDs(ctx context.Context, arg ListAssistantSlackAuthClientIDsParams) ([]uuid.NullUUID, error) {
+	rows, err := q.db.Query(ctx, listAssistantSlackAuthClientIDs, arg.ProjectID, arg.AssistantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.NullUUID
+	for rows.Next() {
+		var auth_client_id uuid.NullUUID
+		if err := rows.Scan(&auth_client_id); err != nil {
+			return nil, err
+		}
+		items = append(items, auth_client_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAssistantTriggerBindings = `-- name: ListAssistantTriggerBindings :many
 SELECT tb.original_trigger_id
 FROM trigger_workload_bindings tb

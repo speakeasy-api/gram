@@ -27,6 +27,7 @@ export const AuthClientClientType = {
   StaticCredential: "static_credential",
   PassThrough: "pass_through",
   Ema: "ema",
+  SlackApp: "slack_app",
 } as const;
 /**
  * How the client authenticates upstream.
