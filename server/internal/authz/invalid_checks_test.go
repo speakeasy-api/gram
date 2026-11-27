@@ -352,6 +352,30 @@ func TestGroup_OnlyAsTheSingleCheckOfRequire(t *testing.T) {
 	}
 }
 
+// GrantsAuthorize decides a group as Require does, so it refuses the same
+// misuses: no alternatives, a nested group, and an invalid alternative.
+func TestGrantsAuthorize_RefusesMisusedGroups(t *testing.T) {
+	t.Parallel()
+	root := []Grant{NewGrant(ScopeRoot, WildcardResource)}
+	project := Project(ProjectIDFrom("project-one"))
+
+	allowed, err := GrantsAuthorize(root, Either())
+	require.ErrorIs(t, err, ErrNoChecks)
+	require.False(t, allowed)
+
+	allowed, err = GrantsAuthorize(root, Either(Either(project.Read()), project.Write()))
+	require.ErrorIs(t, err, ErrInvalidCheck)
+	require.False(t, allowed)
+
+	allowed, err = GrantsAuthorize(root, Either(project.Read(), Project(ProjectIDFrom("")).Write()))
+	require.ErrorIs(t, err, ErrInvalidCheck)
+	require.False(t, allowed)
+
+	allowed, err = GrantsAuthorize(root, Either(project.Read(), project.Write()))
+	require.NoError(t, err)
+	require.True(t, allowed)
+}
+
 // A probe is a discovery question: Decide answers it, Require refuses
 // it, alone or inside Either, whether or not RBAC is enforced.
 func TestProbe_RefusedByRequire(t *testing.T) {

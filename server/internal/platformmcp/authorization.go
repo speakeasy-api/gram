@@ -141,9 +141,12 @@ func (a *LiveOrgAdminAuthorizer) AuthorizeExternalCall(ctx context.Context, prin
 	if !ok || authCtx == nil || authCtx.UserID != principal.UserID || authCtx.ActiveOrganizationID != principal.OrganizationID {
 		return ErrUnavailable
 	}
-	var check authz.Check
-	switch policy {
-	case ExternalAuthorizationMember:
+	if policy.IsZero() {
+		return fmt.Errorf("%w: unsupported external authorization policy %s", ErrUnavailable, policy)
+	}
+	org := authz.OrgIDFrom(principal.OrganizationID)
+	check, gated := policy.check(org)
+	if !gated {
 		enforce, err := a.engine.ShouldEnforce(ctx)
 		if err != nil || !enforce {
 			return ErrUnavailable
@@ -152,19 +155,16 @@ func (a *LiveOrgAdminAuthorizer) AuthorizeExternalCall(ctx context.Context, prin
 			return ErrUnavailable
 		}
 		return nil
-	case ExternalAuthorizationOrgAdmin:
-		check = authz.Org(authz.OrgIDFrom(principal.OrganizationID)).Admin()
-	default:
-		return fmt.Errorf("%w: unsupported external authorization policy %q", ErrUnavailable, policy)
 	}
 	if err := a.engine.Require(ctx, check); err != nil {
 		var shareable *oops.ShareableError
 		if !errors.As(err, &shareable) || shareable.Code != oops.CodeForbidden {
 			return fmt.Errorf("authorize Platform MCP call: %w", err)
 		}
+		request, _ := policy.requestCheck(org)
 		return &ExternalAuthorizationError{
-			RequiredScope:    string(check.Scope),
-			RequestAccessURL: a.requestAccessURL(ctx, check),
+			RequiredScope:    string(request.Scope),
+			RequestAccessURL: a.requestAccessURL(ctx, request),
 			cause:            err,
 		}
 	}
@@ -172,10 +172,13 @@ func (a *LiveOrgAdminAuthorizer) AuthorizeExternalCall(ctx context.Context, prin
 }
 
 func (a *LiveOrgAdminAuthorizer) requestAccessURL(ctx context.Context, check authz.Check) string {
-	// The current policy is one exact, user-visible organization scope. Future
-	// compound or undisclosable checks must withhold a prefilled request rather
-	// than suggest an inaccurate grant.
-	if check.Scope != authz.ScopeOrgAdmin || check.ResourceID == "" || check.ResourceID == authz.WildcardResource {
+	// A policy names one exact check to request. A scope people cannot be
+	// granted, or a check without a concrete resource, withholds a prefilled
+	// request rather than suggest an inaccurate grant.
+	if visibility, ok := authz.ScopeVisibilityFor(check.Scope); !ok || visibility != authz.ScopeVisibilityUserVisible {
+		return ""
+	}
+	if check.ResourceID == "" || check.ResourceID == authz.WildcardResource {
 		return ""
 	}
 	authCtx, ok := contextvalues.GetAuthContext(ctx)

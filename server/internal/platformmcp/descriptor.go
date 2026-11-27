@@ -55,18 +55,76 @@ const (
 	ProjectScopeDefaultable
 )
 
-// ExternalAuthorization names the call-time authority required by the external
+// ExternalAuthorization is the call-time authority required by the external
 // OAuth surface. It is independent from audience membership: members see one
 // stable catalogue, then authorization decides whether each call may run.
-type ExternalAuthorization string
+//
+// A policy other than member carries a typed check on the caller's
+// organization. The same check gates the call, decides whether tools/list
+// shows the tool, and names what a refused caller is asked to request. The
+// zero value is no policy, which registration refuses for external tools.
+type ExternalAuthorization struct {
+	policy *externalPolicy
+}
 
-const (
+type externalPolicy struct {
+	name string
+	// requires builds the check every call must pass. Nil means live
+	// membership is enough.
+	requires func(authz.OrgID) authz.Check
+	// request builds the single check a refused caller is asked to request.
+	// Nil means requires, which must then not be an Either group: a group has
+	// no one grant to suggest.
+	request func(authz.OrgID) authz.Check
+}
+
+var (
 	// ExternalAuthorizationMember relies on live membership established while
 	// preparing the external request. The handler must enforce any narrower
 	// resource, ownership, or domain policy it needs.
-	ExternalAuthorizationMember   ExternalAuthorization = "member"
-	ExternalAuthorizationOrgAdmin ExternalAuthorization = "org_admin"
+	ExternalAuthorizationMember = ExternalAuthorization{policy: &externalPolicy{name: "member", requires: nil, request: nil}}
+	// ExternalAuthorizationOrgAdmin requires org:admin on the caller's
+	// organization.
+	ExternalAuthorizationOrgAdmin = ExternalAuthorization{policy: &externalPolicy{
+		name:     "org_admin",
+		requires: func(org authz.OrgID) authz.Check { return authz.Org(org).Admin() },
+		request:  nil,
+	}}
 )
+
+// IsZero reports whether no policy was declared.
+func (a ExternalAuthorization) IsZero() bool { return a.policy == nil }
+
+// String names the policy for logs and errors.
+func (a ExternalAuthorization) String() string {
+	if a.policy == nil {
+		return "none"
+	}
+	return a.policy.name
+}
+
+// check returns the check a call must pass on org, and false when live
+// membership is enough.
+func (a ExternalAuthorization) check(org authz.OrgID) (authz.Check, bool) {
+	if a.policy == nil || a.policy.requires == nil {
+		var none authz.Check
+		return none, false
+	}
+	return a.policy.requires(org), true
+}
+
+// requestCheck returns the single check a caller refused by this policy is
+// asked to request on org.
+func (a ExternalAuthorization) requestCheck(org authz.OrgID) (authz.Check, bool) {
+	if a.policy == nil || a.policy.requires == nil {
+		var none authz.Check
+		return none, false
+	}
+	if a.policy.request != nil {
+		return a.policy.request(org), true
+	}
+	return a.policy.requires(org), true
+}
 
 // ToolMeta is what a tool declares beyond its schemas: who may call it, how it
 // obtains its target, and which live policy protects external calls.
@@ -320,21 +378,20 @@ func externalToolDiscoverable(grants []authz.Grant, grantsLoaded bool, principal
 	if !grantsLoaded {
 		return false
 	}
-	scopes := meta.DiscoveryScopes
-	switch meta.Authorization {
-	case ExternalAuthorizationMember:
-		if len(scopes) == 0 {
-			return true
-		}
-	case ExternalAuthorizationOrgAdmin:
-		if !grantsAuthorizeAnyScope(grants, principal.OrganizationID, []authz.Scope{authz.ScopeOrgAdmin}) {
+	if meta.Authorization.IsZero() {
+		return false
+	}
+	// A gated tool is listed only to callers its call-time check would admit,
+	// asked with the same check on the caller's organization.
+	if check, gated := meta.Authorization.check(authz.OrgIDFrom(principal.OrganizationID)); gated {
+		allowed, err := authz.GrantsAuthorize(grants, check)
+		if err != nil || !allowed {
 			return false
 		}
-		if len(scopes) == 0 {
-			return true
-		}
-	default:
-		return false
+	}
+	scopes := meta.DiscoveryScopes
+	if len(scopes) == 0 {
+		return true
 	}
 	return grantsAuthorizeAnyScope(grants, principal.OrganizationID, scopes)
 }
@@ -365,7 +422,7 @@ func (r *Registrar) ResourceFor(audience Audience, uri string) (ResourceDescript
 // addResource registers one resource with the MCP server and records the
 // descriptor that lets an admitted non-MCP audience read the same content.
 func addResource(r *Registrar, resource *mcp.Resource, meta ResourceMeta, read func(ctx context.Context) (string, error)) {
-	if meta.servesAudience(AudienceExternal) && meta.Authorization == "" {
+	if meta.servesAudience(AudienceExternal) && meta.Authorization.IsZero() {
 		panic(fmt.Sprintf("platformmcp: external resource %q declares no authorization policy", resource.URI))
 	}
 	// Registered with the MCP server only when the external endpoint is an
@@ -429,7 +486,7 @@ func addTool[In, Out any](r *Registrar, tool *mcp.Tool, meta ToolMeta, handler m
 		}
 		return handler(ctx, request, input)
 	}
-	if meta.servesAudience(AudienceExternal) && meta.Authorization == "" {
+	if meta.servesAudience(AudienceExternal) && meta.Authorization.IsZero() {
 		panic(fmt.Sprintf("platformmcp: external tool %q declares no authorization policy", tool.Name))
 	}
 

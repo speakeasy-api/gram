@@ -56,7 +56,14 @@ func GrantsSatisfy(grants []Grant, check Check) bool {
 // same scope expansion, selector matching, and exclusion semantics as Engine.
 // Read-only projections use this when they need to explain another principal's
 // effective access without replacing the request context's acting principal.
+//
+// The check may be an Either group, decided as Require decides one: one
+// allowed alternative is enough, but a block on any alternative refuses the
+// group unless a direct grant on the concrete resource outranks it.
 func GrantsAuthorize(grants []Grant, check Check) (bool, error) {
+	if check.group != nil {
+		return grantsAuthorizeGroup(grants, check.group)
+	}
 	if err := validateInput(check); err != nil {
 		return false, err
 	}
@@ -65,6 +72,33 @@ func GrantsAuthorize(grants []Grant, check Check) (bool, error) {
 		return false, err
 	}
 	return evaluation.Grant != nil && !evaluation.Denied, nil
+}
+
+// grantsAuthorizeGroup is the enforced branch of question.decideGroup on a
+// single loaded policy. It has no caller organization to compare, so unlike
+// the engine it does not drop alternatives about another organization.
+func grantsAuthorizeGroup(grants []Grant, alternatives []Check) (bool, error) {
+	if len(alternatives) == 0 {
+		return false, ErrNoChecks
+	}
+	for _, alternative := range alternatives {
+		if err := validateInput(alternative); err != nil {
+			return false, err
+		}
+	}
+	authorization := loadedGrantAuthorization(grants)
+	blocked, err := firstUnoverriddenExclusion(authorization, alternatives)
+	if err != nil {
+		return false, err
+	}
+	if blocked != nil {
+		return false, nil
+	}
+	result, err := authorization.decideAnyOf(alternatives)
+	if err != nil {
+		return false, err
+	}
+	return result.allowed(), nil
 }
 
 // SystemRoleGrants defines the canonical grant sets for the built-in system
