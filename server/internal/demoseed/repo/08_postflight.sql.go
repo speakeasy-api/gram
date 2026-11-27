@@ -216,6 +216,25 @@ func (q *Queries) PostflightCountDismissedFindings(ctx context.Context, orgID st
 	return count, err
 }
 
+const postflightCountDuplicateMCPServerNames = `-- name: PostflightCountDuplicateMCPServerNames :one
+SELECT count(*) FROM (
+  SELECT lower(name)
+  FROM mcp_servers
+  WHERE project_id = $1::uuid AND deleted IS FALSE
+  GROUP BY lower(name)
+  HAVING count(*) > 1
+) duplicates
+`
+
+// Every seeded MCP server in the demo project must have a unique display name
+// so server pickers never present ambiguous rows.
+func (q *Queries) PostflightCountDuplicateMCPServerNames(ctx context.Context, projectID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightCountDuplicateMCPServerNames, projectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightCountExcludedFindings = `-- name: PostflightCountExcludedFindings :one
 
 SELECT count(*)
