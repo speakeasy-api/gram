@@ -10,8 +10,8 @@ history. Runtime selection does not migrate v1/v2 transcripts.
 Before starting, obtain:
 
 - A configured development checkout and a running Docker-compatible engine.
-- Kit release `v0.2.19` and image
-  `localhost/kit-control-plane:v0.2.19`.
+- Kit release `v0.3.1` and image
+  `localhost/kit-control-plane:v0.3.1`.
 - A development assistant with an active agent-backed workload identity and one
   attached, issuer-gated HTTPS `/mcp/<slug>` resource.
 - The resource's persisted user-session issuer UUID and advertised OAuth issuer.
@@ -34,7 +34,7 @@ absent, build it from the matching Kit checkout:
 ```sh
 cd <KIT_WORKTREE>
 KIT_IMAGE=localhost/kit-control-plane mise run docker:build -- slim --load \
-  --tag localhost/kit-control-plane:v0.2.19
+  --tag localhost/kit-control-plane:v0.3.1
 ```
 
 Use an explicit non-`latest` image tag or a digest. Untagged images and `:latest`
@@ -53,7 +53,7 @@ files or command output.
 
    ```toml
    GRAM_ASSISTANT_RUNTIME_PROVIDER = "local"
-   GRAM_ASSISTANT_KIT_IMAGE = "localhost/kit-control-plane:v0.2.19"
+   GRAM_ASSISTANT_KIT_IMAGE = "localhost/kit-control-plane:v0.3.1"
    GRAM_ASSISTANT_KIT_NETWORK = "<ISOLATED_NETWORK>"
    GRAM_ASSISTANT_RUNTIME_LOCAL_CA_FILE = "<ABSOLUTE_CA_BUNDLE_PATH>"
    GRAM_ASSISTANT_KIT_WORKLOAD_ISSUER = "<EXTERNAL_ISSUER_URL>"
@@ -196,7 +196,7 @@ results before retrying or retiring the runtime; do not stop the projector or
 use replacement resume to take control away from it. Natural completion is not
 reported as successful cancellation.
 
-Kit `v0.2.19` persists ACP message IDs for newly written v2 transcripts; older
+Kit `v0.3.1` persists ACP message IDs for newly written v2 transcripts; older
 unstamped transcripts can reconstruct different replay IDs and remain unsafe
 for deduplication. Our live cold-process projection still needs verification.
 The legacy idle-expiry path deliberately excludes Kit because it lacks an
@@ -227,7 +227,7 @@ automatically posted to Slack.
 
 ## Troubleshoot local setup and missing results
 
-Kit `v0.2.19` retains failed MCP initialization as an error. Repeating
+Kit (observed on `v0.2.19`) retains failed MCP initialization as an error. Repeating
 `tool_search` or touching an unchanged config file does not retry initialization:
 reload compares parsed entries. Repair transport before first discovery. For an
 isolated fixture already in this state, a deliberate server-key rename can
