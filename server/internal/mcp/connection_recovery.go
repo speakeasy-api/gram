@@ -206,6 +206,10 @@ type memberPersonalRecoveryError struct {
 	logMessage string
 }
 
+func (e memberPersonalRecoveryError) Unwrap() error {
+	return e.memberCredentialError
+}
+
 // memberTelemetryFailureMessage returns a safe telemetry error message for err,
 // stripping one-time personal connection recovery URLs.
 func memberTelemetryFailureMessage(err error, fallback string) string {

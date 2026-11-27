@@ -701,7 +701,7 @@ func (s *Service) logMetaDiscovery(ctx context.Context, gate *metaGateContext, t
 	params := metaDiscoveryLogParams(ctx, gate, toolName, start, handlerErr)
 	if memberFailure != nil {
 		tm.HTTPLogAttributes(params.Attributes).RecordStatusCode(memberFailure.status)
-		params.Attributes[attr.ErrorMessageKey] = memberFailure.message
+		params.Attributes[attr.ErrorMessageKey] = memberFailure.logMessage
 	}
 	s.telemLogger.Log(ctx, params)
 }
@@ -925,10 +925,12 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *h
 		}
 	}
 	chatID := request.chatID
-	if chatID == "" {
-		if boundChatID, ok := assistanttokens.RuntimeChatID(ctx); ok {
-			chatID = boundChatID.String()
+	if boundChatID, ok := assistanttokens.RuntimeChatID(ctx); ok {
+		bound := boundChatID.String()
+		if chatID != "" && chatID != bound {
+			return ctx, nil, oops.E(oops.CodeForbidden, nil, "chat ID does not match bound thread")
 		}
+		chatID = bound
 	}
 	gate := &metaGateContext{
 		caller:           gateCaller,

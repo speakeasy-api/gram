@@ -2,6 +2,7 @@ package mcp_test
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -299,12 +300,20 @@ func TestServeProjectGateway_PersonalConnectionRecovery(t *testing.T) {
 	require.NotContains(t, forbiddenText, "/mcp/connection_recovery/")
 	require.NotContains(t, forbiddenText, "Reconnect required")
 
-	// 7. Telemetry logs record the failed calls and never persist one-time recovery URLs.
+	// 7. Telemetry logs record 401 status and never persist one-time recovery URLs
+	// on either tool_call or meta_discovery rows.
 	requireTelemetryRowCount(t, `gram_project_id = ?
 		   AND event_source = 'tool_call'
 		   AND tool_name = 'list_issues'
+		   AND toInt32OrZero(toString(attributes.http.response.status_code)) = 401
 		   AND position(toJSONString(attributes), 'personal connection') > 0`,
 		3, authCtx.ProjectID.String())
+	requireTelemetryRowCount(t, `gram_project_id = ?
+		   AND event_source = 'meta_discovery'
+		   AND tool_name = 'describe_server'
+		   AND toInt32OrZero(toString(attributes.http.response.status_code)) = 401
+		   AND position(toJSONString(attributes), 'personal connection') > 0`,
+		1, authCtx.ProjectID.String())
 	requireTelemetryRowCount(t, `gram_project_id = ?
 		   AND position(toJSONString(attributes), '/mcp/connection_recovery/') > 0`,
 		0, authCtx.ProjectID.String())
@@ -512,6 +521,24 @@ func TestServeProjectGateway_TurnCredentialChatIDFallback(t *testing.T) {
 	listed, err := serveProjectGatewayHTTP(t, ti, fixture, fixture.projectSlug, token, listServersBody(t))
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, listed.Code, listed.Body.String())
+
+	// A mismatched Gram-Chat-ID header on a runtime-bound turn credential must
+	// be rejected with 403 Forbidden instead of overriding the bound chat.
+	mismatched := httptest.NewRequest(http.MethodPost, "/mcp/org/"+fixture.organizationSlug+"/projects/"+fixture.projectSlug, strings.NewReader(string(listServersBody(t))))
+	mismatched.Header.Set("Authorization", "Bearer "+token)
+	mismatched.Header.Set("Content-Type", "application/json")
+	mismatched.Header.Set("Accept", "application/json, text/event-stream")
+	mismatched.Header.Set("Gram-Chat-ID", uuid.NewString())
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", fixture.organizationSlug)
+	rctx.URLParams.Add("projectSlug", fixture.projectSlug)
+	mismatched = mismatched.WithContext(context.WithValue(mismatched.Context(), chi.RouteCtxKey, rctx))
+	mismatchedRec := httptest.NewRecorder()
+	mismatchedErr := ti.service.ServeOrganizationGateway(mismatchedRec, mismatched)
+	require.Error(t, mismatchedErr)
+	shareable, ok := errors.AsType[*oops.ShareableError](mismatchedErr)
+	require.True(t, ok, "expected shareable error, got %v", mismatchedErr)
+	require.Equal(t, oops.CodeForbidden, shareable.Code)
 
 	gatewayID := orggateway.ProjectGatewayID(authCtx.ActiveOrganizationID, *authCtx.ProjectID)
 	requireTelemetryRowCount(t, `gram_project_id = ?

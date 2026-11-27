@@ -467,7 +467,9 @@ func (s *Service) dialMetaMember(
 	dial, backend, err := s.routeMetaMember(ctx, logger, gate, member, callerIdentity, true)
 	if err != nil && isMemberPersonalRecoveryCause(err) && memberCanRecoverPersonal(ctx, gate, member) {
 		if recErr, ok := s.memberConnectionRecoveryError(ctx, gate, member, s.memberUpstreamResource(ctx, member)); ok {
-			err = recErr
+			if _, memberErr := errors.AsType[*metaMemberError](recErr); memberErr {
+				err = recErr
+			}
 		}
 	}
 	if err == nil && memberCanRecoverPersonal(ctx, gate, member) {
