@@ -252,6 +252,14 @@ func TestCanonicalTelemetryRows_RecordsBuiltinEvidence(t *testing.T) {
 			tc:        canonicalBuiltinCase{name: "device copy resolves a command", toolName: "mcp__linear__list_issues", deviceInventory: []MCPServerEntry{{Source: "claude", Name: "linear", Command: "npx linear-mcp"}}},
 			wantMatch: "npx linear-mcp",
 		},
+		{
+			tc: canonicalBuiltinCase{
+				name:      "inventory command is redacted",
+				toolName:  "mcp__linear__list_issues",
+				inventory: []MCPServerEntry{{Source: "claude", Name: "linear", Command: "LINEAR_TOKEN=secret-value npx linear-mcp --api-key=secret-key"}},
+			},
+			wantMatch: "LINEAR_TOKEN=<redacted> npx linear-mcp --api-key=<redacted>",
+		},
 		{tc: canonicalBuiltinCase{name: "vendor bundle command", toolName: "mcp__computer_use__click", command: builtinTestVendorCommand}, wantEvidence: "vendor_bundle", wantMatch: builtinTestVendorCommand},
 		{tc: canonicalBuiltinCase{name: "cursor built-in", adapter: cursorAdapter, toolName: "MCP:browser_click", serverName: "cursor-ide-browser", identity: "cursor-ide-browser"}, wantEvidence: "cursor_builtin"},
 		{

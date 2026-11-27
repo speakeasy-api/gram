@@ -8,6 +8,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/identity"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/toolref"
 )
@@ -350,7 +351,12 @@ func (s *Service) applyCanonicalShadowMCPAttrs(ctx context.Context, attrs map[at
 			attrs[attr.MCPServerURLKey] = target.inventoryURL
 			attrs[attr.MCPMatchKey] = target.inventoryURL
 		case target.inventoryCommand != "":
-			attrs[attr.MCPMatchKey] = target.inventoryCommand
+			// An inventory command can carry credentials (a secret flag or an
+			// environment assignment) when its sender did not redact it, and
+			// this attribute reaches telemetry rows and findings. Readers of
+			// the match redact a command again before comparing it, and
+			// redaction is idempotent, so the stored form stays comparable.
+			attrs[attr.MCPMatchKey] = identity.RedactCommand(target.inventoryCommand)
 		}
 	}
 	if target.classification.IsBuiltin() {
