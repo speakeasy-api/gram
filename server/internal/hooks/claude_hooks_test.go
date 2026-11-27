@@ -277,8 +277,10 @@ func TestClaude_PreToolUse_BuiltInBlocklistAllowsWithoutMCPList(t *testing.T) {
 // When the MCP list snapshot is missing from the cache (SessionStart hasn't
 // finished yet, or the 12h inactivity TTL elapsed), a connector named by its
 // UUID cannot be resolved to a URL, so the guard fails closed for it and
-// surfaces a retry/restart hint to the user. Any other server without an
-// inventory is treated as a coding agent built-in.
+// surfaces a retry/restart hint to the user. A claude.ai connector
+// (claude_ai_*) or plugin server (plugin_*) waits for the inventory the same
+// way. Any other server without an inventory is treated as a coding agent
+// built-in.
 func TestClaude_PreToolUse_DeniesWhenMCPListNotCached(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
