@@ -751,6 +751,12 @@ WHERE target.id = $1
       FROM organization_user_relationships AS other_member
       WHERE other_member.organization_id = target.id
         AND other_member.deleted_at IS NULL
+        AND NOT EXISTS (
+            SELECT 1
+            FROM users AS departed
+            WHERE departed.id = other_member.user_id
+              AND departed.deleted_at IS NOT NULL
+        )
         AND NOT (
             COALESCE(other_member.user_id = $2::text, FALSE)
             OR COALESCE(other_member.workos_user_id = $3::text, FALSE)

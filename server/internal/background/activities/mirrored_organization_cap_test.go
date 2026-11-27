@@ -211,6 +211,31 @@ func TestMirroredOrganizationCap_OrganizationWithAnotherMemberIsNotDisabled(t *t
 	require.False(t, organizationDisabled(t, ctx, conn, "gram_org_cap_own"))
 }
 
+func TestMirroredOrganizationCap_DeletedFormerMemberDoesNotExemptOrganization(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn := newOrgEventsTestConn(t, "mirrored_cap_deleted_member")
+	seedWorkOSOrganization(t, ctx, conn, "gram_org_cap_deleted_own", "org_01HZCAPDELOWN")
+	seedWorkOSOrganization(t, ctx, conn, "gram_org_cap_deleted_team", "org_01HZCAPDELTEAM")
+	seedWorkOSUser(t, ctx, conn, "user_cap_deleted_joiner", "user_01HZCAPDELJOINER")
+	seedWorkOSUser(t, ctx, conn, "user_cap_deleted_former", "user_01HZCAPDELFORMER")
+
+	require.NoError(t, deliverMembershipCreated(t, ctx, conn, "org_01HZCAPDELOWN", "user_01HZCAPDELJOINER", "A"))
+	require.NoError(t, deliverMembershipCreated(t, ctx, conn, "org_01HZCAPDELTEAM", "user_01HZCAPDELFORMER", "B"))
+	_, err := usersrepo.New(conn).DisableUser(ctx, usersrepo.DisableUserParams{
+		WorkosUpdatedAt: conv.ToPGTimestamptz(time.Now()),
+		WorkosDeletedAt: conv.ToPGTimestamptz(time.Now()),
+		WorkosID:        conv.ToPGText("user_01HZCAPDELFORMER"),
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, deliverMembershipCreated(t, ctx, conn, "org_01HZCAPDELTEAM", "user_01HZCAPDELJOINER", "C"))
+
+	require.True(t, organizationDisabled(t, ctx, conn, "gram_org_cap_deleted_team"))
+	require.False(t, organizationDisabled(t, ctx, conn, "gram_org_cap_deleted_own"))
+}
+
 func TestMirroredOrganizationCap_OrganizationCreatedBySpeakeasyFlowIsNotDisabled(t *testing.T) {
 	t.Parallel()
 
