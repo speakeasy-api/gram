@@ -46,6 +46,56 @@ func TestKitProtocolStatusCapability(t *testing.T) {
 	}
 }
 
+func TestKitProtocolPromptDeliveryCapability(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, raw, mode string
+		want            bool
+	}{
+		{"queue and steer", `{"capabilities":{"session":{"prompt":{"delivery":{"steer":{},"queue":{}}}}}}`, kitPromptDeliverySteer, true},
+		{"steer only", `{"capabilities":{"session":{"prompt":{"delivery":{"steer":{}}}}}}`, kitPromptDeliverySteer, true},
+		{"queue only", `{"capabilities":{"session":{"prompt":{"delivery":{"queue":{}}}}}}`, kitPromptDeliverySteer, false},
+		{"absent delivery", `{"capabilities":{"_meta":{"kit/session/status":{}}}}`, kitPromptDeliverySteer, false},
+		{"null mode", `{"capabilities":{"session":{"prompt":{"delivery":{"steer":null}}}}}`, kitPromptDeliverySteer, false},
+		{"wrong type", `{"capabilities":{"session":{"prompt":{"delivery":{"steer":true}}}}}`, kitPromptDeliverySteer, false},
+		{"invalid", `{`, kitPromptDeliverySteer, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, kitPromptDeliveryCapability(json.RawMessage(tc.raw), tc.mode))
+		})
+	}
+}
+
+func TestKitProtocolPromptIdempotencyKey(t *testing.T) {
+	t.Parallel()
+	eventID := uuid.New()
+	for _, tc := range []struct {
+		name    string
+		req     runTurnRequest
+		want    string
+		wantErr bool
+	}{
+		{"explicit key", runTurnRequest{IdempotencyKey: "turn-123", EventID: eventID, EventAttempt: 1}, "turn-123", false},
+		{"retry keeps same key", runTurnRequest{IdempotencyKey: "turn-123", EventID: eventID, EventAttempt: 3}, "turn-123", false},
+		{"falls back to event ID", runTurnRequest{EventID: eventID, EventAttempt: 2}, eventID.String(), false},
+		{"empty when no identity", runTurnRequest{}, "", false},
+		{"max length allowed", runTurnRequest{IdempotencyKey: strings.Repeat("k", kitPromptIdempotencyKeyMaxRunes)}, strings.Repeat("k", kitPromptIdempotencyKeyMaxRunes), false},
+		{"exceeds max length", runTurnRequest{IdempotencyKey: strings.Repeat("k", kitPromptIdempotencyKeyMaxRunes+1)}, "", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := kitPromptIdempotencyKey(tc.req)
+			if tc.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got)
+		})
+	}
+}
+
 func TestKitProtocolSettlementFailsClosed(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -105,6 +155,8 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 	source, _ := json.Marshal(map[string]string{"idempotency_key": currentID.String()})
 	eventID, err := assistantrepo.New(db).InsertAssistantThreadEvent(t.Context(), assistantrepo.InsertAssistantThreadEventParams{AssistantThreadID: key.ThreadID, AssistantID: key.AssistantID, ProjectID: key.ProjectID, EventID: uuid.NewString(), CorrelationID: "kit-turn", Status: "processing", NormalizedPayloadJson: []byte(`{}`), SourcePayloadJson: source})
 	require.NoError(t, err)
+	eventID2, err := assistantrepo.New(db).InsertAssistantThreadEvent(t.Context(), assistantrepo.InsertAssistantThreadEventParams{AssistantThreadID: key.ThreadID, AssistantID: key.AssistantID, ProjectID: key.ProjectID, EventID: uuid.NewString(), CorrelationID: "kit-turn", Status: "processing", NormalizedPayloadJson: []byte(`{}`), SourcePayloadJson: source})
+	require.NoError(t, err)
 	ids, err := assistantrepo.New(db).ResolveKitCurrentUserMessage(t.Context(), assistantrepo.ResolveKitCurrentUserMessageParams{ProjectID: key.ProjectID, AssistantID: key.AssistantID, EventID: eventID})
 	require.NoError(t, err)
 	require.Equal(t, []uuid.UUID{currentID}, ids)
@@ -155,7 +207,7 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 				connection := fmt.Sprintf("connection-%d", connections)
 				mu.Unlock()
 				w.Header().Set("Acp-Connection-Id", connection)
-				_, _ = fmt.Fprintf(w, `{"jsonrpc":"2.0","id":%s,"result":{"capabilities":{"_meta":{"kit/session/status":{}}}}}`, msg.ID)
+				_, _ = fmt.Fprintf(w, `{"jsonrpc":"2.0","id":%s,"result":{"capabilities":{"_meta":{"kit/session/status":{}},"session":{"prompt":{"delivery":{"steer":{},"queue":{}}}}}}}`, msg.ID)
 				return
 			}
 			mu.Lock()
@@ -252,6 +304,19 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 				selectedModel = value
 				result = catalog()
 			case "session/prompt":
+				var delivery, idempotencyKey string
+				_ = json.Unmarshal(msg.Params["delivery"], &delivery)
+				_ = json.Unmarshal(msg.Params["idempotencyKey"], &idempotencyKey)
+				if delivery != kitPromptDeliverySteer {
+					t.Errorf("expected steer delivery mode, got %q", delivery)
+				}
+				expectedKey := eventID.String()
+				if prompts > 0 {
+					expectedKey = eventID2.String()
+				}
+				if idempotencyKey != expectedKey {
+					t.Errorf("expected idempotencyKey %q, got %q", expectedKey, idempotencyKey)
+				}
 				if strings.Contains(string(msg.Params["prompt"]), kitHistoryDroppedNotice) {
 					t.Error("history notice sent for a conversation without earlier assistant turns")
 				}
@@ -339,11 +404,11 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 	mu.Lock()
 	require.Zero(t, connections, "missing session must not dial")
 	mu.Unlock()
-	require.NoError(t, p.RunTurn(ctx, r, runTurnRequest{Model: "openai/gpt-4.1-mini", ReasoningEffort: "low", ThreadID: key.ThreadID, Prompt: "hello", EventID: eventID, CanonicalUserMessageID: currentID}))
+	require.NoError(t, p.RunTurn(ctx, r, runTurnRequest{Model: "openai/gpt-4.1-mini", ReasoningEffort: "low", ThreadID: key.ThreadID, Prompt: "hello", EventID: eventID, IdempotencyKey: eventID.String(), CanonicalUserMessageID: currentID}))
 	// A new adapter reconstructs the durable correlation before replay.
 	restarted, err := NewKitRuntimeProtocol(p.config)
 	require.NoError(t, err)
-	require.NoError(t, restarted.RunTurn(ctx, r, runTurnRequest{Model: "openai/gpt-4.1", ReasoningEffort: "high", ThreadID: key.ThreadID, Prompt: "hello", EventID: eventID, CanonicalUserMessageID: currentID}))
+	require.NoError(t, restarted.RunTurn(ctx, r, runTurnRequest{Model: "openai/gpt-4.1", ReasoningEffort: "high", ThreadID: key.ThreadID, Prompt: "hello", EventID: eventID2, IdempotencyKey: eventID2.String(), CanonicalUserMessageID: currentID}))
 	messages, err := chatrepo.New(db).ListLatestGenerationChatMessages(ctx, chatrepo.ListLatestGenerationChatMessagesParams{ProjectID: key.ProjectID, ChatID: chatID})
 	require.NoError(t, err)
 	users, finals := 0, 0
@@ -475,4 +540,457 @@ func TestKitProtocolPreservesUpstreamSignInAction(t *testing.T) {
 	require.Contains(t, prompt[0]["text"], "single primary button")
 	require.Contains(t, prompt[0]["text"], "Never ask users to paste passwords or tokens")
 	require.Contains(t, prompt[0]["text"], "never disclose workload credentials")
+}
+
+func TestKitProtocolPromptDeliveryRetryDeduplicates(t *testing.T) {
+	t.Parallel()
+	core, db, key, chatID := kitSessionFixture(t)
+	currentID, err := testrepo.New(db).InsertChatMessage(t.Context(), testrepo.InsertChatMessageParams{
+		ProjectID: uuid.NullUUID{UUID: key.ProjectID, Valid: true}, ChatID: chatID, Role: "user", Content: "retry me",
+	})
+	require.NoError(t, err)
+	require.NoError(t, assistantrepo.New(db).SetKitThreadSourceFixture(t.Context(), assistantrepo.SetKitThreadSourceFixtureParams{
+		ProjectID: key.ProjectID, ThreadID: key.ThreadID, SourceKind: "dashboard",
+	}))
+	source, _ := json.Marshal(map[string]string{"idempotency_key": currentID.String()})
+	eventID, err := assistantrepo.New(db).InsertAssistantThreadEvent(t.Context(), assistantrepo.InsertAssistantThreadEventParams{
+		AssistantThreadID: key.ThreadID, AssistantID: key.AssistantID, ProjectID: key.ProjectID,
+		EventID: uuid.NewString(), CorrelationID: "kit-retry", Status: "processing",
+		NormalizedPayloadJson: []byte(`{}`), SourcePayloadJson: source,
+	})
+	require.NoError(t, err)
+
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), db, assetstest.NewTestBlobStore(t))
+	t.Cleanup(func() { _ = shutdown(context.Background()) })
+	projector := NewKitTranscriptProjector(db, writer, nil, func(ctx context.Context, tx pgx.Tx, b KitTranscriptBinding) error {
+		_, err := core.ValidateKitRuntimeSessionInTx(ctx, tx, key, b.SessionID)
+		return err
+	})
+
+	var mu sync.Mutex
+	streams := map[string]chan string{}
+	promptKeys := map[string]string{}
+	insertions := 0
+	promptCalls := 0
+	setConfigCalls := 0
+	selectedModel := "speakeasy:openai/gpt-4.1-mini"
+	selectedEffort := "medium"
+	catalog := func() string {
+		return fmt.Sprintf(`{"configOptions":[{"configId":"model","type":"select","currentValue":%q,"options":[{"value":"speakeasy:openai/gpt-4.1-mini"}]},{"configId":"reasoning_effort","type":"select","currentValue":%q,"options":[{"value":"low"},{"value":"medium"},{"value":"high"}]}]}`, selectedModel, selectedEffort)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer fixture-token" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		session := r.Header.Get("Acp-Session-Id")
+		switch r.Method {
+		case http.MethodPost:
+			var msg struct {
+				ID     json.RawMessage            `json:"id"`
+				Method string                     `json:"method"`
+				Params map[string]json.RawMessage `json:"params"`
+			}
+			if json.NewDecoder(r.Body).Decode(&msg) != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			if msg.Method == "initialize" {
+				w.Header().Set("Acp-Connection-Id", "conn")
+				_, _ = fmt.Fprintf(w, `{"jsonrpc":"2.0","id":%s,"result":{"capabilities":{"_meta":{"kit/session/status":{}},"session":{"prompt":{"delivery":{"steer":{},"queue":{}}}}}}}`, msg.ID)
+				return
+			}
+			mu.Lock()
+			ch := streams[session]
+			mu.Unlock()
+			if ch == nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			switch msg.Method {
+			case "session/new":
+				w.WriteHeader(http.StatusAccepted)
+				result := strings.TrimSuffix(catalog(), "}") + `,"sessionId":"session-retry"}`
+				ch <- fmt.Sprintf("data: {\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":%s}\n\n", msg.ID, result)
+			case "session/resume":
+				w.WriteHeader(http.StatusAccepted)
+				// Replay the prompt inserted during attempt 1 before its response was lost.
+				ch <- `data: {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"session-retry","update":{"sessionUpdate":"user_message","messageId":"user-msg-1","content":[{"type":"text","text":"retry me"}]}}}` + "\n\n"
+				ch <- `data: {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"session-retry","update":{"sessionUpdate":"agent_message_chunk","messageId":"reply-1","content":{"type":"text","text":"single answer"}}}}` + "\n\n"
+				ch <- `data: {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"session-retry","update":{"sessionUpdate":"state_update","state":"idle","stopReason":"end_turn"}}}` + "\n\n"
+				ch <- fmt.Sprintf("data: {\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":%s}\n\n", msg.ID, catalog())
+			case "session/set_config_option":
+				mu.Lock()
+				setConfigCalls++
+				mu.Unlock()
+				w.WriteHeader(http.StatusAccepted)
+				ch <- fmt.Sprintf("data: {\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":%s}\n\n", msg.ID, catalog())
+			case "session/prompt":
+				var delivery, idempotencyKey string
+				_ = json.Unmarshal(msg.Params["delivery"], &delivery)
+				_ = json.Unmarshal(msg.Params["idempotencyKey"], &idempotencyKey)
+				if delivery != kitPromptDeliverySteer || idempotencyKey != eventID.String() {
+					t.Errorf("unexpected prompt delivery=%q key=%q", delivery, idempotencyKey)
+				}
+				mu.Lock()
+				promptCalls++
+				existing, duplicate := promptKeys[idempotencyKey]
+				if !duplicate {
+					insertions++
+					existing = fmt.Sprintf("user-msg-%d", insertions)
+					promptKeys[idempotencyKey] = existing
+				}
+				attempt := promptCalls
+				mu.Unlock()
+				w.WriteHeader(http.StatusAccepted)
+				if attempt == 1 {
+					// Simulate transport loss after Kit inserted the prompt and
+					// before the server received PromptResponse or stored the echo.
+					close(ch)
+					return
+				}
+				// Deduplicated retry returns the original messageId without
+				// inserting a second user message or emitting another echo.
+				ch <- fmt.Sprintf("data: {\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{\"messageId\":%q}}\n\n", msg.ID, existing)
+			case "kit/session/status":
+				w.WriteHeader(http.StatusAccepted)
+				ch <- fmt.Sprintf("data: {\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{\"sessionId\":\"session-retry\",\"settled\":true,\"foregroundActive\":false,\"backgroundActive\":false,\"pendingBackgroundTerminals\":false,\"activeSubagents\":0}}\n\n", msg.ID)
+			case "session/close":
+				w.WriteHeader(http.StatusAccepted)
+				ch <- fmt.Sprintf("data: {\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{}}\n\n", msg.ID)
+			default:
+				t.Errorf("unexpected method %s", msg.Method)
+				w.WriteHeader(http.StatusBadRequest)
+			}
+		case http.MethodGet:
+			ch := make(chan string, 16)
+			mu.Lock()
+			streams[session] = ch
+			mu.Unlock()
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.WriteHeader(http.StatusOK)
+			flushKitTestResponse(t, w)
+			for {
+				select {
+				case data, ok := <-ch:
+					if !ok {
+						return
+					}
+					_, _ = fmt.Fprint(w, data)
+					flushKitTestResponse(t, w)
+				case <-r.Context().Done():
+					return
+				}
+			}
+		case http.MethodDelete:
+			w.WriteHeader(http.StatusAccepted)
+		}
+	}))
+	defer server.Close()
+
+	endpoint, err := url.Parse(server.URL + "/acp")
+	require.NoError(t, err)
+	p, err := NewKitRuntimeProtocol(KitRuntimeProtocolConfig{
+		Core: core, Endpoint: endpoint, Projector: projector, CWD: "/workspace",
+		GatewayToken: "fixture-token", HTTPClient: kitProtocolTestHTTPClient(t),
+	})
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+	defer cancel()
+	r := assistantRuntimeRecord{ID: key.RuntimeID, ProjectID: key.ProjectID, AssistantID: key.AssistantID, RuntimeVersion: 3}
+	turn := runTurnRequest{
+		Model:                  "openai/gpt-4.1-mini",
+		ReasoningEffort:        "medium",
+		ThreadID:               key.ThreadID,
+		Prompt:                 "retry me",
+		EventID:                eventID,
+		EventAttempt:           1,
+		IdempotencyKey:         eventID.String(),
+		CanonicalUserMessageID: currentID,
+	}
+
+	require.Error(t, p.RunTurn(ctx, r, turn), "attempt 1 must fail when SSE closes before prompt ack")
+
+	turn.EventAttempt = 2
+	require.NoError(t, p.RunTurn(ctx, r, turn), "attempt 2 must recover cleanly via idempotencyKey")
+
+	mu.Lock()
+	require.Equal(t, 1, insertions, "Kit must insert the retried prompt only once")
+	require.Equal(t, 2, promptCalls)
+	require.Zero(t, setConfigCalls, "matching model and effort must not issue redundant set_config_option RPCs")
+	mu.Unlock()
+
+	messages, err := chatrepo.New(db).ListLatestGenerationChatMessages(ctx, chatrepo.ListLatestGenerationChatMessagesParams{
+		ProjectID: key.ProjectID, ChatID: chatID,
+	})
+	require.NoError(t, err)
+	users, assistantsCount := 0, 0
+	for _, m := range messages {
+		if m.Role == "user" {
+			users++
+		}
+		if m.Role == "assistant" && m.Content == "single answer" {
+			assistantsCount++
+		}
+	}
+	require.Equal(t, 1, users, "replayed user echo must correlate with canonical user row without duplicating")
+	require.Equal(t, 1, assistantsCount)
+}
+
+func TestKitProtocolLegacyGatewayOmitsDelivery(t *testing.T) {
+	t.Parallel()
+	core, db, key, chatID := kitSessionFixture(t)
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), db, assetstest.NewTestBlobStore(t))
+	t.Cleanup(func() { _ = shutdown(context.Background()) })
+	projector := NewKitTranscriptProjector(db, writer, nil, func(ctx context.Context, tx pgx.Tx, b KitTranscriptBinding) error {
+		_, err := core.ValidateKitRuntimeSessionInTx(ctx, tx, key, b.SessionID)
+		return err
+	})
+
+	var mu sync.Mutex
+	streams := map[string]chan string{}
+	sawDelivery := false
+	sawIdempotencyKey := ""
+	const catalog = `{"configOptions":[{"configId":"model","type":"select","currentValue":"speakeasy:openai/gpt-4.1-mini","options":[{"value":"speakeasy:openai/gpt-4.1-mini"}]},{"configId":"reasoning_effort","type":"select","currentValue":"medium","options":[{"value":"medium"}]}]}`
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		session := r.Header.Get("Acp-Session-Id")
+		switch r.Method {
+		case http.MethodPost:
+			var msg struct {
+				ID     json.RawMessage            `json:"id"`
+				Method string                     `json:"method"`
+				Params map[string]json.RawMessage `json:"params"`
+			}
+			if json.NewDecoder(r.Body).Decode(&msg) != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			if msg.Method == "initialize" {
+				w.Header().Set("Acp-Connection-Id", "legacy-conn")
+				// Kit 0.2.x advertises kit/session/status without prompt delivery capabilities.
+				_, _ = fmt.Fprintf(w, `{"jsonrpc":"2.0","id":%s,"result":{"capabilities":{"_meta":{"kit/session/status":{}}}}}`, msg.ID)
+				return
+			}
+			mu.Lock()
+			ch := streams[session]
+			mu.Unlock()
+			w.WriteHeader(http.StatusAccepted)
+			switch msg.Method {
+			case "session/new":
+				ch <- fmt.Sprintf("data: {\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":%s}\n\n", msg.ID, strings.TrimSuffix(catalog, "}")+`,"sessionId":"legacy-session"}`)
+			case "session/prompt":
+				mu.Lock()
+				_, sawDelivery = msg.Params["delivery"]
+				_ = json.Unmarshal(msg.Params["idempotencyKey"], &sawIdempotencyKey)
+				mu.Unlock()
+				ch <- `data: {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"legacy-session","update":{"sessionUpdate":"user_message","messageId":"u1","content":[{"type":"text","text":"hi"}]}}}` + "\n\n"
+				ch <- fmt.Sprintf("data: {\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{\"messageId\":\"u1\"}}\n\n", msg.ID)
+			case "kit/session/status":
+				ch <- `data: {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"legacy-session","update":{"sessionUpdate":"agent_message_chunk","messageId":"a1","content":{"type":"text","text":"ok"}}}}` + "\n\n"
+				ch <- `data: {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"legacy-session","update":{"sessionUpdate":"state_update","state":"idle","stopReason":"end_turn"}}}` + "\n\n"
+				ch <- fmt.Sprintf("data: {\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{\"sessionId\":\"legacy-session\",\"settled\":true,\"foregroundActive\":false,\"backgroundActive\":false,\"pendingBackgroundTerminals\":false,\"activeSubagents\":0}}\n\n", msg.ID)
+			case "session/close":
+				ch <- fmt.Sprintf("data: {\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{}}\n\n", msg.ID)
+			}
+		case http.MethodGet:
+			ch := make(chan string, 16)
+			mu.Lock()
+			streams[session] = ch
+			mu.Unlock()
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.WriteHeader(http.StatusOK)
+			flushKitTestResponse(t, w)
+			for {
+				select {
+				case data := <-ch:
+					_, _ = fmt.Fprint(w, data)
+					flushKitTestResponse(t, w)
+				case <-r.Context().Done():
+					return
+				}
+			}
+		case http.MethodDelete:
+			w.WriteHeader(http.StatusAccepted)
+		}
+	}))
+	defer server.Close()
+
+	endpoint, err := url.Parse(server.URL + "/acp")
+	require.NoError(t, err)
+	p, err := NewKitRuntimeProtocol(KitRuntimeProtocolConfig{
+		Core: core, Endpoint: endpoint, Projector: projector, CWD: "/workspace",
+		GatewayToken: "fixture-token", HTTPClient: kitProtocolTestHTTPClient(t),
+	})
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	eventID := uuid.New()
+	r := assistantRuntimeRecord{ID: key.RuntimeID, ProjectID: key.ProjectID, AssistantID: key.AssistantID, RuntimeVersion: 3}
+	require.NoError(t, p.RunTurn(ctx, r, runTurnRequest{
+		Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium", ThreadID: key.ThreadID,
+		Prompt: "hi", EventID: eventID, IdempotencyKey: eventID.String(),
+	}))
+	mu.Lock()
+	require.False(t, sawDelivery, "must not send unadvertised delivery mode to a Kit 0.2.x gateway")
+	require.Equal(t, eventID.String(), sawIdempotencyKey)
+	mu.Unlock()
+
+	messages, err := chatrepo.New(db).ListLatestGenerationChatMessages(ctx, chatrepo.ListLatestGenerationChatMessagesParams{
+		ProjectID: key.ProjectID, ChatID: chatID,
+	})
+	require.NoError(t, err)
+	foundAssistant := false
+	for _, m := range messages {
+		if m.Role == "assistant" && m.Content == "ok" && m.FinishReason.String == "end_turn" {
+			foundAssistant = true
+		}
+	}
+	require.True(t, foundAssistant, "legacy gateway assistant reply must be projected")
+}
+
+func TestKitProtocolInterruptRunningTurnAndSettle(t *testing.T) {
+	t.Parallel()
+	core, db, key, chatID := kitSessionFixture(t)
+	event, err := assistantrepo.New(db).ClaimNextPendingEvent(t.Context(), assistantrepo.ClaimNextPendingEventParams{
+		ProjectID: key.ProjectID, ThreadID: key.ThreadID, PendingStatus: eventStatusPending, ProcessingStatus: eventStatusProcessing,
+	})
+	require.NoError(t, err)
+
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), db, assetstest.NewTestBlobStore(t))
+	t.Cleanup(func() { _ = shutdown(context.Background()) })
+	projector := NewKitTranscriptProjector(db, writer, nil, func(ctx context.Context, tx pgx.Tx, b KitTranscriptBinding) error {
+		_, err := core.ValidateKitRuntimeSessionInTx(ctx, tx, key, b.SessionID)
+		return err
+	})
+
+	var mu sync.Mutex
+	streams := map[string]chan string{}
+	promptInserted := make(chan struct{})
+	cancelled := false
+	cancelCalls := 0
+	const catalog = `{"configOptions":[{"configId":"model","type":"select","currentValue":"speakeasy:openai/gpt-4.1-mini","options":[{"value":"speakeasy:openai/gpt-4.1-mini"}]},{"configId":"reasoning_effort","type":"select","currentValue":"medium","options":[{"value":"medium"}]}]}`
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		session := r.Header.Get("Acp-Session-Id")
+		switch r.Method {
+		case http.MethodPost:
+			var msg struct {
+				ID     json.RawMessage            `json:"id"`
+				Method string                     `json:"method"`
+				Params map[string]json.RawMessage `json:"params"`
+			}
+			if json.NewDecoder(r.Body).Decode(&msg) != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			if msg.Method == "initialize" {
+				w.Header().Set("Acp-Connection-Id", "cancel-conn")
+				_, _ = fmt.Fprintf(w, `{"jsonrpc":"2.0","id":%s,"result":{"capabilities":{"_meta":{"kit/session/status":{}},"session":{"prompt":{"delivery":{"steer":{},"queue":{}}}}}}}`, msg.ID)
+				return
+			}
+			mu.Lock()
+			ch := streams[session]
+			mu.Unlock()
+			w.WriteHeader(http.StatusAccepted)
+			switch msg.Method {
+			case "session/new":
+				ch <- fmt.Sprintf("data: {\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":%s}\n\n", msg.ID, strings.TrimSuffix(catalog, "}")+`,"sessionId":"cancel-session"}`)
+			case "session/prompt":
+				var delivery string
+				_ = json.Unmarshal(msg.Params["delivery"], &delivery)
+				if delivery != kitPromptDeliverySteer {
+					t.Errorf("expected steer delivery mode, got %q", delivery)
+				}
+				ch <- `data: {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"cancel-session","update":{"sessionUpdate":"user_message","messageId":"u1","content":[{"type":"text","text":"work"}]}}}` + "\n\n"
+				ch <- `data: {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"cancel-session","update":{"sessionUpdate":"state_update","state":"running"}}}` + "\n\n"
+				ch <- `data: {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"cancel-session","update":{"sessionUpdate":"agent_message_chunk","messageId":"a1","content":{"type":"text","text":"partial"}}}}` + "\n\n"
+				ch <- fmt.Sprintf("data: {\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{\"messageId\":\"u1\"}}\n\n", msg.ID)
+				close(promptInserted)
+			case "session/cancel":
+				mu.Lock()
+				cancelCalls++
+				cancelled = true
+				mu.Unlock()
+				ch <- `data: {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"cancel-session","update":{"sessionUpdate":"state_update","state":"idle","stopReason":"cancelled"}}}` + "\n\n"
+			case "kit/session/status":
+				mu.Lock()
+				done := cancelled
+				mu.Unlock()
+				ch <- fmt.Sprintf("data: {\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{\"sessionId\":\"cancel-session\",\"settled\":%t,\"foregroundActive\":%t,\"backgroundActive\":false,\"pendingBackgroundTerminals\":false,\"activeSubagents\":0}}\n\n", msg.ID, done, !done)
+			case "session/close":
+				ch <- fmt.Sprintf("data: {\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{}}\n\n", msg.ID)
+			}
+		case http.MethodGet:
+			ch := make(chan string, 16)
+			mu.Lock()
+			streams[session] = ch
+			mu.Unlock()
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.WriteHeader(http.StatusOK)
+			flushKitTestResponse(t, w)
+			for {
+				select {
+				case data := <-ch:
+					_, _ = fmt.Fprint(w, data)
+					flushKitTestResponse(t, w)
+				case <-r.Context().Done():
+					return
+				}
+			}
+		case http.MethodDelete:
+			w.WriteHeader(http.StatusAccepted)
+		}
+	}))
+	defer server.Close()
+
+	endpoint, err := url.Parse(server.URL + "/acp")
+	require.NoError(t, err)
+	worker, err := NewKitRuntimeProtocol(KitRuntimeProtocolConfig{
+		Core: core, Endpoint: endpoint, Projector: projector, CWD: "/workspace",
+		GatewayToken: "fixture-token", HTTPClient: kitProtocolTestHTTPClient(t),
+	})
+	require.NoError(t, err)
+	api := &KitRuntimeProtocol{config: KitRuntimeProtocolConfig{Core: &ServiceCore{db: db}}}
+
+	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+	defer cancel()
+	r := assistantRuntimeRecord{ID: key.RuntimeID, ProjectID: key.ProjectID, AssistantID: key.AssistantID, RuntimeVersion: 3}
+	turnDone := make(chan error, 1)
+	go func() {
+		turnDone <- worker.RunTurn(ctx, r, runTurnRequest{
+			Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium", ThreadID: key.ThreadID,
+			Prompt: "work", EventID: event.ID, EventAttempt: int(event.Attempts), IdempotencyKey: event.ID.String(),
+		})
+	}()
+
+	select {
+	case <-promptInserted:
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	}
+
+	interrupted, err := api.InterruptTurn(ctx, r, key.ThreadID)
+	require.NoError(t, err)
+	require.True(t, interrupted)
+	require.NoError(t, <-turnDone)
+
+	mu.Lock()
+	require.Equal(t, 1, cancelCalls)
+	mu.Unlock()
+
+	messages, err := chatrepo.New(db).ListLatestGenerationChatMessages(ctx, chatrepo.ListLatestGenerationChatMessagesParams{
+		ProjectID: key.ProjectID, ChatID: chatID,
+	})
+	require.NoError(t, err)
+	foundCancelled := false
+	for _, m := range messages {
+		if m.Role == "assistant" && m.Content == "partial" && m.FinishReason.String == "cancelled" {
+			foundCancelled = true
+		}
+	}
+	require.True(t, foundCancelled, "cancelled turn must persist partial output and cancelled finish reason")
 }

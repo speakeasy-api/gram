@@ -176,7 +176,7 @@ func kitLocalBootstrapPayload(b KitLocalBootstrap, extraEnv map[string]string) (
 	return raw, nil
 }
 
-// kitBootstrapConfig is the public Kit generic workload contract.
+// kitBootstrapConfig is the public Kit v0.3.1 generic workload contract.
 // When EgressInjectedAuth is true, the sandbox holds no assertion file or
 // workload token-exchange block: Kit uses OpenAI-compatible bearer auth
 // (OPENROUTER_BASE_URL + placeholder OPENROUTER_API_KEY) and ATE's egress

@@ -12,7 +12,7 @@ Before starting, obtain:
 
 - A configured development checkout and a running Docker-compatible engine.
 - A local Kit runtime image built from `agents/ate-runtime/Dockerfile`
-  (containing `kit-ate-init` and `kit` release `v0.2.19+`), tagged explicitly
+  (containing `kit-ate-init` and `kit` release `v0.3.1+`), tagged explicitly
   (for example, `localhost/kit-ate-runtime:dev`).
 - A development assistant with an active agent-backed workload identity.
 - An enabled HTTPS Project Gateway with one organization-level session issuer
@@ -209,7 +209,7 @@ results before retrying or retiring the runtime; do not stop the projector or
 use replacement resume to take control away from it. Natural completion is not
 reported as successful cancellation.
 
-Kit `v0.2.19` persists ACP message IDs for newly written v2 transcripts; older
+Kit `v0.3.1` persists ACP message IDs for newly written v2 transcripts; older
 unstamped transcripts can reconstruct different replay IDs and remain unsafe
 for deduplication. Our live cold-process projection still needs verification.
 The legacy idle-expiry path deliberately excludes Kit because it lacks an
@@ -240,7 +240,7 @@ automatically posted to Slack.
 
 ## Troubleshoot local setup and missing results
 
-Kit `v0.2.19` retains failed MCP initialization as an error. Repeating
+Kit (observed on `v0.2.19`) retains failed MCP initialization as an error. Repeating
 `tool_search` or touching an unchanged config file does not retry initialization:
 reload compares parsed entries. Repair transport before first discovery. For an
 isolated fixture already in this state, a deliberate server-key rename can

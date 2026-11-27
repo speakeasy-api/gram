@@ -194,6 +194,112 @@ func testTransport(t *testing.T, path string, tunnel bool) {
 		t.Fatal("teardown changed session work")
 	}
 }
+
+func TestStartCallAndCancelRequest(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	var mu sync.Mutex
+	streams := map[string]chan string{}
+	var promptID uint64
+	var cancelRequestID uint64
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		session := r.Header.Get("Acp-Session-Id")
+		switch r.Method {
+		case http.MethodPost:
+			var m envelope
+			if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
+				t.Error(err)
+				return
+			}
+			if m.Method == "initialize" {
+				w.Header().Set("Acp-Connection-Id", "conn")
+				_, _ = fmt.Fprintf(w, `{"jsonrpc":"2.0","id":%s,"result":{"protocolVersion":2,"info":{"name":"test","version":"0"},"capabilities":{}}}`, m.ID)
+				return
+			}
+			mu.Lock()
+			ch := streams[session]
+			mu.Unlock()
+			w.WriteHeader(http.StatusAccepted)
+			switch m.Method {
+			case "session/prompt":
+				var id uint64
+				if err := json.Unmarshal(m.ID, &id); err != nil {
+					t.Errorf("expected numeric request id, got %s", string(m.ID))
+					return
+				}
+				mu.Lock()
+				promptID = id
+				mu.Unlock()
+			case "$/cancel_request":
+				if len(m.ID) != 0 {
+					t.Error("$/cancel_request must be a notification")
+				}
+				if session != "s1" {
+					t.Errorf("expected session header s1, got %q", session)
+				}
+				var p struct {
+					RequestID uint64 `json:"requestId"`
+				}
+				if err := json.Unmarshal(m.Params, &p); err != nil {
+					t.Errorf("decode $/cancel_request params: %v", err)
+					return
+				}
+				mu.Lock()
+				cancelRequestID = p.RequestID
+				mu.Unlock()
+				ch <- fmt.Sprintf("data: {\"jsonrpc\":\"2.0\",\"id\":%d,\"error\":{\"code\":%d,\"message\":\"cancelled\"}}\n\n", p.RequestID, RequestCancelledCode)
+			}
+		case http.MethodGet:
+			ch := make(chan string, 8)
+			mu.Lock()
+			streams[session] = ch
+			mu.Unlock()
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.WriteHeader(http.StatusOK)
+			flushTestResponse(t, w)
+			for {
+				select {
+				case msg := <-ch:
+					_, _ = fmt.Fprint(w, msg)
+					flushTestResponse(t, w)
+				case <-r.Context().Done():
+					return
+				}
+			}
+		case http.MethodDelete:
+			w.WriteHeader(http.StatusAccepted)
+		}
+	}))
+	defer s.Close()
+
+	c, _, err := Dial(ctx, s.URL+"/acp", "test-secret", testHTTPClient(t), json.RawMessage(`{"protocolVersion":2,"info":{"name":"test","version":"0"},"capabilities":{}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = c.CloseTransport(ctx) }()
+	if err := c.AttachSession(ctx, "s1"); err != nil {
+		t.Fatal(err)
+	}
+	pendingCall, err := c.StartCall(ctx, "session/prompt", map[string]any{"sessionId": "s1", "prompt": []any{}}, "s1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := pendingCall.CancelRequest(ctx); err != nil {
+		t.Fatal(err)
+	}
+	_, err = pendingCall.Wait(ctx)
+	var rpcErr *RPCError
+	if !errors.As(err, &rpcErr) || rpcErr.Code != RequestCancelledCode {
+		t.Fatalf("expected RPCError %d, got %v", RequestCancelledCode, err)
+	}
+	mu.Lock()
+	gotPromptID, gotCancelID := promptID, cancelRequestID
+	mu.Unlock()
+	if gotPromptID == 0 || gotPromptID != gotCancelID {
+		t.Fatalf("expected matching request IDs, prompt=%d cancel=%d", gotPromptID, gotCancelID)
+	}
+}
 func TestRedirectAndSanitizedErrors(t *testing.T) {
 	t.Parallel()
 	var leaked atomic.Bool
@@ -534,4 +640,107 @@ func (t confidentialTestTransport) RoundTrip(req *http.Request) (*http.Response,
 		return nil, fmt.Errorf("test tunnel request: %w", err)
 	}
 	return response, nil
+}
+
+func TestPromptDeliveryPayloadAndWithdrawalError(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	var mu sync.Mutex
+	streams := map[string]chan string{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		session := r.Header.Get("Acp-Session-Id")
+		switch r.Method {
+		case http.MethodPost:
+			var m envelope
+			if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
+				t.Error(err)
+				return
+			}
+			if m.Method == "initialize" {
+				w.Header().Set("Acp-Connection-Id", "conn")
+				_, _ = fmt.Fprintf(w, `{"jsonrpc":"2.0","id":%s,"result":{"protocolVersion":2,"info":{"name":"kit-gateway","version":"0.3.1"},"capabilities":{"_meta":{"kit/session/status":{}},"session":{"prompt":{"delivery":{"steer":{},"queue":{}}}}}}}`, m.ID)
+				return
+			}
+			mu.Lock()
+			ch := streams[session]
+			mu.Unlock()
+			w.WriteHeader(http.StatusAccepted)
+			if m.Method != "session/prompt" {
+				ch <- fmt.Sprintf("data: {\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{}}\n\n", m.ID)
+				return
+			}
+			var params struct {
+				SessionID      string `json:"sessionId"`
+				Delivery       string `json:"delivery"`
+				IdempotencyKey string `json:"idempotencyKey"`
+			}
+			if err := json.Unmarshal(m.Params, &params); err != nil {
+				t.Error(err)
+				return
+			}
+			if params.Delivery != "steer" {
+				t.Errorf("delivery=%q, want steer", params.Delivery)
+			}
+			if params.IdempotencyKey == "withdraw-me" {
+				ch <- fmt.Sprintf("data: {\"jsonrpc\":\"2.0\",\"id\":%s,\"error\":{\"code\":%d,\"message\":\"Request cancelled\"}}\n\n", m.ID, RequestCancelledCode)
+				return
+			}
+			ch <- fmt.Sprintf("data: {\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{\"messageId\":\"msg-inserted\"}}\n\n", m.ID)
+		case http.MethodGet:
+			ch := make(chan string, 8)
+			mu.Lock()
+			streams[session] = ch
+			mu.Unlock()
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.WriteHeader(http.StatusOK)
+			flushTestResponse(t, w)
+			for {
+				select {
+				case msg := <-ch:
+					_, _ = fmt.Fprint(w, msg)
+					flushTestResponse(t, w)
+				case <-r.Context().Done():
+					return
+				}
+			}
+		case http.MethodDelete:
+			w.WriteHeader(http.StatusAccepted)
+		}
+	}))
+	defer server.Close()
+
+	c, initResult, err := Dial(ctx, server.URL+"/acp", "test-secret", testHTTPClient(t), json.RawMessage(`{"protocolVersion":2,"info":{"name":"test","version":"0"},"capabilities":{}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = c.CloseTransport(context.Background()) }()
+	if !strings.Contains(string(initResult), `"delivery"`) {
+		t.Fatalf("missing delivery capabilities in initialize result: %s", initResult)
+	}
+	if err := c.AttachSession(ctx, "s1"); err != nil {
+		t.Fatal(err)
+	}
+	res, err := c.Call(ctx, "session/prompt", map[string]any{
+		"sessionId":      "s1",
+		"prompt":         []map[string]any{{"type": "text", "text": "hello"}},
+		"delivery":       "steer",
+		"idempotencyKey": "turn-1",
+	}, "s1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(res) != `{"messageId":"msg-inserted"}` {
+		t.Fatalf("unexpected insertion ack: %s", res)
+	}
+	_, err = c.Call(ctx, "session/prompt", map[string]any{
+		"sessionId":      "s1",
+		"prompt":         []map[string]any{{"type": "text", "text": "cancel"}},
+		"delivery":       "steer",
+		"idempotencyKey": "withdraw-me",
+	}, "s1")
+	rpcErr, ok := errors.AsType[*RPCError](err)
+	if !ok || rpcErr.Code != RequestCancelledCode {
+		t.Fatalf("expected RPCError %d, got %v", RequestCancelledCode, err)
+	}
 }

@@ -81,7 +81,7 @@ func TestKitLocalRequiresExplicitImage(t *testing.T) {
 		_, err := newKitLocalRuntimeBackend(config, engine)
 		require.Error(t, err, image)
 	}
-	for _, image := range []string{"registry.example:5000/kit:0.2.19", "kit@sha256:" + strings.Repeat("a", 64)} {
+	for _, image := range []string{"registry.example:5000/kit:0.3.1", "kit@sha256:" + strings.Repeat("a", 64)} {
 		config := k.config
 		config.Image = image
 		_, err := newKitLocalRuntimeBackend(config, engine)
