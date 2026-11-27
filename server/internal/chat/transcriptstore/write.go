@@ -286,10 +286,11 @@ type Beginner interface {
 	Begin(ctx context.Context) (pgx.Tx, error)
 }
 
-// Begin loads the project's transcript key into the cache, then opens a
-// transaction on db. Every transaction that writes protected fields opens
-// here, so nothing inside it calls KMS, and a key that will not load fails
-// before anything is written. The caller defers Rollback and commits.
+// Begin loads the transcript key of the project's organization into the
+// cache, then opens a transaction on db. Writes through Transcripts open
+// their transaction here (Backfill takes the same two steps itself), so
+// nothing inside it calls KMS, and a key that will not load fails before
+// anything is written. The caller defers Rollback and commits.
 func (t *Transcripts) Begin(ctx context.Context, db Beginner, organizationID string, projectID uuid.UUID) (pgx.Tx, error) {
 	if err := t.Prepare(ctx, organizationID, projectID); err != nil {
 		return nil, err

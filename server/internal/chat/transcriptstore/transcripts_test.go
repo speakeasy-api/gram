@@ -1,6 +1,7 @@
 package transcriptstore
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -474,6 +475,7 @@ func (f *fixture) insert(t *testing.T, transcripts *Transcripts, id uuid.UUID) r
 	}}
 	tx, err := transcripts.Begin(ctx, f.db, f.org, f.project)
 	require.NoError(t, err)
+	t.Cleanup(func() { _ = tx.Rollback(context.Background()) })
 	n, err := transcripts.InsertChatMessages(ctx, tx, f.org, f.project, params)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, n)
