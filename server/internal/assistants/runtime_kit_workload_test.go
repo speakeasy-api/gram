@@ -44,6 +44,11 @@ func enableTestOrganizationGateway(t *testing.T, db *pgxpool.Pool, orgID string)
 	require.NoError(t, err)
 	_, err = q.DeleteFeature(t.Context(), productfeaturesrepo.DeleteFeatureParams(setting))
 	require.NoError(t, err)
+	require.NoError(t, testrepo.New(db).SetOrganizationServingStateFixture(t.Context(), testrepo.SetOrganizationServingStateFixtureParams{
+		ID:          orgID,
+		Whitelisted: true,
+		Disabled:    false,
+	}))
 }
 
 func TestKitWorkloadSubjectGeneration(t *testing.T) {
