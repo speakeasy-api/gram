@@ -207,6 +207,7 @@ func newDemoSeedCommand() *cli.Command {
 			stores, err := newRedisStores(ctx, logger, otel.GetMeterProvider(), redisClientOptions{
 				redisAddr:     c.String("redis-cache-addr"),
 				redisPassword: c.String("redis-cache-password"),
+				environment:   c.String("environment"),
 				enableTracing: false,
 			})
 			if err != nil {

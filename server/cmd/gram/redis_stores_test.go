@@ -19,7 +19,7 @@ func TestRedisStoresShareOneClient(t *testing.T) {
 	t.Parallel()
 
 	mr := miniredis.RunT(t)
-	stores, err := newRedisStores(t.Context(), testenv.NewLogger(t), testenv.NewMeterProvider(t), redisClientOptions{redisAddr: mr.Addr(), redisPassword: "", enableTracing: false})
+	stores, err := newRedisStores(t.Context(), testenv.NewLogger(t), testenv.NewMeterProvider(t), redisClientOptions{redisAddr: mr.Addr(), redisPassword: "", environment: "", enableTracing: false})
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, stores.Close()) })
 
@@ -42,7 +42,7 @@ func TestRedisStoresCloseClosesTheSharedClientOnce(t *testing.T) {
 	t.Parallel()
 
 	mr := miniredis.RunT(t)
-	stores, err := newRedisStores(t.Context(), testenv.NewLogger(t), testenv.NewMeterProvider(t), redisClientOptions{redisAddr: mr.Addr(), redisPassword: "", enableTracing: false})
+	stores, err := newRedisStores(t.Context(), testenv.NewLogger(t), testenv.NewMeterProvider(t), redisClientOptions{redisAddr: mr.Addr(), redisPassword: "", environment: "", enableTracing: false})
 	require.NoError(t, err)
 
 	require.NoError(t, stores.Close())
@@ -65,7 +65,7 @@ func TestRedisStoresUsePinnedEndpointsWithoutSessionsAddress(t *testing.T) {
 	}
 
 	ctx := t.Context()
-	stores, err := newRedisStores(ctx, testenv.NewLogger(t), testenv.NewMeterProvider(t), redisClientOptions{redisAddr: "", redisPassword: "", enableTracing: false})
+	stores, err := newRedisStores(ctx, testenv.NewLogger(t), testenv.NewMeterProvider(t), redisClientOptions{redisAddr: "", redisPassword: "", environment: "", enableTracing: false})
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, stores.Close()) })
 
@@ -87,7 +87,7 @@ func TestRedisStoresReuseSessionsOnRollbackAndDisarm(t *testing.T) {
 	t.Setenv("GRAM_REDIS_OPS_NEXT_AUTH_MODE", "iam")
 
 	ctx := t.Context()
-	stores, err := newRedisStores(ctx, testenv.NewLogger(t), testenv.NewMeterProvider(t), redisClientOptions{redisAddr: sessions.Addr(), redisPassword: "sessions-password", enableTracing: false})
+	stores, err := newRedisStores(ctx, testenv.NewLogger(t), testenv.NewMeterProvider(t), redisClientOptions{redisAddr: sessions.Addr(), redisPassword: "sessions-password", environment: "", enableTracing: false})
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, stores.Close()) })
 
@@ -106,7 +106,7 @@ func TestRedisStoresLeaveDisarmedOpsIndependentOfAuthSwitch(t *testing.T) {
 	t.Setenv("GRAM_REDIS_AUTH_NEXT_CA_CERT", "")
 	t.Setenv("GRAM_REDIS_OPS_NEXT_ADDR", sessions.Addr())
 
-	stores, err := newRedisStores(t.Context(), testenv.NewLogger(t), testenv.NewMeterProvider(t), redisClientOptions{redisAddr: sessions.Addr(), redisPassword: "", enableTracing: false})
+	stores, err := newRedisStores(t.Context(), testenv.NewLogger(t), testenv.NewMeterProvider(t), redisClientOptions{redisAddr: sessions.Addr(), redisPassword: "", environment: "", enableTracing: false})
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, stores.Close()) })
 

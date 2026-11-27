@@ -176,6 +176,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	stores, err := newRedisStores(ctx, logger, meterProvider, redisClientOptions{
 		redisAddr:     c.String("redis-cache-addr"),
 		redisPassword: c.String("redis-cache-password"),
+		environment:   c.String("environment"),
 		enableTracing: c.Bool("redis-enable-tracing"),
 	})
 	if err != nil {

@@ -621,9 +621,13 @@ func buildTestMCPService(
 	posthog := posthog.New(ctx, logger, "", "", "")
 	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
 	evictableCache := testenv.NewEvictableCache(t, redisClient)
-	mcpCache := cache.Cache(cacheAdapter)
+	// The service gets enforcing role adapters, as production wires them, so a
+	// family wired to the wrong role fails these tests.
+	authCache := testenv.NewRoleCache(t, redisClient, redisrole.RoleAuth)
+	opsCache := testenv.NewRoleCache(t, redisClient, redisrole.RoleOps)
+	mcpCache := cache.Cache(authCache)
 	if wrapCache != nil {
-		mcpCache = wrapCache(cacheAdapter)
+		mcpCache = wrapCache(authCache)
 	}
 	billingStub := billing.NewStubClient(logger, tracerProvider)
 	devProvisioner := openrouter.NewDevelopment("test-openrouter-key")
@@ -730,7 +734,7 @@ func buildTestMCPService(
 	toolCallRecords := &toolCallRecorder{}
 	// Named as in production, so the pipeline derives the same source.
 	toolCallLogs := otelpub.NewLogger(toolCallRecords, resource.NewSchemaless(semconv.ServiceNameKey.String("gram-server")), dialect.GatewayLogScope)
-	svc, err := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, features, serverURL, siteURL, enc, mcp.RedisRoles{Auth: mcpCache, AuthClient: redisClient, Ops: cacheAdapter, OpsClient: redisClient, Evictable: evictableCache, EvictableClient: redisrole.EvictableClient{Client: redisClient}}, guardianPolicy, funcs, billingStub, billingStub, telemLogger, toolCallLogs, telemService, vectorToolStore, nil, authzEngine, assistantTokens, principalCredentials, shadowMCPClient, auditLogger, assistantSkillTools, featClient.PlatformFeatureCheck, platformToolsets, identityResolver, userSessionSigner, remoteChallengeMgr, scanEvaluator, remoteProxyManager, tunnelRoutes, "", nil, callerAssertions, tunnelPublicConfig, metaRuntime, nil, nil)
+	svc, err := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, features, serverURL, siteURL, enc, mcp.RedisRoles{Auth: mcpCache, AuthClient: redisClient, Ops: opsCache, OpsClient: redisClient, Evictable: evictableCache, EvictableClient: redisrole.EvictableClient{Client: redisClient}}, guardianPolicy, funcs, billingStub, billingStub, telemLogger, toolCallLogs, telemService, vectorToolStore, nil, authzEngine, assistantTokens, principalCredentials, shadowMCPClient, auditLogger, assistantSkillTools, featClient.PlatformFeatureCheck, platformToolsets, identityResolver, userSessionSigner, remoteChallengeMgr, scanEvaluator, remoteProxyManager, tunnelRoutes, "", nil, callerAssertions, tunnelPublicConfig, metaRuntime, nil, nil)
 	require.NoError(t, err)
 	svc.SetAuthFeatureChecker(featClient.PlatformFeatureCheckUncached)
 	// Identity chaining runs as in production, so gate tests without bindings

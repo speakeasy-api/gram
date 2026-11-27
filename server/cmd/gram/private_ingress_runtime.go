@@ -122,7 +122,7 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 		return nil, err
 	}
 	r.cleanup = append(r.cleanup, stop)
-	stores, err := newRedisStores(ctx, logger, meterProvider, redisClientOptions{redisAddr: c.String("redis-cache-addr"), redisPassword: c.String("redis-cache-password"), enableTracing: c.Bool("redis-enable-tracing")})
+	stores, err := newRedisStores(ctx, logger, meterProvider, redisClientOptions{redisAddr: c.String("redis-cache-addr"), redisPassword: c.String("redis-cache-password"), environment: c.String("environment"), enableTracing: c.Bool("redis-enable-tracing")})
 	if err != nil {
 		return nil, err
 	}

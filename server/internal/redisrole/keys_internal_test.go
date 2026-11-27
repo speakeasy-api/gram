@@ -55,7 +55,14 @@ func TestCommandKeys(t *testing.T) {
 		{name: "memory stats", args: []any{"memory", "stats"}, want: nil},
 		{name: "object encoding", args: []any{"object", "encoding", "toolset:a"}, want: []string{"toolset:a"}},
 		{name: "config get", args: []any{"config", "get", "maxmemory"}, want: nil},
-		{name: "flushdb async", args: []any{"flushdb", "async"}, want: nil},
+		{name: "flushdb async", args: []any{"flushdb", "async"}, want: []string{everyKey}},
+		{name: "flushall", args: []any{"flushall"}, want: []string{everyKey}},
+		{name: "acl whoami", args: []any{"acl", "whoami"}, want: nil},
+		{name: "function list", args: []any{"function", "list"}, want: nil},
+		{name: "slowlog get", args: []any{"slowlog", "get", 10}, want: nil},
+		{name: "lcs", args: []any{"lcs", "a", "b"}, want: []string{"a", "b"}},
+		{name: "zrangestore", args: []any{"zrangestore", "dest", "src", 0, -1}, want: []string{"dest", "src"}},
+		{name: "geosearchstore", args: []any{"geosearchstore", "dest", "src", "frommember", "m", "byradius", 1, "km"}, want: []string{"dest", "src"}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

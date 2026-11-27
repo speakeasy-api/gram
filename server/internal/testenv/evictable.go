@@ -20,6 +20,16 @@ func NewEvictableCache(t *testing.T, client *redis.Client) *cache.EvictableRedis
 	return cache.NewEvictableRedisAdapter(redisrole.EvictableClient{Client: client}, guard)
 }
 
+// NewRoleCache returns the auth- or ops-role adapter over client with the role
+// guard in enforce mode, so a test fails when the code under test sends a key
+// of another role, or of no declared family, through it.
+func NewRoleCache(t *testing.T, client *redis.Client, role redisrole.Role) *cache.RoleRedisAdapter {
+	t.Helper()
+
+	guard := redisrole.NewGuard(NewLogger(t), NewMeterProvider(t), redisrole.GuardEnforce)
+	return cache.NewRoleRedisAdapter(client, role, guard)
+}
+
 // evictableMemoryCache is the in-memory cache standing in for the evictable
 // role in unit tests without Redis.
 type evictableMemoryCache struct {

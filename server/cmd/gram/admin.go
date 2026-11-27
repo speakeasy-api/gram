@@ -94,6 +94,9 @@ func resolveAdminAssetStorage(backend, uri string) (assetStorageOptions, error) 
 
 func newAdminCommand() *cli.Command {
 	var shutdownFuncs []func(context.Context) error
+	// redisClose closes the Redis role clients after every shutdown func has
+	// stopped using them.
+	redisClose := func() error { return nil }
 
 	flags := []cli.Flag{
 		&cli.StringFlag{
@@ -431,11 +434,14 @@ func newAdminCommand() *cli.Command {
 			stores, err := newRedisStores(ctx, logger, meterProvider, redisClientOptions{
 				redisAddr:     c.String("redis-cache-addr"),
 				redisPassword: c.String("redis-cache-password"),
+				environment:   c.String("environment"),
 				enableTracing: false,
 			})
 			if err != nil {
 				return fmt.Errorf("failed to connect to redis: %w", err)
 			}
+			redisClose = stores.Close
+
 			guardianPolicy, err := newGuardianPolicy(c, logger, tracerProvider, meterProvider, stores.Ops)
 			if err != nil {
 				return err
@@ -731,6 +737,7 @@ func newAdminCommand() *cli.Command {
 			return loadConfigFromFile(ctx, flags)
 		},
 		After: func(c *cli.Context) error {
+			defer o11y.LogDefer(context.WithoutCancel(c.Context), PullLogger(c.Context), "close redis clients", func() error { return redisClose() })
 			return runShutdown(PullLogger(c.Context), c.Context, shutdownFuncs)
 		},
 	}

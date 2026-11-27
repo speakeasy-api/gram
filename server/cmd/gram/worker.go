@@ -142,6 +142,9 @@ func workerRuntimeFlags() []cli.Flag {
 
 func newWorkerCommand() *cli.Command {
 	var shutdownFuncs []func(context.Context) error
+	// redisClose closes the Redis role clients after every shutdown func has
+	// stopped using them.
+	redisClose := func() error { return nil }
 
 	flags := append(workerRuntimeFlags(),
 		&cli.StringFlag{Name: "authz-issuer-url", EnvVars: []string{"GRAM_AUTHZ_ISSUER_URL"}, Usage: "Speakeasy platform signing issuer origin"},
@@ -462,11 +465,13 @@ func newWorkerCommand() *cli.Command {
 			stores, err := newRedisStores(ctx, logger, meterProvider, redisClientOptions{
 				redisAddr:     c.String("redis-cache-addr"),
 				redisPassword: c.String("redis-cache-password"),
+				environment:   c.String("environment"),
 				enableTracing: c.Bool("redis-enable-tracing"),
 			})
 			if err != nil {
 				return fmt.Errorf("failed to connect to redis: %w", err)
 			}
+			redisClose = stores.Close
 
 			guardianPolicy, err := newGuardianPolicy(c, logger, tracerProvider, meterProvider, stores.Ops)
 			if err != nil {
@@ -1013,6 +1018,7 @@ func newWorkerCommand() *cli.Command {
 			return loadConfigFromFile(ctx, flags)
 		},
 		After: func(c *cli.Context) error {
+			defer o11y.LogDefer(context.WithoutCancel(c.Context), PullLogger(c.Context), "close redis clients", func() error { return redisClose() })
 			return runShutdown(PullLogger(c.Context), c.Context, shutdownFuncs)
 		},
 	}

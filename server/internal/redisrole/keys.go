@@ -10,26 +10,52 @@ import (
 // commandsWithoutKeys are commands the guard never inspects: connection
 // setup, server administration and introspection, and transaction framing.
 var commandsWithoutKeys = map[string]struct{}{
-	"auth":     {},
-	"client":   {},
-	"command":  {},
-	"config":   {},
-	"dbsize":   {},
-	"discard":  {},
-	"echo":     {},
-	"exec":     {},
+	"acl":          {},
+	"auth":         {},
+	"bgrewriteaof": {},
+	"bgsave":       {},
+	"client":       {},
+	"command":      {},
+	"config":       {},
+	"dbsize":       {},
+	"discard":      {},
+	"echo":         {},
+	"exec":         {},
+	"function":     {},
+	"hello":        {},
+	"info":         {},
+	"lastsave":     {},
+	"latency":      {},
+	"module":       {},
+	"multi":        {},
+	"ping":         {},
+	"quit":         {},
+	"readonly":     {},
+	"readwrite":    {},
+	"reset":        {},
+	"role":         {},
+	"save":         {},
+	"script":       {},
+	"select":       {},
+	"slowlog":      {},
+	"time":         {},
+	"unwatch":      {},
+	"wait":         {},
+	"waitaof":      {},
+}
+
+// commandsOnEveryKey address the whole database at once. The guard checks them
+// as one key of no family, so enforce mode refuses them on every role: a role
+// client that shares an instance with others must never erase their keys.
+var commandsOnEveryKey = map[string]struct{}{
 	"flushall": {},
 	"flushdb":  {},
-	"hello":    {},
-	"info":     {},
-	"multi":    {},
-	"ping":     {},
-	"quit":     {},
-	"script":   {},
-	"select":   {},
-	"time":     {},
-	"unwatch":  {},
+	"swapdb":   {},
 }
+
+// everyKey is the key the guard checks for a command in commandsOnEveryKey. It
+// matches no family, so it is unclassified.
+const everyKey = "*"
 
 // commandsWithKeyArguments take only keys after the command name.
 var commandsWithKeyArguments = map[string]struct{}{
@@ -50,14 +76,17 @@ var commandsWithKeyArguments = map[string]struct{}{
 
 // commandsWithTwoKeys take a source and a destination key first.
 var commandsWithTwoKeys = map[string]struct{}{
-	"blmove":     {},
-	"brpoplpush": {},
-	"copy":       {},
-	"lmove":      {},
-	"rename":     {},
-	"renamenx":   {},
-	"rpoplpush":  {},
-	"smove":      {},
+	"blmove":         {},
+	"brpoplpush":     {},
+	"copy":           {},
+	"geosearchstore": {},
+	"lcs":            {},
+	"lmove":          {},
+	"rename":         {},
+	"renamenx":       {},
+	"rpoplpush":      {},
+	"smove":          {},
+	"zrangestore":    {},
 }
 
 // blockingPopCommands take keys followed by a timeout.
@@ -97,6 +126,9 @@ func commandKeys(args []any) []string {
 
 	if _, skip := commandsWithoutKeys[name]; skip {
 		return nil
+	}
+	if _, every := commandsOnEveryKey[name]; every {
+		return []string{everyKey}
 	}
 	if _, all := commandsWithKeyArguments[name]; all {
 		return argStrings(args[1:])

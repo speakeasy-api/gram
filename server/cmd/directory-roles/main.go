@@ -168,6 +168,15 @@ func supportRedisOptions(ctx context.Context, getenv func(string) string, authAd
 	if effectiveAddress == "" {
 		effectiveAddress = fallbackAddress
 	}
+	// A direct URL names the instance the command will write to, so the move
+	// check compares the Auth target against it.
+	if redisURL != "" {
+		parsed, err := redis.ParseURL(redisURL)
+		if err != nil {
+			return nil, errors.New("invalid Redis configuration")
+		}
+		effectiveAddress = parsed.Addr
+	}
 	if next := strings.TrimSpace(getenv("GRAM_REDIS_AUTH_NEXT_ADDR")); next != "" && next != effectiveAddress {
 		return nil, errors.New("finish the Auth Redis move before running directory roles")
 	}

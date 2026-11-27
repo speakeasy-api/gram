@@ -464,7 +464,7 @@ func (s *Service) recordRefusedConsent(ctx context.Context, logger *slog.Logger,
 	if attempt.IsZero() {
 		return
 	}
-	if s.userSessionRefreshReplayCoordination == nil {
+	if s.connectionAttemptCache == nil {
 		s.connections.Step(ctx, attempt, mcpconnectionattempts.StepInboundConsent, code, opts...)
 		return
 	}
@@ -709,7 +709,7 @@ func (s *Service) recordOffRequest(ctx context.Context, logger *slog.Logger, wha
 // runAttemptEnding bounds all ending work, including readiness reads, off the response path.
 // It reports whether the work was taken on.
 func (s *Service) runAttemptEnding(ctx context.Context, logger *slog.Logger, work func(context.Context)) bool {
-	if s.connections == nil || s.userSessionRefreshReplayCoordination == nil || s.attemptEndings == nil {
+	if s.connections == nil || s.attemptEndings == nil {
 		return false
 	}
 	select {
@@ -728,6 +728,11 @@ func (s *Service) runAttemptEnding(ctx context.Context, logger *slog.Logger, wor
 }
 
 func (s *Service) claimAttemptEnding(ctx context.Context, logger *slog.Logger, attempt mcpconnectionattempts.Attempt, step mcpconnectionattempts.Step, what mcpconnectionattempts.Happened, opts ...mcpconnectionattempts.Option) {
+	// The ending marker is auth state; without that store the attempt stays
+	// open rather than risk ending twice.
+	if s.userSessionRefreshReplayCoordination == nil {
+		return
+	}
 	won, err := s.userSessionRefreshReplayCoordination.Add(ctx, attemptEndMarker(attempt), connectionAttemptEndTTL)
 	if err != nil {
 		logger.WarnContext(ctx, "claim connection attempt ending", attr.SlogError(err))

@@ -474,6 +474,9 @@ func newAssetStorage(ctx context.Context, logger *slog.Logger, opts assetStorage
 type redisClientOptions struct {
 	redisAddr     string
 	redisPassword string
+	// environment is the command's --environment flag. Empty falls back to
+	// GRAM_ENVIRONMENT.
+	environment   string
 	enableTracing bool
 }
 
@@ -549,7 +552,10 @@ func newRedisStores(ctx context.Context, logger *slog.Logger, meterProvider metr
 		{prefix: "GRAM_REDIS_OPS_", role: redisswitch.RoleOps},
 		{prefix: "GRAM_REDIS_EVICTABLE_", role: ""},
 	}
-	environment := os.Getenv("GRAM_ENVIRONMENT")
+	environment := opts.environment
+	if environment == "" {
+		environment = os.Getenv("GRAM_ENVIRONMENT")
+	}
 	modeName := os.Getenv("GRAM_REDIS_ROLE_GUARD")
 	if modeName == "" && environment == "dev" {
 		modeName = "enforce"

@@ -109,9 +109,33 @@ func TestGuardEnforceAllowsSwitchKeysOnEveryRole(t *testing.T) {
 	t.Parallel()
 
 	for _, role := range redisrole.Roles() {
-		guard := redisrole.NewGuard(testenv.NewLogger(t), testenv.NewMeterProvider(t), redisrole.GuardEnforce)
-		client, _ := newGuardedClient(t, guard, role)
-		require.NoError(t, client.MGet(t.Context(), "gram:redis-switch:state:auth", "gram:redis-switch:hold").Err(), role)
+		t.Run(string(role), func(t *testing.T) {
+			t.Parallel()
+
+			guard := redisrole.NewGuard(testenv.NewLogger(t), testenv.NewMeterProvider(t), redisrole.GuardEnforce)
+			client, _ := newGuardedClient(t, guard, role)
+			require.NoError(t, client.MGet(t.Context(), "gram:redis-switch:state:auth", "gram:redis-switch:hold").Err())
+		})
+	}
+}
+
+// TestGuardEnforceRefusesFlushOnEveryRole keeps a role client that shares an
+// instance with the others from erasing their keys.
+func TestGuardEnforceRefusesFlushOnEveryRole(t *testing.T) {
+	t.Parallel()
+
+	for _, role := range redisrole.Roles() {
+		t.Run(string(role), func(t *testing.T) {
+			t.Parallel()
+
+			guard := redisrole.NewGuard(testenv.NewLogger(t), testenv.NewMeterProvider(t), redisrole.GuardEnforce)
+			client, mr := newGuardedClient(t, guard, role)
+			require.NoError(t, mr.Set(authKey, "kept"))
+
+			require.ErrorIs(t, client.FlushDB(t.Context()).Err(), redisrole.ErrWrongRole)
+			require.ErrorIs(t, client.FlushAll(t.Context()).Err(), redisrole.ErrWrongRole)
+			require.True(t, mr.Exists(authKey))
+		})
 	}
 }
 
