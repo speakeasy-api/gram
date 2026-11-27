@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -338,18 +339,23 @@ func TestPluginPublishSignalMessage(t *testing.T) {
 }
 
 // rejectingPublishClient stands in for the plugins service and refuses every
-// publish the way an organization with no member to attribute keys to does.
+// publish with err, the way the service refuses one it can never complete.
 type rejectingPublishClient struct {
 	mu    sync.Mutex
 	calls int
+	err   error
 }
 
 func (c *rejectingPublishClient) PublishProject(context.Context, plugins.PublishProjectInput) (*plugins.PublishProjectResult, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.calls++
-	return nil, fmt.Errorf("%w: organization %q", plugins.ErrPluginAPIKeyCreatorNotMember, "org_none")
+	return nil, c.err
 }
+
+// errDisabledOrganization is the error the plugins service returns for a
+// publish whose organization is disabled.
+var errDisabledOrganization = oops.E(oops.CodeForbidden, plugins.ErrOrganizationDisabled, "organization is disabled")
 
 func TestPluginPublishWorkflow_NoActorIsRejectedOnce(t *testing.T) {
 	t.Parallel()
@@ -361,7 +367,7 @@ func TestPluginPublishWorkflow_NoActorIsRejectedOnce(t *testing.T) {
 	// hop before the Temporal SDK decides retryability from the error's
 	// concrete type, so a wrapper there silently turns the permanent
 	// rejection into three attempts and a failed workflow.
-	client := &rejectingPublishClient{mu: sync.Mutex{}, calls: 0}
+	client := &rejectingPublishClient{mu: sync.Mutex{}, calls: 0, err: fmt.Errorf("%w: organization %q", plugins.ErrPluginAPIKeyCreatorNotMember, "org_none")}
 	var a Activities
 	a.pluginPublisher = activities.NewPluginPublisher(testenv.NewLogger(t), nil, client)
 	env.RegisterActivity(a.PublishPluginProject)
@@ -380,4 +386,31 @@ func TestPluginPublishWorkflow_NoActorIsRejectedOnce(t *testing.T) {
 	require.NoError(t, env.GetWorkflowResult(&result))
 	require.True(t, result.Skipped)
 	require.Equal(t, 1, client.calls, "a permanent rejection must not be retried")
+}
+
+func TestPluginPublishWorkflow_DisabledOrganizationIsRejectedOnce(t *testing.T) {
+	t.Parallel()
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+
+	client := &rejectingPublishClient{mu: sync.Mutex{}, calls: 0, err: errDisabledOrganization}
+	var a Activities
+	a.pluginPublisher = activities.NewPluginPublisher(testenv.NewLogger(t), nil, client)
+	env.RegisterActivity(a.PublishPluginProject)
+
+	env.ExecuteWorkflow(PluginPublishWorkflow, PluginPublishParams{
+		ProjectID:       uuid.New(),
+		CreatedByUserID: "user_01HZ",
+		CommitMessage:   "Update plugin packages",
+		SkipIfUnchanged: true,
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError())
+
+	var result plugins.PublishProjectResult
+	require.NoError(t, env.GetWorkflowResult(&result))
+	require.True(t, result.Skipped)
+	require.Equal(t, 1, client.calls, "a disabled organization's publish must not be retried")
 }
