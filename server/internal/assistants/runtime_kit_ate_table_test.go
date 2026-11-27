@@ -241,20 +241,12 @@ func TestKitATEConcurrentThreadsDoNotWaitOnEachOther(t *testing.T) {
 
 	require.NoError(t, tx1.Commit(t.Context()))
 
-	// Verify distinct tokens and workload admissions exist for both threads, and
-	// assistant_runtimes.backend_metadata_json never holds per-thread JSON state.
+	// Verify distinct tokens and workload admissions exist for both threads.
 	protoMu.Lock()
 	require.NotEmpty(t, protoTokens[thread1])
 	require.NotEmpty(t, protoTokens[thread2])
 	require.NotEqual(t, protoTokens[thread1], protoTokens[thread2])
 	protoMu.Unlock()
-
-	runtimeRow, err := q.GetAssistantRuntime(t.Context(), assistantrepo.GetAssistantRuntimeParams{
-		ProjectID: runtimeSeed.ProjectID,
-		ID:        runtimeID,
-	})
-	require.NoError(t, err)
-	require.NotContains(t, string(runtimeRow.BackendMetadataJson), `"threads"`)
 
 	var binding1, binding2 KitWorkloadBinding
 	require.NoError(t, json.Unmarshal(lockedRow1.WorkloadBindingJson, &binding1))

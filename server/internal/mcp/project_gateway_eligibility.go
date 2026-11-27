@@ -139,8 +139,7 @@ func (s *Service) EvaluateProjectGatewayForTurnCredential(
 	project := availability.Project
 	rawURL := availability.GatewayURL.String()
 
-	// Reuse the issuer resolved by orggateway.ResolveProjectGateway instead of
-	// querying organization gateway availability a second time.
+	// Reuse the issuer resolved by orggateway.ResolveProjectGateway.
 	resolvedAvailability := func(context.Context, usersessionsrepo.DBTX, organizations_repo.OrganizationMetadatum) (uuid.UUID, orggateway.Unavailability, error) {
 		return availability.IssuerID, orggateway.UnavailabilityNone, nil
 	}

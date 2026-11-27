@@ -1757,8 +1757,8 @@ func (s *ServiceCore) CreateAssistant(
 	if err := validateReasoningEffort(effort); err != nil {
 		return assistantRecord{}, err
 	}
-	// The Default runtime can use initial legacy attachments as requested.
-	// Kit uses backing-agent grants instead, so keep attached creates on Default.
+	// The Default runtime serves explicit MCP attachments directly.
+	// Kit uses backing-agent grants, so creates with attachments stay on Default.
 	hasInitialAttachments := len(toolsets) > 0 || len(mcpServers) > 0
 	runtimeVersion := s.newAssistantRuntimeVersion
 	if hasInitialAttachments && runtimeVersion == 3 {

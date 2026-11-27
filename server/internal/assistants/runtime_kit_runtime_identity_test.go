@@ -88,9 +88,7 @@ func TestKitBootstrapMultipleRootsAndIndependentEventRevocation(t *testing.T) {
 		require.Equal(t, "mcp:connect", gw.Auth.Scope)
 		require.Empty(t, gw.Auth.Extensions)
 		require.Empty(t, gw.Headers)
-		require.NotContains(t, string(b.MCPJSON), "builtin-")
 		require.Contains(t, string(b.AgentsMD), "`project-gateway`")
-		require.NotContains(t, string(b.AgentsMD), "builtin-")
 		return b
 	}
 

@@ -36,7 +36,7 @@ func TestKitLocalBootstrapContractValidation(t *testing.T) {
 			b.MCPJSON = []byte(`{"mcpServers":{}}`)
 		},
 		func(b *KitLocalBootstrap) {
-			b.MCPJSON = []byte(`{"mcpServers":{"builtin-assistants":{"type":"streamable-http","url":"https://api.example/platform/mcp/assistants","headers":{},"auth":{"type":"workload_identity","tokenFile":"/var/run/secrets/speakeasy/workload/assertion","endpointMode":"explicit","grant":"jwtBearer","tokenEndpoint":"https://issuer.example/oauth/usi/test/token","resource":"https://api.example/platform/mcp/assistants","scope":"mcp:connect","extensions":{"project_id":"00000000-0000-0000-0000-000000000001"}}}}}`)
+			b.MCPJSON = []byte(`{"mcpServers":{"other-server":{"type":"streamable-http","url":"https://api.example/mcp/other","headers":{},"auth":{"type":"workload_identity","tokenFile":"/var/run/secrets/speakeasy/workload/assertion","endpointMode":"explicit","grant":"jwtBearer","tokenEndpoint":"https://issuer.example/oauth/usi/test/token","resource":"https://api.example/mcp/other","scope":"mcp:connect"}}}}`)
 		},
 		func(b *KitLocalBootstrap) {
 			b.MCPJSON = []byte(`{"mcpServers":{"project-gateway":{"type":"streamable-http","url":"https://api.example/mcp/gateway/org/projects/p","headers":{},"auth":{"type":"workload_identity","tokenFile":"/var/run/secrets/speakeasy/workload/assertion","endpointMode":"explicit","grant":"jwtBearer","tokenEndpoint":"https://issuer.example/oauth/usi/test/token","resource":"https://api.example/mcp/gateway/org/projects/p","scope":"mcp:connect","extensions":{"project_id":"00000000-0000-0000-0000-000000000001"}}}}}`)

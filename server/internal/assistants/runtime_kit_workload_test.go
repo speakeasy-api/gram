@@ -618,17 +618,17 @@ func TestKitConfiguredTurnEnforcesProjectGatewayMetadata(t *testing.T) {
 	require.NoError(t, err)
 	r = kitWorkloadMetadata(t, r, binding)
 	protocol := &kitConfiguredRuntimeProtocol{}
-	// Legacy runtimes without MCPProjectGateway: true fail with
+	// Runtimes without verified MCPProjectGateway metadata fail with
 	// errKitMCPConfigurationUnverified so the turn worker revokes and replaces them.
 	err = protocol.RunTurn(t.Context(), r, runTurnRequest{MCPServers: []runtimeMCPServer{}})
 	require.ErrorIs(t, err, errKitMCPConfigurationUnverified)
 	require.ErrorIs(t, err, errKitRuntimeUnrecoverable)
 	preserved, err := workloadrepo.New(db).CountLiveAdmissionsForSubject(t.Context(), workloadrepo.CountLiveAdmissionsForSubjectParams{OrganizationID: identity.OrganizationID, WorkloadIssuerID: binding.IssuerID, Subject: binding.Subject, MatchKind: "exact"})
 	require.NoError(t, err)
-	require.EqualValues(t, 1, preserved, "legacy configuration must let the turn worker revoke and replace cleanly")
+	require.EqualValues(t, 1, preserved, "unverified configuration must let the turn worker revoke and replace cleanly")
 }
 
-func TestKitAssistantUpdateDoesNotRequireRetirement(t *testing.T) {
+func TestKitAssistantUpdateSucceeds(t *testing.T) {
 	t.Parallel()
 	_, db, key, _ := kitSessionFixture(t)
 	core := newProvisioningCore(t, db)
@@ -645,7 +645,7 @@ func TestKitAssistantUpdateDoesNotRequireRetirement(t *testing.T) {
 	require.Len(t, rows, 1)
 
 	_, err = core.UpdateAssistant(t.Context(), key.ProjectID, key.AssistantID, nil, nil, nil, []*types.AssistantToolsetRef{}, []*types.AssistantMCPServerRef{}, nil, nil, nil, nil, nil)
-	require.NoError(t, err, "Kit assistants use agent RBAC grants through the Project Gateway rather than persisted attachments")
+	require.NoError(t, err, "Kit assistant updates persist changes while runtime access is governed by agent RBAC grants")
 	rows, err = assistantrepo.New(db).LoadAssistantMcpServers(t.Context(), assistantrepo.LoadAssistantMcpServersParams{ProjectID: key.ProjectID, AssistantIds: []uuid.UUID{key.AssistantID}})
 	require.NoError(t, err)
 	require.Empty(t, rows)

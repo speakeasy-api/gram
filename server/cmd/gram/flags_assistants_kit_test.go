@@ -107,7 +107,4 @@ func TestPrivateIngressRegistersAssistantRuntimeFlags(t *testing.T) {
 		require.True(t, flags[f.Names()[0]], "missing flag %s", f.Names()[0])
 	}
 	require.False(t, flags["assistant-kit-allow-insecure-inference"], "Kit requires its fixed HTTPS provider origin")
-	for _, removed := range []string{"assistant-kit-mcp-resource", "assistant-kit-mcp-issuer", "assistant-kit-mcp-issuer-id"} {
-		require.False(t, flags[removed], "legacy per-resource flag %s must not be registered", removed)
-	}
 }

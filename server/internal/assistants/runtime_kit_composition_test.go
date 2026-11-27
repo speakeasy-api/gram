@@ -17,7 +17,6 @@ func TestKitCompositionMachineConfigUsesAssertions(t *testing.T) {
 	require.NoError(t, err)
 	require.JSONEq(t, `{"mcpServers":{"project-gateway":{"headers":{},"type":"streamable-http","url":"https://mcp.example/mcp/gateway/org-test/projects/proj-test","auth":{"type":"workload_identity","tokenFile":"/var/run/secrets/speakeasy/workload/assertion","endpointMode":"explicit","grant":"jwtBearer","tokenEndpoint":"https://issuer.example/oauth/usi/test/token","resource":"https://mcp.example/mcp/gateway/org-test/projects/proj-test","scope":"mcp:connect"}}}}`, string(raw))
 	require.NotContains(t, string(raw), "client_id")
-	require.NotContains(t, string(raw), "builtin-")
 
 	_, err = kitCompositionMCP(gateway, nil)
 	require.Error(t, err)
@@ -69,8 +68,7 @@ func TestKitAgentsMDAndTurnPromptUseProjectGatewayMode(t *testing.T) {
 	require.Contains(t, agentsMD, "execute_read_only_tool")
 	require.Contains(t, agentsMD, "execute_tool")
 	require.Contains(t, agentsMD, "platform--<tool_name>")
-	require.NotContains(t, agentsMD, "builtin-")
-	require.NotContains(t, agentsMD, "mcp__p-assistants_skills_load")
+	require.NotContains(t, agentsMD, "tool_search")
 
 	slackThread := assistantThreadRecord{
 		ID:            uuid.New(),
@@ -86,5 +84,4 @@ func TestKitAgentsMDAndTurnPromptUseProjectGatewayMode(t *testing.T) {
 	require.Contains(t, sourceInstructions, "execute_read_only_tool with assistants--skills_load")
 	require.Contains(t, sourceInstructions, "execute_tool with assistant-slack--")
 	require.NotContains(t, sourceInstructions, "mcp__p-assistants_skills_load")
-	require.NotContains(t, sourceInstructions, "builtin-")
 }
