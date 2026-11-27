@@ -236,7 +236,27 @@ func TestAuthMirrorDeletesRouteWhenTunnelIsRevoked(t *testing.T) {
 		return len(candidates) == 2
 	}, 5*time.Second, 10*time.Millisecond)
 
+	// RevokeTunnel returns only after the mirror's delete was attempted.
 	harness.gateway.RevokeTunnel(t.Context(), "tunnel-oauth")
+	require.Equal(t, 1, mirror.operationCount("tunnel-oauth", "delete"))
+	candidates, err := mirror.Candidates(t.Context(), "tunnel-oauth")
+	require.NoError(t, err)
+	require.Empty(t, candidates)
+}
+
+func TestAuthMirrorRetriesFailedRevocationDelete(t *testing.T) {
+	t.Parallel()
+
+	mirror := newRecordingRouteStore(false, false)
+	harness := newAuthMirrorHarness(t, map[string]string{"tunnel-oauth": "gram_tunnel_mirror_retry"},
+		newRecordingRouteStore(false, false), mirror, newFakeEligibility("tunnel-oauth"))
+
+	harness.connect(t, "gram_tunnel_mirror_retry")
+	require.Eventually(t, func() bool { return mirror.operationCount("tunnel-oauth", "publish") >= 1 }, 5*time.Second, 10*time.Millisecond)
+
+	mirror.failNextDelete()
+	harness.gateway.RevokeTunnel(t.Context(), "tunnel-oauth")
+	require.Equal(t, 1, mirror.operationCount("tunnel-oauth", "delete_failed"))
 	require.Eventually(t, func() bool { return mirror.operationCount("tunnel-oauth", "delete") == 1 }, 5*time.Second, 10*time.Millisecond)
 	candidates, err := mirror.Candidates(t.Context(), "tunnel-oauth")
 	require.NoError(t, err)

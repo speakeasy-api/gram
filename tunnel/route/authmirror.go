@@ -81,7 +81,9 @@ func NewMirrorReader(mirror, bulk Store) *MirrorReader {
 // the bulk store's, and reports the mirror's error only when the bulk store
 // failed too.
 func (r *MirrorReader) Candidates(ctx context.Context, tunnelID string) ([]string, error) {
-	mirrored, mirrorErr := r.mirror.Candidates(ctx, tunnelID)
+	mirrorCtx, cancel := context.WithTimeout(ctx, mirrorLookupTimeout)
+	mirrored, mirrorErr := r.mirror.Candidates(mirrorCtx, tunnelID)
+	cancel()
 	if mirrorErr == nil && len(mirrored) > 0 {
 		return mirrored, nil
 	}
@@ -93,10 +95,25 @@ func (r *MirrorReader) Candidates(ctx context.Context, tunnelID string) ([]strin
 	return candidates, nil
 }
 
+// mirrorLookupTimeout bounds the mirror's part of Candidates, so a slow or
+// held auth instance leaves most of a caller's lookup budget (one second for
+// tunneled OAuth) to the bulk routes. A healthy read takes a millisecond or
+// two.
+const mirrorLookupTimeout = 250 * time.Millisecond
+
+// bulkCleanupTimeout bounds the bulk store's part of Unpublish. Removing a dead
+// gateway from the bulk routes is cleanup the gateway's own expiry also does
+// within 30 s, so a held or unreachable operations instance may cost an OAuth
+// call at most this long.
+const bulkCleanupTimeout = 500 * time.Millisecond
+
 // Unpublish removes a dead gateway from both stores, so neither hands it out
 // again. The mirror goes first: it is what tunneled OAuth reads.
 func (r *MirrorReader) Unpublish(ctx context.Context, tunnelID, addr string) error {
-	return errors.Join(r.mirror.Unpublish(ctx, tunnelID, addr), r.bulk.Unpublish(ctx, tunnelID, addr))
+	mirrorErr := r.mirror.Unpublish(ctx, tunnelID, addr)
+	bulkCtx, cancel := context.WithTimeout(ctx, bulkCleanupTimeout)
+	defer cancel()
+	return errors.Join(mirrorErr, r.bulk.Unpublish(bulkCtx, tunnelID, addr))
 }
 
 // Publish writes both stores. Readers do not publish; the method exists so the

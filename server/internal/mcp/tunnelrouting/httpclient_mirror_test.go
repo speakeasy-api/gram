@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -16,25 +17,31 @@ import (
 )
 
 // heldRoutes blocks every command until its context ends, like an operations
-// instance held by an instance move.
-type heldRoutes struct{}
+// instance held by an instance move, and counts the commands it was sent.
+type heldRoutes struct {
+	commands atomic.Int32
+}
 
-func (heldRoutes) Publish(ctx context.Context, _, _ string, _ time.Duration) error {
+func (h *heldRoutes) Publish(ctx context.Context, _, _ string, _ time.Duration) error {
+	h.commands.Add(1)
 	<-ctx.Done()
 	return fmt.Errorf("operations held: %w", ctx.Err())
 }
 
-func (heldRoutes) Candidates(ctx context.Context, _ string) ([]string, error) {
+func (h *heldRoutes) Candidates(ctx context.Context, _ string) ([]string, error) {
+	h.commands.Add(1)
 	<-ctx.Done()
 	return nil, fmt.Errorf("operations held: %w", ctx.Err())
 }
 
-func (heldRoutes) Unpublish(ctx context.Context, _, _ string) error {
+func (h *heldRoutes) Unpublish(ctx context.Context, _, _ string) error {
+	h.commands.Add(1)
 	<-ctx.Done()
 	return fmt.Errorf("operations held: %w", ctx.Err())
 }
 
-func (heldRoutes) Delete(ctx context.Context, _ string) error {
+func (h *heldRoutes) Delete(ctx context.Context, _ string) error {
+	h.commands.Add(1)
 	<-ctx.Done()
 	return fmt.Errorf("operations held: %w", ctx.Err())
 }
@@ -96,16 +103,13 @@ func TestHTTPClientReachesMirroredTunnelWhileOperationsIsHeldForAMove(t *testing
 	t.Parallel()
 
 	gateway := okGateway(t)
-	routes := route.NewMirrorReader(mirroredRoute(t, "tunnel-1", gateway.URL), heldRoutes{})
+	ops := &heldRoutes{commands: atomic.Int32{}}
+	routes := route.NewMirrorReader(mirroredRoute(t, "tunnel-1", gateway.URL), ops)
 
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
-	defer cancel()
-	req := tokenRequest(t, "https://as.customer.internal/oauth/token").WithContext(ctx)
-	started := time.Now()
+	req := tokenRequest(t, "https://as.customer.internal/oauth/token")
 	resp, err := newTestHTTPClient(t, routes).Do(req, "tunnel-1")
 	require.NoError(t, err)
 	defer func() { require.NoError(t, resp.Body.Close()) }()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
-	// The held store was never waited on.
-	require.Less(t, time.Since(started), time.Second)
+	require.Zero(t, ops.commands.Load(), "the held operations store was never asked")
 }

@@ -2,6 +2,7 @@ package gram
 
 import (
 	"flag"
+	"slices"
 	"strconv"
 	"testing"
 	"time"
@@ -20,6 +21,29 @@ func tunnelAuthRouteMirrorCLIContext(t *testing.T, enabled bool) *cli.Context {
 	require.NoError(t, tunnelAuthRouteMirrorFlag().Apply(set))
 	require.NoError(t, set.Set(tunnelAuthRouteMirrorFlagName, strconv.FormatBool(enabled)))
 	return cli.NewContext(nil, set, nil)
+}
+
+// TestTunnelAuthRouteMirrorFlagOnEveryOAuthCommand covers every command that
+// builds the tunneled-OAuth transport, so the setting cannot be silently
+// ignored by one of them.
+func TestTunnelAuthRouteMirrorFlagOnEveryOAuthCommand(t *testing.T) {
+	t.Parallel()
+
+	commands := map[string]*cli.Command{
+		"start":           newStartCommand(),
+		"mcp":             newMCPCommand(),
+		"network-ingress": newNetworkIngressServerCommand(),
+		"worker":          newWorkerCommand(),
+	}
+	for name, command := range commands {
+		found := false
+		for _, f := range command.Flags {
+			if slices.Contains(f.Names(), tunnelAuthRouteMirrorFlagName) {
+				found = true
+			}
+		}
+		require.True(t, found, "%s lacks --%s", name, tunnelAuthRouteMirrorFlagName)
+	}
 }
 
 // splitRoleStores builds stores whose auth and ops roles are separate

@@ -540,7 +540,7 @@ func (g *Gateway) RevokeTunnel(ctx context.Context, tunnelID string) int {
 		revoker.Revoke(tunnelID)
 	}
 	killed := g.reg.kill(tunnelID)
-	g.authRoutes.revoke(tunnelID)
+	g.authRoutes.revoke(ctx, tunnelID)
 	g.reconciler.requestRevoke(ctx, tunnelID)
 	return killed
 }

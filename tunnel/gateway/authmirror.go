@@ -84,8 +84,8 @@ type authRouteMirror struct {
 	mu sync.Mutex
 
 	// revoked holds tunnels whose mirror entry must be deleted for every
-	// gateway on the next pass.
-	revoked map[string]struct{}
+	// gateway on the next pass, each with the revokers waiting for the attempt.
+	revoked map[string][]chan struct{}
 
 	// stopped is set once draining starts.
 	stopped bool
@@ -120,7 +120,7 @@ func newAuthRouteMirror(
 		lifetimeCtx: lifetimeCtx,
 		cancel:      cancel,
 		mu:          sync.Mutex{},
-		revoked:     make(map[string]struct{}),
+		revoked:     make(map[string][]chan struct{}),
 		stopped:     false,
 		published:   make(map[string]struct{}),
 		decisions:   make(map[string]eligibilityDecision),
@@ -145,20 +145,30 @@ func (m *authRouteMirror) nudge() {
 	}
 }
 
-// revoke deletes the tunnel's mirror entry for every gateway on the next pass.
-// A nil mirror ignores it.
-func (m *authRouteMirror) revoke(tunnelID string) {
+// revoke deletes the tunnel's mirror entry for every gateway and waits for the
+// first attempt, as the route reconciler does for the bulk routes. A failed
+// delete is retried every pass. The caller has already killed the tunnel's
+// sessions and revoked its key, so nothing republishes it unless an agent
+// connects again with a valid key. A nil mirror ignores it.
+func (m *authRouteMirror) revoke(ctx context.Context, tunnelID string) {
 	if m == nil {
 		return
 	}
+	attempted := make(chan struct{})
 	m.mu.Lock()
 	if m.stopped {
 		m.mu.Unlock()
 		return
 	}
-	m.revoked[tunnelID] = struct{}{}
+	m.revoked[tunnelID] = append(m.revoked[tunnelID], attempted)
 	m.mu.Unlock()
 	m.nudge()
+
+	select {
+	case <-attempted:
+	case <-m.done:
+	case <-ctx.Done():
+	}
 }
 
 func (m *authRouteMirror) requestDrain(ctx context.Context) {
@@ -201,30 +211,30 @@ func (m *authRouteMirror) run() {
 	}
 }
 
-func (m *authRouteMirror) takeRevoked() []string {
+func (m *authRouteMirror) takeRevoked() map[string][]chan struct{} {
 	m.mu.Lock()
 	revoked := m.revoked
-	m.revoked = make(map[string]struct{})
+	m.revoked = make(map[string][]chan struct{})
 	m.mu.Unlock()
-
-	tunnelIDs := make([]string, 0, len(revoked))
-	for tunnelID := range revoked {
-		tunnelIDs = append(tunnelIDs, tunnelID)
-	}
-	return tunnelIDs
+	return revoked
 }
 
 // pass brings the mirror in line with the registry.
 func (m *authRouteMirror) pass(ctx context.Context) {
-	for _, tunnelID := range m.takeRevoked() {
+	for tunnelID, waiters := range m.takeRevoked() {
 		opCtx, cancel := routeOperationContext(ctx)
 		err := m.routes.Delete(opCtx, tunnelID)
 		cancel()
+		for _, attempted := range waiters {
+			close(attempted)
+		}
 		if err != nil {
 			m.logger.WarnContext(ctx, "tunnel auth route delete failed",
 				slog.String("tunnel_id", tunnelID), slog.Any("error", err))
 			m.mu.Lock()
-			m.revoked[tunnelID] = struct{}{}
+			if _, pending := m.revoked[tunnelID]; !pending {
+				m.revoked[tunnelID] = nil
+			}
 			m.mu.Unlock()
 			continue
 		}
