@@ -679,7 +679,11 @@ func newWorkerCommand() *cli.Command {
 			telemetryLogger, shutdown := newTelemetryLogger(ctx, logger, tracerProvider, meterProvider, db, cache.NewRedisCacheAdapter(redisClient), chDB, logsEnabled, toolIOLogsEnabled, telemetryLogPublisher)
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
-			chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(logger, db, assetStorage)
+			transcripts, err := configureTranscripts(ctx, c, db, orgEncryption, featureFlags, logger, tracerProvider, meterProvider)
+			if err != nil {
+				return err
+			}
+			chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(logger, db, assetStorage, transcripts)
 			shutdownFuncs = append(shutdownFuncs, chatWriterShutdown)
 
 			captureStrategy := chat.NewChatMessageCaptureStrategy(logger, meterProvider, db, chatWriter)
@@ -876,9 +880,6 @@ func newWorkerCommand() *cli.Command {
 			}
 			clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
 			clientAssertionSigner.PinManagedSigner(c.String(identityProviderSigningServiceAccount))
-			if _, err := configureTranscripts(ctx, c, db, chatWriter, orgEncryption, featureFlags, logger, tracerProvider, meterProvider); err != nil {
-				return err
-			}
 			orgEncryptionMigrator, err := orgEncryption.Migrator(logger, db, encryptionClient, meterProvider)
 			if err != nil {
 				return err

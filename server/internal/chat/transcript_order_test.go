@@ -178,7 +178,7 @@ func TestChatMessageWriter_BatchKeepsInsertionOrder(t *testing.T) {
 	ctx := initSessionCtx(t, ti)
 
 	chatID := seedChat(t, ctx, ti, "u", "", "batch order")
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, assetstest.NewTestBlobStore(t))
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, assetstest.NewTestBlobStore(t), nil)
 	t.Cleanup(func() { _ = shutdown(context.WithoutCancel(t.Context())) })
 
 	roles := []string{"user", "assistant", "user", "assistant"}
@@ -221,7 +221,7 @@ func TestChatMessageWriter_CorrelatedMessageStampsMissingCreatedAt(t *testing.T)
 	ctx := initSessionCtx(t, ti)
 
 	chatID := seedChat(t, ctx, ti, "u", "", "correlated timestamp")
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, assetstest.NewTestBlobStore(t))
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, assetstest.NewTestBlobStore(t), nil)
 	t.Cleanup(func() { _ = shutdown(context.WithoutCancel(t.Context())) })
 
 	_, err := writer.WriteCorrelated(ctx, ti.projectID, chat.MessageWrite{

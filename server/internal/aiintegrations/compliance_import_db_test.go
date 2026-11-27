@@ -91,7 +91,7 @@ func complianceImportFixture(t *testing.T) (context.Context, *ComplianceImportSe
 	cfg := created.Config
 	cfg.ProjectID = project.ID
 
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil)
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil, nil)
 	t.Cleanup(func() { _ = shutdown(context.Background()) })
 
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})

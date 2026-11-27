@@ -103,7 +103,7 @@ func TestChatGPTConversationProcessPageWritesChatAndMessagesIdempotently(t *test
 	cfg := created.Config
 	cfg.ProjectID = project.ID
 
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil)
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil, nil)
 	t.Cleanup(func() { _ = shutdown(context.Background()) })
 
 	heartbeats := 0
@@ -261,7 +261,7 @@ func TestChatGPTConversationProcessPageStoresMessagesContainingNUL(t *testing.T)
 	cfg := created.Config
 	cfg.ProjectID = project.ID
 
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil)
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil, nil)
 	t.Cleanup(func() { _ = shutdown(context.Background()) })
 
 	svc := NewChatGPTConversationImportService(testenv.NewLogger(t), store, conn, nil, writer, func(context.Context, int) {})

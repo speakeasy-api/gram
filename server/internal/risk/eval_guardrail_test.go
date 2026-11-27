@@ -382,7 +382,7 @@ func insertAssistantToolCallMessage(t *testing.T, ti *testInstance, projectID, c
 	require.NoError(t, err)
 
 	messageID := "msg-" + uuid.NewString()
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, nil)
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, nil, nil)
 	t.Cleanup(func() { _ = shutdown(t.Context()) })
 	_, err = writer.Write(t.Context(), projectID, []chat.MessageWrite{{Params: chatrepo.CreateChatMessageParams{
 		ID:               uuid.Nil,

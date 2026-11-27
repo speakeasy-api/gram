@@ -124,7 +124,12 @@ type ChatMessageWriter struct {
 	cancel      context.CancelFunc
 }
 
-func NewChatMessageWriter(logger *slog.Logger, db *pgxpool.Pool, assetStorage assets.BlobStore) (w *ChatMessageWriter, shutdown func(context.Context) error) {
+// NewChatMessageWriter builds the writer every chat message write goes
+// through. transcripts decides which projects' messages are sealed in the same
+// transaction as the write; build it with configureTranscripts before the
+// writer. Nil seals nothing, so every project is written plaintext only: pass
+// it only where no project can have encrypted transcripts.
+func NewChatMessageWriter(logger *slog.Logger, db *pgxpool.Pool, assetStorage assets.BlobStore, transcripts *transcriptstore.Transcripts) (w *ChatMessageWriter, shutdown func(context.Context) error) {
 	ctx, cancel := context.WithCancel(context.Background()) //nolint:contextcheck // shutdown context must outlive any single request
 	w = &ChatMessageWriter{
 		db:           db,
@@ -132,7 +137,7 @@ func NewChatMessageWriter(logger *slog.Logger, db *pgxpool.Pool, assetStorage as
 		assetStorage: assetStorage,
 		stokenCodec:  stokens.NewCodec(),
 		observers:    nil,
-		transcripts:  nil,
+		transcripts:  transcripts,
 		shutdownCtx:  ctx,
 		cancel:       cancel,
 		turnStream:   nil,
@@ -142,16 +147,6 @@ func NewChatMessageWriter(logger *slog.Logger, db *pgxpool.Pool, assetStorage as
 		return nil
 	}
 	return w, shutdown
-}
-
-// WithTranscripts seals an encrypted copy of each message in the same
-// transaction as the write, for projects with encrypted transcripts. Configure it before
-// serving requests, after the schema migration and organization key
-// provisioning. It does not encrypt assets or remove plaintext. Body updates
-// outside the writer go through UpdateChatMessage.
-func (w *ChatMessageWriter) WithTranscripts(transcripts *transcriptstore.Transcripts) *ChatMessageWriter {
-	w.transcripts = transcripts
-	return w
 }
 
 // PrepareTranscripts loads the project's transcript key into the process

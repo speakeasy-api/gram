@@ -225,7 +225,7 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []uuid.UUID{currentID}, ids)
 
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), db, assetstest.NewTestBlobStore(t))
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), db, assetstest.NewTestBlobStore(t), nil)
 	t.Cleanup(func() { _ = shutdown(context.Background()) })
 	projector := NewKitTranscriptProjector(db, writer, nil, func(ctx context.Context, tx pgx.Tx, b KitTranscriptBinding) error {
 		// Exercise transport backpressure with a deliberately slow real consumer.

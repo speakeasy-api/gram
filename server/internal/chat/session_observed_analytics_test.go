@@ -50,7 +50,7 @@ func TestImportedSessionObservationReachesUserAndSessionAnalytics(t *testing.T) 
 	})
 	require.NoError(t, err)
 	chatID := upserted.ID
-	writer, shutdown := chat.NewChatMessageWriter(logger, ti.conn, assetstest.NewTestBlobStore(t))
+	writer, shutdown := chat.NewChatMessageWriter(logger, ti.conn, assetstest.NewTestBlobStore(t), nil)
 	t.Cleanup(func() { require.NoError(t, shutdown(context.WithoutCancel(t.Context()))) })
 	var write chat.ExternalMessageWrite
 	write.Params.ChatID = chatID

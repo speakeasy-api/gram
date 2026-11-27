@@ -156,7 +156,7 @@ func newTestServiceWithResults(t *testing.T, jev classifier.Classifier, flags fe
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	results := &recordingPublisher{mu: sync.Mutex{}, messages: nil}
-	writer, shutdown := chat.NewChatMessageWriter(logger, conn, nil)
+	writer, shutdown := chat.NewChatMessageWriter(logger, conn, nil, nil)
 	t.Cleanup(func() { _ = shutdown(context.Background()) })
 
 	svc, err := intentpolicies.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, flags, writer, geminiStub{CompletionClient: nil, body: geminiBenign}, jev, results)

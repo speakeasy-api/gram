@@ -1131,7 +1131,11 @@ func newStartCommand() *cli.Command {
 			// row of a turn is persisted, so dashboard subscribers can render
 			// a turn without polling for it.
 			turnStream := chat.NewTurnStream(redisClient)
-			chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(logger, db, assetStorage)
+			transcripts, err := configureTranscripts(ctx, c, db, orgEncryption, featureFlags, logger, tracerProvider, meterProvider)
+			if err != nil {
+				return err
+			}
+			chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(logger, db, assetStorage, transcripts)
 			chatWriter = chatWriter.WithTurnStream(turnStream)
 			shutdownFuncs = append(shutdownFuncs, chatWriterShutdown)
 
@@ -1220,10 +1224,6 @@ func newStartCommand() *cli.Command {
 			}
 			clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
 			clientAssertionSigner.PinManagedSigner(c.String(identityProviderSigningServiceAccount))
-			transcripts, err := configureTranscripts(ctx, c, db, chatWriter, orgEncryption, featureFlags, logger, tracerProvider, meterProvider)
-			if err != nil {
-				return err
-			}
 			clientSecrets := orgEncryption.ClientSecrets(logger, encryptionClient)
 			upstreamTokens := orgEncryption.UpstreamTokens(logger, encryptionClient)
 			marketplaceTokens := orgEncryption.MarketplaceTokens(logger, encryptionClient)

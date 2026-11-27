@@ -104,7 +104,7 @@ func TestKitTranscriptReplayPatchAndRuntimeFence(t *testing.T) {
 	runtimeRow, err := queries.GetAssistantRuntimeV2(t.Context(), assistantrepo.GetAssistantRuntimeV2Params{ProjectID: project, AssistantID: assistant})
 	require.NoError(t, err)
 	runtime := runtimeRow.ID
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), db, assetstest.NewTestBlobStore(t))
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), db, assetstest.NewTestBlobStore(t), nil)
 	t.Cleanup(func() { _ = shutdown(context.WithoutCancel(t.Context())) })
 	b := KitTranscriptBinding{RuntimeID: runtime, ProjectID: project, AssistantID: assistant, ThreadID: thread, ChatID: chatID, SessionID: "session"}
 	_, err = queries.InsertKitRuntimeSession(t.Context(), assistantrepo.InsertKitRuntimeSessionParams{SessionID: b.SessionID, RuntimeID: runtime, ProjectID: project, AssistantID: assistant, ThreadID: thread})

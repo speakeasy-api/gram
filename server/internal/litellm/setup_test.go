@@ -131,7 +131,7 @@ func newRealTestServiceWithScannerFactory(t *testing.T, scannerFactory func(*pgx
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
 	assetStorage := assetstest.NewTestBlobStore(t)
-	chatWriter, shutdownWriter := chat.NewChatMessageWriter(logger, conn, assetStorage)
+	chatWriter, shutdownWriter := chat.NewChatMessageWriter(logger, conn, assetStorage, nil)
 	t.Cleanup(func() { require.NoError(t, shutdownWriter(t.Context())) })
 	observer := &recordingMessageObserver{mu: sync.Mutex{}, projects: nil}
 	chatWriter.AddObserver(observer)

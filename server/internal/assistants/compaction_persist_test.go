@@ -94,7 +94,7 @@ func TestRecordCompactedGenerationWritesNewGeneration(t *testing.T) {
 
 	logger := testenv.NewLogger(t)
 	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendGKE, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
-	chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(logger, conn, assetstest.NewTestBlobStore(t))
+	chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(logger, conn, assetstest.NewTestBlobStore(t), nil)
 	t.Cleanup(func() { _ = chatWriterShutdown(ctx) })
 	core.SetChatMessageWriter(chatWriter)
 
@@ -152,7 +152,7 @@ func TestRecordCompactedGenerationRejectsForeignAssistant(t *testing.T) {
 
 	logger := testenv.NewLogger(t)
 	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendGKE, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
-	chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(logger, conn, assetstest.NewTestBlobStore(t))
+	chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(logger, conn, assetstest.NewTestBlobStore(t), nil)
 	t.Cleanup(func() { _ = chatWriterShutdown(ctx) })
 	core.SetChatMessageWriter(chatWriter)
 
@@ -177,7 +177,7 @@ func recordCompactedGenerationMalformedFixture(t *testing.T, slug string) (*Serv
 
 	logger := testenv.NewLogger(t)
 	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendGKE, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
-	chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(logger, conn, assetstest.NewTestBlobStore(t))
+	chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(logger, conn, assetstest.NewTestBlobStore(t), nil)
 	t.Cleanup(func() { _ = chatWriterShutdown(ctx) })
 	core.SetChatMessageWriter(chatWriter)
 
@@ -229,7 +229,7 @@ func TestRecordCompactedGenerationRejectsEmptyMessages(t *testing.T) {
 
 	logger := testenv.NewLogger(t)
 	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendGKE, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
-	chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(logger, conn, assetstest.NewTestBlobStore(t))
+	chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(logger, conn, assetstest.NewTestBlobStore(t), nil)
 	t.Cleanup(func() { _ = chatWriterShutdown(ctx) })
 	core.SetChatMessageWriter(chatWriter)
 
