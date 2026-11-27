@@ -54,6 +54,10 @@ describe("SigninErrorNotice", () => {
       "transfer_temporary_error",
       "We couldn't complete sign-in right now. Please try again.",
     ],
+    [
+      "personal_email_not_allowed",
+      "Sign up with your work email address. Personal email addresses cannot create a Speakeasy organization.",
+    ],
   ])("explains the sign-in failure %s", (code, message) => {
     const params = new URLSearchParams({
       signin_error: code,

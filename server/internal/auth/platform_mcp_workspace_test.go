@@ -167,3 +167,19 @@ func platformMCPWorkspaceUser() *MockUserInfo {
 	userInfo.Organizations = nil
 	return userInfo
 }
+
+func TestProvisionPlatformMCPWorkspaceRefusesPersonalEmail(t *testing.T) {
+	t.Parallel()
+
+	userInfo := platformMCPWorkspaceUser()
+	userInfo.Email = "someone@gmail.com"
+	ctx, instance := newTestAuthServiceForOrganizationProvisioning(t, userInfo)
+
+	_, _, err := instance.service.ProvisionPlatformMCPWorkspace(ctx, userInfo.UserID, "Acme Workspace", "Claude Code")
+	require.ErrorIs(t, err, auth.ErrPersonalEmailDomain)
+
+	organizations, err := orgRepo.New(instance.conn).ListOrganizationsForUser(ctx, conv.ToPGText(userInfo.UserID))
+	require.NoError(t, err)
+	require.Empty(t, organizations)
+	require.Empty(t, instance.trialNotifier.trialStarted)
+}

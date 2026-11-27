@@ -50,6 +50,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
+	"github.com/speakeasy-api/gram/server/internal/organizations/personalemail"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -60,6 +61,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
 	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 const dispositionAssistants = "assistants"
@@ -112,7 +114,19 @@ const (
 	// authErrSignInRevoked asks the user to sign in again: the identity
 	// provider handed back a session whose sign-in was revoked.
 	authErrSignInRevoked authErr = "sign_in_revoked"
+	// authErrPersonalEmail asks the user to sign up with a work address: a
+	// personal mailbox cannot create an organization.
+	authErrPersonalEmail authErr = "personal_email_not_allowed"
 )
+
+// provisionErrCode picks the sign-in error shown for a failed organization
+// provisioning.
+func provisionErrCode(err error) authErr {
+	if errors.Is(err, ErrPersonalEmailDomain) {
+		return authErrPersonalEmail
+	}
+	return authErrInit
+}
 
 type AuthConfigurations struct {
 	PartnerPromotionCodeResolver PartnerPromotionCodeResolver
@@ -540,7 +554,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 				CreationSource:        orgprovision.SourceSignup,
 			})
 			if err != nil {
-				return s.redirectPartnerSignupError(ctx, payload, authErrInit, err, intent)
+				return s.redirectPartnerSignupError(ctx, payload, provisionErrCode(err), err, intent)
 			}
 
 			partnerSignup, err := s.hasPartnerSignup(ctx, org.ID)
@@ -569,7 +583,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		if s.dispositionFromState(payload) == dispositionAssistants && (intent == nil || intent.PartnerCode == "") {
 			location, err := s.autoProvisionForAssistants(ctx, userInfo, &session, authenticatedAt)
 			if err != nil {
-				return redirectWithError(authErrInit, err)
+				return redirectWithError(provisionErrCode(err), err)
 			}
 			return &gen.CallbackResult{
 				Location:      location,
@@ -1461,6 +1475,12 @@ type orgProvisionOptions struct {
 	CreationSource string
 }
 
+// ErrPersonalEmailDomain refuses a self-serve organization for a user whose
+// email is at a personal or disposable mailbox provider.
+var ErrPersonalEmailDomain = errors.New("organizations cannot be created with a personal email address")
+
+const personalEmailSignupMessage = "Sign up with your work email address. Personal email addresses cannot create a Speakeasy organization."
+
 // provisionOrgForUser creates an organization and attaches a user to it as the
 // first member. Shared by the four paths that create orgs: self-serve register,
 // signup with a company name carried through login, assistants
@@ -1471,6 +1491,15 @@ type orgProvisionOptions struct {
 // ActiveOrganizationID on an in-memory session before storing it once.
 func (s *Service) provisionOrgForUser(ctx context.Context, userID, orgName string, opts orgProvisionOptions) (orgRepo.OrganizationMetadatum, error) {
 	var empty orgRepo.OrganizationMetadatum
+
+	user, err := usersRepo.New(s.db).GetUser(ctx, userID)
+	if err != nil {
+		return empty, fmt.Errorf("read user for organization provisioning: %w", err)
+	}
+	if personalemail.IsPersonal(user.Email) {
+		return empty, ErrPersonalEmailDomain
+	}
+
 	promotionCodeID, err := s.resolvePartnerSignup(ctx, opts.PartnerCode)
 	if err != nil {
 		return empty, err
@@ -1534,6 +1563,9 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 		CreationSource:        orgprovision.SourceSignup,
 	})
 	if err != nil {
+		if errors.Is(err, ErrPersonalEmailDomain) {
+			return oops.E(oops.CodeForbidden, err, personalEmailSignupMessage)
+		}
 		if oops.IsClientFault(err) {
 			return err
 		}

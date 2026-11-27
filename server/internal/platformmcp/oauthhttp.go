@@ -909,6 +909,9 @@ func (s *OAuthHTTP) CreateWorkspaceHandler() http.Handler {
 		}
 		organization, err := s.workspaces.ProvisionWorkspace(r.Context(), userID, submitted, client.Name)
 		switch {
+		case errors.Is(err, auth.ErrPersonalEmailDomain):
+			redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: "access_denied", Description: "Sign up with your work email address. Personal email addresses cannot create a Speakeasy organization."})
+			return
 		case errors.Is(err, auth.ErrUserHasPendingInvitation):
 			redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: "access_denied", Description: "You have a pending invitation to a Speakeasy organization. Accept it from the invitation email, then connect again."})
 			return
