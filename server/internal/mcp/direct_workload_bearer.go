@@ -12,7 +12,7 @@ import (
 
 	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/google/uuid"
-	"github.com/hashicorp/golang-lru/v2/expirable"
+	"github.com/hashicorp/golang-lru/v2/simplelru"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
@@ -55,8 +55,12 @@ const (
 
 // errDirectWorkloadUnavailable marks a direct-bearer workload verification that
 // could not reach a decision because a dependency (database, Redis, or JWKS)
-// was unavailable or rate-limited.
+// was unavailable.
 var errDirectWorkloadUnavailable = errors.New("direct workload bearer verification unavailable")
+
+// errDirectWorkloadRateLimited marks a direct-bearer workload verification that
+// was refused by the issuer or device-key lookup rate limiter.
+var errDirectWorkloadRateLimited = errors.New("direct workload bearer rate limited")
 
 // verifiedDirectWorkload is the verified Stage-1 outcome of a direct-bearer
 // workload JWT: the trusted issuer row, exact admitted external subject, token
@@ -84,10 +88,11 @@ type cachedDirectWorkload struct {
 // (issuer resolution, signature verification, reuse opt-in, and subject
 // admission) for at most directWorkloadCacheTTL, bounded by token expiry.
 // Stage-2 authorization (agent assignment, lifecycle, owner eligibility, and
-// live grants) is never cached.
+// live grants) is never cached. Expiration is evaluated strictly against now
+// so tests control the clock without wall-clock races.
 type directWorkloadCache struct {
-	entries *expirable.LRU[directWorkloadCacheKey, cachedDirectWorkload]
-	mu      sync.RWMutex
+	mu      sync.Mutex
+	entries *simplelru.LRU[directWorkloadCacheKey, cachedDirectWorkload]
 	now     func() time.Time
 }
 
@@ -95,18 +100,15 @@ func newDirectWorkloadCache(now func() time.Time) *directWorkloadCache {
 	if now == nil {
 		now = time.Now
 	}
+	entries, err := simplelru.NewLRU[directWorkloadCacheKey, cachedDirectWorkload](directWorkloadCacheSize, nil)
+	if err != nil {
+		panic(fmt.Sprintf("new direct workload cache: %v", err))
+	}
 	return &directWorkloadCache{
-		entries: expirable.NewLRU[directWorkloadCacheKey, cachedDirectWorkload](directWorkloadCacheSize, nil, directWorkloadCacheTTL),
-		mu:      sync.RWMutex{},
+		mu:      sync.Mutex{},
+		entries: entries,
 		now:     now,
 	}
-}
-
-func (c *directWorkloadCache) currentTime() time.Time {
-	c.mu.RLock()
-	nowFn := c.now
-	c.mu.RUnlock()
-	return nowFn()
 }
 
 func (c *directWorkloadCache) setClock(now func() time.Time) {
@@ -123,11 +125,14 @@ func (c *directWorkloadCache) get(key directWorkloadCacheKey) (verifiedDirectWor
 	if c == nil || c.entries == nil {
 		return zero, false
 	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	entry, ok := c.entries.Get(key)
 	if !ok {
 		return zero, false
 	}
-	now := c.currentTime()
+	now := c.now()
 	if !now.Before(entry.cachedUntil) || !now.Before(entry.verified.expiresAt) {
 		c.entries.Remove(key)
 		return zero, false
@@ -139,7 +144,10 @@ func (c *directWorkloadCache) put(key directWorkloadCacheKey, verified verifiedD
 	if c == nil || c.entries == nil {
 		return
 	}
-	now := c.currentTime()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	now := c.now()
 	if !now.Before(verified.expiresAt) {
 		return
 	}
@@ -344,10 +352,14 @@ func (s *Service) authenticateIssuerGateDirectWorkload(
 	verified, err := s.authenticateDirectWorkloadBearer(ctx, endpoint.workloadTenancy(), DirectWorkloadProjectGatewayAudience, authToken)
 	if err != nil {
 		if refusal, ok := errors.AsType[*workloadGrantError](err); ok {
-			if refusal.outcome == workloadGrantUnavailable || refusal.outcome == workloadGrantRateLimited {
+			switch refusal.outcome {
+			case workloadGrantRateLimited:
+				return ctx, nil, fmt.Errorf("%w: %w", errDirectWorkloadRateLimited, err)
+			case workloadGrantUnavailable:
 				return ctx, nil, fmt.Errorf("%w: %w", errDirectWorkloadUnavailable, err)
+			case workloadGrantRefused:
+				return ctx, nil, fmt.Errorf("%w: %w", errCredentialRejected, err)
 			}
-			return ctx, nil, fmt.Errorf("%w: %w", errCredentialRejected, err)
 		}
 		return ctx, nil, fmt.Errorf("authenticate direct workload bearer: %w", err)
 	}
@@ -411,10 +423,14 @@ func (s *Service) authorizeDirectWorkloadInference(
 	verified, err := s.authenticateDirectWorkloadBearer(ctx, tenancy, DirectWorkloadInferenceAudience, token)
 	if err != nil {
 		if refusal, ok := errors.AsType[*workloadGrantError](err); ok {
-			if refusal.outcome == workloadGrantUnavailable || refusal.outcome == workloadGrantRateLimited {
+			switch refusal.outcome {
+			case workloadGrantRateLimited:
+				return ctx, true, oops.E(oops.CodeRateLimitExceeded, err, "too many requests; retry later")
+			case workloadGrantUnavailable:
 				return ctx, true, oops.E(oops.CodeUnavailable, err, "inference credential validation unavailable")
+			case workloadGrantRefused:
+				return ctx, true, oops.E(oops.CodeUnauthorized, err, "invalid inference credential")
 			}
-			return ctx, true, oops.E(oops.CodeUnauthorized, err, "invalid inference credential")
 		}
 		return ctx, true, fmt.Errorf("authorize workload inference: %w", err)
 	}

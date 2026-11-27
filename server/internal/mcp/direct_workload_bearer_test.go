@@ -398,14 +398,14 @@ func TestDirectWorkloadBearer_NonAdmittedSubjectRejected(t *testing.T) {
 	gateway, _, _ := seedDirectWorkloadProjectGateway(t, f)
 	enableWorkloadInference(t, f)
 
-	upstream := &workloadInferenceCompletionClient{}
-	router := newDirectWorkloadChatMux(t, f, upstream)
 	projectPath := "/projects/" + f.fx.target.ProjectID.String() + "/chat/completions"
 
 	// Non-admitted subjects (including worker-for-actor/*) are rejected naturally by exact-subject admission.
 	for _, subject := range []string{"worker-for-actor/actor-123", "sandbox/other-runtime"} {
 		t.Run(subject, func(t *testing.T) {
 			t.Parallel()
+			upstream := &workloadInferenceCompletionClient{}
+			router := newDirectWorkloadChatMux(t, f, upstream)
 			token := f.directAssertion(t, subject, mcp.DirectWorkloadProjectGatewayAudience, mcp.DirectWorkloadInferenceAudience)
 			gwResp, err := serveProjectGatewayHTTP(t, f.ti, gateway, gateway.projectSlug, token, listServersBody(t))
 			requireOopsCode(t, err, oops.CodeUnauthorized)
@@ -413,9 +413,9 @@ func TestDirectWorkloadBearer_NonAdmittedSubjectRejected(t *testing.T) {
 
 			w := postCompletionRequest(router, projectPath, token, nil, "")
 			require.Equal(t, http.StatusUnauthorized, w.Code, w.Body.String())
+			require.Empty(t, upstream.requests)
 		})
 	}
-	require.Empty(t, upstream.requests)
 }
 
 func TestDirectWorkloadBearer_SingleUseIssuerRefused(t *testing.T) {
