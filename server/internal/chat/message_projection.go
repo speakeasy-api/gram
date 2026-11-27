@@ -37,7 +37,6 @@ func (w *ChatMessageWriter) ProjectMessage(ctx context.Context, projectID, messa
 	if err := guard(ctx, tx); err != nil {
 		return false, fmt.Errorf("admit message projection: %w", err)
 	}
-	q := repo.New(tx)
 	row, err := w.transcripts.GetKitProjectionMessage(ctx, tx, projectID, messageID)
 	exists := err == nil
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
@@ -77,13 +76,9 @@ func (w *ChatMessageWriter) ProjectMessage(ctx context.Context, projectID, messa
 	if exists {
 		changed, err = w.patchProjection(ctx, tx, projectID, row, write, prepared)
 	} else {
-		changed, err = q.CreateChatMessage(ctx, []repo.CreateChatMessageParams{write.Params})
+		changed, organizationID, err = w.insertProjection(ctx, tx, projectID, write.Params, prepared)
 		if err == nil && changed > 0 {
-			org, lookupErr := q.GetProjectOrganizationID(ctx, projectID)
-			if lookupErr != nil {
-				return false, fmt.Errorf("look up projection organization: %w", lookupErr)
-			}
-			organizationID = org
+			org := organizationID
 			readings, meterErr := w.meterMessages(ctx, w.logger, org, projectID, writes, now)
 			if meterErr != nil {
 				return false, fmt.Errorf("meter projected message: %w", meterErr)
@@ -99,14 +94,6 @@ func (w *ChatMessageWriter) ProjectMessage(ctx context.Context, projectID, messa
 	if err != nil {
 		return false, fmt.Errorf("persist projected message: %w", err)
 	}
-	if !exists && changed > 0 && w.transcripts.Enabled(projectID) {
-		if prepared != nil {
-			return false, prepared
-		}
-		if err := w.sealTranscripts(ctx, tx, organizationID, projectID, []uuid.UUID{messageID}); err != nil {
-			return false, err
-		}
-	}
 	if err := tx.Commit(ctx); err != nil {
 		return false, fmt.Errorf("commit message projection: %w", err)
 	}
@@ -117,16 +104,48 @@ func (w *ChatMessageWriter) ProjectMessage(ctx context.Context, projectID, messa
 	return changed > 0, nil
 }
 
+// insertProjection stores a new kit message through the project's transcript
+// mode. A projection that reaches here always writes, so a failed key load
+// fails it.
+func (w *ChatMessageWriter) insertProjection(ctx context.Context, tx pgx.Tx, projectID uuid.UUID, params repo.CreateChatMessageParams, prepared error) (int64, string, error) {
+	q := repo.New(tx)
+	organizationID, err := q.GetProjectOrganizationID(ctx, projectID)
+	if err != nil {
+		return 0, "", fmt.Errorf("look up projection organization: %w", err)
+	}
+	if prepared != nil && w.transcripts.Enabled(projectID) {
+		return 0, "", prepared
+	}
+	var changed int64
+	refs := []transcriptstore.ProtectedFieldRefs{protectedFieldRefs(params.ID, &params.Content, &params.ContentRaw, &params.ToolCalls, &params.StorageError)}
+	_, err = w.insertMessages(ctx, tx, organizationID, projectID, refs, func() ([]uuid.UUID, error) {
+		n, err := q.CreateChatMessage(ctx, []repo.CreateChatMessageParams{params})
+		if err != nil {
+			return nil, fmt.Errorf("create projected message: %w", err)
+		}
+		changed = n
+		if n == 0 {
+			return nil, nil
+		}
+		return []uuid.UUID{params.ID}, nil
+	})
+	if err != nil {
+		return 0, "", err
+	}
+	return changed, organizationID, nil
+}
+
 // patchProjection rewrites an existing kit message in the caller's
-// transaction through UpdateChatMessage, which keeps every copy of the protected fields in
-// step: content, content_raw and tool_calls, the content hash and finish
-// reason, and a cleared risk mark when the protected fields changed, so the new protected fields are
-// analyzed again. It returns 1 when anything changed.
+// transaction through UpdateChatMessage, which keeps every copy of the row in
+// step. It sets the content hash and finish reason, and when content,
+// content_raw or tool_calls differ from the row as UpdateChatMessage read it
+// (decrypted in encrypted mode), it writes them and clears the risk mark so
+// the new content is analyzed again. It returns 1 when anything changed.
 func (w *ChatMessageWriter) patchProjection(ctx context.Context, tx pgx.Tx, projectID uuid.UUID, row repo.ChatMessage, write MessageWrite, prepared error) (int64, error) {
-	// Postgres re-serializes jsonb, so compare the stored JSON by value: an
-	// unchanged patch must not lock the row and open its transcript.
-	bodyChanged := row.Content != write.Params.Content || !transcriptstore.SameJSON(row.ContentRaw, write.Params.ContentRaw) || !transcriptstore.SameJSON(row.ToolCalls, write.Params.ToolCalls)
-	if !bodyChanged && bytes.Equal(row.ContentHash, write.Params.ContentHash) && row.FinishReason == write.Params.FinishReason {
+	// An unchanged patch must not lock the row and open its transcript. In
+	// encrypted mode the plaintext columns are empty, so this check passes
+	// and apply compares against the decrypted row instead.
+	if !contentDiffers(row, write) && bytes.Equal(row.ContentHash, write.Params.ContentHash) && row.FinishReason == write.Params.FinishReason {
 		return 0, nil
 	}
 	if prepared != nil && w.transcripts.Enabled(projectID) {
@@ -139,7 +158,7 @@ func (w *ChatMessageWriter) patchProjection(ctx context.Context, tx pgx.Tx, proj
 	changed, err := w.transcripts.UpdateChatMessage(ctx, tx, organizationID, projectID, row.ChatID, row.ID, func(m *repo.ChatMessage) error {
 		m.ContentHash = write.Params.ContentHash
 		m.FinishReason = write.Params.FinishReason
-		if !bodyChanged {
+		if !contentDiffers(*m, write) {
 			return nil
 		}
 		m.Content = write.Params.Content
@@ -155,4 +174,10 @@ func (w *ChatMessageWriter) patchProjection(ctx context.Context, tx pgx.Tx, proj
 		return 0, nil
 	}
 	return 1, nil
+}
+
+// contentDiffers reports whether the write changes content, content_raw or
+// tool_calls. Postgres re-serializes jsonb, so JSON is compared by value.
+func contentDiffers(row repo.ChatMessage, write MessageWrite) bool {
+	return row.Content != write.Params.Content || !transcriptstore.SameJSON(row.ContentRaw, write.Params.ContentRaw) || !transcriptstore.SameJSON(row.ToolCalls, write.Params.ToolCalls)
 }

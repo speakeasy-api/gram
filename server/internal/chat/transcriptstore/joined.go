@@ -113,7 +113,7 @@ func (t *Transcripts) openJoinedRows(ctx context.Context, db plainrepo.DBTX, pro
 			stale++
 			continue
 		}
-		row.body.assign(message)
+		row.body.set(message)
 	}
 	return missing, stale, nil
 }
@@ -165,26 +165,4 @@ func textPointer(v pgtype.Text) *string {
 		return nil
 	}
 	return &v.String
-}
-
-// assign writes the opened message into every loaded field.
-func (b ProtectedFieldRefs) assign(m transcriptcrypto.ProtectedFields) {
-	if b.Content != nil {
-		*b.Content = m.Content
-	}
-	if b.ContentRaw != nil {
-		*b.ContentRaw = m.ContentRaw
-	}
-	if b.ToolCalls != nil {
-		*b.ToolCalls = m.ToolCalls
-	}
-	if b.ToolCallSummaries != nil {
-		*b.ToolCallSummaries = m.ToolCallSummaries
-	}
-	if b.ToolOutcomeNotes != nil {
-		*b.ToolOutcomeNotes = optionalText(m.ToolOutcomeNotes)
-	}
-	if b.StorageError != nil {
-		*b.StorageError = optionalText(m.StorageError)
-	}
 }

@@ -404,7 +404,7 @@ type UpdateMessageMetadataParams struct {
 }
 
 // Plaintext-free metadata measured from the snapshot just sealed, in the same
-// transaction, while Snapshot's lock keeps the protected fields unchanged.
+// transaction, while LockChatMessage's lock keeps the protected fields unchanged.
 func (q *Queries) UpdateMessageMetadata(ctx context.Context, arg UpdateMessageMetadataParams) (int64, error) {
 	result, err := q.db.Exec(ctx, updateMessageMetadata,
 		arg.ToolCallCount,

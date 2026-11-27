@@ -101,7 +101,7 @@ WHERE m.id = ANY(@message_ids::uuid[]) AND m.project_id = @project_id AND p.orga
 
 -- name: UpdateMessageMetadata :execrows
 -- Plaintext-free metadata measured from the snapshot just sealed, in the same
--- transaction, while Snapshot's lock keeps the protected fields unchanged.
+-- transaction, while LockChatMessage's lock keeps the protected fields unchanged.
 UPDATE chat_messages
 SET tool_call_count = @tool_call_count::integer, content_bytes = @content_bytes::integer,
     content_raw_bytes = @content_raw_bytes::integer, tool_calls_bytes = @tool_calls_bytes::integer

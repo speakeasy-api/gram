@@ -91,3 +91,13 @@ export function buildHeatmap(buckets: readonly Bucket[]): Heatmap {
     total: [...cells.values()].reduce((sum, n) => sum + n, 0),
   };
 }
+
+/** Widget ids, in grid order. */
+export const HOME_WIDGET_IDS = [
+  "attention",
+  "spend",
+  "movers",
+  "active",
+  "heatmap",
+] as const;
+export type HomeWidgetId = (typeof HOME_WIDGET_IDS)[number];
