@@ -32,7 +32,9 @@ func TestFunctionTimeoutApplies(t *testing.T) {
 	require.True(t, receipt.Before.IsDefault)
 	require.Equal(t, 300, receipt.After.Seconds)
 	require.False(t, receipt.After.IsDefault)
-	require.Contains(t, receipt.SideEffects, "redeployed")
+	require.Equal(t, functionTimeoutSideEffects, receipt.SideEffects)
+	require.Contains(t, receipt.SideEffects, "only after it is redeployed")
+	require.Contains(t, receipt.SideEffects, "this operation does not redeploy")
 
 	after, err := orgrepo.New(f.db).GetOrganizationMetadata(ctx, f.orgA)
 	require.NoError(t, err)
