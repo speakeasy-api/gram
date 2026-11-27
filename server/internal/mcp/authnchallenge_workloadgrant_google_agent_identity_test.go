@@ -26,7 +26,7 @@ func TestWorkloadAssertionGrant_GoogleAgentIdentity(t *testing.T) {
 	t.Parallel()
 	const issuer = "https://sts.googleapis.com/v1/organizations/100000000001/locations/global/workloadIdentityPools/agents.global.org-100000000001.system.id.goog"
 	const subject = "spiffe://agents.global.org-100000000001.system.id.goog/resources/container/projects/200000000002/locations/test-region/clusters/test-cluster/ns/runtime-test/sa/kit-runtime"
-	f := newWorkloadGrantFixtureWithIdentity(t, testenv.NewLogger(t), "", nil, issuer, subject)
+	f := newWorkloadGrantFixtureWithIdentity(t, testenv.NewLogger(t), nil, "", nil, issuer, subject)
 	require.LessOrEqual(t, len(subject), urn.MaxWorkloadExternalSubjectLength)
 	// The production URL policy must accept the native STS path. Network/key
 	// fetching below intentionally uses the fixture's HTTPS JWKS server.
