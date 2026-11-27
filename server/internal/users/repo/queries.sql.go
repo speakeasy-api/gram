@@ -462,6 +462,24 @@ func (q *Queries) GetUsersByWorkosIDs(ctx context.Context, workosIds []string) (
 	return items, nil
 }
 
+const isEmailBlacklisted = `-- name: IsEmailBlacklisted :one
+SELECT EXISTS (
+  SELECT 1
+  FROM users
+  WHERE lower(email) = lower($1::text)
+    AND blacklisted_at IS NOT NULL
+)::boolean AS blacklisted
+`
+
+// Whether a blocked user holds this email, read uncached, matched
+// case-insensitively. Login checks it before writing anything for the user.
+func (q *Queries) IsEmailBlacklisted(ctx context.Context, email string) (bool, error) {
+	row := q.db.QueryRow(ctx, isEmailBlacklisted, email)
+	var blacklisted bool
+	err := row.Scan(&blacklisted)
+	return blacklisted, err
+}
+
 const isPlatformAdminEmail = `-- name: IsPlatformAdminEmail :one
 SELECT EXISTS (
   SELECT 1
@@ -493,15 +511,48 @@ SELECT EXISTS (
 )::boolean AS blacklisted
 `
 
-// Whether staff blocked this user from the platform. Authentication paths
-// read it on every request (through a short in-process cache), so a block
-// applies within seconds. An unknown user is not blocked; the caller's own
-// user lookup rejects it.
+// Whether staff blocked this user from the platform, read uncached. Login,
+// invite and approval paths use it so a fresh block applies at once; request
+// authentication uses the in-memory snapshot in package userblock instead.
+// An unknown user is not blocked; the caller's own user lookup rejects it.
 func (q *Queries) IsUserBlacklisted(ctx context.Context, id string) (bool, error) {
 	row := q.db.QueryRow(ctx, isUserBlacklisted, id)
 	var blacklisted bool
 	err := row.Scan(&blacklisted)
 	return blacklisted, err
+}
+
+const listBlacklistedUsers = `-- name: ListBlacklistedUsers :many
+SELECT id, lower(email)::text AS email
+FROM users
+WHERE blacklisted_at IS NOT NULL
+`
+
+type ListBlacklistedUsersRow struct {
+	ID    string
+	Email string
+}
+
+// Every user staff blocked from the platform. Each server process loads this
+// set every few seconds so request authentication checks it in memory.
+func (q *Queries) ListBlacklistedUsers(ctx context.Context) ([]ListBlacklistedUsersRow, error) {
+	rows, err := q.db.Query(ctx, listBlacklistedUsers)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListBlacklistedUsersRow
+	for rows.Next() {
+		var i ListBlacklistedUsersRow
+		if err := rows.Scan(&i.ID, &i.Email); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const lockUserForPlatformAdminCheck = `-- name: LockUserForPlatformAdminCheck :one

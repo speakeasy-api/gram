@@ -7,6 +7,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/userblock"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
@@ -29,12 +30,13 @@ func TestAuthenticate_RejectsBlockedUser(t *testing.T) {
 		Blacklisted: true,
 		ID:          userInfo.UserID,
 	}))
+	userblock.Forget(instance.conn)
 
 	for _, sessionID := range []string{"blocked-user-org-session", "blocked-user-orgless-session"} {
 		_, err := instance.sessionManager.Authenticate(ctx, sessionID)
 		require.Error(t, err, sessionID)
 		var oopsErr *oops.ShareableError
 		require.ErrorAs(t, err, &oopsErr, sessionID)
-		require.Equal(t, oops.CodeForbidden, oopsErr.Code, sessionID)
+		require.Equal(t, oops.CodeUnauthorized, oopsErr.Code, sessionID)
 	}
 }

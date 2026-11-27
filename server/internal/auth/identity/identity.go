@@ -539,13 +539,22 @@ type IDPMembershipRole struct {
 // an organization access check made right after cannot disagree with WorkOS
 // or with a cached organization list.
 func (r *Resolver) CompleteIDPLogin(ctx context.Context, idpUser *IDPUserInfo, opts IDPLoginOptions) (IDPLoginResult, error) {
+	// A user staff blocked from the platform gets no session on any login
+	// surface, and nothing is written for them: not the user upsert, not the
+	// membership sync. Checked by email before the upsert, then by user ID in
+	// case the identity provider changed the email. Read uncached so a fresh
+	// block applies at once.
+	blockedEmail, err := r.userRepo.IsEmailBlacklisted(ctx, idpUser.Email)
+	if err != nil {
+		return IDPLoginResult{}, fmt.Errorf("check user email block: %w", err)
+	}
+	if blockedEmail {
+		return IDPLoginResult{}, ErrUserBlocked
+	}
 	upserted, err := r.upsertUserFromIDP(ctx, idpUser, opts.Attribution)
 	if err != nil {
 		return IDPLoginResult{}, err
 	}
-	// A user staff blocked from the platform gets no session on any login
-	// surface, and membership sync below must not create organizations or
-	// memberships for them. Read uncached so a fresh block applies at once.
 	blocked, err := r.userRepo.IsUserBlacklisted(ctx, upserted.UserID)
 	if err != nil {
 		return IDPLoginResult{}, fmt.Errorf("check user block: %w", err)

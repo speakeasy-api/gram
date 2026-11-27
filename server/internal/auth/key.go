@@ -341,7 +341,7 @@ func (k *ByKey) KeyBasedAuth(ctx context.Context, key string, requiredScopes []s
 
 	// Reject a key whose creator or, for a principal key, whose authorizing
 	// user staff blocked from the platform.
-	if err := k.userBlock.Check(ctx, apiKey.CreatedByUserID, credential.AuthorizerUserID); err != nil {
+	if err := k.userBlock.Check(ctx, logger, "api_key", apiKey.CreatedByUserID, credential.AuthorizerUserID); err != nil {
 		return ctx, fmt.Errorf("api key user: %w", err)
 	}
 

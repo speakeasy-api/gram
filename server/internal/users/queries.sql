@@ -181,15 +181,32 @@ WHERE u.id = @user_id OR EXISTS (
     WHERE m.user_id = u.id AND m.organization_id = ANY(@organization_ids::text[])
 );
 
--- Whether staff blocked this user from the platform. Authentication paths
--- read it on every request (through a short in-process cache), so a block
--- applies within seconds. An unknown user is not blocked; the caller's own
--- user lookup rejects it.
+-- Whether staff blocked this user from the platform, read uncached. Login,
+-- invite and approval paths use it so a fresh block applies at once; request
+-- authentication uses the in-memory snapshot in package userblock instead.
+-- An unknown user is not blocked; the caller's own user lookup rejects it.
 -- name: IsUserBlacklisted :one
 SELECT EXISTS (
   SELECT 1
   FROM users
   WHERE id = @id
+    AND blacklisted_at IS NOT NULL
+)::boolean AS blacklisted;
+
+-- Every user staff blocked from the platform. Each server process loads this
+-- set every few seconds so request authentication checks it in memory.
+-- name: ListBlacklistedUsers :many
+SELECT id, lower(email)::text AS email
+FROM users
+WHERE blacklisted_at IS NOT NULL;
+
+-- Whether a blocked user holds this email, read uncached, matched
+-- case-insensitively. Login checks it before writing anything for the user.
+-- name: IsEmailBlacklisted :one
+SELECT EXISTS (
+  SELECT 1
+  FROM users
+  WHERE lower(email) = lower(@email::text)
     AND blacklisted_at IS NOT NULL
 )::boolean AS blacklisted;
 

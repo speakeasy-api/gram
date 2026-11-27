@@ -48,6 +48,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/userblock"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
@@ -306,9 +307,10 @@ func (s *Service) Redeem(ctx context.Context, payload *gen.RedeemPayload) (*gen.
 	// A user staff blocked after approving the code gets no key.
 	blocked, err := usersrepo.New(s.db).IsUserBlacklisted(ctx, record.UserID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "check user block state").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnauthorized, err, "unauthorized").LogError(ctx, s.logger)
 	}
 	if blocked {
+		userblock.LogRefusal(ctx, s.logger, "cli_auth_redeem", record.UserID)
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 

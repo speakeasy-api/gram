@@ -332,11 +332,6 @@ func (r *Runtime) Handler() http.Handler {
 				http.Error(w, "unavailable", http.StatusServiceUnavailable)
 				return
 			}
-			if errors.Is(err, ErrForbidden) {
-				r.recordAuthOutcome(req.Context(), "forbidden", "")
-				http.Error(w, "forbidden", http.StatusForbidden)
-				return
-			}
 			r.recordAuthOutcome(req.Context(), "unauthorized", "")
 			if r.protectedResourceURL != "" {
 				// The metadata lives on the platform host the request arrived

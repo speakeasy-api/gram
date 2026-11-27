@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/userblock"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/idjag"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -299,7 +300,8 @@ func (s *Service) resolveFederatedHuman(ctx context.Context, endpoint *ResolvedM
 		return "", oops.E(oops.CodeUnavailable, err, "Identity verification is temporarily unavailable. Restart login")
 	}
 	if blocked {
-		return "", oops.E(oops.CodeForbidden, nil, "This account is disabled. Contact support@speakeasy.com")
+		userblock.LogRefusal(ctx, s.logger, "mcp_federated_login", userID)
+		return "", oops.E(oops.CodeForbidden, nil, "Your account is not provisioned for this organization. Contact your administrator")
 	}
 	return userID, nil
 }

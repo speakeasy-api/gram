@@ -241,7 +241,7 @@ func (s *Manager) CheckUserBlock(ctx context.Context, userID string) error {
 	if s.userBlock == nil {
 		return nil
 	}
-	if err := s.userBlock.Check(ctx, userID); err != nil {
+	if err := s.userBlock.Check(ctx, s.logger, "dashboard_session", userID); err != nil {
 		return fmt.Errorf("session user: %w", err)
 	}
 	return nil

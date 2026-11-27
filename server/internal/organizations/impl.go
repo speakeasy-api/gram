@@ -60,6 +60,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
 	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/userblock"
 	userrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	svix "github.com/svix/svix-webhooks/go"
 	"github.com/svix/svix-webhooks/go/models"
@@ -1914,11 +1915,14 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 	blocked, err := userrepo.New(s.db).IsUserBlacklisted(ctx, gramUserID)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "invite callback: failed to check user block state", attr.SlogError(err))
-		redirectError("failed to create user account")
+		span.RecordError(err)
+		redirectError("failed to accept invite")
 		return
 	}
 	if blocked {
-		redirectError("this account is disabled")
+		// The generic expired-invite refusal, so the page does not reveal the block.
+		userblock.LogRefusal(ctx, s.logger, "org_invite", gramUserID)
+		redirectError("invite already used, revoked, or expired")
 		return
 	}
 	span.SetAttributes(

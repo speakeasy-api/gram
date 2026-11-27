@@ -38,6 +38,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/userblock"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
@@ -610,6 +611,7 @@ func (s *Service) requireApprover(ctx context.Context, organizationID, userID st
 		return fmt.Errorf("check approver block state: %w", err)
 	}
 	if blocked {
+		userblock.LogRefusal(ctx, s.logger, "risk_approval_decision", userID)
 		return ErrNotApprover
 	}
 	principals, err := s.ApproverPrincipals(ctx, organizationID, userID)

@@ -126,12 +126,21 @@ func (e *Engine) CheckUserBlock(ctx context.Context) error {
 	return e.CheckUsersBlocked(ctx, userIDs...)
 }
 
+// LogUserBlockRefusal records a refusal of a blocked user by a path that
+// checked the block itself, through the engine's logger.
+func (e *Engine) LogUserBlockRefusal(ctx context.Context, surface, userID string) {
+	if e == nil {
+		return
+	}
+	userblock.LogRefusal(ctx, e.logger, surface, userID)
+}
+
 // CheckUsersBlocked rejects when any of userIDs is blocked from the platform.
 func (e *Engine) CheckUsersBlocked(ctx context.Context, userIDs ...string) error {
 	if e == nil || e.userBlock == nil {
 		return nil
 	}
-	if err := e.userBlock.Check(ctx, userIDs...); err != nil {
+	if err := e.userBlock.Check(ctx, e.logger, "authz_admission", userIDs...); err != nil {
 		return fmt.Errorf("user block: %w", err)
 	}
 	return nil

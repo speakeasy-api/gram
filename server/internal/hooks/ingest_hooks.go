@@ -34,7 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/toolref"
-	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
+	"github.com/speakeasy-api/gram/server/internal/userblock"
 )
 
 const (
@@ -551,16 +551,19 @@ func (s *Service) withOrgSettings(ctx context.Context, orgID string, res *gen.In
 // refuseBlockedActor rejects an event attributed to a user staff blocked from
 // the platform. A shared org plugin key or device-agent token authenticates
 // the machine, not the person, so the credential checks never see them.
+// Ingest keeps working when its reads fail, so a failed read is logged and
+// the event proceeds; the credential checks still fail closed.
 func (s *Service) refuseBlockedActor(ctx context.Context, actor canonicalActor) error {
 	if actor.UserID == "" {
 		return nil
 	}
-	blocked, err := usersrepo.New(s.db).IsUserBlacklisted(ctx, actor.UserID)
+	blocked, err := userblock.BlockedIn(ctx, s.db, actor.UserID)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "check hook actor block state").LogError(ctx, s.logger)
+		s.logger.WarnContext(ctx, "could not check hook actor block state", attr.SlogError(err), attr.SlogUserID(actor.UserID))
+		return nil
 	}
 	if blocked {
-		return oops.E(oops.CodeForbidden, nil, "this account is disabled")
+		return fmt.Errorf("hook actor: %w", userblock.Refusal(ctx, s.logger, "hooks_ingest", actor.UserID))
 	}
 	return nil
 }

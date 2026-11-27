@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/userblock"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
@@ -350,7 +351,8 @@ func (m *Manager) Authorize(ctx context.Context, tokenString string) (context.Co
 		return ctx, nil, oops.E(oops.CodeUnauthorized, err, "unable to load assistant owner")
 	}
 	if owner.BlacklistedAt.Valid {
-		return ctx, nil, oops.E(oops.CodeForbidden, nil, "assistant owner is disabled")
+		m.authz.LogUserBlockRefusal(ctx, "assistant_token", owner.ID)
+		return ctx, nil, oops.E(oops.CodeUnauthorized, userblock.ErrBlocked, "unable to load assistant owner")
 	}
 
 	if err := m.checkRevocation(ctx, projectID, assistantID, threadID); err != nil {

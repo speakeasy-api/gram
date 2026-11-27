@@ -58,6 +58,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/userblock"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -909,7 +910,8 @@ func (s *Service) contextForSessionSubject(
 			return nil, fmt.Errorf("session subject block state: %w", err)
 		}
 		if blocked {
-			return nil, fmt.Errorf("%w: %w", errCredentialRejected, oops.E(oops.CodeForbidden, nil, "this account is disabled"))
+			userblock.LogRefusal(ctx, s.logger, "mcp_session", subject.ID)
+			return nil, fmt.Errorf("%w: %w", errCredentialRejected, userblock.ErrBlocked)
 		}
 		authCtx.UserID = subject.ID
 		// Resolve the validated Speakeasy subject through the session manager's

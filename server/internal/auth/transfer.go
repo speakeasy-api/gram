@@ -66,6 +66,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/userblock"
 )
 
 // transferSigninError is a public signin_error code a failed transfer puts on
@@ -472,7 +473,8 @@ func (s *Service) transferInCallback(ctx context.Context, logger *slog.Logger, c
 		return nil, failTransfer(signinTransferTemporaryError, "user_block_lookup_failed", err)
 	}
 	if blocked {
-		return nil, failTransfer(signinTransferAccessChanged, "user_disabled", nil)
+		userblock.LogRefusal(ctx, s.logger, "session_transfer", record.UserID)
+		return nil, failTransfer(signinTransferAccessChanged, "not_a_member", nil)
 	}
 	issuedAt, known := time.UnixMicro(record.SourceIssuedAt), record.SourceIssuedAt != 0
 	predates, err := s.sessions.IssuedBeforeEpoch(ctx, record.UserID, issuedAt, known)

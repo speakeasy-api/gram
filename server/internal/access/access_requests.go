@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/userblock"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
@@ -405,6 +406,7 @@ func (s *Service) DecideAccessRequestAs(ctx context.Context, input DecideAccessR
 		return nil, oops.E(oops.CodeUnexpected, err, "check decider block state").LogError(ctx, logger)
 	}
 	if blocked {
+		userblock.LogRefusal(ctx, logger, "access_request_decision", input.DeciderUserID)
 		return nil, ErrAccessRequestNotAdmin
 	}
 	admin, err := isOrganizationAdmin(ctx, s.db, input.OrganizationID, input.DeciderUserID)

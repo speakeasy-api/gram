@@ -37,6 +37,7 @@ type JWTAuthenticator struct {
 	store       *platformrepo.Queries
 	credentials *CredentialCodec
 	userBlock   *userblock.Gate
+	logger      *slog.Logger
 
 	// baseURL is the configured server URL, whose resource applies to
 	// requests that carry no platform origin.
@@ -56,8 +57,17 @@ func NewJWTAuthenticator(signer *sessiontokens.Signer, db *pgxpool.Pool, encrypt
 		store:       platformrepo.New(db),
 		credentials: credentials,
 		userBlock:   userblock.NewGate(db),
+		logger:      nil,
 		baseURL:     baseURL,
 	}, nil
+}
+
+// WithLogger sets the logger that records refusals of blocked users.
+func (a *JWTAuthenticator) WithLogger(logger *slog.Logger) *JWTAuthenticator {
+	if a != nil {
+		a.logger = logger
+	}
+	return a
 }
 
 func (a *JWTAuthenticator) Authenticate(ctx context.Context, token string) (Principal, error) {
@@ -95,7 +105,10 @@ func (a *JWTAuthenticator) Authenticate(ctx context.Context, token string) (Prin
 			return Principal{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
 		}
 		if blocked {
-			return Principal{}, ErrForbidden
+			if a.logger != nil {
+				userblock.LogRefusal(ctx, a.logger, "platform_mcp", subject.ID)
+			}
+			return Principal{}, ErrUnauthorized
 		}
 	}
 

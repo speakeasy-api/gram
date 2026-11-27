@@ -50,6 +50,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/signins"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/userblock"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/idjag"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
@@ -1385,8 +1386,9 @@ func (s *Service) rotateRefreshToken(
 		}
 	}
 	// A user staff blocked from the platform cannot mint new MCP access tokens,
-	// and neither can an agent they authorized.
-	if lookupErr == nil {
+	// and neither can an agent they authorized. Checked only for the client the
+	// token was issued to, so a leaked token reveals nothing to another client.
+	if lookupErr == nil && refreshSession.UserSessionClientID.Valid && refreshSession.UserSessionClientID.UUID == clientRow.ID {
 		blockedUserID := refreshSession.AuthorizerUserID.String
 		if refreshSession.SubjectUrn.Kind == urn.SessionSubjectKindUser {
 			blockedUserID = refreshSession.SubjectUrn.ID
@@ -1396,9 +1398,10 @@ func (s *Service) rotateRefreshToken(
 			return true, oops.E(oops.CodeUnexpected, blockErr, "check refresh token user").LogError(ctx, logger)
 		}
 		if blocked {
-			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "user_disabled")
-			writeErr := writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidGrant, "this account is disabled")
-			return true, refuseInboundRefresh(ctx, tracker, r, writeErr, "user_disabled", mcpconnectionattempts.Subject(&refreshSession.SubjectUrn))
+			userblock.LogRefusal(ctx, logger, "mcp_refresh_token", blockedUserID)
+			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", refreshUserDisabled)
+			writeErr := writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidGrant, "refresh_token is unknown or already used")
+			return true, refuseInboundRefresh(ctx, tracker, r, writeErr, refreshUserDisabled, mcpconnectionattempts.Subject(&refreshSession.SubjectUrn))
 		}
 	}
 	upstreamCheck := upstreamRefreshServed
@@ -1966,6 +1969,17 @@ func (s *Service) writeRefreshTokenReplay(
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", reason)
 			writeErr := writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidGrant, "refreshed session is no longer active; sign in again")
 			return refuseInboundRefresh(ctx, tracker, r, writeErr, reason, mcpconnectionattempts.Subject(payload.Subject))
+		}
+		// Nor a successor for a user staff blocked since the rotation.
+		blocked, blockErr := s.sessions.IsUserBlocked(ctx, payload.Subject.ID)
+		if blockErr != nil {
+			return oops.E(oops.CodeUnexpected, blockErr, "check refresh token replay user").LogError(ctx, logger)
+		}
+		if blocked {
+			userblock.LogRefusal(ctx, logger, "mcp_refresh_token_replay", payload.Subject.ID)
+			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", refreshUserDisabled)
+			writeErr := writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidGrant, "refresh_token is unknown or already used")
+			return refuseInboundRefresh(ctx, tracker, r, writeErr, refreshUserDisabled, mcpconnectionattempts.Subject(payload.Subject))
 		}
 	}
 	endpointIssuer, err := s.issuerURL(endpoint, baseURL)
