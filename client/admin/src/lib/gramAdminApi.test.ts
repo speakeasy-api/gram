@@ -39,6 +39,7 @@ import {
   MIN_TRIAL_START_DAYS,
   resumeStripeSubscription,
   setAdoptionDashboardUrl,
+  setFunctionTimeout,
   setInferenceKeyMonthlyLimit,
   setStripeCustomer,
   toSearchParams,
@@ -401,6 +402,40 @@ describe("organization billing endpoints", () => {
           organization_id: "org_1",
           adoption_dashboard_url: "https://example.com/adoption",
         }),
+      }),
+    );
+  });
+
+  it("posts the function timeout to the organization endpoint", async () => {
+    const fetch = stubFetch();
+
+    await setFunctionTimeout({
+      organization_id: "org_1",
+      function_timeout_seconds: 300,
+    });
+
+    expect(fetch).toHaveBeenCalledWith(
+      "/admin/organization.setFunctionTimeout",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          organization_id: "org_1",
+          function_timeout_seconds: 300,
+        }),
+      }),
+    );
+  });
+
+  it("omits the function timeout to restore the default", async () => {
+    const fetch = stubFetch();
+
+    await setFunctionTimeout({ organization_id: "org_1" });
+
+    expect(fetch).toHaveBeenCalledWith(
+      "/admin/organization.setFunctionTimeout",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ organization_id: "org_1" }),
       }),
     );
   });
