@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	adminrepo "github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
@@ -160,4 +161,44 @@ func TestSyncerRecordsRejectedClientSecret(t *testing.T) {
 	require.NotNil(t, run)
 	require.Equal(t, "failed", run.Status)
 	require.Equal(t, "credential_rejected", run.Error.String)
+}
+
+// A disabled organization's connection is neither selected nor synced, opens
+// no run, and syncs once the organization is re-enabled.
+func TestSyncerSkipsDisabledOrganization(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	bc := newBasicConnection(t, ctx)
+	fakes := basicFakes()
+	fakes.Fake(basicOrgURL).RequireClientSecret(clientSecret)
+	syncer := oktaapplications.NewSyncer(testenv.NewLogger(t), testenv.NewMeterProvider(t), bc.conn, fakes, clientsecretstest.New(t, bc.conn, bc.enc))
+	listed := func() bool {
+		candidates, err := syncer.ListCandidates(ctx, 100, []uuid.UUID{})
+		require.NoError(t, err)
+		for _, candidate := range candidates {
+			if candidate.ConnectionID == bc.connectionID {
+				return true
+			}
+		}
+		return false
+	}
+	require.True(t, listed(), "the never-synced connection is a candidate while the organization is enabled")
+
+	_, err := adminrepo.New(bc.conn).AdminDisableOrganization(ctx, bc.orgID)
+	require.NoError(t, err)
+	require.False(t, listed(), "a disabled organization's connection is not a candidate")
+	// A run that raced the disable is skipped at run time.
+	require.NoError(t, syncer.Run(ctx, bc.connectionID, false))
+	run, err := oktaapplications.LatestRun(ctx, bc.conn, bc.orgID, bc.connectionID)
+	require.NoError(t, err)
+	require.Nil(t, run, "the skip opens no run")
+
+	_, err = adminrepo.New(bc.conn).AdminEnableOrganization(ctx, bc.orgID)
+	require.NoError(t, err)
+	require.NoError(t, syncer.Run(ctx, bc.connectionID, false))
+	run, err = oktaapplications.LatestRun(ctx, bc.conn, bc.orgID, bc.connectionID)
+	require.NoError(t, err)
+	require.NotNil(t, run)
+	require.Equal(t, "succeeded", run.Status)
 }

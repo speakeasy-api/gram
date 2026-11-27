@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations"
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations/timewindowpoller"
 	"github.com/speakeasy-api/gram/server/internal/aiproviderkeys"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -25,6 +26,7 @@ const (
 )
 
 type PollCursorUsageMetrics struct {
+	logger          *slog.Logger
 	integrations    *aiintegrations.Store
 	telemetryLogger *telemetry.Logger
 	guardianPolicy  *guardian.Policy
@@ -39,6 +41,7 @@ func NewPollCursorUsageMetrics(
 ) *PollCursorUsageMetrics {
 	store := aiintegrations.NewStore(logger, db, keys)
 	return &PollCursorUsageMetrics{
+		logger:          logger.With(attr.SlogComponent("activities.poll_cursor_usage_metrics")),
 		integrations:    store,
 		telemetryLogger: telemetryLogger,
 		guardianPolicy:  guardianPolicy,
@@ -72,6 +75,12 @@ func (p *PollCursorUsageMetrics) Do(ctx context.Context, configID string) (err e
 	}()
 
 	cfg, err := p.integrations.GetUsagePollConfig(ctx, id, aiintegrations.ScheduleCursor)
+	if errors.Is(err, aiintegrations.ErrOrganizationDisabled) {
+		// Returning nil completes the activity without a retry or a recorded
+		// failure, so the poll resumes once the organization is re-enabled.
+		p.logger.InfoContext(ctx, "skip cursor usage poll for disabled organization", attr.SlogReason("organization_disabled"))
+		return nil
+	}
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to load ai integration configuration")
 	}

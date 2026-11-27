@@ -543,6 +543,7 @@ func (t *ConfigureTrigger) upsertTrigger(
 			DefinitionSlug: params.DefinitionSlug,
 			Name:           strings.TrimSpace(params.Name),
 			EnvironmentID:  uuid.NullUUID{UUID: environment.ID, Valid: true},
+			AuthClientID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 			TargetKind:     targetKind,
 			TargetRef:      strings.TrimSpace(params.TargetRef),
 			TargetDisplay:  strings.TrimSpace(params.TargetDisplay),
@@ -588,10 +589,12 @@ func (t *ConfigureTrigger) upsertTrigger(
 
 		item, err = t.app.Update(ctx, bgtriggers.UpdateParams{
 			ID:             triggerID,
+			OrganizationID: authCtx.ActiveOrganizationID,
 			ProjectID:      *authCtx.ProjectID,
 			DefinitionSlug: params.DefinitionSlug,
 			Name:           strings.TrimSpace(params.Name),
 			EnvironmentID:  uuid.NullUUID{UUID: environment.ID, Valid: true},
+			AuthClientID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 			TargetKind:     targetKind,
 			TargetRef:      strings.TrimSpace(params.TargetRef),
 			TargetDisplay:  strings.TrimSpace(params.TargetDisplay),
@@ -863,6 +866,7 @@ func buildTriggerInstanceSnapshot(item triggerrepo.TriggerInstance, webhookURL *
 		DefinitionSlug: item.DefinitionSlug,
 		Name:           item.Name,
 		EnvironmentID:  conv.Ternary(item.EnvironmentID.Valid, conv.PtrEmpty(item.EnvironmentID.UUID.String()), nil),
+		AuthClientID:   conv.Ternary(item.AuthClientID.Valid, conv.PtrEmpty(item.AuthClientID.UUID.String()), nil),
 		TargetKind:     item.TargetKind,
 		TargetRef:      item.TargetRef,
 		TargetDisplay:  item.TargetDisplay,

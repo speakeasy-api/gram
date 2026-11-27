@@ -194,6 +194,14 @@ func (s *Service) CreateTriggerInstance(ctx context.Context, payload *gen.Create
 		}
 		envID = uuid.NullUUID{UUID: parsed, Valid: true}
 	}
+	var authClientID uuid.NullUUID
+	if payload.AuthClientID != nil {
+		parsed, err := uuid.Parse(*payload.AuthClientID)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid auth client id").LogError(ctx, s.logger)
+		}
+		authClientID = uuid.NullUUID{UUID: parsed, Valid: true}
+	}
 
 	item, err := s.app.Create(ctx, bgtriggers.CreateParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
@@ -201,6 +209,7 @@ func (s *Service) CreateTriggerInstance(ctx context.Context, payload *gen.Create
 		DefinitionSlug: payload.DefinitionSlug,
 		Name:           payload.Name,
 		EnvironmentID:  envID,
+		AuthClientID:   authClientID,
 		TargetKind:     payload.TargetKind,
 		TargetRef:      payload.TargetRef,
 		TargetDisplay:  payload.TargetDisplay,
@@ -245,12 +254,25 @@ func (s *Service) UpdateTriggerInstance(ctx context.Context, payload *gen.Update
 		return nil, toTriggerError(ctx, s.logger, err, "get trigger instance")
 	}
 
+	if payload.EnvironmentID != nil && payload.AuthClientID != nil {
+		return nil, oops.E(oops.CodeBadRequest, nil, "trigger cannot specify both environment_id and auth_client_id").LogWarn(ctx, s.logger)
+	}
+
 	environmentID := nullUUIDToUUID(existing.EnvironmentID)
+	authClientID := nullUUIDToUUID(existing.AuthClientID)
 	if payload.EnvironmentID != nil {
 		environmentID, err = uuid.Parse(*payload.EnvironmentID)
 		if err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid environment id").LogError(ctx, s.logger)
 		}
+		authClientID = uuid.Nil
+	}
+	if payload.AuthClientID != nil {
+		authClientID, err = uuid.Parse(*payload.AuthClientID)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid auth client id").LogError(ctx, s.logger)
+		}
+		environmentID = uuid.Nil
 	}
 
 	configMap, err := configJSONToMap(existing.ConfigJson)
@@ -268,10 +290,12 @@ func (s *Service) UpdateTriggerInstance(ctx context.Context, payload *gen.Update
 
 	item, err := s.app.Update(ctx, bgtriggers.UpdateParams{
 		ID:             triggerID,
+		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      *authCtx.ProjectID,
 		DefinitionSlug: existing.DefinitionSlug,
 		Name:           valueOrDefault(payload.Name, existing.Name),
 		EnvironmentID:  uuid.NullUUID{UUID: environmentID, Valid: environmentID != uuid.Nil},
+		AuthClientID:   uuid.NullUUID{UUID: authClientID, Valid: authClientID != uuid.Nil},
 		TargetKind:     valueOrDefault(payload.TargetKind, existing.TargetKind),
 		TargetRef:      valueOrDefault(payload.TargetRef, existing.TargetRef),
 		TargetDisplay:  valueOrDefault(payload.TargetDisplay, existing.TargetDisplay),

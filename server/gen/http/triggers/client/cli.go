@@ -153,13 +153,16 @@ func BuildCreateTriggerInstancePayload(triggersCreateTriggerInstanceBody string,
 	{
 		err = json.Unmarshal([]byte(triggersCreateTriggerInstanceBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"config\": {\n         \"abc123\": \"abc123\"\n      },\n      \"definition_slug\": \"abc123\",\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"status\": \"paused\",\n      \"target_display\": \"abc123\",\n      \"target_kind\": \"noop\",\n      \"target_ref\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"auth_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"config\": {\n         \"abc123\": \"abc123\"\n      },\n      \"definition_slug\": \"abc123\",\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"status\": \"paused\",\n      \"target_display\": \"abc123\",\n      \"target_kind\": \"noop\",\n      \"target_ref\": \"abc123\"\n   }'")
 		}
 		if body.Config == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("config", "body"))
 		}
 		if body.EnvironmentID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.environment_id", *body.EnvironmentID, goa.FormatUUID))
+		}
+		if body.AuthClientID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.auth_client_id", *body.AuthClientID, goa.FormatUUID))
 		}
 		if !(body.TargetKind == "assistant" || body.TargetKind == "noop") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_kind", body.TargetKind, []any{"assistant", "noop"}))
@@ -189,6 +192,7 @@ func BuildCreateTriggerInstancePayload(triggersCreateTriggerInstanceBody string,
 		DefinitionSlug: body.DefinitionSlug,
 		Name:           body.Name,
 		EnvironmentID:  body.EnvironmentID,
+		AuthClientID:   body.AuthClientID,
 		TargetKind:     body.TargetKind,
 		TargetRef:      body.TargetRef,
 		TargetDisplay:  body.TargetDisplay,
@@ -216,11 +220,14 @@ func BuildUpdateTriggerInstancePayload(triggersUpdateTriggerInstanceBody string,
 	{
 		err = json.Unmarshal([]byte(triggersUpdateTriggerInstanceBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"config\": {\n         \"abc123\": \"abc123\"\n      },\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"status\": \"paused\",\n      \"target_display\": \"abc123\",\n      \"target_kind\": \"noop\",\n      \"target_ref\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"auth_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"config\": {\n         \"abc123\": \"abc123\"\n      },\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"status\": \"paused\",\n      \"target_display\": \"abc123\",\n      \"target_kind\": \"noop\",\n      \"target_ref\": \"abc123\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if body.EnvironmentID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.environment_id", *body.EnvironmentID, goa.FormatUUID))
+		}
+		if body.AuthClientID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.auth_client_id", *body.AuthClientID, goa.FormatUUID))
 		}
 		if body.TargetKind != nil {
 			if !(*body.TargetKind == "assistant" || *body.TargetKind == "noop") {
@@ -252,6 +259,7 @@ func BuildUpdateTriggerInstancePayload(triggersUpdateTriggerInstanceBody string,
 		ID:            body.ID,
 		Name:          body.Name,
 		EnvironmentID: body.EnvironmentID,
+		AuthClientID:  body.AuthClientID,
 		TargetKind:    body.TargetKind,
 		TargetRef:     body.TargetRef,
 		TargetDisplay: body.TargetDisplay,

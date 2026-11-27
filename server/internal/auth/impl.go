@@ -60,6 +60,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
 	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/userblock"
 )
 
 const dispositionAssistants = "assistants"
@@ -446,6 +447,11 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		SkipMembershipSync: supportOrgID != "",
 		Attribution:        attribution,
 	})
+	if errors.Is(err, identity.ErrUserBlocked) {
+		// The generic login failure, so the page does not reveal the block.
+		userblock.LogRefusal(ctx, s.logger, "dashboard_login", idpUser.Sub)
+		return redirectWithError(authErrInit, err)
+	}
 	if err != nil {
 		return redirectWithError(authErrInit, err)
 	}

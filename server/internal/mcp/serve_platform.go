@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
@@ -169,6 +170,21 @@ func (s *Service) authorizePlatformToolset(ctx context.Context, slug string, aut
 		// runtime, this is where its principal is checked.
 		return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
 	case platformtools.PlatformMCPReadToolsetSlug, platformtools.SpeakeasySlackPlatformToolsetSlug:
+	case platformtools.AssistantSlackPlatformToolsetSlug:
+		// Assistant Slack requires an explicit mcp:connect grant on its stable
+		// PlatformToolsetID, matching Project Gateway semantics so assistants
+		// without Slack configured cannot probe the direct route either.
+		if authCtx.ProjectID == nil {
+			return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
+		}
+		decision, err := s.authz.Decide(authz.WithoutChallenges(ctx), authz.MCPServer(authz.MCPServerIDOf(platformtools.PlatformToolsetID(slug)), authz.ProjectIDOf(*authCtx.ProjectID)).Connect())
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "authorize assistant-slack platform toolset").LogError(ctx, s.logger)
+		}
+		if !decision.AllAllowed {
+			return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
+		}
+		return nil
 	default:
 		return nil
 	}
@@ -251,7 +267,12 @@ func (s *Service) handlePlatformToolsetRequest(
 		if req.Method == mcpversions.MethodToolsList {
 			return s.listPlatformToolsetTools(ctx, authCtx, toolset, req)
 		}
-		return s.callPlatformToolsetTool(ctx, authCtx, toolset, req, chatIDHeader)
+		return s.callPlatformToolsetTool(ctx, authCtx, toolset, req, chatIDHeader, platformToolCallOptions{
+			metaServerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			serverID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			serverIdentity: serverInfoPlatformToolset,
+			attempt:        nil,
+		})
 	case mcpversions.MethodResourcesList:
 		// The platform toolset has resources only while it declares the
 		// Skills extension, and even then lists none: skills are listed
@@ -366,13 +387,25 @@ func (s *Service) listPlatformToolsetTools(
 	return bs, nil
 }
 
+type platformToolCallOptions struct {
+	metaServerID   uuid.NullUUID
+	serverID       uuid.NullUUID
+	serverIdentity serverInfo
+	attempt        *metaToolCallAttempt
+}
+
 func (s *Service) callPlatformToolsetTool(
 	ctx context.Context,
 	authCtx *contextvalues.AuthContext,
 	toolset platformtools.Toolset,
 	req *rawRequest,
 	chatIDHeader string,
+	opts platformToolCallOptions,
 ) (json.RawMessage, error) {
+	serverIdentity := opts.serverIdentity
+	if serverIdentity.Name == "" {
+		serverIdentity = serverInfoPlatformToolset
+	}
 	var params toolsCallParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "failed to parse tool call request").LogError(ctx, s.logger)
@@ -489,6 +522,21 @@ func (s *Service) callPlatformToolsetTool(
 		})
 	}
 
+	if opts.attempt != nil {
+		opts.attempt.descriptor = descriptor
+		opts.attempt.logged = true
+	}
+
+	var billingMCPServerID, billingMetaServerID *string
+	if opts.serverID.Valid {
+		id := opts.serverID.UUID.String()
+		billingMCPServerID = &id
+	}
+	if opts.metaServerID.Valid {
+		id := opts.metaServerID.UUID.String()
+		billingMetaServerID = &id
+	}
+
 	logAttrs := tm.HTTPLogAttributes{}
 	defer func() {
 		go s.billingTracker.TrackToolCallUsage(context.WithoutCancel(ctx), billing.ToolCallUsageEvent{
@@ -505,9 +553,9 @@ func (s *Service) callPlatformToolsetTool(
 			ResponseStatusCode:    rw.statusCode,
 			MCPURL:                &mcpURL,
 			MCPSessionID:          nil,
-			MCPServerID:           nil,
+			MCPServerID:           billingMCPServerID,
 			MCPEndpointID:         nil,
-			MetaMCPServerID:       nil,
+			MetaMCPServerID:       billingMetaServerID,
 			ChatID:                conv.PtrEmpty(chatID),
 			Type:                  plan.BillingType,
 			ResourceURI:           "",
@@ -529,6 +577,12 @@ func (s *Service) callPlatformToolsetTool(
 		if chatID != "" {
 			logAttrs[attr.GenAIConversationIDKey] = chatID
 		}
+		if opts.metaServerID.Valid {
+			logAttrs[attr.MetaMcpServerIDKey] = opts.metaServerID.UUID.String()
+		}
+		if opts.serverID.Valid {
+			logAttrs[attr.McpServerIDKey] = opts.serverID.UUID.String()
+		}
 		logAttrs.RecordToolsetSlug(platformToolsetSlug)
 		logAttrs.RecordMCPURL(mcpURL)
 		s.telemLogger.Log(ctx, tm.LogParams{
@@ -547,13 +601,17 @@ func (s *Service) callPlatformToolsetTool(
 		})
 	}()
 
+	scanMetaServerID := ""
+	if opts.metaServerID.Valid {
+		scanMetaServerID = opts.metaServerID.UUID.String()
+	}
 	requestSubject := mcpriskscan.NewRequest(ctx, mcpriskscan.Event{
 		Surface:         mcpriskscan.SurfacePlatformMCP,
 		Method:          mcpriskscan.MethodToolsCall,
 		OrganizationID:  descriptor.OrganizationID,
 		ProjectID:       descriptor.ProjectID,
 		ServerID:        platformtools.PlatformToolsetID(toolset.Slug).String(),
-		MetaServerID:    "",
+		MetaServerID:    scanMetaServerID,
 		ToolsetID:       "",
 		ToolName:        descriptor.Name,
 		ResourceURI:     "",
@@ -566,7 +624,7 @@ func (s *Service) callPlatformToolsetTool(
 		// A held call is an instruction, not a refusal: the agent reads the
 		// tool result, requests approval and retries.
 		rw.resultIsError = true
-		return marshalToolErrorResult(ctx, logger, req.ID, decision.UserMessage, serverInfoPlatformToolset)
+		return marshalToolErrorResult(ctx, logger, req.ID, decision.UserMessage, serverIdentity)
 	}
 	if decision.Denied() {
 		failure := oops.E(oops.CodeForbidden, nil, "%s", decision.UserMessage)
@@ -596,14 +654,19 @@ func (s *Service) callPlatformToolsetTool(
 		return nil, failure
 	}
 
+	isError := rw.statusCode < 200 || rw.statusCode >= 300
+	if opts.attempt != nil && !isError {
+		opts.attempt.succeeded = true
+	}
+
 	bs, err := json.Marshal(result[toolCallResult]{
 		ID: req.ID,
 		Result: toolCallResult{
 			Content:           responseContent,
 			StructuredContent: structured,
-			IsError:           rw.statusCode < 200 || rw.statusCode >= 300,
+			IsError:           isError,
 		},
-		serverIdentity: serverInfoPlatformToolset,
+		serverIdentity: serverIdentity,
 		cacheHints:     nil,
 	})
 	if err != nil {

@@ -70,6 +70,8 @@ type CreateTriggerInstancePayload struct {
 	Name string
 	// The linked environment ID.
 	EnvironmentID *string
+	// The linked slack_app auth client ID. Mutually exclusive with environment_id.
+	AuthClientID *string
 	// The trigger target kind.
 	TargetKind string
 	// The opaque target reference.
@@ -175,6 +177,8 @@ type UpdateTriggerInstancePayload struct {
 	Name *string
 	// The linked environment ID.
 	EnvironmentID *string
+	// The linked slack_app auth client ID. Mutually exclusive with environment_id.
+	AuthClientID *string
 	// The trigger target kind.
 	TargetKind *string
 	// The opaque target reference.

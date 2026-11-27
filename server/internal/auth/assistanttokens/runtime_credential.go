@@ -39,10 +39,12 @@ func RuntimeChatID(ctx context.Context) (uuid.UUID, bool) {
 // IsRuntimeCredential reports whether an Authorization header carries a
 // principal credential.
 func IsRuntimeCredential(header string) bool {
-	return principalcredential.IsToken(bearerToken(header))
+	return principalcredential.IsToken(BearerToken(header))
 }
 
-func bearerToken(header string) string {
+// BearerToken extracts the raw token from an Authorization header value,
+// stripping an optional case-insensitive "Bearer " prefix.
+func BearerToken(header string) string {
 	header = strings.TrimSpace(header)
 	if len(header) > len("bearer ") && strings.EqualFold(header[:len("bearer ")], "bearer ") {
 		return strings.TrimSpace(header[len("bearer "):])
@@ -95,7 +97,7 @@ func (m *Manager) AuthorizeRuntime(ctx context.Context, header string) (context.
 	if !IsRuntimeCredential(header) || m.credentials == nil {
 		return ctx, nil, oops.E(oops.CodeUnauthorized, nil, "invalid runtime credential")
 	}
-	raw := bearerToken(header)
+	raw := BearerToken(header)
 	authed, err := m.credentials.Authenticate(ctx, raw)
 	if errors.Is(err, principalcredential.ErrInvalid) || errors.Is(err, principalcredential.ErrNotCredential) {
 		return ctx, nil, oops.E(oops.CodeUnauthorized, err, "invalid runtime credential")

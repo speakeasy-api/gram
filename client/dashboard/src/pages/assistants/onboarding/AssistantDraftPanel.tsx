@@ -21,6 +21,7 @@ import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { parseAsStringLiteral, useQueryState } from "nuqs";
 import { useState } from "react";
+import { AssistantKitMCPAccess } from "./AssistantKitMCPAccess";
 import { AssistantMCPServersSection } from "./AssistantMCPServersSection";
 import { AssistantIdentitySettings } from "./AssistantIdentitySettings";
 import { AssistantUpstreamCredentials } from "./AssistantUpstreamCredentials";
@@ -230,10 +231,14 @@ export function AssistantDraftPanel(): JSX.Element {
                 <AssistantSkillsSection />
               </RequireScope>
 
-              <AssistantMCPServersSection
-                assistant={a}
-                onUpdated={() => void draft.refetchAssistant()}
-              />
+              {a.runtimeVersion === 3 ? (
+                <AssistantKitMCPAccess agentId={a.agentId} />
+              ) : (
+                <AssistantMCPServersSection
+                  assistant={a}
+                  onUpdated={() => void draft.refetchAssistant()}
+                />
+              )}
             </Stack>
           </TabsContent>
 

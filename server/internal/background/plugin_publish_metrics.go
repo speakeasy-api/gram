@@ -20,7 +20,7 @@ func recordPluginProjectPublishOutcome(ctx workflow.Context, result plugins.Publ
 	switch {
 	case temporal.IsCanceledError(err):
 		outcome = "canceled"
-	case errors.As(err, &appErr) && appErr.Type() == activities.ErrTypePluginActorNotMember:
+	case errors.As(err, &appErr) && (appErr.Type() == activities.ErrTypePluginActorNotMember || appErr.Type() == activities.ErrTypeOrganizationDisabled):
 		outcome = "rejected"
 	case err != nil:
 		outcome = "failed"

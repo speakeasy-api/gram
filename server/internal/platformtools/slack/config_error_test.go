@@ -152,3 +152,81 @@ func TestSpeakeasyAppTool_RejectedTokenGivesNoEnvironmentAdvice(t *testing.T) {
 	_, shareable := errors.AsType[*oops.ShareableError](err)
 	require.False(t, shareable)
 }
+
+type staticAssistantSlackCreds AssistantSlackCredentials
+
+func (s staticAssistantSlackCreds) ResolveForCaller(_ context.Context, _ string, _ uuid.UUID) (AssistantSlackCredentials, error) {
+	return AssistantSlackCredentials(s), nil
+}
+
+type errRoundTripper struct{ err error }
+
+func (rt errRoundTripper) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, rt.err
+}
+
+func TestAssistantSlackTool_RejectsControlCharsAndScrubsLeakedTokens(t *testing.T) {
+	t.Parallel()
+
+	projectID := uuid.New()
+	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
+		ActiveOrganizationID: "org",
+		ProjectID:            &projectID,
+	})
+
+	t.Run("rejects control character before request", func(t *testing.T) {
+		t.Parallel()
+		badToken := "xoxb-secret\ninjected"
+		tool := &assistantSlackTool{
+			inner: &slackTool{
+				descriptor: NewListEmojiTool(nil).Descriptor(),
+				client:     newAPIClient("https://slack.test.invalid", &http.Client{Transport: errRoundTripper{err: errors.New("must not reach transport")}}),
+				callFn:     callListEmoji,
+			},
+			credentials: staticAssistantSlackCreds{BotToken: badToken},
+		}
+		err := tool.Call(ctx, emptySlackEnv(), bytes.NewBufferString(`{}`), io.Discard)
+		require.Error(t, err)
+		shareable, ok := errors.AsType[*oops.ShareableError](err)
+		require.True(t, ok)
+		require.Equal(t, oops.CodeFailedPrecondition, shareable.Code)
+		require.NotContains(t, err.Error(), badToken)
+	})
+
+	t.Run("scrubs token echoed in transport error", func(t *testing.T) {
+		t.Parallel()
+		token := "xoxb-transport-secret"
+		tool := &assistantSlackTool{
+			inner: &slackTool{
+				descriptor: NewListEmojiTool(nil).Descriptor(),
+				client:     newAPIClient("https://slack.test.invalid", &http.Client{Transport: errRoundTripper{err: errors.New("dial failed with header " + token)}}),
+				callFn:     callListEmoji,
+			},
+			credentials: staticAssistantSlackCreds{BotToken: token},
+		}
+		err := tool.Call(ctx, emptySlackEnv(), bytes.NewBufferString(`{}`), io.Discard)
+		require.EqualError(t, err, "Slack request failed")
+		require.NotContains(t, err.Error(), token)
+	})
+
+	t.Run("scrubs token echoed in non-200 Slack response body", func(t *testing.T) {
+		t.Parallel()
+		token := "xoxb-http500-secret"
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusBadGateway)
+			_, _ = w.Write([]byte("upstream proxy echoed " + token))
+		}))
+		t.Cleanup(server.Close)
+		tool := &assistantSlackTool{
+			inner: &slackTool{
+				descriptor: NewListEmojiTool(nil).Descriptor(),
+				client:     newAPIClient(server.URL, server.Client()),
+				callFn:     callListEmoji,
+			},
+			credentials: staticAssistantSlackCreds{BotToken: token},
+		}
+		err := tool.Call(ctx, emptySlackEnv(), bytes.NewBufferString(`{}`), io.Discard)
+		require.EqualError(t, err, "Slack request failed")
+		require.NotContains(t, err.Error(), token)
+	})
+}
