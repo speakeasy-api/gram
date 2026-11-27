@@ -26,6 +26,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -923,6 +924,12 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *h
 			}
 		}
 	}
+	chatID := request.chatID
+	if chatID == "" {
+		if boundChatID, ok := assistanttokens.RuntimeChatID(ctx); ok {
+			chatID = boundChatID.String()
+		}
+	}
 	gate := &metaGateContext{
 		caller:           gateCaller,
 		fromRequest:      request.fromRequest,
@@ -954,7 +961,7 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *h
 		discoveryMode:       metamcp.ResolveDiscoveryMode(metaServer.DiscoveryMode),
 		authenticated:       false,
 		sessionID:           request.sessionID,
-		chatID:              request.chatID,
+		chatID:              chatID,
 		userID:              "",
 		externalUserID:      "",
 		apiKeyID:            "",

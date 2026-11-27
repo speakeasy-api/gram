@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
@@ -97,46 +98,58 @@ var (
 	errRecoveryUnavailable = errors.New("connection recovery client is no longer available")
 )
 
-// connectionRecoveryError answers a turn acting for a user whose own
-// connection for the chosen personal client is missing or expired, with a
-// link only that user can complete. It reports false for any other caller or
-// client, which keep the ordinary answer.
-func (s *Service) connectionRecoveryError(ctx context.Context, authentication *issuerGateAuthentication, cause error) (error, bool) {
-	res := authentication.authClient
-	authenticated, ok := principalcredential.FromContext(ctx)
-	if !ok || authenticated.Credential.AuthorizerUserID == "" || res == nil || res.outcome != authClientResolved ||
-		res.clientType != authClientTypeRemoteSession || !authentication.chosenClient.Valid || !authentication.endpoint.McpServerID.Valid {
-		return nil, false
+type connectionRecoveryTarget struct {
+	organizationID      string
+	projectID           uuid.UUID
+	userSessionIssuerID uuid.UUID
+	mcpServerID         uuid.UUID
+	mcpSlug             string
+	upstreamResource    string
+	serverName          string
+	authClientID        uuid.UUID
+	registrationID      uuid.UUID
+}
+
+// issueConnectionRecoveryMessage mints a one-time recovery link bound to the
+// principal credential's authorizing user in ctx. It reports ok=false when ctx
+// has no human-backed principal credential for target's tenant or siteURL is
+// unconfigured.
+func (s *Service) issueConnectionRecoveryMessage(ctx context.Context, target connectionRecoveryTarget) (message, action string, ok bool, err error) {
+	authenticated, hasCred := principalcredential.FromContext(ctx)
+	if !hasCred || authenticated.Credential.AuthorizerUserID == "" || s.siteURL == nil {
+		return "", "", false, nil
 	}
-	if s.siteURL == nil {
-		return nil, false
+	if authenticated.Credential.OrganizationID != target.organizationID || authenticated.Credential.ProjectID != target.projectID {
+		return "", "", false, nil
 	}
-	endpoint := authentication.endpoint
+	if target.mcpServerID == uuid.Nil || target.authClientID == uuid.Nil || target.registrationID == uuid.Nil {
+		return "", "", false, nil
+	}
 	userID := authenticated.Credential.AuthorizerUserID
-	statuses, err := s.remoteChallengeMgr.AuthClientRemoteSessionStatuses(ctx, urn.NewUserSubject(userID), endpoint.ProjectID, endpoint.OrganizationID, []uuid.UUID{authentication.chosenClient.UUID})
+	statuses, err := s.remoteChallengeMgr.AuthClientRemoteSessionStatuses(ctx, urn.NewUserSubject(userID), target.projectID, target.organizationID, []uuid.UUID{target.registrationID})
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "read connection status").LogError(ctx, s.logger), true
+		return "", "", true, oops.E(oops.CodeUnexpected, err, "read connection status").LogError(ctx, s.logger)
 	}
-	_, connected := statuses[authentication.chosenClient.UUID]
+	_, connected := statuses[target.registrationID]
 
 	token, err := generateOpaqueToken()
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "mint connection link").LogError(ctx, s.logger), true
+		return "", "", true, oops.E(oops.CodeUnexpected, err, "mint connection link").LogError(ctx, s.logger)
 	}
 	recovery := connectionRecovery{
-		ID: token, OrganizationID: endpoint.OrganizationID, UserID: userID, ProjectID: endpoint.ProjectID,
-		UserSessionIssuerID: endpoint.UserSessionIssuerID, McpServerID: endpoint.McpServerID.UUID, McpSlug: endpoint.Slug,
-		UpstreamResource: endpoint.UpstreamResource, ServerName: res.serverName, AuthClientID: res.clientID, RegistrationID: authentication.chosenClient.UUID, CreatedAt: time.Now(),
+		ID: token, OrganizationID: target.organizationID, UserID: userID, ProjectID: target.projectID,
+		UserSessionIssuerID: target.userSessionIssuerID, McpServerID: target.mcpServerID, McpSlug: target.mcpSlug,
+		UpstreamResource: target.upstreamResource, ServerName: target.serverName, AuthClientID: target.authClientID, RegistrationID: target.registrationID, CreatedAt: time.Now(),
 		BrowserCookieID: "", BrowserHash: "", BrowserHop: false,
 	}
 	if err := s.connectionRecoveryCache.Store(ctx, recovery); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "store connection link").LogError(ctx, s.logger), true
+		return "", "", true, oops.E(oops.CodeUnexpected, err, "store connection link").LogError(ctx, s.logger)
 	}
 	// Issued on the dashboard's canonical origin only, so the assistant can
 	// tell a genuine link from one a tool's own error text makes up.
 	link := s.siteURL.JoinPath(connectionRecoveryPath, token).String()
 
-	name := res.serverName
+	name := target.serverName
 	if name == "" {
 		name = "this MCP server"
 	}
@@ -144,14 +157,100 @@ func (s *Service) connectionRecoveryError(ctx context.Context, authentication *i
 	if connected {
 		heading, action = "Reconnect required", "reconnect"
 	}
-	message := fmt.Sprintf("%s: the person this turn acts for needs to %s their own account for %s. "+
+	message = fmt.Sprintf("%s: the person this turn acts for needs to %s their own account for %s. "+
 		"Send this link privately to that person only; it works only for them, signed in to Speakeasy, and expires in 15 minutes. "+
 		"If you cannot reach them privately, do not post the link: ask them to open Speakeasy and %s %s instead.\n\n%s",
 		heading, action, name, action, name, link)
+	return message, action, true, nil
+}
+
+// connectionRecoveryError answers a turn acting for a user whose own
+// connection for the chosen personal client is missing or expired, with a
+// link only that user can complete. It reports false for any other caller or
+// client, which keep the ordinary answer.
+func (s *Service) connectionRecoveryError(ctx context.Context, authentication *issuerGateAuthentication, cause error) (error, bool) {
+	res := authentication.authClient
+	if res == nil || res.outcome != authClientResolved || res.clientType != authClientTypeRemoteSession ||
+		res.attachedSession != uuid.Nil || !authentication.chosenClient.Valid || !authentication.endpoint.McpServerID.Valid {
+		return nil, false
+	}
+	endpoint := authentication.endpoint
+	message, action, ok, err := s.issueConnectionRecoveryMessage(ctx, connectionRecoveryTarget{
+		organizationID:      endpoint.OrganizationID,
+		projectID:           endpoint.ProjectID,
+		userSessionIssuerID: endpoint.UserSessionIssuerID,
+		mcpServerID:         endpoint.McpServerID.UUID,
+		mcpSlug:             endpoint.Slug,
+		upstreamResource:    endpoint.UpstreamResource,
+		serverName:          res.serverName,
+		authClientID:        res.clientID,
+		registrationID:      authentication.chosenClient.UUID,
+	})
+	if err != nil {
+		return err, true
+	}
+	if !ok {
+		return nil, false
+	}
 	s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: represented user's connection "+action+" required", issuerGateReasonInvalidRemoteSession, mcpconnectionattempts.CodeInvalidRemoteSession, cause)
 	// Not logged: the message carries the link, and the rejection above is
 	// already recorded without it.
 	return oops.E(oops.CodeFailedPrecondition, nil, "%s", message), true
+}
+
+// memberPersonalRecoveryError wraps a personal connection recovery error so
+// the tool response carries the one-time link while telemetry logs record a
+// link-free summary.
+type memberPersonalRecoveryError struct {
+	memberCredentialError
+	logMessage string
+}
+
+// memberTelemetryFailureMessage returns a safe telemetry error message for err,
+// stripping one-time personal connection recovery URLs.
+func memberTelemetryFailureMessage(err error, fallback string) string {
+	if rec, ok := errors.AsType[memberPersonalRecoveryError](err); ok && rec.logMessage != "" {
+		return rec.logMessage
+	}
+	return fallback
+}
+
+// memberConnectionRecoveryError answers a human-backed principal credential's
+// missing, expired, or rejected personal connection on a gateway member with
+// the same one-time user-bound link a direct server returns, wrapped as a
+// memberCredentialError so the gateway emits it as an isError tool result.
+// Workload turns and shared or agent-owned connections return false and keep
+// their existing gateway error.
+func (s *Service) memberConnectionRecoveryError(ctx context.Context, gate metaGateContext, member metaMember, upstreamResource string) (error, bool) {
+	res := member.authClient
+	if gate.userSessionIssuerID == uuid.Nil || res == nil || res.outcome != authClientResolved ||
+		res.clientType != authClientTypeRemoteSession || res.attachedSession != uuid.Nil ||
+		!member.chosenClientID.Valid || member.upstreamNoAuth {
+		return nil, false
+	}
+	serverName := conv.Default(res.serverName, member.name)
+	message, action, ok, err := s.issueConnectionRecoveryMessage(ctx, connectionRecoveryTarget{
+		organizationID:      gate.organizationID,
+		projectID:           member.projectID,
+		userSessionIssuerID: gate.userSessionIssuerID,
+		mcpServerID:         member.serverID,
+		mcpSlug:             member.slug,
+		upstreamResource:    upstreamResource,
+		serverName:          serverName,
+		authClientID:        res.clientID,
+		registrationID:      member.chosenClientID.UUID,
+	})
+	if err != nil {
+		return err, true
+	}
+	if !ok {
+		return nil, false
+	}
+	logSummary := fmt.Sprintf("personal connection %s required for %s", action, conv.Default(serverName, member.slug))
+	return memberPersonalRecoveryError{
+		memberCredentialError: memberCredentialError{&metaMemberError{message: message}},
+		logMessage:            logSummary,
+	}, true
 }
 
 // HandleConnectionRecovery serves a connection link. The signed-in Speakeasy
