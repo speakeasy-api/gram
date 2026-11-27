@@ -62,7 +62,7 @@ func TestCaptureStoresMetadataAndToolCallIDs(t *testing.T) {
 	f.capture(t, id)
 
 	fixtures := fixturerepo.New(f.db)
-	meta, err := fixtures.ShadowMetadata(t.Context(), id)
+	meta, err := fixtures.MessageMetadata(t.Context(), id)
 	require.NoError(t, err)
 	var lengths struct {
 		Content, ContentRaw, ToolCalls int32
@@ -74,18 +74,18 @@ func TestCaptureStoresMetadataAndToolCallIDs(t *testing.T) {
 	require.Equal(t, pgtype.Int4{Int32: lengths.Content, Valid: true}, meta.ContentBytes)
 	require.Equal(t, pgtype.Int4{Int32: lengths.ContentRaw, Valid: true}, meta.ContentRawBytes, "matches octet_length(content_raw::text)")
 	require.Equal(t, pgtype.Int4{Int32: lengths.ToolCalls, Valid: true}, meta.ToolCallsBytes, "matches octet_length(tool_calls::text)")
-	ids, err := fixtures.ShadowToolCallIDs(t.Context(), id)
+	ids, err := fixtures.ToolCallIDs(t.Context(), id)
 	require.NoError(t, err)
 	require.Equal(t, []string{"example"}, ids)
 
-	// A recapture rewrites the tool-call IDs with the shadow.
+	// A recapture rewrites the tool-call IDs with the transcript.
 	_, err = fixtures.SetToolCalls(t.Context(), []byte(`[{"id":"first"},{"id":"second"}]`), id, project(f.project))
 	require.NoError(t, err)
 	f.capture(t, id)
-	ids, err = fixtures.ShadowToolCallIDs(t.Context(), id)
+	ids, err = fixtures.ToolCallIDs(t.Context(), id)
 	require.NoError(t, err)
 	require.Equal(t, []string{"first", "second"}, ids)
-	meta, err = fixtures.ShadowMetadata(t.Context(), id)
+	meta, err = fixtures.MessageMetadata(t.Context(), id)
 	require.NoError(t, err)
 	require.Equal(t, pgtype.Int4{Int32: 2, Valid: true}, meta.ToolCallCount)
 
@@ -93,7 +93,7 @@ func TestCaptureStoresMetadataAndToolCallIDs(t *testing.T) {
 	_, err = fixtures.SetToolCalls(t.Context(), nil, id, project(f.project))
 	require.NoError(t, err)
 	f.capture(t, id)
-	ids, err = fixtures.ShadowToolCallIDs(t.Context(), id)
+	ids, err = fixtures.ToolCallIDs(t.Context(), id)
 	require.NoError(t, err)
 	require.Empty(t, ids)
 }
@@ -111,13 +111,13 @@ func TestTranscriptsGateByProject(t *testing.T) {
 	other := NewTranscripts(f.store, uuid.New())
 	require.False(t, other.Enabled(f.project))
 	require.NoError(t, other.Seal(t.Context(), f.db, f.org, f.project, []uuid.UUID{id}))
-	_, err := fixturerepo.New(f.db).ShadowMetadata(t.Context(), id)
+	_, err := fixturerepo.New(f.db).MessageMetadata(t.Context(), id)
 	require.Error(t, err, "a project off the list captures nothing")
 
 	enabled := NewTranscripts(f.store, f.project)
 	require.True(t, enabled.Enabled(f.project))
 	require.NoError(t, enabled.Seal(t.Context(), f.db, f.org, f.project, []uuid.UUID{id}))
-	_, err = fixturerepo.New(f.db).ShadowMetadata(t.Context(), id)
+	_, err = fixturerepo.New(f.db).MessageMetadata(t.Context(), id)
 	require.NoError(t, err)
 }
 
@@ -131,8 +131,8 @@ type openRow struct {
 	storageError pgtype.Text
 }
 
-func openRowBody(r *openRow) Body {
-	return Body{MessageID: r.id, Content: &r.content, ContentRaw: &r.contentRaw, ToolCalls: &r.toolCalls, ToolOutcomeNotes: &r.notes, ToolCallSummaries: &r.summaries, StorageError: &r.storageError}
+func openRowBody(r *openRow) ProtectedFieldRefs {
+	return ProtectedFieldRefs{MessageID: r.id, Content: &r.content, ContentRaw: &r.contentRaw, ToolCalls: &r.toolCalls, ToolOutcomeNotes: &r.notes, ToolCallSummaries: &r.summaries, StorageError: &r.storageError}
 }
 
 // plaintextRow is a loaded row whose six body fields all hold placeholder
@@ -148,32 +148,32 @@ func plaintextRow(id uuid.UUID) openRow {
 func TestOpenRowsServesTranscriptsAndFallsBackToPlaintext(t *testing.T) {
 	t.Parallel()
 	f := setup(t, true)
-	shadowed, unshadowed := uuid.New(), uuid.New()
-	f.add(t, shadowed)
-	f.add(t, unshadowed)
-	_, err := fixturerepo.New(f.db).SetStorageError(t.Context(), pgtype.Text{String: "example error", Valid: true}, shadowed, project(f.project))
+	sealed, unsealed := uuid.New(), uuid.New()
+	f.add(t, sealed)
+	f.add(t, unsealed)
+	_, err := fixturerepo.New(f.db).SetStorageError(t.Context(), pgtype.Text{String: "example error", Valid: true}, sealed, project(f.project))
 	require.NoError(t, err)
-	f.capture(t, shadowed)
+	f.capture(t, sealed)
 	transcripts := NewTranscripts(f.store, f.project)
 
-	rows := []openRow{plaintextRow(shadowed), plaintextRow(unshadowed)}
+	rows := []openRow{plaintextRow(sealed), plaintextRow(unsealed)}
 	require.NoError(t, OpenRows(t.Context(), transcripts, f.org, f.project, rows, openRowBody))
 	opened := rows[0]
-	require.Equal(t, "sensitive example", opened.content, "a shadowed message is served from its shadow")
+	require.Equal(t, "sensitive example", opened.content, "a sealed message is served from its transcript")
 	require.True(t, sameJSON([]byte(`{"large":9007199254740993,"n":1e2}`), opened.contentRaw), "numbers survive exactly: %s", opened.contentRaw)
 	require.JSONEq(t, `[{"id":"example"}]`, string(opened.toolCalls))
 	require.Equal(t, pgtype.Text{String: "example note", Valid: true}, opened.notes)
 	require.JSONEq(t, `{"example":"summary"}`, string(opened.summaries))
 	require.Equal(t, pgtype.Text{String: "example error", Valid: true}, opened.storageError, "all six fields come from the copy")
-	require.Equal(t, plaintextRow(unshadowed), rows[1], "a message with no shadow keeps its plaintext")
+	require.Equal(t, plaintextRow(unsealed), rows[1], "a message with no transcript keeps its plaintext")
 
-	off := []openRow{plaintextRow(shadowed)}
+	off := []openRow{plaintextRow(sealed)}
 	require.NoError(t, OpenRows(t.Context(), NewTranscripts(f.store), f.org, f.project, off, openRowBody))
-	require.Equal(t, plaintextRow(shadowed), off[0], "a project off the list reads plaintext")
+	require.Equal(t, plaintextRow(sealed), off[0], "a project off the list reads plaintext")
 
-	_, err = fixturerepo.New(f.db).ChangeContent(t.Context(), shadowed, project(f.project))
+	_, err = fixturerepo.New(f.db).ChangeContent(t.Context(), sealed, project(f.project))
 	require.NoError(t, err)
-	stale := []openRow{plaintextRow(shadowed)}
+	stale := []openRow{plaintextRow(sealed)}
 	stale[0].content = "changed"
 	require.NoError(t, OpenRows(t.Context(), transcripts, f.org, f.project, stale, openRowBody))
 	require.Equal(t, "changed", stale[0].content, "a disagreeing transcript is logged and the plaintext is kept")
@@ -190,18 +190,18 @@ func TestToolCallIDsStayWithTheirProject(t *testing.T) {
 	q := repo.New(f.db)
 	require.NoError(t, q.DeleteToolCallIDs(t.Context(), repo.DeleteToolCallIDsParams{MessageID: id, ProjectID: uuid.New()}))
 	require.NoError(t, q.InsertToolCallIDs(t.Context(), repo.InsertToolCallIDsParams{MessageID: id, ProjectID: uuid.New(), ToolCallIds: []string{"forged"}}))
-	ids, err := fixturerepo.New(f.db).ShadowToolCallIDs(t.Context(), id)
+	ids, err := fixturerepo.New(f.db).ToolCallIDs(t.Context(), id)
 	require.NoError(t, err)
 	require.Equal(t, []string{"example"}, ids)
 }
 
-// updateBody runs one UpdateMessage in its own committed transaction.
+// updateBody runs one UpdateChatMessage in its own committed transaction.
 func (f *fixture) updateBody(t *testing.T, transcripts *Transcripts, chatID, id uuid.UUID, apply func(*chatrepo.ChatMessage) error) (bool, error) {
 	t.Helper()
 	tx, err := f.db.Begin(t.Context()) //nolint:glint // notestingrawsql: caller-owned transaction boundary is the behavior under test.
 	require.NoError(t, err)
 	defer func() { _ = tx.Rollback(t.Context()) }()
-	changed, err := transcripts.UpdateMessage(t.Context(), tx, f.org, f.project, chatID, id, apply)
+	changed, err := transcripts.UpdateChatMessage(t.Context(), tx, f.org, f.project, chatID, id, apply)
 	if err != nil {
 		return false, err
 	}
@@ -257,7 +257,7 @@ func TestUpdateMessageKeepsEveryCopyCurrent(t *testing.T) {
 	opened, err = f.store.Load(ctx, f.org, f.project, id)
 	require.NoError(t, err)
 	require.Equal(t, "patched", opened.Content)
-	ids, err := fixturerepo.New(f.db).ShadowToolCallIDs(ctx, id)
+	ids, err := fixturerepo.New(f.db).ToolCallIDs(ctx, id)
 	require.NoError(t, err)
 	require.Equal(t, []string{"call_new"}, ids, "tool-call IDs are measured from the new body")
 
@@ -268,7 +268,7 @@ func TestUpdateMessageKeepsEveryCopyCurrent(t *testing.T) {
 	require.Equal(t, Progress{Current: 1}, progress)
 }
 
-// In plaintext mode UpdateMessage writes the plaintext row and the metadata, and
+// In plaintext mode UpdateChatMessage writes the plaintext row and the metadata, and
 // no transcript.
 func TestUpdateMessageInPlaintextMode(t *testing.T) {
 	t.Parallel()
@@ -287,7 +287,7 @@ func TestUpdateMessageInPlaintextMode(t *testing.T) {
 	snapshot, err := fixturerepo.New(f.db).MessageSnapshot(ctx, id, project(f.project))
 	require.NoError(t, err)
 	require.Contains(t, snapshot, `"content": "plain update"`)
-	_, err = fixturerepo.New(f.db).ShadowMetadata(ctx, id)
+	_, err = fixturerepo.New(f.db).MessageMetadata(ctx, id)
 	require.NoError(t, err, "metadata is written in every mode")
 	progress, err := f.store.Progress(ctx, f.org, f.project)
 	require.NoError(t, err)
@@ -316,7 +316,7 @@ func TestUpdateMessageStartsFromTheTranscriptOrThePlaintext(t *testing.T) {
 		}, content: "changed"},
 		{name: "transcript disagrees with the plaintext", prepare: func(f *fixture, id uuid.UUID) {
 			f.capture(t, id)
-			// A write that bypassed UpdateMessage left the transcript behind.
+			// A write that bypassed UpdateChatMessage left the transcript behind.
 			_, err := fixturerepo.New(f.db).ChangeContent(ctx, id, project(f.project))
 			require.NoError(t, err)
 		}, content: "changed"},
@@ -390,12 +390,15 @@ func TestEncryptedMode(t *testing.T) {
 	require.JSONEq(t, `{"example":"summary"}`, string(row.summaries))
 	require.Equal(t, pgtype.Text{}, row.storageError, "no storage error, served as NULL rather than the placeholder")
 
-	// A backfill must not reseal it from the empty plaintext row.
-	_, err = f.store.Backfill(ctx, f.org, f.project, uuid.Nil, 10)
+	// Sealing it again in encrypted mode must not reseal it from the empty
+	// plaintext row.
+	reseal, err := f.db.Begin(ctx) //nolint:glint // notestingrawsql: caller-owned transaction boundary is the behavior under test.
 	require.NoError(t, err)
+	require.NoError(t, encrypted.Seal(ctx, reseal, f.org, f.project, []uuid.UUID{updated}))
+	require.NoError(t, reseal.Commit(ctx))
 	row, err = open(updated)
 	require.NoError(t, err)
-	require.Equal(t, "sensitive example", row.content, "the transcript survives a backfill")
+	require.Equal(t, "sensitive example", row.content, "encrypted mode never reseals an existing transcript")
 
 	// A row sealed in shadow mode is emptied by an update that changes nothing.
 	populated := uuid.New()
@@ -404,7 +407,7 @@ func TestEncryptedMode(t *testing.T) {
 	_, err = f.updateBody(t, encrypted, f.chat, populated, func(*chatrepo.ChatMessage) error { return nil })
 	require.NoError(t, err)
 	emptied(populated)
-	meta, err := fixtures.ShadowMetadata(ctx, updated)
+	meta, err := fixtures.MessageMetadata(ctx, updated)
 	require.NoError(t, err)
 	require.Equal(t, pgtype.Int4{Int32: int32(len("sensitive example")), Valid: true}, meta.ContentBytes, "metadata describes the body, not the empty columns")
 

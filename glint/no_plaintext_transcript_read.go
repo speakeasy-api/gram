@@ -18,7 +18,7 @@ import (
 
 const (
 	noPlaintextTranscriptReadAnalyzer = "noplaintexttranscriptread"
-	noPlaintextTranscriptReadDoc      = "only the transcript store may read, update or insert the plaintext transcript columns of chat_messages; it opens encrypted transcripts on read, writes every copy of a body through Transcripts.UpdateMessage, and the chat message writer seals inserts"
+	noPlaintextTranscriptReadDoc      = "only the transcript store may read, update or insert the plaintext transcript columns of chat_messages; it opens encrypted transcripts on read, writes every copy of a body through Transcripts.UpdateChatMessage, and the chat message writer seals inserts"
 )
 
 type noPlaintextTranscriptReadSettings struct {
@@ -121,7 +121,7 @@ func newNoPlaintextTranscriptReadAnalyzerWith(_ noPlaintextTranscriptReadSetting
 				}
 
 				if use == plaintextTranscriptUpdate {
-					pass.ReportRangef(sel, "do not call %q here: it updates the plaintext transcript columns of chat_messages; change the message through transcriptstore.Transcripts.UpdateMessage, which writes every copy (caller %q)", called.Name(), callerOrPackage(caller, pass))
+					pass.ReportRangef(sel, "do not call %q here: it updates the plaintext transcript columns of chat_messages; change the message through transcriptstore.Transcripts.UpdateChatMessage, which writes every copy (caller %q)", called.Name(), callerOrPackage(caller, pass))
 					return true
 				}
 				if use == plaintextTranscriptInsert {
@@ -407,7 +407,7 @@ func sqlInsertsPlaintextTranscript(sql string) bool {
 // sqlUpdatesPlaintextTranscript reports whether a query updates a plaintext
 // transcript column of chat_messages: an UPDATE of chat_messages, or an INSERT
 // into it with ON CONFLICT DO UPDATE, whose SET clause assigns one. Every body
-// change goes through Transcripts.UpdateMessage, which writes every copy.
+// change goes through Transcripts.UpdateChatMessage, which writes every copy.
 func sqlUpdatesPlaintextTranscript(sql string) bool {
 	s := stripSQLCommentsAndStrings(strings.ToLower(sql))
 	if !sqlUpdateTarget.MatchString(s) && !sqlUpsertTarget.MatchString(s) {
@@ -632,7 +632,7 @@ func reportRawPlaintextTranscriptWrites(pass *analysis.Pass, ins *inspector.Insp
 			return true
 		}
 		if sqlUpdatesPlaintextTranscript(sql) {
-			pass.ReportRangef(lit, "this SQL updates the plaintext transcript columns of chat_messages; change the message through transcriptstore.Transcripts.UpdateMessage, which writes every copy")
+			pass.ReportRangef(lit, "this SQL updates the plaintext transcript columns of chat_messages; change the message through transcriptstore.Transcripts.UpdateChatMessage, which writes every copy")
 			return true
 		}
 		if !sqlInsertsPlaintextTranscript(sql) {

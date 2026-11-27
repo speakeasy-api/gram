@@ -184,7 +184,7 @@ func TestLeftRunesMatchesPostgresLeft(t *testing.T) {
 
 func TestPlatformShapeBlanksOversizedFields(t *testing.T) {
 	t.Parallel()
-	m := transcriptcrypto.Message{Content: "body", ContentRaw: []byte(`"raw"`), ToolCalls: []byte(`[]`)}
+	m := transcriptcrypto.ProtectedFields{Content: "body", ContentRaw: []byte(`"raw"`), ToolCalls: []byte(`[]`)}
 	platformShape(platformOversized{content: true, toolCalls: false, contentRaw: true})(&m)
 	require.Empty(t, m.Content)
 	require.Nil(t, m.ContentRaw)

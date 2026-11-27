@@ -30,8 +30,8 @@ func leftRunes(s string, n int) string {
 	return s
 }
 
-func capContent(n int) func(*transcriptcrypto.Message) {
-	return func(m *transcriptcrypto.Message) { m.Content = leftRunes(m.Content, n) }
+func capContent(n int) func(*transcriptcrypto.ProtectedFields) {
+	return func(m *transcriptcrypto.ProtectedFields) { m.Content = leftRunes(m.Content, n) }
 }
 
 // GetMessageContentBatchRow is one message risk analysis scans, with the
@@ -47,12 +47,12 @@ func (t *Transcripts) GetMessageContentBatch(ctx context.Context, db DBTX, proje
 	joined := make([]joinedRow, 0, len(rows)*3)
 	for i := range rows {
 		r := &rows[i]
-		joined = append(joined, joinedRow{body: Body{MessageID: r.ID, Content: &r.Content, ContentRaw: nil, ToolCalls: &r.ToolCalls, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}, chatID: r.ChatID, ciphertext: r.ShadowCiphertext, current: r.ShadowCurrent, shape: nil})
+		joined = append(joined, joinedRow{body: ProtectedFieldRefs{MessageID: r.ID, Content: &r.Content, ContentRaw: nil, ToolCalls: &r.ToolCalls, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}, chatID: r.ChatID, ciphertext: r.ShadowCiphertext, current: r.ShadowCurrent, shape: nil})
 		if r.PriorUserRequestID != uuid.Nil {
-			joined = append(joined, joinedRow{body: Body{MessageID: r.PriorUserRequestID, Content: &r.PriorUserRequest, ContentRaw: nil, ToolCalls: nil, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}, chatID: r.ChatID, ciphertext: r.PriorShadowCiphertext, current: r.PriorShadowCurrent, shape: capContent(riskContextRunes)})
+			joined = append(joined, joinedRow{body: ProtectedFieldRefs{MessageID: r.PriorUserRequestID, Content: &r.PriorUserRequest, ContentRaw: nil, ToolCalls: nil, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}, chatID: r.ChatID, ciphertext: r.PriorShadowCiphertext, current: r.PriorShadowCurrent, shape: capContent(riskContextRunes)})
 		}
 		if r.RecentUntrustedContentID != uuid.Nil {
-			joined = append(joined, joinedRow{body: Body{MessageID: r.RecentUntrustedContentID, Content: &r.RecentUntrustedContent, ContentRaw: nil, ToolCalls: nil, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}, chatID: r.ChatID, ciphertext: r.RecentShadowCiphertext, current: r.RecentShadowCurrent, shape: capContent(riskContextRunes)})
+			joined = append(joined, joinedRow{body: ProtectedFieldRefs{MessageID: r.RecentUntrustedContentID, Content: &r.RecentUntrustedContent, ContentRaw: nil, ToolCalls: nil, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}, chatID: r.ChatID, ciphertext: r.RecentShadowCiphertext, current: r.RecentShadowCurrent, shape: capContent(riskContextRunes)})
 		}
 	}
 	if err := t.openJoined(ctx, db, projectID, "GetMessageContentBatch", joined); err != nil {
@@ -70,7 +70,7 @@ func (t *Transcripts) GetChatMessageForUnmask(ctx context.Context, db DBTX, proj
 	if err != nil {
 		return GetChatMessageForUnmaskRow{}, fmt.Errorf("get chat message for unmask: %w", err)
 	}
-	joined := []joinedRow{{body: Body{MessageID: row.ID, Content: &row.Content, ContentRaw: nil, ToolCalls: &row.ToolCalls, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}, chatID: row.ChatID, ciphertext: row.ShadowCiphertext, current: row.ShadowCurrent, shape: nil}}
+	joined := []joinedRow{{body: ProtectedFieldRefs{MessageID: row.ID, Content: &row.Content, ContentRaw: nil, ToolCalls: &row.ToolCalls, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}, chatID: row.ChatID, ciphertext: row.ShadowCiphertext, current: row.ShadowCurrent, shape: nil}}
 	if err := t.openJoined(ctx, db, projectID, "GetChatMessageForUnmask", joined); err != nil {
 		// Never hand back the plaintext that failed the check.
 		return GetChatMessageForUnmaskRow{}, err
@@ -116,7 +116,7 @@ func (t *Transcripts) GetJudgeMessageWindow(ctx context.Context, db DBTX, p Judg
 	joined := make([]joinedRow, len(rows))
 	for i := range rows {
 		r := &rows[i]
-		joined[i] = joinedRow{body: Body{MessageID: r.ID, Content: &r.Content, ContentRaw: nil, ToolCalls: &r.ToolCalls, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}, chatID: r.ChatID, ciphertext: r.ShadowCiphertext, current: r.ShadowCurrent, shape: nil}
+		joined[i] = joinedRow{body: ProtectedFieldRefs{MessageID: r.ID, Content: &r.Content, ContentRaw: nil, ToolCalls: &r.ToolCalls, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}, chatID: r.ChatID, ciphertext: r.ShadowCiphertext, current: r.ShadowCurrent, shape: nil}
 	}
 	if err := t.openJoined(ctx, db, p.ProjectID, "GetJudgeMessageWindow", joined); err != nil {
 		return nil, err

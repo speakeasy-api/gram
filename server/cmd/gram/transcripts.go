@@ -47,7 +47,7 @@ func configureTranscripts(ctx context.Context, c *cli.Context, db *pgxpool.Pool,
 	if len(values) == 0 {
 		// An explicitly supplied blank must not silently disable the feature.
 		if c.IsSet(chatTranscriptShadowProjectIDsFlag) {
-			return none, fmt.Errorf("chat transcript shadow requires explicit nonempty project UUIDs")
+			return none, fmt.Errorf("chat transcript shadow mode requires explicit nonempty project UUIDs")
 		}
 		return none, nil
 	}
@@ -56,10 +56,10 @@ func configureTranscripts(ctx context.Context, c *cli.Context, db *pgxpool.Pool,
 		return none, err
 	}
 	if orgEncryption.Service == nil || (writer != nil && orgEncryption.Provisioner == nil) {
-		return none, fmt.Errorf("chat transcript shadow requires organization encryption service and provisioner")
+		return none, fmt.Errorf("chat transcript shadow mode requires organization encryption service and provisioner")
 	}
 	if db == nil {
-		return none, fmt.Errorf("chat transcript shadow requires a database")
+		return none, fmt.Errorf("chat transcript shadow mode requires a database")
 	}
 	// Check compatibility before resolving projects, provisioning keys or enabling writes.
 	if err := checkTranscriptSchema(ctx, db); err != nil {
@@ -85,7 +85,7 @@ func configureTranscripts(ctx context.Context, c *cli.Context, db *pgxpool.Pool,
 	// Build the store first: it can fail, and provisioning mints keys.
 	store, err := transcriptstore.New(db, orgEncryption.Service, logger, tracerProvider, meterProvider)
 	if err != nil {
-		return none, fmt.Errorf("create chat transcript shadow store: %w", err)
+		return none, fmt.Errorf("create chat transcript store: %w", err)
 	}
 	// Only a process that captures shadows provisions keys. A reader opens
 	// shadows that a capturing process already sealed, so it never mints a
@@ -95,7 +95,7 @@ func configureTranscripts(ctx context.Context, c *cli.Context, db *pgxpool.Pool,
 			break
 		}
 		if err := orgEncryption.Provisioner.EnsureUseCase(ctx, org, orgencryption.UseCaseChatTranscripts, orgencryption.SystemActor()); err != nil {
-			return none, fmt.Errorf("provision chat transcript shadow encryption: %w", err)
+			return none, fmt.Errorf("provision chat transcript encryption: %w", err)
 		}
 	}
 	transcripts := transcriptstore.NewTranscripts(store, projectIDs...)
@@ -262,10 +262,10 @@ SELECT EXISTS (SELECT 1 FROM sidecar)
  AND EXISTS (SELECT 1 FROM tool_call_arbiters WHERE indimmediate AND indisready)
  AND NOT EXISTS (SELECT 1 FROM tool_call_arbiters WHERE NOT indimmediate)`).Scan(&compatible)
 	if err != nil {
-		return fmt.Errorf("check chat transcript shadow schema: %w", err)
+		return fmt.Errorf("check chat transcript schema: %w", err)
 	}
 	if !compatible {
-		return fmt.Errorf("chat transcript shadow schema is unavailable or incompatible")
+		return fmt.Errorf("chat transcript schema is unavailable or incompatible")
 	}
 	return nil
 }

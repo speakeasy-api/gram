@@ -19,15 +19,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-func newTranscriptShadowStore(t *testing.T, ti *chatTestInstance) *transcriptstore.Store {
+func newTranscriptStore(t *testing.T, ti *chatTestInstance) *transcriptstore.Store {
 	t.Helper()
-	store, _ := newMeteredTranscriptShadowStore(t, ti)
+	store, _ := newMeteredTranscriptStore(t, ti)
 	return store
 }
 
-// newMeteredTranscriptShadowStore also returns a reader for the store's
-// metrics, so a test can prove which messages were served from shadows.
-func newMeteredTranscriptShadowStore(t *testing.T, ti *chatTestInstance) (*transcriptstore.Store, *sdkmetric.ManualReader) {
+// newMeteredTranscriptStore also returns a reader for the store's
+// metrics, so a test can prove which messages were served from transcripts.
+func newMeteredTranscriptStore(t *testing.T, ti *chatTestInstance) (*transcriptstore.Store, *sdkmetric.ManualReader) {
 	t.Helper()
 	keys := orgencryptiontest.New(t, ti.conn)
 	require.NoError(t, keys.Provisioner.EnsureUseCase(t.Context(), ti.orgID, orgencryption.UseCaseChatTranscripts, orgencryption.SystemActor()))
@@ -61,7 +61,7 @@ func readMessagesByOutcome(t *testing.T, reader *sdkmetric.ManualReader) map[str
 	return counts
 }
 
-func captureTranscriptShadows(t *testing.T, ti *chatTestInstance, store *transcriptstore.Store, messageIDs ...uuid.UUID) {
+func sealTranscripts(t *testing.T, ti *chatTestInstance, store *transcriptstore.Store, messageIDs ...uuid.UUID) {
 	t.Helper()
 	require.NoError(t, store.Prepare(t.Context(), ti.orgID))
 	tx, err := ti.conn.Begin(t.Context()) //nolint:glint // notestingrawsql: Capture runs inside the caller's message transaction; message rows come from generated seed queries.
@@ -71,18 +71,18 @@ func captureTranscriptShadows(t *testing.T, ti *chatTestInstance, store *transcr
 	require.NoError(t, tx.Commit(t.Context()))
 }
 
-func TestLoadChat_ReadEnabledProjectOpensEncryptedShadows(t *testing.T) {
+func TestLoadChat_ReadEnabledProjectOpensTranscripts(t *testing.T) {
 	t.Parallel()
 	ti := newTestChatService(t)
 	ctx := authztest.WithAdminGrants(initSessionCtx(t, ti))
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	chatID := seedChat(t, ctx, ti, authCtx.UserID, "", "shadow reads")
+	chatID := seedChat(t, ctx, ti, authCtx.UserID, "", "transcript reads")
 	first := seedMessageContent(t, ctx, ti, chatID, "first sealed message")
 	second := seedMessageContent(t, ctx, ti, chatID, "second sealed message")
 
-	store, reader := newMeteredTranscriptShadowStore(t, ti)
-	captureTranscriptShadows(t, ti, store, first, second)
+	store, reader := newMeteredTranscriptStore(t, ti)
+	sealTranscripts(t, ti, store, first, second)
 	ti.service.WithTranscripts(transcriptstore.NewTranscripts(store, ti.projectID))
 
 	result, err := ti.service.LoadChat(ctx, loadPayload(chatID.String()))
@@ -97,13 +97,13 @@ func TestLoadChat_ReadEnabledProjectOpensEncryptedShadows(t *testing.T) {
 		first.String():  "first sealed message",
 		second.String(): "second sealed message",
 	}, contents)
-	// A current shadow opens to the same text as the plaintext, so the body
+	// A current transcript opens to the same text as the plaintext, so the body
 	// alone cannot show where it came from. The read metric proves both
-	// messages were opened from shadows, with no plaintext fallback.
+	// messages were opened from transcripts, with no plaintext fallback.
 	require.Equal(t, map[string]int64{"success": 2}, readMessagesByOutcome(t, reader))
 }
 
-func TestLoadChat_ReadEnabledProjectServesPlaintextWhenNoShadowExists(t *testing.T) {
+func TestLoadChat_ReadEnabledProjectServesPlaintextWhenNoTranscriptExists(t *testing.T) {
 	t.Parallel()
 	ti := newTestChatService(t)
 	ctx := authztest.WithAdminGrants(initSessionCtx(t, ti))
@@ -113,8 +113,8 @@ func TestLoadChat_ReadEnabledProjectServesPlaintextWhenNoShadowExists(t *testing
 	captured := seedMessageContent(t, ctx, ti, chatID, "captured message")
 	uncaptured := seedMessageContent(t, ctx, ti, chatID, "message written before capture began")
 
-	store := newTranscriptShadowStore(t, ti)
-	captureTranscriptShadows(t, ti, store, captured)
+	store := newTranscriptStore(t, ti)
+	sealTranscripts(t, ti, store, captured)
 	ti.service.WithTranscripts(transcriptstore.NewTranscripts(store, ti.projectID))
 
 	result, err := ti.service.LoadChat(ctx, loadPayload(chatID.String()))
@@ -137,12 +137,12 @@ func TestLoadChat_ReadEnabledProjectServesPlaintextForAStaleTranscript(t *testin
 	ctx := authztest.WithAdminGrants(initSessionCtx(t, ti))
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	chatID := seedChat(t, ctx, ti, authCtx.UserID, "", "stale shadow")
+	chatID := seedChat(t, ctx, ti, authCtx.UserID, "", "stale transcript")
 	edited := seedMessageContent(t, ctx, ti, chatID, "original message")
 
-	store := newTranscriptShadowStore(t, ti)
-	captureTranscriptShadows(t, ti, store, edited)
-	// A write that skips capture leaves the shadow behind the plaintext.
+	store := newTranscriptStore(t, ti)
+	sealTranscripts(t, ti, store, edited)
+	// A write that skips capture leaves the transcript behind the plaintext.
 	_, err := fixturerepo.New(ti.conn).ChangeContent(t.Context(), edited, uuid.NullUUID{UUID: ti.projectID, Valid: true})
 	require.NoError(t, err)
 	ti.service.WithTranscripts(transcriptstore.NewTranscripts(store, ti.projectID))
@@ -165,12 +165,12 @@ func TestLoadChat_OtherProjectsKeepReadingPlaintext(t *testing.T) {
 	chatID := seedChat(t, ctx, ti, authCtx.UserID, "", "plaintext reads")
 	edited := seedMessageContent(t, ctx, ti, chatID, "original message")
 
-	// The message has a shadow that is now stale. A project the service reads
-	// shadows for would fail this load; the service reads shadows only for
+	// The message has a transcript that is now stale. A project the service reads
+	// transcripts for would fail this load; the service reads transcripts only for
 	// another project, so this one keeps serving plaintext without touching
-	// the shadow.
-	store, reader := newMeteredTranscriptShadowStore(t, ti)
-	captureTranscriptShadows(t, ti, store, edited)
+	// the transcript.
+	store, reader := newMeteredTranscriptStore(t, ti)
+	sealTranscripts(t, ti, store, edited)
 	_, err := fixturerepo.New(ti.conn).ChangeContent(t.Context(), edited, uuid.NullUUID{UUID: ti.projectID, Valid: true})
 	require.NoError(t, err)
 	ti.service.WithTranscripts(transcriptstore.NewTranscripts(store, uuid.New()))

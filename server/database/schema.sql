@@ -7125,7 +7125,7 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   -- The message body is content, content_raw, tool_calls, tool_outcome_notes,
   -- tool_call_summaries and storage_error. Projects with encrypted transcripts
   -- keep a copy of it in chat_message_transcripts, so change these columns of
-  -- an existing row only through transcriptstore.Transcripts.UpdateMessage. The
+  -- an existing row only through transcriptstore.Transcripts.UpdateChatMessage. The
   -- noplaintexttranscriptread lint rule enforces it.
   content TEXT NOT NULL,
   -- if message content is small enough then we'll store it straight in the
