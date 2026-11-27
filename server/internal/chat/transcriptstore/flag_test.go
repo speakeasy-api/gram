@@ -224,3 +224,30 @@ func TestShadowListIgnoresTheFlag(t *testing.T) {
 	require.Error(t, f.transcripts.Prepare(t.Context(), f.org, f.project), "a listed project fails closed without its key")
 	require.Zero(t, f.provisioner.calls.Load(), "listed organizations are provisioned at startup, not by the flag")
 }
+
+// Reads never provision a key. Before any writer provisioned the organization
+// they serve plaintext; once another process sealed messages, they open them
+// without provisioning anything themselves.
+func TestFlagReadsNeverProvision(t *testing.T) {
+	t.Parallel()
+	f := setupFlag(t)
+	f.setFlag(true)
+	id := uuid.New()
+	f.add(t, id)
+
+	reader := NewTranscripts(f.store).WithFeatureFlag(f.flags, f.provisioner)
+	rows := []openRow{plaintextRow(id)}
+	require.NoError(t, OpenRows(t.Context(), reader, f.org, f.project, rows, openRowBody))
+	require.Equal(t, plaintextRow(id), rows[0], "an organization without a key is served from plaintext")
+	require.Zero(t, f.provisioner.calls.Load(), "a read does not provision the key")
+
+	sealed := uuid.New()
+	f.write(t, sealed)
+	require.Equal(t, int32(1), f.provisioner.calls.Load(), "the writer provisions the key")
+
+	rows = []openRow{plaintextRow(sealed)}
+	require.NoError(t, OpenRows(t.Context(), reader, f.org, f.project, rows, openRowBody))
+	require.Equal(t, "sensitive example", rows[0].content, "a reader opens transcripts a writer sealed")
+	require.Equal(t, int32(1), f.provisioner.calls.Load(), "the reader still provisioned nothing")
+	require.Equal(t, ModePlaintext, reader.Mode(t.Context(), f.project), "the reader's process never writes for the organization")
+}

@@ -46,12 +46,15 @@ func NewTranscripts(store *Store, projectIDs ...uuid.UUID) *Transcripts {
 // WithFeatureFlag also puts in shadow mode every project of an organization
 // feature.FlagChatTranscriptShadow is on for. The flag is evaluated from the
 // provider's locally cached definitions only, so no read or write calls
-// PostHog. The first Prepare or Open for such an organization provisions its
-// transcript key outside any transaction; until that succeeds in this process
-// the organization stays plaintext, so a key that cannot be provisioned never
-// fails a write. Once it is provisioned the project is in shadow mode, and
-// sealing fails closed like for a listed project. An error or an undecided
-// lookup of the project's organization or of the flag reads as plaintext.
+// PostHog. Only a writer's Prepare provisions such an organization's transcript
+// key, outside any transaction; until that succeeds in this process the
+// organization stays plaintext for writes, so a key that cannot be provisioned
+// never fails a write. Once it is provisioned the project is in shadow mode,
+// and sealing fails closed like for a listed project. Reads never provision a
+// key: Open reads whatever transcripts exist, and an organization without a
+// key has none, so its messages are served from plaintext. An error or an
+// undecided lookup of the project's organization or of the flag reads as
+// plaintext.
 func (t *Transcripts) WithFeatureFlag(features feature.Provider, provisioner Provisioner) *Transcripts {
 	if t.store == nil || features == nil || provisioner == nil {
 		panic("transcriptstore: WithFeatureFlag needs a store, a feature provider and a provisioner")
@@ -101,8 +104,14 @@ func (t *Transcripts) PrepareProject(ctx context.Context, projectID uuid.UUID) e
 	if t == nil || t.store == nil {
 		return nil
 	}
-	if d := t.decide(ctx, t.store.db, projectID); d.mode == ModePlaintext && d.unprovisioned == "" {
+	d := t.decide(ctx, t.store.db, projectID)
+	if d.mode == ModePlaintext && !d.unprovisioned {
 		return nil
+	}
+	// The flag path already resolved the organization; reusing it means a
+	// second lookup cannot fail a write the flag decision let through.
+	if d.organizationID != "" {
+		return t.Prepare(ctx, d.organizationID, projectID)
 	}
 	org, err := repo.New(t.store.db).GetProjectOrganization(ctx, projectID)
 	if err != nil {
@@ -155,26 +164,28 @@ func (t *Transcripts) Mode(ctx context.Context, projectID uuid.UUID) Mode {
 	return t.decide(ctx, t.store.db, projectID).mode
 }
 
-// decision is Mode with the reason a flag-enabled project is still plaintext.
+// decision is Mode with what the flag path learned.
 type decision struct {
 	mode Mode
+	// organizationID is the project's organization when the flag decided.
+	organizationID string
 	// unprovisioned is set when the feature flag puts the project in shadow
 	// mode but this process has not provisioned its organization's key yet.
-	unprovisioned string
+	unprovisioned bool
 }
 
 // decide reads the project lists and the feature flag. db is the caller's
 // transaction when it has one.
 func (t *Transcripts) decide(ctx context.Context, db repo.DBTX, projectID uuid.UUID) decision {
-	plaintext := decision{mode: ModePlaintext, unprovisioned: ""}
+	plaintext := decision{mode: ModePlaintext, organizationID: "", unprovisioned: false}
 	if t == nil || t.store == nil {
 		return plaintext
 	}
 	if _, ok := t.encrypted[projectID]; ok {
-		return decision{mode: ModeEncrypted, unprovisioned: ""}
+		return decision{mode: ModeEncrypted, organizationID: "", unprovisioned: false}
 	}
 	if _, ok := t.projects[projectID]; ok {
-		return decision{mode: ModeShadow, unprovisioned: ""}
+		return decision{mode: ModeShadow, organizationID: "", unprovisioned: false}
 	}
 	if t.flag == nil {
 		return plaintext
@@ -184,25 +195,41 @@ func (t *Transcripts) decide(ctx context.Context, db repo.DBTX, projectID uuid.U
 		return plaintext
 	}
 	if !t.flag.isProvisioned(org.id) {
-		return decision{mode: ModePlaintext, unprovisioned: org.id}
+		return decision{mode: ModePlaintext, organizationID: org.id, unprovisioned: true}
 	}
-	return decision{mode: ModeShadow, unprovisioned: ""}
+	return decision{mode: ModeShadow, organizationID: org.id, unprovisioned: false}
 }
 
 // activate provisions the organization of a project the feature flag puts in
 // shadow mode, outside any transaction, and returns the project's mode after.
+// Only the write path calls it.
 func (t *Transcripts) activate(ctx context.Context, projectID uuid.UUID) Mode {
 	if t == nil || t.store == nil {
 		return ModePlaintext
 	}
 	d := t.decide(ctx, t.store.db, projectID)
-	if d.unprovisioned == "" {
+	if !d.unprovisioned {
 		return d.mode
 	}
-	if !t.flag.ensureProvisioned(ctx, d.unprovisioned) {
+	if !t.flag.ensureProvisioned(ctx, d.organizationID) {
 		return ModePlaintext
 	}
 	return ModeShadow
+}
+
+// readMode is the mode reads use. A project the feature flag puts in shadow
+// mode reads its transcripts even before this process provisioned the key: a
+// transcript exists only if a writer provisioned the key, so reads never need
+// to create one.
+func (t *Transcripts) readMode(ctx context.Context, projectID uuid.UUID) Mode {
+	if t == nil || t.store == nil {
+		return ModePlaintext
+	}
+	d := t.decide(ctx, t.store.db, projectID)
+	if d.unprovisioned {
+		return ModeShadow
+	}
+	return d.mode
 }
 
 // UpdateChatMessage is the one way to change an existing message's protected fields: content,
@@ -250,8 +277,7 @@ type ProtectedFieldRefs struct {
 // and the plaintext is kept, the same rule UpdateChatMessage follows. In encrypted
 // mode the transcript is served without comparison, and a message without one
 // fails the read with ErrMissingTranscript. A transcript that cannot be
-// decrypted fails the read in either mode. For a project the feature flag puts
-// in shadow mode it first provisions the organization's key, once per process.
+// decrypted fails the read in either mode. Open never provisions a key.
 //
 // A message edited while the flag was off for its organization keeps the
 // transcript sealed before the edit. When the flag is back on, reads of it log
@@ -264,7 +290,7 @@ func (t *Transcripts) Open(ctx context.Context, organizationID string, projectID
 	if len(refs) == 0 {
 		return nil
 	}
-	mode := t.activate(ctx, projectID)
+	mode := t.readMode(ctx, projectID)
 	if mode == ModePlaintext {
 		return nil
 	}

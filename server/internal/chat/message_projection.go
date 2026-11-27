@@ -99,8 +99,7 @@ func (w *ChatMessageWriter) ProjectMessage(ctx context.Context, projectID, messa
 	if err != nil {
 		return false, fmt.Errorf("persist projected message: %w", err)
 	}
-	if !exists && changed > 0 {
-		// Prepare fails only for a project that seals.
+	if !exists && changed > 0 && w.transcripts.Enabled(ctx, projectID) {
 		if prepared != nil {
 			return false, prepared
 		}
@@ -131,8 +130,7 @@ func (w *ChatMessageWriter) patchProjection(ctx context.Context, tx pgx.Tx, proj
 	if !contentDiffers(row, write) && bytes.Equal(row.ContentHash, write.Params.ContentHash) && row.FinishReason == write.Params.FinishReason {
 		return 0, nil
 	}
-	// Prepare fails only for a project that seals.
-	if prepared != nil {
+	if prepared != nil && w.transcripts.Enabled(ctx, projectID) {
 		return 0, prepared
 	}
 	organizationID, err := repo.New(tx).GetProjectOrganizationID(ctx, projectID)
