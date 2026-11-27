@@ -155,12 +155,16 @@ WHERE
   AND project_id = @project_id::uuid;
 
 -- name: GetChatAttachmentAssetURL :one
-SELECT name, url, content_type, content_length, updated_at
+-- A disabled organization's attachments are not served, including through
+-- signed URLs minted before it was disabled.
+SELECT assets.name, assets.url, assets.content_type, assets.content_length, assets.updated_at
 FROM assets
+JOIN projects p ON p.id = assets.project_id
+JOIN organization_metadata om ON om.id = p.organization_id AND om.disabled_at IS NULL
 WHERE
-  id = @id AND kind = 'chat_attachment'
-  AND project_id = @project_id::uuid
-  AND deleted = false;
+  assets.id = @id AND assets.kind = 'chat_attachment'
+  AND assets.project_id = @project_id::uuid
+  AND assets.deleted = false;
 
 -- name: ListAssets :many
 SELECT * FROM assets WHERE project_id = @project_id::uuid;

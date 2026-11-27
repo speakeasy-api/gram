@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/userblock"
 )
 
 // JWTAuthenticator validates Platform MCP access tokens. A token is accepted
@@ -35,6 +36,8 @@ type JWTAuthenticator struct {
 	signer      *sessiontokens.Signer
 	store       *platformrepo.Queries
 	credentials *CredentialCodec
+	userBlock   *userblock.Gate
+	logger      *slog.Logger
 
 	// baseURL is the configured server URL, whose resource applies to
 	// requests that carry no platform origin.
@@ -53,8 +56,18 @@ func NewJWTAuthenticator(signer *sessiontokens.Signer, db *pgxpool.Pool, encrypt
 		signer:      signer,
 		store:       platformrepo.New(db),
 		credentials: credentials,
+		userBlock:   userblock.NewGate(db),
+		logger:      nil,
 		baseURL:     baseURL,
 	}, nil
+}
+
+// WithLogger sets the logger that records refusals of blocked users.
+func (a *JWTAuthenticator) WithLogger(logger *slog.Logger) *JWTAuthenticator {
+	if a != nil {
+		a.logger = logger
+	}
+	return a
 }
 
 func (a *JWTAuthenticator) Authenticate(ctx context.Context, token string) (Principal, error) {
@@ -85,6 +98,18 @@ func (a *JWTAuthenticator) Authenticate(ctx context.Context, token string) (Prin
 	}
 	if session.SubjectUrn != subject.String() || session.ClientID != claims.ClientID || session.ConnectionGeneration != session.ActiveGeneration {
 		return Principal{}, ErrUnauthorized
+	}
+	if a.userBlock != nil {
+		blocked, err := a.userBlock.Blocked(ctx, subject.ID)
+		if err != nil {
+			return Principal{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
+		}
+		if blocked {
+			if a.logger != nil {
+				userblock.LogRefusal(ctx, a.logger, "platform_mcp", subject.ID)
+			}
+			return Principal{}, ErrUnauthorized
+		}
 	}
 
 	return Principal{
