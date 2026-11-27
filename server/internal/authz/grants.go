@@ -556,17 +556,41 @@ func allScopeGrants() []Grant {
 	return grants
 }
 
-// DemoScopeGrants returns the grant set for sessions pointed at the shared
-// demo organization: every user-visible scope, unrestricted — including
-// org:admin. It is the same set access.ListGrants reports to the dashboard, so
-// a demo visitor never sees a page or control the server then refuses to
-// serve.
+// demoReadOnlyScopes is every scope a session in the shared demo organization
+// holds. Any authenticated user can enter the demo, with no membership, and
+// everyone who enters shares the same data, so a demo session may only view.
 //
-// Demo visitors can therefore mutate demo data. That is intended: the demo
-// organization is a sandbox, and `gram demo-seed` deletes and reinserts its
-// data daily, so anything a visitor changes is reverted on the next run.
+// This is an allowlist: a scope added to the registry is withheld from demo
+// sessions until it is listed here. List only scopes that neither change
+// state nor act on anyone's behalf. Deliberately absent:
+//   - every write and admin scope, including org:admin, which also gates
+//     admin-only reads such as API keys and billing;
+//   - mcp:connect and inference:execute, which run tools and models;
+//   - channels:read_all, which is not granted by default to anyone.
+var demoReadOnlyScopes = []Scope{
+	ScopeOrgRead,
+	ScopeChatRead,
+	ScopeProjectRead,
+	ScopeLogRead,
+	ScopeMemoryRead,
+	ScopeMCPRead,
+	ScopeEnvironmentRead,
+	ScopeSkillRead,
+	ScopeAssistantRead,
+	ScopeAgentRead,
+	ScopeWorkloadRead,
+}
+
+// DemoScopeGrants returns the grant set for sessions pointed at the shared
+// demo organization: unrestricted grants of the read-only scopes in
+// demoReadOnlyScopes. It is the same set access.ListGrants reports to the
+// dashboard, so the dashboard hides the controls the server would refuse.
 func DemoScopeGrants() []Grant {
-	return allScopeGrants()
+	grants := make([]Grant, 0, len(demoReadOnlyScopes))
+	for _, s := range demoReadOnlyScopes {
+		grants = append(grants, NewGrant(s, WildcardResource))
+	}
+	return grants
 }
 
 func roleGrantsForScopes(scopes []Scope) []*RoleGrant {

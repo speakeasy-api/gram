@@ -270,18 +270,21 @@ Access is by IMPERSONATION only — demo org never gets membership rows.
    only takes effect at the login callback). `sessions.Authenticate` accepts
    the membership-less demo session.
 2. DONE: `authz.Engine.PrepareContext` gives any demo session
-   `authz.DemoScopeGrants()` — every user-visible scope, unrestricted,
-   `org:admin` and `environment:read` included — for everyone, including
+   `authz.DemoScopeGrants()`: unrestricted grants of read-only scopes only
+   (`org:read`, `project:read`, `mcp:read`, `environment:read`, `chat:read`,
+   `log:read`, `memory:read`, `skill:read`, `assistant:read`, `agent:read`,
+   `workload:read`). No write or admin scope, no `org:admin`, no
+   `mcp:connect` or `inference:execute`. This applies to everyone, including
    admins with the override cookie. It is the same set `access.listGrants`
-   reports to the dashboard, so no page is offered that its handler then
-   refuses. Visitors can mutate demo data; the daily reseed reverts it.
+   reports to the dashboard, so the dashboard hides what the server refuses.
+   Demo sessions are read-only because anyone can enter the demo and everyone
+   shares it: a visitor's changes would be seen by, and could target, the
+   next visitor until the reseed runs.
 3. DONE (commit ae256351c1): transcript block lifted for the demo org in
    `chat.LoadChat` via `constants.DemoOrganizationID`.
 4. DONE: `authz.Engine.ShouldEnforce` forces enforcement for the demo org
-   regardless of its RBAC product feature. Mutations by demo sessions are
-   allowed to land: the daily `gram demo-seed` run deletes and reinserts the
-   org's data wholesale, so the seed staying idempotent and scoped — not an
-   access control — is what keeps the demo presentable.
+   regardless of its RBAC product feature, so the read-only grant set in 2
+   always applies.
 5. DONE: `ImpersonationBanner` shows "Demo org — sample data" for any session
    whose active org slug is `acme-demo` (cookie no longer required); exit
    switches back to the user's own org via `auth.switchScopes`. Entry points:
