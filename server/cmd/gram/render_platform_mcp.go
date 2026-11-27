@@ -18,9 +18,10 @@ func newRenderPlatformMCPCommand() *cli.Command {
 		Usage: "Render the public Speakeasy marketplace tree (speakeasy-api/marketplace) into a directory",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
-				Name:  "server-url",
-				Value: "https://app.getgram.ai",
-				Usage: "Speakeasy deployment the rendered package points at",
+				Name:     "server-url",
+				Usage:    "Speakeasy deployment the rendered package points at",
+				EnvVars:  []string{"GRAM_SERVER_URL"},
+				Required: true,
 			},
 			&cli.StringFlag{
 				Name:  "version",
