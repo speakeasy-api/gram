@@ -273,8 +273,9 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 			interrupt.observe(n.Params)
 			var envelope struct {
 				Update struct {
-					Kind string `json:"sessionUpdate"`
-					ID   string `json:"messageId"`
+					Kind    string          `json:"sessionUpdate"`
+					ID      string          `json:"messageId"`
+					Content json.RawMessage `json:"content"`
 				} `json:"update"`
 			}
 			_ = json.Unmarshal(n.Params, &envelope)
@@ -318,9 +319,12 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 				return err
 			}
 			if replayEcho != nil {
-				// Coalesce reduced agent_message replacements in place so long
-				// streamed replies retain only the latest accumulated frame.
-				if (envelope.Update.Kind == "agent_message" || envelope.Update.Kind == "agent_message_chunk") && envelope.Update.ID != "" {
+				// Coalesce content-bearing reduced agent_message replacements in
+				// place so long streamed replies retain only the latest accumulated
+				// frame; contentless agent_message patches (e.g. stopReason) stay
+				// appended after the content frame they update.
+				hasContentReplacement := envelope.Update.Kind == "agent_message_chunk" || (envelope.Update.Kind == "agent_message" && len(envelope.Update.Content) > 0)
+				if hasContentReplacement && envelope.Update.ID != "" {
 					if idx, ok := replayTailAgentIndex[envelope.Update.ID]; ok {
 						replayTail[idx] = canonical
 						return nil
