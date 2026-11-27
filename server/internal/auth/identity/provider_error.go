@@ -20,3 +20,7 @@ func (e *providerError) Error() string {
 func (e *providerError) Unwrap() error {
 	return e.cause
 }
+
+// ErrUserBlocked marks a login refused because staff blocked the user from
+// the platform (users.blacklisted_at).
+var ErrUserBlocked = errors.New("user is blocked from the platform")
