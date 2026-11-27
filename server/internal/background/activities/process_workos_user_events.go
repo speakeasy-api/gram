@@ -175,7 +175,7 @@ type workosUserEventPayload struct {
 // block a user from the platform: "true" sets users.blacklisted_at, "false"
 // clears it, and an absent key leaves it unchanged so a block made another
 // way survives unrelated profile updates.
-const workosUserDisabledMetadataKey = "speakeasy_disabled"
+const workosUserDisabledMetadataKey = "blacklisted"
 
 // workosUserDisabledState reads the block state staff set in WorkOS metadata.
 // ok is false when the metadata does not say.

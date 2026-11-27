@@ -869,10 +869,10 @@ func TestProcessWorkOSUserEvents_AppliesDisabledMetadata(t *testing.T) {
 		metadata  string
 		blocked   bool
 	}{
-		{name: "disabled true blocks", eventID: "event_block", updatedAt: "2026-05-12T10:00:00Z", metadata: `{"speakeasy_disabled":"true"}`, blocked: true},
+		{name: "disabled true blocks", eventID: "event_block", updatedAt: "2026-05-12T10:00:00Z", metadata: `{"blacklisted":"true"}`, blocked: true},
 		{name: "absent key keeps block", eventID: "event_unrelated", updatedAt: "2026-05-13T10:00:00Z", metadata: `{"team":"sdk"}`, blocked: true},
-		{name: "stale event cannot unblock", eventID: "event_stale", updatedAt: "2026-05-01T10:00:00Z", metadata: `{"speakeasy_disabled":"false"}`, blocked: true},
-		{name: "disabled false unblocks", eventID: "event_unblock", updatedAt: "2026-05-14T10:00:00Z", metadata: `{"speakeasy_disabled":"false"}`, blocked: false},
+		{name: "stale event cannot unblock", eventID: "event_stale", updatedAt: "2026-05-01T10:00:00Z", metadata: `{"blacklisted":"false"}`, blocked: true},
+		{name: "disabled false unblocks", eventID: "event_unblock", updatedAt: "2026-05-14T10:00:00Z", metadata: `{"blacklisted":"false"}`, blocked: false},
 	}
 	for _, step := range steps {
 		workosClient := workos.NewStubClient()
