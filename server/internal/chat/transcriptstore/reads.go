@@ -2,9 +2,11 @@ package transcriptstore
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
@@ -169,7 +171,8 @@ type GetChatEntryTotalsParams = plainrepo.GetChatEntryTotalsParams
 type GetChatEntryTotalsRow = plainrepo.GetChatEntryTotalsRow
 
 // GetChatEntryTotals counts a generation's trace entries. It returns no
-// message body.
+// message body. Whether a sealed message carries tool calls comes from its
+// metadata, not its plaintext.
 func (t *Transcripts) GetChatEntryTotals(ctx context.Context, db DBTX, params GetChatEntryTotalsParams) (GetChatEntryTotalsRow, error) {
 	row, err := plainrepo.New(db).GetChatEntryTotals(ctx, params)
 	if err != nil {
@@ -251,7 +254,8 @@ func (t *Transcripts) GetToolCallSummaryContext(ctx context.Context, db DBTX, c 
 type ListClaudeUserMessagesForPromptAttachmentParentRow = plainrepo.ListClaudeUserMessagesForPromptAttachmentParentRow
 
 // ListClaudeUserMessagesForPromptAttachmentParent returns a chat's non-empty
-// user prompts, newest first.
+// user prompts, newest first. Whether a sealed prompt is empty comes from its
+// metadata, not its plaintext.
 func (t *Transcripts) ListClaudeUserMessagesForPromptAttachmentParent(ctx context.Context, db DBTX, projectID, chatID uuid.UUID) ([]ListClaudeUserMessagesForPromptAttachmentParentRow, error) {
 	rows, err := plainrepo.New(db).ListClaudeUserMessagesForPromptAttachmentParent(ctx, plainrepo.ListClaudeUserMessagesForPromptAttachmentParentParams{OpenShadows: t.Enabled(projectID), ChatID: chatID, ProjectID: projectID})
 	if err != nil {
@@ -318,8 +322,25 @@ func (p TranscriptPages) ListChatTranscriptMessagesPage(ctx context.Context, pag
 
 // FindAssistantToolCallMessageID returns the newest assistant message of a
 // chat that issued the tool call, or pgx.ErrNoRows (wrapped).
+//
+// For a project with encrypted transcripts, the tool-call IDs sealing indexed
+// answer first. Only when they have no match are the plaintext tool calls
+// scanned, and then only for messages whose IDs are not indexed: messages never
+// sealed (written before sealing began, or by a writer that does not seal) or
+// changed since. That is the same
+// fallback every read applies, so such a message is still found.
 func (t *Transcripts) FindAssistantToolCallMessageID(ctx context.Context, db DBTX, projectID, chatID uuid.UUID, toolCallID string) (uuid.UUID, error) {
-	id, err := plainrepo.New(db).FindAssistantToolCallMessageID(ctx, plainrepo.FindAssistantToolCallMessageIDParams{ProjectID: uuid.NullUUID{UUID: projectID, Valid: true}, ChatID: chatID, ToolCallID: toolCallID})
+	indexed := t.Enabled(projectID)
+	if indexed {
+		id, err := plainrepo.New(db).FindIndexedToolCallMessageID(ctx, plainrepo.FindIndexedToolCallMessageIDParams{ChatID: chatID, ToolCallID: toolCallID, ProjectID: projectID})
+		if err == nil {
+			return id, nil
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return uuid.Nil, fmt.Errorf("find indexed assistant tool call message: %w", err)
+		}
+	}
+	id, err := plainrepo.New(db).FindAssistantToolCallMessageID(ctx, plainrepo.FindAssistantToolCallMessageIDParams{ProjectID: uuid.NullUUID{UUID: projectID, Valid: true}, ChatID: chatID, SkipIndexed: indexed, ToolCallID: toolCallID})
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("find assistant tool call message: %w", err)
 	}

@@ -14,29 +14,67 @@ import (
 )
 
 const findAssistantToolCallMessageID = `-- name: FindAssistantToolCallMessageID :one
-SELECT id
-FROM chat_messages
-WHERE project_id = $1
-  AND chat_id = $2
-  AND role = 'assistant'
-  AND tool_calls IS NOT NULL
+SELECT m.id
+FROM chat_messages m
+WHERE m.project_id = $1
+  AND m.chat_id = $2
+  AND m.role = 'assistant'
+  AND NOT ($3::boolean AND m.tool_call_count IS NOT NULL)
+  AND m.tool_calls IS NOT NULL
   AND EXISTS (
     SELECT 1
-    FROM jsonb_array_elements(tool_calls) tc
-    WHERE tc->>'id' = $3::text
+    FROM jsonb_array_elements(m.tool_calls) tc
+    WHERE tc->>'id' = $4::text
   )
-ORDER BY created_at DESC
+ORDER BY m.created_at DESC, m.seq DESC, m.id DESC
 LIMIT 1
 `
 
 type FindAssistantToolCallMessageIDParams struct {
-	ProjectID  uuid.NullUUID
-	ChatID     uuid.UUID
-	ToolCallID string
+	ProjectID   uuid.NullUUID
+	ChatID      uuid.UUID
+	SkipIndexed bool
+	ToolCallID  string
 }
 
+// With @skip_indexed, a message whose sealed tool-call IDs are indexed (its
+// tool_call_count is set) is left to FindIndexedToolCallMessageID, so only
+// messages never sealed, or changed since, are scanned here.
 func (q *Queries) FindAssistantToolCallMessageID(ctx context.Context, arg FindAssistantToolCallMessageIDParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, findAssistantToolCallMessageID, arg.ProjectID, arg.ChatID, arg.ToolCallID)
+	row := q.db.QueryRow(ctx, findAssistantToolCallMessageID,
+		arg.ProjectID,
+		arg.ChatID,
+		arg.SkipIndexed,
+		arg.ToolCallID,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const findIndexedToolCallMessageID = `-- name: FindIndexedToolCallMessageID :one
+SELECT m.id
+FROM chat_message_tool_call_ids tc
+JOIN chat_messages m ON m.id = tc.message_id AND m.project_id = tc.project_id
+WHERE tc.chat_id = $1
+  AND tc.tool_call_id = $2
+  AND tc.project_id = $3
+  AND m.chat_id = $1
+  AND m.role = 'assistant'
+ORDER BY m.created_at DESC, m.seq DESC, m.id DESC
+LIMIT 1
+`
+
+type FindIndexedToolCallMessageIDParams struct {
+	ChatID     uuid.UUID
+	ToolCallID string
+	ProjectID  uuid.UUID
+}
+
+// The newest assistant message of a chat whose sealed tool-call IDs include
+// the tool call. Reads no plaintext and no encrypted copy.
+func (q *Queries) FindIndexedToolCallMessageID(ctx context.Context, arg FindIndexedToolCallMessageIDParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, findIndexedToolCallMessageID, arg.ChatID, arg.ToolCallID, arg.ProjectID)
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
@@ -48,6 +86,7 @@ WITH ordered AS (
     cm.id,
     cm.role,
     CASE
+      WHEN cm.tool_call_count IS NOT NULL THEN cm.tool_call_count > 0
       WHEN cm.tool_calls IS NULL THEN false
       WHEN jsonb_typeof(cm.tool_calls) = 'array'
         THEN jsonb_array_length(cm.tool_calls) > 0
@@ -113,6 +152,10 @@ type GetChatEntryTotalsRow struct {
 // counts messages the caller's ClickHouse finding anchors flag
 // (@risk_message_ids), directly or through an attachment hanging off them
 // (@risk_content_part_ids).
+//
+// The tool-call count comes from the message's metadata when sealing measured
+// it, so the plaintext tool_calls column is consulted only for a message that
+// was never sealed or changed since.
 func (q *Queries) GetChatEntryTotals(ctx context.Context, arg GetChatEntryTotalsParams) (GetChatEntryTotalsRow, error) {
 	row := q.db.QueryRow(ctx, getChatEntryTotals,
 		arg.RiskMessageIds,
@@ -186,6 +229,43 @@ func (q *Queries) GetChatMessageForUnmask(ctx context.Context, arg GetChatMessag
 		&i.Content,
 		&i.ToolCalls,
 		&i.CreatedAt,
+		&i.ShadowCiphertext,
+		&i.ShadowCurrent,
+	)
+	return i, err
+}
+
+const getCorrelatedChatMessageBody = `-- name: GetCorrelatedChatMessageBody :one
+SELECT m.chat_id, m.content, m.tool_calls, t.ciphertext AS shadow_ciphertext,
+  (t.ciphertext IS NOT NULL)::boolean AS shadow_current
+FROM chat_messages m
+LEFT JOIN chat_message_transcripts t ON t.source_hash IS NULL AND t.message_id = m.id AND t.project_id = m.project_id AND $1::boolean
+WHERE m.project_id = $2::uuid AND m.id = $3
+`
+
+type GetCorrelatedChatMessageBodyParams struct {
+	OpenShadows bool
+	ProjectID   uuid.UUID
+	ID          uuid.UUID
+}
+
+type GetCorrelatedChatMessageBodyRow struct {
+	ChatID           uuid.UUID
+	Content          string
+	ToolCalls        []byte
+	ShadowCiphertext pgtype.Text
+	ShadowCurrent    bool
+}
+
+// The stored body of a correlated message, with its transcript, for a project
+// that keeps transcripts.
+func (q *Queries) GetCorrelatedChatMessageBody(ctx context.Context, arg GetCorrelatedChatMessageBodyParams) (GetCorrelatedChatMessageBodyRow, error) {
+	row := q.db.QueryRow(ctx, getCorrelatedChatMessageBody, arg.OpenShadows, arg.ProjectID, arg.ID)
+	var i GetCorrelatedChatMessageBodyRow
+	err := row.Scan(
+		&i.ChatID,
+		&i.Content,
+		&i.ToolCalls,
 		&i.ShadowCiphertext,
 		&i.ShadowCurrent,
 	)
@@ -1107,7 +1187,8 @@ LEFT JOIN chat_message_transcripts t ON t.source_hash IS NULL AND t.message_id =
 WHERE m.chat_id = $2
   AND m.project_id = $3::uuid
   AND m.role = 'user'
-  AND m.content != ''
+  -- A sealed prompt is measured by its metadata, not its plaintext.
+  AND CASE WHEN m.content_bytes IS NOT NULL THEN m.content_bytes > 0 ELSE m.content != '' END
 ORDER BY m.seq DESC, m.created_at DESC
 `
 
@@ -1691,7 +1772,8 @@ const loadEvaluationHistory = `-- name: LoadEvaluationHistory :many
 WITH candidates AS MATERIALIZED (
     SELECT m.id, m.project_id, m.chat_id, m.created_at, m.seq,
            m.role, m.content, m.content_raw, m.content_asset_url, m.tool_calls,
-           m.origin, m.external_message_id
+           m.origin, m.external_message_id,
+           m.content_bytes, m.content_raw_bytes, m.tool_calls_bytes
     FROM chat_messages m
     JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
     JOIN projects p ON p.id = m.project_id
@@ -1704,11 +1786,12 @@ WITH candidates AS MATERIALIZED (
     ORDER BY m.created_at DESC, m.seq DESC
     LIMIT $9
 ), sized AS (
-    SELECT m.id, m.project_id, m.chat_id, m.created_at, m.seq, m.role, m.content, m.content_raw, m.content_asset_url, m.tool_calls, m.origin, m.external_message_id,
-           (octet_length(m.role)::bigint + octet_length(m.content)::bigint
-            + COALESCE(octet_length(m.content_raw::text), 0)::bigint
+    SELECT m.id, m.project_id, m.chat_id, m.created_at, m.seq, m.role, m.content, m.content_raw, m.content_asset_url, m.tool_calls, m.origin, m.external_message_id, m.content_bytes, m.content_raw_bytes, m.tool_calls_bytes,
+           (octet_length(m.role)::bigint
+            + COALESCE(m.content_bytes::bigint, octet_length(m.content)::bigint)
+            + COALESCE(m.content_raw_bytes::bigint, octet_length(m.content_raw::text)::bigint, 0)
             + COALESCE(octet_length(m.content_asset_url), 0)::bigint
-            + COALESCE(octet_length(m.tool_calls::text), 0)::bigint
+            + COALESCE(m.tool_calls_bytes::bigint, octet_length(m.tool_calls::text)::bigint, 0)
             + COALESCE((SELECT sum(octet_length(cp.content_asset_url)::bigint + 8)
                         FROM chat_content_parts cp
                         WHERE cp.project_id = m.project_id AND cp.chat_id = m.chat_id
@@ -1716,7 +1799,7 @@ WITH candidates AS MATERIALIZED (
            ) AS payload_bytes
     FROM candidates m
 ), bounded AS (
-    SELECT m.id, m.project_id, m.chat_id, m.created_at, m.seq, m.role, m.content, m.content_raw, m.content_asset_url, m.tool_calls, m.origin, m.external_message_id, m.payload_bytes,
+    SELECT m.id, m.project_id, m.chat_id, m.created_at, m.seq, m.role, m.content, m.content_raw, m.content_asset_url, m.tool_calls, m.origin, m.external_message_id, m.content_bytes, m.content_raw_bytes, m.tool_calls_bytes, m.payload_bytes,
            (sum(payload_bytes) OVER (ORDER BY created_at DESC, seq DESC ROWS UNBOUNDED PRECEDING)
             > $10::bigint)::boolean AS content_too_large
     FROM sized m
@@ -1781,6 +1864,8 @@ type LoadEvaluationHistoryRow struct {
 // Bound the cumulative inline payload before transferring it to the application.
 // Keep overflow rows as markers: skipping them would change window membership.
 // Reserve eight bytes per attachment locator for array element framing.
+// For a project that keeps shadows the body sizes come from the shadow's
+// metadata, falling back to the plaintext only where it has none.
 func (q *Queries) LoadEvaluationHistory(ctx context.Context, arg LoadEvaluationHistoryParams) ([]LoadEvaluationHistoryRow, error) {
 	rows, err := q.db.Query(ctx, loadEvaluationHistory,
 		arg.OpenShadows,
@@ -1947,14 +2032,13 @@ WITH anchor AS (
 SELECT n.id, n.chat_id, n.seq, n.created_at, n.role, n.generation,
        COALESCE(CASE WHEN octet_length(n.source) <= 512 THEN n.source END, '')::text AS source,
        COALESCE(CASE WHEN octet_length(n.user_id) <= 512 THEN n.user_id END, '')::text AS user_id,
-       CASE WHEN octet_length(n.content) <= 131072 THEN n.content ELSE '' END::text AS content,
-       CASE WHEN octet_length(n.tool_calls::text) <= 131072 THEN n.tool_calls END::jsonb AS tool_calls,
-       CASE WHEN octet_length(n.content_raw::text) <= 131072 THEN n.content_raw END::jsonb AS content_raw,
-       (octet_length(n.content) > 131072 OR COALESCE(octet_length(n.tool_calls::text), 0) > 131072
-        OR COALESCE(octet_length(n.content_raw::text), 0) > 131072)::boolean AS oversized,
-       (COALESCE(octet_length(n.content), 0) > 131072)::boolean AS content_oversized,
-       (COALESCE(octet_length(n.tool_calls::text), 0) > 131072)::boolean AS tool_calls_oversized,
-       (COALESCE(octet_length(n.content_raw::text), 0) > 131072)::boolean AS content_raw_oversized,
+       CASE WHEN sz.content_oversized THEN '' ELSE n.content END::text AS content,
+       CASE WHEN sz.tool_calls_oversized THEN NULL ELSE n.tool_calls END::jsonb AS tool_calls,
+       CASE WHEN sz.content_raw_oversized THEN NULL ELSE n.content_raw END::jsonb AS content_raw,
+       (sz.content_oversized OR sz.tool_calls_oversized OR sz.content_raw_oversized)::boolean AS oversized,
+       sz.content_oversized::boolean AS content_oversized,
+       sz.tool_calls_oversized::boolean AS tool_calls_oversized,
+       sz.content_raw_oversized::boolean AS content_raw_oversized,
        COALESCE((
          SELECT jsonb_agg(jsonb_build_object(
                   'provider', CASE WHEN octet_length(cp.provider) <= 512 THEN cp.provider END, 'provider_user_id', CASE WHEN octet_length(cp.provider_user_id) <= 512 THEN cp.provider_user_id END,
@@ -1967,6 +2051,11 @@ SELECT n.id, n.chat_id, n.seq, n.created_at, n.role, n.generation,
        (t.ciphertext IS NOT NULL)::boolean AS shadow_current
 FROM neighbors n
 LEFT JOIN chat_message_transcripts t ON t.source_hash IS NULL AND t.message_id = n.id AND t.project_id = n.project_id AND $2::boolean
+CROSS JOIN LATERAL (
+  SELECT COALESCE(n.content_bytes, octet_length(n.content)) > 131072 AS content_oversized,
+         COALESCE(n.tool_calls_bytes, octet_length(n.tool_calls::text), 0) > 131072 AS tool_calls_oversized,
+         COALESCE(n.content_raw_bytes, octet_length(n.content_raw::text), 0) > 131072 AS content_raw_oversized
+) sz
 ORDER BY n.seq
 `
 
@@ -2003,6 +2092,8 @@ type ReadPlatformChatMessagesRow struct {
 
 // Capture-sequence window around one message of this chat, or its latest one,
 // with up to five recorded participants per message.
+// Field sizes come from the message's metadata when sealing measured it, as in
+// SearchPlatformChatMessages.
 func (q *Queries) ReadPlatformChatMessages(ctx context.Context, arg ReadPlatformChatMessagesParams) ([]ReadPlatformChatMessagesRow, error) {
 	rows, err := q.db.Query(ctx, readPlatformChatMessages,
 		arg.ProjectID,
@@ -2057,20 +2148,24 @@ SELECT m.id, m.chat_id, m.seq, m.created_at, m.role, m.generation,
        COALESCE(CASE WHEN octet_length(c.title) <= 4096 THEN c.title END, '')::text AS chat_title,
        c.title_manually_set AS chat_title_manually_set,
        COALESCE(c.user_id, '')::text AS owner_user_id,
-       CASE WHEN octet_length(m.content) <= 131072 THEN m.content ELSE '' END::text AS content,
-       CASE WHEN octet_length(m.tool_calls::text) <= 131072 THEN m.tool_calls END::jsonb AS tool_calls,
-       CASE WHEN octet_length(m.content_raw::text) <= 131072 THEN m.content_raw END::jsonb AS content_raw,
-       (octet_length(m.content) > 131072 OR COALESCE(octet_length(m.tool_calls::text), 0) > 131072
-        OR COALESCE(octet_length(m.content_raw::text), 0) > 131072)::boolean AS oversized,
-       (COALESCE(octet_length(m.content), 0) > 131072)::boolean AS content_oversized,
-       (COALESCE(octet_length(m.tool_calls::text), 0) > 131072)::boolean AS tool_calls_oversized,
-       (COALESCE(octet_length(m.content_raw::text), 0) > 131072)::boolean AS content_raw_oversized,
+       CASE WHEN sz.content_oversized THEN '' ELSE m.content END::text AS content,
+       CASE WHEN sz.tool_calls_oversized THEN NULL ELSE m.tool_calls END::jsonb AS tool_calls,
+       CASE WHEN sz.content_raw_oversized THEN NULL ELSE m.content_raw END::jsonb AS content_raw,
+       (sz.content_oversized OR sz.tool_calls_oversized OR sz.content_raw_oversized)::boolean AS oversized,
+       sz.content_oversized::boolean AS content_oversized,
+       sz.tool_calls_oversized::boolean AS tool_calls_oversized,
+       sz.content_raw_oversized::boolean AS content_raw_oversized,
        t.ciphertext AS shadow_ciphertext,
        (t.ciphertext IS NOT NULL)::boolean AS shadow_current
 FROM chat_messages m
 JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
 JOIN projects p ON p.id = c.project_id
 LEFT JOIN chat_message_transcripts t ON t.source_hash IS NULL AND t.message_id = m.id AND t.project_id = m.project_id AND $1::boolean
+CROSS JOIN LATERAL (
+  SELECT COALESCE(m.content_bytes, octet_length(m.content)) > 131072 AS content_oversized,
+         COALESCE(m.tool_calls_bytes, octet_length(m.tool_calls::text), 0) > 131072 AS tool_calls_oversized,
+         COALESCE(m.content_raw_bytes, octet_length(m.content_raw::text), 0) > 131072 AS content_raw_oversized
+) sz
 WHERE m.project_id = $2::uuid
   AND c.organization_id = $3 AND p.organization_id = $3
   AND c.deleted IS FALSE AND p.deleted IS FALSE
@@ -2156,6 +2251,9 @@ type SearchPlatformChatMessagesRow struct {
 // Literal substring search over captured messages in one project and interval,
 // newest or oldest first by (created_at, id). Fields over 128 KiB are neither
 // matched nor returned. The caller requests one extra row to detect more pages.
+// The size of each returned field comes from the message's metadata when
+// sealing measured it (sz), and the store blanks the opened copy by the same
+// *_oversized flags.
 func (q *Queries) SearchPlatformChatMessages(ctx context.Context, arg SearchPlatformChatMessagesParams) ([]SearchPlatformChatMessagesRow, error) {
 	rows, err := q.db.Query(ctx, searchPlatformChatMessages,
 		arg.OpenShadows,

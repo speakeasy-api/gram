@@ -182,13 +182,19 @@ func TestLeftRunesMatchesPostgresLeft(t *testing.T) {
 	require.Equal(t, strings.Repeat("界", 3), leftRunes(strings.Repeat("界", 5), 3))
 }
 
-func TestPlatformShapeBlanksOversizedFields(t *testing.T) {
+func TestPlatformShapeBlanksFlaggedFields(t *testing.T) {
 	t.Parallel()
 	m := transcriptcrypto.ProtectedFields{Content: "body", ContentRaw: []byte(`"raw"`), ToolCalls: []byte(`[]`)}
 	platformShape(platformOversized{content: true, toolCalls: false, contentRaw: true})(&m)
 	require.Empty(t, m.Content)
 	require.Nil(t, m.ContentRaw)
 	require.Equal(t, []byte(`[]`), []byte(m.ToolCalls))
+
+	m = transcriptcrypto.ProtectedFields{Content: "content", ContentRaw: []byte(`"raw"`), ToolCalls: []byte(`[{"id":"a"}]`)}
+	platformShape(platformOversized{content: false, toolCalls: true, contentRaw: false})(&m)
+	require.Equal(t, "content", m.Content)
+	require.Equal(t, []byte(`"raw"`), []byte(m.ContentRaw))
+	require.Nil(t, m.ToolCalls)
 }
 
 func TestJudgeToolCallsOf(t *testing.T) {

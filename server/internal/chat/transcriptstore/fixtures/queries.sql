@@ -69,6 +69,18 @@ SELECT tool_call_id FROM chat_message_tool_call_ids WHERE message_id=$1 ORDER BY
 -- name: SetToolCalls :execrows
 UPDATE chat_messages SET tool_calls=$1 WHERE id=$2 AND project_id=$3;
 
+-- name: StoredMetadata :one
+SELECT tool_call_count, content_bytes, content_raw_bytes, tool_calls_bytes FROM chat_messages WHERE id=$1;
+
+-- name: SetShadowMetadata :execrows
+UPDATE chat_messages SET tool_call_count=sqlc.narg(tool_call_count), content_bytes=sqlc.narg(content_bytes), content_raw_bytes=sqlc.narg(content_raw_bytes), tool_calls_bytes=sqlc.narg(tool_calls_bytes) WHERE id=sqlc.arg(message_id);
+
+-- name: SetRoleAndSource :execrows
+UPDATE chat_messages SET role=sqlc.arg(role), source=sqlc.arg(source) WHERE id=sqlc.arg(message_id) AND project_id=sqlc.arg(project_id);
+
+-- name: SetExternalMessageID :execrows
+UPDATE chat_messages SET external_message_id=sqlc.arg(external_message_id), source=sqlc.arg(source) WHERE id=sqlc.arg(message_id) AND project_id=sqlc.arg(project_id);
+
 -- name: SetSource :execrows
 UPDATE chat_messages SET source=$1 WHERE id=$2;
 

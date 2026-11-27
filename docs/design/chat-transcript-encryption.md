@@ -10,7 +10,7 @@ Six `chat_messages` columns are protected fields: `content`, `content_raw`, `too
 
 ## Reads
 
-Every query that reads the protected fields lives in `transcriptstore/internal/plainrepo`, so only `Transcripts` can call it. Each one joins the message's transcript, which `Transcripts` opens with the rules above. The `no-plaintext-transcript-read` glint rule rejects a read, an insert or a raw update of them anywhere else.
+Every query that reads the protected fields lives in `transcriptstore/internal/plainrepo`, so only `Transcripts` can call it. Each one joins the message's transcript, which `Transcripts` opens with the rules above. Counts, size caps, the sigint history budget, the empty-prompt filter and the hooks tool-call lookup read the plaintext-free metadata that sealing writes (`tool_call_count`, `*_bytes`, `chat_message_tool_call_ids`), and fall back to plaintext only for a message never sealed. The `no-plaintext-transcript-read` glint rule rejects a read, an insert or a raw update of them anywhere else.
 
 ## Writes
 
@@ -26,6 +26,6 @@ Legacy transcripts with an unkeyed `source_hash` read as missing until `Backfill
 2. Add one internal project to the allowlist and run a full backfill.
 3. Watch `stale`, `hydrate_mismatch`, `sanity_mismatch` and `error` for a week; each must stay at zero.
 4. Widen the allowlist project by project, backfilling each.
-5. Move the remaining plaintext SQL (search, counts, lookups) behind `Transcripts`.
+5. Move search (`ILIKE`), the last plaintext SQL, behind `Transcripts`.
 6. Make encrypted mode configurable and teach backfill to empty plaintext; switch one project, then the rest.
 7. Drop `source_hash` once no row carries it.

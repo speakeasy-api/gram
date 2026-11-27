@@ -237,8 +237,9 @@ func (t *Transcripts) InsertExternalChatMessage(ctx context.Context, db chatrepo
 // attribution only, so the protected fields, their metadata and their
 // transcript stay as they were. found is false when a row for the turn exists
 // and cannot be promoted. For an inserted row the returned content and tool
-// calls are the params', in every mode; for a promoted one they are its
-// columns.
+// calls are the params', in every mode. For a promoted one they are its
+// columns in plaintext mode; a project that keeps transcripts never returns
+// them from the plaintext columns, and reads them from the transcript instead.
 func (t *Transcripts) UpsertCorrelatedChatMessage(ctx context.Context, db chatrepo.DBTX, organizationID string, projectID uuid.UUID, params UpsertCorrelatedChatMessageParams) (UpsertCorrelatedChatMessageRow, bool, error) {
 	var stored UpsertCorrelatedChatMessageRow
 	if params.ProjectID != projectID {
@@ -254,7 +255,7 @@ func (t *Transcripts) UpsertCorrelatedChatMessage(ctx context.Context, db chatre
 		if err != nil {
 			return 0, err
 		}
-		row, err := p.q.UpsertCorrelatedChatMessage(ctx, correlatedRow(params, writes[0]))
+		row, err := p.q.UpsertCorrelatedChatMessage(ctx, correlatedRow(params, writes[0], t.Enabled(projectID)))
 		if errors.Is(err, pgx.ErrNoRows) {
 			return 0, nil
 		}
@@ -273,6 +274,12 @@ func (t *Transcripts) UpsertCorrelatedChatMessage(ctx context.Context, db chatre
 		return 1, nil
 	})
 	if err != nil {
+		return stored, false, err
+	}
+	if !found || stored.Inserted || !t.Enabled(projectID) {
+		return stored, found, nil
+	}
+	if err := t.openCorrelatedBody(ctx, db, projectID, &stored); err != nil {
 		return stored, false, err
 	}
 	return stored, found, nil
@@ -375,7 +382,7 @@ func externalRow(r chatrepo.CreateExternalChatMessageParams, w write) repo.Inser
 	}
 }
 
-func correlatedRow(r UpsertCorrelatedChatMessageParams, w write) repo.UpsertCorrelatedChatMessageParams {
+func correlatedRow(r UpsertCorrelatedChatMessageParams, w write, openShadows bool) repo.UpsertCorrelatedChatMessageParams {
 	return repo.UpsertCorrelatedChatMessageParams{
 		ID: r.ID, ChatID: r.ChatID, Role: r.Role, ProjectID: r.ProjectID,
 		Content: w.stored.Content, ContentRaw: w.stored.ContentRaw, ContentAssetUrl: r.ContentAssetUrl,
@@ -387,5 +394,6 @@ func correlatedRow(r UpsertCorrelatedChatMessageParams, w write) repo.UpsertCorr
 		ContentHash: r.ContentHash, Generation: r.Generation, Replayed: r.Replayed, CreatedAt: r.CreatedAt,
 		ToolCallCount: w.meta.toolCallCount, ContentBytes: w.meta.contentBytes,
 		ContentRawBytes: w.meta.contentRawBytes, ToolCallsBytes: w.meta.toolCallsBytes,
+		OpenShadows: openShadows,
 	}
 }

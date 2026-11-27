@@ -698,7 +698,10 @@ DO UPDATE SET
 WHERE chat_messages.project_id = EXCLUDED.project_id
   AND EXCLUDED.source IN ('codex', 'opencode', 'openclaw')
   AND chat_messages.source = 'litellm'
-RETURNING id, content, tool_calls, model, user_id, external_user_id, source, user_agent, (xmax = 0) AS inserted
+RETURNING id,
+  (CASE WHEN $32::boolean THEN '' ELSE content END)::text AS content,
+  (CASE WHEN $32::boolean THEN NULL ELSE tool_calls END)::jsonb AS tool_calls,
+  model, user_id, external_user_id, source, user_agent, (xmax = 0) AS inserted
 `
 
 type UpsertCorrelatedChatMessageParams struct {
@@ -733,6 +736,7 @@ type UpsertCorrelatedChatMessageParams struct {
 	ContentBytes      int32
 	ContentRawBytes   int32
 	ToolCallsBytes    int32
+	OpenShadows       bool
 }
 
 type UpsertCorrelatedChatMessageRow struct {
@@ -750,7 +754,9 @@ type UpsertCorrelatedChatMessageRow struct {
 // Stores a message with its metadata, or promotes the earlier LiteLLM row for
 // the same turn to the native-hook source. A promotion changes attribution
 // only, so it leaves the protected fields and their metadata alone. Run only
-// through Transcripts.UpsertCorrelatedChatMessage.
+// through Transcripts.UpsertCorrelatedChatMessage. A project that keeps
+// transcripts (@open_shadows) gets no body back; the store reads a promoted
+// message's body from its transcript instead.
 func (q *Queries) UpsertCorrelatedChatMessage(ctx context.Context, arg UpsertCorrelatedChatMessageParams) (UpsertCorrelatedChatMessageRow, error) {
 	row := q.db.QueryRow(ctx, upsertCorrelatedChatMessage,
 		arg.ID,
@@ -784,6 +790,7 @@ func (q *Queries) UpsertCorrelatedChatMessage(ctx context.Context, arg UpsertCor
 		arg.ContentBytes,
 		arg.ContentRawBytes,
 		arg.ToolCallsBytes,
+		arg.OpenShadows,
 	)
 	var i UpsertCorrelatedChatMessageRow
 	err := row.Scan(
