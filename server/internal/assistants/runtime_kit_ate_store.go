@@ -291,36 +291,63 @@ func (t *kitATEThreadLifecycleTransaction) Publish(ctx context.Context) error {
 	return nil
 }
 
-func beginKitATEThreadLifecycleTransaction(ctx context.Context, pool *pgxpool.Pool, runtimeID, threadID uuid.UUID) (*kitATEThreadLifecycleTransaction, func(), error) {
+func beginKitATEThreadLifecycleTransaction(ctx context.Context, pool *pgxpool.Pool, assistantID, runtimeID, threadID uuid.UUID) (*kitATEThreadLifecycleTransaction, func(), error) {
 	conn, err := pool.Acquire(ctx)
 	if err != nil {
 		return nil, nil, fmt.Errorf("acquire ATE thread lifecycle connection: %w", err)
 	}
-	var lifecycle *kitATEThreadLifecycleTransaction
+	var (
+		lifecycle       *kitATEThreadLifecycleTransaction
+		heldSharedLock  bool
+		heldThreadLock  bool
+		assistantLockID = assistantID.String()
+	)
 	cleanup := func() {
 		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 		defer cancel()
 		if lifecycle != nil {
 			_ = lifecycle.Rollback(cleanupCtx)
 		}
-		_, err := assistantrepo.New(conn).ReleaseATEThreadSessionLock(cleanupCtx, assistantrepo.ReleaseATEThreadSessionLockParams{
-			RuntimeID: runtimeID.String(),
-			ThreadID:  threadID.String(),
-		})
-		if err != nil {
+		q := assistantrepo.New(conn)
+		unlockFailed := false
+		if heldThreadLock {
+			if _, err := q.ReleaseATEThreadSessionLock(cleanupCtx, assistantrepo.ReleaseATEThreadSessionLockParams{
+				RuntimeID: runtimeID.String(),
+				ThreadID:  threadID.String(),
+			}); err != nil {
+				unlockFailed = true
+			}
+		}
+		if heldSharedLock {
+			if _, err := q.ReleaseAssistantSharedSessionLock(cleanupCtx, assistantLockID); err != nil {
+				unlockFailed = true
+			}
+		}
+		if unlockFailed {
 			raw := conn.Hijack()
 			_ = raw.Close(cleanupCtx)
 			return
 		}
 		conn.Release()
 	}
-	if err = assistantrepo.New(conn).AcquireATEThreadSessionLock(ctx, assistantrepo.AcquireATEThreadSessionLockParams{
+	q := assistantrepo.New(conn)
+	// Shared assistant lock allows sibling threads to proceed concurrently while
+	// still excluding runtime-wide Stop/Reap/switch (which take the exclusive lock).
+	if err = q.AcquireAssistantSharedSessionLock(ctx, assistantLockID); err != nil {
+		heldSharedLock = true
+		cleanup()
+		return nil, nil, fmt.Errorf("acquire shared ATE runtime lock: %w", err)
+	}
+	heldSharedLock = true
+	if err = q.AcquireATEThreadSessionLock(ctx, assistantrepo.AcquireATEThreadSessionLockParams{
 		RuntimeID: runtimeID.String(),
 		ThreadID:  threadID.String(),
 	}); err != nil {
+		heldThreadLock = true
 		cleanup()
 		return nil, nil, fmt.Errorf("lock ATE thread lifecycle: %w", err)
 	}
+	heldThreadLock = true
 	tx, err := conn.BeginTx(ctx, pgx.TxOptions{
 		IsoLevel:       pgx.ReadCommitted,
 		AccessMode:     pgx.ReadWrite,

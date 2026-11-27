@@ -171,8 +171,8 @@ func kitATEActorName(r assistantRuntimeRecord, thread uuid.UUID) string {
 	return kitATEActorNamePrefix(r.ID) + hex.EncodeToString(sum[:8])
 }
 
-func kitATEActorNameValid(r assistantRuntimeRecord, name string) bool {
-	return len(name) <= maxATEDNSLabelLen && kitATENamePattern.MatchString(name) && strings.HasPrefix(name, kitATEActorNamePrefix(r.ID))
+func kitATEActorNameValid(r assistantRuntimeRecord, thread uuid.UUID, name string) bool {
+	return thread != uuid.Nil && name == kitATEActorName(r, thread)
 }
 
 func (k *KitATERuntimeBackend) metadata(r assistantRuntimeRecord) (kitATEMetadata, error) {
@@ -198,7 +198,7 @@ func (k *KitATERuntimeBackend) metadata(r assistantRuntimeRecord) (kitATEMetadat
 }
 
 func (k *KitATERuntimeBackend) validateActorRow(r assistantRuntimeRecord, actor kitATEThreadActor) error {
-	if actor.ThreadID == uuid.Nil || actor.ActorUID == "" || !kitATEActorNameValid(r, actor.ActorName) {
+	if actor.ThreadID == uuid.Nil || actor.ActorUID == "" || !kitATEActorNameValid(r, actor.ThreadID, actor.ActorName) {
 		return ErrKitRuntimeBinding
 	}
 	return nil
@@ -663,6 +663,9 @@ func (k *KitATERuntimeBackend) RuntimeExists(ctx context.Context, r assistantRun
 	actors, err := k.config.Store.ListForRuntime(ctx, r)
 	if err != nil {
 		return false, fmt.Errorf("list ATE actors for existence check: %w", err)
+	}
+	if len(actors) == 0 {
+		return !r.Retired, nil
 	}
 	for _, t := range actors {
 		if err := k.validateActorRow(r, t); err != nil {

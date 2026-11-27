@@ -216,13 +216,29 @@ func TestKitATEConcurrentThreadsDoNotWaitOnEachOther(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEqual(t, lockedRow1.ActorUid, row2.ActorUid)
 
-	byUID1, err := q.GetAssistantATEActorByUID(t.Context(), lockedRow1.ActorUid)
+	byUID1, err := q.GetAssistantATEActorByUID(t.Context(), assistantrepo.GetAssistantATEActorByUIDParams{
+		OrganizationID: identity.OrganizationID,
+		ProjectID:      runtimeSeed.ProjectID,
+		ActorUid:       lockedRow1.ActorUid,
+	})
 	require.NoError(t, err)
 	require.Equal(t, lockedRow1.ID, byUID1.ID)
 
-	byUID2, err := q.GetAssistantATEActorByUID(t.Context(), row2.ActorUid)
+	byUID2, err := q.GetAssistantATEActorByUID(t.Context(), assistantrepo.GetAssistantATEActorByUIDParams{
+		OrganizationID: identity.OrganizationID,
+		ProjectID:      runtimeSeed.ProjectID,
+		ActorUid:       row2.ActorUid,
+	})
 	require.NoError(t, err)
 	require.Equal(t, row2.ID, byUID2.ID)
+
+	// Cross-tenant UID lookup is rejected.
+	_, err = q.GetAssistantATEActorByUID(t.Context(), assistantrepo.GetAssistantATEActorByUIDParams{
+		OrganizationID: "org-other",
+		ProjectID:      runtimeSeed.ProjectID,
+		ActorUid:       row2.ActorUid,
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
 
 	require.NoError(t, tx1.Commit(t.Context()))
 
@@ -336,7 +352,11 @@ func TestKitATEActorLookupByUIDUsesUniqueIndex(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(1), rowsAffected)
 
-	_, err = q.GetAssistantATEActorByUID(t.Context(), "uid-actor-one")
+	_, err = q.GetAssistantATEActorByUID(t.Context(), assistantrepo.GetAssistantATEActorByUIDParams{
+		OrganizationID: "org-test",
+		ProjectID:      projectID,
+		ActorUid:       "uid-actor-one",
+	})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 
 	replacement, err := q.InsertAssistantATEActor(t.Context(), assistantrepo.InsertAssistantATEActorParams{
@@ -356,7 +376,11 @@ func TestKitATEActorLookupByUIDUsesUniqueIndex(t *testing.T) {
 	tx := testenv.BeginTx(t, t.Context(), db)
 
 	capture := &capturingATEActorDB{DBTX: tx}
-	found, err := assistantrepo.New(capture).GetAssistantATEActorByUID(t.Context(), replacement.ActorUid)
+	found, err := assistantrepo.New(capture).GetAssistantATEActorByUID(t.Context(), assistantrepo.GetAssistantATEActorByUIDParams{
+		OrganizationID: "org-test",
+		ProjectID:      projectID,
+		ActorUid:       replacement.ActorUid,
+	})
 	require.NoError(t, err)
 	require.Equal(t, replacement.ID, found.ID)
 	require.Equal(t, replacement.ActorUid, found.ActorUid)

@@ -772,6 +772,10 @@ func TestKitATEBackendPrepareTurnStopResumeAndReap(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, ok)
 
+	exists, err := backend.RuntimeExists(t.Context(), record)
+	require.NoError(t, err)
+	require.False(t, exists, "retired runtime with no remaining actors must report non-existent")
+
 	// Reap is idempotent once the actor is gone.
 	require.NoError(t, backend.Reap(t.Context(), record))
 }

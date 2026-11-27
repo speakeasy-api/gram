@@ -114,6 +114,17 @@ func (q *Queries) AcquireAssistantSessionLock(ctx context.Context, assistantID s
 	return err
 }
 
+const acquireAssistantSharedSessionLock = `-- name: AcquireAssistantSharedSessionLock :exec
+SELECT pg_advisory_lock_shared(hashtext('asst:' || $1::text))
+`
+
+// Shared companion to AcquireAssistantSessionLock: sibling ATE threads run concurrently
+// while runtime-wide Stop/Reap/switch hold the exclusive assistant session lock.
+func (q *Queries) AcquireAssistantSharedSessionLock(ctx context.Context, assistantID string) error {
+	_, err := q.db.Exec(ctx, acquireAssistantSharedSessionLock, assistantID)
+	return err
+}
+
 type AddAssistantMcpServersParams struct {
 	AssistantID   uuid.UUID
 	McpServerID   uuid.UUID
@@ -1268,12 +1279,19 @@ func (q *Queries) GetAssistant(ctx context.Context, arg GetAssistantParams) (Get
 
 const getAssistantATEActorByUID = `-- name: GetAssistantATEActorByUID :one
 SELECT id, organization_id, project_id, assistant_id, runtime_id, assistant_thread_id, actor_name, actor_uid, state, configured, workload_binding_json, warm_until, created_at, updated_at, deleted_at, deleted FROM assistant_ate_actors
-WHERE actor_uid = $1 AND deleted IS FALSE
+WHERE organization_id = $1 AND project_id = $2
+  AND actor_uid = $3 AND deleted IS FALSE
 `
 
-// Uses assistant_ate_actors_actor_uid_key for durable actor identity lookup.
-func (q *Queries) GetAssistantATEActorByUID(ctx context.Context, actorUid string) (AssistantAteActor, error) {
-	row := q.db.QueryRow(ctx, getAssistantATEActorByUID, actorUid)
+type GetAssistantATEActorByUIDParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	ActorUid       string
+}
+
+// Uses assistant_ate_actors_actor_uid_key for tenant-scoped actor identity lookup.
+func (q *Queries) GetAssistantATEActorByUID(ctx context.Context, arg GetAssistantATEActorByUIDParams) (AssistantAteActor, error) {
+	row := q.db.QueryRow(ctx, getAssistantATEActorByUID, arg.OrganizationID, arg.ProjectID, arg.ActorUid)
 	var i AssistantAteActor
 	err := row.Scan(
 		&i.ID,
@@ -3273,55 +3291,6 @@ func (q *Queries) ListPendingRuntimeSwitchRetirements(ctx context.Context, limit
 	return items, nil
 }
 
-const listRunningAssistantATEActors = `-- name: ListRunningAssistantATEActors :many
-SELECT id, organization_id, project_id, assistant_id, runtime_id, assistant_thread_id, actor_name, actor_uid, state, configured, workload_binding_json, warm_until, created_at, updated_at, deleted_at, deleted FROM assistant_ate_actors
-WHERE state = $1 AND deleted IS FALSE
-ORDER BY warm_until ASC NULLS LAST, id ASC
-LIMIT $2
-`
-
-type ListRunningAssistantATEActorsParams struct {
-	RunningState string
-	LimitCount   int32
-}
-
-func (q *Queries) ListRunningAssistantATEActors(ctx context.Context, arg ListRunningAssistantATEActorsParams) ([]AssistantAteActor, error) {
-	rows, err := q.db.Query(ctx, listRunningAssistantATEActors, arg.RunningState, arg.LimitCount)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []AssistantAteActor
-	for rows.Next() {
-		var i AssistantAteActor
-		if err := rows.Scan(
-			&i.ID,
-			&i.OrganizationID,
-			&i.ProjectID,
-			&i.AssistantID,
-			&i.RuntimeID,
-			&i.AssistantThreadID,
-			&i.ActorName,
-			&i.ActorUid,
-			&i.State,
-			&i.Configured,
-			&i.WorkloadBindingJson,
-			&i.WarmUntil,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
-			&i.Deleted,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listStoppedRuntimesForReap = `-- name: ListStoppedRuntimesForReap :many
 SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.runtime_version, r.backend, r.backend_metadata_json, r.state, r.warm_until
 FROM assistant_runtimes r
@@ -4415,6 +4384,17 @@ func (q *Queries) ReleaseAssistantSessionLock(ctx context.Context, assistantID s
 	return unlocked, err
 }
 
+const releaseAssistantSharedSessionLock = `-- name: ReleaseAssistantSharedSessionLock :one
+SELECT pg_advisory_unlock_shared(hashtext('asst:' || $1::text))::boolean AS unlocked
+`
+
+func (q *Queries) ReleaseAssistantSharedSessionLock(ctx context.Context, assistantID string) (bool, error) {
+	row := q.db.QueryRow(ctx, releaseAssistantSharedSessionLock, assistantID)
+	var unlocked bool
+	err := row.Scan(&unlocked)
+	return unlocked, err
+}
+
 const requestKitInterrupt = `-- name: RequestKitInterrupt :one
 INSERT INTO assistant_kit_interrupt_requests
   (project_id, assistant_id, runtime_id, assistant_thread_id, event_id, attempt)
@@ -5390,6 +5370,7 @@ func (q *Queries) SetKitThreadSourceFixture(ctx context.Context, arg SetKitThrea
 const softDeleteAssistantATEActor = `-- name: SoftDeleteAssistantATEActor :execrows
 UPDATE assistant_ate_actors
 SET state = $1,
+    workload_binding_json = NULL,
     warm_until = NULL,
     deleted_at = clock_timestamp(),
     updated_at = clock_timestamp()
@@ -5572,28 +5553,6 @@ func (q *Queries) StoreKitProtocolUserEcho(ctx context.Context, arg StoreKitProt
 		return 0, err
 	}
 	return result.RowsAffected(), nil
-}
-
-const threadHasUnsettledEvents = `-- name: ThreadHasUnsettledEvents :one
-SELECT EXISTS (
-  SELECT 1 FROM assistant_thread_events e
-  WHERE e.project_id = $1 AND e.assistant_id = $2
-    AND e.assistant_thread_id = $3
-    AND e.deleted IS FALSE AND e.status NOT IN ('completed', 'failed', 'cancelled')
-) AS busy
-`
-
-type ThreadHasUnsettledEventsParams struct {
-	ProjectID   uuid.UUID
-	AssistantID uuid.UUID
-	ThreadID    uuid.UUID
-}
-
-func (q *Queries) ThreadHasUnsettledEvents(ctx context.Context, arg ThreadHasUnsettledEventsParams) (bool, error) {
-	row := q.db.QueryRow(ctx, threadHasUnsettledEvents, arg.ProjectID, arg.AssistantID, arg.ThreadID)
-	var busy bool
-	err := row.Scan(&busy)
-	return busy, err
 }
 
 const touchProcessingLease = `-- name: TouchProcessingLease :exec

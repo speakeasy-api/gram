@@ -346,7 +346,7 @@ func (s *ServiceCore) kitATEThreadLifecycle(ctx context.Context, r assistantRunt
 		return operation(ctx, r)
 	}
 
-	tx, release, err := beginKitATEThreadLifecycleTransaction(ctx, s.db, r.ID, threadID)
+	tx, release, err := beginKitATEThreadLifecycleTransaction(ctx, s.db, r.AssistantID, r.ID, threadID)
 	if err != nil {
 		return fmt.Errorf("begin Kit ATE thread lifecycle: %w", err)
 	}

@@ -2106,9 +2106,10 @@ UPDATE assistants SET reasoning_effort = NULL
 WHERE id = @assistant_id AND project_id = @project_id;
 
 -- name: GetAssistantATEActorByUID :one
--- Uses assistant_ate_actors_actor_uid_key for durable actor identity lookup.
+-- Uses assistant_ate_actors_actor_uid_key for tenant-scoped actor identity lookup.
 SELECT * FROM assistant_ate_actors
-WHERE actor_uid = @actor_uid AND deleted IS FALSE;
+WHERE organization_id = @organization_id AND project_id = @project_id
+  AND actor_uid = @actor_uid AND deleted IS FALSE;
 
 -- name: GetAssistantATEActorForThread :one
 SELECT * FROM assistant_ate_actors
@@ -2158,6 +2159,7 @@ RETURNING *;
 -- name: SoftDeleteAssistantATEActor :execrows
 UPDATE assistant_ate_actors
 SET state = @retired_state,
+    workload_binding_json = NULL,
     warm_until = NULL,
     deleted_at = clock_timestamp(),
     updated_at = clock_timestamp()
@@ -2172,11 +2174,13 @@ ORDER BY created_at ASC, id ASC;
 SELECT count(*) FROM assistant_ate_actors
 WHERE project_id = @project_id AND runtime_id = @runtime_id AND deleted IS FALSE;
 
--- name: ListRunningAssistantATEActors :many
-SELECT * FROM assistant_ate_actors
-WHERE state = @running_state AND deleted IS FALSE
-ORDER BY warm_until ASC NULLS LAST, id ASC
-LIMIT @limit_count;
+-- name: AcquireAssistantSharedSessionLock :exec
+-- Shared companion to AcquireAssistantSessionLock: sibling ATE threads run concurrently
+-- while runtime-wide Stop/Reap/switch hold the exclusive assistant session lock.
+SELECT pg_advisory_lock_shared(hashtext('asst:' || @assistant_id::text));
+
+-- name: ReleaseAssistantSharedSessionLock :one
+SELECT pg_advisory_unlock_shared(hashtext('asst:' || @assistant_id::text))::boolean AS unlocked;
 
 -- name: AcquireATEThreadSessionLock :exec
 -- Pin the connection to serialize lifecycle phases for one ATE thread actor without locking sibling threads.
@@ -2194,11 +2198,3 @@ WHERE r.id = @runtime_id AND r.project_id = @project_id AND r.assistant_id = @as
   AND r.runtime_version = 3 AND r.deleted IS FALSE AND r.ended IS FALSE
   AND a.deleted IS FALSE
 ON CONFLICT (runtime_id) DO NOTHING;
-
--- name: ThreadHasUnsettledEvents :one
-SELECT EXISTS (
-  SELECT 1 FROM assistant_thread_events e
-  WHERE e.project_id = @project_id AND e.assistant_id = @assistant_id
-    AND e.assistant_thread_id = @thread_id
-    AND e.deleted IS FALSE AND e.status NOT IN ('completed', 'failed', 'cancelled')
-) AS busy;
