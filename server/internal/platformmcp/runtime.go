@@ -30,7 +30,17 @@ var (
 	ErrUnauthorized = errors.New("platform mcp unauthorized")
 	ErrForbidden    = errors.New("platform mcp forbidden")
 	ErrUnavailable  = errors.New("platform mcp unavailable")
+
+	// ErrOrganizationDisabled denies a member of a disabled organization. It
+	// wraps ErrForbidden so generic denial handling still refuses the request,
+	// but disabling is reversible, so it must never durably end a connection.
+	ErrOrganizationDisabled = fmt.Errorf("platform mcp organization disabled: %w", ErrForbidden)
 )
+
+// OrganizationDisabledMessage is the user-facing explanation for a request
+// refused because its organization is disabled. It names the same next step as
+// the dashboard session and API key refusals.
+const OrganizationDisabledMessage = "This organization is disabled. Please reach out to support@speakeasy.com for more information."
 
 // ActingSurface names the surface a call arrives through. Audit has to be able
 // to tell an agent-driven change from a dashboard change made by the same
@@ -358,7 +368,10 @@ func (r *Runtime) Handler() http.Handler {
 		}
 		ctx, err := r.authorizer.PrepareExternalContext(req.Context(), principal)
 		if err != nil {
-			if isAuthorizationDenied(err) {
+			if errors.Is(err, ErrOrganizationDisabled) {
+				r.recordAuthOutcome(req.Context(), "access_denied", "organization_disabled")
+				http.Error(w, OrganizationDisabledMessage, http.StatusForbidden)
+			} else if isAuthorizationDenied(err) {
 				r.recordAuthOutcome(req.Context(), "access_denied", "membership_denied")
 				http.Error(w, "forbidden", http.StatusForbidden)
 			} else {

@@ -97,11 +97,13 @@ func TestRuntimeHandlerRequiresLiveOrganizationMembership(t *testing.T) {
 		name      string
 		err       error
 		status    int
+		body      string
 		telemetry OAuthEvent
 	}{
-		{name: "denied", err: ErrForbidden, status: http.StatusForbidden, telemetry: OAuthEvent{Operation: "runtime_auth", Outcome: "access_denied", Reason: "membership_denied"}},
-		{name: "unavailable", err: ErrUnavailable, status: http.StatusServiceUnavailable, telemetry: OAuthEvent{Operation: "runtime_auth", Outcome: "temporarily_unavailable", Reason: "authorization_unavailable"}},
-		{name: "unexpected error", err: errors.New("authorization store unavailable"), status: http.StatusServiceUnavailable, telemetry: OAuthEvent{Operation: "runtime_auth", Outcome: "temporarily_unavailable", Reason: "authorization_unavailable"}},
+		{name: "denied", err: ErrForbidden, status: http.StatusForbidden, body: "forbidden", telemetry: OAuthEvent{Operation: "runtime_auth", Outcome: "access_denied", Reason: "membership_denied"}},
+		{name: "organization disabled", err: ErrOrganizationDisabled, status: http.StatusForbidden, body: OrganizationDisabledMessage, telemetry: OAuthEvent{Operation: "runtime_auth", Outcome: "access_denied", Reason: "organization_disabled"}},
+		{name: "unavailable", err: ErrUnavailable, status: http.StatusServiceUnavailable, body: "unavailable", telemetry: OAuthEvent{Operation: "runtime_auth", Outcome: "temporarily_unavailable", Reason: "authorization_unavailable"}},
+		{name: "unexpected error", err: errors.New("authorization store unavailable"), status: http.StatusServiceUnavailable, body: "unavailable", telemetry: OAuthEvent{Operation: "runtime_auth", Outcome: "temporarily_unavailable", Reason: "authorization_unavailable"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -116,6 +118,7 @@ func TestRuntimeHandlerRequiresLiveOrganizationMembership(t *testing.T) {
 			handler.ServeHTTP(res, req)
 
 			require.Equal(t, tc.status, res.Code)
+			require.Equal(t, tc.body+"\n", res.Body.String())
 			require.Equal(t, 1, authorizer.calls)
 			require.Equal(t, []OAuthEvent{tc.telemetry}, telemetry.events)
 		})

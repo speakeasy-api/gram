@@ -174,22 +174,29 @@ func isAuthorizationDenied(err error) bool {
 	return errors.As(err, &shareable) && shareable.Code == oops.CodeForbidden
 }
 
+// RequireLiveMembership admits a principal only while the user is an active
+// member of an organization that is not disabled. It reads both facts fresh on
+// every call, so disabling an organization denies its next request.
+//
+// A user who is not a member is denied with ErrForbidden. A member of a
+// disabled organization is denied with ErrOrganizationDisabled, which callers
+// must not treat as lost membership because an organization can be re-enabled.
 func (a *LiveOrgAdminAuthorizer) RequireLiveMembership(ctx context.Context, principal Principal) error {
 	if a == nil || a.db == nil || principal.UserID == "" || principal.OrganizationID == "" {
 		return ErrUnavailable
 	}
-	// A disabled organization denies exactly like a lapsed membership. Every
-	// Platform MCP request and OAuth exchange passes through here, so
-	// disabling an organization also cuts off tokens issued before it.
-	member, err := platformrepo.New(a.db).HasActiveMembershipInEnabledOrganization(ctx, platformrepo.HasActiveMembershipInEnabledOrganizationParams{
+	access, err := platformrepo.New(a.db).GetPlatformMCPOrganizationAccess(ctx, platformrepo.GetPlatformMCPOrganizationAccessParams{
 		UserID:         principal.UserID,
 		OrganizationID: principal.OrganizationID,
 	})
 	if err != nil {
 		return fmt.Errorf("check active organization membership: %w", err)
 	}
-	if !member {
+	if !access.IsMember {
 		return ErrForbidden
+	}
+	if access.OrganizationDisabled {
+		return ErrOrganizationDisabled
 	}
 	return nil
 }

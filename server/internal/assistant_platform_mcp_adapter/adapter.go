@@ -118,8 +118,8 @@ func (t Tool) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Rea
 	}
 
 	ctx, acting, err := actAs(ctx, t.authorizer)
-	if errors.Is(err, errPersonRequired) {
-		if _, writeErr := wr.Write(personRequiredRefusal); writeErr != nil {
+	if refusal, ok := authorizationRefusal(err); ok {
+		if _, writeErr := wr.Write(refusal); writeErr != nil {
 			return fmt.Errorf("write platform tool refusal: %w", writeErr)
 		}
 		return nil
@@ -134,6 +134,12 @@ func (t Tool) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Rea
 		return err
 	}
 	if err := t.authorizer.RequireLiveOrgAdmin(ctx, principal); err != nil {
+		if refusal, ok := authorizationRefusal(err); ok {
+			if _, writeErr := wr.Write(refusal); writeErr != nil {
+				return fmt.Errorf("write platform tool refusal: %w", writeErr)
+			}
+			return nil
+		}
 		return fmt.Errorf("authorize assistant platform tool %q: %w", t.descriptor.Name, err)
 	}
 
@@ -351,12 +357,13 @@ type actingKey struct{}
 
 // ActingContext returns the context the Project Assistant's platform toolset
 // lists and calls its tools in, so what a turn is offered matches what it may
-// call. A turn that acts for no person keeps its own context; its calls are
-// refused with person_required.
+// call. A turn that acts for no person, or for a person in a disabled
+// organization, keeps its own context; its calls are refused with
+// person_required or organization_disabled.
 func ActingContext(authorizer platformmcp.Authorizer) func(ctx context.Context) (context.Context, error) {
 	return func(ctx context.Context) (context.Context, error) {
 		prepared, _, err := actAs(ctx, authorizer)
-		if errors.Is(err, errPersonRequired) {
+		if _, refused := authorizationRefusal(err); refused {
 			return ctx, nil
 		}
 		return prepared, err
@@ -422,6 +429,32 @@ var errPersonRequired = errors.New("assistant platform tools require a person to
 // runner does not treat a turn that can never use these tools as a dropped
 // connection and retry.
 var personRequiredRefusal = []byte(`{"code":"person_required","message":"Platform tools act for a person, and this assistant turn does not act for anyone. Ask a person to run this request from the dashboard."}`)
+
+// organizationDisabledRefusal is returned to the model instead of an error for
+// the same reason: no retry can succeed until the organization is re-enabled.
+var organizationDisabledRefusal = func() []byte {
+	encoded, err := json.Marshal(struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	}{Code: "organization_disabled", Message: platformmcp.OrganizationDisabledMessage})
+	if err != nil {
+		panic(fmt.Sprintf("encode organization disabled refusal: %v", err))
+	}
+	return encoded
+}()
+
+// authorizationRefusal returns the payload the model receives for an
+// authorization outcome no retry within the turn can change.
+func authorizationRefusal(err error) ([]byte, bool) {
+	switch {
+	case errors.Is(err, errPersonRequired):
+		return personRequiredRefusal, true
+	case errors.Is(err, platformmcp.ErrOrganizationDisabled):
+		return organizationDisabledRefusal, true
+	default:
+		return nil, false
+	}
+}
 
 // principalFromContext builds the assistant's identity. The user is the person
 // whose turn it is, so authorization and audit attribute to them; there is no

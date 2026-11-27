@@ -127,6 +127,7 @@ func TestOAuthTelemetryAcceptsOnlyBoundedDimensions(t *testing.T) {
 
 	require.True(t, validOAuthEvent(OAuthEvent{Operation: "runtime_auth", Outcome: "access_denied", Reason: "authorization_denied"}))
 	require.True(t, validOAuthEvent(OAuthEvent{Operation: "runtime_auth", Outcome: "access_denied", Reason: "membership_denied"}))
+	require.True(t, validOAuthEvent(OAuthEvent{Operation: "refresh", Outcome: "invalid_grant", Reason: "organization_disabled"}))
 	require.True(t, validOAuthEvent(OAuthEvent{Operation: "interactive_authorization", Outcome: "temporarily_unavailable", Reason: "authorization_unavailable"}))
 	require.False(t, validOAuthEvent(OAuthEvent{Operation: "https://untrusted.example", Outcome: "succeeded"}))
 	require.False(t, validOAuthEvent(OAuthEvent{Operation: "refresh", Outcome: "succeeded", Reason: "access-token"}))
