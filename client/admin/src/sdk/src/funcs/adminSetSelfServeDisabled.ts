@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * @remarks
  * Turn self-serve signup off or on across the platform. Existing organizations are unaffected.
  */
-export function adminAdminSetSelfServeDisabled(
+export function adminSetSelfServeDisabled(
   client: GramCore,
   request: SetSelfServeDisabledRequestBody,
   options?: RequestOptions,

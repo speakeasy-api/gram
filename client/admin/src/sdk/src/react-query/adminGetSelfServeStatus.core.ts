@@ -8,40 +8,40 @@ import {
   QueryKey,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { adminAdminGetSelfServeStatus } from "../funcs/adminAdminGetSelfServeStatus.js";
+import { adminGetSelfServeStatus } from "../funcs/adminGetSelfServeStatus.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { AdminSelfServeStatus } from "../models/components/adminselfservestatus.js";
 import { unwrapAsync } from "../types/fp.js";
-export type AdminAdminGetSelfServeStatusQueryData = AdminSelfServeStatus;
+export type AdminGetSelfServeStatusQueryData = AdminSelfServeStatus;
 
-export function prefetchAdminAdminGetSelfServeStatus(
+export function prefetchAdminGetSelfServeStatus(
   queryClient: QueryClient,
   client$: GramCore,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
-    ...buildAdminAdminGetSelfServeStatusQuery(
+    ...buildAdminGetSelfServeStatusQuery(
       client$,
       options,
     ),
   });
 }
 
-export function buildAdminAdminGetSelfServeStatusQuery(
+export function buildAdminGetSelfServeStatusQuery(
   client$: GramCore,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
   queryFn: (
     context: QueryFunctionContext,
-  ) => Promise<AdminAdminGetSelfServeStatusQueryData>;
+  ) => Promise<AdminGetSelfServeStatusQueryData>;
 } {
   return {
-    queryKey: queryKeyAdminAdminGetSelfServeStatus(),
-    queryFn: async function adminAdminGetSelfServeStatusQueryFn(
+    queryKey: queryKeyAdminGetSelfServeStatus(),
+    queryFn: async function adminGetSelfServeStatusQueryFn(
       ctx,
-    ): Promise<AdminAdminGetSelfServeStatusQueryData> {
+    ): Promise<AdminGetSelfServeStatusQueryData> {
       const sig = combineSignals(
         ctx.signal,
         options?.signal,
@@ -53,7 +53,7 @@ export function buildAdminAdminGetSelfServeStatusQuery(
         signal: sig,
       };
 
-      return unwrapAsync(adminAdminGetSelfServeStatus(
+      return unwrapAsync(adminGetSelfServeStatus(
         client$,
         mergedOptions,
       ));
@@ -61,6 +61,6 @@ export function buildAdminAdminGetSelfServeStatusQuery(
   };
 }
 
-export function queryKeyAdminAdminGetSelfServeStatus(): QueryKey {
-  return ["@gram/admin-client", "admin", "adminGetSelfServeStatus"];
+export function queryKeyAdminGetSelfServeStatus(): QueryKey {
+  return ["@gram/admin-client", "admin", "getSelfServeStatus"];
 }

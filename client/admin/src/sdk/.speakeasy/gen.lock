@@ -32,8 +32,6 @@ trackedFiles:
   FUNCTIONS.md: {}
   REACT_QUERY.md: {}
   src/core.ts: {}
-  src/funcs/adminAdminGetSelfServeStatus.ts: {}
-  src/funcs/adminAdminSetSelfServeDisabled.ts: {}
   src/funcs/adminAssignOrganizationOnboardingPlaybook.ts: {}
   src/funcs/adminBackfillMcpAuthGrants.ts: {}
   src/funcs/adminBackfillMcpConnectGrants.ts: {}
@@ -93,6 +91,7 @@ trackedFiles:
   src/funcs/adminGetRegistryOktaCandidates.ts: {}
   src/funcs/adminGetRegistryPromotionCandidate.ts: {}
   src/funcs/adminGetSecretBackfills.ts: {}
+  src/funcs/adminGetSelfServeStatus.ts: {}
   src/funcs/adminGetSession.ts: {}
   src/funcs/adminGetSpendBreakdown.ts: {}
   src/funcs/adminGetStripeCustomer.ts: {}
@@ -157,6 +156,7 @@ trackedFiles:
   src/funcs/adminSetOrganizationHooksRollout.ts: {}
   src/funcs/adminSetOrganizationOnboardingStack.ts: {}
   src/funcs/adminSetRegistryEntryPublished.ts: {}
+  src/funcs/adminSetSelfServeDisabled.ts: {}
   src/funcs/adminSetStripeCustomer.ts: {}
   src/funcs/adminSetStripeSubscription.ts: {}
   src/funcs/adminStartMemoryEvalRun.ts: {}
@@ -502,9 +502,6 @@ trackedFiles:
   src/models/operations/adminserveimage.ts: {}
   src/react-query/_context.tsx: {}
   src/react-query/_types.ts: {}
-  src/react-query/adminAdminGetSelfServeStatus.core.ts: {}
-  src/react-query/adminAdminGetSelfServeStatus.ts: {}
-  src/react-query/adminAdminSetSelfServeDisabled.ts: {}
   src/react-query/adminBackfillMcpAuthGrants.ts: {}
   src/react-query/adminBackfillMcpConnectGrants.ts: {}
   src/react-query/adminBulkUpdateAccountType.ts: {}
@@ -580,6 +577,8 @@ trackedFiles:
   src/react-query/adminGetRegistryPromotionCandidate.ts: {}
   src/react-query/adminGetSecretBackfills.core.ts: {}
   src/react-query/adminGetSecretBackfills.ts: {}
+  src/react-query/adminGetSelfServeStatus.core.ts: {}
+  src/react-query/adminGetSelfServeStatus.ts: {}
   src/react-query/adminGetSession.core.ts: {}
   src/react-query/adminGetSession.ts: {}
   src/react-query/adminGetSpendBreakdown.core.ts: {}
@@ -685,6 +684,7 @@ trackedFiles:
   src/react-query/adminSetOrganizationChatAnalysisSettings.ts: {}
   src/react-query/adminSetOrganizationHooksRollout.ts: {}
   src/react-query/adminSetRegistryEntryPublished.ts: {}
+  src/react-query/adminSetSelfServeDisabled.ts: {}
   src/react-query/adminSetStripeCustomer.ts: {}
   src/react-query/adminSetStripeSubscription.ts: {}
   src/react-query/adminStartMemoryEvalRun.ts: {}

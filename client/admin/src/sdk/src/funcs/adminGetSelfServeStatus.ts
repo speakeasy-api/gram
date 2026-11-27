@@ -35,7 +35,7 @@ import { Result } from "../types/fp.js";
  * @remarks
  * Report whether self-serve signup is disabled across the platform.
  */
-export function adminAdminGetSelfServeStatus(
+export function adminGetSelfServeStatus(
   client: GramCore,
   options?: RequestOptions,
 ): APIPromise<

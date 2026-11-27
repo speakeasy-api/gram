@@ -8,7 +8,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { adminAdminSetSelfServeDisabled } from "../funcs/adminAdminSetSelfServeDisabled.js";
+import { adminSetSelfServeDisabled } from "../funcs/adminSetSelfServeDisabled.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { AdminSelfServeStatus } from "../models/components/adminselfservestatus.js";
@@ -28,14 +28,14 @@ import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type AdminAdminSetSelfServeDisabledMutationVariables = {
+export type AdminSetSelfServeDisabledMutationVariables = {
   request: SetSelfServeDisabledRequestBody;
   options?: RequestOptions;
 };
 
-export type AdminAdminSetSelfServeDisabledMutationData = AdminSelfServeStatus;
+export type AdminSetSelfServeDisabledMutationData = AdminSelfServeStatus;
 
-export type AdminAdminSetSelfServeDisabledMutationError =
+export type AdminSetSelfServeDisabledMutationError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -52,43 +52,43 @@ export type AdminAdminSetSelfServeDisabledMutationError =
  * @remarks
  * Turn self-serve signup off or on across the platform. Existing organizations are unaffected.
  */
-export function useAdminAdminSetSelfServeDisabledMutation(
+export function useAdminSetSelfServeDisabledMutation(
   options?: MutationHookOptions<
-    AdminAdminSetSelfServeDisabledMutationData,
-    AdminAdminSetSelfServeDisabledMutationError,
-    AdminAdminSetSelfServeDisabledMutationVariables
+    AdminSetSelfServeDisabledMutationData,
+    AdminSetSelfServeDisabledMutationError,
+    AdminSetSelfServeDisabledMutationVariables
   >,
 ): UseMutationResult<
-  AdminAdminSetSelfServeDisabledMutationData,
-  AdminAdminSetSelfServeDisabledMutationError,
-  AdminAdminSetSelfServeDisabledMutationVariables
+  AdminSetSelfServeDisabledMutationData,
+  AdminSetSelfServeDisabledMutationError,
+  AdminSetSelfServeDisabledMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildAdminAdminSetSelfServeDisabledMutation(client, options),
+    ...buildAdminSetSelfServeDisabledMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeyAdminAdminSetSelfServeDisabled(): MutationKey {
-  return ["@gram/admin-client", "admin", "adminSetSelfServeDisabled"];
+export function mutationKeyAdminSetSelfServeDisabled(): MutationKey {
+  return ["@gram/admin-client", "admin", "setSelfServeDisabled"];
 }
 
-export function buildAdminAdminSetSelfServeDisabledMutation(
+export function buildAdminSetSelfServeDisabledMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: AdminAdminSetSelfServeDisabledMutationVariables,
-  ) => Promise<AdminAdminSetSelfServeDisabledMutationData>;
+    variables: AdminSetSelfServeDisabledMutationVariables,
+  ) => Promise<AdminSetSelfServeDisabledMutationData>;
 } {
   return {
-    mutationKey: mutationKeyAdminAdminSetSelfServeDisabled(),
-    mutationFn: function adminAdminSetSelfServeDisabledMutationFn({
+    mutationKey: mutationKeyAdminSetSelfServeDisabled(),
+    mutationFn: function adminSetSelfServeDisabledMutationFn({
       request,
       options,
-    }): Promise<AdminAdminSetSelfServeDisabledMutationData> {
+    }): Promise<AdminSetSelfServeDisabledMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,
@@ -101,7 +101,7 @@ export function buildAdminAdminSetSelfServeDisabledMutation(
           ),
         },
       };
-      return unwrapAsync(adminAdminSetSelfServeDisabled(
+      return unwrapAsync(adminSetSelfServeDisabled(
         client$,
         request,
         mergedOptions,

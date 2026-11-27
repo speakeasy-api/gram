@@ -9894,6 +9894,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: getSelfServeStatus
   /admin/selfServe.set:
     post:
       tags:
@@ -9968,6 +9969,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: setSelfServeDisabled
   /admin/session.get:
     get:
       tags:

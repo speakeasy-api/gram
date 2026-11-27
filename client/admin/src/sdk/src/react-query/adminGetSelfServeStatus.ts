@@ -24,19 +24,19 @@ import { ServiceError } from "../models/errors/serviceerror.js";
 import { useGramContext } from "./_context.js";
 import { QueryHookOptions, SuspenseQueryHookOptions } from "./_types.js";
 import {
-  AdminAdminGetSelfServeStatusQueryData,
-  buildAdminAdminGetSelfServeStatusQuery,
-  prefetchAdminAdminGetSelfServeStatus,
-  queryKeyAdminAdminGetSelfServeStatus,
-} from "./adminAdminGetSelfServeStatus.core.js";
+  AdminGetSelfServeStatusQueryData,
+  buildAdminGetSelfServeStatusQuery,
+  prefetchAdminGetSelfServeStatus,
+  queryKeyAdminGetSelfServeStatus,
+} from "./adminGetSelfServeStatus.core.js";
 export {
-  type AdminAdminGetSelfServeStatusQueryData,
-  buildAdminAdminGetSelfServeStatusQuery,
-  prefetchAdminAdminGetSelfServeStatus,
-  queryKeyAdminAdminGetSelfServeStatus,
+  type AdminGetSelfServeStatusQueryData,
+  buildAdminGetSelfServeStatusQuery,
+  prefetchAdminGetSelfServeStatus,
+  queryKeyAdminGetSelfServeStatus,
 };
 
-export type AdminAdminGetSelfServeStatusQueryError =
+export type AdminGetSelfServeStatusQueryError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -53,18 +53,18 @@ export type AdminAdminGetSelfServeStatusQueryError =
  * @remarks
  * Report whether self-serve signup is disabled across the platform.
  */
-export function useAdminAdminGetSelfServeStatus(
+export function useAdminGetSelfServeStatus(
   options?: QueryHookOptions<
-    AdminAdminGetSelfServeStatusQueryData,
-    AdminAdminGetSelfServeStatusQueryError
+    AdminGetSelfServeStatusQueryData,
+    AdminGetSelfServeStatusQueryError
   >,
 ): UseQueryResult<
-  AdminAdminGetSelfServeStatusQueryData,
-  AdminAdminGetSelfServeStatusQueryError
+  AdminGetSelfServeStatusQueryData,
+  AdminGetSelfServeStatusQueryError
 > {
   const client = useGramContext();
   return useQuery({
-    ...buildAdminAdminGetSelfServeStatusQuery(
+    ...buildAdminGetSelfServeStatusQuery(
       client,
       options,
     ),
@@ -78,18 +78,18 @@ export function useAdminAdminGetSelfServeStatus(
  * @remarks
  * Report whether self-serve signup is disabled across the platform.
  */
-export function useAdminAdminGetSelfServeStatusSuspense(
+export function useAdminGetSelfServeStatusSuspense(
   options?: SuspenseQueryHookOptions<
-    AdminAdminGetSelfServeStatusQueryData,
-    AdminAdminGetSelfServeStatusQueryError
+    AdminGetSelfServeStatusQueryData,
+    AdminGetSelfServeStatusQueryError
   >,
 ): UseSuspenseQueryResult<
-  AdminAdminGetSelfServeStatusQueryData,
-  AdminAdminGetSelfServeStatusQueryError
+  AdminGetSelfServeStatusQueryData,
+  AdminGetSelfServeStatusQueryError
 > {
   const client = useGramContext();
   return useSuspenseQuery({
-    ...buildAdminAdminGetSelfServeStatusQuery(
+    ...buildAdminGetSelfServeStatusQuery(
       client,
       options,
     ),
@@ -97,21 +97,21 @@ export function useAdminAdminGetSelfServeStatusSuspense(
   });
 }
 
-export function setAdminAdminGetSelfServeStatusData(
+export function setAdminGetSelfServeStatusData(
   client: QueryClient,
-  data: AdminAdminGetSelfServeStatusQueryData,
-): AdminAdminGetSelfServeStatusQueryData | undefined {
-  const key = queryKeyAdminAdminGetSelfServeStatus();
+  data: AdminGetSelfServeStatusQueryData,
+): AdminGetSelfServeStatusQueryData | undefined {
+  const key = queryKeyAdminGetSelfServeStatus();
 
-  return client.setQueryData<AdminAdminGetSelfServeStatusQueryData>(key, data);
+  return client.setQueryData<AdminGetSelfServeStatusQueryData>(key, data);
 }
 
-export function invalidateAllAdminAdminGetSelfServeStatus(
+export function invalidateAllAdminGetSelfServeStatus(
   client: QueryClient,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/admin-client", "admin", "adminGetSelfServeStatus"],
+    queryKey: ["@gram/admin-client", "admin", "getSelfServeStatus"],
   });
 }
