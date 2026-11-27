@@ -159,6 +159,12 @@ actions:
   - target: $.paths.*[?@.operationId=='adminUpdateSignupOffer']
     update:
       x-speakeasy-name-override: updateSignupOffer
+  - target: $.paths.*[?@.operationId=='adminGetSelfServeStatus']
+    update:
+      x-speakeasy-name-override: getSelfServeStatus
+  - target: $.paths.*[?@.operationId=='adminSetSelfServeDisabled']
+    update:
+      x-speakeasy-name-override: setSelfServeDisabled
   - target: $.paths.*[?@.operationId=='adminListOnboardingUseCases']
     update:
       x-speakeasy-name-override: listOnboardingUseCases
