@@ -7996,6 +7996,7 @@ CREATE TABLE IF NOT EXISTS users (
   workos_updated_at timestamptz,
   workos_deleted_at timestamptz,
   deleted_at timestamptz,
+  blacklisted_at timestamptz,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -8013,6 +8014,8 @@ COMMENT ON COLUMN users.workos_created_at IS '@access: confidential';
 COMMENT ON COLUMN users.workos_updated_at IS '@access: confidential';
 COMMENT ON COLUMN users.workos_deleted_at IS '@access: confidential';
 COMMENT ON COLUMN users.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN users.blacklisted_at IS 'When staff blocked this user from the platform. A set value rejects every request the user makes or authorizes.
+@access: confidential';
 COMMENT ON COLUMN users.created_at IS '@access: confidential';
 COMMENT ON COLUMN users.updated_at IS '@access: confidential';
 
