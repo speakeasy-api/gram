@@ -76,7 +76,7 @@ vi.mock("./sections/VisibilitySection", () => ({
   VisibilitySection: () => <h2>Visibility</h2>,
 }));
 vi.mock("@/hooks/useRBAC", () => ({
-  useRBAC: () => ({ hasScope: () => true }),
+  useRBAC: () => ({ hasScope: () => true, can: () => true }),
 }));
 vi.mock("@/hooks/usePluginWriteAccess", () => ({
   usePluginWriteAccess: () => true,

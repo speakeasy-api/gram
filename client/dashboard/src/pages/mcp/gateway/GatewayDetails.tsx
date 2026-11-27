@@ -25,6 +25,7 @@ import { GatewayInspectTab } from "./GatewayInspectTab";
 import { GatewayOverviewTab } from "./GatewayOverviewTab";
 import { GatewaySettingsTab } from "./GatewaySettingsTab";
 import { GatewaySkillsTab } from "./GatewaySkillsTab";
+import * as authz from "@/lib/authz.gen";
 
 /**
  * Reads the gateway before the detail chrome mounts: a deleted or unknown id
@@ -146,8 +147,9 @@ function GatewayDetailsContent(): JSX.Element {
         return (
           <RequireScope scope="org:read" level="page">
             <RequireScope
-              scope="mcp:read"
-              resourceId={metaMcpServer.id}
+              check={authz
+                .mcpServer(metaMcpServer.id, metaMcpServer.projectId)
+                .read()}
               level="page"
             >
               {/* Gateways grant under the same `mcp:*` scope kind as every
@@ -164,7 +166,10 @@ function GatewayDetailsContent(): JSX.Element {
         );
       case "sessions":
         return (
-          <RequireScope scope="project:read" level="page">
+          <RequireScope
+            check={authz.project(metaMcpServer.projectId).read()}
+            level="page"
+          >
             <ClientsAndSessionsTab
               gateway={{ id: metaMcpServer.id }}
               issuerId={metaMcpServer.userSessionIssuerId}

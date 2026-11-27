@@ -17,6 +17,7 @@ import { Link } from "react-router";
 import { toast } from "sonner";
 import { MCP_PUBLIC_ACCESS_SECTION_ID } from "./PublicAccessSection";
 import { invalidateTunneledMcpSourceViews } from "./sourceInvalidation";
+import * as authz from "@/lib/authz.gen";
 
 // Moved here from the retired tunneled source detail page, which is where this
 // section shipped: the tunnel has no page of its own now, so its public limit
@@ -223,7 +224,10 @@ function PublicRateLimits({
         </dd>
       </dl>
 
-      <RequireScope scope="mcp:write" resourceId={projectId} level="component">
+      <RequireScope
+        check={authz.mcpServers(projectId).write()}
+        level="component"
+      >
         <Stack gap={3}>
           <div className="grid max-w-xl grid-cols-1 gap-3 sm:grid-cols-2">
             {PUBLIC_RATE_LIMIT_FIELDS.map(({ key, label, hint }) => (

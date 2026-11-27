@@ -1,8 +1,10 @@
 import { InlineEmptyState } from "@/components/inline-empty-state";
 import { RequireScope } from "@/components/require-scope";
 import { Button } from "@/components/ui/Button";
+import { useProject } from "@/contexts/Auth";
 import { useOrgRoutes, useRoutes } from "@/routes";
 import { Link } from "react-router";
+import * as authz from "@/lib/authz.gen";
 
 export function RiskSetupEmptyState({
   heading = "No risk events found",
@@ -105,13 +107,17 @@ export function IdentitySyncCallout(): JSX.Element {
 
 export function MCPSessionsEmptyState(): JSX.Element {
   const routes = useRoutes();
+  const project = useProject();
   return (
     <InlineEmptyState
       icon="plug"
       heading="No connections yet"
       description="Add an MCP server, then connect an AI agent. Connections agents establish with your MCP servers will appear here."
       action={
-        <RequireScope scope="mcp:write" level="component">
+        <RequireScope
+          check={authz.mcpServers(project.id).write()}
+          level="component"
+        >
           <Button asChild>
             <Link to={routes.mcp.add.href()}>Add MCP server</Link>
           </Button>

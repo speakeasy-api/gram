@@ -46,12 +46,15 @@ vi.mock("@/pages/mcp/gateway/useGatewayMemberStates", () => ({
 vi.mock("./useGatewayMemberSetup", () => ({
   useGatewayMemberSetup: () => state.setup,
 }));
-vi.mock("@/contexts/Auth", () => ({ useProject: () => ({ id: "project" }) }));
+vi.mock("@/contexts/Auth", () => ({
+  useOrganization: () => ({ id: "org" }),
+  useProject: () => ({ id: "project" }),
+}));
 vi.mock("@/contexts/Sdk", () => ({
   useSlugs: () => ({ orgSlug: "example", projectSlug: "default" }),
 }));
 vi.mock("@/hooks/useRBAC", () => ({
-  useRBAC: () => ({ hasScope: () => true }),
+  useRBAC: () => ({ hasScope: () => true, can: () => true }),
 }));
 vi.mock("@/pages/skills/use-skills-over-mcp", () => ({
   useSkillsOverMcpEnabled: () => false,

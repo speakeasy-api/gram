@@ -44,6 +44,8 @@ import { useProjectNavRoutes } from "@/hooks/useProjectNavRoutes";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useSidebar } from "@/components/ui/Sidebar/sidebar-context";
 import { useSlugs } from "@/contexts/Sdk";
+import { useOrganization } from "@/contexts/Auth";
+import * as authz from "@/lib/authz.gen";
 
 /** A top-level navigation item gated by its required scopes. */
 function ScopeGatedTopLevelItem({
@@ -85,7 +87,13 @@ export function AppSidebar({
   const { state } = useSidebar();
   // While grants reload (e.g. right after switching projects, when the query
   // cache is cleared), show a skeleton so the scope-gated nav doesn't flash empty.
-  const { isLoading: rbacLoading, hasAnyScope } = useRBAC();
+  const { isLoading: rbacLoading, can, hasAnyScope } = useRBAC();
+  const organization = useOrganization();
+  // The organization home page opens for org readers and admins only.
+  const homeChecks = [
+    authz.org(organization.id).read(),
+    authz.org(organization.id).admin(),
+  ];
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
   // useProjectNavRoutes owns feature-flag and scope decisions for both the
@@ -243,7 +251,7 @@ export function AppSidebar({
   ];
   // Mirrors the scopes on Home, Project Overview and Chat below.
   const hasTopItems =
-    hasAnyScope(["org:read", "project:read", "org:admin"]) ||
+    homeChecks.some(can) ||
     canSee(accessFor(routes.home)) ||
     (isChatEnabled && canSee(accessFor(routes.chat)));
   const navLayout = sidebarNavLayout(navGroups, hasTopItems, hasAnyScope);
@@ -310,10 +318,7 @@ export function AppSidebar({
               footer action); the project's own landing page sits below it as
               "Project Overview". Scoped to match OrgSidebar's own Home item,
               so it only shows to users who can open the page it links to. */}
-          <RequireScope
-            scope={["org:read", "project:read", "org:admin"]}
-            level="section"
-          >
+          <RequireScope check={homeChecks} level="section">
             <SidebarMenuItem>
               <NavButton
                 title="Home"

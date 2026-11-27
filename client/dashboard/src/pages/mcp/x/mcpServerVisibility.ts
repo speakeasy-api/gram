@@ -21,6 +21,7 @@ import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { useState, useSyncExternalStore } from "react";
 
 import { toast } from "sonner";
+import * as authz from "@/lib/authz.gen";
 
 /**
  * The visibility each server is being changed to, shared by every control for
@@ -145,10 +146,12 @@ export function useMcpServerVisibilityUpdate(server: McpServer): {
    */
   displayVisibility: McpServerVisibility;
 } {
-  const { hasScope } = useRBAC();
+  const { can } = useRBAC();
   // Checked on this server, like the API does; a hosted server is granted
   // under its toolset id.
-  const hasWriteScope = hasScope("mcp:write", server.toolsetId ?? server.id);
+  const hasWriteScope = can(
+    authz.mcpServer(server.toolsetId ?? server.id, server.projectId).write(),
+  );
   const canWrite =
     hasWriteScope &&
     isKnownEnumValue(KnownUpdateMcpServerFormVisibility, server.visibility);

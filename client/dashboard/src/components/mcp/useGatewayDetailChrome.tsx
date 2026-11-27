@@ -1,4 +1,4 @@
-import { useProject } from "@/contexts/Auth";
+import { useOrganization, useProject } from "@/contexts/Auth";
 import { AUTHORIZATION_SERVERS_FIELD_ID } from "@/pages/mcp/x/tabs/settings/sections/authentication/RemoteIdentityProvidersField";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useSkillsOverMcpEnabled } from "@/pages/skills/use-skills-over-mcp";
@@ -44,6 +44,7 @@ import {
 } from "./mcpDetailChrome";
 import { buildMcpDetailNavItems } from "./mcpDetailNavItems";
 import { useLocation, useParams } from "react-router";
+import * as authz from "@/lib/authz.gen";
 
 /**
  * Loads one gateway's detail chrome: its tabs, readiness checks and URLs, in
@@ -81,11 +82,14 @@ export function useGatewayDetailChrome(): McpDetailChrome | null {
     rows,
     { checkTools: "fetch" },
   );
-  const { hasScope } = useRBAC();
+  const { can, hasScope } = useRBAC();
+  const organization = useOrganization();
   // Mirrors the mcp_servers sidebar: the tab reads org membership as well as
   // the resource, so hide it rather than render a permission wall.
   const canViewTeamAccess =
-    !!metaMcpServer && hasScope("org:read") && hasScope("mcp:read", id);
+    !!metaMcpServer &&
+    can(authz.org(organization.id).read()) &&
+    can(authz.mcpServer(metaMcpServer.id, metaMcpServer.projectId).read());
   const project = useProject();
   // Same check as the Skills tab route: skill read on this project.
   const canViewSkills =

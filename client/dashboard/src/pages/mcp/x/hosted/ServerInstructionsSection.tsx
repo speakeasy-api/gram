@@ -15,6 +15,7 @@ import { useGetMcpMetadata } from "@gram/client/react-query/getMcpMetadata.js";
 import { generateText } from "ai";
 import React, { useState } from "react";
 import { toast } from "sonner";
+import * as authz from "@/lib/authz.gen";
 
 const INSTRUCTIONS_SOFT_LIMIT = 2000;
 
@@ -22,12 +23,14 @@ const INSTRUCTIONS_SOFT_LIMIT = 2000;
 export function ServerInstructionsSection({
   mcpServerId,
   writeResourceId,
+  projectId,
   name,
   tools,
 }: {
   mcpServerId: string;
   /** The id mcp:write is granted on: the toolset id for a hosted server. */
   writeResourceId: string;
+  projectId: string;
   name: string;
   tools: { name: string; description?: string | undefined }[];
 }): React.JSX.Element {
@@ -48,8 +51,8 @@ export function ServerInstructionsSection({
     metadataResult.isLoading ||
     (metadataResult.isError && !metadataIs404) ||
     form.isLoading;
-  const { hasScope } = useRBAC();
-  const canWrite = hasScope("mcp:write", writeResourceId);
+  const { can } = useRBAC();
+  const canWrite = can(authz.mcpServer(writeResourceId, projectId).write());
   const charCount = form.instructionsHandlers.value?.length ?? 0;
   const overLimit = charCount > INSTRUCTIONS_SOFT_LIMIT;
 

@@ -115,11 +115,7 @@ export function UserSessionIssuerField({
         <FieldError>{update.error.message}</FieldError>
       ) : null}
       <RowSave visible={dirty} className="justify-end">
-        <RequireScope
-          scope="mcp:write"
-          resourceId={target.permissionResourceId}
-          level="component"
-        >
+        <RequireScope check={target.writeCheck} level="component">
           {({ disabled }) => (
             <Button
               variant="primary"

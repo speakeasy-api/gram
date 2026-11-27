@@ -32,6 +32,8 @@ import { LogsTabContent } from "./LogsTabContent";
 import { ToolsTabContent } from "./ToolsTabContent";
 import type { DeploymentPageSearchParams } from "./use-deployment-search-params";
 import { useDeploymentSearchParams } from "./use-deployment-search-params";
+import { useProject } from "@/contexts/Auth";
+import * as authz from "@/lib/authz.gen";
 
 export default function DeploymentPage(): JSX.Element {
   const { deploymentId } = useParams();
@@ -183,6 +185,7 @@ function DeploymentLogs(props: { deploymentId: string }) {
 }
 
 const HeadingSection = () => {
+  const project = useProject();
   const { deploymentId } = useParams();
   const { data: deployment } = useDeployment({ id: deploymentId! }, undefined, {
     staleTime: Infinity,
@@ -247,7 +250,7 @@ const HeadingSection = () => {
         <Page.Eyebrow />
         <Heading variant="h1">Deployment Overview</Heading>
       </div>
-      <RequireScope scope="project:write" level="section">
+      <RequireScope check={authz.project(project.id).write()} level="section">
         <RedeployButton />
       </RequireScope>
     </div>

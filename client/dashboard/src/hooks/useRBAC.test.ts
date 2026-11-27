@@ -802,10 +802,15 @@ describe("canInGrants", () => {
     expect(
       canInGrants(everything, authz.mcpServer("next\u0085line", "p").write()),
     ).toBe(false);
+    // A response missing a field its type promises.
+    const missing = undefined as unknown as string;
+    expect(canInGrants(everything, authz.mcpServer("s", missing).write())).toBe(
+      false,
+    );
     expect(canInGrants(everything, authz.mcpServer("s", "p").write())).toBe(
       true,
     );
-    expect(consoleError).toHaveBeenCalledTimes(5);
+    expect(consoleError).toHaveBeenCalledTimes(6);
     consoleError.mockRestore();
   });
 });

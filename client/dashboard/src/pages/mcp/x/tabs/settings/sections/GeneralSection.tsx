@@ -21,6 +21,7 @@ import {
   SettingsSection,
 } from "@/components/detail/settings-section";
 import { useReportUnsavedChanges } from "@/components/detail/settings-layout";
+import * as authz from "@/lib/authz.gen";
 
 // Matches MCP_SERVER_NAME_MAX_LENGTH on the legacy page. The limit is enforced
 // here, not by the mcp_servers.name column.
@@ -92,8 +93,11 @@ export function GeneralSection({
   const dirty = nameDirty || metadataForm.brandingDirty;
   // Same check as the Save gate: an edit nobody can save is no change worth
   // guarding.
-  const { hasScope } = useRBAC();
-  useReportUnsavedChanges(hasScope("mcp:write") && dirty);
+  const { can } = useRBAC();
+  const writeCheck = authz
+    .mcpServer(mcpServer.toolsetId ?? mcpServer.id, mcpServer.projectId)
+    .write();
+  useReportUnsavedChanges(can(writeCheck) && dirty);
   const saving = update.isPending || metadataForm.isLoading;
   const supportsEditing = isKnownEnumValue(
     KnownUpdateMcpServerFormVisibility,
@@ -232,7 +236,7 @@ export function GeneralSection({
         </SettingsSection.Body>
         <SettingsSection.Footer>
           <SettingsSection.FooterActions>
-            <RequireScope scope="mcp:write" level="component">
+            <RequireScope check={writeCheck} level="component">
               <FooterSaveButton
                 pending={saving}
                 disabled={saveDisabled}

@@ -60,6 +60,7 @@ import { useIssuerDiscovery } from "./useIssuerDiscovery";
 import { IssuerDuplicateWarning } from "./IssuerDuplicateWarning";
 import { useIssuerDuplicatePreflight } from "./useIssuerDuplicatePreflight";
 import { CONFIG_WRITE_META } from "@/lib/config-write";
+import * as authz from "@/lib/authz.gen";
 
 export function ModifyRemoteIdentityProviderSheet({
   open,
@@ -166,7 +167,7 @@ function ModifyRemoteIdentityProviderSheetBody({
   // Migrating saves on its own, independent of the form below, the way the
   // client detail page does it. The project update endpoint requires
   // project:write, so the button hides without it.
-  const { hasAnyScope } = useRBAC();
+  const { can } = useRBAC();
   const migrate = useMutation({
     meta: CONFIG_WRITE_META,
     mutationFn: async (clientId: string) => {
@@ -608,7 +609,7 @@ function ModifyRemoteIdentityProviderSheetBody({
             callbackUrl={primaryClient.callbackUrl}
             onMigrate={() => migrate.mutate(primaryClient.id)}
             isMigrating={migrate.isPending}
-            canMigrate={hasAnyScope(["project:write"])}
+            canMigrate={can(authz.project(issuer.projectId).write())}
           />
         )}
 

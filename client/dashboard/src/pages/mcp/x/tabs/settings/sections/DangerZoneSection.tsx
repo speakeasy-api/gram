@@ -36,6 +36,7 @@ import { DeleteHostedServerButton } from "@/pages/mcp/x/hosted/DeleteHostedServe
 import { ServerUsageConfirmation } from "@/components/mcp-server-usage/ServerUsageConfirmation";
 import { useServerUsageConfirmation } from "@/components/mcp-server-usage/useServerUsageConfirmation";
 import type { Toolset } from "@/lib/toolTypes";
+import * as authz from "@/lib/authz.gen";
 
 const SOURCE_KIND_LABEL: Record<SourceBackedDeleteTarget["kind"], string> = {
   remote: "remote MCP source",
@@ -157,8 +158,9 @@ export function DangerZoneSection({
                     description="Permanently delete this MCP server and its toolset. This action cannot be undone."
                   >
                     <RequireScope
-                      scope="mcp:write"
-                      resourceId={hostedToolset.id}
+                      check={authz
+                        .mcpServer(hostedToolset.id, hostedToolset.projectId)
+                        .write()}
                       level="component"
                     >
                       <DeleteHostedServerButton toolset={hostedToolset} />
@@ -171,8 +173,7 @@ export function DangerZoneSection({
                   description={deleteRow.description}
                 >
                   <RequireScope
-                    scope="mcp:write"
-                    resourceId={mcpServer.projectId}
+                    check={authz.mcpServers(mcpServer.projectId).write()}
                     level="component"
                   >
                     <Button

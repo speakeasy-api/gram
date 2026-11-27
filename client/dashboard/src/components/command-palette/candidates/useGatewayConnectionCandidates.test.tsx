@@ -23,7 +23,10 @@ vi.mock("@/contexts/Sdk", () => ({
   useSlugs: () => ({ orgSlug: "acme", projectSlug: "route-project" }),
 }));
 vi.mock("@/hooks/useRBAC", () => ({
-  useRBAC: () => ({ hasScope: () => state.allowed }),
+  useRBAC: () => ({
+    hasScope: () => state.allowed,
+    can: () => state.allowed,
+  }),
 }));
 vi.mock("react-router", async (importOriginal) => ({
   ...(await importOriginal<typeof import("react-router")>()),

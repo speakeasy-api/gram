@@ -80,6 +80,11 @@ vi.mock("@/hooks/useRBAC", () => {
   return {
     useRBAC: () => ({
       hasScope,
+      // A write grant also grants read, as the registry says.
+      can: ({ scope, resourceId }: { scope: string; resourceId: string }) =>
+        hasScope(scope, resourceId) ||
+        (scope.endsWith(":read") &&
+          hasScope(scope.replace(/:read$/, ":write"), resourceId)),
       hasAnyScope: (scopes: string[], resource?: string) =>
         scopes.some((scope) => hasScope(scope, resource)),
       hasAllScopes: (scopes: string[], resource?: string) =>

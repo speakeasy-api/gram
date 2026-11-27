@@ -32,6 +32,7 @@ import {
   ShowSlackAppGuideComponent,
   ShowWebhookUrlComponent,
 } from "./components";
+import * as authz from "@/lib/authz.gen";
 
 type DraftHandle = ReturnType<typeof useAssistantDraft>;
 
@@ -2586,7 +2587,7 @@ export function useOnboardingTools(): {
   const sdk = useSdkClient();
   const session = useSession();
   const project = useProject();
-  const { hasScope } = useRBAC();
+  const { can, hasScope } = useRBAC();
   const draft = useAssistantDraft();
   const organizationId = session.activeOrganizationId;
   const canWriteAssistant = hasScope(
@@ -2596,10 +2597,10 @@ export function useOnboardingTools(): {
   );
   const canReadProject = hasScope("project:read", project.id);
   const canWriteProject = hasScope("project:write", project.id);
-  const canReadMCP = hasScope("mcp:read", project.id);
-  const canWriteMCP = hasScope("mcp:write", project.id);
+  const canReadMCP = can(authz.mcpServers(project.id).read().probe());
+  const canWriteMCP = can(authz.mcpServers(project.id).write());
   const canReadSkills = hasScope("skill:read", project.id);
-  const canWriteEnvironment = hasScope("environment:write", project.id);
+  const canWriteEnvironment = can(authz.environments(project.id).write());
 
   const frontendTools = useMemo<Partial<OnboardingTools>>(() => {
     const tools = buildAssistantTools({ sdk, organizationId, draft });

@@ -58,6 +58,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { NetworkTrafficPanel } from "./NetworkTrafficPanel";
+import * as authz from "@/lib/authz.gen";
 
 const NETWORK_ACCESS_LABELS: Record<
   UpdateMcpServerFormNetworkAccessMode,
@@ -547,8 +548,9 @@ function NetworkAccessSectionContent({
           </SettingsSection.FooterHint>
           <SettingsSection.FooterActions>
             <RequireScope
-              scope="mcp:write"
-              resourceId={toolset?.projectId ?? server?.projectId}
+              check={authz
+                .mcpServers(toolset?.projectId ?? server?.projectId ?? "")
+                .write()}
               level="component"
             >
               <FooterSaveButton

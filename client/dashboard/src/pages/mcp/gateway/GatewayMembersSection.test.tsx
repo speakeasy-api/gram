@@ -44,6 +44,13 @@ vi.mock("@/hooks/useRBAC", () => ({
       resource === undefined
         ? [...permissions.scopes].some((grant) => grant.startsWith(`${scope}:`))
         : permissions.scopes.has(`${scope}:${resource}`),
+    // A write grant also grants read, as the registry says.
+    can: ({ scope, resourceId }: { scope: string; resourceId: string }) =>
+      permissions.scopes.has(`${scope}:${resourceId}`) ||
+      (scope.endsWith(":read") &&
+        permissions.scopes.has(
+          `${scope.replace(/:read$/, ":write")}:${resourceId}`,
+        )),
     canWriteMCPServer: ({
       serverId,
       projectId,
@@ -855,8 +862,11 @@ it.each([{ toolsetsFailed: true }, { toolsetsLoading: true }])(
   },
 );
 
-it.each([["project:read:project", "mcp:write:gateway"], ["mcp:write:gateway"]])(
-  "allows catalog browsing with gateway write and grants %j",
+it.each([
+  ["project:read:project", "mcp:write:gateway"],
+  ["mcp:write:project", "mcp:write:gateway"],
+])(
+  "allows catalog browsing with project read or project-wide write: %j",
   (...grants) => {
     permissions.scopes = new Set(grants);
     setup();
@@ -878,6 +888,15 @@ it.each([["project:read:project", "mcp:write:gateway"], ["mcp:write:gateway"]])(
   },
 );
 
+it("keeps the catalog closed for a write grant on the gateway alone", () => {
+  permissions.scopes = new Set(["mcp:write:gateway"]);
+  setup();
+  // Nothing else in the menu is allowed either, so the menu stays shut.
+  expect(
+    (screen.getByRole("button", { name: "Add new" }) as HTMLButtonElement)
+      .disabled,
+  ).toBe(true);
+});
 it.each([
   [true, { toolsetsLoading: true }],
   [true, { toolsetsFailed: true }],

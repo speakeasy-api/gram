@@ -53,20 +53,25 @@ import {
 import { useAccessibleServerIds } from "./use-accessible-by";
 import { usePlugins } from "@gram/client/react-query/plugins.js";
 import { useMembers } from "@gram/client/react-query/members.js";
-import { useSession } from "@/contexts/Auth";
+import { useProject, useSession } from "@/contexts/Auth";
+import * as authz from "@/lib/authz.gen";
 
 export function MCPRoot(): JSX.Element {
   return <Outlet />;
 }
 
 export const MCPPage = (): JSX.Element => {
+  const project = useProject();
   return (
     <Page>
       <Page.Header>
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <RequireScope scope={["mcp:read", "mcp:write"]} level="page">
+        <RequireScope
+          check={authz.mcpServers(project.id).read().probe()}
+          level="page"
+        >
           <Page.Section>
             <Page.Section.Title>MCP Servers</Page.Section.Title>
             <Page.Section.Description className="max-w-2xl">
@@ -84,6 +89,7 @@ export const MCPPage = (): JSX.Element => {
 
 function MCPOverview() {
   const routes = useRoutes();
+  const project = useProject();
 
   // These listing fetches are non-critical: degrade to the last good (or empty)
   // data with an inline indicator instead of throwing to the page error
@@ -325,7 +331,10 @@ function MCPOverview() {
     !showProjectGateway;
 
   const newMcpServerButton = (
-    <RequireScope scope="mcp:write" level="component">
+    <RequireScope
+      check={authz.mcpServers(project.id).write()}
+      level="component"
+    >
       {/* h-10 matches the toolbar's own controls, which Toolbar.Actions
           leaves to its children to size. */}
       <Button size="sm" className="h-10" onClick={() => routes.mcp.add.goTo()}>

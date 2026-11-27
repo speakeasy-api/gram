@@ -38,6 +38,7 @@ import { useFilterState, type SortOption } from "./hooks/useFilterState";
 import { ServerCard } from "./ServerCard";
 import { ServerTableRow } from "./ServerTableRow";
 import { useCatalogTeamUsage } from "./useCatalogTeamUsage";
+import * as authz from "@/lib/authz.gen";
 
 // Sort options shown in the toolbar (mirrors the legacy SortDropdown order).
 const CATALOG_SORT_OPTIONS: { value: SortOption; label: string }[] = [
@@ -58,8 +59,15 @@ export function CatalogRoot(): JSX.Element {
 }
 
 export default function Catalog(): JSX.Element {
+  const project = useProject();
   return (
-    <RequireScope scope={["project:read", "mcp:write"]} level="page">
+    <RequireScope
+      check={[
+        authz.project(project.id).read(),
+        authz.mcpServers(project.id).write(),
+      ]}
+      level="page"
+    >
       <CatalogInner />
     </RequireScope>
   );

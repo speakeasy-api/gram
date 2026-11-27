@@ -12,6 +12,7 @@ import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthTarget } from "./authTarget";
 import { UserSessionIssuerField } from "./UserSessionIssuerField";
+import * as authz from "@/lib/authz.gen";
 
 const testState = vi.hoisted(() => ({
   impact: {
@@ -173,6 +174,7 @@ function renderField(
     slug: "server",
     projectId: "project-1",
     permissionResourceId: "toolset-1",
+    writeCheck: authz.mcpServer("toolset-1", "project-1").write(),
     attachImpactTarget: { toolsetId: "toolset-1" },
     supportsOrganizationIssuers: true,
     userSessionIssuerId: currentIssuerId,

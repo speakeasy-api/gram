@@ -22,7 +22,7 @@ vi.mock("@/contexts/Sdk", () => ({
   }),
 }));
 vi.mock("@/hooks/useRBAC", () => ({
-  useRBAC: () => ({ hasScope: () => true }),
+  useRBAC: () => ({ hasScope: () => true, can: () => true }),
 }));
 vi.mock("../useAssistantDraft", () => ({
   useAssistantDraft: () => ({

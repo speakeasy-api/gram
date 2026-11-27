@@ -21,6 +21,7 @@ import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { useUserSessionIssuer } from "@gram/client/react-query/userSessionIssuer.js";
 import { useMemo, useState, type ReactNode } from "react";
+import type { Check } from "@/lib/authz.gen";
 import { InlineEmptyState } from "@/components/inline-empty-state";
 import { AuthRow } from "./AuthRow";
 import { SettingsSection } from "@/components/detail/settings-section";
@@ -202,7 +203,7 @@ export function AuthenticationSectionBody({
       associatedIssuers={associatedIssuers}
       associations={associations.data?.associations}
       allowAdditionalProviders={false}
-      projectId={target.projectId}
+      writeCheck={target.writeCheck}
       isLoading={associations.isLoading || isLoadingAssociatedIssuers}
       isError={associations.isError || isAssociatedIssuersError}
       onAdd={() => setSheetOpen(true)}
@@ -224,6 +225,7 @@ export function AuthenticationSectionBody({
     authenticationFields = (
       <>
         <IdentityProviderSetupField
+          writeCheck={target.writeCheck}
           onStartManual={() => setSheetOpen(true)}
           additionalAction={additionalSetupAction}
         />
@@ -307,9 +309,11 @@ export function AuthenticationSectionBody({
 }
 
 function IdentityProviderSetupField({
+  writeCheck,
   onStartManual,
   additionalAction,
 }: {
+  writeCheck: Check;
   onStartManual: () => void;
   additionalAction?: ReactNode;
 }) {
@@ -325,6 +329,7 @@ function IdentityProviderSetupField({
         className="py-8"
         action={
           <AuthenticationSetupActions
+            writeCheck={writeCheck}
             onStartManual={onStartManual}
             additionalAction={additionalAction}
           />

@@ -30,9 +30,10 @@ const mocks = vi.hoisted(() => ({
   pluginWriteAccess: false,
   /** Every RBAC check, with the resource id it was made against. */
   rbacCalls: [] as Array<{
-    fn: "hasAnyScope" | "hasScope";
+    fn: "hasAnyScope" | "hasScope" | "can";
     scopes: string[];
     resourceId?: string;
+    projectId?: string;
   }>,
   mcpServers: [] as unknown[],
   gateways: [] as unknown[],
@@ -310,6 +311,32 @@ vi.mock("@/hooks/useRBAC", () => ({
       if (scope !== "mcp:write" || !mocks.mcpWriteResourceIds) return true;
       return !resourceId || mocks.mcpWriteResourceIds.includes(resourceId);
     },
+    can: (check: {
+      scope: string;
+      resourceId: string;
+      dimensions: Record<string, string>;
+    }) => {
+      mocks.rbacCalls.push({
+        fn: "can",
+        scopes: [check.scope],
+        resourceId: check.resourceId,
+        projectId: check.dimensions.projectId,
+      });
+      // mcp:write implies mcp:read, as the registry says.
+      const held =
+        mocks.scopes.includes(check.scope) ||
+        (check.scope === "mcp:read" && mocks.scopes.includes("mcp:write"));
+      if (!held) return false;
+      // Grants in this suite are on the active project only.
+      if (
+        check.dimensions.projectId !== undefined &&
+        check.dimensions.projectId !== "project-default"
+      )
+        return false;
+      if (check.scope !== "mcp:write" || !mocks.mcpWriteResourceIds)
+        return true;
+      return mocks.mcpWriteResourceIds.includes(check.resourceId);
+    },
   }),
 }));
 // The source hooks have their own query/navigation tests. Keep this suite
@@ -419,6 +446,7 @@ function mcpServer(
 ) {
   return {
     id: `server-${slug}`,
+    projectId: "project-default",
     name,
     slug,
     visibility,
@@ -429,6 +457,7 @@ function mcpServer(
 
 const HOSTED_ROW = {
   id: "server-hosted",
+  projectId: "project-default",
   name: "Hosted",
   slug: "hosted-x1",
   toolsetId: "toolset-1",
@@ -605,9 +634,10 @@ describe("useGatewayCandidates", () => {
     renderCandidates();
 
     expect(mocks.rbacCalls).toContainEqual({
-      fn: "hasAnyScope",
-      scopes: ["mcp:read", "mcp:write"],
+      fn: "can",
+      scopes: ["mcp:read"],
       resourceId: "project-default",
+      projectId: "project-default",
     });
   });
 

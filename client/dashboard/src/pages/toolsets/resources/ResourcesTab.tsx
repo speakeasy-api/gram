@@ -28,6 +28,7 @@ import { useMemo, useState } from "react";
 import { GettingStartedInstructions } from "@/components/functions/GettingStartedInstructions";
 import { useFunctionsAvailable } from "@/hooks/useFunctionsAvailability";
 import { ResourcesEmptyState } from "./ResourcesEmptyState";
+import * as authz from "@/lib/authz.gen";
 
 export function ResourcesTabContent({
   toolset,
@@ -36,6 +37,8 @@ export function ResourcesTabContent({
   toolset: Toolset;
   updateToolsetMutation: ReturnType<typeof useUpdateToolsetMutation>;
 }): JSX.Element {
+  const { can } = useRBAC();
+  const writeCheck = authz.mcpServer(toolset.id, toolset.projectId).write();
   const { data: resourcesResponse } = useListResources({});
   const allResources = resourcesResponse?.resources ?? [];
   const [instructionsOpen, setInstructionsOpen] = useState(false);
@@ -146,6 +149,7 @@ export function ResourcesTabContent({
       width: "64px",
       render: (resource) => (
         <RemoveResourceAction
+          canWrite={can(writeCheck)}
           onRemove={() => removeResourceFromToolset(resource.resourceUrn)}
         />
       ),
@@ -158,7 +162,7 @@ export function ResourcesTabContent({
         <ResourcesEmptyState
           action={
             addAction ? (
-              <RequireScope scope="mcp:write" level="component">
+              <RequireScope check={writeCheck} level="component">
                 {addAction}
               </RequireScope>
             ) : (
@@ -175,7 +179,7 @@ export function ResourcesTabContent({
               Agents connected to this server can read these resources.
             </Text>
             {addAction && (
-              <RequireScope scope="mcp:write" level="component">
+              <RequireScope check={writeCheck} level="component">
                 {addAction}
               </RequireScope>
             )}
@@ -203,15 +207,20 @@ export function ResourcesTabContent({
   );
 }
 
-function RemoveResourceAction({ onRemove }: { onRemove: () => void }) {
-  const { hasScope } = useRBAC();
+function RemoveResourceAction({
+  canWrite,
+  onRemove,
+}: {
+  canWrite: boolean;
+  onRemove: () => void;
+}) {
   const actions: Action[] = [
     {
       label: "Remove from MCP server",
       onClick: onRemove,
       icon: "trash" as const,
       destructive: true,
-      disabled: !hasScope("mcp:write"),
+      disabled: !canWrite,
     },
   ];
   return <MoreActions actions={actions} />;

@@ -30,9 +30,10 @@ const state = vi.hoisted(() => ({
     },
   })),
   mutation: vi.fn(() => ({ isPending: false, mutateAsync: vi.fn() })),
-  mcpServer: { id: "server-a", name: "Server" } as {
+  mcpServer: { id: "server-a", name: "Server", projectId: "project-1" } as {
     id: string;
     name: string;
+    projectId?: string;
     tunneledMcpServerId?: string;
     remoteMcpServerId?: string;
   },
@@ -255,7 +256,7 @@ function DetailChrome() {
 beforeEach(() => {
   vi.clearAllMocks();
   state.grants = [];
-  state.mcpServer = { id: "server-a", name: "Server" };
+  state.mcpServer = { id: "server-a", name: "Server", projectId: "project-1" };
   state.skillsOverMcp = false;
   state.tunnelConnections.mockReturnValue({
     data: undefined,

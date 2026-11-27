@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AuthenticationSetupActions } from "./AuthenticationSetupActions";
+import * as authz from "@/lib/authz.gen";
 
 vi.mock("@/components/require-scope", () => ({
   RequireScope: ({ children }: { children: ReactNode }) => children,
@@ -11,6 +12,7 @@ vi.mock("@/components/require-scope", () => ({
 afterEach(cleanup);
 
 const defaultProps = {
+  writeCheck: authz.mcpServer("server-1", "project-1").write(),
   onStartManual: vi.fn(),
 };
 

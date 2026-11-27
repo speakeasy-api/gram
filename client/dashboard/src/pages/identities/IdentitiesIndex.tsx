@@ -78,6 +78,7 @@ import {
   registeredAgentIdentity,
   matchesIdentityTelemetryFilters,
 } from "./identityRoster";
+import * as authz from "@/lib/authz.gen";
 
 export function IdentitiesRoot(): JSX.Element {
   return <Outlet />;
@@ -500,6 +501,7 @@ export default function IdentitiesIndex({
 }: {
   kind: RosterKind;
 }): JSX.Element {
+  const project = useProject();
   const page = (
     <Page>
       <Page.Header>
@@ -517,7 +519,7 @@ export default function IdentitiesIndex({
   // agents that are theirs.
   if (kind === "person") {
     return (
-      <RequireScope scope={["project:read"]} level="page">
+      <RequireScope check={authz.project(project.id).read()} level="page">
         {page}
       </RequireScope>
     );

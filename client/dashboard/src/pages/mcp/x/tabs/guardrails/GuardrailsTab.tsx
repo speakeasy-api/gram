@@ -21,6 +21,7 @@ import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { AddServerGuardrailDialog } from "./AddServerGuardrailDialog";
 import { ServerRiskEvents } from "./ServerRiskEvents";
+import * as authz from "@/lib/authz.gen";
 
 type GuardrailsView = "policies" | "events";
 
@@ -59,7 +60,12 @@ export function GuardrailsTab({
 
   return (
     <RequireScope scope="org:admin" resourceId={organization.id} level="page">
-      <RequireScope scope="mcp:read" resourceId={mcpServer.id} level="page">
+      <RequireScope
+        check={authz
+          .mcpServer(mcpServer.toolsetId ?? mcpServer.id, mcpServer.projectId)
+          .read()}
+        level="page"
+      >
         <Stack gap={6}>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <Text small muted>

@@ -80,6 +80,7 @@ import {
 } from "./useGatewayMemberRows";
 import { useToolsets } from "../../toolsets/useToolsets";
 import { memberWrappers } from "./ensureToolsetWrapper";
+import * as authz from "@/lib/authz.gen";
 
 const CLASSIFICATION_LABEL: Record<MemberClassification, string> = {
   hosted: "Hosted by Speakeasy",
@@ -761,6 +762,7 @@ export function AddServersSheet({
   const routes = useRoutes();
   const navigate = useNavigate();
   const {
+    can,
     hasScope,
     canWriteMCPServer,
     canWriteProjectMCPServers,
@@ -775,7 +777,9 @@ export function AddServersSheet({
     !permissionsLoading && hasScope("project:write", projectId);
   // Match the Catalog page's browse permission; installation checks stay there.
   const canBrowseCatalog =
-    !permissionsLoading && (hasScope("project:read") || hasScope("mcp:write"));
+    !permissionsLoading &&
+    (can(authz.project(projectId).read()) ||
+      can(authz.mcpServers(projectId).write()));
   const candidates = useMemo(
     () => buildAddCandidates(servers, toolsets, memberServerIds, ""),
     [servers, toolsets, memberServerIds],

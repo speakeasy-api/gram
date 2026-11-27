@@ -40,6 +40,7 @@ import { PlatformInstrumentationSheet } from "@/pages/setup/components/platform-
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import { organizationGatewayInstallPlatforms } from "./organization-gateway-install";
+import * as authz from "@/lib/authz.gen";
 
 /**
  * The Organization Gateway: one MCP URL that gives each person every server they can
@@ -118,7 +119,7 @@ export function ProjectGatewayPage(): JSX.Element {
   const organization = useOrganization();
   const project = useProject();
   return (
-    <RequireScope scope="project:read" level="page">
+    <RequireScope check={authz.project(project.id).read()} level="page">
       <ProjectGatewayContent
         key={`${organization.id}/${project.id}`}
         organizationId={organization.id}

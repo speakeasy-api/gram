@@ -6,6 +6,7 @@ import {
   AuthenticationSectionBody,
 } from "./AuthenticationSection";
 import type { AuthTarget } from "./authTarget";
+import * as authz from "@/lib/authz.gen";
 
 const {
   attachSheet,
@@ -496,6 +497,7 @@ const standardTargetWithSessionIssuer: AuthTarget = {
   slug: "standard-server",
   projectId: "project-1",
   permissionResourceId: "mcp-server-1",
+  writeCheck: authz.mcpServer("mcp-server-1", "project-1").write(),
   mcpServerId: "mcp-server-1",
   attachImpactTarget: { mcpServerId: "mcp-server-1" },
   supportsOrganizationIssuers: true,

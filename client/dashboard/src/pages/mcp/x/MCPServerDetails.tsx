@@ -73,6 +73,7 @@ import {
   visibilityLabel,
   VISIBILITY_OPTIONS,
 } from "./mcpServerVisibility";
+import * as authz from "@/lib/authz.gen";
 
 export default function MCPServerDetails(): JSX.Element | null {
   const { mcpServerSlug } = useParams<{ mcpServerSlug: string }>();
@@ -208,7 +209,12 @@ export default function MCPServerDetails(): JSX.Element | null {
           ),
         }}
       >
-        <RequireScope scope="mcp:write" resourceId={mcpServer.id} level="page">
+        <RequireScope
+          check={authz
+            .mcpServer(mcpServer.toolsetId ?? mcpServer.id, mcpServer.projectId)
+            .write()}
+          level="page"
+        >
           <ProviderSetupPage key={mcpServer.id} mcpServer={mcpServer} />
         </RequireScope>
       </McpSetupFrame>
@@ -316,8 +322,12 @@ export default function MCPServerDetails(): JSX.Element | null {
           mcpServer && (
             <RequireScope scope="org:read" level="page">
               <RequireScope
-                scope="mcp:read"
-                resourceId={mcpServer.toolsetId ?? mcpServer.id}
+                check={authz
+                  .mcpServer(
+                    mcpServer.toolsetId ?? mcpServer.id,
+                    mcpServer.projectId,
+                  )
+                  .read()}
                 level="page"
               >
                 {/* Reads gate on the toolset id like the API; grants key on the server id that endpoint calls check. */}
@@ -350,7 +360,10 @@ export default function MCPServerDetails(): JSX.Element | null {
       case "sessions":
         return (
           mcpServer && (
-            <RequireScope scope="project:read" level="page">
+            <RequireScope
+              check={authz.project(mcpServer.projectId).read()}
+              level="page"
+            >
               <ClientsAndSessionsTab
                 issuerId={mcpServer.userSessionIssuerId}
                 originatingMcpServerId={mcpServer.id}
@@ -371,8 +384,12 @@ export default function MCPServerDetails(): JSX.Element | null {
           mcpServer && (
             // Gated on the toolset id for a hosted server, like the API.
             <RequireScope
-              scope="mcp:read"
-              resourceId={mcpServer.toolsetId ?? mcpServer.id}
+              check={authz
+                .mcpServer(
+                  mcpServer.toolsetId ?? mcpServer.id,
+                  mcpServer.projectId,
+                )
+                .read()}
               level="page"
             >
               <FeedbackTab key={mcpServer.id} mcpServer={mcpServer} />

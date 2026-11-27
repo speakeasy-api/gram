@@ -10,6 +10,7 @@ import {
   useRegisterEnvironmentTelemetry,
   useTelemetry,
 } from "@/contexts/Telemetry";
+import { useProject } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useDeleteEnvironmentMutation } from "@gram/client/react-query/deleteEnvironment.js";
 import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
@@ -24,6 +25,7 @@ import { DotRow } from "@/components/ui/DotRow";
 import { DotTable } from "@/components/ui/DotTable";
 import { type Action, MoreActions } from "@/components/ui/MoreActions";
 import { useEnvironment } from "./useEnvironment";
+import * as authz from "@/lib/authz.gen";
 
 const MASK = "••••••••••••";
 
@@ -153,8 +155,9 @@ function entryActions(
 }
 
 export default function EnvironmentPage(): JSX.Element {
+  const project = useProject();
   return (
-    <RequireScope scope="project:read" level="page">
+    <RequireScope check={authz.project(project.id).read()} level="page">
       <EnvironmentPageInner />
     </RequireScope>
   );
@@ -164,8 +167,10 @@ function EnvironmentPageInner() {
   const environment = useEnvironment();
   const navigate = useNavigate();
   const telemetry = useTelemetry();
-  const { hasScope } = useRBAC();
-  const canWrite = hasScope("environment:write");
+  const { can } = useRBAC();
+  const canWrite =
+    !!environment &&
+    can(authz.environment(environment.id, environment.projectId).write());
 
   const [toolsetDialogOpen, setToolsetDialogOpen] = useState(false);
   const [selectedToolsetSlug, setSelectedToolsetSlug] = useState<string>("");
@@ -307,7 +312,12 @@ function EnvironmentPageInner() {
         <Page.Section>
           <Page.Section.Title>{environment.name}</Page.Section.Title>
           <Page.Section.CTA>
-            <RequireScope scope="environment:write" level="component">
+            <RequireScope
+              check={authz
+                .environment(environment.id, environment.projectId)
+                .write()}
+              level="component"
+            >
               <Button
                 onClick={() => setVariableDialog({ open: true })}
                 disabled={isMutating}
