@@ -156,6 +156,24 @@ func toolServer(t *testing.T) *httptest.Server {
 	return server
 }
 
+// droppingListener returns the URL of a listener that closes every connection unanswered. It holds its port for the whole test, unlike a closed httptest server whose freed port a parallel test can take.
+func droppingListener(t *testing.T) string {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = listener.Close() })
+	go func() {
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			_ = conn.Close()
+		}
+	}()
+	return "http://" + listener.Addr().String()
+}
+
 // A failed token request tells the caller what to check, and keeps the request's details in the server log only.
 func TestClientGrantFailureMessage(t *testing.T) {
 	t.Parallel()
@@ -201,7 +219,7 @@ func TestClientGrantFailureMessage(t *testing.T) {
 			name:     "refused address",
 			tokenURL: func(*testing.T) string { return "https://192.0.2.10:8443/oauth/token" },
 			options:  []func(*guardian.Policy){guardian.WithBlockedCIDRBlocks("192.0.2.0/24")},
-			secret:   []string{"192.0.2.10", "8443"},
+			secret:   []string{"192.0.2.10", ":8443"},
 			want:     address,
 			code:     mcpconnectionattempts.CodeAddressNotAllowed,
 		},
@@ -210,7 +228,7 @@ func TestClientGrantFailureMessage(t *testing.T) {
 			tokenURL: func(*testing.T) string { return "https://" + tokenHost + "/unused" },
 			headers:  map[string]string{"Mcp-Machine-Token-Url": "https://192.0.2.10:8443/oauth/token"},
 			options:  []func(*guardian.Policy){guardian.WithBlockedCIDRBlocks("192.0.2.0/24")},
-			secret:   []string{"192.0.2.10", "8443"},
+			secret:   []string{"192.0.2.10", ":8443"},
 			logged:   "192.0.2.10",
 			want:     address,
 			code:     mcpconnectionattempts.CodeAddressNotAllowed,
@@ -219,7 +237,7 @@ func TestClientGrantFailureMessage(t *testing.T) {
 			name:     "missing host",
 			tokenURL: func(*testing.T) string { return "https://" + tokenHost + ":8443/oauth/token" },
 			options:  []func(*guardian.Policy){resolving(&net.DNSError{Err: "no such host", Name: tokenHost, Server: "198.51.100.53:53", IsNotFound: true})},
-			secret:   []string{tokenHost, "198.51.100.53", "8443"},
+			secret:   []string{tokenHost, "198.51.100.53", ":8443"},
 			want:     address,
 			code:     mcpconnectionattempts.CodeAddressNotFound,
 		},
@@ -227,7 +245,7 @@ func TestClientGrantFailureMessage(t *testing.T) {
 			name:     "temporary lookup failure",
 			tokenURL: func(*testing.T) string { return "https://" + tokenHost + ":8443/oauth/token" },
 			options:  []func(*guardian.Policy){resolving(&net.DNSError{Err: "server misbehaving", Name: tokenHost, Server: "198.51.100.53:53", IsTemporary: true})},
-			secret:   []string{tokenHost, "198.51.100.53", "8443"},
+			secret:   []string{tokenHost, "198.51.100.53", ":8443"},
 			want:     unavailable,
 			code:     mcpconnectionattempts.CodeRemoteSessionUnavailable,
 		},
@@ -235,17 +253,15 @@ func TestClientGrantFailureMessage(t *testing.T) {
 			name:     "lookup timeout",
 			tokenURL: func(*testing.T) string { return "https://" + tokenHost + ":8443/oauth/token" },
 			options:  []func(*guardian.Policy){resolving(&net.DNSError{Err: "i/o timeout", Name: tokenHost, Server: "198.51.100.53:53", IsTimeout: true})},
-			secret:   []string{tokenHost, "198.51.100.53", "8443"},
+			secret:   []string{tokenHost, "198.51.100.53", ":8443"},
 			want:     unavailable,
 			code:     mcpconnectionattempts.CodeRemoteSessionUnavailable,
 		},
 		{
-			name: "connection refused",
+			name: "connection dropped",
 			tokenURL: func(t *testing.T) string {
 				t.Helper()
-				down := httptest.NewServer(http.NotFoundHandler())
-				down.Close()
-				return down.URL + "/oauth/token"
+				return droppingListener(t) + "/oauth/token"
 			},
 			want: unavailable,
 			code: mcpconnectionattempts.CodeRemoteSessionUnavailable,
@@ -255,7 +271,7 @@ func TestClientGrantFailureMessage(t *testing.T) {
 			tokenURL: func(*testing.T) string { return "https://" + tokenHost + "/unused" },
 			headers:  map[string]string{"Mcp-Machine-Token-Url": "https://" + tokenHost + ":8443/oauth/token"},
 			options:  []func(*guardian.Policy){resolving(&net.DNSError{Err: "server misbehaving", Name: tokenHost, Server: "198.51.100.53:53", IsTemporary: true})},
-			secret:   []string{tokenHost, "198.51.100.53", "8443"},
+			secret:   []string{tokenHost, "198.51.100.53", ":8443"},
 			logged:   tokenHost,
 			want:     unavailable,
 			code:     mcpconnectionattempts.CodeRemoteSessionUnavailable,
@@ -310,7 +326,7 @@ func TestClientGrantFailureMessage(t *testing.T) {
 				t.Helper()
 				return answering(t, http.StatusInternalServerError, `stack-detail at 10.1.2.3:5432`)
 			},
-			secret: []string{"stack-detail", "10.1.2.3", "5432"},
+			secret: []string{"stack-detail", "10.1.2.3", ":5432"},
 			logged: "stack-detail",
 			want:   unavailable,
 			code:   mcpconnectionattempts.CodeRemoteSessionUnavailable,

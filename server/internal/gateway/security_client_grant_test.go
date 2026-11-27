@@ -65,8 +65,19 @@ func TestClientGrantFailureIsReported(t *testing.T) {
 		t.Cleanup(server.Close)
 		return server.URL
 	}
-	down := httptest.NewServer(http.NotFoundHandler())
-	down.Close()
+	// A listener that drops every connection keeps its port, unlike a closed server whose freed port a parallel test can take.
+	down, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = down.Close() })
+	go func() {
+		for {
+			conn, err := down.Accept()
+			if err != nil {
+				return
+			}
+			_ = conn.Close()
+		}
+	}()
 
 	redirectToBlocked := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "http://192.0.2.10/token", http.StatusFound)
@@ -89,7 +100,7 @@ func TestClientGrantFailureIsReported(t *testing.T) {
 		{name: "server error", tokenURL: answering(http.StatusInternalServerError), want: toolconfig.ClientGrantUnavailable},
 		{name: "rate limited", tokenURL: answering(http.StatusTooManyRequests), want: toolconfig.ClientGrantUnavailable},
 		{name: "bad request", tokenURL: answering(http.StatusBadRequest), want: toolconfig.ClientGrantRejected},
-		{name: "down", tokenURL: down.URL, want: toolconfig.ClientGrantUnavailable},
+		{name: "down", tokenURL: "http://" + down.Addr().String(), want: toolconfig.ClientGrantUnavailable},
 		{name: "wrong url", tokenURL: answering(http.StatusNotFound), want: toolconfig.ClientGrantMisconfigured},
 		{name: "blocked address", tokenURL: answering(http.StatusOK), blocking: true, want: toolconfig.ClientGrantBlocked},
 	} {
