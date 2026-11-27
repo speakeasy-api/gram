@@ -77,6 +77,13 @@ type EnvironmentLoader interface {
 	Load(context.Context, uuid.UUID, toolconfig.SlugOrID) (map[string]string, error)
 }
 
+// SlackAppAuthClientLoader validates and decrypts a slack_app typed auth client
+// referenced by a Slack trigger instance.
+type SlackAppAuthClientLoader interface {
+	ValidateSlackAppAuthClient(ctx context.Context, organizationID string, projectID uuid.UUID, authClientID uuid.UUID) error
+	LoadSlackAppCredentials(ctx context.Context, organizationID string, projectID uuid.UUID, authClientID uuid.UUID) (map[string]string, error)
+}
+
 type DeliveryLogger interface {
 	LogTriggerDelivery(context.Context, triggerrepo.TriggerInstance, EventEnvelope, DeliveryStatus, string, error)
 }
@@ -180,7 +187,18 @@ type App struct {
 	// access, which only costs the loading indicator and thread backfill.
 	speakeasySlackTokens SpeakeasySlackTokens
 
+	// slackAppAuthClients resolves signing secrets and bot tokens for Slack
+	// trigger instances bound to a slack_app typed auth client.
+	slackAppAuthClients SlackAppAuthClientLoader
+
 	slackBotIdentities cache.TypedCacheObject[slackBotIdentity]
+}
+
+// SetSlackAppAuthClientLoader wires the slack_app typed auth client loader for
+// Slack trigger instances that reference an auth client instead of an
+// environment.
+func (a *App) SetSlackAppAuthClientLoader(loader SlackAppAuthClientLoader) {
+	a.slackAppAuthClients = loader
 }
 
 // InstanceDBHook runs inside the transaction that mutates a trigger instance,
@@ -194,6 +212,7 @@ type CreateParams struct {
 	DefinitionSlug string
 	Name           string
 	EnvironmentID  uuid.NullUUID
+	AuthClientID   uuid.NullUUID
 	TargetKind     string
 	TargetRef      string
 	TargetDisplay  string
@@ -203,10 +222,12 @@ type CreateParams struct {
 
 type UpdateParams struct {
 	ID             uuid.UUID
+	OrganizationID string
 	ProjectID      uuid.UUID
 	DefinitionSlug string
 	Name           string
 	EnvironmentID  uuid.NullUUID
+	AuthClientID   uuid.NullUUID
 	TargetKind     string
 	TargetRef      string
 	TargetDisplay  string
@@ -257,6 +278,7 @@ func NewApp(
 		slackClient:    slackClient,
 
 		speakeasySlackTokens: nil,
+		slackAppAuthClients:  nil,
 		slackBotIdentities:   cache.NewTypedObjectCache[slackBotIdentity](logger.With(attr.SlogCacheNamespace("slack_bot_identity")), cacheImpl, cache.SuffixNone),
 	}
 }
@@ -298,7 +320,7 @@ func (a *App) Create(ctx context.Context, params CreateParams, hooks ...Instance
 		params.Config = map[string]any{}
 	}
 
-	definition, config, err := a.validateInstance(ctx, params.ProjectID, nullUUIDToUUID(params.EnvironmentID), params.DefinitionSlug, params.Config)
+	definition, config, err := a.validateInstance(ctx, params.OrganizationID, params.ProjectID, nullUUIDToUUID(params.EnvironmentID), nullUUIDToUUID(params.AuthClientID), params.DefinitionSlug, params.Config)
 	if err != nil {
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("%w: validate trigger instance: %w", ErrBadRequest, err)
 	}
@@ -323,6 +345,7 @@ func (a *App) Create(ctx context.Context, params CreateParams, hooks ...Instance
 		DefinitionSlug: params.DefinitionSlug,
 		Name:           params.Name,
 		EnvironmentID:  params.EnvironmentID,
+		AuthClientID:   params.AuthClientID,
 		TargetKind:     params.TargetKind,
 		TargetRef:      params.TargetRef,
 		TargetDisplay:  params.TargetDisplay,
@@ -369,7 +392,7 @@ func (a *App) Update(ctx context.Context, params UpdateParams, hooks ...Instance
 		params.Config = map[string]any{}
 	}
 
-	definition, config, err := a.validateInstance(ctx, params.ProjectID, nullUUIDToUUID(params.EnvironmentID), params.DefinitionSlug, params.Config)
+	definition, config, err := a.validateInstance(ctx, params.OrganizationID, params.ProjectID, nullUUIDToUUID(params.EnvironmentID), nullUUIDToUUID(params.AuthClientID), params.DefinitionSlug, params.Config)
 	if err != nil {
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("%w: validate trigger instance: %w", ErrBadRequest, err)
 	}
@@ -403,6 +426,8 @@ func (a *App) Update(ctx context.Context, params UpdateParams, hooks ...Instance
 		Name:                conv.ToPGText(params.Name),
 		UpdateEnvironmentID: true,
 		EnvironmentID:       params.EnvironmentID,
+		UpdateAuthClientID:  true,
+		AuthClientID:        params.AuthClientID,
 		TargetKind:          conv.ToPGText(params.TargetKind),
 		TargetRef:           conv.ToPGText(params.TargetRef),
 		TargetDisplay:       conv.ToPGText(params.TargetDisplay),
@@ -534,7 +559,7 @@ func (a *App) SetStatus(ctx context.Context, projectID uuid.UUID, id uuid.UUID, 
 	if err != nil {
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("decode trigger config: %w", err)
 	}
-	definition, config, err := a.validateInstance(ctx, item.ProjectID, nullUUIDToUUID(item.EnvironmentID), item.DefinitionSlug, rawConfig)
+	definition, config, err := a.validateInstance(ctx, item.OrganizationID, item.ProjectID, nullUUIDToUUID(item.EnvironmentID), nullUUIDToUUID(item.AuthClientID), item.DefinitionSlug, rawConfig)
 	if err != nil {
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("%w: validate trigger instance: %w", ErrBadRequest, err)
 	}
@@ -630,7 +655,7 @@ func (a *App) CreateWakeInstance(ctx context.Context, params CreateWakeInstanceP
 		configMap["note"] = *params.Note
 	}
 
-	if _, _, err := a.validateInstance(ctx, params.ProjectID, uuid.Nil, DefinitionSlugWake, configMap); err != nil {
+	if _, _, err := a.validateInstance(ctx, params.OrganizationID, params.ProjectID, uuid.Nil, uuid.Nil, DefinitionSlugWake, configMap); err != nil {
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("%w: validate wake config: %w", ErrBadRequest, err)
 	}
 
@@ -645,6 +670,7 @@ func (a *App) CreateWakeInstance(ctx context.Context, params CreateWakeInstanceP
 		DefinitionSlug: DefinitionSlugWake,
 		Name:           params.Name,
 		EnvironmentID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		AuthClientID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		TargetKind:     TargetKindAssistant,
 		TargetRef:      params.AssistantID.String(),
 		TargetDisplay:  params.TargetDisplay,
@@ -852,17 +878,32 @@ func (a *App) ProcessWebhook(ctx context.Context, instanceID uuid.UUID, body []b
 	if err != nil {
 		return nil, fmt.Errorf("decode trigger config: %w", err)
 	}
-	_, config, err := a.validateInstance(ctx, instance.ProjectID, nullUUIDToUUID(instance.EnvironmentID), instance.DefinitionSlug, rawConfig)
-	if err != nil {
-		return nil, fmt.Errorf("validate trigger instance: %w", err)
-	}
 
-	envMap := map[string]string{}
-	if instance.EnvironmentID.Valid {
+	var envMap map[string]string
+	switch {
+	case instance.AuthClientID.Valid:
+		// Auth-client-backed triggers read exclusively from their slack_app
+		// auth client and fail closed if it is missing, deleted, disabled, or
+		// unreadable — never falling back to a project environment.
+		if a.slackAppAuthClients == nil {
+			return nil, fmt.Errorf("%w: slack_app auth client loader not configured", ErrAuthFailed)
+		}
+		envMap, err = a.slackAppAuthClients.LoadSlackAppCredentials(ctx, instance.OrganizationID, instance.ProjectID, instance.AuthClientID.UUID)
+		if err != nil {
+			return nil, fmt.Errorf("%w: load slack_app auth client: %w", ErrAuthFailed, err)
+		}
+	case instance.EnvironmentID.Valid:
 		envMap, err = a.loadEnvironmentMap(ctx, instance.ProjectID, instance.EnvironmentID.UUID)
 		if err != nil {
 			return nil, fmt.Errorf("load environment: %w", err)
 		}
+	default:
+		envMap = map[string]string{}
+	}
+
+	config, err := definition.DecodeConfig(rawConfig)
+	if err != nil {
+		return nil, fmt.Errorf("decode trigger config: %w", err)
 	}
 
 	if err := definition.AuthenticateWebhook(ctx, body, headers, envMap, config); err != nil {
@@ -988,7 +1029,7 @@ func (a *App) ProcessScheduled(ctx context.Context, input ProcessScheduledInput)
 		return nil, fmt.Errorf("decode trigger config: %w", err)
 	}
 
-	definition, config, err := a.validateInstance(ctx, instance.ProjectID, nullUUIDToUUID(instance.EnvironmentID), instance.DefinitionSlug, rawConfig)
+	definition, config, err := a.validateInstance(ctx, instance.OrganizationID, instance.ProjectID, nullUUIDToUUID(instance.EnvironmentID), nullUUIDToUUID(instance.AuthClientID), instance.DefinitionSlug, rawConfig)
 	if err != nil {
 		return nil, fmt.Errorf("validate trigger instance: %w", err)
 	}
@@ -1044,7 +1085,7 @@ func (a *App) ProcessEvent(ctx context.Context, instance triggerrepo.TriggerInst
 		return nil, fmt.Errorf("decode trigger config: %w", err)
 	}
 
-	_, config, err := a.validateInstance(ctx, instance.ProjectID, nullUUIDToUUID(instance.EnvironmentID), instance.DefinitionSlug, rawConfig)
+	_, config, err := a.validateInstance(ctx, instance.OrganizationID, instance.ProjectID, nullUUIDToUUID(instance.EnvironmentID), nullUUIDToUUID(instance.AuthClientID), instance.DefinitionSlug, rawConfig)
 	if err != nil {
 		a.deliveryLogger.LogTriggerDelivery(ctx, instance, envelope, DeliveryStatusFailed, "validate trigger instance", err)
 		return nil, fmt.Errorf("validate trigger instance: %w", err)
@@ -1129,7 +1170,7 @@ func (a *App) IngestDirect(ctx context.Context, instanceID uuid.UUID, payload []
 		return nil, fmt.Errorf("decode trigger config: %w", err)
 	}
 
-	definition, config, err := a.validateInstance(ctx, instance.ProjectID, nullUUIDToUUID(instance.EnvironmentID), instance.DefinitionSlug, rawConfig)
+	definition, config, err := a.validateInstance(ctx, instance.OrganizationID, instance.ProjectID, nullUUIDToUUID(instance.EnvironmentID), nullUUIDToUUID(instance.AuthClientID), instance.DefinitionSlug, rawConfig)
 	if err != nil {
 		return nil, fmt.Errorf("validate trigger instance: %w", err)
 	}
@@ -1204,7 +1245,7 @@ func (a *App) WebhookURL(instance triggerrepo.TriggerInstance) *string {
 	return new(webhookURL.String())
 }
 
-func (a *App) validateInstance(ctx context.Context, projectID uuid.UUID, environmentID uuid.UUID, definitionSlug string, rawConfig map[string]any) (Definition, Config, error) {
+func (a *App) validateInstance(ctx context.Context, organizationID string, projectID uuid.UUID, environmentID uuid.UUID, authClientID uuid.UUID, definitionSlug string, rawConfig map[string]any) (Definition, Config, error) {
 	definition, ok := GetDefinition(definitionSlug)
 	if !ok {
 		return Definition{}, nil, fmt.Errorf("unknown trigger definition %q", definitionSlug)
@@ -1213,6 +1254,23 @@ func (a *App) validateInstance(ctx context.Context, projectID uuid.UUID, environ
 	config, err := definition.DecodeConfig(rawConfig)
 	if err != nil {
 		return Definition{}, nil, fmt.Errorf("decode trigger config: %w", err)
+	}
+
+	if environmentID != uuid.Nil && authClientID != uuid.Nil {
+		return Definition{}, nil, fmt.Errorf("trigger cannot specify both environment_id and auth_client_id")
+	}
+
+	if authClientID != uuid.Nil {
+		if definitionSlug != DefinitionSlugSlack {
+			return Definition{}, nil, fmt.Errorf("auth_client_id is only supported for %q triggers", DefinitionSlugSlack)
+		}
+		if a.slackAppAuthClients == nil {
+			return Definition{}, nil, fmt.Errorf("slack_app auth clients are not configured")
+		}
+		if err := a.slackAppAuthClients.ValidateSlackAppAuthClient(ctx, organizationID, projectID, authClientID); err != nil {
+			return Definition{}, nil, fmt.Errorf("validate auth_client_id: %w", err)
+		}
+		return definition, config, nil
 	}
 
 	hasRequiredEnv := false
@@ -1225,6 +1283,9 @@ func (a *App) validateInstance(ctx context.Context, projectID uuid.UUID, environ
 
 	if environmentID == uuid.Nil {
 		if hasRequiredEnv {
+			if definitionSlug == DefinitionSlugSlack {
+				return Definition{}, nil, fmt.Errorf("either auth_client_id or environment_id is required for slack triggers")
+			}
 			return Definition{}, nil, fmt.Errorf("environment_id is required when the trigger definition has required environment variables")
 		}
 		return definition, config, nil

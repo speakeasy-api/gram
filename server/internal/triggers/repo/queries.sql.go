@@ -206,6 +206,7 @@ INSERT INTO trigger_instances (
     definition_slug,
     name,
     environment_id,
+    auth_client_id,
     target_kind,
     target_ref,
     target_display,
@@ -221,7 +222,8 @@ INSERT INTO trigger_instances (
     $7,
     $8,
     $9,
-    $10
+    $10,
+    $11
 ) RETURNING id, organization_id, project_id, definition_slug, name, environment_id, auth_client_id, target_kind, target_ref, target_display, config_json, status, created_at, updated_at, deleted_at, deleted
 `
 
@@ -231,6 +233,7 @@ type CreateTriggerInstanceParams struct {
 	DefinitionSlug string
 	Name           string
 	EnvironmentID  uuid.NullUUID
+	AuthClientID   uuid.NullUUID
 	TargetKind     string
 	TargetRef      string
 	TargetDisplay  string
@@ -245,6 +248,7 @@ func (q *Queries) CreateTriggerInstance(ctx context.Context, arg CreateTriggerIn
 		arg.DefinitionSlug,
 		arg.Name,
 		arg.EnvironmentID,
+		arg.AuthClientID,
 		arg.TargetKind,
 		arg.TargetRef,
 		arg.TargetDisplay,
@@ -929,14 +933,18 @@ SET
         WHEN $2::boolean THEN $3::uuid
         ELSE environment_id
     END,
-    target_kind = COALESCE($4, target_kind),
-    target_ref = COALESCE($5, target_ref),
-    target_display = COALESCE($6, target_display),
-    config_json = COALESCE($7, config_json),
-    status = COALESCE($8, status),
+    auth_client_id = CASE
+        WHEN $4::boolean THEN $5::uuid
+        ELSE auth_client_id
+    END,
+    target_kind = COALESCE($6, target_kind),
+    target_ref = COALESCE($7, target_ref),
+    target_display = COALESCE($8, target_display),
+    config_json = COALESCE($9, config_json),
+    status = COALESCE($10, status),
     updated_at = clock_timestamp()
-WHERE id = $9
-  AND project_id = $10
+WHERE id = $11
+  AND project_id = $12
   AND deleted IS FALSE
 RETURNING id, organization_id, project_id, definition_slug, name, environment_id, auth_client_id, target_kind, target_ref, target_display, config_json, status, created_at, updated_at, deleted_at, deleted
 `
@@ -945,6 +953,8 @@ type UpdateTriggerInstanceParams struct {
 	Name                pgtype.Text
 	UpdateEnvironmentID bool
 	EnvironmentID       uuid.NullUUID
+	UpdateAuthClientID  bool
+	AuthClientID        uuid.NullUUID
 	TargetKind          pgtype.Text
 	TargetRef           pgtype.Text
 	TargetDisplay       pgtype.Text
@@ -959,6 +969,8 @@ func (q *Queries) UpdateTriggerInstance(ctx context.Context, arg UpdateTriggerIn
 		arg.Name,
 		arg.UpdateEnvironmentID,
 		arg.EnvironmentID,
+		arg.UpdateAuthClientID,
+		arg.AuthClientID,
 		arg.TargetKind,
 		arg.TargetRef,
 		arg.TargetDisplay,

@@ -17,6 +17,12 @@ const PlatformMCPReadToolsetSlug = "platform"
 // token, resolved on the server per call.
 const SpeakeasySlackPlatformToolsetSlug = "speakeasy-slack"
 
+// AssistantSlackPlatformToolsetSlug is the reserved slug for the built-in
+// assistant Slack toolset backed by a slack_app typed auth client. Any
+// assistant whose backing agent holds mcp:connect on it and mcp:auth on its
+// slack_app auth client can reach these tools through the Project Gateway.
+const AssistantSlackPlatformToolsetSlug = "assistant-slack"
+
 // ResearchToolsetSlug is the reserved slug for the MCP research agent's web
 // tools (search and page fetch). No assistant is granted it by default; the
 // research-agent runner attaches it explicitly, and its tools are gated on
@@ -40,6 +46,8 @@ func PlatformToolsetName(slug string) string {
 		return "Speakeasy Platform MCP"
 	case SpeakeasySlackPlatformToolsetSlug:
 		return "Speakeasy Slack app"
+	case AssistantSlackPlatformToolsetSlug:
+		return "Speakeasy assistant Slack"
 	default:
 		return slug
 	}

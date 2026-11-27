@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	platformtoolscore "github.com/speakeasy-api/gram/server/internal/platformtools/core"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -134,6 +135,9 @@ func backfillAssistantBuiltinGrants(ctx context.Context, tx pgx.Tx, auditLogger 
 	}
 
 	desired := assistantidentity.BuiltinConnectGrants(row.ProjectID, row.IsManaged)
+	if row.HasAssistantSlack {
+		desired = append(desired, assistantidentity.BuiltinConnectGrant(row.ProjectID, platformtoolscore.AssistantSlackPlatformToolsetSlug))
+	}
 	actor, displayName, _ := adminActor(ctx)
 	agentURN := urn.NewAgentIdentity(row.AgentID.String())
 	var added int64

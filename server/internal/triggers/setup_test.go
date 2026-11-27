@@ -14,12 +14,14 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/authclients"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	environmentsrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -57,9 +59,14 @@ func (s stubEnvLoader) Load(_ context.Context, _ uuid.UUID, _ toolconfig.SlugOrI
 }
 
 type testInstance struct {
-	service       *triggers.Service
-	conn          *pgxpool.Pool
-	environmentID uuid.UUID
+	service        *triggers.Service
+	app            *bgtriggers.App
+	authClientsSvc *authclients.Service
+	conn           *pgxpool.Pool
+	enc            *encryption.Client
+	organizationID string
+	projectID      uuid.UUID
+	environmentID  uuid.UUID
 }
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
@@ -103,6 +110,10 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	require.NoError(t, err)
 
 	auditLogger := audit.NewLogger()
+	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	enc := testenv.NewEncryptionClient(t)
+	slackAppCreds := authclients.NewSlackAppCredentialStore(conn, authzEngine, enc)
+	authClientsSvc := authclients.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, auditLogger, enc)
 
 	app := bgtriggers.NewApp(
 		logger,
@@ -118,20 +129,26 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		cache.NoopCache,
 		assistantidentity.New("https://platform.example.invalid", auditLogger),
 	)
+	app.SetSlackAppAuthClientLoader(slackAppCreds)
 
 	svc := triggers.NewService(
 		logger,
 		tracerProvider,
 		conn,
 		sessionManager,
-		authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()),
+		authzEngine,
 		app,
 		auditLogger,
 	)
 
 	return ctx, &testInstance{
-		service:       svc,
-		conn:          conn,
-		environmentID: envRow.ID,
+		service:        svc,
+		app:            app,
+		authClientsSvc: authClientsSvc,
+		conn:           conn,
+		enc:            enc,
+		organizationID: authCtx.ActiveOrganizationID,
+		projectID:      *authCtx.ProjectID,
+		environmentID:  envRow.ID,
 	}
 }

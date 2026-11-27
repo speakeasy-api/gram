@@ -170,6 +170,21 @@ func (s *Service) authorizePlatformToolset(ctx context.Context, slug string, aut
 		// runtime, this is where its principal is checked.
 		return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
 	case platformtools.PlatformMCPReadToolsetSlug, platformtools.SpeakeasySlackPlatformToolsetSlug:
+	case platformtools.AssistantSlackPlatformToolsetSlug:
+		// Assistant Slack requires an explicit mcp:connect grant on its stable
+		// PlatformToolsetID, matching Project Gateway semantics so assistants
+		// without Slack configured cannot probe the direct route either.
+		if authCtx.ProjectID == nil {
+			return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
+		}
+		decision, err := s.authz.Decide(authz.WithoutChallenges(ctx), authz.MCPServer(authz.MCPServerIDOf(platformtools.PlatformToolsetID(slug)), authz.ProjectIDOf(*authCtx.ProjectID)).Connect())
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "authorize assistant-slack platform toolset").LogError(ctx, s.logger)
+		}
+		if !decision.AllAllowed {
+			return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
+		}
+		return nil
 	default:
 		return nil
 	}

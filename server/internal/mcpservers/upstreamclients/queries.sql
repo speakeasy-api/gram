@@ -527,11 +527,14 @@ LEFT JOIN remote_session_issuers AS rsi
 -- name: ListAuthClientHeaders :many
 -- A live auth client's own headers, for the proxy to send after the server's
 -- non-credential headers. Values stay as stored; secret ones are encrypted.
+-- slack_app clients store internal Slack app credentials and are never
+-- forwarded as outbound HTTP headers to upstream MCP servers.
 SELECT h.auth_client_id, h.name, h.is_required, h.is_secret, h.value, h.value_from_request_header
 FROM mcp_auth_client_headers AS h
 JOIN mcp_auth_clients AS ac
   ON ac.id = h.auth_client_id
  AND ac.organization_id = h.organization_id
+ AND ac.client_type <> 'slack_app'
  AND ac.deleted IS FALSE
 WHERE h.auth_client_id = ANY(@auth_client_ids::uuid[])
   AND h.organization_id = @organization_id::text
@@ -632,6 +635,7 @@ LEFT JOIN mcp_auth_clients AS c
   ON c.id = link.auth_client_id
  AND c.organization_id = link.organization_id
  AND (c.project_id IS NULL OR c.project_id = m.project_id)
+ AND c.client_type <> 'slack_app'
  AND c.deleted IS FALSE
  AND c.enabled
 WHERE m.id = ANY(@mcp_server_ids::uuid[])
@@ -727,6 +731,7 @@ LEFT JOIN mcp_auth_clients AS ac
   ON ac.id = sqlc.narg('auth_client_id')::uuid
  AND ac.organization_id = p.organization_id
  AND (ac.project_id IS NULL OR ac.project_id = s.project_id)
+ AND ac.client_type <> 'slack_app'
  AND ac.deleted IS FALSE
  AND ac.enabled
  AND EXISTS (

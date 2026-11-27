@@ -70,6 +70,16 @@ WHERE project_id = @project_id
 ORDER BY id
 FOR UPDATE;
 
+-- name: ListAssistantSlackAuthClientIDs :many
+SELECT DISTINCT auth_client_id
+FROM trigger_instances
+WHERE project_id = @project_id
+  AND target_kind = 'assistant' AND target_ref = @assistant_id::text
+  AND definition_slug = 'slack'
+  AND auth_client_id IS NOT NULL
+  AND deleted IS FALSE
+ORDER BY auth_client_id;
+
 -- name: GetTriggerBinding :one
 SELECT id, organization_id, original_workload_issuer_id AS workload_issuer_id, subject
 FROM trigger_workload_bindings

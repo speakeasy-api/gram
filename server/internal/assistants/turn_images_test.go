@@ -7,10 +7,20 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/authclients"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	envrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	slackapi "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/api"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
+	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
 )
 
 type stubImageFetcher struct {
@@ -131,4 +141,133 @@ func TestFetchInlineImagePartsEnforcesTurnByteBudget(t *testing.T) {
 	parts := fetchInlineImageParts(t.Context(), testenv.NewLogger(t), fetcher, "tok", files)
 	require.Len(t, parts, 1, "second image exceeds the remaining budget after the first")
 	require.ElementsMatch(t, []string{"F1", "F2"}, fetcher.calls, "budget-exceeding declared size must skip the download")
+}
+
+type stubEnvLoader map[toolconfig.SlugOrID]map[string]string
+
+func (s stubEnvLoader) Load(_ context.Context, _ uuid.UUID, ref toolconfig.SlugOrID) (map[string]string, error) {
+	return s[ref], nil
+}
+
+func (s stubEnvLoader) LoadSystemEnv(context.Context, uuid.UUID, uuid.UUID, string, string) (*toolconfig.CaseInsensitiveEnv, error) {
+	return toolconfig.CIEnvFrom(nil), nil
+}
+
+func TestSlackTriggerTokenReadsSlackAppAuthClientAndFailsClosed(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_slack_token")
+	require.NoError(t, err)
+	_, err = orgrepo.New(conn).UpsertOrganizationMetadata(ctx, orgrepo.UpsertOrganizationMetadataParams{
+		ID:             "org-test",
+		Name:           "Test Org",
+		Slug:           "test-org",
+		WorkosID:       pgtype.Text{},
+		Whitelisted:    pgtype.Bool{},
+		CreationSource: pgtype.Text{},
+	})
+	require.NoError(t, err)
+	projectID, assistantID, _, threadID := insertAssistantFixture(t, conn)
+
+	enc := testenv.NewEncryptionClient(t)
+	store := authclients.NewSlackAppCredentialStore(conn, newTestAuthzEngine(t, conn), enc)
+
+	// Create a slack_app auth client with an encrypted bot token.
+	clientID, err := testrepo.New(conn).CreateAuthClientFixture(ctx, testrepo.CreateAuthClientFixtureParams{
+		OrganizationID: "org-test",
+		ProjectID:      uuid.NullUUID{UUID: projectID, Valid: true},
+		ClientType:     authz.AuthClientTypeSlackApp,
+		Name:           "Turn Images Slack",
+	})
+	require.NoError(t, err)
+	encBot, err := enc.Encrypt([]byte("xoxb-from-auth-client"))
+	require.NoError(t, err)
+	require.NoError(t, testrepo.New(conn).CreateAuthClientHeaderFixture(ctx, testrepo.CreateAuthClientHeaderFixtureParams{
+		AuthClientID:   clientID,
+		OrganizationID: "org-test",
+		Name:           authclients.SlackHeaderBotToken,
+		IsSecret:       true,
+		Value:          pgtype.Text{String: encBot, Valid: true},
+	}))
+
+	// Create an auth-client-backed Slack trigger and a legacy env-backed Slack trigger.
+	authTrigger, err := triggerrepo.New(conn).CreateTriggerInstance(ctx, triggerrepo.CreateTriggerInstanceParams{
+		OrganizationID: "org-test",
+		ProjectID:      projectID,
+		DefinitionSlug: "slack",
+		Name:           "Auth-client Slack",
+		EnvironmentID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		AuthClientID:   uuid.NullUUID{UUID: clientID, Valid: true},
+		TargetKind:     "assistant",
+		TargetRef:      assistantID.String(),
+		TargetDisplay:  "Assistant",
+		ConfigJson:     []byte(`{}`),
+		Status:         "active",
+	})
+	require.NoError(t, err)
+
+	envRow, err := envrepo.New(conn).CreateEnvironment(ctx, envrepo.CreateEnvironmentParams{
+		OrganizationID: "org-test",
+		ProjectID:      projectID,
+		Name:           "Legacy Slack Env",
+		Slug:           "legacy-slack-env",
+		Description:    pgtype.Text{},
+	})
+	require.NoError(t, err)
+	legacyTrigger, err := triggerrepo.New(conn).CreateTriggerInstance(ctx, triggerrepo.CreateTriggerInstanceParams{
+		OrganizationID: "org-test",
+		ProjectID:      projectID,
+		DefinitionSlug: "slack",
+		Name:           "Legacy Slack",
+		EnvironmentID:  uuid.NullUUID{UUID: envRow.ID, Valid: true},
+		AuthClientID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		TargetKind:     "assistant",
+		TargetRef:      assistantID.String(),
+		TargetDisplay:  "Assistant",
+		ConfigJson:     []byte(`{}`),
+		Status:         "active",
+	})
+	require.NoError(t, err)
+
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendGKE, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
+	core.SetSlackAppCredentials(store)
+	core.envLoader = stubEnvLoader{toolconfig.ID(envRow.ID): {"SLACK_BOT_TOKEN": "xoxb-from-legacy-env"}}
+
+	thread := assistantThreadRecord{ID: threadID, ProjectID: projectID}
+
+	// Auth-client trigger reads exclusively from its slack_app client.
+	gotAuth, err := core.slackTriggerToken(ctx, thread, assistantThreadEventRecord{
+		TriggerInstanceID: uuid.NullUUID{UUID: authTrigger.ID, Valid: true},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "xoxb-from-auth-client", gotAuth)
+
+	// Legacy trigger continues reading from its environment.
+	gotLegacy, err := core.slackTriggerToken(ctx, thread, assistantThreadEventRecord{
+		TriggerInstanceID: uuid.NullUUID{UUID: legacyTrigger.ID, Valid: true},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "xoxb-from-legacy-env", gotLegacy)
+
+	// Soft-deleting the slack_app client causes the auth-client trigger to fail closed.
+	require.NoError(t, testrepo.New(conn).SoftDeleteAuthClientFixture(ctx, testrepo.SoftDeleteAuthClientFixtureParams{
+		ID:             clientID,
+		OrganizationID: "org-test",
+	}))
+	_, err = core.slackTriggerToken(ctx, thread, assistantThreadEventRecord{
+		TriggerInstanceID: uuid.NullUUID{UUID: authTrigger.ID, Valid: true},
+	})
+	require.Error(t, err)
+
+	// Hard-deleting sets auth_client_id NULL while environment_id is also NULL -> returns "" (never falls back to stale env).
+	require.NoError(t, testrepo.New(conn).HardDeleteAuthClientFixture(ctx, testrepo.HardDeleteAuthClientFixtureParams{
+		ID:             clientID,
+		OrganizationID: "org-test",
+	}))
+	gotDeleted, err := core.slackTriggerToken(ctx, thread, assistantThreadEventRecord{
+		TriggerInstanceID: uuid.NullUUID{UUID: authTrigger.ID, Valid: true},
+	})
+	require.NoError(t, err)
+	require.Empty(t, gotDeleted)
 }

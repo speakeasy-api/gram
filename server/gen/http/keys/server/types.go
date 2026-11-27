@@ -3228,8 +3228,8 @@ func ValidateAgentPolicySelectorRequestBody(body *AgentPolicySelectorRequestBody
 		}
 	}
 	if body.ClientType != nil {
-		if !(*body.ClientType == "remote_session" || *body.ClientType == "service_account" || *body.ClientType == "static_credential" || *body.ClientType == "pass_through" || *body.ClientType == "ema" || *body.ClientType == "*") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_type", *body.ClientType, []any{"remote_session", "service_account", "static_credential", "pass_through", "ema", "*"}))
+		if !(*body.ClientType == "remote_session" || *body.ClientType == "service_account" || *body.ClientType == "static_credential" || *body.ClientType == "pass_through" || *body.ClientType == "ema" || *body.ClientType == "slack_app" || *body.ClientType == "*") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_type", *body.ClientType, []any{"remote_session", "service_account", "static_credential", "pass_through", "ema", "slack_app", "*"}))
 		}
 	}
 	if body.Disposition != nil {

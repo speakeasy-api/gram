@@ -77,7 +77,7 @@ func (s *Service) GetAuthClientAudience(ctx context.Context, payload *gen.GetAut
 }
 
 func (s *Service) SetAuthClientAudience(ctx context.Context, payload *gen.SetAuthClientAudiencePayload) (*types.AuthClientAudience, error) {
-	authCtx, logger, err := s.require(ctx, authz.OrgRef.Admin)
+	authCtx, logger, err := s.require(ctx, ManageAuthClientPermission)
 	if err != nil {
 		return nil, err
 	}

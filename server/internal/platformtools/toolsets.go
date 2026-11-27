@@ -24,6 +24,10 @@ const PlatformMCPReadToolsetSlug = core.PlatformMCPReadToolsetSlug
 // token, resolved on the server per call.
 const SpeakeasySlackPlatformToolsetSlug = core.SpeakeasySlackPlatformToolsetSlug
 
+// AssistantSlackPlatformToolsetSlug is the reserved slug for the built-in
+// assistant Slack toolset backed by a slack_app typed auth client.
+const AssistantSlackPlatformToolsetSlug = core.AssistantSlackPlatformToolsetSlug
+
 // ResearchToolsetSlug is the reserved slug for the MCP research agent's web
 // tools (search and page fetch). No assistant is granted it by default; the
 // research-agent runner attaches it explicitly, and its tools are gated on
@@ -56,6 +60,7 @@ type ToolsetDependencies struct {
 	// ActingContext.
 	PlatformMCPReadActingContext func(ctx context.Context) (context.Context, error)
 	SpeakeasySlackTools          []ExternalTool
+	AssistantSlackTools          []ExternalTool
 }
 
 type toolsetBuilder func(deps ToolsetDependencies) Toolset
@@ -79,6 +84,11 @@ var toolsetRegistry = []toolsetBuilder{
 		tools := make([]ExternalTool, 0, len(deps.SpeakeasySlackTools))
 		tools = append(tools, deps.SpeakeasySlackTools...)
 		return Toolset{Slug: SpeakeasySlackPlatformToolsetSlug, Tools: tools, ActingContext: nil}
+	},
+	func(deps ToolsetDependencies) Toolset {
+		tools := make([]ExternalTool, 0, len(deps.AssistantSlackTools))
+		tools = append(tools, deps.AssistantSlackTools...)
+		return Toolset{Slug: AssistantSlackPlatformToolsetSlug, Tools: tools, ActingContext: nil}
 	},
 }
 
