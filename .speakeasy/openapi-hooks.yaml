@@ -703,6 +703,10 @@ components:
           type: string
           description: Local path where the skill was resolved, if available.
           maxLength: 4096
+        tree_sha256:
+          type: string
+          description: 'Tree digest of the skill directory on the device, if the sender located it: the skill-manifest-v1 tree digest over the raw SKILL.md SHA-256 and the supporting files the sender would upload.'
+          pattern: ^[0-9a-f]{64}$
       description: Skill activation payload.
       required:
         - name
@@ -809,6 +813,27 @@ components:
         - schema_version
         - source
         - event
+    SkillContentFile:
+      type: object
+      properties:
+        content:
+          type: string
+          description: Exact file bytes.
+          format: binary
+        path:
+          type: string
+          description: Slash-separated path relative to the skill directory, for example scripts/run.sh.
+          minLength: 1
+          maxLength: 512
+        sha256:
+          type: string
+          description: Lowercase SHA-256 of content.
+          pattern: ^[0-9a-f]{64}$
+      description: A supporting file of a skill directory, uploaded with its SKILL.md.
+      required:
+        - path
+        - content
+        - sha256
     SkillFeedbackPayload:
       type: object
       properties:
@@ -847,15 +872,22 @@ components:
         content:
           type: string
           description: Raw UTF-8 skill manifest content. The server rejects content whose UTF-8 encoding exceeds 65,536 bytes.
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/SkillContentFile'
+          description: Supporting files of the skill directory, excluding SKILL.md. Only accepted with schema_version hook.skill-content.v2; at most 100 files, 5 MiB per file and 10 MiB in total.
+          maxItems: 100
         raw_sha256:
           type: string
           description: Lowercase SHA-256 of the raw content.
           pattern: ^[0-9a-f]{64}$
         schema_version:
           type: string
-          description: Contract version.
+          description: Contract version. hook.skill-content.v2 adds the skill's supporting files.
           enum:
             - hook.skill-content.v1
+            - hook.skill-content.v2
       description: Content for a skill manifest requested by a prior hook ingest response.
       required:
         - schema_version

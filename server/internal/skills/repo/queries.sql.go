@@ -6159,6 +6159,40 @@ func (q *Queries) RefreshSkillEfficacyEvaluationClaim(ctx context.Context, arg R
 	return result.RowsAffected(), nil
 }
 
+const repointSkillRawHashAlias = `-- name: RepointSkillRawHashAlias :exec
+UPDATE skill_raw_hashes srh
+SET canonical_sha256 = sv.canonical_sha256
+FROM skill_versions sv
+JOIN skills s ON s.id = sv.skill_id
+WHERE srh.project_id = $1
+  AND srh.raw_sha256 = $2
+  AND s.project_id = $1
+  AND s.id = $3
+  AND s.archived_at IS NULL
+  AND sv.id = $4
+`
+
+type RepointSkillRawHashAliasParams struct {
+	ProjectID      uuid.UUID
+	RawSha256      string
+	SkillID        uuid.UUID
+	SkillVersionID uuid.UUID
+}
+
+// Points an existing raw SKILL.md hash alias at another live version of the
+// skill. Device capture uses it when a skill directory changes without its
+// SKILL.md changing, so later activations attribute to the latest captured
+// tree.
+func (q *Queries) RepointSkillRawHashAlias(ctx context.Context, arg RepointSkillRawHashAliasParams) error {
+	_, err := q.db.Exec(ctx, repointSkillRawHashAlias,
+		arg.ProjectID,
+		arg.RawSha256,
+		arg.SkillID,
+		arg.SkillVersionID,
+	)
+	return err
+}
+
 const reserveSkillEfficacyEvaluations = `-- name: ReserveSkillEfficacyEvaluations :execrows
 UPDATE skill_efficacy_evaluations
 SET state = 'reserved',

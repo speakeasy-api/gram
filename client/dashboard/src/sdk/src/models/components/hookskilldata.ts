@@ -29,6 +29,10 @@ export type HookSkillData = {
    * Local path where the skill was resolved, if available.
    */
   sourcePath?: string | undefined;
+  /**
+   * Tree digest of the skill directory on the device, if the sender located it: the skill-manifest-v1 tree digest over the raw SKILL.md SHA-256 and the supporting files the sender would upload.
+   */
+  treeSha256?: string | undefined;
 };
 
 /** @internal */
@@ -38,6 +42,7 @@ export type HookSkillData$Outbound = {
   source?: string | undefined;
   source_level?: string | undefined;
   source_path?: string | undefined;
+  tree_sha256?: string | undefined;
 };
 
 /** @internal */
@@ -51,12 +56,14 @@ export const HookSkillData$outboundSchema: z.ZodMiniType<
     source: z.optional(z.string()),
     sourceLevel: z.optional(z.string()),
     sourcePath: z.optional(z.string()),
+    treeSha256: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       rawSha256: "raw_sha256",
       sourceLevel: "source_level",
       sourcePath: "source_path",
+      treeSha256: "tree_sha256",
     });
   }),
 );

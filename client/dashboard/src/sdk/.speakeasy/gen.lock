@@ -2109,6 +2109,7 @@ trackedFiles:
   src/models/components/skill.ts: {}
   src/models/components/skilladoption.ts: {}
   src/models/components/skillbreakdownrow.ts: {}
+  src/models/components/skillcontentfile.ts: {}
   src/models/components/skilldistribution.ts: {}
   src/models/components/skilldrift.ts: {}
   src/models/components/skilleditsuggestion.ts: {}

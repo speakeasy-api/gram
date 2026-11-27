@@ -222,18 +222,37 @@ var HookSkillData = Type("HookSkillData", func() {
 	Attribute("source_level", String, "Scope where the skill was resolved, if available.", func() { MaxLength(64) })
 	Attribute("source_path", String, "Local path where the skill was resolved, if available.", func() { MaxLength(4096) })
 	Attribute("raw_sha256", String, "SHA-256 of the raw skill manifest, if available.", func() { MaxLength(128) })
+	Attribute("tree_sha256", String, "Tree digest of the skill directory on the device, if the sender located it: the skill-manifest-v1 tree digest over the raw SKILL.md SHA-256 and the supporting files the sender would upload.", func() {
+		Pattern("^[0-9a-f]{64}$")
+	})
+})
+
+var SkillContentFile = Type("SkillContentFile", func() {
+	Description("A supporting file of a skill directory, uploaded with its SKILL.md.")
+	Required("path", "content", "sha256")
+	Attribute("path", String, "Slash-separated path relative to the skill directory, for example scripts/run.sh.", func() {
+		MinLength(1)
+		MaxLength(512)
+	})
+	Attribute("content", Bytes, "Exact file bytes.")
+	Attribute("sha256", String, "Lowercase SHA-256 of content.", func() {
+		Pattern("^[0-9a-f]{64}$")
+	})
 })
 
 var UploadSkillContentPayload = Type("UploadSkillContentPayload", func() {
 	Description("Content for a skill manifest requested by a prior hook ingest response.")
 	Required("schema_version", "raw_sha256", "content")
-	Attribute("schema_version", String, "Contract version.", func() {
-		Enum("hook.skill-content.v1")
+	Attribute("schema_version", String, "Contract version. hook.skill-content.v2 adds the skill's supporting files.", func() {
+		Enum("hook.skill-content.v1", "hook.skill-content.v2")
 	})
 	Attribute("raw_sha256", String, "Lowercase SHA-256 of the raw content.", func() {
 		Pattern("^[0-9a-f]{64}$")
 	})
 	Attribute("content", String, "Raw UTF-8 skill manifest content. The server rejects content whose UTF-8 encoding exceeds 65,536 bytes.")
+	Attribute("files", ArrayOf(SkillContentFile), "Supporting files of the skill directory, excluding SKILL.md. Only accepted with schema_version hook.skill-content.v2; at most 100 files, 5 MiB per file and 10 MiB in total.", func() {
+		MaxLength(100)
+	})
 })
 
 var SkillFeedbackPayload = Type("SkillFeedbackPayload", func() {

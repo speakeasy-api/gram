@@ -179,13 +179,17 @@ type IngestRequestBody struct {
 // UploadSkillContentRequestBody is the type of the "hooks" service
 // "uploadSkillContent" endpoint HTTP request body.
 type UploadSkillContentRequestBody struct {
-	// Contract version.
+	// Contract version. hook.skill-content.v2 adds the skill's supporting files.
 	SchemaVersion string `form:"schema_version" json:"schema_version" xml:"schema_version"`
 	// Lowercase SHA-256 of the raw content.
 	RawSha256 string `form:"raw_sha256" json:"raw_sha256" xml:"raw_sha256"`
 	// Raw UTF-8 skill manifest content. The server rejects content whose UTF-8
 	// encoding exceeds 65,536 bytes.
 	Content string `form:"content" json:"content" xml:"content"`
+	// Supporting files of the skill directory, excluding SKILL.md. Only accepted
+	// with schema_version hook.skill-content.v2; at most 100 files, 5 MiB per file
+	// and 10 MiB in total.
+	Files []*SkillContentFileRequestBody `form:"files,omitempty" json:"files,omitempty" xml:"files,omitempty"`
 }
 
 // SkillFeedbackRequestBody is the type of the "hooks" service "skillFeedback"
@@ -2071,6 +2075,10 @@ type HookSkillDataRequestBody struct {
 	SourcePath *string `form:"source_path,omitempty" json:"source_path,omitempty" xml:"source_path,omitempty"`
 	// SHA-256 of the raw skill manifest, if available.
 	RawSha256 *string `form:"raw_sha256,omitempty" json:"raw_sha256,omitempty" xml:"raw_sha256,omitempty"`
+	// Tree digest of the skill directory on the device, if the sender located it:
+	// the skill-manifest-v1 tree digest over the raw SKILL.md SHA-256 and the
+	// supporting files the sender would upload.
+	TreeSha256 *string `form:"tree_sha256,omitempty" json:"tree_sha256,omitempty" xml:"tree_sha256,omitempty"`
 }
 
 // HookNotificationDataRequestBody is used to define fields on request body
@@ -2181,6 +2189,17 @@ type HookInstallFailureDataRequestBody struct {
 	Arch *string `form:"arch,omitempty" json:"arch,omitempty" xml:"arch,omitempty"`
 	// Coding agent harness the hook ran under.
 	Harness *string `form:"harness,omitempty" json:"harness,omitempty" xml:"harness,omitempty"`
+}
+
+// SkillContentFileRequestBody is used to define fields on request body types.
+type SkillContentFileRequestBody struct {
+	// Slash-separated path relative to the skill directory, for example
+	// scripts/run.sh.
+	Path string `form:"path" json:"path" xml:"path"`
+	// Exact file bytes.
+	Content []byte `form:"content" json:"content" xml:"content"`
+	// Lowercase SHA-256 of content.
+	Sha256 string `form:"sha256" json:"sha256" xml:"sha256"`
 }
 
 // OTELResourceLogRequestBody is used to define fields on request body types.
@@ -2473,6 +2492,16 @@ func NewUploadSkillContentRequestBody(p *hooks.UploadSkillContentPayload) *Uploa
 		SchemaVersion: p.SchemaVersion,
 		RawSha256:     p.RawSha256,
 		Content:       p.Content,
+	}
+	if p.Files != nil {
+		body.Files = make([]*SkillContentFileRequestBody, len(p.Files))
+		for i, val := range p.Files {
+			if val == nil {
+				body.Files[i] = nil
+				continue
+			}
+			body.Files[i] = marshalHooksSkillContentFileToSkillContentFileRequestBody(val)
+		}
 	}
 	return body
 }
@@ -6155,6 +6184,9 @@ func ValidateHookSkillDataRequestBody(body *HookSkillDataRequestBody) (err error
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.raw_sha256", *body.RawSha256, utf8.RuneCountInString(*body.RawSha256), 128, false))
 		}
 	}
+	if body.TreeSha256 != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.tree_sha256", *body.TreeSha256, "^[0-9a-f]{64}$"))
+	}
 	return
 }
 
@@ -6241,5 +6273,21 @@ func ValidateHookInstallFailureDataRequestBody(body *HookInstallFailureDataReque
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.harness", *body.Harness, utf8.RuneCountInString(*body.Harness), 64, false))
 		}
 	}
+	return
+}
+
+// ValidateSkillContentFileRequestBody runs the validations defined on
+// SkillContentFileRequestBody
+func ValidateSkillContentFileRequestBody(body *SkillContentFileRequestBody) (err error) {
+	if body.Content == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("content", "body"))
+	}
+	if utf8.RuneCountInString(body.Path) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.path", body.Path, utf8.RuneCountInString(body.Path), 1, true))
+	}
+	if utf8.RuneCountInString(body.Path) > 512 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.path", body.Path, utf8.RuneCountInString(body.Path), 512, false))
+	}
+	err = goa.MergeErrors(err, goa.ValidatePattern("body.sha256", body.Sha256, "^[0-9a-f]{64}$"))
 	return
 }

@@ -2316,6 +2316,7 @@ func unmarshalHookSkillDataRequestBodyToHooksHookSkillData(v *HookSkillDataReque
 		SourceLevel: v.SourceLevel,
 		SourcePath:  v.SourcePath,
 		RawSha256:   v.RawSha256,
+		TreeSha256:  v.TreeSha256,
 	}
 
 	return res
@@ -2421,6 +2422,22 @@ func unmarshalHookInstallFailureDataRequestBodyToHooksHookInstallFailureData(v *
 		Os:          v.Os,
 		Arch:        v.Arch,
 		Harness:     v.Harness,
+	}
+
+	return res
+}
+
+// unmarshalSkillContentFileRequestBodyToHooksSkillContentFile builds a value
+// of type *hooks.SkillContentFile from a value of type
+// *SkillContentFileRequestBody.
+func unmarshalSkillContentFileRequestBodyToHooksSkillContentFile(v *SkillContentFileRequestBody) *hooks.SkillContentFile {
+	if v == nil {
+		return nil
+	}
+	res := &hooks.SkillContentFile{
+		Path:    *v.Path,
+		Content: v.Content,
+		Sha256:  *v.Sha256,
 	}
 
 	return res

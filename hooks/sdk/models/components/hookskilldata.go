@@ -14,6 +14,8 @@ type HookSkillData struct {
 	SourceLevel *string `json:"source_level,omitzero"`
 	// Local path where the skill was resolved, if available.
 	SourcePath *string `json:"source_path,omitzero"`
+	// Tree digest of the skill directory on the device, if the sender located it: the skill-manifest-v1 tree digest over the raw SKILL.md SHA-256 and the supporting files the sender would upload.
+	TreeSha256 *string `json:"tree_sha256,omitzero"`
 }
 
 func (h *HookSkillData) GetName() string {
@@ -49,4 +51,11 @@ func (h *HookSkillData) GetSourcePath() *string {
 		return nil
 	}
 	return h.SourcePath
+}
+
+func (h *HookSkillData) GetTreeSha256() *string {
+	if h == nil {
+		return nil
+	}
+	return h.TreeSha256
 }

@@ -1,6 +1,6 @@
 # UploadSkillContentPayloadSchemaVersion
 
-Contract version.
+Contract version. hook.skill-content.v2 adds the skill's supporting files.
 
 ## Example Usage
 
@@ -18,3 +18,4 @@ value := components.UploadSkillContentPayloadSchemaVersionHookSkillContentV1
 | Name                                                       | Value                                                      |
 | ---------------------------------------------------------- | ---------------------------------------------------------- |
 | `UploadSkillContentPayloadSchemaVersionHookSkillContentV1` | hook.skill-content.v1                                      |
+| `UploadSkillContentPayloadSchemaVersionHookSkillContentV2` | hook.skill-content.v2                                      |

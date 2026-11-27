@@ -101,7 +101,7 @@ func TestHooksRoutes_AcceptLargeCompressedEventWithinLimit(t *testing.T) {
 
 	// Larger than the skill-upload limit but well under the default, so this
 	// also shows the stricter limit stays specific to skill uploads.
-	prompt := strings.Repeat("x", 2*maxSkillUploadRequestBodyBytes)
+	prompt := strings.Repeat("x", maxSkillUploadRequestBodyBytes+1024*1024)
 	payload, err := json.Marshal(map[string]string{"hook_event_name": "UserPromptSubmit", "prompt": prompt})
 	require.NoError(t, err)
 

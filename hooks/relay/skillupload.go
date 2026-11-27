@@ -18,6 +18,12 @@ type skillUploadTask struct {
 	APIKey    string
 	RawSHA256 string
 	Content   string
+	// SendTree selects the hook.skill-content.v2 upload, which carries the
+	// skill directory's supporting files. It is set whenever a directory was
+	// located, even one with no supporting files.
+	SendTree bool
+	// Files are the supporting files sent with SendTree, sorted by path.
+	Files []skillTreeFile
 }
 
 func requestedSkillUploadTask(c creds, res ingestResult, skill *resolvedSkill) (skillUploadTask, bool, error) {
@@ -36,6 +42,11 @@ func requestedSkillUploadTask(c creds, res ingestResult, skill *resolvedSkill) (
 		APIKey:    c.APIKey,
 		RawSHA256: skill.rawSHA256,
 		Content:   skill.content,
+		SendTree:  skill.tree != nil,
+		Files:     nil,
+	}
+	if skill.tree != nil {
+		task.Files = skill.tree.files
 	}
 	if !validSkillUploadTask(task) {
 		return skillUploadTask{}, false, fmt.Errorf("invalid skill upload task")
@@ -53,7 +64,20 @@ func uploadSkillContent(ctx context.Context, c creds, res ingestResult, skill *r
 
 var executeSkillUpload = func(ctx context.Context, task skillUploadTask) error {
 	c := creds{ServerURL: task.ServerURL, APIKey: task.APIKey, Project: task.Project, Email: "", Org: "", Source: credEnv}
-	return newClient(task.ServerURL).uploadSkillContent(ctx, c, task.RawSHA256, task.Content)
+	cl := newClient(task.ServerURL)
+	if !task.SendTree {
+		return cl.uploadSkillContent(ctx, c, task.RawSHA256, task.Content)
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, skillUploadBudget)
+	defer cancel()
+	err := cl.uploadSkillTree(ctx, c, task)
+	if !treeUploadRejected(err) {
+		return err
+	}
+	// A server that predates hook.skill-content.v2, or one that refuses this
+	// tree, still captures the SKILL.md through the v1 upload.
+	return cl.uploadSkillContent(ctx, c, task.RawSHA256, task.Content)
 }
 
 func validSkillUploadTask(task skillUploadTask) bool {
@@ -66,7 +90,7 @@ func validSkillUploadTask(task skillUploadTask) bool {
 			return false
 		}
 	}
-	if !validRawSHA256(task.RawSHA256) {
+	if !validRawSHA256(task.RawSHA256) || !validSkillTreeFiles(task.Files) || len(task.Files) > 0 && !task.SendTree {
 		return false
 	}
 	digest := sha256.Sum256([]byte(task.Content))

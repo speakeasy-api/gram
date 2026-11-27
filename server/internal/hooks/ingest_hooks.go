@@ -432,13 +432,42 @@ func (s *Service) recordSkillActivation(ctx context.Context, payload *gen.Ingest
 			return nil, false, fmt.Errorf("resolve known skill raw hash: %w", err)
 		}
 		contentRequired := !known
-		if known && s.piScanner != nil {
+		treeSHA256 := normalizeRawSHA256(conv.PtrValOr(skill.TreeSha256, ""))
+		switch {
+		case contentRequired:
+		case treeSHA256 != "":
+			// A device that located the skill directory reports its tree
+			// digest. Ask for the directory when no stored version holds that
+			// tree, so a changed script or reference produces a new captured
+			// version even though SKILL.md is unchanged. The tree is only a
+			// capture hint: a failed lookup asks for the directory rather
+			// than dropping the activation.
+			matched, err := deviceSkillTreeVersion(writeCtx, s.repo, *authCtx.ProjectID, rawSHA256, treeSHA256)
+			if err != nil {
+				s.logger.WarnContext(ctx, "resolve known skill tree; requesting skill directory", attr.SlogError(err))
+			}
+			contentRequired = !matched.Valid
+			// The matched version need not be the one the raw hash alias
+			// points to, so check that version's own scan coverage. A failed
+			// check asks for the directory too, so the upload rescans it.
+			if !contentRequired && s.piScanner != nil {
+				contentRequired, err = s.repo.SkillVersionNeedsPromptInjectionScan(writeCtx, repo.SkillVersionNeedsPromptInjectionScanParams{
+					ProjectID:      *authCtx.ProjectID,
+					SkillVersionID: matched.UUID,
+				})
+				if err != nil {
+					s.logger.WarnContext(ctx, "check known skill tree scan state; requesting skill directory", attr.SlogError(err))
+					contentRequired = true
+				}
+			}
+		case s.piScanner != nil:
 			contentRequired, err = s.repo.SkillRawHashNeedsPromptInjectionScan(writeCtx, repo.SkillRawHashNeedsPromptInjectionScanParams{
 				ProjectID: *authCtx.ProjectID,
 				RawSha256: rawSHA256,
 			})
 			if err != nil {
-				return nil, false, fmt.Errorf("check known skill scan state: %w", err)
+				s.logger.WarnContext(ctx, "check known skill scan state; requesting skill content", attr.SlogError(err))
+				contentRequired = true
 			}
 		}
 		capture = &skillCaptureSignal{rawSHA256: rawSHA256, contentRequired: contentRequired}

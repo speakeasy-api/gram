@@ -5,15 +5,21 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
+import {
+  SkillContentFile,
+  SkillContentFile$Outbound,
+  SkillContentFile$outboundSchema,
+} from "./skillcontentfile.js";
 
 /**
- * Contract version.
+ * Contract version. hook.skill-content.v2 adds the skill's supporting files.
  */
 export const UploadSkillContentPayloadSchemaVersion = {
   HookSkillContentV1: "hook.skill-content.v1",
+  HookSkillContentV2: "hook.skill-content.v2",
 } as const;
 /**
- * Contract version.
+ * Contract version. hook.skill-content.v2 adds the skill's supporting files.
  */
 export type UploadSkillContentPayloadSchemaVersion = ClosedEnum<
   typeof UploadSkillContentPayloadSchemaVersion
@@ -28,11 +34,15 @@ export type UploadSkillContentPayload = {
    */
   content: string;
   /**
+   * Supporting files of the skill directory, excluding SKILL.md. Only accepted with schema_version hook.skill-content.v2; at most 100 files, 5 MiB per file and 10 MiB in total.
+   */
+  files?: Array<SkillContentFile> | undefined;
+  /**
    * Lowercase SHA-256 of the raw content.
    */
   rawSha256: string;
   /**
-   * Contract version.
+   * Contract version. hook.skill-content.v2 adds the skill's supporting files.
    */
   schemaVersion: UploadSkillContentPayloadSchemaVersion;
 };
@@ -46,6 +56,7 @@ export const UploadSkillContentPayloadSchemaVersion$outboundSchema:
 /** @internal */
 export type UploadSkillContentPayload$Outbound = {
   content: string;
+  files?: Array<SkillContentFile$Outbound> | undefined;
   raw_sha256: string;
   schema_version: string;
 };
@@ -57,6 +68,7 @@ export const UploadSkillContentPayload$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     content: z.string(),
+    files: z.optional(z.array(SkillContentFile$outboundSchema)),
     rawSha256: z.string(),
     schemaVersion: UploadSkillContentPayloadSchemaVersion$outboundSchema,
   }),

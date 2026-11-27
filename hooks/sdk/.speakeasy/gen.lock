@@ -6,9 +6,9 @@ management:
   generationVersion: 2.960.8
   releaseVersion: 0.1.0
 persistentEdits:
-  generation_id: 2f252887-4965-4ce7-a26a-25af74ed8c05
-  pristine_commit_hash: 27778b377410bf10b3a2e4d31eb2060ea1b4c5e9
-  pristine_tree_hash: 1890209b81a9c9f40c13a4b4b11ffd1685c8ea5e
+  generation_id: 8c039ad3-a12a-4919-871f-81f60e6eb7cd
+  pristine_commit_hash: 0d3c253913ce1d8fa7e390f7d17b09165cb163f0
+  pristine_tree_hash: 6b611afcdf567192ea52c8706314e377d5d39cb4
 features:
   go:
     additionalDependencies: 0.1.0
@@ -103,8 +103,8 @@ trackedFiles:
     pristine_git_object: 61be9895990af1ba33b0ce8713199107c3f8cb05
   docs/models/components/hookskilldata.md:
     id: 4a4fb1241f1a
-    last_write_checksum: sha1:d28e54ef0aea3b1360da9bbfd6f888287302fda6
-    pristine_git_object: 44715485bd2ca0a768a5bf82f00c376d46dc6348
+    last_write_checksum: sha1:a5f8d5468d0c62276ae5e221005b55b6d06b8826
+    pristine_git_object: 404fb1251ce9407d264105d9fb7952a8c2a09fa0
   docs/models/components/hooktoolcalldata.md:
     id: eaf2a8d748d3
     last_write_checksum: sha1:746ac4506d1738c9a221d4612c0b4302d92dc2e5
@@ -129,6 +129,10 @@ trackedFiles:
     id: 54906b49ea28
     last_write_checksum: sha1:947688bf7656cfe322d8d7801c9fa86d54883597
     pristine_git_object: 100f1c7e454721e273939cc90f7e9b5ecf34c915
+  docs/models/components/skillcontentfile.md:
+    id: 1c6aec1a4680
+    last_write_checksum: sha1:b6d2bef87e032d03616e31660c39dc072ec53b2f
+    pristine_git_object: c715a6b4be9edd320c690f6a11ae7173d4b4240b
   docs/models/components/skillfeedbackpayload.md:
     id: f25dacb8a87a
     last_write_checksum: sha1:717fa3799db4f043bdb4fae8b27ae4fcdd67a409
@@ -143,12 +147,12 @@ trackedFiles:
     pristine_git_object: cee876142093c568719855914279f549136d1fb5
   docs/models/components/uploadskillcontentpayload.md:
     id: 8085801c558c
-    last_write_checksum: sha1:6407d329b8e9e75133146f604b4a29c060402353
-    pristine_git_object: 8405fae10ff93b42442fc78147047e978db2c961
+    last_write_checksum: sha1:3a94fce263d4f872fc0240c84fb64cd5ed756a39
+    pristine_git_object: 803abe3c17c2b260c6f9e946728578666bc0a0fa
   docs/models/components/uploadskillcontentpayloadschemaversion.md:
     id: 4b2a9a2a28dd
-    last_write_checksum: sha1:509d776639292c55b7397c37c7c9484889b5feb7
-    pristine_git_object: b15c9745ee09fdaea03c66a3e1765bcd5ef42078
+    last_write_checksum: sha1:654e922a0ef62347fd5010bc2185ee7c1820fd5f
+    pristine_git_object: 1277be9a1035242ade343dfa0a849f28235a3027
   docs/models/operations/ingesthookeventrequest.md:
     id: eca24359934d
     last_write_checksum: sha1:2bafd0e18e4d622bd6528bc37eb8879cf13bfaca
@@ -315,8 +319,8 @@ trackedFiles:
     pristine_git_object: fa6f07241a0aef24d874f078fcbef8ce726ee7cf
   models/components/hookskilldata.go:
     id: 2799c7830249
-    last_write_checksum: sha1:f22f31a1b64f8fd8cf7c41939edb34ebc8dcc450
-    pristine_git_object: 6689f284574c332eb758086627a923b321c9c6bd
+    last_write_checksum: sha1:ee687c9b40ad0b477a53bea1263672cc87e3c445
+    pristine_git_object: 284a1b2c14774c8670fa26309c86cb46197bff80
   models/components/hooktoolcalldata.go:
     id: 2fc4104a4c2f
     last_write_checksum: sha1:581ddeac42cc6a4c38ddeaa7492b550d8fd10ec3
@@ -337,14 +341,18 @@ trackedFiles:
     id: 3a5eba5fe9e0
     last_write_checksum: sha1:a7ccf558d1b24fda0ced0622337fd619530b1307
     pristine_git_object: 8490bf8d1fb70375d2d9f8b2ea4da1a475e79245
+  models/components/skillcontentfile.go:
+    id: 4ae0fb342a37
+    last_write_checksum: sha1:fb96f1e51d40bf6b91569518ceac38f022ede77a
+    pristine_git_object: 79f35c69aaa54eaa7a39ee8c2a00f6923efe0c04
   models/components/skillfeedbackpayload.go:
     id: 1e1e1b2fac7f
     last_write_checksum: sha1:f829b6930f1eed3c99c043a729778a08eefd3b88
     pristine_git_object: 936b1ce365df7468ab963ee5fa7371512e06bd5b
   models/components/uploadskillcontentpayload.go:
     id: e95576ceff7a
-    last_write_checksum: sha1:131b6b2fa6b158c2151f3c393b7eb245e2829be1
-    pristine_git_object: 0b7cca4fcddc51d8c2167df2585244a0606afc8d
+    last_write_checksum: sha1:2f8d4c277a4eccf86e0d6345bd34380f2bef9d9c
+    pristine_git_object: c85d2df381350ce2d2b556529faa4ebeb5a07ad4
   models/operations/ingesthookevent.go:
     id: 3d7e416834ce
     last_write_checksum: sha1:968dfeeb619965248fe64e7e0f51f807c9bd9764

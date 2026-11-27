@@ -545,6 +545,10 @@ type HookSkillData struct {
 	SourcePath *string
 	// SHA-256 of the raw skill manifest, if available.
 	RawSha256 *string
+	// Tree digest of the skill directory on the device, if the sender located it:
+	// the skill-manifest-v1 tree digest over the raw SKILL.md SHA-256 and the
+	// supporting files the sender would upload.
+	TreeSha256 *string
 }
 
 // Tool call feature payload.
@@ -806,6 +810,17 @@ type OTELSum struct {
 	DataPoints []*OTELNumberDataPoint
 }
 
+// A supporting file of a skill directory, uploaded with its SKILL.md.
+type SkillContentFile struct {
+	// Slash-separated path relative to the skill directory, for example
+	// scripts/run.sh.
+	Path string
+	// Exact file bytes.
+	Content []byte
+	// Lowercase SHA-256 of content.
+	Sha256 string
+}
+
 // SkillFeedbackPayload is the payload type of the hooks service skillFeedback
 // method.
 type SkillFeedbackPayload struct {
@@ -826,13 +841,17 @@ type SkillFeedbackPayload struct {
 type UploadSkillContentPayload struct {
 	ApikeyToken      *string
 	ProjectSlugInput *string
-	// Contract version.
+	// Contract version. hook.skill-content.v2 adds the skill's supporting files.
 	SchemaVersion string
 	// Lowercase SHA-256 of the raw content.
 	RawSha256 string
 	// Raw UTF-8 skill manifest content. The server rejects content whose UTF-8
 	// encoding exceeds 65,536 bytes.
 	Content string
+	// Supporting files of the skill directory, excluding SKILL.md. Only accepted
+	// with schema_version hook.skill-content.v2; at most 100 files, 5 MiB per file
+	// and 10 MiB in total.
+	Files []*SkillContentFile
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.
