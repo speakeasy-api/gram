@@ -109,6 +109,10 @@ func (c failingSessionEpochChecker) SessionPredatesEpoch(context.Context, string
 	return false, c.err
 }
 
+func (c failingSessionEpochChecker) CheckUserBlock(context.Context, string) error {
+	return nil
+}
+
 func TestManagerAuthorize_SessionEpochUnavailable(t *testing.T) {
 	t.Parallel()
 

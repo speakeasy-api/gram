@@ -34,6 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/toolref"
+	"github.com/speakeasy-api/gram/server/internal/userblock"
 )
 
 const (
@@ -277,6 +278,9 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 		}
 	}
 	actor := s.resolveCanonicalActor(ctx, payload, authCtx)
+	if err := s.refuseBlockedActor(ctx, actor); err != nil {
+		return nil, err
+	}
 
 	sessionID := canonicalSessionID(payload)
 	timestamp := canonicalEventTime(payload)
@@ -542,6 +546,26 @@ func (s *Service) withOrgSettings(ctx context.Context, orgID string, res *gen.In
 		res.Effects = nil
 	}
 	return res
+}
+
+// refuseBlockedActor rejects an event attributed to a user staff blocked from
+// the platform. A shared org plugin key or device-agent token authenticates
+// the machine, not the person, so the credential checks never see them.
+// Ingest keeps working when its reads fail, so a failed read is logged and
+// the event proceeds; the credential checks still fail closed.
+func (s *Service) refuseBlockedActor(ctx context.Context, actor canonicalActor) error {
+	if actor.UserID == "" {
+		return nil
+	}
+	blocked, err := userblock.BlockedIn(ctx, s.db, actor.UserID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "could not check hook actor block state", attr.SlogError(err), attr.SlogUserID(actor.UserID))
+		return nil
+	}
+	if blocked {
+		return fmt.Errorf("hook actor: %w", userblock.Refusal(ctx, s.logger, "hooks_ingest", actor.UserID))
+	}
+	return nil
 }
 
 // canonicalActor is the human the event is attributed to. Distinct from the
