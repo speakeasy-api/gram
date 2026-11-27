@@ -135,7 +135,8 @@ func TestTranscriptShadowSchemaCompatibility(t *testing.T) {
 		base := "CREATE TABLE chat_message_transcripts (" + columns + ", UNIQUE (message_id)); "
 		tests = append(tests,
 			schemaCase{name: "missing " + column.name, ddl: base + "ALTER TABLE chat_message_transcripts DROP COLUMN " + column.name + " CASCADE"},
-			schemaCase{name: "nullable " + column.name, ddl: base + "ALTER TABLE chat_message_transcripts ALTER COLUMN " + column.name + " DROP NOT NULL"},
+			// The store always writes source_hash, so only its type is required.
+			schemaCase{name: "nullable " + column.name, ddl: base + "ALTER TABLE chat_message_transcripts ALTER COLUMN " + column.name + " DROP NOT NULL", ok: column.name == "source_hash"},
 			schemaCase{name: "wrong type " + column.name, ddl: "CREATE TABLE chat_message_transcripts (" + strings.Replace(strings.ReplaceAll(columns, " DEFAULT clock_timestamp()", ""), column.name+" "+column.typ, column.name+" integer", 1) + ", UNIQUE (message_id))"},
 		)
 	}
@@ -186,6 +187,26 @@ ON CONFLICT (message_id) DO UPDATE SET ciphertext = EXCLUDED.ciphertext`)
 			}
 		})
 	}
+}
+
+// The other schema tests replace chat_message_transcripts with hand-written
+// DDL, so a migration that changes the real table cannot fail them. This test
+// runs the check on the database the migrations build, the same schema every
+// deployed environment reaches, so such a migration fails CI instead of
+// crashing every process that enables transcript shadows at startup.
+func TestTranscriptShadowSchemaMatchesMigrations(t *testing.T) {
+	t.Parallel()
+	infra, cleanup, err := testenv.Launch(t.Context(), testenv.LaunchOptions{Postgres: true})
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, cleanup()) })
+	db, err := infra.CloneTestDatabase(t, "transcript_shadow_migrated")
+	require.NoError(t, err)
+
+	tx, err := db.BeginTx(t.Context(), pgx.TxOptions{AccessMode: pgx.ReadOnly}) //nolint:glint // notestingrawsql: proves preflight is read-only.
+	require.NoError(t, err)
+	defer func() { require.NoError(t, tx.Rollback(t.Context())) }()
+	require.NoError(t, checkTranscriptShadowSchema(t.Context(), tx),
+		"the migrated chat_message_transcripts table must pass the startup check; update the check in the same PR as the migration")
 }
 
 // Deployed databases keep application tables in a non-public schema reached
