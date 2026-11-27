@@ -1175,13 +1175,12 @@ func (s *Service) authenticateIssuerGate(
 
 	}
 	if subject == nil {
-		// All supported credential paths rejected the
-		// token. valErr is nil for the no-credentials handshake probe and
-		// never set for a token the assistant path just accepted. It usually
-		// carries a credential rejection (audience mismatch / expiry / bad
-		// signature / revoked jti), but the errIssuerGateOrgLookup wrap means
-		// the token validated and the org lookup failed — an operational
-		// error, labeled distinctly so nobody chases a phantom bad token.
+		// All supported credential paths rejected the token. valErr is nil for
+		// the no-credentials handshake probe. It usually carries a credential
+		// rejection (audience mismatch / expiry / bad signature / revoked jti),
+		// but the errIssuerGateOrgLookup wrap means the token validated and the
+		// org lookup failed — an operational error, labeled distinctly so
+		// nobody chases a phantom bad token.
 		//
 		// The no-credentials probe is counted but not logged: it fires on
 		// every client's first handshake, so a warning per probe is noise.

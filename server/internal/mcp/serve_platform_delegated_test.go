@@ -59,7 +59,6 @@ func mintAgentTurnCredential(t *testing.T, ti *testInstance, authCtx *contextval
 func mintAgentTurnCredentialWithThread(t *testing.T, ti *testInstance, authCtx *contextvalues.AuthContext, assistantID, agentID uuid.UUID) (string, uuid.UUID) {
 	t.Helper()
 
-	grantProjectRead(t, ti, authCtx)
 	queries := assistantsrepo.New(ti.conn)
 	chatID := uuid.New()
 	require.NoError(t, queries.UpsertAssistantChat(t.Context(), assistantsrepo.UpsertAssistantChatParams{

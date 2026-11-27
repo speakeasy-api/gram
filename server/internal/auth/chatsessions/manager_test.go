@@ -177,6 +177,14 @@ func TestManagerValidateToken_RejectsForeignIssuerAndMissingJTI(t *testing.T) {
 				"exp":        now.Add(time.Hour).Unix(),
 			},
 		},
+		{
+			name: "missing org_id",
+			claims: jwt.MapClaims{
+				"jti":        uuid.NewString(),
+				"project_id": uuid.NewString(),
+				"exp":        now.Add(time.Hour).Unix(),
+			},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

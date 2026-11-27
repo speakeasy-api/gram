@@ -652,6 +652,7 @@ func TestConformanceMatrix_Platform(t *testing.T) {
 	require.True(t, ok)
 
 	managedID, managedAgentID := managedAssistantWithAgent(t, ti, authCtx)
+	grantProjectRead(t, ti, authCtx)
 
 	router := goahttp.NewMuxer()
 	mcp.Attach(router, ti.service.Service, nil)

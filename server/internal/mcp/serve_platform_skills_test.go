@@ -47,6 +47,7 @@ func newPlatformSkillsFixture(t *testing.T, ctx context.Context, ti *testInstanc
 	require.NotNil(t, authCtx.ProjectID)
 
 	managedID, managedAgentID := managedAssistantWithAgent(t, ti, authCtx)
+	grantProjectRead(t, ti, authCtx)
 	ti.features.SetFlag(feature.FlagSkillsOverMCP, authCtx.ActiveOrganizationID, true)
 
 	return &platformSkillsFixture{

@@ -75,6 +75,7 @@ func TestSkillsLoadWithoutTemporalRemainsSuccessfulAcrossTrailingSignal(t *testi
 	require.NotNil(t, authCtx.ProjectID)
 
 	assistantID, agentID := createAssistantWithAgent(t, ti, authCtx, "No Temporal")
+	grantProjectRead(t, ti, authCtx)
 	token := mintAgentTurnCredential(t, ti, authCtx, assistantID, agentID)
 	skillName := "no-temporal-skill-" + uuid.NewString()[:8]
 	queries := skillsrepo.New(ti.conn)

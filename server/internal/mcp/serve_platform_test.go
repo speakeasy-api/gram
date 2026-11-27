@@ -65,6 +65,7 @@ func TestServePlatformToolset_NonManagedAssistantRejected(t *testing.T) {
 	require.NoError(t, err)
 
 	otherID, otherAgentID := createAssistantWithAgent(t, ti, authCtx, "Other")
+	grantProjectRead(t, ti, authCtx)
 	token := mintAgentTurnCredential(t, ti, authCtx, otherID, otherAgentID)
 
 	_, err = servePlatformHTTP(t, ti, platformtools.PlatformMCPReadToolsetSlug, toolsListBody(), token)
@@ -105,6 +106,7 @@ func TestServePlatformToolset_DeniedAndMissingInvalidBodiesMatch(t *testing.T) {
 	})
 	require.NoError(t, err)
 	otherID, otherAgentID := createAssistantWithAgent(t, ti, authCtx, "Other")
+	grantProjectRead(t, ti, authCtx)
 	token := mintAgentTurnCredential(t, ti, authCtx, otherID, otherAgentID)
 
 	router := goahttp.NewMuxer()
@@ -261,6 +263,7 @@ func TestServePlatformToolset_ResearchToolsetIsNotServed(t *testing.T) {
 
 	managedID, managedAgentID := managedAssistantWithAgent(t, ti, authCtx)
 
+	grantProjectRead(t, ti, authCtx)
 	token := mintAgentTurnCredential(t, ti, authCtx, managedID, managedAgentID)
 	_, err := servePlatformHTTP(t, ti, platformtools.ResearchToolsetSlug, toolsListBody(), token)
 	require.Error(t, err)
@@ -282,6 +285,7 @@ func TestServePlatformToolset_AssistantToolCallAudited(t *testing.T) {
 
 	managedID, managedAgentID := managedAssistantWithAgent(t, ti, authCtx)
 
+	grantProjectRead(t, ti, authCtx)
 	grantLiveOrgAdmin(t, ti, authCtx)
 	token, threadID := mintAgentTurnCredentialWithThread(t, ti, authCtx, managedID, managedAgentID)
 
@@ -354,6 +358,7 @@ func TestServePlatformToolset_RiskScanUsesStableToolsetIdentityAndAnnotations(t 
 	})
 	require.NoError(t, err)
 
+	grantProjectRead(t, ti, authCtx)
 	token := mintAgentTurnCredential(t, ti, authCtx, managedID, managedAgentID)
 	w, err := servePlatformHTTP(t, ti, platformtools.PlatformMCPReadToolsetSlug, body, token)
 	require.NoError(t, err)
@@ -442,6 +447,7 @@ func TestServePlatformToolset_PlatformMCPReadVariantListsTools(t *testing.T) {
 
 	managedID, managedAgentID := managedAssistantWithAgent(t, ti, authCtx)
 
+	grantProjectRead(t, ti, authCtx)
 	token := mintAgentTurnCredential(t, ti, authCtx, managedID, managedAgentID)
 	w, err := servePlatformHTTP(t, ti, platformtools.PlatformMCPReadToolsetSlug, toolsListBody(), token)
 	require.NoError(t, err)
@@ -485,6 +491,7 @@ func TestServePlatformToolset_PlatformMCPReadNonManagedAssistantRejected(t *test
 	require.NoError(t, err)
 
 	otherID, otherAgentID := createAssistantWithAgent(t, ti, authCtx, "Other")
+	grantProjectRead(t, ti, authCtx)
 	token := mintAgentTurnCredential(t, ti, authCtx, otherID, otherAgentID)
 
 	_, err = servePlatformHTTP(t, ti, platformtools.PlatformMCPReadToolsetSlug, toolsListBody(), token)
@@ -507,6 +514,7 @@ func TestServePlatformToolset_PlatformMCPReadListProjectsCall(t *testing.T) {
 
 	// Assistant calls are authorized live on every request, not carried from
 	// an earlier decision, so the grant has to exist for real.
+	grantProjectRead(t, ti, authCtx)
 	grantLiveOrgAdmin(t, ti, authCtx)
 
 	token := mintAgentTurnCredential(t, ti, authCtx, managedID, managedAgentID)

@@ -86,6 +86,7 @@ func TestMCPBandwidthAttributionForAuthorizedPlatformToolset(t *testing.T) {
 	require.NotNil(t, authCtx.ProjectID)
 
 	managedID, managedAgentID := managedAssistantWithAgent(t, ti, authCtx)
+	grantProjectRead(t, ti, authCtx)
 	token := mintAgentTurnCredential(t, ti, authCtx, managedID, managedAgentID)
 	body := toolsListBody()
 	slug := platformtools.PlatformMCPReadToolsetSlug
