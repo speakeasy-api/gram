@@ -208,12 +208,11 @@ func TestClientGrantFailureMessage(t *testing.T) {
 		{
 			name:     "refused address the caller set",
 			tokenURL: func(*testing.T) string { return "https://" + tokenHost + "/unused" },
-			headers:  map[string]string{"Mcp-Machine-Token-Url": "https://192.0.2.10:8443/oauth/token"},
+			headers:  map[string]string{"Mcp-Machine-Client-Id": "caller-client", "Mcp-Machine-Client-Secret": "caller-secret", "Mcp-Machine-Token-Url": "https://192.0.2.10:8443/oauth/token"},
 			options:  []func(*guardian.Policy){guardian.WithBlockedCIDRBlocks("192.0.2.0/24")},
-			secret:   []string{"192.0.2.10", "8443"},
+			secret:   []string{"192.0.2.10", "8443", "caller-secret"},
 			logged:   "192.0.2.10",
 			want:     address,
-			code:     mcpconnectionattempts.CodeAddressNotAllowed,
 		},
 		{
 			name:     "missing host",
@@ -253,12 +252,11 @@ func TestClientGrantFailureMessage(t *testing.T) {
 		{
 			name:     "unreachable token URL the caller set",
 			tokenURL: func(*testing.T) string { return "https://" + tokenHost + "/unused" },
-			headers:  map[string]string{"Mcp-Machine-Token-Url": "https://" + tokenHost + ":8443/oauth/token"},
+			headers:  map[string]string{"Mcp-Machine-Client-Id": "caller-client", "Mcp-Machine-Client-Secret": "caller-secret", "Mcp-Machine-Token-Url": "https://" + tokenHost + ":8443/oauth/token"},
 			options:  []func(*guardian.Policy){resolving(&net.DNSError{Err: "server misbehaving", Name: tokenHost, Server: "198.51.100.53:53", IsTemporary: true})},
-			secret:   []string{tokenHost, "198.51.100.53", "8443"},
+			secret:   []string{tokenHost, "198.51.100.53", "8443", "caller-secret"},
 			logged:   tokenHost,
 			want:     unavailable,
-			code:     mcpconnectionattempts.CodeRemoteSessionUnavailable,
 		},
 		{
 			name: "token service refuses the client",

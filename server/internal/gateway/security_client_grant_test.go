@@ -1,12 +1,15 @@
 package gateway
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strconv"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -197,4 +200,352 @@ func keys(header http.Header) []string {
 		out = append(out, k)
 	}
 	return out
+}
+
+func recordingTokenEndpoint(t *testing.T, accessToken string) (string, func() []url.Values) {
+	t.Helper()
+	var mu sync.Mutex
+	var forms []url.Values
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		copied := make(url.Values, len(r.PostForm))
+		for k, v := range r.PostForm {
+			copied[k] = append([]string(nil), v...)
+		}
+		mu.Lock()
+		forms = append(forms, copied)
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"` + accessToken + `","expires_in":60}`))
+	}))
+	t.Cleanup(server.Close)
+	return server.URL + "/token", func() []url.Values {
+		mu.Lock()
+		defer mu.Unlock()
+		out := make([]url.Values, len(forms))
+		copy(out, forms)
+		return out
+	}
+}
+
+func TestClientCredentialsTokenURLPrecedence(t *testing.T) {
+	t.Parallel()
+
+	t.Run("system client ignores user token URL header", func(t *testing.T) {
+		t.Parallel()
+
+		defaultURL, defaultForms := recordingTokenEndpoint(t, "default-tok")
+		userURL, userForms := recordingTokenEndpoint(t, "user-tok")
+		sec := &HTTPToolSecurity{
+			Key:          "acme",
+			Type:         NullString{Value: "oauth2", Valid: true},
+			OAuthTypes:   []string{"client_credentials"},
+			OAuthFlows:   []byte(`{"clientCredentials":{"tokenUrl":"` + defaultURL + `"}}`),
+			EnvVariables: []string{"ACME_CLIENT_ID", "ACME_CLIENT_SECRET", "ACME_TOKEN_URL", "ACME_ACCESS_TOKEN"},
+		}
+
+		ok, _, _, _ := runSecurity(t, unsafePolicy(t), []*HTTPToolSecurity{sec},
+			map[string]string{"ACME_CLIENT_ID": "sys-id", "ACME_CLIENT_SECRET": "sys-secret"},
+			map[string]string{"ACME_TOKEN_URL": userURL})
+		require.True(t, ok)
+		require.Empty(t, userForms())
+		require.Len(t, defaultForms(), 1)
+		require.Equal(t, "sys-id", defaultForms()[0].Get("client_id"))
+		require.Equal(t, "sys-secret", defaultForms()[0].Get("client_secret"))
+	})
+
+	t.Run("system client ignores tool call argument token URL", func(t *testing.T) {
+		t.Parallel()
+
+		defaultURL, defaultForms := recordingTokenEndpoint(t, "default-tok")
+		argURL, argForms := recordingTokenEndpoint(t, "arg-tok")
+		upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"ok":true}`))
+		}))
+		t.Cleanup(upstream.Close)
+
+		plan := &HTTPToolCallPlan{
+			ServerEnvVar:     "ACME_SERVER_URL",
+			DefaultServerUrl: NullString{Value: upstream.URL, Valid: true},
+			Security: []*HTTPToolSecurity{{
+				Key:          "acme",
+				Type:         NullString{Value: "oauth2", Valid: true},
+				OAuthTypes:   []string{"client_credentials"},
+				OAuthFlows:   []byte(`{"clientCredentials":{"tokenUrl":"` + defaultURL + `"}}`),
+				EnvVariables: []string{"ACME_CLIENT_ID", "ACME_CLIENT_SECRET", "ACME_TOKEN_URL", "ACME_ACCESS_TOKEN"},
+			}},
+			SecurityScopes:     map[string][]string{},
+			Method:             http.MethodGet,
+			Path:               "/widgets",
+			Schema:             []byte(`{"type":"object"}`),
+			HeaderParams:       map[string]*HTTPParameter{},
+			QueryParams:        map[string]*HTTPParameter{},
+			PathParams:         map[string]*HTTPParameter{},
+			RequestContentType: NullString{Value: "application/json", Valid: true},
+		}
+
+		body, err := json.Marshal(map[string]any{
+			"environmentVariables": map[string]string{"ACME_TOKEN_URL": argURL},
+		})
+		require.NoError(t, err)
+
+		proxy := NewToolProxy(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ToolCallSourceMCP, testenv.NewEncryptionClient(t), testenv.NewMemoryCache(), unsafePolicy(t), nil, nil, nil)
+		err = proxy.Do(t.Context(), httptest.NewRecorder(), bytes.NewReader(body), toolconfig.ToolCallEnv{
+			SystemEnv:   toolconfig.CIEnvFrom(map[string]string{"ACME_CLIENT_ID": "sys-id", "ACME_CLIENT_SECRET": "sys-secret"}),
+			SavedConfig: toolconfig.NewCaseInsensitiveEnv(),
+			UserConfig:  toolconfig.NewCaseInsensitiveEnv(),
+		}, NewHTTPToolCallPlan(newTestToolDescriptor(), plan), tm.HTTPLogAttributes{})
+		require.NoError(t, err)
+		require.Empty(t, argForms())
+		require.Len(t, defaultForms(), 1)
+		require.Equal(t, "sys-secret", defaultForms()[0].Get("client_secret"))
+	})
+
+	t.Run("partial user client falls back to configured token URL", func(t *testing.T) {
+		t.Parallel()
+
+		sysURL, sysForms := recordingTokenEndpoint(t, "sys-tok")
+		userURL, userForms := recordingTokenEndpoint(t, "user-tok")
+		sec := &HTTPToolSecurity{
+			Key:          "acme",
+			Type:         NullString{Value: "oauth2", Valid: true},
+			OAuthTypes:   []string{"client_credentials"},
+			OAuthFlows:   []byte(`{"clientCredentials":{"tokenUrl":"https://unused.example/token"}}`),
+			EnvVariables: []string{"ACME_CLIENT_ID", "ACME_CLIENT_SECRET", "ACME_TOKEN_URL", "ACME_ACCESS_TOKEN"},
+		}
+
+		ok, _, _, _ := runSecurity(t, unsafePolicy(t), []*HTTPToolSecurity{sec},
+			map[string]string{"ACME_CLIENT_ID": "sys-id", "ACME_CLIENT_SECRET": "sys-secret", "ACME_TOKEN_URL": sysURL},
+			map[string]string{"ACME_CLIENT_SECRET": "user-secret", "ACME_TOKEN_URL": userURL})
+		require.True(t, ok)
+		require.Empty(t, userForms())
+		require.Len(t, sysForms(), 1)
+		require.Equal(t, "sys-id", sysForms()[0].Get("client_id"))
+	})
+
+	t.Run("saved config client ignores user token URL header", func(t *testing.T) {
+		t.Parallel()
+
+		defaultURL, defaultForms := recordingTokenEndpoint(t, "default-tok")
+		userURL, userForms := recordingTokenEndpoint(t, "user-tok")
+		sec := &HTTPToolSecurity{
+			Key:          "acme",
+			Type:         NullString{Value: "oauth2", Valid: true},
+			OAuthTypes:   []string{"client_credentials"},
+			OAuthFlows:   []byte(`{"clientCredentials":{"tokenUrl":"` + defaultURL + `"}}`),
+			EnvVariables: []string{"ACME_CLIENT_ID", "ACME_CLIENT_SECRET", "ACME_TOKEN_URL", "ACME_ACCESS_TOKEN"},
+		}
+
+		report := &toolconfig.CredentialReport{}
+		env := toolconfig.ToolCallEnv{
+			SystemEnv:   toolconfig.NewCaseInsensitiveEnv(),
+			SavedConfig: toolconfig.CIEnvFrom(map[string]string{"ACME_CLIENT_ID": "saved-id", "ACME_CLIENT_SECRET": "saved-secret"}),
+			UserConfig:  toolconfig.CIEnvFrom(map[string]string{"ACME_TOKEN_URL": userURL}),
+			Credentials: report,
+		}
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "https://api.example/resource", nil)
+		var status int
+		ok := processSecurity(t.Context(), testenv.NewLogger(t), unsafePolicy(t), req, httptest.NewRecorder(), &status, newTestToolDescriptor(), &HTTPToolCallPlan{Security: []*HTTPToolSecurity{sec}}, testenv.NewMemoryCache(), env, "https://api.example", tm.HTTPLogAttributes{})
+		require.True(t, ok)
+		require.Empty(t, userForms())
+		require.Len(t, defaultForms(), 1)
+		require.Equal(t, "saved-id", defaultForms()[0].Get("client_id"))
+		require.Equal(t, "saved-secret", defaultForms()[0].Get("client_secret"))
+		require.Equal(t, []toolconfig.AppliedCredential{{Variable: "ACME_CLIENT_SECRET", System: false, ClientGrant: true, Carrier: "Authorization"}}, report.Sent)
+	})
+
+	t.Run("user client with user token URL uses user endpoint", func(t *testing.T) {
+		t.Parallel()
+
+		defaultURL, defaultForms := recordingTokenEndpoint(t, "default-tok")
+		userURL, userForms := recordingTokenEndpoint(t, "user-tok")
+		sec := &HTTPToolSecurity{
+			Key:          "acme",
+			Type:         NullString{Value: "oauth2", Valid: true},
+			OAuthTypes:   []string{"client_credentials"},
+			OAuthFlows:   []byte(`{"clientCredentials":{"tokenUrl":"` + defaultURL + `"}}`),
+			EnvVariables: []string{"ACME_CLIENT_ID", "ACME_CLIENT_SECRET", "ACME_TOKEN_URL", "ACME_ACCESS_TOKEN"},
+		}
+
+		ok, _, _, _ := runSecurity(t, unsafePolicy(t), []*HTTPToolSecurity{sec},
+			map[string]string{"ACME_CLIENT_ID": "sys-id", "ACME_CLIENT_SECRET": "sys-secret"},
+			map[string]string{"ACME_CLIENT_ID": "user-id", "ACME_CLIENT_SECRET": "user-secret", "ACME_TOKEN_URL": userURL})
+		require.True(t, ok)
+		require.Empty(t, defaultForms())
+		require.Len(t, userForms(), 1)
+		require.Equal(t, "user-id", userForms()[0].Get("client_id"))
+		require.Equal(t, "user-secret", userForms()[0].Get("client_secret"))
+	})
+}
+
+func TestServerEnvVarRespectsSavedConfig(t *testing.T) {
+	t.Parallel()
+
+	recordingAPI := func(t *testing.T) (string, func() []http.Header) {
+		t.Helper()
+		var mu sync.Mutex
+		var seen []http.Header
+		s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			mu.Lock()
+			seen = append(seen, r.Header.Clone())
+			mu.Unlock()
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"ok":true}`))
+		}))
+		t.Cleanup(s.Close)
+		return s.URL, func() []http.Header {
+			mu.Lock()
+			defer mu.Unlock()
+			out := make([]http.Header, len(seen))
+			copy(out, seen)
+			return out
+		}
+	}
+
+	t.Run("saved config API key blocks user server URL override", func(t *testing.T) {
+		t.Parallel()
+
+		defaultAPI, defaultHits := recordingAPI(t)
+		userAPI, userHits := recordingAPI(t)
+		plan := &HTTPToolCallPlan{
+			ServerEnvVar:     "ACME_SERVER_URL",
+			DefaultServerUrl: NullString{Value: defaultAPI, Valid: true},
+			Security: []*HTTPToolSecurity{{
+				Type:         NullString{Value: "apiKey", Valid: true},
+				Scheme:       NullString{Value: "apiKey", Valid: true},
+				Name:         NullString{Value: "X-API-Key", Valid: true},
+				Placement:    NullString{Value: "header", Valid: true},
+				EnvVariables: []string{"ACME_API_KEY"},
+			}},
+			SecurityScopes:     map[string][]string{},
+			Method:             http.MethodGet,
+			Path:               "/items",
+			HeaderParams:       map[string]*HTTPParameter{},
+			QueryParams:        map[string]*HTTPParameter{},
+			PathParams:         map[string]*HTTPParameter{},
+			RequestContentType: NullString{Value: "application/json", Valid: true},
+		}
+
+		proxy := NewToolProxy(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ToolCallSourceMCP, testenv.NewEncryptionClient(t), testenv.NewMemoryCache(), unsafePolicy(t), nil, nil, nil)
+		err := proxy.Do(t.Context(), httptest.NewRecorder(), bytes.NewReader([]byte(`{}`)), toolconfig.ToolCallEnv{
+			SystemEnv:   toolconfig.NewCaseInsensitiveEnv(),
+			SavedConfig: toolconfig.CIEnvFrom(map[string]string{"ACME_API_KEY": "saved-api-key"}),
+			UserConfig:  toolconfig.CIEnvFrom(map[string]string{"ACME_SERVER_URL": userAPI}),
+		}, NewHTTPToolCallPlan(newTestToolDescriptor(), plan), tm.HTTPLogAttributes{})
+		require.NoError(t, err)
+		require.Empty(t, userHits())
+		require.Len(t, defaultHits(), 1)
+		require.Equal(t, "saved-api-key", defaultHits()[0].Get("X-API-Key"))
+	})
+
+	t.Run("saved config OAuth token blocks user server URL override", func(t *testing.T) {
+		t.Parallel()
+
+		defaultAPI, defaultHits := recordingAPI(t)
+		userAPI, userHits := recordingAPI(t)
+		plan := &HTTPToolCallPlan{
+			ServerEnvVar:     "ACME_SERVER_URL",
+			DefaultServerUrl: NullString{Value: defaultAPI, Valid: true},
+			Security: []*HTTPToolSecurity{{
+				Key:          "oauth",
+				Type:         NullString{Value: "oauth2", Valid: true},
+				OAuthTypes:   []string{"authorization_code"},
+				EnvVariables: []string{"ACME_OAUTH_ACCESS_TOKEN"},
+			}},
+			SecurityScopes:     map[string][]string{},
+			Method:             http.MethodGet,
+			Path:               "/items",
+			HeaderParams:       map[string]*HTTPParameter{},
+			QueryParams:        map[string]*HTTPParameter{},
+			PathParams:         map[string]*HTTPParameter{},
+			RequestContentType: NullString{Value: "application/json", Valid: true},
+		}
+
+		proxy := NewToolProxy(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ToolCallSourceMCP, testenv.NewEncryptionClient(t), testenv.NewMemoryCache(), unsafePolicy(t), nil, nil, nil)
+		err := proxy.Do(t.Context(), httptest.NewRecorder(), bytes.NewReader([]byte(`{}`)), toolconfig.ToolCallEnv{
+			SystemEnv:   toolconfig.NewCaseInsensitiveEnv(),
+			SavedConfig: toolconfig.CIEnvFrom(map[string]string{"ACME_OAUTH_ACCESS_TOKEN": "oauth-token"}),
+			UserConfig:  toolconfig.CIEnvFrom(map[string]string{"ACME_SERVER_URL": userAPI}),
+		}, NewHTTPToolCallPlan(newTestToolDescriptor(), plan), tm.HTTPLogAttributes{})
+		require.NoError(t, err)
+		require.Empty(t, userHits())
+		require.Len(t, defaultHits(), 1)
+		require.Equal(t, "Bearer oauth-token", defaultHits()[0].Get("Authorization"))
+	})
+
+	t.Run("saved config server URL takes precedence over user server URL", func(t *testing.T) {
+		t.Parallel()
+
+		savedAPI, savedHits := recordingAPI(t)
+		userAPI, userHits := recordingAPI(t)
+		plan := &HTTPToolCallPlan{
+			ServerEnvVar:     "ACME_SERVER_URL",
+			DefaultServerUrl: NullString{Value: "https://unused.example", Valid: true},
+			Security: []*HTTPToolSecurity{{
+				Type:         NullString{Value: "apiKey", Valid: true},
+				Scheme:       NullString{Value: "apiKey", Valid: true},
+				Name:         NullString{Value: "X-API-Key", Valid: true},
+				Placement:    NullString{Value: "header", Valid: true},
+				EnvVariables: []string{"ACME_API_KEY"},
+			}},
+			SecurityScopes:     map[string][]string{},
+			Method:             http.MethodGet,
+			Path:               "/items",
+			HeaderParams:       map[string]*HTTPParameter{},
+			QueryParams:        map[string]*HTTPParameter{},
+			PathParams:         map[string]*HTTPParameter{},
+			RequestContentType: NullString{Value: "application/json", Valid: true},
+		}
+
+		proxy := NewToolProxy(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ToolCallSourceMCP, testenv.NewEncryptionClient(t), testenv.NewMemoryCache(), unsafePolicy(t), nil, nil, nil)
+		err := proxy.Do(t.Context(), httptest.NewRecorder(), bytes.NewReader([]byte(`{}`)), toolconfig.ToolCallEnv{
+			SystemEnv:   toolconfig.NewCaseInsensitiveEnv(),
+			SavedConfig: toolconfig.CIEnvFrom(map[string]string{"ACME_API_KEY": "saved-api-key", "ACME_SERVER_URL": savedAPI}),
+			UserConfig:  toolconfig.CIEnvFrom(map[string]string{"ACME_SERVER_URL": userAPI}),
+		}, NewHTTPToolCallPlan(newTestToolDescriptor(), plan), tm.HTTPLogAttributes{})
+		require.NoError(t, err)
+		require.Empty(t, userHits())
+		require.Len(t, savedHits(), 1)
+		require.Equal(t, "saved-api-key", savedHits()[0].Get("X-API-Key"))
+	})
+
+	t.Run("user server URL works when no configured layers are populated", func(t *testing.T) {
+		t.Parallel()
+
+		defaultAPI, defaultHits := recordingAPI(t)
+		userAPI, userHits := recordingAPI(t)
+		plan := &HTTPToolCallPlan{
+			ServerEnvVar:     "ACME_SERVER_URL",
+			DefaultServerUrl: NullString{Value: defaultAPI, Valid: true},
+			Security: []*HTTPToolSecurity{{
+				Type:         NullString{Value: "apiKey", Valid: true},
+				Scheme:       NullString{Value: "apiKey", Valid: true},
+				Name:         NullString{Value: "X-API-Key", Valid: true},
+				Placement:    NullString{Value: "header", Valid: true},
+				EnvVariables: []string{"ACME_API_KEY"},
+			}},
+			SecurityScopes:     map[string][]string{},
+			Method:             http.MethodGet,
+			Path:               "/items",
+			HeaderParams:       map[string]*HTTPParameter{},
+			QueryParams:        map[string]*HTTPParameter{},
+			PathParams:         map[string]*HTTPParameter{},
+			RequestContentType: NullString{Value: "application/json", Valid: true},
+		}
+
+		proxy := NewToolProxy(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ToolCallSourceMCP, testenv.NewEncryptionClient(t), testenv.NewMemoryCache(), unsafePolicy(t), nil, nil, nil)
+		err := proxy.Do(t.Context(), httptest.NewRecorder(), bytes.NewReader([]byte(`{}`)), toolconfig.ToolCallEnv{
+			SystemEnv:   toolconfig.NewCaseInsensitiveEnv(),
+			SavedConfig: toolconfig.NewCaseInsensitiveEnv(),
+			UserConfig:  toolconfig.CIEnvFrom(map[string]string{"ACME_API_KEY": "user-api-key", "ACME_SERVER_URL": userAPI}),
+		}, NewHTTPToolCallPlan(newTestToolDescriptor(), plan), tm.HTTPLogAttributes{})
+		require.NoError(t, err)
+		require.Empty(t, defaultHits())
+		require.Len(t, userHits(), 1)
+		require.Equal(t, "user-api-key", userHits()[0].Get("X-API-Key"))
+	})
 }

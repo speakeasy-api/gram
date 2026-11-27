@@ -326,7 +326,7 @@ func handleToolsCall(
 		}
 	}
 
-	userConfig, credentialSources, err := resolveUserConfiguration(ctx, logger, env, payload, plan)
+	savedConfig, userConfig, credentialSources, err := resolveUserConfiguration(ctx, logger, env, payload, plan)
 	if err != nil {
 		return nil, err
 	}
@@ -355,11 +355,12 @@ func handleToolsCall(
 	clientIdentity, _ := resolveClientIdentity(ctx, logger, clientInfoStore, payload, reqMeta.ClientInfo)
 
 	toolCallEnv := toolconfig.ToolCallEnv{
-		UserConfig: userConfig,
-		SystemEnv:  systemConfig,
-		GramEmail:  gramEmail,
-		GramChatID: payload.chatID,
-		MCPClient:  clientIdentity,
+		SystemEnv:   systemConfig,
+		SavedConfig: savedConfig,
+		UserConfig:  userConfig,
+		GramEmail:   gramEmail,
+		GramChatID:  payload.chatID,
+		MCPClient:   clientIdentity,
 		Credentials: &toolconfig.CredentialReport{
 			Sent:            nil,
 			GrantFailure:    "",
@@ -892,10 +893,15 @@ func resolveUserConfiguration(
 	env toolconfig.EnvironmentLoader,
 	payload *mcpInputs,
 	plan *gateway.ToolCallPlan,
-) (*toolconfig.CaseInsensitiveEnv, map[string]credentialSource, error) {
+) (*toolconfig.CaseInsensitiveEnv, *toolconfig.CaseInsensitiveEnv, map[string]credentialSource, error) {
+	savedConfig := toolconfig.NewCaseInsensitiveEnv()
 	userConfig := toolconfig.NewCaseInsensitiveEnv()
 	sources := make(map[string]credentialSource)
-	set := func(key, value string, source credentialSource) {
+	setSaved := func(key, value string, source credentialSource) {
+		savedConfig.Set(key, value)
+		sources[strings.ToLower(key)] = source
+	}
+	setUser := func(key, value string, source credentialSource) {
 		userConfig.Set(key, value)
 		sources[strings.ToLower(key)] = source
 	}
@@ -906,28 +912,29 @@ func resolveUserConfiguration(
 		storedEnvVars, err := env.Load(ctx, payload.projectID, toolconfig.Slug(payload.environment))
 		switch {
 		case errors.Is(err, toolconfig.ErrNotFound):
-			return nil, nil, oops.E(oops.CodeBadRequest, err, "environment not found").LogError(ctx, logger)
+			return nil, nil, nil, oops.E(oops.CodeBadRequest, err, "environment not found").LogError(ctx, logger)
 		case err != nil:
-			return nil, nil, oops.E(oops.CodeUnexpected, err, "failed to load environment").LogError(ctx, logger)
+			return nil, nil, nil, oops.E(oops.CodeUnexpected, err, "failed to load environment").LogError(ctx, logger)
 		}
 
 		for k, v := range storedEnvVars {
-			set(k, v, credentialSourceSaved)
+			setSaved(k, v, credentialSourceSaved)
 		}
 	}
 
 	for k, v := range payload.mcpEnvVariables {
-		set(k, v, credentialSourceCaller)
+		setUser(k, v, credentialSourceCaller)
 	}
 
-	// Process OAuth tokens for HTTP tools
+	// Process OAuth tokens for HTTP tools; resolved tokens take precedence over request headers.
 	if plan != nil && plan.Kind == gateway.ToolKindHTTP {
 		for _, security := range plan.HTTP.Security {
 			for _, token := range payload.oauthTokenInputs {
 				if oauthTokenCovers(security, token) {
 					for _, envVar := range security.EnvVariables {
 						if strings.HasSuffix(envVar, "ACCESS_TOKEN") {
-							set(envVar, token.Token, token.source())
+							setSaved(envVar, token.Token, token.source())
+							userConfig.Delete(envVar)
 						}
 					}
 				}
@@ -935,16 +942,17 @@ func resolveUserConfiguration(
 		}
 	}
 
-	// Process OAuth tokens for Function tools
+	// Process OAuth tokens for Function tools; resolved tokens take precedence over request headers.
 	if plan != nil && plan.Kind == gateway.ToolKindFunction && plan.Function.AuthInput != nil {
 		for _, token := range payload.oauthTokenInputs {
 			if plan.Function.AuthInput.Type == "oauth2" {
-				userConfig.Set(plan.Function.AuthInput.Variable, token.Token)
+				savedConfig.Set(plan.Function.AuthInput.Variable, token.Token)
+				userConfig.Delete(plan.Function.AuthInput.Variable)
 			}
 		}
 	}
 
-	return userConfig, sources, nil
+	return savedConfig, userConfig, sources, nil
 }
 
 // source says whose sign-in the token is.
@@ -1202,6 +1210,11 @@ func filterOmittedEnvVars(
 	for _, key := range env.SystemEnv.Keys() {
 		if !systemKeysToRetain[key] {
 			env.SystemEnv.Delete(key)
+		}
+	}
+	for _, key := range env.SavedConfig.Keys() {
+		if !userKeysToRetain[key] {
+			env.SavedConfig.Delete(key)
 		}
 	}
 	for _, key := range env.UserConfig.Keys() {

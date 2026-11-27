@@ -449,15 +449,15 @@ func (tp *ToolProxy) doFunction(
 		payloadEnv[strings.ToUpper(k)] = v
 	}
 
-	// For each variable required by the function, allow user config to merge/override
+	// For each variable required by the function, allow saved config and user config to merge/override
 	for key := range plan.Variables {
-		if val := env.UserConfig.Get(key); val != "" {
+		if val := env.ConfiguredOrUserGet(key); val != "" {
 			payloadEnv[key] = val
 		}
 	}
 
 	if plan.AuthInput != nil {
-		if val := env.UserConfig.Get(plan.AuthInput.Variable); val != "" {
+		if val := env.ConfiguredOrUserGet(plan.AuthInput.Variable); val != "" {
 			payloadEnv[plan.AuthInput.Variable] = val
 		}
 	}
@@ -700,16 +700,6 @@ func (tp *ToolProxy) doHTTP(
 				logger.ErrorContext(ctx, "failed to encode tool call error", attr.SlogError(err))
 			}
 			return nil
-		}
-	}
-
-	// We prefer tool call specified arguments over user-specified config
-	if toolCallBody.EnvironmentVariables != nil {
-		for k, v := range toolCallBody.EnvironmentVariables {
-			env.UserConfig.Set(k, v)
-			if env.Credentials != nil {
-				env.Credentials.CallerVariables = append(env.Credentials.CallerVariables, k)
-			}
 		}
 	}
 
@@ -1214,25 +1204,31 @@ func captureResponseStatusCode(opts ReverseProxyOptions, statusCode int) {
 }
 
 func processServerEnvVars(ctx context.Context, logger *slog.Logger, tool *HTTPToolCallPlan, env toolconfig.ToolCallEnv) string {
-	if tool.ServerEnvVar != "" {
-		if envVar := env.SystemEnv.Get(tool.ServerEnvVar); envVar != "" {
-			return envVar
-		} else if len(env.SystemEnv.All()) > 0 {
-			// IMPORTANT: when system environment variables exist, we _always_ disallow user-supplied
-			// server URLs to prevent exfiltration of system environment variables to user-controlled servers.
-			return ""
-		}
-
-		envVar := env.UserConfig.Get(tool.ServerEnvVar)
-		if envVar != "" {
-			if env.Credentials != nil {
-				env.Credentials.ServerVariable = tool.ServerEnvVar
-			}
-			return envVar
-		} else {
-			logger.WarnContext(ctx, "provided variables for server not found", attr.SlogEnvVarName(tool.ServerEnvVar))
-		}
+	if tool.ServerEnvVar == "" {
+		return ""
 	}
+
+	if envVar := env.SystemEnv.Get(tool.ServerEnvVar); envVar != "" {
+		return envVar
+	}
+	if envVar := env.SavedConfig.Get(tool.ServerEnvVar); envVar != "" {
+		return envVar
+	}
+	// When configured environment variables exist in SystemEnv or SavedConfig,
+	// disallow request-level server URL overrides so configured values remain
+	// bound to their configured destination.
+	if env.HasConfiguredEnv() {
+		return ""
+	}
+
+	if envVar := env.UserConfig.Get(tool.ServerEnvVar); envVar != "" {
+		if env.Credentials != nil {
+			env.Credentials.ServerVariable = tool.ServerEnvVar
+		}
+		return envVar
+	}
+
+	logger.WarnContext(ctx, "provided variables for server not found", attr.SlogEnvVarName(tool.ServerEnvVar))
 	return ""
 }
 

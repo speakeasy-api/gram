@@ -43,7 +43,12 @@ func processSecurity(
 	// applied keeps the credential behind each header or query parameter the request ends up carrying.
 	applied := make(map[string]toolconfig.AppliedCredential)
 	credentialFrom := func(variable string, grant bool) toolconfig.AppliedCredential {
-		return toolconfig.AppliedCredential{Variable: variable, System: env.UserConfig == nil || env.UserConfig.Get(variable) == "", ClientGrant: grant, Carrier: ""}
+		return toolconfig.AppliedCredential{
+			Variable:    variable,
+			System:      env.UserConfig.Get(variable) == "" && env.SavedConfig.Get(variable) == "",
+			ClientGrant: grant,
+			Carrier:     "",
+		}
 	}
 	// A grant that failed without the proxy answering 401 counts only if nothing else sent an Authorization.
 	var grantFailure toolconfig.ClientGrantFailure
@@ -173,7 +178,7 @@ func processSecurity(
 						}
 					}
 				case "client_credentials":
-					token, variable, grant, err := processClientCredentials(ctx, logger, guardianPolicy, req, cacheImpl, tool, plan.SecurityScopes, security, mergedEnv, serverURL)
+					token, variable, grant, err := processClientCredentials(ctx, logger, guardianPolicy, req, cacheImpl, tool, plan.SecurityScopes, security, env, mergedEnv, serverURL)
 					if err != nil {
 						logger.ErrorContext(ctx, "could not process client credentials", attr.SlogError(err))
 						if failure, ok := errors.AsType[*clientCredentialsError](err); ok && failure.tokenRequest {
@@ -282,20 +287,22 @@ type clientCredentialsTokenResponseCamelCase struct {
 	ExpiresIn   int    `json:"expiresIn"`
 }
 
-func processClientCredentials(ctx context.Context, logger *slog.Logger, guardianPolicy *guardian.Policy, req *http.Request, cacheImpl cache.Cache, tool *ToolDescriptor, planScopes map[string][]string, security *HTTPToolSecurity, mergedEnv *toolconfig.CaseInsensitiveEnv, serverURL string) (string, string, bool, error) {
+func processClientCredentials(ctx context.Context, logger *slog.Logger, guardianPolicy *guardian.Policy, req *http.Request, cacheImpl cache.Cache, tool *ToolDescriptor, planScopes map[string][]string, security *HTTPToolSecurity, env toolconfig.ToolCallEnv, mergedEnv *toolconfig.CaseInsensitiveEnv, serverURL string) (string, string, bool, error) {
 	// To discuss, currently we are taking the approach of exact scope match for reused tokens
 	// We could look into enabling a prefix match feature for caches where we return multiple entries matching the projectID, clientID, tokenURL and then check scopes against all returned values
 	// We would want to make sure any underlying cache implementation supports this feature
 	tokenCache := cache.NewTypedObjectCache[clientCredentialsTokenCache](logger.With(attr.SlogCacheNamespace("client_credentials_token_cache")), cacheImpl, cache.SuffixNone)
-	var clientSecret, clientID, tokenURLOverride, accessToken, secretVar, accessTokenVar string
+	var clientSecret, clientID, tokenURLOverride, accessToken, secretVar, clientIDVar, tokenURLVar, accessTokenVar string
 	for _, v := range security.EnvVariables {
 		if strings.Contains(v, "CLIENT_SECRET") {
 			clientSecret = mergedEnv.Get(v)
 			secretVar = v
 		} else if strings.Contains(v, "CLIENT_ID") {
 			clientID = mergedEnv.Get(v)
+			clientIDVar = v
 		} else if strings.Contains(v, "TOKEN_URL") {
 			tokenURLOverride = mergedEnv.Get(v)
+			tokenURLVar = v
 		} else if strings.Contains(v, "ACCESS_TOKEN") {
 			accessToken = mergedEnv.Get(v)
 			accessTokenVar = v
@@ -304,6 +311,13 @@ func processClientCredentials(ctx context.Context, logger *slog.Logger, guardian
 
 	if accessToken != "" {
 		return accessToken, accessTokenVar, false, nil
+	}
+
+	// A request-level token URL override applies only when the request also
+	// supplies both client ID and client secret; otherwise fall back to
+	// configured layers or the tool's default tokenUrl.
+	if env.HasUserValue(tokenURLVar) && (!env.HasUserValue(clientIDVar) || !env.HasUserValue(secretVar)) {
+		tokenURLOverride = env.ConfiguredGet(tokenURLVar)
 	}
 
 	if clientSecret == "" {

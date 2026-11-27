@@ -97,11 +97,17 @@ func CIEnvFrom(vars map[string]string) *CaseInsensitiveEnv {
 
 // Get retrieves a value by key (case-insensitive).
 func (c *CaseInsensitiveEnv) Get(key string) string {
+	if c == nil {
+		return ""
+	}
 	return c.data[strings.ToLower(key)]
 }
 
 // Has reports whether a key is declared (case-insensitive), regardless of value.
 func (c *CaseInsensitiveEnv) Has(key string) bool {
+	if c == nil {
+		return false
+	}
 	_, ok := c.data[strings.ToLower(key)]
 	return ok
 }
@@ -113,6 +119,9 @@ func (c *CaseInsensitiveEnv) Set(key, value string) {
 
 // All returns a copy of all stored key-value pairs.
 func (c *CaseInsensitiveEnv) All() map[string]string {
+	if c == nil {
+		return map[string]string{}
+	}
 	result := make(map[string]string, len(c.data))
 	maps.Copy(result, c.data)
 	return result
@@ -120,16 +129,30 @@ func (c *CaseInsensitiveEnv) All() map[string]string {
 
 // Delete removes a key from the environment (case-insensitive).
 func (c *CaseInsensitiveEnv) Delete(key string) {
+	if c == nil {
+		return
+	}
 	delete(c.data, strings.ToLower(key))
 }
 
 // Keys returns all keys in the environment.
 func (c *CaseInsensitiveEnv) Keys() []string {
+	if c == nil {
+		return nil
+	}
 	keys := make([]string, 0, len(c.data))
 	for k := range c.data {
 		keys = append(keys, k)
 	}
 	return keys
+}
+
+// Len returns the number of entries in the environment.
+func (c *CaseInsensitiveEnv) Len() int {
+	if c == nil {
+		return 0
+	}
+	return len(c.data)
 }
 
 // MCPClientIdentity describes who is on the other end of an MCP tool call.
@@ -156,13 +179,24 @@ func (m MCPClientIdentity) IsZero() bool {
 }
 
 // ToolCallEnv holds the environment configuration for a tool call.
-// SystemEnv contains base values, UserConfig contains user overrides.
 type ToolCallEnv struct {
-	SystemEnv  *CaseInsensitiveEnv
+	// SystemEnv holds source, toolset, and attached environment values.
+	// Keys here also forward as raw HTTP headers when unclaimed by a security scheme.
+	SystemEnv *CaseInsensitiveEnv
+
+	// SavedConfig holds platform-resolved configuration from saved environments
+	// and OAuth token inputs. Keys here apply only to declared tool variables.
+	SavedConfig *CaseInsensitiveEnv
+
+	// UserConfig holds per-request overrides supplied by the caller.
 	UserConfig *CaseInsensitiveEnv
-	GramEmail  string // Authenticated Speakeasy user's email (empty if not applicable)
+
+	// GramEmail is the authenticated Speakeasy user's email (empty if not applicable).
+	GramEmail string
+
 	// GramChatID is the authoritative assistant chat UUID when supplied by the caller.
 	GramChatID string
+
 	// MCPClient identifies the MCP caller, when the tool was called over MCP.
 	MCPClient MCPClientIdentity
 
@@ -241,12 +275,17 @@ const (
 	ClientGrantMisconfigured ClientGrantFailure = "misconfigured"
 )
 
-// Merged returns a case-insensitive view where UserConfig values override
-// SystemEnv values. Handles nil SystemEnv / UserConfig. Never returns nil.
+// Merged returns a case-insensitive view where UserConfig overrides
+// SavedConfig, which overrides SystemEnv. Handles nil layers. Never returns nil.
 func (e ToolCallEnv) Merged() *CaseInsensitiveEnv {
 	merged := NewCaseInsensitiveEnv()
 	if e.SystemEnv != nil {
 		for k, v := range e.SystemEnv.All() {
+			merged.Set(k, v)
+		}
+	}
+	if e.SavedConfig != nil {
+		for k, v := range e.SavedConfig.All() {
 			merged.Set(k, v)
 		}
 	}
@@ -256,6 +295,39 @@ func (e ToolCallEnv) Merged() *CaseInsensitiveEnv {
 		}
 	}
 	return merged
+}
+
+// HasConfiguredEnv reports whether any platform-configured variable exists in
+// SystemEnv or SavedConfig.
+func (e ToolCallEnv) HasConfiguredEnv() bool {
+	return e.SystemEnv.Len() > 0 || e.SavedConfig.Len() > 0
+}
+
+// HasUserValue reports whether UserConfig holds a non-empty value for key.
+func (e ToolCallEnv) HasUserValue(key string) bool {
+	return key != "" && e.UserConfig.Get(key) != ""
+}
+
+// ConfiguredGet returns key from SavedConfig if non-empty, otherwise from SystemEnv.
+func (e ToolCallEnv) ConfiguredGet(key string) string {
+	if key == "" {
+		return ""
+	}
+	if val := e.SavedConfig.Get(key); val != "" {
+		return val
+	}
+	return e.SystemEnv.Get(key)
+}
+
+// ConfiguredOrUserGet returns key from UserConfig if non-empty, otherwise from SavedConfig.
+func (e ToolCallEnv) ConfiguredOrUserGet(key string) string {
+	if key == "" {
+		return ""
+	}
+	if val := e.UserConfig.Get(key); val != "" {
+		return val
+	}
+	return e.SavedConfig.Get(key)
 }
 
 // ToNormalizedEnvKey converts a string to a normalized environment variable key

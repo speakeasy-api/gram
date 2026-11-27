@@ -123,7 +123,7 @@ func handleResourcesRead(
 
 	ctx, logger = o11y.EnrichToolCallContext(ctx, logger, descriptor.OrganizationSlug, descriptor.ProjectSlug)
 
-	userConfig, _, err := resolveUserConfiguration(ctx, logger, env, payload, nil)
+	savedConfig, userConfig, _, err := resolveUserConfiguration(ctx, logger, env, payload, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -240,10 +240,11 @@ func handleResourcesRead(
 		return nil, oops.E(oops.CodeForbidden, nil, "%s", decision.UserMessage)
 	}
 	err = toolProxy.ReadResource(ctx, rw, strings.NewReader("{}"), toolconfig.ToolCallEnv{
-		UserConfig: userConfig,
-		SystemEnv:  systemConfig,
-		GramEmail:  "",
-		GramChatID: payload.chatID,
+		SystemEnv:   systemConfig,
+		SavedConfig: savedConfig,
+		UserConfig:  userConfig,
+		GramEmail:   "",
+		GramChatID:  payload.chatID,
 		// Resource reads reach functions through a separate payload that
 		// carries no caller identity, and the functions SDK exposes none on a
 		// resource handler.
