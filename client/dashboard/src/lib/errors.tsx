@@ -2,6 +2,7 @@ import { Text } from "@/components/ui/Text";
 import { Stack } from "@/components/ui/Stack";
 import { toast } from "sonner";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
+import { recordActivity } from "./activity-journal";
 import { describeApiError } from "./api-error";
 import { denialFromError, denialMessage } from "./denial";
 
@@ -85,6 +86,9 @@ export function handleError(
 
   // Show toast notification unless silent
   if (!silent) {
+    // The Project Assistant reads what the user was just shown, so it can
+    // explain an error without asking which one.
+    recordActivity("error", `${title}: ${errorMessage}`);
     toast.error(
       <Stack gap={1}>
         <Text variant="subheading" className="text-destructive!">

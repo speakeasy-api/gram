@@ -4,6 +4,7 @@ import { Chat } from "@/elements";
 import { cn } from "@/lib/utils";
 import { SquarePen } from "lucide-react";
 import type { ReactElement } from "react";
+import { HOME_TERMINAL_ID } from "./home-widget-hooks";
 import {
   TERMINAL_HOST_CLASS,
   TerminalSkinContext,
@@ -30,6 +31,7 @@ export function HomeTerminal({
 
   return (
     <section
+      id={HOME_TERMINAL_ID}
       aria-label="Project Assistant"
       className={cn(
         "bg-card flex min-h-0 flex-col overflow-hidden border",

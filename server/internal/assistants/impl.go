@@ -44,6 +44,8 @@ type Service struct {
 	signaler                  WorkflowSignaler
 	bootstrapLimiter          *ratelimit.Limiter
 	bootstrapAggregateLimiter *ratelimit.Limiter
+	intentCompleter           IntentCompleter
+	intentLimiter             *ratelimit.Limiter
 }
 
 var (
@@ -77,6 +79,8 @@ func NewService(
 		bootstrapLimiter: ratelimit.New(bootstrapStore, "assistant-bootstrap",
 			ratelimit.PerMinute(bootstrapRatePerMin).WithBurst(bootstrapRateBurst),
 			ratelimit.WithMetrics(meterProvider)),
+		intentCompleter: nil,
+		intentLimiter:   nil,
 	}
 }
 

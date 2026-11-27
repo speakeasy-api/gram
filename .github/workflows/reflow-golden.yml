@@ -22,7 +22,7 @@ concurrency:
 
 env:
   # Exact Reflow CLI release; bump deliberately.
-  REFLOW_VERSION: 0.1.0-9a6228c334e188c19c72
+  REFLOW_VERSION: 0.1.0-2580e083b41149307451
   REFLOW_API: https://app.reflow.io
 
 jobs:
@@ -145,6 +145,17 @@ jobs:
           done
           exit 1
 
+      # A pull request can keep edits to Reflow-kept flows as PR drafts. Once it
+      # merges, promote the drafts its CI validated before main selects its
+      # golden flows. Promotion changes flows that other golden flows call, so
+      # main then runs every flow again instead of carrying earlier passes.
+      - name: Promote merged PR flow drafts
+        id: promote
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          reflow flows promote --collection "$REFLOW_COLLECTION" --commit "$GITHUB_SHA" --json > "$RUNNER_TEMP/reflow-promote.json"
+          echo "needs_fresh=$(jq -r '.needs_fresh' "$RUNNER_TEMP/reflow-promote.json")" >> "$GITHUB_OUTPUT"
+
       - name: Target the stack
         run: mise run reflow:target --group "ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" --dir "$RUNNER_TEMP/reflow-target"
 
@@ -170,10 +181,14 @@ jobs:
         env:
           BASE_BRANCH: ${{ github.event_name == 'pull_request' && github.base_ref || '' }}
           HEAD_REF: ${{ github.head_ref || github.ref_name }}
+          NEEDS_FRESH: ${{ steps.promote.outputs.needs_fresh }}
         run: |
           args=(--ci-context "$RUNNER_TEMP/reflow-ci.json" --branch "$HEAD_REF" --out-dir "$RUNNER_TEMP/reflow-ci" --publish)
           if [ -n "$BASE_BRANCH" ]; then
             args+=(--base-branch "$BASE_BRANCH" --post)
+          fi
+          if [ "$NEEDS_FRESH" = "true" ]; then
+            args+=(--fresh)
           fi
           mise run reflow:golden "${args[@]}"
 
