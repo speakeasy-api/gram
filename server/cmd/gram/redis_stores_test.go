@@ -124,11 +124,13 @@ func TestRedisStoresReuseSessionsForARoleAddressEqualToIt(t *testing.T) {
 func TestRedisStoresIgnoreNextEndpoints(t *testing.T) {
 	auth := miniredis.RunT(t)
 	ops := miniredis.RunT(t)
+	evictable := miniredis.RunT(t)
 	setRoleEndpoint(t, "GRAM_REDIS_AUTH_", auth.Addr())
 	setRoleEndpoint(t, "GRAM_REDIS_OPS_", ops.Addr())
-	setRoleEndpoint(t, "GRAM_REDIS_EVICTABLE_", ops.Addr())
+	setRoleEndpoint(t, "GRAM_REDIS_EVICTABLE_", evictable.Addr())
 	t.Setenv("GRAM_REDIS_AUTH_NEXT_ADDR", "127.0.0.1:1")
 	t.Setenv("GRAM_REDIS_OPS_NEXT_ADDR", "127.0.0.1:1")
+	t.Setenv("GRAM_REDIS_EVICTABLE_NEXT_ADDR", "127.0.0.1:1")
 	t.Setenv("GRAM_REDIS_NEXT_ADDR", "127.0.0.1:1")
 
 	ctx := t.Context()
@@ -138,6 +140,8 @@ func TestRedisStoresIgnoreNextEndpoints(t *testing.T) {
 
 	require.NoError(t, stores.AuthCache.Set(ctx, "sessions:v2:sid:", "a", time.Minute))
 	require.NoError(t, stores.OpsCache.Set(ctx, "hook:pending:sid", "o", time.Minute))
+	require.NoError(t, stores.EvictableCache.Set(ctx, "toolset:a:b:1:", "e", time.Minute))
 	require.Equal(t, []string{"sessions:v2:sid:"}, auth.Keys())
 	require.Equal(t, []string{"hook:pending:sid"}, ops.Keys())
+	require.Equal(t, []string{"toolset:a:b:1:"}, evictable.Keys())
 }
