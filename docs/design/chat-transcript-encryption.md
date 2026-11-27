@@ -39,8 +39,7 @@ Provisioning/rotation alone does not encrypt any transcripts.
 The process flag `--chat-transcript-shadow-project-ids` (environment variable
 `GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS`) is empty by default. An explicit
 project allowlist is required for process-level activation; there is no implicit
-all-project rollout. Startup validates all targets and the schema prerequisite
-before provisioning keys. Missing organization encryption or a failed key operation
+all-project rollout. Startup validates all targets before provisioning keys. Missing organization encryption or a failed key operation
 aborts startup instead of silently disabling encryption. No existing-data backfill
 runs automatically at startup.
 
@@ -217,8 +216,8 @@ invalidating freshness, backfill refresh, and rejection of a forged public sourc
 fingerprint when the authenticated storage error differs from the live row.
 
 There is no startup schema check. Like every other store, capture trusts the
-migrated schema, and the store tests prove its queries against the database the
-migrations build. Ordinary readers, encrypted-only writes, cutover fencing, and verified
+deployed schema. CI checks that the migrations produce `schema.sql`, and the
+store tests run their queries on a database loaded from `schema.sql`. Ordinary readers, encrypted-only writes, cutover fencing, and verified
 plaintext destruction remain unimplemented. Do not
 interpret shadow coverage or key provisioning as completion of the ticket.
 
