@@ -74,13 +74,14 @@ func (r *AnthropicInferenceResolver) Resolve(ctx context.Context, id string) (an
 	if err != nil {
 		return empty, anthropicinference.ErrIntegrationUnavailable
 	}
-	row, err := repo.New(r.db).GetAnthropicInferenceConfigByID(ctx, configID)
+	result, err := repo.New(r.db).GetAnthropicInferenceConfigByID(ctx, configID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return empty, anthropicinference.ErrIntegrationUnavailable
 	}
 	if err != nil {
 		return empty, fmt.Errorf("load inference integration: %w", err)
 	}
+	row := result.AiIntegrationConfig
 	secrets, err := decryptInferenceSecrets(ctx, r.keys, nil, row)
 	if err != nil {
 		return empty, err
@@ -100,7 +101,7 @@ func (r *AnthropicInferenceResolver) Resolve(ctx context.Context, id string) (an
 			keys = append(keys, key.Secret)
 		}
 	}
-	return anthropicinference.Config{ID: row.ID.String(), OrganizationID: row.OrganizationID, ProjectID: row.ProjectID, TenantID: "", SigningSecrets: keys}, nil
+	return anthropicinference.Config{ID: row.ID.String(), OrganizationID: row.OrganizationID, ProjectID: row.ProjectID, TenantID: "", SigningSecrets: keys, OrganizationDisabled: result.OrganizationDisabled}, nil
 }
 
 // decryptInferenceSecrets opens a config row's signing secrets. db is the

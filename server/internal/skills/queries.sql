@@ -2773,7 +2773,8 @@ RETURNING *;
 -- name: GetSharedSkillByToken :one
 -- Public read for the unauthenticated share-link endpoint. The join pins the
 -- share link to its owning project's skill and the lateral picks the latest
--- version by effective promotion time.
+-- version by effective promotion time. A disabled organization's links do not
+-- resolve, and resolve again once it is re-enabled.
 SELECT
   s.name,
   s.display_name,
@@ -2781,6 +2782,11 @@ SELECT
   latest.content,
   latest.created_at AS version_created_at
 FROM skill_share_links l
+JOIN projects p
+  ON p.id = l.project_id
+JOIN organization_metadata om
+  ON om.id = p.organization_id
+  AND om.disabled_at IS NULL
 JOIN skills s
   ON s.project_id = l.project_id
   AND s.id = l.skill_id
@@ -2799,6 +2805,7 @@ WHERE l.token = @token
 -- Custom-domain variant of GetSharedSkillByToken: the extra projects join pins
 -- the share link to the organization that owns the serving domain, so one
 -- tenant's skill can never be rendered under another tenant's custom domain.
+-- Like GetSharedSkillByToken, it resolves nothing for a disabled organization.
 SELECT
   s.name,
   s.display_name,
@@ -2810,6 +2817,9 @@ JOIN projects p
   ON p.id = l.project_id
   AND p.organization_id = @organization_id
   AND NOT p.deleted
+JOIN organization_metadata om
+  ON om.id = p.organization_id
+  AND om.disabled_at IS NULL
 JOIN skills s
   ON s.project_id = l.project_id
   AND s.id = l.skill_id

@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/skills"
+	adminrepo "github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
@@ -179,6 +180,26 @@ func TestSkillGetSharedUnknownToken(t *testing.T) {
 
 	_, err := ti.service.GetShared(ctx, &gen.GetSharedPayload{Token: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"})
 	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+func TestSkillGetSharedRefusesDisabledOrganization(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	created := createSkill(t, ctx, ti, "disabled-org-skill", "Shared before the disable.")
+	link, err := ti.service.Share(ctx, &gen.SharePayload{SkillID: created.Skill.ID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+
+	_, err = adminrepo.New(ti.conn).AdminDisableOrganization(ctx, ti.authContext.ActiveOrganizationID)
+	require.NoError(t, err)
+	_, err = ti.service.GetShared(ctx, &gen.GetSharedPayload{Token: link.Token})
+	requireOopsCode(t, err, oops.CodeNotFound)
+
+	_, err = adminrepo.New(ti.conn).AdminEnableOrganization(ctx, ti.authContext.ActiveOrganizationID)
+	require.NoError(t, err)
+	shared, err := ti.service.GetShared(ctx, &gen.GetSharedPayload{Token: link.Token})
+	require.NoError(t, err, "re-enabling the organization restores the link")
+	require.Equal(t, "disabled-org-skill", shared.Name)
 }
 
 func TestSkillArchiveRevokesShareLink(t *testing.T) {

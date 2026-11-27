@@ -17,6 +17,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	adminrepo "github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations/repo"
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations/timewindowpoller"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -125,6 +126,36 @@ func TestListUsagePollCandidatesReturnsEveryDueSchedule(t *testing.T) {
 		ScheduleAnthropicAnalyticsCost:  SyncKindTime,
 	}, schedules)
 }
+
+// A disabled organization's polls are neither selected nor loaded, and resume
+// once the organization is re-enabled.
+func TestUsagePollSkipsDisabledOrganization(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, orgID := newStoreTestDB(t)
+
+	created := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderCursor, "cursor-key", true, true, nil, nil)
+	_, err := adminrepo.New(conn).AdminDisableOrganization(ctx, orgID)
+	require.NoError(t, err)
+
+	candidates, err := store.ListUsagePollCandidates(ctx, time.Now().Add(time.Minute), 10)
+	require.NoError(t, err)
+	require.Empty(t, candidates)
+	// A poll that raced the disable is refused before credentials are opened.
+	_, _, err = store.GetUsagePollConfigBySyncID(ctx, created.Config.SyncID)
+	require.ErrorIs(t, err, ErrOrganizationDisabled)
+	_, _, err = store.GetProviderUsagePollConfig(ctx, created.Config.ID)
+	require.ErrorIs(t, err, ErrOrganizationDisabled)
+
+	_, err = adminrepo.New(conn).AdminEnableOrganization(ctx, orgID)
+	require.NoError(t, err)
+	candidates, err = store.ListUsagePollCandidates(ctx, time.Now().Add(time.Minute), 10)
+	require.NoError(t, err)
+	require.Len(t, candidates, 1)
+	_, _, err = store.GetUsagePollConfigBySyncID(ctx, created.Config.SyncID)
+	require.NoError(t, err)
+}
+
 func TestListUsagePollCandidatesCreatesMissingSchedules(t *testing.T) {
 	t.Parallel()
 

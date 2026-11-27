@@ -46,6 +46,9 @@ const (
 	// unavailableDenyReason is the fail-closed copy for a request that could
 	// not be evaluated in full.
 	unavailableDenyReason = "Speakeasy could not evaluate this request. Please try again."
+	// organizationDisabledDenyReason is the deny copy while the integration's
+	// organization is disabled. Retrying cannot help, so it names support.
+	organizationDisabledDenyReason = "This organization is disabled. Please reach out to support@speakeasy.com for more information."
 )
 
 var errPolicyDenied = errors.New("inference policy denied")

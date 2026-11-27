@@ -39,6 +39,11 @@ const (
 	ProviderGeminiCompliance  = "gemini_compliance"
 )
 
+// ErrOrganizationDisabled is returned when a usage poll's organization is
+// disabled. The poll is skipped rather than failed, so it neither backs off
+// nor auto-pauses and resumes when the organization is re-enabled.
+var ErrOrganizationDisabled = errors.New("ai integration organization is disabled")
+
 var (
 	codexExternalOrganizationIDPattern = regexp.MustCompile(`^org-[A-Za-z0-9_-]+$`)
 	chatgptWorkspaceIDPattern          = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
@@ -775,6 +780,9 @@ func (s *Store) GetUsagePollConfigBySyncID(ctx context.Context, syncID uuid.UUID
 	case err != nil:
 		return Config{}, "", oops.E(oops.CodeUnexpected, err, "failed to load ai integration usage poll sync")
 	}
+	if row.OrganizationDisabled {
+		return Config{}, "", ErrOrganizationDisabled
+	}
 	cfg, err := s.configFromUsagePollConfigBySyncIDRow(ctx, nil, row)
 	if err != nil {
 		return Config{}, "", err
@@ -792,6 +800,9 @@ func (s *Store) GetProviderUsagePollConfig(ctx context.Context, configID uuid.UU
 		return Config{}, "", oops.E(oops.CodeNotFound, err, "ai integration usage poll config not found")
 	case err != nil:
 		return Config{}, "", oops.E(oops.CodeUnexpected, err, "failed to load ai integration usage poll config")
+	}
+	if row.OrganizationDisabled {
+		return Config{}, "", ErrOrganizationDisabled
 	}
 	cfg, err := s.configFromProviderUsagePollConfigByIDRow(ctx, nil, row)
 	if err != nil {

@@ -317,32 +317,43 @@ func (q *Queries) GetAnthropicInferenceConfig(ctx context.Context, organizationI
 }
 
 const getAnthropicInferenceConfigByID = `-- name: GetAnthropicInferenceConfigByID :one
-SELECT c.created_at, c.deleted_at, c.updated_at, c.organization_id, c.provider, c.project_id, c.external_organization_id, c.api_key_encrypted, c.api_key_org_encrypted, c.enabled, c.billing_mode, c.id, c.deleted, c.settings FROM ai_integration_configs c
+SELECT c.created_at, c.deleted_at, c.updated_at, c.organization_id, c.provider, c.project_id, c.external_organization_id, c.api_key_encrypted, c.api_key_org_encrypted, c.enabled, c.billing_mode, c.id, c.deleted, c.settings, (om.disabled_at IS NOT NULL)::boolean AS organization_disabled
+FROM ai_integration_configs c
 JOIN projects p ON p.id = c.project_id AND p.organization_id = c.organization_id
+JOIN organization_metadata om ON om.id = c.organization_id
 WHERE c.id = $1 AND c.provider = 'anthropic_inference'
   AND c.deleted IS FALSE AND p.deleted IS FALSE
 `
 
+type GetAnthropicInferenceConfigByIDRow struct {
+	AiIntegrationConfig  AiIntegrationConfig
+	OrganizationDisabled bool
+}
+
 // The random endpoint identifier is the credential lookup key before signature
 // verification; it does not itself authorize ingestion.
-func (q *Queries) GetAnthropicInferenceConfigByID(ctx context.Context, id uuid.UUID) (AiIntegrationConfig, error) {
+// organization_disabled is returned rather than filtered so the webhook can
+// answer a disabled organization's signed requests with a fail-closed deny
+// instead of the not-found response Anthropic may treat as allow.
+func (q *Queries) GetAnthropicInferenceConfigByID(ctx context.Context, id uuid.UUID) (GetAnthropicInferenceConfigByIDRow, error) {
 	row := q.db.QueryRow(ctx, getAnthropicInferenceConfigByID, id)
-	var i AiIntegrationConfig
+	var i GetAnthropicInferenceConfigByIDRow
 	err := row.Scan(
-		&i.CreatedAt,
-		&i.DeletedAt,
-		&i.UpdatedAt,
-		&i.OrganizationID,
-		&i.Provider,
-		&i.ProjectID,
-		&i.ExternalOrganizationID,
-		&i.ApiKeyEncrypted,
-		&i.ApiKeyOrgEncrypted,
-		&i.Enabled,
-		&i.BillingMode,
-		&i.ID,
-		&i.Deleted,
-		&i.Settings,
+		&i.AiIntegrationConfig.CreatedAt,
+		&i.AiIntegrationConfig.DeletedAt,
+		&i.AiIntegrationConfig.UpdatedAt,
+		&i.AiIntegrationConfig.OrganizationID,
+		&i.AiIntegrationConfig.Provider,
+		&i.AiIntegrationConfig.ProjectID,
+		&i.AiIntegrationConfig.ExternalOrganizationID,
+		&i.AiIntegrationConfig.ApiKeyEncrypted,
+		&i.AiIntegrationConfig.ApiKeyOrgEncrypted,
+		&i.AiIntegrationConfig.Enabled,
+		&i.AiIntegrationConfig.BillingMode,
+		&i.AiIntegrationConfig.ID,
+		&i.AiIntegrationConfig.Deleted,
+		&i.AiIntegrationConfig.Settings,
+		&i.OrganizationDisabled,
 	)
 	return i, err
 }
@@ -472,10 +483,12 @@ SELECT
   , s.last_cursor_id
   , s.created_at AS sync_created_at
   , s.updated_at AS sync_updated_at
+  , (om.disabled_at IS NOT NULL)::boolean AS organization_disabled
 FROM ai_integration_configs c
 JOIN ai_integration_syncs s
   ON s.ai_integration_config_id = c.id
  AND s.schedule = c.provider
+JOIN organization_metadata om ON om.id = c.organization_id
 WHERE c.id = $1
   AND c.enabled IS TRUE
   AND c.deleted IS FALSE
@@ -511,6 +524,7 @@ type GetProviderUsagePollConfigByIDRow struct {
 	LastCursorID           pgtype.Text
 	SyncCreatedAt          pgtype.Timestamptz
 	SyncUpdatedAt          pgtype.Timestamptz
+	OrganizationDisabled   bool
 }
 
 func (q *Queries) GetProviderUsagePollConfigByID(ctx context.Context, aiIntegrationConfigID uuid.UUID) (GetProviderUsagePollConfigByIDRow, error) {
@@ -544,6 +558,7 @@ func (q *Queries) GetProviderUsagePollConfigByID(ctx context.Context, aiIntegrat
 		&i.LastCursorID,
 		&i.SyncCreatedAt,
 		&i.SyncUpdatedAt,
+		&i.OrganizationDisabled,
 	)
 	return i, err
 }
@@ -654,8 +669,10 @@ SELECT
   , s.last_cursor_id
   , s.created_at AS sync_created_at
   , s.updated_at AS sync_updated_at
+  , (om.disabled_at IS NOT NULL)::boolean AS organization_disabled
 FROM ai_integration_syncs s
 JOIN ai_integration_configs c ON c.id = s.ai_integration_config_id
+JOIN organization_metadata om ON om.id = c.organization_id
 WHERE s.id = $1
   AND c.enabled IS TRUE
   AND c.deleted IS FALSE
@@ -690,6 +707,7 @@ type GetUsagePollConfigBySyncIDRow struct {
 	LastCursorID           pgtype.Text
 	SyncCreatedAt          pgtype.Timestamptz
 	SyncUpdatedAt          pgtype.Timestamptz
+	OrganizationDisabled   bool
 }
 
 func (q *Queries) GetUsagePollConfigBySyncID(ctx context.Context, syncID uuid.UUID) (GetUsagePollConfigBySyncIDRow, error) {
@@ -723,6 +741,7 @@ func (q *Queries) GetUsagePollConfigBySyncID(ctx context.Context, syncID uuid.UU
 		&i.LastCursorID,
 		&i.SyncCreatedAt,
 		&i.SyncUpdatedAt,
+		&i.OrganizationDisabled,
 	)
 	return i, err
 }
@@ -966,6 +985,9 @@ WHERE c.enabled IS TRUE
   AND (c.api_key_encrypted IS NOT NULL OR c.api_key_org_encrypted IS NOT NULL)
   AND s.auto_paused_at IS NULL
   AND s.disabled_at IS NULL
+  -- A disabled organization's syncs stay due without being selected, so they
+  -- run on the first tick after the organization is re-enabled.
+  AND om.disabled_at IS NULL
   AND s.next_poll_after <= $1
 ORDER BY s.next_poll_after ASC, c.organization_id ASC, s.schedule ASC
 LIMIT $2

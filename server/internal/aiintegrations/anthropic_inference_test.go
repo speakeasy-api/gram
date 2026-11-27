@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	gen "github.com/speakeasy-api/gram/server/gen/ai_integrations"
+	adminrepo "github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations/repo"
 	auditrepo "github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -141,6 +142,27 @@ func TestInferenceResolverRejectsDeletedProject(t *testing.T) {
 	require.NoError(t, err)
 	_, err = resolver.Resolve(ctx, *saved.ID)
 	require.Error(t, err)
+}
+
+func TestInferenceResolverReportsDisabledOrganization(t *testing.T) {
+	t.Parallel()
+	ctx, conn, service, orgID := newInferenceTestService(t)
+	saved, err := service.UpsertAnthropicInferenceConfig(ctx, &gen.UpsertAnthropicInferenceConfigPayload{})
+	require.NoError(t, err)
+	resolver := NewAnthropicInferenceResolver(conn, service.store.keys)
+
+	_, err = adminrepo.New(conn).AdminDisableOrganization(ctx, orgID)
+	require.NoError(t, err)
+	binding, err := resolver.Resolve(ctx, *saved.ID)
+	require.NoError(t, err, "the binding still resolves so the webhook can verify the signature before denying")
+	require.True(t, binding.OrganizationDisabled)
+
+	_, err = adminrepo.New(conn).AdminEnableOrganization(ctx, orgID)
+	require.NoError(t, err)
+	binding, err = resolver.Resolve(ctx, *saved.ID)
+	require.NoError(t, err)
+	require.False(t, binding.OrganizationDisabled)
+	require.Equal(t, orgID, binding.OrganizationID)
 }
 
 func TestInferenceRapidRotationsPreserveOriginalExpiry(t *testing.T) {
