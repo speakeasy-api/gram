@@ -27,6 +27,15 @@ var actor = urn.NewSystemPrincipal("organization-cap")
 
 const actorDisplayName = "Organization cap"
 
+// LockUser serializes every organization-limit decision for one user until tx
+// ends. Take it before writing any membership or organization row.
+func LockUser(ctx context.Context, tx orgrepo.DBTX, key string) error {
+	if err := orgrepo.New(tx).LockUserOrganizationCap(ctx, key); err != nil {
+		return fmt.Errorf("lock user organization cap: %w", err)
+	}
+	return nil
+}
+
 // RequireRoomForOrganization refuses a user who already holds
 // MaxOrganizationsPerUser enabled organizations other than excludeOrganizationID.
 func RequireRoomForOrganization(ctx context.Context, db orgrepo.DBTX, userID, excludeOrganizationID string) error {
@@ -54,19 +63,18 @@ type NewMembership struct {
 
 // Enforce disables an organization the user joins from the identity provider
 // when it would take them past MaxOrganizationsPerUser. Call it once, in the
-// READ COMMITTED transaction that has just written the membership.
+// READ COMMITTED transaction that took LockUser and then wrote the membership.
 func Enforce(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, membership NewMembership) (bool, error) {
 	if membership.OrganizationID == "" || membership.WorkOSUserID == "" {
 		return false, nil
 	}
 	ctx = contextvalues.SetActingSurface(ctx, string(audit.SurfaceSystem))
 
-	queries := orgrepo.New(tx)
-	if err := queries.LockUserOrganizationCap(ctx, membership.WorkOSUserID); err != nil {
-		return false, fmt.Errorf("lock user organization cap: %w", err)
+	if err := LockUser(ctx, tx, membership.WorkOSUserID); err != nil {
+		return false, err
 	}
 
-	disabled, err := queries.DisableOrganizationOverUserCap(ctx, orgrepo.DisableOrganizationOverUserCapParams{
+	disabled, err := orgrepo.New(tx).DisableOrganizationOverUserCap(ctx, orgrepo.DisableOrganizationOverUserCapParams{
 		OrganizationID:   membership.OrganizationID,
 		UserID:           conv.ToPGTextEmpty(membership.UserID),
 		WorkosUserID:     conv.ToPGText(membership.WorkOSUserID),

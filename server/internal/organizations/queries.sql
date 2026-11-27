@@ -956,9 +956,6 @@ WHERE our.user_id = @user_id
   AND our.deleted_at IS NULL
   AND om.disabled_at IS NULL;
 
--- name: LockUserOrganizationProvision :exec
-SELECT pg_advisory_xact_lock(hashtextextended('organization-provision:' || @user_id::text, 0));
-
 -- name: LockUserOrganizationCap :exec
 SELECT pg_advisory_xact_lock(hashtextextended('organization-cap:' || @workos_user_id::text, 0));
 

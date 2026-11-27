@@ -2724,15 +2724,6 @@ func (q *Queries) LockUserOrganizationCap(ctx context.Context, workosUserID stri
 	return err
 }
 
-const lockUserOrganizationProvision = `-- name: LockUserOrganizationProvision :exec
-SELECT pg_advisory_xact_lock(hashtextextended('organization-provision:' || $1::text, 0))
-`
-
-func (q *Queries) LockUserOrganizationProvision(ctx context.Context, userID string) error {
-	_, err := q.db.Exec(ctx, lockUserOrganizationProvision, userID)
-	return err
-}
-
 const markRoleAssignmentsDeleted = `-- name: MarkRoleAssignmentsDeleted :exec
 UPDATE organization_role_assignments
 SET workos_updated_at = $1,

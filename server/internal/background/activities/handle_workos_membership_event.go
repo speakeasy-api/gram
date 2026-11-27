@@ -97,11 +97,17 @@ func handleOrganizationMembershipEvent(ctx context.Context, logger *slog.Logger,
 		})
 	}
 
+	created := workos.EventKind(event.Event) == workos.EventKindOrganizationMembershipCreated
+	enforce := firstMembershipEvent(existing, created, time.Now())
+	if enforce {
+		if err := orgcap.LockUser(ctx, dbtx, payload.UserID); err != nil {
+			return none, fmt.Errorf("lock organization cap for membership %q: %w", payload.ID, err)
+		}
+	}
 	if err := upsertOrganizationMembership(ctx, dbtx, org.ID, gramUserID, event, payload); err != nil {
 		return none, err
 	}
-	created := workos.EventKind(event.Event) == workos.EventKindOrganizationMembershipCreated
-	if firstMembershipEvent(existing, created, time.Now()) {
+	if enforce {
 		capped, err := orgcap.Enforce(ctx, dbtx, audit.NewLogger(), orgcap.NewMembership{
 			OrganizationID: org.ID,
 			UserID:         gramUserID,
@@ -170,10 +176,13 @@ type membershipRelationship struct {
 // carries no event cursor; for a created event soon after, login only got
 // there before the event did.
 func firstMembershipEvent(existing membershipRelationship, created bool, now time.Time) bool {
+	if !created {
+		return false
+	}
 	if !existing.known {
 		return true
 	}
-	return created && existing.lastEventID == nil && now.Sub(existing.createdAt) < recentMembershipWindow
+	return existing.lastEventID == nil && now.Sub(existing.createdAt) < recentMembershipWindow
 }
 
 func getMembershipRelationshipCursor(ctx context.Context, repo *orgrepo.Queries, organizationID, gramUserID, workosMembershipID string) (membershipRelationship, error) {

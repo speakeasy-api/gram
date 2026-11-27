@@ -1643,7 +1643,13 @@ func (s *Service) persistProvisionedOrganization(
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
 	queries := orgRepo.New(tx)
-	if err := queries.LockUserOrganizationProvision(ctx, userID); err != nil {
+	// The membership sync locks on the identity-provider user ID, so lock on the
+	// same key when there is one.
+	lockKey := provisionedOrg.WorkOSUserID
+	if lockKey == "" {
+		lockKey = userID
+	}
+	if err := orgcap.LockUser(ctx, tx, lockKey); err != nil {
 		return orgRepo.OrganizationMetadatum{}, fmt.Errorf("lock organization provisioning: %w", err)
 	}
 	if err := orgcap.RequireRoomForOrganization(ctx, tx, userID, provisionedOrg.GramOrganizationID); err != nil {

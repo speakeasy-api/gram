@@ -211,6 +211,22 @@ func TestMirroredOrganizationCap_OrganizationWithAnotherMemberIsNotDisabled(t *t
 	require.False(t, organizationDisabled(t, ctx, conn, "gram_org_cap_own"))
 }
 
+func TestMirroredOrganizationCap_UpdateForUnrecordedMembershipIsNotChecked(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn := newOrgEventsTestConn(t, "mirrored_cap_update_unrecorded")
+	seedWorkOSOrganization(t, ctx, conn, "gram_org_cap_unrecorded_own", "org_01HZCAPUNRECOWN")
+	seedWorkOSOrganization(t, ctx, conn, "gram_org_cap_unrecorded_existing", "org_01HZCAPUNRECEXIST")
+	seedWorkOSUser(t, ctx, conn, "user_cap_unrecorded", "user_01HZCAPUNREC")
+	require.NoError(t, deliverMembershipCreated(t, ctx, conn, "org_01HZCAPUNRECOWN", "user_01HZCAPUNREC", "A"))
+
+	updated := newWorkOSMembershipEvent(t, "organization_membership.updated", "event_01HZCAPUNRECB", "mem_01HZCAPUNRECB", "org_01HZCAPUNRECEXIST", "user_01HZCAPUNREC", mirroredCapEventTime, "member")
+	require.NoError(t, deliverEvent(ctx, testenv.NewLogger(t), conn, "org_01HZCAPUNRECEXIST", updated))
+
+	require.False(t, organizationDisabled(t, ctx, conn, "gram_org_cap_unrecorded_existing"))
+}
+
 func TestMirroredOrganizationCap_DeletedFormerMemberDoesNotExemptOrganization(t *testing.T) {
 	t.Parallel()
 
