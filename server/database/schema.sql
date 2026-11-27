@@ -11386,7 +11386,7 @@ CREATE TABLE IF NOT EXISTS shadow_mcp_official_servers (
   -- version exists, for example while it is tested.
   allow_direct_access boolean NOT NULL DEFAULT false,
   created_by_user_id TEXT,
-  updated_by TEXT,
+  updated_by_user_id TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -18410,7 +18410,7 @@ CREATE TABLE IF NOT EXISTS mcp_server_feedback_configs (
   enabled boolean NOT NULL,
   tool_name TEXT,
   tool_description TEXT,
-  updated_by TEXT,
+  updated_by_user_id TEXT,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
