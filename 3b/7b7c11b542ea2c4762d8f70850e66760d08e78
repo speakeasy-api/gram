@@ -1,0 +1,16 @@
+server/internal/authz/decision.go
+  h_2620cc60cfd1e9 48-61,65,68,75,83,90,93,103,159,162,186-190,192,195,198-199,202,241-242
+server/internal/authz/decision_test.go
+  h_2620cc60cfd1e9 161-186
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3b7b7c11b542ea2c4762d8f70850e66760d08e78",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
