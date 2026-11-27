@@ -66,10 +66,15 @@ func TestChatSearchAndReadServePlaintextForStaleShadows(t *testing.T) {
 	require.Len(t, read.Messages, 1)
 	require.Contains(t, read.Messages[0].Text, "rotate the staging certificate")
 
-	// A shadow that disagrees with plaintext edited behind it is logged, and
-	// both tools serve the plaintext row, which stays the source of truth.
+	// The chunked search matches the transcript, never the plaintext edited
+	// behind it. A hit whose transcript disagrees with its plaintext row is
+	// logged and served from plaintext, which stays the source of truth, and
+	// the read tool serves it too.
 	editBehindShadow(t, ctx, f.db, f.project.ID, messageID)
 	output, err = f.service.Search(ctx, f.principal, f.search("changed"))
+	require.NoError(t, err)
+	require.Empty(t, output.Hits, "the edited plaintext is not searched")
+	output, err = f.service.Search(ctx, f.principal, f.search("staging certificate"))
 	require.NoError(t, err)
 	require.Len(t, output.Hits, 1)
 	require.Contains(t, output.Hits[0].Text, "changed")

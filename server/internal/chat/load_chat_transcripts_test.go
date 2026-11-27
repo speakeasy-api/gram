@@ -10,6 +10,8 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore/fixturerepo"
@@ -182,4 +184,82 @@ func TestLoadChat_OtherProjectsKeepReadingPlaintext(t *testing.T) {
 	require.NoError(t, json.Unmarshal(result.Messages[0].Content, &text))
 	require.Equal(t, "changed", text)
 	require.Empty(t, readMessagesByOutcome(t, reader))
+}
+
+func TestLoadChat_SearchScansEncryptedShadowsInChunks(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := authztest.WithAdminGrants(initSessionCtx(t, ti))
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	chatID := seedChat(t, ctx, ti, authCtx.UserID, "", "chunked search")
+	// More than one chunk of messages; positions 13 and 215 carry the needle,
+	// one in each chunk.
+	total := transcriptstore.SearchChunkMessages + 30
+	ids := make([]uuid.UUID, total)
+	for i := range total {
+		content := "ordinary message"
+		if i+1 == 13 || i+1 == 215 {
+			content = "this line has a NEEDLE in it"
+		}
+		ids[i] = seedMessageContent(t, ctx, ti, chatID, content)
+	}
+	store, reader := newMeteredTranscriptStore(t, ti)
+	sealTranscripts(t, ti, store, ids...)
+	ti.service.WithTranscripts(transcriptstore.NewTranscripts(store, ti.projectID))
+
+	query := "needle"
+	p := loadPayload(chatID.String())
+	p.Query = &query
+	first, err := ti.service.LoadChat(ctx, p)
+	require.NoError(t, err)
+	require.NotNil(t, first.ScanHasMore)
+	require.True(t, *first.ScanHasMore, "the first request scans one chunk")
+	require.NotNil(t, first.NextScanCursor)
+	require.EqualValues(t, transcriptstore.SearchChunkMessages, *first.ScannedMessages)
+	require.Len(t, first.MatchSegments, 1)
+	require.Len(t, first.Messages, 11)
+	require.Equal(t, ids[12].String(), first.Messages[5].ID)
+	var text string
+	require.NoError(t, json.Unmarshal(first.Messages[5].Content, &text))
+	require.Equal(t, "this line has a NEEDLE in it", text)
+
+	p.ScanCursor = first.NextScanCursor
+	generation := first.Generation
+	p.Generation = &generation
+	second, err := ti.service.LoadChat(ctx, p)
+	require.NoError(t, err)
+	require.False(t, *second.ScanHasMore, "the second chunk reaches the end")
+	require.Nil(t, second.NextScanCursor)
+	require.EqualValues(t, total, *second.ScannedMessages)
+	require.Len(t, second.MatchSegments, 1)
+	require.Len(t, second.Messages, 11)
+	require.Equal(t, ids[214].String(), second.Messages[5].ID)
+	// Every message scanned and every message shown was opened from its
+	// shadow, with no plaintext fallback.
+	require.Equal(t, map[string]int64{"success": int64(total + 22)}, readMessagesByOutcome(t, reader))
+
+	bad := "not a cursor"
+	p.ScanCursor = &bad
+	_, err = ti.service.LoadChat(ctx, p)
+	require.ErrorIs(t, err, transcriptstore.ErrInvalidCursor)
+
+	// A search continuation reuses the open's audit record, but a scan_cursor
+	// on a read that is not a search does not skip it.
+	audited := func() int64 {
+		t.Helper()
+		n, err := audittest.AuditLogCountByAction(t.Context(), ti.conn, audit.ActionChatSessionAccess)
+		require.NoError(t, err)
+		return n
+	}
+	before := audited()
+	p.ScanCursor = first.NextScanCursor
+	_, err = ti.service.LoadChat(ctx, p)
+	require.NoError(t, err)
+	require.Equal(t, before, audited(), "a search continuation is not logged again")
+	plain := loadPayload(chatID.String())
+	plain.ScanCursor = first.NextScanCursor
+	_, err = ti.service.LoadChat(ctx, plain)
+	require.NoError(t, err)
+	require.Equal(t, before+1, audited(), "a transcript read with a stray scan_cursor is logged")
 }

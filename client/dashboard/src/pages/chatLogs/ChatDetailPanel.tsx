@@ -647,6 +647,7 @@ function ThreadSearchBar({
   matchCount,
   activeIndex,
   loading,
+  scan,
   onPrev,
   onNext,
 }: {
@@ -655,6 +656,9 @@ function ThreadSearchBar({
   matchCount: number;
   activeIndex: number;
   loading: boolean;
+  /** Set while a chunked search is still scanning; matches found so far are
+   * already navigable. */
+  scan: { scanned: number; total: number } | null;
   onPrev: () => void;
   onNext: () => void;
 }) {
@@ -667,7 +671,7 @@ function ThreadSearchBar({
   const navBtn =
     "text-muted-foreground hover:text-foreground hover:bg-background flex size-6 shrink-0 items-center justify-center transition-colors disabled:opacity-40";
   return (
-    <div className="bg-background focus-within:border-foreground/40 flex h-9 items-center gap-2 border px-2.5 transition-colors">
+    <div className="bg-background focus-within:border-foreground/40 relative flex h-9 items-center gap-2 border px-2.5 transition-colors">
       {overLimit ? (
         <SimpleTooltip
           tooltip={`Queries are limited to ${MAX_SEARCH_QUERY_LEN} characters`}
@@ -709,7 +713,17 @@ function ThreadSearchBar({
               {trimmedLen}/{MAX_SEARCH_QUERY_LEN}
             </span>
           ) : (
-            <span className="text-muted-foreground shrink-0 text-xs tabular-nums">
+            <span className="text-muted-foreground flex shrink-0 items-center gap-1.5 text-xs tabular-nums">
+              {scan && (
+                <SimpleTooltip
+                  tooltip={`Still searching: ${searchProgressLabel(scan.scanned, scan.total)}. Matches appear as they are found.`}
+                >
+                  {/* Spinner drops the trigger props, so a span carries them. */}
+                  <span className="flex">
+                    <Spinner className="mr-0 size-3" />
+                  </span>
+                </SimpleTooltip>
+              )}
               {loading
                 ? "…"
                 : matchCount > 0
@@ -749,8 +763,29 @@ function ThreadSearchBar({
           </button>
         </>
       )}
+      {hasQuery && scan && scan.total > 0 && (
+        <div
+          role="progressbar"
+          aria-label="Search progress"
+          aria-valuemin={0}
+          aria-valuemax={scan.total}
+          aria-valuenow={scan.scanned}
+          className="bg-foreground/70 absolute bottom-0 left-0 h-0.5 transition-[width]"
+          style={{
+            width: `${Math.min(100, (scan.scanned / scan.total) * 100)}%`,
+          }}
+        />
+      )}
     </div>
   );
+}
+
+/** "400 of 1,200 messages", or "400 messages" before the total is known. */
+function searchProgressLabel(scanned: number, total: number): string {
+  const n = (v: number) => v.toLocaleString("en-US");
+  return total > 0
+    ? `${n(Math.min(scanned, total))} of ${n(total)} messages`
+    : `${n(scanned)} messages`;
 }
 
 function ChatDetailHeader({
@@ -1873,6 +1908,14 @@ function ChatDetailPanel({
               matchCount={matchCount}
               activeIndex={activeOccurrenceIdx}
               loading={searchActive && searchTranscript.isLoading}
+              scan={
+                searchActive && searchTranscript.isScanning
+                  ? {
+                      scanned: searchTranscript.scannedMessages,
+                      total: searchTranscript.totalMessages,
+                    }
+                  : null
+              }
               onPrev={() => goToMatch(-1)}
               onNext={() => goToMatch(1)}
             />
@@ -1978,7 +2021,11 @@ function ChatDetailPanel({
               searchActive
                 ? searchTranscript.isLoading
                   ? "Searching…"
-                  : `No messages match “${searchQuery}”.`
+                  : searchTranscript.isScanning
+                    ? `Searching… ${searchProgressLabel(searchTranscript.scannedMessages, searchTranscript.totalMessages)}`
+                    : searchTranscript.isError
+                      ? `The search stopped early. No messages matched “${searchQuery}” in the part it scanned.`
+                      : `No messages match “${searchQuery}”.`
                 : filterActive
                   ? "No messages match the current filter."
                   : dimNonRisk

@@ -1514,6 +1514,223 @@ func (q *Queries) ListRiskWindowedMessages(ctx context.Context, arg ListRiskWind
 	return items, nil
 }
 
+const listSearchHitFields = `-- name: ListSearchHitFields :many
+SELECT m.id, m.content, m.tool_calls, m.content_raw
+FROM chat_messages m
+WHERE m.project_id = $1::uuid
+  AND m.id = ANY($2::uuid[])
+`
+
+type ListSearchHitFieldsParams struct {
+	ProjectID  uuid.UUID
+	MessageIds []uuid.UUID
+}
+
+type ListSearchHitFieldsRow struct {
+	ID         uuid.UUID
+	Content    string
+	ToolCalls  []byte
+	ContentRaw []byte
+}
+
+// The plaintext fields of the hits a chunked Platform MCP search matched on
+// transcripts it opened without reading plaintext. In shadow mode the store
+// compares each hit with its plaintext row, which stays the source of truth.
+func (q *Queries) ListSearchHitFields(ctx context.Context, arg ListSearchHitFieldsParams) ([]ListSearchHitFieldsRow, error) {
+	rows, err := q.db.Query(ctx, listSearchHitFields, arg.ProjectID, arg.MessageIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSearchHitFieldsRow
+	for rows.Next() {
+		var i ListSearchHitFieldsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Content,
+			&i.ToolCalls,
+			&i.ContentRaw,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSearchMatchWindows = `-- name: ListSearchMatchWindows :many
+WITH ordered AS (
+  SELECT
+    cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.tool_call_summaries, cm.content_hash, cm.generation, cm.capture_kind, cm.original_message_id, cm.replayed, cm.created_at, cm.risk_analyzed_at, cm.tool_call_count, cm.content_bytes, cm.content_raw_bytes, cm.tool_calls_bytes,
+    row_number() OVER (ORDER BY cm.created_at, cm.seq) AS rn,
+    count(*) OVER () AS total
+  FROM chat_messages cm
+  WHERE cm.chat_id = $3
+    AND cm.project_id = $4::uuid
+    AND cm.generation = $5::integer
+),
+match_rns AS (
+  SELECT o.rn FROM ordered o WHERE o.id = ANY($6::uuid[])
+),
+bridge_rns AS (
+  SELECT o.rn FROM ordered o
+  WHERE o.rn = $7::bigint
+    AND EXISTS (SELECT 1 FROM match_rns m WHERE m.rn = o.rn + 1 + $2::bigint)
+)
+SELECT
+  o.id, o.seq, o.chat_id, o.project_id, o.role, o.content, o.content_raw, o.content_asset_url, o.model, o.message_id, o.finish_reason, o.tool_calls, o.prompt_tokens, o.completion_tokens, o.total_tokens, o.storage_error, o.user_id, o.external_user_id, o.external_message_id, o.origin, o.user_agent, o.ip_address, o.source, o.tool_call_id, o.tool_urn, o.tool_outcome, o.tool_outcome_notes, o.tool_call_summaries, o.content_hash, o.generation, o.capture_kind, o.original_message_id, o.replayed, o.created_at, o.risk_analyzed_at, o.tool_call_count, o.content_bytes, o.content_raw_bytes, o.tool_calls_bytes, o.rn, o.total,
+  EXISTS (SELECT 1 FROM match_rns m WHERE m.rn = o.rn) AS is_match,
+  t.ciphertext AS shadow_ciphertext,
+  (t.ciphertext IS NOT NULL)::boolean AS shadow_current
+FROM ordered o
+LEFT JOIN chat_message_transcripts t ON t.source_hash IS NULL AND t.message_id = o.id AND t.project_id = o.project_id AND $1::boolean
+WHERE EXISTS (
+  SELECT 1 FROM match_rns m
+  WHERE o.rn BETWEEN m.rn - $2::bigint AND m.rn + $2::bigint
+)
+   OR o.rn IN (SELECT rn FROM bridge_rns)
+ORDER BY o.created_at ASC, o.seq ASC
+`
+
+type ListSearchMatchWindowsParams struct {
+	OpenShadows bool
+	ContextSize int64
+	ChatID      uuid.UUID
+	ProjectID   uuid.UUID
+	Generation  int32
+	MatchIds    []uuid.UUID
+	BridgeRn    int64
+}
+
+type ListSearchMatchWindowsRow struct {
+	ID                uuid.UUID
+	Seq               int64
+	ChatID            uuid.UUID
+	ProjectID         uuid.NullUUID
+	Role              string
+	Content           string
+	ContentRaw        []byte
+	ContentAssetUrl   pgtype.Text
+	Model             pgtype.Text
+	MessageID         pgtype.Text
+	FinishReason      pgtype.Text
+	ToolCalls         []byte
+	PromptTokens      int64
+	CompletionTokens  int64
+	TotalTokens       int64
+	StorageError      pgtype.Text
+	UserID            pgtype.Text
+	ExternalUserID    pgtype.Text
+	ExternalMessageID pgtype.Text
+	Origin            pgtype.Text
+	UserAgent         pgtype.Text
+	IpAddress         pgtype.Text
+	Source            pgtype.Text
+	ToolCallID        pgtype.Text
+	ToolUrn           pgtype.Text
+	ToolOutcome       pgtype.Text
+	ToolOutcomeNotes  pgtype.Text
+	ToolCallSummaries []byte
+	ContentHash       []byte
+	Generation        int32
+	CaptureKind       pgtype.Text
+	OriginalMessageID uuid.NullUUID
+	Replayed          bool
+	CreatedAt         pgtype.Timestamptz
+	RiskAnalyzedAt    pgtype.Timestamptz
+	ToolCallCount     pgtype.Int4
+	ContentBytes      pgtype.Int4
+	ContentRawBytes   pgtype.Int4
+	ToolCallsBytes    pgtype.Int4
+	Rn                int64
+	Total             int64
+	IsMatch           bool
+	ShadowCiphertext  pgtype.Text
+	ShadowCurrent     bool
+}
+
+// The search view around matches the store already found in Go: the same rows
+// and columns as ListSearchWindowedMessages, seeded by @match_ids instead of
+// an ILIKE. A chunked search builds windows one chunk at a time, so when this
+// chunk's first window starts right after the previous chunk's last window
+// (@bridge_rn), that row is returned too: the two windows then share a message
+// and the caller joins them into one segment instead of showing a gap.
+func (q *Queries) ListSearchMatchWindows(ctx context.Context, arg ListSearchMatchWindowsParams) ([]ListSearchMatchWindowsRow, error) {
+	rows, err := q.db.Query(ctx, listSearchMatchWindows,
+		arg.OpenShadows,
+		arg.ContextSize,
+		arg.ChatID,
+		arg.ProjectID,
+		arg.Generation,
+		arg.MatchIds,
+		arg.BridgeRn,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSearchMatchWindowsRow
+	for rows.Next() {
+		var i ListSearchMatchWindowsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Seq,
+			&i.ChatID,
+			&i.ProjectID,
+			&i.Role,
+			&i.Content,
+			&i.ContentRaw,
+			&i.ContentAssetUrl,
+			&i.Model,
+			&i.MessageID,
+			&i.FinishReason,
+			&i.ToolCalls,
+			&i.PromptTokens,
+			&i.CompletionTokens,
+			&i.TotalTokens,
+			&i.StorageError,
+			&i.UserID,
+			&i.ExternalUserID,
+			&i.ExternalMessageID,
+			&i.Origin,
+			&i.UserAgent,
+			&i.IpAddress,
+			&i.Source,
+			&i.ToolCallID,
+			&i.ToolUrn,
+			&i.ToolOutcome,
+			&i.ToolOutcomeNotes,
+			&i.ToolCallSummaries,
+			&i.ContentHash,
+			&i.Generation,
+			&i.CaptureKind,
+			&i.OriginalMessageID,
+			&i.Replayed,
+			&i.CreatedAt,
+			&i.RiskAnalyzedAt,
+			&i.ToolCallCount,
+			&i.ContentBytes,
+			&i.ContentRawBytes,
+			&i.ToolCallsBytes,
+			&i.Rn,
+			&i.Total,
+			&i.IsMatch,
+			&i.ShadowCiphertext,
+			&i.ShadowCurrent,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSearchWindowedMessages = `-- name: ListSearchWindowedMessages :many
 WITH ordered AS (
   SELECT
@@ -2039,6 +2256,234 @@ func (q *Queries) ReadPlatformChatMessages(ctx context.Context, arg ReadPlatform
 			&i.Participants,
 			&i.ShadowCiphertext,
 			&i.ShadowCurrent,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const scanChatSearchChunk = `-- name: ScanChatSearchChunk :many
+SELECT m.id, m.chat_id, m.created_at, m.seq, m.role,
+       t.ciphertext AS shadow_ciphertext,
+       COALESCE(CASE WHEN t.message_id IS NULL THEN m.content END, '')::text AS fallback_content,
+       CASE WHEN t.message_id IS NULL THEN m.tool_calls END::jsonb AS fallback_tool_calls,
+       CASE WHEN t.message_id IS NULL THEN m.content_raw END::jsonb AS fallback_content_raw
+FROM chat_messages m
+LEFT JOIN chat_message_transcripts t ON t.source_hash IS NULL AND t.message_id = m.id AND t.project_id = m.project_id
+WHERE m.chat_id = $1
+  AND m.project_id = $2::uuid
+  AND m.generation = $3::integer
+  AND (NOT $4::boolean OR (m.created_at, m.seq) > ($5::timestamptz, $6::bigint))
+ORDER BY m.created_at ASC, m.seq ASC
+LIMIT $7::integer
+`
+
+type ScanChatSearchChunkParams struct {
+	ChatID     uuid.UUID
+	ProjectID  uuid.UUID
+	Generation int32
+	HasCursor  bool
+	CursorAt   pgtype.Timestamptz
+	CursorSeq  int64
+	ChunkSize  int32
+}
+
+type ScanChatSearchChunkRow struct {
+	ID                 uuid.UUID
+	ChatID             uuid.UUID
+	CreatedAt          pgtype.Timestamptz
+	Seq                int64
+	Role               string
+	ShadowCiphertext   pgtype.Text
+	FallbackContent    string
+	FallbackToolCalls  []byte
+	FallbackContentRaw []byte
+}
+
+// One chunk of a chunked search over one chat generation in a project that
+// keeps shadows: up to @chunk_size messages after the keyset cursor, oldest
+// first. A message with a shadow returns its ciphertext and no plaintext body,
+// so the store matches it on the opened shadow only. A message with no shadow
+// (written before capture began) returns its plaintext, the fallback every read
+// applies. The role lets the store count scanned messages the way
+// GetChatEntryTotals counts the generation, so progress compares like with
+// like.
+func (q *Queries) ScanChatSearchChunk(ctx context.Context, arg ScanChatSearchChunkParams) ([]ScanChatSearchChunkRow, error) {
+	rows, err := q.db.Query(ctx, scanChatSearchChunk,
+		arg.ChatID,
+		arg.ProjectID,
+		arg.Generation,
+		arg.HasCursor,
+		arg.CursorAt,
+		arg.CursorSeq,
+		arg.ChunkSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ScanChatSearchChunkRow
+	for rows.Next() {
+		var i ScanChatSearchChunkRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ChatID,
+			&i.CreatedAt,
+			&i.Seq,
+			&i.Role,
+			&i.ShadowCiphertext,
+			&i.FallbackContent,
+			&i.FallbackToolCalls,
+			&i.FallbackContentRaw,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const scanPlatformChatMessages = `-- name: ScanPlatformChatMessages :many
+SELECT m.id, m.chat_id, m.seq, m.created_at, m.role, m.generation,
+       COALESCE(CASE WHEN octet_length(m.source) <= 512 THEN m.source END, '')::text AS source,
+       COALESCE(CASE WHEN octet_length(m.user_id) <= 512 THEN m.user_id END, '')::text AS user_id,
+       COALESCE(CASE WHEN octet_length(c.title) <= 4096 THEN c.title END, '')::text AS chat_title,
+       c.title_manually_set AS chat_title_manually_set,
+       COALESCE(c.user_id, '')::text AS owner_user_id,
+       COALESCE(c.title ILIKE $1::text ESCAPE '\'
+         OR (NOT c.title_manually_set
+             AND ('Cron: ' || substring(c.title from '^\s*\[cron:[0-9a-fA-F-]{36} ([^\]]+)')) ILIKE $1 ESCAPE '\'), false)::boolean AS title_match,
+       t.ciphertext AS shadow_ciphertext,
+       COALESCE(CASE WHEN t.message_id IS NULL THEN m.content END, '')::text AS fallback_content,
+       CASE WHEN t.message_id IS NULL THEN m.tool_calls END::jsonb AS fallback_tool_calls,
+       CASE WHEN t.message_id IS NULL THEN m.content_raw END::jsonb AS fallback_content_raw
+FROM chat_messages m
+JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
+JOIN projects p ON p.id = c.project_id
+LEFT JOIN chat_message_transcripts t ON t.source_hash IS NULL AND t.message_id = m.id AND t.project_id = m.project_id
+WHERE m.project_id = $2::uuid
+  AND c.organization_id = $3 AND p.organization_id = $3
+  AND c.deleted IS FALSE AND p.deleted IS FALSE
+  AND m.created_at >= $4 AND m.created_at < $5
+  AND (cardinality($6::uuid[]) = 0 OR m.chat_id = ANY($6::uuid[]))
+  AND ($7::text = '' OR c.user_id = $7
+       OR (c.user_id IS NULL AND COALESCE(c.external_user_id, '') = '' AND c.agent_id = ANY($8::uuid[])))
+  AND ($9::text = '' OR c.user_id = $9)
+  AND ($10::text = '' OR m.source = $10)
+  AND ($11::text = ''
+       OR ($12::text = '' AND m.user_id = $11)
+       OR EXISTS (
+         SELECT 1 FROM chat_message_participants cp
+         WHERE cp.project_id = m.project_id AND cp.chat_id = m.chat_id AND cp.message_id = m.id
+           AND (cp.user_id = $11 OR cp.provider_user_id = $11)
+           AND ($12 = '' OR cp.provider = $12)))
+  AND (NOT $13::boolean
+       OR ($14::boolean AND (m.created_at, m.id) > ($15::timestamptz, $16::uuid))
+       OR (NOT $14 AND (m.created_at, m.id) < ($15, $16)))
+ORDER BY CASE WHEN $14 THEN m.created_at END ASC,
+         CASE WHEN $14 THEN m.id END ASC,
+         CASE WHEN NOT $14 THEN m.created_at END DESC,
+         CASE WHEN NOT $14 THEN m.id END DESC
+LIMIT $17::integer
+`
+
+type ScanPlatformChatMessagesParams struct {
+	Pattern             string
+	ProjectID           uuid.UUID
+	OrganizationID      string
+	FromTime            pgtype.Timestamptz
+	ToTime              pgtype.Timestamptz
+	ChatIds             []uuid.UUID
+	OwnUserID           string
+	OwnedAgentIds       []uuid.UUID
+	OwnerUserID         string
+	Source              string
+	ParticipantID       string
+	ParticipantProvider string
+	HasCursor           bool
+	OldestFirst         bool
+	CursorAt            pgtype.Timestamptz
+	CursorID            uuid.UUID
+	RowLimit            int32
+}
+
+type ScanPlatformChatMessagesRow struct {
+	ID                   uuid.UUID
+	ChatID               uuid.UUID
+	Seq                  int64
+	CreatedAt            pgtype.Timestamptz
+	Role                 string
+	Generation           int32
+	Source               string
+	UserID               string
+	ChatTitle            string
+	ChatTitleManuallySet bool
+	OwnerUserID          string
+	TitleMatch           bool
+	ShadowCiphertext     pgtype.Text
+	FallbackContent      string
+	FallbackToolCalls    []byte
+	FallbackContentRaw   []byte
+}
+
+// One chunk of the Platform MCP chat search in a project that keeps shadows:
+// the filters, order and cursor of SearchPlatformChatMessages without its text
+// match, which the store applies in Go to each opened shadow. title_match
+// reports whether the chat title (not transcript body) matches @pattern. A
+// message with a shadow returns its ciphertext and no plaintext body; one with
+// no shadow returns its plaintext, the fallback every read applies.
+func (q *Queries) ScanPlatformChatMessages(ctx context.Context, arg ScanPlatformChatMessagesParams) ([]ScanPlatformChatMessagesRow, error) {
+	rows, err := q.db.Query(ctx, scanPlatformChatMessages,
+		arg.Pattern,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.FromTime,
+		arg.ToTime,
+		arg.ChatIds,
+		arg.OwnUserID,
+		arg.OwnedAgentIds,
+		arg.OwnerUserID,
+		arg.Source,
+		arg.ParticipantID,
+		arg.ParticipantProvider,
+		arg.HasCursor,
+		arg.OldestFirst,
+		arg.CursorAt,
+		arg.CursorID,
+		arg.RowLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ScanPlatformChatMessagesRow
+	for rows.Next() {
+		var i ScanPlatformChatMessagesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ChatID,
+			&i.Seq,
+			&i.CreatedAt,
+			&i.Role,
+			&i.Generation,
+			&i.Source,
+			&i.UserID,
+			&i.ChatTitle,
+			&i.ChatTitleManuallySet,
+			&i.OwnerUserID,
+			&i.TitleMatch,
+			&i.ShadowCiphertext,
+			&i.FallbackContent,
+			&i.FallbackToolCalls,
+			&i.FallbackContentRaw,
 		); err != nil {
 			return nil, err
 		}

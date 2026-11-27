@@ -69,6 +69,16 @@ SELECT tool_call_id FROM chat_message_tool_call_ids WHERE message_id=$1 ORDER BY
 -- name: SetToolCalls :execrows
 UPDATE chat_messages SET tool_calls=$1 WHERE id=$2 AND project_id=$3;
 
+-- name: CreateTextMessage :execrows
+INSERT INTO chat_messages(id,chat_id,project_id,role,content,content_raw,tool_calls,created_at)
+VALUES(@id,@chat_id,@project_id,'user',@content,sqlc.narg(content_raw)::jsonb,sqlc.narg(tool_calls)::jsonb,@created_at);
+
+-- name: SetContent :execrows
+UPDATE chat_messages SET content = @content WHERE id = @id AND project_id = @project_id;
+
+-- name: SetRole :execrows
+UPDATE chat_messages SET role = @role WHERE id = @id AND project_id = @project_id;
+
 -- name: SetSource :execrows
 UPDATE chat_messages SET source=$1 WHERE id=$2;
 

@@ -99,6 +99,10 @@ export type Chat = {
    */
   messages: Array<ChatMessage>;
   /**
+   * Present when `scan_has_more` is true: pass it as `scan_cursor` to scan the next chunk.
+   */
+  nextScanCursor?: string | undefined;
+  /**
    * The number of messages in the chat
    */
   numMessages: number;
@@ -122,6 +126,14 @@ export type Chat = {
    * Present only when `risk_only` was requested: contiguous runs of returned messages, each spanning a risk finding and its surrounding context. Use each segment's cursors to expand it.
    */
   riskSegments?: Array<RiskSegment> | undefined;
+  /**
+   * Present only when `query` was requested. In projects that keep encrypted transcripts a search scans the generation in chunks, one per request, and returns the matches of that chunk; true means part of the generation is still unscanned, so call again with `scan_cursor` set to `next_scan_cursor` and merge the results. False when the search is complete.
+   */
+  scanHasMore?: boolean | undefined;
+  /**
+   * Present only when `query` was requested: how many messages of the generation the search has scanned so far, for progress against `totals.total`.
+   */
+  scannedMessages?: number | undefined;
   /**
    * Observed Slack channel associated with this session.
    */
@@ -217,12 +229,15 @@ export const Chat$inboundSchema: z.ZodMiniType<Chat, unknown> = z.pipe(
     match_segments: z.optional(z.array(RiskSegment$inboundSchema)),
     max_generation: z.int(),
     messages: z.array(ChatMessage$inboundSchema),
+    next_scan_cursor: z.optional(z.string()),
     num_messages: z.int(),
     originating_client: z.optional(z.string()),
     participants: z.optional(z.array(ChatParticipant$inboundSchema)),
     pinned: z.optional(z.boolean()),
     risk_findings_count: z.optional(z.int()),
     risk_segments: z.optional(z.array(RiskSegment$inboundSchema)),
+    scan_has_more: z.optional(z.boolean()),
+    scanned_messages: z.optional(z.int()),
     slack_channel_id: z.optional(z.string()),
     slack_channel_name: z.optional(z.string()),
     slack_team_id: z.optional(z.string()),
@@ -264,10 +279,13 @@ export const Chat$inboundSchema: z.ZodMiniType<Chat, unknown> = z.pipe(
       "litellm_proxied": "litellmProxied",
       "match_segments": "matchSegments",
       "max_generation": "maxGeneration",
+      "next_scan_cursor": "nextScanCursor",
       "num_messages": "numMessages",
       "originating_client": "originatingClient",
       "risk_findings_count": "riskFindingsCount",
       "risk_segments": "riskSegments",
+      "scan_has_more": "scanHasMore",
+      "scanned_messages": "scannedMessages",
       "slack_channel_id": "slackChannelId",
       "slack_channel_name": "slackChannelName",
       "slack_team_id": "slackTeamId",

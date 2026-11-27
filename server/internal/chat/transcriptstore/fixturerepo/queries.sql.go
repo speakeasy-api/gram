@@ -119,6 +119,27 @@ func (q *Queries) CreateProject(ctx context.Context, iD uuid.UUID, organizationI
 	return result.RowsAffected(), nil
 }
 
+const createTextMessage = `-- name: CreateTextMessage :execrows
+INSERT INTO chat_messages(id,chat_id,project_id,role,content,content_raw,tool_calls,created_at)
+VALUES($1,$2,$3,'user',$4,$5::jsonb,$6::jsonb,$7)
+`
+
+func (q *Queries) CreateTextMessage(ctx context.Context, iD uuid.UUID, chatID uuid.UUID, projectID uuid.NullUUID, content string, contentRaw []byte, toolCalls []byte, createdAt pgtype.Timestamptz) (int64, error) {
+	result, err := q.db.Exec(ctx, createTextMessage,
+		iD,
+		chatID,
+		projectID,
+		content,
+		contentRaw,
+		toolCalls,
+		createdAt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const insertTranscript = `-- name: InsertTranscript :execrows
 INSERT INTO chat_message_transcripts(message_id,project_id,organization_id,ciphertext,source_hash)
 VALUES($1,$2,$3,'test ciphertext',decode(repeat('00',32),'hex'))
@@ -244,6 +265,18 @@ func (q *Queries) ReplaceCiphertext(ctx context.Context, ciphertext string, mess
 	return result.RowsAffected(), nil
 }
 
+const setContent = `-- name: SetContent :execrows
+UPDATE chat_messages SET content = $1 WHERE id = $2 AND project_id = $3
+`
+
+func (q *Queries) SetContent(ctx context.Context, content string, iD uuid.UUID, projectID uuid.NullUUID) (int64, error) {
+	result, err := q.db.Exec(ctx, setContent, content, iD, projectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setJSONField = `-- name: SetJSONField :execrows
 UPDATE chat_messages SET
 content_raw=CASE WHEN $1::text='content_raw' THEN $2::jsonb ELSE content_raw END,
@@ -259,6 +292,18 @@ func (q *Queries) SetJSONField(ctx context.Context, column1 string, column2 []by
 		iD,
 		projectID,
 	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const setRole = `-- name: SetRole :execrows
+UPDATE chat_messages SET role = $1 WHERE id = $2 AND project_id = $3
+`
+
+func (q *Queries) SetRole(ctx context.Context, role string, iD uuid.UUID, projectID uuid.NullUUID) (int64, error) {
+	result, err := q.db.Exec(ctx, setRole, role, iD, projectID)
 	if err != nil {
 		return 0, err
 	}

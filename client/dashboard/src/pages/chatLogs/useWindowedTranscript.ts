@@ -32,6 +32,13 @@ export interface WindowedTranscript {
   loadAll: () => void;
   loadingKey: WindowLoadKey | null;
   isLoading: boolean;
+  /** A `query` search is still scanning the conversation. In projects that
+   * keep encrypted transcripts the server scans one chunk per request, and
+   * each chunk's matches are merged in as it arrives. */
+  isScanning: boolean;
+  /** Messages scanned so far and the generation's total, for progress. */
+  scannedMessages: number;
+  totalMessages: number;
   isError: boolean;
   /** True when the load failed specifically because the caller lacks
    * chat:read for this chat, so callers can show a permission message
@@ -39,7 +46,7 @@ export interface WindowedTranscript {
   isForbidden: boolean;
 }
 
-interface WindowState {
+export interface WindowState {
   messages: ChatMessage[];
   gaps: Set<number>;
   hasMoreBefore: boolean;
@@ -76,6 +83,46 @@ function buildInitial(chat: Chat, segments: RiskSegment[]): WindowState {
     hasMoreAfter: segments[segments.length - 1]?.hasMoreAfter ?? false,
   };
 }
+
+// mergeChunk folds one further search chunk into the window. Chunks arrive in
+// conversation order and each one's windows may share messages with what is
+// already loaded; a new window that starts past the loaded edge is separated
+// from it by a gap, and so is every break between the chunk's own windows that
+// lies past that edge. Ranges the user already expanded are left alone.
+export function mergeChunk(prev: WindowState, chat: Chat): WindowState {
+  const segments = chat.matchSegments ?? [];
+  if (segments.length === 0) return prev;
+  if (prev.messages.length === 0) return buildInitial(chat, segments);
+  const edge = prev.messages[prev.messages.length - 1]!.seq;
+  const gaps = new Set(prev.gaps);
+  if (segments[0]!.firstSeq > edge) gaps.add(edge);
+  for (let i = 0; i < segments.length - 1; i++) {
+    if (segments[i + 1]!.firstSeq > edge) gaps.add(segments[i]!.lastSeq);
+  }
+  const last = segments[segments.length - 1]!;
+  return {
+    messages: mergeSorted(prev.messages, chat.messages),
+    gaps,
+    hasMoreBefore: prev.hasMoreBefore,
+    hasMoreAfter: last.lastSeq > edge ? last.hasMoreAfter : prev.hasMoreAfter,
+  };
+}
+
+interface ScanProgress {
+  scanning: boolean;
+  scanned: number;
+  total: number;
+}
+
+function scanProgressOf(chat: Chat): ScanProgress {
+  return {
+    scanning: chat.scanHasMore ?? false,
+    scanned: chat.scannedMessages ?? 0,
+    total: chat.totals?.total ?? 0,
+  };
+}
+
+const IDLE_SCAN: ScanProgress = { scanning: false, scanned: 0, total: 0 };
 
 // useWindowedTranscript loads a windowed slice of a chat plus surrounding
 // context, then lets the user expand the edges and fill the gaps between
@@ -114,6 +161,8 @@ export function useWindowedTranscript(
   const [state, setState] = useState<WindowState | null>(null);
   const [loadingKey, setLoadingKey] = useState<WindowLoadKey | null>(null);
   const [loadError, setLoadError] = useState(false);
+  const [scan, setScan] = useState<ScanProgress>(IDLE_SCAN);
+  const query = request.query;
 
   // A stable key for the active windowed request (chat + mode). A slow in-flight
   // page from a previous chat OR a previous query/risk request must not apply its
@@ -142,6 +191,46 @@ export function useWindowedTranscript(
       setLoadError(false);
     }
   }, [base.data, riskOnly]);
+
+  // A chunked search: while the server reports more to scan, request the next
+  // chunk and merge its matches in as they arrive. A new query, chat, or base
+  // response stops the loop; its late responses are dropped.
+  useEffect(() => {
+    const first = base.data;
+    if (!first || !query) {
+      setScan(IDLE_SCAN);
+      return;
+    }
+    setScan(scanProgressOf(first));
+    if (!first.scanHasMore || !first.nextScanCursor) return;
+    let cancelled = false;
+    const startKey = requestKeyRef.current;
+    const stale = () => cancelled || requestKeyRef.current !== startKey;
+    void (async () => {
+      let cursor: string | undefined = first.nextScanCursor;
+      try {
+        while (cursor && !stale()) {
+          const chunk = await client.chat.load({
+            id: chatId,
+            query,
+            generation: first.generation,
+            scanCursor: cursor,
+          });
+          if (stale()) return;
+          setState((prev) => (prev ? mergeChunk(prev, chunk) : prev));
+          setScan(scanProgressOf(chunk));
+          cursor = chunk.scanHasMore ? chunk.nextScanCursor : undefined;
+        }
+      } catch {
+        if (stale()) return;
+        setLoadError(true);
+        setScan((prev) => ({ ...prev, scanning: false }));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [base.data, query, client, chatId]);
 
   // Runs one incremental load: `run` fetches (one page or a whole range) and
   // returns the state update to apply. The result is ignored if the active
@@ -335,6 +424,9 @@ export function useWindowedTranscript(
     loadAll,
     loadingKey,
     isLoading: base.isLoading,
+    isScanning: scan.scanning,
+    scannedMessages: scan.scanned,
+    totalMessages: scan.total,
     isError: base.isError || loadError,
   };
 }

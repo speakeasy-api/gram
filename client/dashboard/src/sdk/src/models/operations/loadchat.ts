@@ -59,6 +59,10 @@ export type LoadChatRequest = {
    */
   query?: string | undefined;
   /**
+   * Continues a chunked `query` search: pass the previous response's `next_scan_cursor` with the same `query` and `generation`. Ignored without `query`.
+   */
+  scanCursor?: string | undefined;
+  /**
    * Session header
    */
   gramSession?: string | undefined;
@@ -211,6 +215,7 @@ export type LoadChatRequest$Outbound = {
   from_start: boolean;
   risk_only: boolean;
   query?: string | undefined;
+  scan_cursor?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
   "Gram-Chat-Session"?: string | undefined;
@@ -231,6 +236,7 @@ export const LoadChatRequest$outboundSchema: z.ZodMiniType<
     fromStart: z._default(z.boolean(), false),
     riskOnly: z._default(z.boolean(), false),
     query: z.optional(z.string()),
+    scanCursor: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     gramChatSession: z.optional(z.string()),
@@ -242,6 +248,7 @@ export const LoadChatRequest$outboundSchema: z.ZodMiniType<
       afterSeq: "after_seq",
       fromStart: "from_start",
       riskOnly: "risk_only",
+      scanCursor: "scan_cursor",
       gramSession: "Gram-Session",
       gramProject: "Gram-Project",
       gramChatSession: "Gram-Chat-Session",

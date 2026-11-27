@@ -206,6 +206,18 @@ type LoadChatResponseBody struct {
 	// messages, each spanning one or more query matches and their surrounding
 	// context. Use each segment's cursors to expand it.
 	MatchSegments []*RiskSegmentResponseBody `form:"match_segments,omitempty" json:"match_segments,omitempty" xml:"match_segments,omitempty"`
+	// Present only when `query` was requested. In projects that keep encrypted
+	// transcripts a search scans the generation in chunks, one per request, and
+	// returns the matches of that chunk; true means part of the generation is
+	// still unscanned, so call again with `scan_cursor` set to `next_scan_cursor`
+	// and merge the results. False when the search is complete.
+	ScanHasMore *bool `form:"scan_has_more,omitempty" json:"scan_has_more,omitempty" xml:"scan_has_more,omitempty"`
+	// Present when `scan_has_more` is true: pass it as `scan_cursor` to scan the
+	// next chunk.
+	NextScanCursor *string `form:"next_scan_cursor,omitempty" json:"next_scan_cursor,omitempty" xml:"next_scan_cursor,omitempty"`
+	// Present only when `query` was requested: how many messages of the generation
+	// the search has scanned so far, for progress against `totals.total`.
+	ScannedMessages *int64 `form:"scanned_messages,omitempty" json:"scanned_messages,omitempty" xml:"scanned_messages,omitempty"`
 	// Agent-specific usage enrichment for the chat, when available.
 	AgentUsage *AgentUsageResponseBody `form:"agent_usage,omitempty" json:"agent_usage,omitempty" xml:"agent_usage,omitempty"`
 	// Whole-generation trace-entry totals for the returned generation. Because
@@ -3519,6 +3531,9 @@ func NewLoadChatResponseBody(res *chat.Chat) *LoadChatResponseBody {
 		MaxGeneration:        res.MaxGeneration,
 		HasMoreBefore:        res.HasMoreBefore,
 		HasMoreAfter:         res.HasMoreAfter,
+		ScanHasMore:          res.ScanHasMore,
+		NextScanCursor:       res.NextScanCursor,
+		ScannedMessages:      res.ScannedMessages,
 		WorkUnitsReport:      res.WorkUnitsReport,
 		SlackTeamID:          res.SlackTeamID,
 		SlackChannelID:       res.SlackChannelID,
@@ -5905,7 +5920,7 @@ func NewLoadChatOverviewPayload(id string, sessionToken *string, projectSlugInpu
 }
 
 // NewLoadChatPayload builds a chat service loadChat endpoint payload.
-func NewLoadChatPayload(id string, generation *int, limit int, beforeSeq *int64, afterSeq *int64, fromStart bool, riskOnly bool, query *string, sessionToken *string, projectSlugInput *string, chatSessionsToken *string, apikeyToken *string) *chat.LoadChatPayload {
+func NewLoadChatPayload(id string, generation *int, limit int, beforeSeq *int64, afterSeq *int64, fromStart bool, riskOnly bool, query *string, scanCursor *string, sessionToken *string, projectSlugInput *string, chatSessionsToken *string, apikeyToken *string) *chat.LoadChatPayload {
 	v := &chat.LoadChatPayload{}
 	v.ID = id
 	v.Generation = generation
@@ -5915,6 +5930,7 @@ func NewLoadChatPayload(id string, generation *int, limit int, beforeSeq *int64,
 	v.FromStart = fromStart
 	v.RiskOnly = riskOnly
 	v.Query = query
+	v.ScanCursor = scanCursor
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 	v.ChatSessionsToken = chatSessionsToken
