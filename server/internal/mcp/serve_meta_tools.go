@@ -166,16 +166,19 @@ func (s *Service) handleMetaDescribeToolsCall(
 		if err != nil {
 			return nil, nil, oops.E(oops.CodeInvalid, err, "invalid tool name: must be of the form serverslug--toolname").LogWarn(ctx, logger)
 		}
-		member, ok := s.findNamedMember(ctx, gate, members, serverSlug)
-		if !ok {
+		// Each server is looked up once, so naming several of its tools
+		// records its check once. A nil entry is a server not found.
+		mr, looked := requestsBySlug[serverSlug]
+		if !looked {
+			if member, ok := s.findNamedMember(ctx, gate, members, serverSlug); ok {
+				mr = &memberRequest{member: member, toolNames: nil}
+				order = append(order, serverSlug)
+			}
+			requestsBySlug[serverSlug] = mr
+		}
+		if mr == nil {
 			notFound = append(notFound, qualified)
 			continue
-		}
-		mr, ok := requestsBySlug[serverSlug]
-		if !ok {
-			mr = &memberRequest{member: member, toolNames: nil}
-			requestsBySlug[serverSlug] = mr
-			order = append(order, serverSlug)
 		}
 		mr.toolNames = append(mr.toolNames, toolName)
 	}

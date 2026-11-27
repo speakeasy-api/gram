@@ -115,25 +115,3 @@ func TestMandatoryChallengeReason(t *testing.T) {
 		})
 	}
 }
-
-func TestLogMandatoryDenialRecordsEachServerOnceInARequest(t *testing.T) {
-	t.Parallel()
-
-	orgID := "org_" + uuid.NewString()
-	conn := newTestDB(t)
-	markerGrant := NewGrantWithSelector(ScopeMCPAuth, authSelector("*", map[string]string{SelectorKeyConnectionOwner: SelectorValueRepresentedUser}))
-	ctx := WithOneChallengePerResource(GrantsToContext(enterpriseSessionCtxWithOrg(t, orgID), []Grant{markerGrant}))
-	seedOrganization(t, ctx, conn, orgID)
-	engine := NewEngine(testenv.NewLogger(t), conn, staticChallengeLogging(true), workos.NewStubClient())
-
-	authorization, err := engine.PrepareMandatory(ctx)
-	require.NoError(t, err)
-	check := personalClientCheck("user_456")
-	decision, err := authorization.Decide(orgID, check)
-	require.NoError(t, err)
-
-	require.True(t, engine.LogMandatoryDenial(ctx, authorization, decision, check, "server_s"))
-	require.False(t, engine.LogMandatoryDenial(ctx, authorization, decision, check, "server_s"), "the same refusal twice in a request is one check")
-	require.True(t, engine.LogMandatoryDenial(ctx, authorization, decision, check, "server_t"), "the same client refused on another server is its own check")
-	require.Len(t, listChallengeOutboxRows(t, conn), 2)
-}

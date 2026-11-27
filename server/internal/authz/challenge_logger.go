@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"log/slog"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -84,12 +83,6 @@ func (l challengeRow) write(ctx context.Context, dbtx database.DBTX, logger *slo
 	if !enabled {
 		return false
 	}
-	// A request records each resource it names once (see
-	// WithOneChallengePerResource).
-	if !claimChallenge(ctx, l) {
-		return false
-	}
-
 	principalURN, principalType := authorizationChallengePrincipal(ctx, authCtx)
 
 	var focus Check
@@ -264,105 +257,4 @@ func roleSlugsFromContext(ctx context.Context) []string {
 		out = append(out, slug)
 	}
 	return out
-}
-
-type challengeScopeKey struct{}
-
-// recordedChallenges remembers which decisions one request has recorded.
-// Decisions still count in the decision metrics either way; only the recorded
-// check, an outbox row each, is skipped.
-type recordedChallenges struct {
-	mu sync.Mutex
-	// decided holds every scope and resource with a recorded decision.
-	decided map[challengeResource]struct{}
-	// denied holds every recorded denial by the tool and disposition it
-	// refused, so each distinct refusal on a resource is recorded once.
-	denied map[challengeDenial]struct{}
-}
-
-type challengeResource struct {
-	scope      Scope
-	resourceID string
-}
-
-// challengeDenial is the refusal of one tool and disposition on a resource. A
-// check that names no tool, such as connecting to the server, has both empty.
-type challengeDenial struct {
-	resource    challengeResource
-	tool        string
-	disposition string
-	// server is the MCP server an auth client was refused on: one client
-	// serves several servers, and each refusal is its own.
-	server string
-}
-
-// WithOneChallengePerResource returns a context under which the engine records
-// at most one check per scope and resource for the rest of the request: the
-// first decision, and later each distinct denial (by tool and disposition) not
-// recorded yet. A gateway request checks the server it names several times
-// (the server, then the tool it calls), and every one of those would otherwise
-// be its own row.
-func WithOneChallengePerResource(ctx context.Context) context.Context {
-	if recorded, ok := ctx.Value(challengeScopeKey{}).(*recordedChallenges); ok && recorded != nil {
-		return ctx
-	}
-	return context.WithValue(ctx, challengeScopeKey{}, &recordedChallenges{
-		mu:      sync.Mutex{},
-		decided: map[challengeResource]struct{}{},
-		denied:  map[challengeDenial]struct{}{},
-	})
-}
-
-// claimChallenge reports whether a decision is recorded under ctx's scope, and
-// marks it recorded. Call it only once the decision is about to be written.
-func claimChallenge(ctx context.Context, l challengeRow) bool {
-	recorded, ok := ctx.Value(challengeScopeKey{}).(*recordedChallenges)
-	if !ok || recorded == nil {
-		return true
-	}
-
-	// A filter row names no one resource. It never takes a resource's slot, so
-	// a later decision about that resource still records, but it is skipped
-	// once that resource has a recorded decision.
-	batch := l.Focus == nil
-	focus := l.Focus
-	if batch && len(l.Checks) > 0 {
-		focus = &l.Checks[0]
-	}
-	if focus == nil {
-		return true
-	}
-	key := challengeResource{scope: focus.Scope, resourceID: focus.ResourceID}
-
-	recorded.mu.Lock()
-	defer recorded.mu.Unlock()
-	_, decided := recorded.decided[key]
-	if batch {
-		return !decided
-	}
-	switch l.Outcome {
-	case authzrepo.OutcomeAllow:
-		if decided {
-			return false
-		}
-	case authzrepo.OutcomeDeny:
-		// A denial after an allow is still recorded: connecting was allowed
-		// but this tool or disposition was not, and that refusal is real. Two
-		// different refused tools on one server are two refusals.
-		denial := challengeDenial{
-			resource:    key,
-			tool:        focus.Dimensions[SelectorKeyTool],
-			disposition: focus.Dimensions[SelectorKeyDisposition],
-			server:      focus.Dimensions[ChallengeKeyMCPServerID],
-		}
-		if _, seen := recorded.denied[denial]; seen {
-			return false
-		}
-		recorded.denied[denial] = struct{}{}
-	default:
-		// Errors are always recorded: they are not a decision about access.
-		return true
-	}
-	recorded.decided[key] = struct{}{}
-	return true
 }

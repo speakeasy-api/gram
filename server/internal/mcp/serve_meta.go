@@ -26,7 +26,6 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
@@ -608,10 +607,6 @@ func (s *Service) callMetaServerTool(
 	if params.Name == "" {
 		return nil, oops.E(oops.CodeInvalid, nil, "tool name is required").LogError(ctx, logger)
 	}
-	// Admission and listings record no authorization checks; a call records
-	// one for each server it names, however often it checks that server.
-	ctx = authz.WithOneChallengePerResource(ctx)
-
 	// A name another mode serves usually comes from a tools/list the client
 	// cached before this connection's mode changed, so the refusal says to
 	// reconnect. Direct serves only server-qualified member tools.
