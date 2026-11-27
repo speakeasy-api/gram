@@ -26,7 +26,7 @@ type transcriptWriterFixture struct {
 	store     *transcriptstore.Store
 }
 
-func newTranscriptWriterFixture(t *testing.T, provision, shadow bool) *transcriptWriterFixture {
+func newTranscriptWriterFixture(t *testing.T, provision, sealed bool) *transcriptWriterFixture {
 	t.Helper()
 	ti := newTestInstance(t)
 	p, err := projectsrepo.New(ti.conn).CreateProject(t.Context(), projectsrepo.CreateProjectParams{Name: "Transcript test", Slug: "transcript-test", OrganizationID: ti.orgID})
@@ -41,7 +41,7 @@ func newTranscriptWriterFixture(t *testing.T, provision, shadow bool) *transcrip
 	require.NoError(t, err)
 	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, nil)
 	t.Cleanup(func() { require.NoError(t, shutdown(context.Background())) })
-	if shadow {
+	if sealed {
 		writer.WithTranscripts(transcriptstore.NewTranscripts(store, p.ID))
 	}
 	return &transcriptWriterFixture{testInstance: ti, projectID: p.ID, chatID: chatID, writer: writer, store: store}
@@ -51,7 +51,7 @@ func (f *transcriptWriterFixture) message(content string) chat.MessageWrite {
 	return chat.MessageWrite{Params: chatrepo.CreateChatMessageParams{ID: uuid.New(), ChatID: f.chatID, ProjectID: f.projectID, Role: "assistant", Content: content}}
 }
 
-func (f *transcriptWriterFixture) assertShadow(t *testing.T, id uuid.UUID) {
+func (f *transcriptWriterFixture) assertTranscript(t *testing.T, id uuid.UUID) {
 	t.Helper()
 	row, err := chatrepo.New(f.conn).GetKitProjectionMessage(t.Context(), chatrepo.GetKitProjectionMessageParams{ProjectID: uuid.NullUUID{UUID: f.projectID, Valid: true}, ID: id})
 	require.NoError(t, err)
@@ -76,7 +76,7 @@ func jsonOrNull(b []byte) string {
 	return string(b)
 }
 
-// Message and shadow counts are project scoped. Outbox counts cover the entire
+// Message and transcript counts are project scoped. Outbox counts cover the entire
 // isolated fixture database, including provisioning events captured in baselines.
 func (f *transcriptWriterFixture) counts(t *testing.T) [4]int64 {
 	t.Helper()
@@ -101,10 +101,10 @@ func TestTranscriptWriterNative(t *testing.T) {
 	n, err := f.writer.Write(t.Context(), f.projectID, []chat.MessageWrite{m})
 	require.NoError(t, err)
 	require.EqualValues(t, 1, n)
-	f.assertShadow(t, m.Params.ID)
+	f.assertTranscript(t, m.Params.ID)
 	row, err := chatrepo.New(f.conn).GetKitProjectionMessage(t.Context(), chatrepo.GetKitProjectionMessageParams{ProjectID: uuid.NullUUID{UUID: f.projectID, Valid: true}, ID: m.Params.ID})
 	require.NoError(t, err)
-	require.Equal(t, m.Params.Content, row.Content, "shadow storage must retain plaintext")
+	require.Equal(t, m.Params.Content, row.Content, "transcript storage must retain plaintext")
 }
 
 // Each write warms the transcript key before its transaction, so a process
@@ -118,7 +118,7 @@ func TestTranscriptWriterUnwrapsOncePerCachePeriod(t *testing.T) {
 		n, err := f.writer.Write(t.Context(), f.projectID, []chat.MessageWrite{m})
 		require.NoError(t, err)
 		require.EqualValues(t, 1, n)
-		f.assertShadow(t, m.Params.ID)
+		f.assertTranscript(t, m.Params.ID)
 	}
 	require.Equal(t, before+1, f.fixture.KMS.Decrypts())
 }
@@ -139,7 +139,7 @@ func TestTranscriptWriterCallerTransaction(t *testing.T) {
 			require.Equal(t, before, f.counts(t), "caller transaction must not publish before commit")
 			if commit {
 				require.NoError(t, tx.Commit(t.Context()))
-				f.assertShadow(t, m.Params.ID)
+				f.assertTranscript(t, m.Params.ID)
 				after := f.counts(t)
 				require.Equal(t, before[0]+1, after[0])
 				require.Equal(t, before[1]+1, after[1])
@@ -184,13 +184,13 @@ func TestTranscriptWriterCorrelatedPromotion(t *testing.T) {
 	n, err := f.writer.WriteCorrelated(t.Context(), f.projectID, original, "example-external-id")
 	require.NoError(t, err)
 	require.EqualValues(t, 1, n)
-	f.assertShadow(t, original.Params.ID)
+	f.assertTranscript(t, original.Params.ID)
 	candidate := f.message("EXAMPLE candidate body must not replace stored body")
 	candidate.Params.Source = conv.ToPGText("codex")
 	n, err = f.writer.WriteCorrelated(t.Context(), f.projectID, candidate, "example-external-id")
 	require.NoError(t, err)
 	require.EqualValues(t, 1, n)
-	f.assertShadow(t, original.Params.ID)
+	f.assertTranscript(t, original.Params.ID)
 	opened, err := f.store.Load(t.Context(), f.orgID, f.projectID, original.Params.ID)
 	require.NoError(t, err)
 	require.Equal(t, original.Params.Content, opened.Content)
@@ -209,7 +209,7 @@ func TestTranscriptWriterExternalIdempotence(t *testing.T) {
 	n, err := f.writer.WriteExternalWithContentParts(t.Context(), f.projectID, []chat.ExternalMessageWrite{m}, nil)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, n)
-	f.assertShadow(t, id)
+	f.assertTranscript(t, id)
 	before := f.counts(t)
 	m.Params.ID = uuid.New()
 	m.Params.Content = "EXAMPLE retry does not replace original"
@@ -217,7 +217,7 @@ func TestTranscriptWriterExternalIdempotence(t *testing.T) {
 	require.NoError(t, err)
 	require.Zero(t, n)
 	require.Equal(t, before, f.counts(t))
-	f.assertShadow(t, id)
+	f.assertTranscript(t, id)
 }
 
 func TestTranscriptWriterAssistantTurn(t *testing.T) {
@@ -225,8 +225,8 @@ func TestTranscriptWriterAssistantTurn(t *testing.T) {
 	f := newTranscriptWriterFixture(t, true, true)
 	first, second := f.message("EXAMPLE first assistant"), f.message("EXAMPLE second assistant")
 	require.NoError(t, f.writer.WriteTurn(t.Context(), f.projectID, nil, []chat.MessageWrite{first, second}))
-	f.assertShadow(t, first.Params.ID)
-	f.assertShadow(t, second.Params.ID)
+	f.assertTranscript(t, first.Params.ID)
+	f.assertTranscript(t, second.Params.ID)
 	counts := f.counts(t)
 	require.EqualValues(t, 2, counts[0])
 	require.EqualValues(t, 2, counts[1])
@@ -235,8 +235,8 @@ func TestTranscriptWriterAssistantTurn(t *testing.T) {
 func TestTranscriptWriterOptOutWithoutStorageOrKeys(t *testing.T) {
 	t.Parallel()
 	f := newTranscriptWriterFixture(t, false, false)
-	// Dropping only in this isolated database proves the opt-out path never consults shadow storage.
-	_, err := f.conn.Exec(t.Context(), `DROP TABLE chat_message_transcripts CASCADE`) //nolint:glint // notestingrawsql: deliberately simulate a legacy schema without shadow storage; no fixture query can drop this table.
+	// Dropping only in this isolated database proves the opt-out path never consults transcript storage.
+	_, err := f.conn.Exec(t.Context(), `DROP TABLE chat_message_transcripts CASCADE`) //nolint:glint // notestingrawsql: deliberately simulate a legacy schema without transcript storage; no fixture query can drop this table.
 	require.NoError(t, err)
 	m := f.message("EXAMPLE opt-out plaintext")
 	n, err := f.writer.Write(t.Context(), f.projectID, []chat.MessageWrite{m})
@@ -248,7 +248,7 @@ func TestTranscriptWriterOptOutWithoutStorageOrKeys(t *testing.T) {
 	require.Equal(t, m.Params.Content, rows[0].Content)
 
 	// Neither an accidentally empty allowlist nor another project may widen
-	// capture to this project or start consulting unavailable shadow storage.
+	// capture to this project or start consulting unavailable transcript storage.
 	f.writer.WithTranscripts(transcriptstore.NewTranscripts(f.store, []uuid.UUID{}...))
 	n, err = f.writer.Write(t.Context(), f.projectID, []chat.MessageWrite{f.message("EXAMPLE empty allowlist")})
 	require.NoError(t, err)
@@ -315,12 +315,12 @@ func TestTranscriptWriterProjection(t *testing.T) {
 			}
 			require.NoError(t, err)
 			require.True(t, changed)
-			f.assertShadow(t, m.Params.ID)
+			f.assertTranscript(t, m.Params.ID)
 			m.Params.Content = "EXAMPLE updated projection"
 			changed, err = f.writer.ProjectMessage(t.Context(), f.projectID, m.Params.ID, guard, build)
 			require.NoError(t, err)
 			require.True(t, changed)
-			f.assertShadow(t, m.Params.ID)
+			f.assertTranscript(t, m.Params.ID)
 		})
 	}
 }

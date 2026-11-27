@@ -155,7 +155,7 @@ func TestCaptureLoadOwnershipAndStaleness(t *testing.T) {
 	require.NoError(t, err)
 	opened, err = f.store.Load(t.Context(), f.org, f.project, id)
 	require.ErrorIs(t, err, ErrStale)
-	require.Equal(t, transcriptcrypto.Message{}, opened)
+	require.Equal(t, transcriptcrypto.ProtectedFields{}, opened)
 	f.capture(t, id)
 	opened, err = f.store.Load(t.Context(), f.org, f.project, id)
 	require.NoError(t, err)
@@ -519,7 +519,7 @@ func TestStorageErrorFingerprintBackfill(t *testing.T) {
 		require.EqualValues(t, 1, n)
 		opened, err := f.store.Load(t.Context(), f.org, f.project, id)
 		require.ErrorIs(t, err, ErrStale)
-		require.Equal(t, transcriptcrypto.Message{}, opened)
+		require.Equal(t, transcriptcrypto.ProtectedFields{}, opened)
 		page, err := f.store.Backfill(t.Context(), f.org, f.project, uuid.Nil, 1)
 		require.NoError(t, err)
 		require.Equal(t, 1, page.Count)
@@ -543,7 +543,7 @@ func TestStorageErrorFingerprintBackfill(t *testing.T) {
 	require.NoError(t, err)
 	opened, err := f.store.Load(t.Context(), f.org, f.project, id)
 	require.ErrorIs(t, err, ErrStale)
-	require.Equal(t, transcriptcrypto.Message{}, opened)
+	require.Equal(t, transcriptcrypto.ProtectedFields{}, opened)
 	page, err := f.store.Backfill(t.Context(), f.org, f.project, uuid.Nil, 1)
 	require.NoError(t, err)
 	require.Equal(t, 1, page.Count)
@@ -553,7 +553,7 @@ func TestStorageErrorFingerprintBackfill(t *testing.T) {
 	require.Equal(t, "sensitive forged error", *opened.StorageError)
 }
 
-func TestShadowOwnershipForeignKeys(t *testing.T) {
+func TestTranscriptOwnershipForeignKeys(t *testing.T) {
 	t.Parallel()
 	f := setup(t, false)
 	id := uuid.New()
@@ -573,13 +573,13 @@ func TestShadowOwnershipForeignKeys(t *testing.T) {
 		{otherProject, f.org, "chat_message_transcripts_project_id_message_id_fkey"},
 		{f.project, otherOrg, "chat_message_transcripts_organization_id_project_id_fkey"},
 	} {
-		_, err := q.InsertShadow(t.Context(), id, target.projectID, target.organizationID)
+		_, err := q.InsertTranscript(t.Context(), id, target.projectID, target.organizationID)
 		var pgErr *pgconn.PgError
 		require.ErrorAs(t, err, &pgErr)
 		require.Equal(t, "23503", pgErr.Code)
 		require.Equal(t, target.constraint, pgErr.ConstraintName)
 	}
-	n, err := q.InsertShadow(t.Context(), id, f.project, f.org)
+	n, err := q.InsertTranscript(t.Context(), id, f.project, f.org)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, n)
 }

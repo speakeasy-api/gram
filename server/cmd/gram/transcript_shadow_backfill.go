@@ -84,8 +84,8 @@ func newTranscriptShadowBackfillCommand() *cli.Command {
 			}
 			// Check the allowlist before connecting or provisioning any keys.
 			// A project that does not capture does not seal new messages, and
-			// body updates leave its transcripts stale, so coverage would break
-			// after its next write.
+			// its updates leave transcripts stale, so coverage would not hold
+			// past its next write.
 			if err := requireTranscriptShadowProject(c.StringSlice(chatTranscriptShadowProjectIDsFlag), projectID); err != nil {
 				return err
 			}

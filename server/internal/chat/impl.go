@@ -94,7 +94,7 @@ type Service struct {
 	staffOrg     staff.Organization
 	riskFindings *chatfindings.Reader
 
-	// transcripts opens the encrypted copies of message bodies for projects
+	// transcripts opens the encrypted copies of protected fields for projects
 	// with encrypted transcripts. Nil opens none.
 	transcripts *transcriptstore.Transcripts
 	// access is the per-chat gate, shared with services that reveal session
@@ -145,7 +145,7 @@ func (s *Service) WithStreamRotation(meterProvider metric.MeterProvider, maxAge 
 	return s
 }
 
-// WithTranscripts makes chat reads open message bodies from encrypted shadows
+// WithTranscripts makes chat reads open protected fields from encrypted transcripts
 // instead of plaintext for the projects the Transcripts serve.
 func (s *Service) WithTranscripts(transcripts *transcriptstore.Transcripts) *Service {
 	s.transcripts = transcripts
@@ -1388,7 +1388,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to load risk-windowed messages").LogError(ctx, s.logger)
 		}
-		if err := openTranscriptRows(ctx, s, authCtx, rows, riskWindowedMessageBody); err != nil {
+		if err := openTranscriptRows(ctx, s, authCtx, rows, riskWindowedFieldRefs); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to open encrypted chat messages").LogError(ctx, s.logger)
 		}
 		resultMessages = make([]*gen.ChatMessage, len(rows))
@@ -1440,7 +1440,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to load search-windowed messages").LogError(ctx, s.logger)
 		}
-		if err := openTranscriptRows(ctx, s, authCtx, rows, searchWindowedMessageBody); err != nil {
+		if err := openTranscriptRows(ctx, s, authCtx, rows, searchWindowedFieldRefs); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to open encrypted chat messages").LogError(ctx, s.logger)
 		}
 		resultMessages = make([]*gen.ChatMessage, len(rows))
@@ -1490,7 +1490,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		}
 		// We paged forward from an existing anchor, so older messages exist.
 		hasMoreBefore = true
-		if err := openTranscriptRows(ctx, s, authCtx, rows, chatMessageBody); err != nil {
+		if err := openTranscriptRows(ctx, s, authCtx, rows, chatMessageFieldRefs); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to open encrypted chat messages").LogError(ctx, s.logger)
 		}
 		resultMessages = s.buildGenMessages(ctx, rows)
@@ -1520,7 +1520,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		if isInitialLatest {
 			latestPageRows = rows
 		}
-		if err := openTranscriptRows(ctx, s, authCtx, rows, chatMessageBody); err != nil {
+		if err := openTranscriptRows(ctx, s, authCtx, rows, chatMessageFieldRefs); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to open encrypted chat messages").LogError(ctx, s.logger)
 		}
 		resultMessages = s.buildGenMessages(ctx, rows)
@@ -1553,7 +1553,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		if isInitialLatest {
 			latestPageRows = rows
 		}
-		if err := openTranscriptRows(ctx, s, authCtx, rows, chatMessageBody); err != nil {
+		if err := openTranscriptRows(ctx, s, authCtx, rows, chatMessageFieldRefs); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to open encrypted chat messages").LogError(ctx, s.logger)
 		}
 		resultMessages = s.buildGenMessages(ctx, rows)
@@ -2612,7 +2612,7 @@ const (
 	// maxSummarizeTranscriptRunes bounds the transcript fed to the summarizer.
 	// Whole messages are dropped oldest-first so the end of the session is kept.
 	maxSummarizeTranscriptRunes = 100000
-	// maxSummarizeMessageRunes caps one message body in the summarize transcript.
+	// maxSummarizeMessageRunes caps one message in the summarize transcript.
 	maxSummarizeMessageRunes   = 4000
 	summarizeCompletionTimeout = 60 * time.Second
 )
@@ -2957,8 +2957,8 @@ func (s *Service) SummarizeToolCall(ctx context.Context, payload *gen.SummarizeT
 		return nil, oops.E(oops.CodeUnexpected, err, "encode tool summary response").LogError(ctx, s.logger)
 	}
 
-	// The summary is part of the message body, so it goes through UpdateMessage,
-	// which writes it to every copy of the body in one transaction. The key
+	// The summary is part of the protected fields, so it goes through UpdateChatMessage,
+	// which writes it to every copy of the protected fields in one transaction. The key
 	// loads before the transaction begins.
 	if err := s.transcripts.Prepare(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "prepare tool call summary transcript").LogError(ctx, s.logger)
@@ -2968,7 +2968,7 @@ func (s *Service) SummarizeToolCall(ctx context.Context, payload *gen.SummarizeT
 		return nil, oops.E(oops.CodeUnexpected, err, "begin tool call summary transaction").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
-	_, err = s.transcripts.UpdateMessage(ctx, tx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, chatID, messageID, func(m *repo.ChatMessage) error {
+	_, err = s.transcripts.UpdateChatMessage(ctx, tx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, chatID, messageID, func(m *repo.ChatMessage) error {
 		summaries, err := setToolCallSummary(m.ToolCallSummaries, payload.ToolCallID, encodedRecord)
 		if err != nil {
 			return err

@@ -65,7 +65,7 @@ func TestBackfillTranscriptShadowsSealsEveryPageAndResumes(t *testing.T) {
 	for _, id := range ids {
 		_, err := store.Load(t.Context(), org, projectID, id)
 		require.NoError(t, err)
-		meta, err := fixtures.ShadowMetadata(t.Context(), id)
+		meta, err := fixtures.MessageMetadata(t.Context(), id)
 		require.NoError(t, err)
 		require.True(t, meta.ToolCallCount.Valid)
 		require.True(t, meta.ContentBytes.Valid)

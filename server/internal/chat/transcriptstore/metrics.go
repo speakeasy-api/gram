@@ -25,7 +25,7 @@ const (
 	meterCaptureMessages = "chat.transcript_shadow.capture.messages"
 
 	// meterReadDuration is the time one LoadMany call spends loading, opening
-	// and verifying the shadows for a page of messages.
+	// and verifying the transcripts for a page of messages.
 	meterReadDuration = "chat.transcript_shadow.read.duration"
 
 	// meterReadMessages counts the messages each LoadMany call was asked to
@@ -62,12 +62,12 @@ type outcome string
 const (
 	outcomeSuccess outcome = "success"
 
-	// outcomePlaintextFallback counts read messages that have no shadow at
+	// outcomePlaintextFallback counts read messages that have no transcript at
 	// all, which the caller serves from plaintext. It is a per-message
 	// outcome; the LoadMany call itself still succeeds.
 	outcomePlaintextFallback outcome = "plaintext_fallback"
 
-	// Consistency checks of a shadow-mode body update. None of these fails the
+	// Consistency checks of a shadow-mode chat message update. None of these fails the
 	// update: the plaintext row wins and the error is logged. A read or decrypt
 	// failure does fail it and is counted as error.
 	//
@@ -118,29 +118,29 @@ func newStoreMetrics(meterProvider metric.MeterProvider) (*storeMetrics, error) 
 	meter := meterProvider.Meter(instrumentationName)
 
 	capture, err := newOperationMetrics(meter, meterCaptureDuration, meterCaptureMessages,
-		"Time to seal and store encrypted transcript shadows for one message write",
-		"Chat messages submitted for encrypted transcript shadow capture")
+		"Time to seal and store encrypted transcripts for one message write",
+		"Chat messages submitted for encrypted transcript capture")
 	if err != nil {
 		return nil, err
 	}
 
 	read, err := newOperationMetrics(meter, meterReadDuration, meterReadMessages,
-		"Time to load, open and verify encrypted transcript shadows for one page of messages",
-		"Chat messages requested from encrypted transcript shadows")
+		"Time to load, open and verify encrypted transcripts for one page of messages",
+		"Chat messages requested from encrypted transcripts")
 	if err != nil {
 		return nil, err
 	}
 
 	update, err := newOperationMetrics(meter, meterUpdateDuration, meterUpdateMessages,
-		"Time to update a message body and its encrypted transcript in one transaction",
-		"Chat message body updates in shadow mode")
+		"Time to update a chat message and its encrypted transcript in one transaction",
+		"Chat message updates in shadow mode")
 	if err != nil {
 		return nil, err
 	}
 
 	checks, err := meter.Int64Counter(
 		meterUpdateChecks,
-		metric.WithDescription("Consistency checks of shadow-mode message body updates, by result"),
+		metric.WithDescription("Consistency checks of shadow-mode chat message updates, by result"),
 		metric.WithUnit("{check}"),
 	)
 	if err != nil {
@@ -174,7 +174,7 @@ func newOperationMetrics(meter metric.Meter, durationName, messagesName, duratio
 	return operationMetrics{duration: duration, messages: messages}, nil
 }
 
-// record is keyed by project because shadows only exist for an explicit,
+// record is keyed by project because transcripts only exist for an explicit,
 // short project allowlist, so the series count stays small.
 func (m operationMetrics) record(ctx context.Context, projectID uuid.UUID, messages int, elapsed time.Duration, result outcome) {
 	opts := metric.WithAttributes(
@@ -205,7 +205,7 @@ func (m operationMetrics) recordDuration(ctx context.Context, projectID uuid.UUI
 	))
 }
 
-// check counts one consistency check result of a shadow-mode body update.
+// check counts one consistency check result of a shadow-mode chat message update.
 func (m *storeMetrics) check(ctx context.Context, projectID uuid.UUID, result outcome) {
 	m.checks.Add(ctx, 1, metric.WithAttributes(attr.ProjectID(projectID.String()), attr.Outcome(result)))
 }
