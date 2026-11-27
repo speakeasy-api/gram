@@ -32,7 +32,7 @@ import (
 
 // KitWorkloadBinding records an exact, runtime-owned admission, not a credential.
 type KitWorkloadBinding struct {
-	MCPDesiredSetHash string                            `json:"mcp_desired_set_hash,omitempty"`
+	MCPProjectGateway bool                              `json:"mcp_project_gateway,omitempty"`
 	IssuerID          uuid.UUID                         `json:"issuer_id"`
 	Subject           string                            `json:"subject"`
 	Identity          assistantidentity.RuntimeIdentity `json:"identity"`
@@ -251,7 +251,7 @@ func (s *ServiceCore) provisionKitWorkload(ctx context.Context, r assistantRunti
 	if err != nil {
 		return nil, fmt.Errorf("provision kit workload: %w", err)
 	}
-	return &KitWorkloadBinding{MCPDesiredSetHash: "", IssuerID: issuer.ID, Subject: subject, Identity: identity, ServiceAccount: sa, Audience: audience, Generation: generation}, nil
+	return &KitWorkloadBinding{MCPProjectGateway: false, IssuerID: issuer.ID, Subject: subject, Identity: identity, ServiceAccount: sa, Audience: audience, Generation: generation}, nil
 }
 
 // revokeKitWorkload withdraws only this runtime's exact admission and assignment.

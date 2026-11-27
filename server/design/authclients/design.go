@@ -8,7 +8,7 @@ import (
 )
 
 func clientTypeEnum() {
-	Enum("remote_session", "service_account", "static_credential", "pass_through", "ema")
+	Enum("remote_session", "service_account", "static_credential", "pass_through", "ema", "slack_app")
 }
 
 func upstreamAuthStatusEnum() {
@@ -114,7 +114,7 @@ var AuthClientAudience = Type("AuthClientAudience", func() {
 })
 
 func creatableClientTypeEnum() {
-	Enum("remote_session", "service_account", "static_credential", "pass_through")
+	Enum("remote_session", "service_account", "static_credential", "pass_through", "slack_app")
 }
 
 var AuthClientHeaderInput = Type("AuthClientHeaderInput", func() {

@@ -757,6 +757,47 @@ type AssistantAgentBinding struct {
 	Deleted bool
 }
 
+type AssistantAteActor struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	AssistantID uuid.UUID
+	// @access: confidential
+	RuntimeID uuid.UUID
+	// @access: confidential
+	AssistantThreadID uuid.UUID
+	// DNS-1123 actor name within the configured ATE atespace.
+	// @access: confidential
+	ActorName string
+	// Immutable ATE-assigned actor UID used for durable identity lookup.
+	// @access: confidential
+	ActorUid string
+	// Lifecycle state of the thread actor (Go constants are canonical).
+	// @access: confidential
+	State string
+	// True once initial bootstrap files have been delivered to the actor rootfs.
+	// @access: confidential
+	Configured bool
+	// Serialized workload admission binding for this thread actor.
+	// @access: restricted
+	WorkloadBindingJson []byte
+	// Deadline after which an idle running actor is eligible for synchronous suspend.
+	// @access: confidential
+	WarmUntil pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
 type AssistantDashboardMessage struct {
 	// @access: confidential
 	ID uuid.UUID
@@ -8675,6 +8716,8 @@ type TriggerInstance struct {
 	Name string
 	// @access: confidential
 	EnvironmentID uuid.NullUUID
+	// @access: confidential
+	AuthClientID uuid.NullUUID
 	// @access: confidential
 	TargetKind string
 	// @access: confidential

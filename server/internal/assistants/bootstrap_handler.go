@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
@@ -78,6 +79,8 @@ func (s *Service) handleGetThreadBootstrap(w http.ResponseWriter, r *http.Reques
 	if err := s.allowBootstrap(ctx, principal.AssistantID, principal.ThreadID); err != nil {
 		return err
 	}
+
+	ctx = withBootstrapRuntimeToken(ctx, assistanttokens.BearerToken(token))
 
 	result, err := s.core.BuildThreadBootstrap(ctx, projectID, threadID, principal.AssistantID)
 	if err != nil {

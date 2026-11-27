@@ -15,7 +15,7 @@ export type DraftContextValue = {
   setAssistant: (assistant: Assistant) => void;
   assistant: Assistant | undefined;
   refetchAssistant: () => Promise<unknown>;
-  invalidateAll: () => void;
+  invalidateAll: (options?: { kitAgentId?: string }) => void;
   invalidateSkillAttachments: () => void;
   registerPending: (toolCallId: string, resolver: PendingResolver) => void;
   resolvePending: (toolCallId: string, result: unknown) => boolean;

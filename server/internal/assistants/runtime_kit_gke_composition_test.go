@@ -8,14 +8,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/chat"
+	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/orghost"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
-	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic/fake"
@@ -25,15 +28,10 @@ func TestKitGKECompositionRejectsLocalAndMissingAuthority(t *testing.T) {
 	t.Parallel()
 	origin, err := url.Parse("https://ai.speakeasy.com")
 	require.NoError(t, err)
-	resource, err := url.Parse("https://mcp.example/mcp/attached")
-	require.NoError(t, err)
-	issuer, err := url.Parse("https://mcp.example/oauth/issuer")
-	require.NoError(t, err)
 	valid := KitGKECompositionConfig{
 		KitGKEIdentityConfig: testKitGKEIdentityConfig(),
 		KitLocalCompositionConfig: KitLocalCompositionConfig{
 			Environment: "production", Image: "registry.example/kit:0.2.17", Origin: origin,
-			MCPResource: resource, MCPIssuer: issuer, MCPUserSessionIssuerID: uuid.New(),
 			TurnStream:      new(chat.TurnStream),
 			WorkloadJWKSURL: "https://external.example/keys", WorkloadIssuerURL: "https://external.example", WorkloadIssuerBaseURL: "https://issuer.example",
 		},
@@ -58,7 +56,6 @@ func TestKitGKECompositionRejectsLocalAndMissingAuthority(t *testing.T) {
 		{"missing namespace", func(c *KitGKECompositionConfig) { c.GKE.Namespace = "" }},
 		{"invalid network bounds", func(c *KitGKECompositionConfig) { c.GKE.RunnerCIDRBlocks = []string{"10.0.0.0/16", "garbage"} }},
 		{"missing network bounds", func(c *KitGKECompositionConfig) { c.GKE.RunnerCIDRBlocks = nil }},
-		{"missing issuer", func(c *KitGKECompositionConfig) { c.MCPUserSessionIssuerID = uuid.Nil }},
 		{"missing workload issuer", func(c *KitGKECompositionConfig) { c.WorkloadIssuerURL = "" }},
 		{"missing transcript", func(c *KitGKECompositionConfig) { c.TurnStream = nil }},
 	} {
@@ -186,60 +183,99 @@ func TestKitGKELifecycleReloadsAndCommitsRecoveryEvidence(t *testing.T) {
 	}))
 }
 
-func TestKitGKEEligibilityUsesPersistedAttachmentAndIssuer(t *testing.T) {
+// enableTestOrganizationGateway opts orgID into the organization/project
+// gateway by inserting and soft-deleting the default-on disabled flag, matching
+// production opt-in semantics.
+func enableTestOrganizationGateway(t *testing.T, db *pgxpool.Pool, orgID string) {
+	t.Helper()
+	q := productfeaturesrepo.New(db)
+	setting := productfeaturesrepo.EnableFeatureParams{
+		OrganizationID: orgID,
+		FeatureName:    string(productfeatures.FeatureOrganizationGatewayDisabled),
+	}
+	_, err := q.EnableFeature(t.Context(), setting)
+	require.NoError(t, err)
+	_, err = q.DeleteFeature(t.Context(), productfeaturesrepo.DeleteFeatureParams(setting))
+	require.NoError(t, err)
+}
+
+func TestKitEligibilityUsesSharedProjectGatewayPredicate(t *testing.T) {
 	t.Parallel()
 	f := newHostedAttachmentFixture(t, "kit_gke_eligibility")
+	enableTestOrganizationGateway(t, f.db, "org-test")
 	origin, err := url.Parse("https://mcp.example")
 	require.NoError(t, err)
 	f.core.serverURL = origin
-	issuer, err := usersessionsrepo.New(f.db).CreateUserSessionIssuer(t.Context(), usersessionsrepo.CreateUserSessionIssuerParams{
-		ProjectID: f.projectID, Slug: "kit-workload", AuthnChallengeMode: "interactive",
-		SessionDuration: pgtype.Interval{Microseconds: time.Hour.Microseconds(), Valid: true},
-	})
-	require.NoError(t, err)
-	c := KitLocalCompositionConfig{MCPResource: origin.JoinPath("mcp", "team-remote"), MCPUserSessionIssuerID: issuer.ID}
+	flags := &feature.InMemory{}
+	f.core.SetFeatureProvider(flags)
 	a := assistantRecord{ID: f.assistant, ProjectID: f.projectID, OrganizationID: "org-test"}
-	check := func(want bool) {
+	check := func(hosts *orghost.Resolver, want bool) {
 		t.Helper()
 		tx := testenv.BeginTx(t, t.Context(), f.db)
 		defer func() { _ = tx.Rollback(t.Context()) }()
-		eligible, err := f.core.kitGKEAssistantEligible(t.Context(), tx, a, c)
+		eligible, err := f.core.kitAssistantEligible(t.Context(), tx, a, hosts)
 		require.NoError(t, err)
 		require.Equal(t, want, eligible)
 	}
-	check(false)
-	f.addServerRow(t, f.remote.ID, uuid.NullUUID{})
-	check(false)
-	err = assistantrepo.New(f.db).SetAttachedMCPServerIssuerForTest(t.Context(), assistantrepo.SetAttachedMCPServerIssuerForTestParams{UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true}, ID: f.remote.ID, ProjectID: f.projectID})
+
+	// Machine-access flag off -> ineligible even before checking issuers.
+	check(nil, false)
+	flags.SetFlag(feature.FlagProjectGatewayMachineAccess, a.OrganizationID, true)
+	// No organization-level user session issuer -> ineligible.
+	check(nil, false)
+
+	fixtures := testrepo.New(f.db)
+	issuerID, err := fixtures.InsertOrganizationTierUserSessionIssuerFixture(t.Context(), testrepo.InsertOrganizationTierUserSessionIssuerFixtureParams{
+		OrganizationID:     pgtype.Text{String: a.OrganizationID, Valid: true},
+		Slug:               "kit-org-issuer",
+		AuthnChallengeMode: "none",
+		SessionDuration:    pgtype.Interval{Microseconds: time.Hour.Microseconds(), Valid: true},
+	})
 	require.NoError(t, err)
-	check(false) // Endpoint-mode issuers do not serve the shared authorization server.
-	updated, err := testrepo.New(f.db).SetUserSessionIssuerAuthorizationServerModeFixture(t.Context(), testrepo.SetUserSessionIssuerAuthorizationServerModeFixtureParams{AuthorizationServerMode: "shared", IssuerID: issuer.ID, OrganizationID: a.OrganizationID, PinnedIssuerUrl: pgtype.Text{String: "", Valid: false}})
+	// Endpoint-mode issuer is not in shared mode -> ineligible.
+	check(nil, false)
+
+	updated, err := fixtures.SetUserSessionIssuerAuthorizationServerModeFixture(t.Context(), testrepo.SetUserSessionIssuerAuthorizationServerModeFixtureParams{
+		AuthorizationServerMode: "shared",
+		IssuerID:                issuerID,
+		OrganizationID:          a.OrganizationID,
+		PinnedIssuerUrl:         pgtype.Text{String: "", Valid: false},
+	})
 	require.NoError(t, err)
 	require.EqualValues(t, 1, updated)
-	check(true)
-	c.MCPUserSessionIssuerID = uuid.New()
-	check(false)
-	c.MCPUserSessionIssuerID = issuer.ID
-	c.MCPResource = origin.JoinPath("mcp", "another-project")
-	check(false)
-	// Production derives the connection from persisted rows, not deployment-
-	// global issuer or resource flags. Stale flags cannot change its authority.
-	c.PersistedMCP = true
-	c.MCPResource = nil
-	c.MCPUserSessionIssuerID = uuid.Nil
-	check(true)
-	err = assistantrepo.New(f.db).DisableAttachedMCPServerForTest(t.Context(), assistantrepo.DisableAttachedMCPServerForTestParams{ID: f.remote.ID, ProjectID: f.projectID})
-	require.NoError(t, err)
-	check(true) // Existing shared issuer still permits inference without attached tools.
-	connections, selectedIssuer, err := f.core.kitPersistedMCPConnections(t.Context(), f.db, a)
-	require.NoError(t, err)
-	require.Empty(t, connections)
-	require.Equal(t, issuer.ID, selectedIssuer)
-	// Repeated selection is stable and remains project-scoped, even with no tools.
-	for range 3 {
-		_, repeated, err := f.core.kitPersistedMCPConnections(t.Context(), f.db, a)
-		require.NoError(t, err)
-		require.Equal(t, selectedIssuer, repeated)
-	}
+	// Eligible with zero attachments/grants as soon as Project Gateway is served.
+	check(nil, true)
 
+	gatewayURL, selectedIssuer, err := f.core.kitProjectGateway(t.Context(), f.db, a, nil)
+	require.NoError(t, err)
+	require.Equal(t, issuerID, selectedIssuer)
+	require.Equal(t, "https://mcp.example/mcp/gateway/identity-tests/projects/kit_gke_eligibility", gatewayURL.String())
+
+	// Non-nil OrgHosts overrides the gateway host with the resolver's server URL.
+	hostsOrigin, err := url.Parse("https://platform-host.example")
+	require.NoError(t, err)
+	hosts := orghost.New(orghost.Config{
+		ServerURL:                  hostsOrigin,
+		SiteURL:                    nil,
+		PlatformHosts:              nil,
+		LegacyDefaultHost:          nil,
+		NewOrganizationDefaultHost: nil,
+	})
+	check(hosts, true)
+	hostGatewayURL, _, err := f.core.kitProjectGateway(t.Context(), f.db, a, hosts)
+	require.NoError(t, err)
+	require.Equal(t, "https://platform-host.example/mcp/gateway/identity-tests/projects/kit_gke_eligibility", hostGatewayURL.String())
+
+	// Non-HTTPS server URL fails closed.
+	f.core.serverURL, _ = url.Parse("http://mcp.example")
+	check(nil, false)
+	f.core.serverURL = origin
+
+	// Turning the organization gateway off makes Kit ineligible immediately.
+	_, err = productfeaturesrepo.New(f.db).EnableFeature(t.Context(), productfeaturesrepo.EnableFeatureParams{
+		OrganizationID: a.OrganizationID,
+		FeatureName:    string(productfeatures.FeatureOrganizationGatewayDisabled),
+	})
+	require.NoError(t, err)
+	check(nil, false)
 }

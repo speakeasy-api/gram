@@ -255,6 +255,9 @@ var CreateTriggerInstanceForm = Type("CreateTriggerInstanceForm", func() {
 	Attribute("environment_id", String, "The linked environment ID.", func() {
 		Format(FormatUUID)
 	})
+	Attribute("auth_client_id", String, "The linked slack_app auth client ID. Mutually exclusive with environment_id.", func() {
+		Format(FormatUUID)
+	})
 	Attribute("target_kind", String, "The trigger target kind.", func() {
 		Enum("assistant", "noop")
 	})
@@ -274,6 +277,9 @@ var UpdateTriggerInstanceForm = Type("UpdateTriggerInstanceForm", func() {
 	})
 	Attribute("name", String, "The trigger instance name.")
 	Attribute("environment_id", String, "The linked environment ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("auth_client_id", String, "The linked slack_app auth client ID. Mutually exclusive with environment_id.", func() {
 		Format(FormatUUID)
 	})
 	Attribute("target_kind", String, "The trigger target kind.", func() {

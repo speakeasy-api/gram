@@ -12,7 +12,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 /**
  * migrated when the run gave the assistant a dedicated agent, already_migrated when it already had one, needs_owner when its creator is no longer an active organization member, and failed when provisioning failed.
  */
-export const Outcome = {
+export const AdminAssistantIdentityMigrationResultOutcome = {
   Migrated: "migrated",
   AlreadyMigrated: "already_migrated",
   NeedsOwner: "needs_owner",
@@ -21,7 +21,9 @@ export const Outcome = {
 /**
  * migrated when the run gave the assistant a dedicated agent, already_migrated when it already had one, needs_owner when its creator is no longer an active organization member, and failed when provisioning failed.
  */
-export type Outcome = ClosedEnum<typeof Outcome>;
+export type AdminAssistantIdentityMigrationResultOutcome = ClosedEnum<
+  typeof AdminAssistantIdentityMigrationResultOutcome
+>;
 
 /**
  * What the identity migration did to one assistant.
@@ -38,7 +40,7 @@ export type AdminAssistantIdentityMigrationResult = {
   /**
    * migrated when the run gave the assistant a dedicated agent, already_migrated when it already had one, needs_owner when its creator is no longer an active organization member, and failed when provisioning failed.
    */
-  outcome: Outcome;
+  outcome: AdminAssistantIdentityMigrationResultOutcome;
   /**
    * The assistant's project ID.
    */
@@ -46,9 +48,10 @@ export type AdminAssistantIdentityMigrationResult = {
 };
 
 /** @internal */
-export const Outcome$inboundSchema: z.ZodMiniEnum<typeof Outcome> = z.enum(
-  Outcome,
-);
+export const AdminAssistantIdentityMigrationResultOutcome$inboundSchema:
+  z.ZodMiniEnum<typeof AdminAssistantIdentityMigrationResultOutcome> = z.enum(
+    AdminAssistantIdentityMigrationResultOutcome,
+  );
 
 /** @internal */
 export const AdminAssistantIdentityMigrationResult$inboundSchema: z.ZodMiniType<
@@ -58,7 +61,7 @@ export const AdminAssistantIdentityMigrationResult$inboundSchema: z.ZodMiniType<
   z.object({
     assistant_id: z.string(),
     name: z.string(),
-    outcome: Outcome$inboundSchema,
+    outcome: AdminAssistantIdentityMigrationResultOutcome$inboundSchema,
     project_id: z.string(),
   }),
   z.transform((v) => {

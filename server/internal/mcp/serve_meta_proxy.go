@@ -24,6 +24,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -178,6 +179,11 @@ type memberDial struct {
 
 	// serviceClient is the service client of the person's own sign-in the build sends, uuid.Nil for any other credential.
 	serviceClient uuid.UUID
+
+	// recoverPersonal mints a one-time user-bound connection recovery link when
+	// an upstream rejects a human-backed principal credential's personal token.
+	// Nil outside dialMetaMember and for any other caller or client kind.
+	recoverPersonal func(ctx context.Context) (error, bool)
 }
 
 func serverHeadersHaveCredential(headers []remotemcp_repo.RemoteMcpServerHeader) bool {
@@ -400,6 +406,56 @@ type memberStaleChoiceError struct {
 
 func (e memberStaleChoiceError) Unwrap() error { return e.memberCredentialError }
 
+// memberCanRecoverPersonal reports whether a human-backed principal credential
+// can mint a personal connection recovery link for member.
+func memberCanRecoverPersonal(ctx context.Context, gate metaGateContext, member metaMember) bool {
+	authenticated, ok := principalcredential.FromContext(ctx)
+	if !ok || authenticated.Credential.AuthorizerUserID == "" || gate.userSessionIssuerID == uuid.Nil {
+		return false
+	}
+	res := member.authClient
+	return res != nil && res.outcome == authClientResolved && res.clientType == authClientTypeRemoteSession &&
+		res.attachedSession == uuid.Nil && member.chosenClientID.Valid && !member.upstreamNoAuth
+}
+
+// isMemberPersonalRecoveryCause reports whether a dial error represents a
+// missing, expired, or unusable personal connection rather than a temporary
+// outage, stale no-auth choice, or access denial.
+func isMemberPersonalRecoveryCause(err error) bool {
+	if _, stale := errors.AsType[memberStaleChoiceError](err); stale {
+		return false
+	}
+	if _, outage := errors.AsType[memberUnavailableError](err); outage {
+		return false
+	}
+	if _, access := errors.AsType[agentAccessError](err); access {
+		return false
+	}
+	if _, ok := errors.AsType[agentCredentialError](err); ok {
+		return true
+	}
+	_, ok := errors.AsType[memberCredentialError](err)
+	return ok
+}
+
+// memberUpstreamResource returns the upstream resource identifier recorded for
+// a proxied member, matching resolveUpstreamResource for recovery validation.
+func (s *Service) memberUpstreamResource(ctx context.Context, member metaMember) string {
+	if member.tunneledServerID.Valid {
+		return member.tunneledResourceIdentifier
+	}
+	if member.remoteServerID.Valid {
+		remote, err := remotemcp_repo.New(s.db).GetServerByID(ctx, remotemcp_repo.GetServerByIDParams{
+			ID:        member.remoteServerID.UUID,
+			ProjectID: member.projectID,
+		})
+		if err == nil {
+			return remote.Url
+		}
+	}
+	return ""
+}
+
 // dialMetaMember routes a member for dispatch and counts the routing outcome.
 func (s *Service) dialMetaMember(
 	ctx context.Context,
@@ -409,6 +465,22 @@ func (s *Service) dialMetaMember(
 	callerIdentity string,
 ) (memberDial, error) {
 	dial, backend, err := s.routeMetaMember(ctx, logger, gate, member, callerIdentity, true)
+	if err != nil && isMemberPersonalRecoveryCause(err) && memberCanRecoverPersonal(ctx, gate, member) {
+		if recErr, ok := s.memberConnectionRecoveryError(ctx, gate, member, s.memberUpstreamResource(ctx, member)); ok {
+			if _, memberErr := errors.AsType[*metaMemberError](recErr); memberErr {
+				err = recErr
+			}
+		}
+	}
+	if err == nil && memberCanRecoverPersonal(ctx, gate, member) {
+		upstreamResource := dial.provider
+		if dial.tunneled {
+			upstreamResource = member.tunneledResourceIdentifier
+		}
+		dial.recoverPersonal = func(callCtx context.Context) (error, bool) {
+			return s.memberConnectionRecoveryError(callCtx, gate, member, upstreamResource)
+		}
+	}
 	dial.fix = sync.OnceValue(func() memberFix {
 		fix := gate.memberFix(member)
 		if fix.url == "" && dial.configuredHeaders && member.authClient != nil && member.authClient.headersOnly() && codeConnectAvailable(&gate) {
@@ -506,7 +578,7 @@ func (s *Service) routeMetaMember(
 		if member.authClient != nil && member.authClient.outcome != authClientLegacy {
 			authHeaders = member.authClient.headers
 		}
-		return memberDial{anonymous: upstreamToken == "", clientCredential: routed.CredentialOwner == remotesessions.CredentialOwnerSelf, fix: nil, oauthSignIn: agentOAuthSignIn(member, tokens), sessionKey: memberSessionKey([]any{remoteServer.Url, remoteServer.TransportType, headers, authHeaders}, upstreamToken), credential: memberServedCredential(gate, member, routed), tunneled: false, configuredHeaders: memberSendsConfiguredCredential(headers, clientHeaders, clientSelected), provider: remoteServer.Url, serviceClient: ownSignInClient(routed), build: func(context.Context) (*proxy.Proxy, error) {
+		return memberDial{anonymous: upstreamToken == "", clientCredential: routed.CredentialOwner == remotesessions.CredentialOwnerSelf, fix: nil, oauthSignIn: agentOAuthSignIn(member, tokens), sessionKey: memberSessionKey([]any{remoteServer.Url, remoteServer.TransportType, headers, authHeaders}, upstreamToken), credential: memberServedCredential(gate, member, routed), tunneled: false, configuredHeaders: memberSendsConfiguredCredential(headers, clientHeaders, clientSelected), provider: remoteServer.Url, serviceClient: ownSignInClient(routed), recoverPersonal: nil, build: func(context.Context) (*proxy.Proxy, error) {
 			// No WWW-Authenticate relay: a member's auth challenge must not
 			// invite the client to re-authenticate against the meta MCP.
 			p := s.remoteProxyManager.Build(logger, &remoteServer, member.serverID.String(), headers, member.visibility, gate.organizationID, member.projectID.String(), upstreamToken, "", nil, options...)
@@ -536,7 +608,7 @@ func (s *Service) routeMetaMember(
 		// Per-member namespace so one caller's handshake, calls, and DELETE
 		// land on one tunnel gateway.
 		affinity := tunnelrouting.HashedClientAffinityKey("meta:"+member.serverID.String(), callerIdentity)
-		return memberDial{anonymous: upstreamToken == "", clientCredential: routed.CredentialOwner == remotesessions.CredentialOwnerSelf, fix: nil, oauthSignIn: agentOAuthSignIn(member, tokens), sessionKey: memberSessionKey([]any{member.tunneledResourceIdentifier, affinity}, upstreamToken), credential: memberServedCredential(gate, member, routed), tunneled: true, configuredHeaders: false, provider: "", serviceClient: ownSignInClient(routed), build: func(ctx context.Context) (*proxy.Proxy, error) {
+		return memberDial{anonymous: upstreamToken == "", clientCredential: routed.CredentialOwner == remotesessions.CredentialOwnerSelf, fix: nil, oauthSignIn: agentOAuthSignIn(member, tokens), sessionKey: memberSessionKey([]any{member.tunneledResourceIdentifier, affinity}, upstreamToken), credential: memberServedCredential(gate, member, routed), tunneled: true, configuredHeaders: false, provider: "", serviceClient: ownSignInClient(routed), recoverPersonal: nil, build: func(ctx context.Context) (*proxy.Proxy, error) {
 			p, berr := s.tunnelManager.buildProxy(ctx, logger, buildProxyParams{
 				ClientAffinityKey:  affinity,
 				ProjectID:          member.projectID,
@@ -726,7 +798,7 @@ func (s *Service) executeProxiedMemberTool(
 		s.recordDialFailure(ctx, gate, member, err)
 		if _, ok := errors.AsType[*metaMemberError](err); ok {
 			message := s.callFailureMessage(ctx, logger, gate, member, err)
-			failMetaToolCall(ctx, metaMemberErrorStatus(err), message)
+			failMetaToolCall(ctx, metaMemberErrorStatus(err), memberTelemetryFailureMessage(err, message))
 			return marshalMetaMemberFailure(ctx, logger, req.ID, err, message)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "dial meta MCP member").LogError(ctx, logger)
@@ -749,7 +821,7 @@ func (s *Service) executeProxiedMemberTool(
 		}
 		// The gateway logs this failure only when the call never reached
 		// the upstream interceptor.
-		failMetaToolCall(ctx, metaMemberErrorStatus(err), err.Error())
+		failMetaToolCall(ctx, metaMemberErrorStatus(err), memberTelemetryFailureMessage(err, err.Error()))
 		return marshalMetaMemberFailure(ctx, logger, req.ID, err, err.Error())
 	}
 
@@ -832,6 +904,9 @@ func (s *Service) describeMetaMember(ctx context.Context, logger *slog.Logger, g
 		// A cached catalog holds what was approved at connect time, which
 		// never includes local tools; they are offered as on a live listing.
 		return withLocalToolsInCatalog(catalog, s.memberLocalTools(ctx, logger, gate.organizationID, member)), nil
+	}
+	if member.backend == metaMemberBackendPlatform {
+		return s.describePlatformMember(ctx, logger, gate, member)
 	}
 	if member.backend == metaMemberBackendHosted {
 		return s.describeMemberToolset(ctx, logger, gate, member)

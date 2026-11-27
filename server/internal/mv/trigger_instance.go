@@ -29,6 +29,7 @@ func BuildTriggerInstanceView(instance triggerrepo.TriggerInstance, webhookURL *
 		DefinitionSlug: instance.DefinitionSlug,
 		Name:           instance.Name,
 		EnvironmentID:  conv.Ternary(instance.EnvironmentID.Valid, conv.PtrEmpty(instance.EnvironmentID.UUID.String()), nil),
+		AuthClientID:   conv.Ternary(instance.AuthClientID.Valid, conv.PtrEmpty(instance.AuthClientID.UUID.String()), nil),
 		TargetKind:     instance.TargetKind,
 		TargetRef:      instance.TargetRef,
 		TargetDisplay:  instance.TargetDisplay,

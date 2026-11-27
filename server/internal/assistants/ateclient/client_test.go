@@ -313,8 +313,14 @@ type fakeControlServer struct {
 	auth      chan string
 }
 
-func (s *fakeControlServer) GetAtespace(_ context.Context, _ *ateapiv1.GetAtespaceRequest) (*ateapiv1.Atespace, error) {
-	return nil, status.Error(codes.NotFound, "atespace created lazily") //nolint:wrapcheck // gRPC server handler returns status.Error directly.
+func (s *fakeControlServer) GetAtespace(_ context.Context, req *ateapiv1.GetAtespaceRequest) (*ateapiv1.Atespace, error) {
+	name := req.GetAtespace().GetName()
+	if name == "missing-space" {
+		return nil, status.Error(codes.NotFound, "atespace not found") //nolint:wrapcheck // gRPC server handler returns status.Error directly.
+	}
+	return &ateapiv1.Atespace{
+		Metadata: &ateapiv1.ResourceMetadata{Name: name, Uid: "space-" + name},
+	}, nil
 }
 
 func (s *fakeControlServer) GetActor(ctx context.Context, req *ateapiv1.GetActorRequest) (*ateapiv1.Actor, error) {
@@ -354,16 +360,57 @@ func (s *fakeControlServer) SuspendActor(ctx context.Context, req *ateapiv1.Susp
 	}, nil
 }
 
+func (s *fakeControlServer) ResumeActor(ctx context.Context, req *ateapiv1.ResumeActorRequest) (*ateapiv1.ResumeActorResponse, error) {
+	deadline, _ := ctx.Deadline()
+	s.deadlines <- deadline
+	if req.GetActor().GetName() == "crashed" {
+		return nil, status.Error(codes.FailedPrecondition, "sensitive backend resume detail") //nolint:wrapcheck // gRPC server handler returns status.Error directly.
+	}
+	return &ateapiv1.ResumeActorResponse{
+		Actor: &ateapiv1.Actor{
+			Metadata: &ateapiv1.ResourceMetadata{
+				Atespace: req.GetActor().GetAtespace(),
+				Name:     req.GetActor().GetName(),
+				Uid:      "uid-1",
+			},
+			Status: &ateapiv1.ActorStatus{
+				State: ateapiv1.ActorState_ACTOR_STATE_RUNNING,
+			},
+		},
+		Resumed: true,
+	}, nil
+}
+
+func (s *fakeControlServer) RevertActor(ctx context.Context, req *ateapiv1.RevertActorRequest) (*ateapiv1.RevertActorResponse, error) {
+	deadline, _ := ctx.Deadline()
+	s.deadlines <- deadline
+	if req.GetActor().GetName() == "missing" {
+		return nil, status.Error(codes.NotFound, "sensitive backend revert detail") //nolint:wrapcheck // gRPC server handler returns status.Error directly.
+	}
+	return &ateapiv1.RevertActorResponse{
+		Actor: &ateapiv1.Actor{
+			Metadata: &ateapiv1.ResourceMetadata{
+				Atespace: req.GetActor().GetAtespace(),
+				Name:     req.GetActor().GetName(),
+				Uid:      "uid-1",
+			},
+			Status: &ateapiv1.ActorStatus{
+				State: ateapiv1.ActorState_ACTOR_STATE_SUSPENDED,
+			},
+		},
+	}, nil
+}
+
 func TestControlClientHonorsAPIServerNameAndDeadlines(t *testing.T) {
 	t.Parallel()
 	// Certificate is valid ONLY for api.ate.test (not 127.0.0.1), so dialing
 	// 127.0.0.1:<port> succeeds only if APIServerName is passed as the gRPC
 	// authority and used in TLS SNI / peer certificate verification.
-	cfg, cert, pool := testConfig(t, "api.ate.test")
+	cfg, cert, _ := testConfig(t, "api.ate.test")
 
 	sni := make(chan string, 1)
-	deadlines := make(chan time.Time, 4)
-	auth := make(chan string, 4)
+	deadlines := make(chan time.Time, 8)
+	auth := make(chan string, 8)
 
 	server := grpc.NewServer(grpc.Creds(credentials.NewTLS(&tls.Config{
 		GetConfigForClient: func(hello *tls.ClientHelloInfo) (*tls.Config, error) {
@@ -373,9 +420,14 @@ func TestControlClientHonorsAPIServerNameAndDeadlines(t *testing.T) {
 			}
 			return nil, nil
 		},
+		VerifyConnection: func(cs tls.ConnectionState) error {
+			if len(cs.PeerCertificates) > 0 {
+				return errors.New("control API must not receive router client certificate")
+			}
+			return nil
+		},
 		Certificates: []tls.Certificate{cert},
-		ClientCAs:    pool,
-		ClientAuth:   tls.RequireAndVerifyClientCert,
+		ClientAuth:   tls.RequestClientCert,
 		MinVersion:   tls.VersionTLS12,
 	})))
 	ateapiv1.RegisterControlServer(server, &fakeControlServer{deadlines: deadlines, auth: auth})
@@ -421,6 +473,38 @@ func TestControlClientHonorsAPIServerNameAndDeadlines(t *testing.T) {
 	require.GreaterOrEqual(t, remaining, 179*time.Second)
 	require.LessOrEqual(t, remaining, suspendRPCTimeout)
 
+	// ResumeActor gets the 2-minute budget and preserves sanitized status codes.
+	_, err = client.ResumeActor(t.Context(), &ateapiv1.ResumeActorRequest{
+		Actor: &ateapiv1.ObjectRef{Atespace: "test-space", Name: "actor-one"},
+	})
+	require.NoError(t, err)
+	remaining = time.Until(<-deadlines)
+	require.GreaterOrEqual(t, remaining, 119*time.Second)
+	require.LessOrEqual(t, remaining, resumeRPCTimeout)
+
+	_, err = client.ResumeActor(t.Context(), &ateapiv1.ResumeActorRequest{
+		Actor: &ateapiv1.ObjectRef{Atespace: "test-space", Name: "crashed"},
+	})
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+	require.NotContains(t, err.Error(), "sensitive backend resume detail")
+	<-deadlines
+
+	// RevertActor gets the 2-minute budget and preserves sanitized status codes.
+	_, err = client.RevertActor(t.Context(), &ateapiv1.RevertActorRequest{
+		Actor: &ateapiv1.ObjectRef{Atespace: "test-space", Name: "actor-one"},
+	})
+	require.NoError(t, err)
+	remaining = time.Until(<-deadlines)
+	require.GreaterOrEqual(t, remaining, 119*time.Second)
+	require.LessOrEqual(t, remaining, revertRPCTimeout)
+
+	_, err = client.RevertActor(t.Context(), &ateapiv1.RevertActorRequest{
+		Actor: &ateapiv1.ObjectRef{Atespace: "test-space", Name: "missing"},
+	})
+	require.Equal(t, codes.NotFound, status.Code(err))
+	require.NotContains(t, err.Error(), "sensitive backend revert detail")
+	<-deadlines
+
 	// Earlier caller deadline still wins over the suspend budget.
 	callerCtx, cancel := context.WithTimeout(t.Context(), time.Second)
 	defer cancel()
@@ -435,12 +519,11 @@ func TestControlClientHonorsAPIServerNameAndDeadlines(t *testing.T) {
 
 func TestControlClientRejectsMismatchedAPIServerName(t *testing.T) {
 	t.Parallel()
-	cfg, cert, pool := testConfig(t, "api.ate.test")
+	cfg, cert, _ := testConfig(t, "api.ate.test")
 
 	server := grpc.NewServer(grpc.Creds(credentials.NewTLS(&tls.Config{
 		Certificates: []tls.Certificate{cert},
-		ClientCAs:    pool,
-		ClientAuth:   tls.RequireAndVerifyClientCert,
+		ClientAuth:   tls.RequestClientCert,
 		MinVersion:   tls.VersionTLS12,
 	})))
 	ateapiv1.RegisterControlServer(server, &fakeControlServer{
@@ -461,6 +544,107 @@ func TestControlClientRejectsMismatchedAPIServerName(t *testing.T) {
 		_ = client.Close()
 	}
 	require.Error(t, err)
+
+	// Missing pre-created atespace fails startup clearly.
+	missingCfg := cfg
+	missingCfg.APIServerName = "api.ate.test"
+	missingCfg.Atespace = "missing-space"
+	missingClient, err := New(t.Context(), missingCfg)
+	if missingClient != nil {
+		_ = missingClient.Close()
+	}
+	require.ErrorContains(t, err, `ATE atespace "missing-space" does not exist`)
+}
+
+func TestControlAPIPresentsNoClientCertWhileRouterRequiresClientCert(t *testing.T) {
+	t.Parallel()
+	cfg, cert, pool := testConfig(t, "api.ate.test")
+
+	apiCertSeen := make(chan int, 2)
+	apiServer := grpc.NewServer(grpc.Creds(credentials.NewTLS(&tls.Config{
+		Certificates: []tls.Certificate{cert},
+		ClientAuth:   tls.RequestClientCert,
+		MinVersion:   tls.VersionTLS12,
+		VerifyConnection: func(cs tls.ConnectionState) error {
+			select {
+			case apiCertSeen <- len(cs.PeerCertificates):
+			default:
+			}
+			if len(cs.PeerCertificates) > 0 {
+				return errors.New("control API rejects any presented client certificate")
+			}
+			return nil
+		},
+	})))
+	ateapiv1.RegisterControlServer(apiServer, &fakeControlServer{
+		deadlines: make(chan time.Time, 4),
+		auth:      make(chan string, 4),
+	})
+	apiLis, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	go func() { _ = apiServer.Serve(apiLis) }()
+	defer apiServer.Stop()
+
+	routerCertCount := make(chan int, 2)
+	routerServer := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.TLS != nil {
+			select {
+			case routerCertCount <- len(r.TLS.PeerCertificates):
+			default:
+			}
+		}
+		hijacker, ok := w.(http.Hijacker)
+		if !ok {
+			t.Error("response writer cannot hijack")
+			return
+		}
+		conn, rw, hijackErr := hijacker.Hijack()
+		if hijackErr != nil {
+			t.Error(hijackErr)
+			return
+		}
+		defer func() { _ = conn.Close() }()
+		_, _ = rw.WriteString("HTTP/1.1 200 Connection Established\r\n\r\n")
+		_ = rw.Flush()
+		_, _ = http.ReadRequest(rw.Reader)
+		_, _ = rw.WriteString("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok")
+		_ = rw.Flush()
+	}))
+	routerServer.TLS = &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		ClientCAs:    pool,
+		ClientAuth:   tls.RequireAndVerifyClientCert,
+		MinVersion:   tls.VersionTLS12,
+	}
+	routerServer.StartTLS()
+	defer routerServer.Close()
+
+	cfg.APIAddress = apiLis.Addr().String()
+	cfg.RouterAddress = strings.TrimPrefix(routerServer.URL, "https://")
+	cfg.RouterServerName = "api.ate.test"
+
+	client, err := New(t.Context(), cfg)
+	require.NoError(t, err)
+	defer func() { _ = client.Close() }()
+
+	_, err = client.GetActor(t.Context(), &ateapiv1.GetActorRequest{
+		Actor: &ateapiv1.ObjectRef{Atespace: "test-space", Name: "actor-one"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, 0, <-apiCertSeen, "control API must not receive a client certificate")
+
+	hc, err := client.ActorHTTPClient("actor-one", 8081)
+	require.NoError(t, err)
+	defer hc.CloseIdleConnections()
+	endpoint, err := ActorEndpoint("actor-one", 8081)
+	require.NoError(t, err)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, endpoint, nil)
+	require.NoError(t, err)
+	resp, err := hc.Do(req)
+	require.NoError(t, err)
+	_ = resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Equal(t, 1, <-routerCertCount, "router must receive the mTLS client certificate")
 }
 
 func TestTokenBoundsAndRotation(t *testing.T) {

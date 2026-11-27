@@ -3,6 +3,7 @@ package assistants
 import (
 	"context"
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
@@ -52,8 +53,11 @@ type KitATECompositionConfig struct {
 	// Atespace is the target ATE namespace.
 	Atespace string
 
-	// Template is the target ATE ActorTemplate name.
+	// Template is the target ATE ActorTemplate base name (versioned by image digest).
 	Template string
+
+	// WorkerSelector holds the label selector applied to created ActorTemplates.
+	WorkerSelector map[string]string
 
 	// EgressHosts lists operator-approved extra DNS hostnames for actor egress.
 	EgressHosts []string
@@ -69,19 +73,20 @@ func validateKitATEComposition(c KitATECompositionConfig) error {
 	if !c.Enabled {
 		return errors.New("assistant ATE runtime is not enabled")
 	}
-	for _, name := range []string{c.Atespace, c.Template} {
-		if len(name) > maxATEDNSLabelLen || !kitATENamePattern.MatchString(name) {
-			return errors.New("assistant ATE requires explicit DNS-label atespace and template names")
-		}
+	if len(c.Atespace) > maxATEDNSLabelLen || !kitATENamePattern.MatchString(c.Atespace) {
+		return errors.New("assistant ATE requires an explicit DNS-label atespace name")
+	}
+	if len(c.Template) > maxATETemplateBaseLen || !kitATENamePattern.MatchString(c.Template) {
+		return errors.New("assistant ATE requires an explicit DNS-label template base name (max 50 chars)")
+	}
+	if err := validateKitATEWorkerSelector(c.WorkerSelector); err != nil {
+		return err
 	}
 	if c.nativeIdentity != nil || c.WorkloadSubject != "" || c.WorkloadAssertionFile != "" || c.Network != "" || c.ExtraCACertFile != "" || c.AllowInsecureInference {
 		return errors.New("assistant ATE rejects GKE identity, operator assertions, and local network or TLS overrides")
 	}
-	if !kitGKEExplicitImage(c.Image) {
-		return errors.New("assistant ATE requires an explicit non-latest image tag or digest")
-	}
-	if !c.PersistedMCP {
-		return errors.New("assistant ATE requires persisted assistant MCP attachments")
+	if _, err := kitATEImageDigest(c.Image); err != nil {
+		return err
 	}
 	return validateKitComposition(c.KitLocalCompositionConfig)
 }
@@ -109,6 +114,7 @@ func (s *ServiceCore) InstallKitATERuntime(ctx context.Context, c KitATEComposit
 		Image:              c.Image,
 		Atespace:           c.Atespace,
 		Template:           c.Template,
+		WorkerSelector:     c.WorkerSelector,
 		ServerURL:          s.serverURL,
 		Client:             client,
 		EgressHosts:        append(slices.Clone(c.EgressHosts), c.Origin.Hostname(), s.serverURL.Hostname()),
@@ -116,8 +122,13 @@ func (s *ServiceCore) InstallKitATERuntime(ctx context.Context, c KitATEComposit
 		Token:              s.kitATEToken,
 		Protocol:           s.kitATEProtocolFactory(c),
 		Lifecycle:          s.kitATELifecycle,
+		ThreadLifecycle:    s.kitATEThreadLifecycle,
+		Store:              s.kitATEActorStore(),
 		Revoke:             s.kitATERevoke,
 		CheckSettled:       s.kitATECheckSettled,
+		CheckThreadSettled: s.kitATECheckThreadSettled,
+		ClearThreadSession: s.kitATEClearThreadSession,
+		Now:                nil,
 		HelperPollInterval: 0,
 	})
 	if err != nil {
@@ -131,7 +142,7 @@ func (s *ServiceCore) InstallKitATERuntime(ctx context.Context, c KitATEComposit
 	}
 
 	s.newAssistantRuntimeEligible = func(ctx context.Context, tx pgx.Tx, assistant assistantRecord) (bool, error) {
-		return s.kitGKEAssistantEligible(ctx, tx, assistant, c.KitLocalCompositionConfig)
+		return s.kitAssistantEligible(ctx, tx, assistant, c.OrgHosts)
 	}
 	return nil
 }
@@ -192,6 +203,39 @@ func (s *ServiceCore) kitATECheckSettled(ctx context.Context, r assistantRuntime
 	}
 	if !busy.Valid || busy.Bool {
 		return errors.New("ATE suspension requires settled assistant events and wakes")
+	}
+	return nil
+}
+
+func (s *ServiceCore) kitATECheckThreadSettled(ctx context.Context, r assistantRuntimeRecord, threadID, excludeEventID uuid.UUID) error {
+	if r.LifecycleTx == nil || r.RuntimeVersion != 3 || r.Backend != runtimeBackendATE || threadID == uuid.Nil {
+		return ErrKitRuntimeBinding
+	}
+	busy, err := assistantrepo.New(r.LifecycleTx).ThreadHasUnsettledEvents(ctx, assistantrepo.ThreadHasUnsettledEventsParams{
+		ProjectID:      r.ProjectID,
+		AssistantID:    r.AssistantID,
+		ThreadID:       threadID,
+		ExcludeEventID: excludeEventID,
+	})
+	if err != nil {
+		return fmt.Errorf("check ATE thread unsettled events: %w", err)
+	}
+	if busy {
+		return errors.New("ATE thread suspension requires settled thread events")
+	}
+	return nil
+}
+
+func (s *ServiceCore) kitATEClearThreadSession(ctx context.Context, r assistantRuntimeRecord, threadID uuid.UUID) error {
+	if r.LifecycleTx == nil || r.RuntimeVersion != 3 || r.Backend != runtimeBackendATE || threadID == uuid.Nil {
+		return ErrKitRuntimeBinding
+	}
+	if _, err := assistantrepo.New(r.LifecycleTx).DeleteKitRuntimeSessionForThread(ctx, assistantrepo.DeleteKitRuntimeSessionForThreadParams{
+		ProjectID: uuid.NullUUID{UUID: r.ProjectID, Valid: true},
+		RuntimeID: uuid.NullUUID{UUID: r.ID, Valid: true},
+		ThreadID:  uuid.NullUUID{UUID: threadID, Valid: true},
+	}); err != nil {
+		return fmt.Errorf("delete replaced ATE thread session: %w", err)
 	}
 	return nil
 }
@@ -285,9 +329,6 @@ func (s *ServiceCore) validateKitATEBootstrapWorkload(ctx context.Context, r ass
 
 func (s *ServiceCore) kitATELifecycle(ctx context.Context, r assistantRuntimeRecord, operation func(context.Context, assistantRuntimeRecord) error) error {
 	if r.LifecycleTx != nil {
-		if _, ok := ctx.Value(kitAdmissionProgressKey{}).(kitAdmissionProgressWriter); !ok {
-			return ErrKitRuntimeBinding
-		}
 		return operation(ctx, r)
 	}
 	if existing, ok := ctx.Value(kitLifecycleTxKey{}).(pgx.Tx); ok {
@@ -323,16 +364,7 @@ func (s *ServiceCore) kitATELifecycle(ctx context.Context, r assistantRuntimeRec
 
 	ctx = context.WithValue(ctx, runtimeSwitchQueriesKey{}, q)
 	ctx = context.WithValue(ctx, kitLifecycleTxKey{}, r.LifecycleTx)
-	ctx = context.WithValue(ctx, kitAdmissionProgressKey{}, kitAdmissionProgressWriter(func(progressCtx context.Context, raw []byte) error {
-		if err := q.UpdateAssistantRuntimeMetadata(progressCtx, assistantrepo.UpdateAssistantRuntimeMetadataParams{
-			ProjectID:           r.ProjectID,
-			RuntimeID:           r.ID,
-			BackendMetadataJson: raw,
-		}); err != nil {
-			return fmt.Errorf("update Kit ATE admission progress: %w", err)
-		}
-		return tx.Publish(progressCtx)
-	}))
+	ctx = context.WithValue(ctx, kitATEPhasePublisherKey{}, kitATEPhasePublisher(tx.Publish))
 
 	operationErr := operation(ctx, r)
 	commitCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), ateLifecycleCommitTimeout)
@@ -343,13 +375,62 @@ func (s *ServiceCore) kitATELifecycle(ctx context.Context, r assistantRuntimeRec
 	return operationErr
 }
 
+// kitATEThreadLifecycle serializes only one (runtime, thread) actor row via a
+// per-thread session advisory lock and FOR UPDATE on assistant_ate_actors,
+// leaving sibling threads of the same assistant unblocked.
+func (s *ServiceCore) kitATEThreadLifecycle(ctx context.Context, r assistantRuntimeRecord, threadID uuid.UUID, operation func(context.Context, assistantRuntimeRecord) error) error {
+	if threadID == uuid.Nil || r.ID == uuid.Nil || r.ProjectID == uuid.Nil || r.AssistantID == uuid.Nil {
+		return ErrKitRuntimeBinding
+	}
+	if r.LifecycleTx != nil {
+		return operation(ctx, r)
+	}
+
+	tx, release, err := beginKitATEThreadLifecycleTransaction(ctx, s.db, r.AssistantID, r.ID, threadID)
+	if err != nil {
+		return fmt.Errorf("begin Kit ATE thread lifecycle: %w", err)
+	}
+	defer release()
+
+	q := assistantrepo.New(tx)
+	row, err := q.GetAssistantRuntime(ctx, assistantrepo.GetAssistantRuntimeParams{ProjectID: r.ProjectID, ID: r.ID})
+	if err != nil {
+		return fmt.Errorf("reload Kit ATE thread lifecycle: %w", err)
+	}
+	if row.AssistantID != r.AssistantID || row.RuntimeVersion != 3 || row.Backend != runtimeBackendATE {
+		return ErrKitRuntimeBinding
+	}
+	r.RuntimeVersion, r.Backend, r.State = row.RuntimeVersion, row.Backend, row.State
+	r.BackendMetadataJSON, r.WarmUntil, r.LifecycleTx = row.BackendMetadataJson, row.WarmUntil, tx
+
+	assistant, err := q.GetAssistantIgnoringDeleted(ctx, assistantrepo.GetAssistantIgnoringDeletedParams{
+		AssistantID: r.AssistantID,
+		ProjectID:   r.ProjectID,
+	})
+	if err != nil {
+		return fmt.Errorf("read Kit ATE thread lifecycle assistant: %w", err)
+	}
+	r.Retired = row.Ended || row.Deleted || assistant.DeletedAt.Valid
+
+	ctx = context.WithValue(ctx, runtimeSwitchQueriesKey{}, q)
+	ctx = context.WithValue(ctx, kitATEPhasePublisherKey{}, kitATEPhasePublisher(tx.Publish))
+
+	operationErr := operation(ctx, r)
+	commitCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), ateLifecycleCommitTimeout)
+	defer cancel()
+	if err := tx.Commit(commitCtx); err != nil {
+		return errors.Join(operationErr, fmt.Errorf("commit Kit ATE thread lifecycle: %w", err))
+	}
+	return operationErr
+}
+
 func (s *ServiceCore) kitATEToken(ctx context.Context, r assistantRuntimeRecord, threadID uuid.UUID) (string, error) {
 	if threadID == uuid.Nil || r.LifecycleTx == nil {
 		return "", ErrKitRuntimeBinding
 	}
 	root, err := s.loadKitGatewayTokenAlreadyLocked(ctx, r)
 	if errors.Is(err, ErrKitGatewayTokenNotFound) {
-		root, err = s.rotateKitGatewayTokenAlreadyLocked(ctx, r)
+		root, err = s.ensureKitATEGatewayRootToken(ctx, r)
 	}
 	if err != nil {
 		return "", err
@@ -357,13 +438,58 @@ func (s *ServiceCore) kitATEToken(ctx context.Context, r assistantRuntimeRecord,
 	return kitATEActorToken(root, threadID.String()), nil
 }
 
-func (s *ServiceCore) kitATECompositionBootstrap(c KitATECompositionConfig) func(context.Context, assistantRuntimeRecord, uuid.UUID, string) (KitLocalBootstrap, error) {
-	return func(ctx context.Context, r assistantRuntimeRecord, threadID uuid.UUID, actorName string) (KitLocalBootstrap, error) {
+// ensureKitATEGatewayRootToken initializes the runtime's encrypted root gateway
+// secret once using ON CONFLICT DO NOTHING so concurrent sibling threads
+// converge on the same root secret without overwriting each other or taking an
+// assistant-wide exclusive lock.
+func (s *ServiceCore) ensureKitATEGatewayRootToken(ctx context.Context, r assistantRuntimeRecord) (string, error) {
+	if s.encryptionClient == nil {
+		return "", errKitGatewayCredential
+	}
+	secret := make([]byte, 32)
+	if _, err := rand.Read(secret); err != nil {
+		return "", fmt.Errorf("generate ATE root gateway secret: %w", err)
+	}
+	token := base64.RawURLEncoding.EncodeToString(secret)
+	plain, err := json.Marshal(kitGatewayTokenEnvelope{
+		ProjectID:   r.ProjectID,
+		AssistantID: r.AssistantID,
+		RuntimeID:   r.ID,
+		Token:       token,
+	})
+	if err != nil {
+		return "", fmt.Errorf("encode ATE root gateway secret: %w", err)
+	}
+	encrypted, err := s.encryptionClient.Encrypt(plain)
+	if err != nil {
+		return "", errKitGatewayCredential
+	}
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return "", fmt.Errorf("begin ATE root gateway credential tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
+	if _, err := assistantrepo.New(tx).StoreKitGatewayCredentialIfAbsent(ctx, assistantrepo.StoreKitGatewayCredentialIfAbsentParams{
+		ProjectID:       r.ProjectID,
+		AssistantID:     r.AssistantID,
+		RuntimeID:       r.ID,
+		TokenCiphertext: encrypted,
+	}); err != nil {
+		return "", fmt.Errorf("store ATE root gateway credential: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return "", fmt.Errorf("commit ATE root gateway credential: %w", err)
+	}
+	return s.loadKitGatewayTokenAlreadyLocked(ctx, r)
+}
+
+func (s *ServiceCore) kitATECompositionBootstrap(c KitATECompositionConfig) func(context.Context, assistantRuntimeRecord, uuid.UUID, string, *KitWorkloadBinding) (KitLocalBootstrap, error) {
+	return func(ctx context.Context, r assistantRuntimeRecord, threadID uuid.UUID, actorName string, priorWorkload *KitWorkloadBinding) (KitLocalBootstrap, error) {
 		if threadID == uuid.Nil || len(actorName) > maxATEDNSLabelLen || !kitATENamePattern.MatchString(actorName) {
 			return KitLocalBootstrap{}, ErrKitRuntimeBinding
 		}
 		if r.LifecycleTx == nil {
-			return KitLocalBootstrap{}, errors.New("ATE bootstrap requires the runtime lifecycle lock")
+			return KitLocalBootstrap{}, errors.New("ATE bootstrap requires the thread lifecycle lock")
 		}
 		token, err := s.kitATEToken(ctx, r, threadID)
 		if err != nil {
@@ -375,11 +501,8 @@ func (s *ServiceCore) kitATECompositionBootstrap(c KitATECompositionConfig) func
 		if err := json.Unmarshal(r.BackendMetadataJSON, &metadata); err != nil || metadata.RuntimeID != r.ID || metadata.AssistantID != r.AssistantID || metadata.ProjectID != r.ProjectID || metadata.Atespace != c.Atespace || metadata.Template != c.Template {
 			return KitLocalBootstrap{}, ErrKitRuntimeBinding
 		}
-		if prior, ok := metadata.Threads[threadID.String()]; ok && prior.Workload != nil {
-			if prior.ActorName != actorName || prior.ActorUID == "" {
-				return KitLocalBootstrap{}, ErrKitRuntimeBinding
-			}
-			local.bootstrapWorkload = prior.Workload
+		if priorWorkload != nil {
+			local.bootstrapWorkload = priorWorkload
 		}
 		local.ateIdentity = &kitATEWorkloadIdentity{Atespace: c.Atespace, ActorName: actorName}
 		local.bootstrapGatewayToken = token
@@ -418,6 +541,6 @@ func (s *ServiceCore) kitATEProtocolFactory(c KitATECompositionConfig) func(cont
 		if err != nil {
 			return nil, err
 		}
-		return &kitConfiguredRuntimeProtocol{KitRuntimeProtocol: p, core: s}, nil
+		return &kitConfiguredRuntimeProtocol{KitRuntimeProtocol: p}, nil
 	}
 }

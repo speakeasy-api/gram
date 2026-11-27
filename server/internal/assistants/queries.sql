@@ -2104,3 +2104,168 @@ SELECT id FROM projects WHERE id = @project_id AND organization_id = @organizati
 -- Test fixture only: simulate a legacy row during nullable column expansion.
 UPDATE assistants SET reasoning_effort = NULL
 WHERE id = @assistant_id AND project_id = @project_id;
+
+-- name: GetAssistantATEActorByUID :one
+-- Uses assistant_ate_actors_actor_uid_key for tenant-scoped actor identity lookup.
+SELECT * FROM assistant_ate_actors
+WHERE organization_id = @organization_id AND project_id = @project_id
+  AND actor_uid = @actor_uid AND deleted IS FALSE;
+
+-- name: GetAssistantATEActorForThread :one
+SELECT * FROM assistant_ate_actors
+WHERE project_id = @project_id AND runtime_id = @runtime_id AND assistant_thread_id = @thread_id
+  AND deleted IS FALSE;
+
+-- name: LockAssistantATEActorForThread :one
+SELECT * FROM assistant_ate_actors
+WHERE project_id = @project_id AND runtime_id = @runtime_id AND assistant_thread_id = @thread_id
+  AND deleted IS FALSE
+FOR UPDATE;
+
+-- name: InsertAssistantATEActor :one
+INSERT INTO assistant_ate_actors (
+  organization_id, project_id, assistant_id, runtime_id, assistant_thread_id,
+  actor_name, actor_uid, state, configured, workload_binding_json, warm_until
+)
+SELECT a.organization_id, r.project_id, r.assistant_id, r.id, t.id,
+  @actor_name, @actor_uid, @state, @configured, @workload_binding_json, @warm_until
+FROM assistant_runtimes r
+JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
+JOIN assistant_threads t ON t.assistant_id = a.id AND t.project_id = a.project_id
+WHERE r.id = @runtime_id AND r.project_id = @project_id AND r.assistant_id = @assistant_id
+  AND t.id = @thread_id
+  AND r.runtime_version = 3 AND r.backend = 'ate' AND r.deleted IS FALSE AND r.ended IS FALSE
+  AND a.deleted IS FALSE AND t.deleted IS FALSE
+RETURNING *;
+
+-- name: UpdateAssistantATEActorBootstrap :one
+UPDATE assistant_ate_actors
+SET workload_binding_json = @workload_binding_json,
+    configured = @configured,
+    state = @state,
+    warm_until = @warm_until,
+    updated_at = clock_timestamp()
+WHERE project_id = @project_id AND id = @id AND deleted IS FALSE
+RETURNING *;
+
+-- name: UpdateAssistantATEActorState :one
+UPDATE assistant_ate_actors
+SET state = @state,
+    warm_until = @warm_until,
+    updated_at = clock_timestamp()
+WHERE project_id = @project_id AND id = @id AND deleted IS FALSE
+RETURNING *;
+
+-- name: SoftDeleteAssistantATEActor :execrows
+UPDATE assistant_ate_actors
+SET state = @retired_state,
+    workload_binding_json = NULL,
+    warm_until = NULL,
+    deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE project_id = @project_id AND id = @id AND deleted IS FALSE;
+
+-- name: ListAssistantATEActorsForRuntime :many
+SELECT * FROM assistant_ate_actors
+WHERE project_id = @project_id AND runtime_id = @runtime_id AND deleted IS FALSE
+ORDER BY created_at ASC, id ASC;
+
+-- name: CountAssistantATEActorsForRuntime :one
+SELECT count(*) FROM assistant_ate_actors
+WHERE project_id = @project_id AND runtime_id = @runtime_id AND deleted IS FALSE;
+
+-- name: AcquireAssistantSharedSessionLock :exec
+-- Shared companion to AcquireAssistantSessionLock: sibling ATE threads run concurrently
+-- while runtime-wide Stop/Reap/switch hold the exclusive assistant session lock.
+SELECT pg_advisory_lock_shared(hashtext('asst:' || @assistant_id::text));
+
+-- name: ReleaseAssistantSharedSessionLock :one
+SELECT pg_advisory_unlock_shared(hashtext('asst:' || @assistant_id::text))::boolean AS unlocked;
+
+-- name: AcquireATEThreadSessionLock :exec
+-- Pin the connection to serialize lifecycle phases for one ATE thread actor without locking sibling threads.
+SELECT pg_advisory_lock(hashtextextended('ate-thread:' || @runtime_id::text || ':' || @thread_id::text, 0));
+
+-- name: ReleaseATEThreadSessionLock :one
+SELECT pg_advisory_unlock(hashtextextended('ate-thread:' || @runtime_id::text || ':' || @thread_id::text, 0))::boolean AS unlocked;
+
+-- name: StoreKitGatewayCredentialIfAbsent :execrows
+INSERT INTO assistant_kit_gateway_credentials (project_id, assistant_id, runtime_id, token_ciphertext)
+SELECT r.project_id, r.assistant_id, r.id, @token_ciphertext
+FROM assistant_runtimes r
+JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
+WHERE r.id = @runtime_id AND r.project_id = @project_id AND r.assistant_id = @assistant_id
+  AND r.runtime_version = 3 AND r.deleted IS FALSE AND r.ended IS FALSE
+  AND a.deleted IS FALSE
+ON CONFLICT (runtime_id) DO NOTHING;
+
+-- name: ListRunningAssistantATEActorsPage :many
+-- Internal background reaper query (mirrors ListActiveAssistantRuntimes): scans
+-- live running ATE thread actors across active runtimes in keyset order so
+-- retired runtimes and warm siblings cannot starve draining actors. Every
+-- per-actor mutation remains tenant-scoped by (project_id, runtime_id, thread_id).
+SELECT a.*
+FROM assistant_ate_actors a
+JOIN assistant_runtimes r ON r.id = a.runtime_id AND r.project_id = a.project_id
+JOIN assistants asst ON asst.id = a.assistant_id AND asst.project_id = a.project_id
+WHERE a.state = @running_state AND a.deleted IS FALSE
+  AND r.runtime_version = 3 AND r.backend = 'ate' AND r.deleted IS FALSE AND r.ended IS FALSE
+  AND asst.deleted IS FALSE
+  AND a.id > @after_id
+ORDER BY a.id ASC
+LIMIT @limit_count;
+
+-- name: ThreadHasUnsettledEvents :one
+-- Pass uuid.Nil for exclude_event_id during periodic sweep, or the completing
+-- turn's event_id during post-turn drain checks.
+SELECT EXISTS (
+  SELECT 1 FROM assistant_thread_events e
+  WHERE e.project_id = @project_id AND e.assistant_id = @assistant_id
+    AND e.assistant_thread_id = @thread_id
+    AND e.id <> @exclude_event_id
+    AND e.deleted IS FALSE AND e.status NOT IN ('completed', 'failed', 'cancelled')
+) AS busy;
+
+-- name: DeleteKitRuntimeSessionForThread :execrows
+DELETE FROM assistant_kit_sessions
+WHERE project_id = @project_id AND runtime_id = @runtime_id AND assistant_thread_id = @thread_id;
+
+-- name: HasAssistantSlackPlatformGrant :one
+-- Reports whether this assistant's live bound agent holds a non-expired
+-- mcp:connect grant on the built-in assistant-slack platform toolset in this
+-- project, so the per-server fallback path exposes /platform/mcp/assistant-slack
+-- without needing a persisted per-assistant Slack toolset.
+SELECT EXISTS (
+    SELECT 1
+    FROM assistant_agent_bindings b
+    JOIN agents g
+      ON g.id = b.agent_id
+     AND g.organization_id = b.organization_id
+     AND g.project_id = b.project_id
+     AND g.deleted IS FALSE
+     AND g.revoked_at IS NULL
+     AND g.suspended_at IS NULL
+    JOIN principal_grants pg
+      ON pg.organization_id = b.organization_id
+     AND pg.principal_urn = concat('agent:', g.id)
+     AND pg.scope = 'mcp:connect'
+     AND pg.selectors->>'resource_kind' = 'mcp'
+     AND pg.selectors->>'resource_id' = @toolset_id::text
+     AND (pg.selectors->>'project_id' IS NULL OR pg.selectors->>'project_id' = b.project_id::text)
+     AND (pg.expires_at IS NULL OR pg.expires_at > clock_timestamp())
+    WHERE b.assistant_id = @assistant_id
+      AND b.project_id = @project_id
+      AND b.organization_id = @organization_id
+      AND b.deleted IS FALSE
+      AND NOT EXISTS (
+          SELECT 1
+          FROM principal_grants bpg
+          WHERE bpg.organization_id = b.organization_id
+            AND bpg.principal_urn = concat('agent:', g.id)
+            AND bpg.scope = 'mcp:blocked_connect'
+            AND bpg.selectors->>'resource_kind' = 'mcp'
+            AND bpg.selectors->>'resource_id' IN (@toolset_id::text, '*')
+            AND (bpg.selectors->>'project_id' IS NULL OR bpg.selectors->>'project_id' = b.project_id::text)
+            AND (bpg.expires_at IS NULL OR bpg.expires_at > clock_timestamp())
+      )
+)::boolean AS has_grant;
