@@ -60,11 +60,6 @@ func configureTranscripts(ctx context.Context, c *cli.Context, db *pgxpool.Pool,
 	if db == nil || writer == nil {
 		return none, fmt.Errorf("chat transcript shadow mode requires database and writer")
 	}
-	// Check compatibility before resolving projects, provisioning keys or enabling writes.
-	if err := transcriptstore.CheckSchema(ctx, db); err != nil {
-		//nolint:wrapcheck // CheckSchema's errors already name the schema check.
-		return none, err
-	}
 	queries := chatrepo.New(db)
 	organizations := make([]string, 0, len(projectIDs))
 	seen := make(map[string]struct{}, len(projectIDs))
