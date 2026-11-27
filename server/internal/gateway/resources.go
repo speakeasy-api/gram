@@ -120,6 +120,8 @@ func (tp *ToolProxy) doFunctionResource(
 		}
 	}
 
+	timeoutSeconds := functionTimeoutSeconds(plan.TimeoutSeconds)
+
 	req, err := tp.functions.ReadResource(ctx, functions.RunnerResourceReadRequest{
 		RunnerBaseRequest: functions.RunnerBaseRequest{
 			InvocationID:      invocationID,
@@ -132,6 +134,7 @@ func (tp *ToolProxy) doFunctionResource(
 			FunctionsAccessID: accessID,
 			Input:             input,
 			Environment:       payloadEnv,
+			TimeoutSeconds:    timeoutSeconds,
 		},
 		ResourceURN:  descriptor.URN,
 		ResourceURI:  descriptor.URI,
@@ -184,7 +187,7 @@ func (tp *ToolProxy) doFunctionResource(
 			return nil
 		},
 		RetryConfig:       functionRunnerRetryConfig(),
-		Timeout:           functionRunnerCallTimeout,
+		Timeout:           functionRunnerCallTimeout(timeoutSeconds),
 		DisableKeepAlives: true,
 		ID:                descriptor.ID,
 		Name:              descriptor.Name,

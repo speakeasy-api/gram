@@ -53,3 +53,28 @@ func TestCallToolPayload_OmitsMetaWhenUnknown(t *testing.T) {
 
 	require.JSONEq(t, `{"name": "whoami", "input": {}}`, string(encoded))
 }
+
+// TestRunnerPayloads_TimeoutWireShape pins the key the runner reads the
+// invocation limit from; its mirrored types decode the same literal.
+func TestRunnerPayloads_TimeoutWireShape(t *testing.T) {
+	t.Parallel()
+
+	encoded, err := json.Marshal(CallToolPayload{
+		ToolName:       "slow",
+		Input:          json.RawMessage(`{}`),
+		Environment:    nil,
+		Meta:           nil,
+		TimeoutSeconds: 90,
+	})
+	require.NoError(t, err)
+	require.JSONEq(t, `{"name": "slow", "input": {}, "timeout_seconds": 90}`, string(encoded))
+
+	encoded, err = json.Marshal(ReadResourcePayload{
+		URI:            "file:///slow",
+		Input:          json.RawMessage(`{}`),
+		Environment:    nil,
+		TimeoutSeconds: 90,
+	})
+	require.NoError(t, err)
+	require.JSONEq(t, `{"uri": "file:///slow", "input": {}, "timeout_seconds": 90}`, string(encoded))
+}

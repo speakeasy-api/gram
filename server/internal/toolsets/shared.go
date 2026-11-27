@@ -9,6 +9,9 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	deploymentsRepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/functions"
@@ -274,6 +277,7 @@ func (t *Toolsets) extractFunctionToolCallPlan(ctx context.Context, tool toolsRe
 		InputSchema:       tool.InputSchema,
 		Variables:         envconfig,
 		AuthInput:         &authInput,
+		TimeoutSeconds:    functionTimeoutSeconds(orgData.FunctionTimeoutSeconds),
 	}
 
 	return gateway.NewFunctionToolCallPlan(descriptor, plan), nil
@@ -399,9 +403,17 @@ func (t *Toolsets) extractFunctionResourceCallPlan(ctx context.Context, resource
 		URI:               resource.Uri,
 		MimeType:          mimeType,
 		Variables:         envvars,
+		TimeoutSeconds:    functionTimeoutSeconds(orgData.FunctionTimeoutSeconds),
 	}
 
 	return gateway.NewResourceFunctionCallPlan(descriptor, plan), nil
+}
+
+// functionTimeoutSeconds is the organization's limit on one function
+// invocation, read from the organization row the plan already loads.
+func functionTimeoutSeconds(stored pgtype.Int4) int {
+	seconds, _ := constants.EffectiveFunctionTimeoutSeconds(conv.FromPGInt4(stored))
+	return seconds
 }
 
 // trimFragment removes the fragment from a URL by trimming everything after '#'.

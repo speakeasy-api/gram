@@ -130,6 +130,10 @@ type FunctionToolCallPlan struct {
 	InputSchema       []byte                                            `json:"input_schema" yaml:"input_schema"`
 	Variables         map[string]*functions.ManifestVariableAttributeV0 `json:"variables" yaml:"variables"`
 	AuthInput         *functions.ManifestAuthInputAttributeV0           `json:"auth_input,omitempty" yaml:"auth_input,omitempty"`
+	// TimeoutSeconds is how long one invocation may run: the organization's
+	// limit or the platform default. A value outside the allowed range means
+	// the default.
+	TimeoutSeconds int `json:"timeout_seconds" yaml:"timeout_seconds"`
 }
 
 type PromptToolCallPlan struct {
@@ -157,6 +161,10 @@ type ResourceFunctionCallPlan struct {
 	URI               string   `json:"uri" yaml:"uri"`
 	MimeType          string   `json:"mime_type" yaml:"mime_type"`
 	Variables         []string `json:"variables" yaml:"variables"`
+	// TimeoutSeconds is how long one invocation may run: the organization's
+	// limit or the platform default. A value outside the allowed range means
+	// the default.
+	TimeoutSeconds int `json:"timeout_seconds" yaml:"timeout_seconds"`
 }
 
 type ToolKind string

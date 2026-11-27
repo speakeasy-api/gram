@@ -93,6 +93,10 @@ type RunnerBaseRequest struct {
 
 	Input       json.RawMessage
 	Environment map[string]string
+
+	// TimeoutSeconds is how long the invocation may run. The runner caps it
+	// at its own ceiling.
+	TimeoutSeconds int
 }
 
 type RunnerToolCallRequest struct {
