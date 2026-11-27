@@ -79,8 +79,8 @@ type healthServer struct {
 
 var healthServers = []healthServer{
 	{"github", "GitHub", "eng-github", "https://github-mcp.example.com/mcp", "https://github.com"},
-	{"linear", "Linear", "eng-linear", "https://linear-mcp.example.com/mcp", "https://linear.app"},
-	{"notion", "Notion", "eng-notion", "https://notion-mcp.example.com/mcp", "https://notion.com"},
+	{"linear", "Jira", "eng-jira", "https://jira-mcp.example.com/mcp", "https://jira.example.com"},
+	{"notion", "Confluence", "eng-confluence", "https://confluence-mcp.example.com/mcp", "https://confluence.example.com"},
 	{"wiki", "Internal Wiki", "internal-wiki", "https://wiki-mcp.example.com/mcp", ""},
 	{"support", "Support Desk", "support-desk", "https://support-mcp.example.com/mcp", "https://support.example.com"},
 }

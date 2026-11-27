@@ -43,6 +43,10 @@ export const FEATURE_FLAGS = {
   // Creating tool approval policies and the Tool approvals tab. The server
   // enforces the same key on policy create and update.
   toolApprovals: "risk-tool-approvals",
+  // UI-only rollout gate: the Project Assistant reads the user's recent
+  // dashboard activity, infers what they are doing when the dock opens, and
+  // sends the activity with each message. assistants.inferIntent is not gated.
+  assistantActivityContext: "assistant-activity-context",
   // UI-only rollout gate for the project homepage with the terminal-style
   // Project Assistant.
   terminalHome: "terminal-home",

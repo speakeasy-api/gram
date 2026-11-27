@@ -1,12 +1,12 @@
 # Chat transcript encryption (DNO-1573)
 
-Six `chat_messages` columns are protected fields: `content`, `content_raw`, `tool_calls`, `tool_outcome_notes`, `tool_call_summaries` and `storage_error`. `chat_message_transcripts` holds them encrypted with the organization's key. Only `transcriptstore.Transcripts` reads or changes them.
+Six `chat_messages` columns are protected fields: `content`, `content_raw`, `tool_calls`, `tool_outcome_notes`, `tool_call_summaries` and `storage_error`. `chat_message_transcripts` holds them encrypted with the organization's key. `transcriptstore.Transcripts` is their only writer and serves chat loads; other reads stay plaintext until rollout step 5.
 
 ## Modes
 
 - **Plaintext:** no transcript.
-- **Shadow** (`GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS`): plaintext and transcript. Reads and updates decrypt the transcript and compare it with the plaintext; a mismatch is logged by field size, never contents, and plaintext wins, as when there is no transcript. `Backfill` reseals from plaintext; run it before re-adding a removed project.
-- **Encrypted:** transcript only, plaintext columns empty; a missing transcript is an error, and an existing one is never resealed. Not configurable yet.
+- **Shadow** (`GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS`): plaintext and transcript. Reads and updates decrypt the transcript and compare it with the plaintext; a mismatch is logged by field size, never contents, and plaintext wins. `Backfill` reseals from plaintext; run it before re-adding a removed project.
+- **Encrypted:** transcript only, plaintext columns empty; inserts never write plaintext; a missing transcript is an error. Not configurable yet.
 
 ## Reads
 
@@ -18,9 +18,9 @@ SQL cannot match ciphertext, so for a listed project `SearchChat` (`chat.load` w
 
 ## Writes
 
-Writers call `Prepare` before `BEGIN`, so KMS runs outside the transaction; only the active key is cached. `Seal` encrypts a new message. `UpdateChatMessage` locks the row and transcript, applies the change in Go and writes every copy. A failure rolls back; a sanity-check mismatch is logged.
+Writers call `Prepare` before `BEGIN`, so KMS runs outside the transaction; only the active key is cached. `InsertChatMessages` and `UpdateChatMessage` write every copy the mode needs in one transaction. A failure rolls back; a sanity-check mismatch is logged.
 
-Transcripts with the legacy unkeyed `source_hash` are plaintext-equivalent and read as missing until `Backfill` reseals them.
+Legacy transcripts with an unkeyed `source_hash` read as missing until `Backfill` reseals them.
 
 `chat.transcript_shadow.read.messages` and `.update.checks` count every outcome.
 

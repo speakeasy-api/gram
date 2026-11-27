@@ -90,7 +90,7 @@ func (c *Codec) Encrypt(ctx context.Context, identity Identity, message Protecte
 }
 
 // Decrypt authenticates the payload and checks the expected row identities.
-// Every failure returns a zero Message, never partial plaintext.
+// Every failure returns zero ProtectedFields, never partial plaintext.
 func (c *Codec) Decrypt(ctx context.Context, identity Identity, ciphertext string) (ProtectedFields, error) {
 	if c == nil || c.encryptor == nil {
 		return ProtectedFields{}, errors.New("transcript codec is not initialized")
