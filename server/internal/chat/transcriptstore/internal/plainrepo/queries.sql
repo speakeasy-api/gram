@@ -357,10 +357,9 @@ ORDER BY cm.created_at DESC, cm.seq DESC, cm.id DESC
 LIMIT @lim::integer;
 
 -- name: UpsertCorrelatedChatMessage :one
--- Returns persisted metering fields and distinguishes initial inserts from
--- native-hook promotions, which must not emit another storage reading. A
--- project that keeps shadows (@open_shadows) gets no body back; the store
--- reads it from the shadow instead.
+-- Only its generated params and row types are used: they are the shape of
+-- Transcripts.UpsertCorrelatedChatMessage, which runs the repo query of the
+-- same name so every write seals and stores metadata. Do not call it.
 INSERT INTO chat_messages (
     id
   , chat_id
@@ -431,10 +430,7 @@ DO UPDATE SET
 WHERE chat_messages.project_id = EXCLUDED.project_id
   AND EXCLUDED.source IN ('codex', 'opencode', 'openclaw')
   AND chat_messages.source = 'litellm'
-RETURNING id,
-  (CASE WHEN @open_shadows::boolean THEN '' ELSE content END)::text AS content,
-  (CASE WHEN @open_shadows::boolean THEN NULL ELSE tool_calls END)::jsonb AS tool_calls,
-  model, user_id, external_user_id, source, user_agent, (xmax = 0) AS inserted;
+RETURNING id, content, tool_calls, model, user_id, external_user_id, source, user_agent, (xmax = 0) AS inserted;
 
 -- name: GetCorrelatedChatMessageBody :one
 -- The stored body of a correlated message, with its transcript, for a project
@@ -834,6 +830,20 @@ FROM bounded m
 LEFT JOIN chat_message_transcripts t ON t.source_hash IS NULL AND t.message_id = m.id AND t.project_id = m.project_id AND @open_shadows::boolean
 LEFT JOIN chat_messages src ON src.id = t.message_id
 ORDER BY m.created_at DESC, m.seq DESC;
+
+-- name: FindIndexedToolCallMessageID :one
+-- The newest assistant message of a chat whose sealed tool-call IDs include
+-- the tool call. Reads no plaintext and no encrypted copy.
+SELECT m.id
+FROM chat_message_tool_call_ids tc
+JOIN chat_messages m ON m.id = tc.message_id AND m.project_id = tc.project_id
+WHERE tc.chat_id = @chat_id
+  AND tc.tool_call_id = @tool_call_id
+  AND tc.project_id = @project_id
+  AND m.chat_id = @chat_id
+  AND m.role = 'assistant'
+ORDER BY m.created_at DESC, m.seq DESC, m.id DESC
+LIMIT 1;
 
 -- name: FindAssistantToolCallMessageID :one
 -- With @skip_indexed, a message whose sealed tool-call IDs are indexed (its

@@ -46,13 +46,11 @@ const plaintextTranscriptStorePath = "github.com/speakeasy-api/gram/server/inter
 
 // sanctionedPlaintextTranscriptReaders may read or insert the plaintext
 // transcript columns outside the transcript store. Keys are types.Func.FullName
-// values. Every entry needs a reason a reviewer can check: the chat message
-// writer, which seals what it inserts in the same transaction, and demo seed
-// data for projects that never keep encrypted transcripts.
+// values. Every entry needs a reason a reviewer can check: demo seed data for
+// projects that never keep encrypted transcripts.
 var sanctionedPlaintextTranscriptReaders = map[string]string{
-	"(*github.com/speakeasy-api/gram/server/internal/chat.ChatMessageWriter).WriteExternalWithContentParts": "the chat message writer seals each message it inserts in the same transaction",
-	"(*github.com/speakeasy-api/gram/server/internal/demoseed.seeder).activityInsertMessages":               "demo seed data for the demo organization, whose projects never keep encrypted transcripts",
-	"(*github.com/speakeasy-api/gram/server/internal/demoseed.seeder).seedSignalConversations":              "demo seed data for the demo organization, whose projects never keep encrypted transcripts",
+	"(*github.com/speakeasy-api/gram/server/internal/demoseed.seeder).activityInsertMessages":  "demo seed data for the demo organization, whose projects never keep encrypted transcripts",
+	"(*github.com/speakeasy-api/gram/server/internal/demoseed.seeder).seedSignalConversations": "demo seed data for the demo organization, whose projects never keep encrypted transcripts",
 }
 
 // pendingPlaintextTranscriptReaders read plaintext and have not moved behind

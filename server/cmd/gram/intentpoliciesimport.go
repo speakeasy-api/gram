@@ -95,7 +95,7 @@ func newIntentPoliciesImportCommand() *cli.Command {
 					logger.WarnContext(ctx, "skip unparseable transcript", attr.SlogFilePath(f), attr.SlogError(err))
 					continue
 				}
-				if _, err := intentpolicy.StoreTranscript(ctx, db, writer, intentpolicy.StoreParams{
+				if _, err := intentpolicy.StoreTranscript(ctx, writer, intentpolicy.StoreParams{
 					ChatID:         chatID,
 					ProjectID:      projectID,
 					OrganizationID: spec.OrgID,

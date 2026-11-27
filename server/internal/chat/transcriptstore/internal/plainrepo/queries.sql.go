@@ -52,6 +52,34 @@ func (q *Queries) FindAssistantToolCallMessageID(ctx context.Context, arg FindAs
 	return id, err
 }
 
+const findIndexedToolCallMessageID = `-- name: FindIndexedToolCallMessageID :one
+SELECT m.id
+FROM chat_message_tool_call_ids tc
+JOIN chat_messages m ON m.id = tc.message_id AND m.project_id = tc.project_id
+WHERE tc.chat_id = $1
+  AND tc.tool_call_id = $2
+  AND tc.project_id = $3
+  AND m.chat_id = $1
+  AND m.role = 'assistant'
+ORDER BY m.created_at DESC, m.seq DESC, m.id DESC
+LIMIT 1
+`
+
+type FindIndexedToolCallMessageIDParams struct {
+	ChatID     uuid.UUID
+	ToolCallID string
+	ProjectID  uuid.UUID
+}
+
+// The newest assistant message of a chat whose sealed tool-call IDs include
+// the tool call. Reads no plaintext and no encrypted copy.
+func (q *Queries) FindIndexedToolCallMessageID(ctx context.Context, arg FindIndexedToolCallMessageIDParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, findIndexedToolCallMessageID, arg.ChatID, arg.ToolCallID, arg.ProjectID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const getChatEntryTotals = `-- name: GetChatEntryTotals :one
 WITH ordered AS (
   SELECT
@@ -2357,10 +2385,7 @@ DO UPDATE SET
 WHERE chat_messages.project_id = EXCLUDED.project_id
   AND EXCLUDED.source IN ('codex', 'opencode', 'openclaw')
   AND chat_messages.source = 'litellm'
-RETURNING id,
-  (CASE WHEN $28::boolean THEN '' ELSE content END)::text AS content,
-  (CASE WHEN $28::boolean THEN NULL ELSE tool_calls END)::jsonb AS tool_calls,
-  model, user_id, external_user_id, source, user_agent, (xmax = 0) AS inserted
+RETURNING id, content, tool_calls, model, user_id, external_user_id, source, user_agent, (xmax = 0) AS inserted
 `
 
 type UpsertCorrelatedChatMessageParams struct {
@@ -2391,7 +2416,6 @@ type UpsertCorrelatedChatMessageParams struct {
 	Generation        int32
 	Replayed          bool
 	CreatedAt         pgtype.Timestamptz
-	OpenShadows       bool
 }
 
 type UpsertCorrelatedChatMessageRow struct {
@@ -2406,10 +2430,9 @@ type UpsertCorrelatedChatMessageRow struct {
 	Inserted       bool
 }
 
-// Returns persisted metering fields and distinguishes initial inserts from
-// native-hook promotions, which must not emit another storage reading. A
-// project that keeps shadows (@open_shadows) gets no body back; the store
-// reads it from the shadow instead.
+// Only its generated params and row types are used: they are the shape of
+// Transcripts.UpsertCorrelatedChatMessage, which runs the repo query of the
+// same name so every write seals and stores metadata. Do not call it.
 func (q *Queries) UpsertCorrelatedChatMessage(ctx context.Context, arg UpsertCorrelatedChatMessageParams) (UpsertCorrelatedChatMessageRow, error) {
 	row := q.db.QueryRow(ctx, upsertCorrelatedChatMessage,
 		arg.ID,
@@ -2439,7 +2462,6 @@ func (q *Queries) UpsertCorrelatedChatMessage(ctx context.Context, arg UpsertCor
 		arg.Generation,
 		arg.Replayed,
 		arg.CreatedAt,
-		arg.OpenShadows,
 	)
 	var i UpsertCorrelatedChatMessageRow
 	err := row.Scan(
