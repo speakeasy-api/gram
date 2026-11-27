@@ -2,6 +2,8 @@ package orgencryption_test
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -12,6 +14,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptcrypto"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/orgencryption"
@@ -132,22 +135,27 @@ func TestTranscriptWriterCallerTransaction(t *testing.T) {
 			t.Parallel()
 			f := newTranscriptWriterFixture(t, true, true)
 			before := f.counts(t)
-			require.NoError(t, f.writer.PrepareTranscripts(t.Context(), f.projectID))
-			tx := testenv.BeginTx(t, t.Context(), f.conn)
 			m := f.message("EXAMPLE transactional content")
-			n, err := f.writer.WriteInTx(t.Context(), tx, []chat.MessageWrite{m})
-			require.NoError(t, err)
-			require.EqualValues(t, 1, n)
-			require.Equal(t, before, f.counts(t), "caller transaction must not publish before commit")
+			errRollback := errors.New("roll back")
+			err := f.writer.InTx(t.Context(), f.projectID, func(tx pgx.Tx) error {
+				n, err := f.writer.WriteInTx(t.Context(), tx, []chat.MessageWrite{m})
+				require.NoError(t, err)
+				require.EqualValues(t, 1, n)
+				require.Equal(t, before, f.counts(t), "caller transaction must not publish before commit")
+				if commit {
+					return nil
+				}
+				return errRollback
+			})
 			if commit {
-				require.NoError(t, tx.Commit(t.Context()))
+				require.NoError(t, err)
 				f.assertTranscript(t, m.Params.ID)
 				after := f.counts(t)
 				require.Equal(t, before[0]+1, after[0])
 				require.Equal(t, before[1]+1, after[1])
 				require.Greater(t, after[2]+after[3], before[2]+before[3])
 			} else {
-				require.NoError(t, tx.Rollback(t.Context()))
+				require.ErrorIs(t, err, errRollback)
 				require.Equal(t, before, f.counts(t))
 			}
 		})
@@ -261,9 +269,10 @@ func TestTranscriptWriterOptOutWithoutStorageOrKeys(t *testing.T) {
 	require.EqualValues(t, 1, n)
 }
 
-// A write that captures nothing (an external retry or a skipped projection)
-// still succeeds while the key cannot load. A write that captures fails closed.
-func TestTranscriptWriterNoopsSucceedWithoutKey(t *testing.T) {
+// InTx loads the key before every write transaction, so a key that will not
+// load fails each write before anything is stored, even one that would have
+// changed nothing.
+func TestTranscriptWriterFailsClosedWithoutKey(t *testing.T) {
 	t.Parallel()
 	f := newTranscriptWriterFixture(t, true, true)
 	m := chat.ExternalMessageWrite{Params: chatrepo.CreateExternalChatMessageParams{ID: uuid.New(), ChatID: f.chatID, ProjectID: f.projectID, Role: "assistant", Content: "EXAMPLE imported content", ExternalMessageID: conv.ToPGText("example-import-id")}}
@@ -273,18 +282,15 @@ func TestTranscriptWriterNoopsSucceedWithoutKey(t *testing.T) {
 	before := f.counts(t)
 
 	m.Params.ID = uuid.New()
-	n, err := f.writer.WriteExternalWithContentParts(t.Context(), f.projectID, []chat.ExternalMessageWrite{m}, nil)
-	require.NoError(t, err, "a retry captures nothing")
-	require.Zero(t, n)
+	_, err = f.writer.WriteExternalWithContentParts(t.Context(), f.projectID, []chat.ExternalMessageWrite{m}, nil)
+	require.ErrorIs(t, err, orgencryption.ErrSuspended, "a retry fails too")
 
 	projected := f.message("EXAMPLE projected body")
 	projected.Params.Source = conv.ToPGText("kit")
 	guard := func(context.Context, pgx.Tx) error { return nil }
 	skip := func(*chatrepo.ChatMessage) (chat.MessageWrite, bool, error) { return projected, false, nil }
-	changed, err := f.writer.ProjectMessage(t.Context(), f.projectID, projected.Params.ID, guard, skip)
-	require.NoError(t, err, "a skipped projection captures nothing")
-	require.False(t, changed)
-	require.Equal(t, before, f.counts(t))
+	_, err = f.writer.ProjectMessage(t.Context(), f.projectID, projected.Params.ID, guard, skip)
+	require.ErrorIs(t, err, orgencryption.ErrSuspended, "a skipped projection fails too")
 
 	fresh := m
 	fresh.Params.ID = uuid.New()
@@ -343,14 +349,17 @@ func TestTranscriptWriterEncryptedRepatchKeepsRiskAnalysis(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, changed)
 
-	require.NoError(t, f.writer.PrepareTranscripts(t.Context(), f.projectID))
-	tx := testenv.BeginTx(t, t.Context(), f.conn)
-	_, err = f.writer.UpdateChatMessage(t.Context(), tx, f.orgID, f.projectID, f.chatID, m.Params.ID, func(row *chatrepo.ChatMessage) error {
-		row.RiskAnalyzedAt = pgtype.Timestamptz{Time: time.Now(), InfinityModifier: pgtype.Finite, Valid: true}
+	err = f.writer.InTx(t.Context(), f.projectID, func(tx pgx.Tx) error {
+		_, err := f.writer.UpdateChatMessage(t.Context(), tx, f.orgID, f.projectID, f.chatID, m.Params.ID, func(row *chatrepo.ChatMessage) error {
+			row.RiskAnalyzedAt = pgtype.Timestamptz{Time: time.Now(), InfinityModifier: pgtype.Finite, Valid: true}
+			return nil
+		})
+		if err != nil {
+			return fmt.Errorf("mark risk analyzed: %w", err)
+		}
 		return nil
 	})
 	require.NoError(t, err)
-	require.NoError(t, tx.Commit(t.Context()))
 
 	changed, err = f.writer.ProjectMessage(t.Context(), f.projectID, m.Params.ID, guard, build)
 	require.NoError(t, err)
@@ -369,7 +378,7 @@ func TestTranscriptWriterEncryptedRepatchKeepsRiskAnalysis(t *testing.T) {
 	require.False(t, row.RiskAnalyzedAt.Valid, "changed content is analyzed again")
 	encrypted := transcriptstore.NewTranscripts(f.store).WithEncryptedProjects(f.projectID)
 	content := row.Content
-	require.NoError(t, encrypted.Open(t.Context(), f.orgID, f.projectID, []transcriptstore.ProtectedFieldRefs{{MessageID: m.Params.ID, Content: &content, ContentRaw: nil, ToolCalls: nil, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}}))
+	require.NoError(t, encrypted.Open(t.Context(), f.orgID, f.projectID, []transcriptstore.OpenTarget{{MessageID: m.Params.ID, Set: func(f transcriptcrypto.ProtectedFields) { content = f.Content }}}))
 	require.Equal(t, "EXAMPLE changed projection", content)
 }
 
@@ -409,7 +418,7 @@ func TestTranscriptWriterEncryptedInsertsStoreNoPlaintext(t *testing.T) {
 		require.Empty(t, row.Content, "chat_messages never holds the plaintext")
 		require.Empty(t, row.ToolCalls)
 		content, toolCalls := row.Content, row.ToolCalls
-		require.NoError(t, encrypted.Open(t.Context(), f.orgID, f.projectID, []transcriptstore.ProtectedFieldRefs{{MessageID: id, Content: &content, ContentRaw: nil, ToolCalls: &toolCalls, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}}))
+		require.NoError(t, encrypted.Open(t.Context(), f.orgID, f.projectID, []transcriptstore.OpenTarget{{MessageID: id, Set: func(f transcriptcrypto.ProtectedFields) { content, toolCalls = f.Content, f.ToolCalls }}}))
 		require.Equal(t, want.content, content, "the transcript holds what was written")
 		if want.toolCalls == "" {
 			require.Empty(t, toolCalls)

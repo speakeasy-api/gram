@@ -38,6 +38,14 @@ func (d *failAt) Exec(ctx context.Context, sql string, args ...any) (pgconn.Comm
 	return tag, safe(err)
 }
 
+func (d *failAt) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error) {
+	if d.matches(sql) {
+		return nil, errInjected
+	}
+	rows, err := d.DBTX.Query(ctx, sql, args...) //nolint:glint // notestingrawsql: transparently intercept generated statements to inject a failure.
+	return rows, safe(err)
+}
+
 func (d *failAt) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
 	if d.matches(sql) {
 		return failedRow{}
@@ -68,7 +76,7 @@ func (f *fixture) summaries(t *testing.T, id uuid.UUID) string {
 // the old body and nothing stale.
 func TestFailedUpdateMessageRollsBack(t *testing.T) {
 	t.Parallel()
-	for _, step := range []string{"WriteChatMessage", "Capture", "UpdateMessageMetadata", "DeleteToolCallIDs", "InsertToolCallIDs"} {
+	for _, step := range []string{"CanonicalJSON", "WriteChatMessage", "Capture", "DeleteToolCallIDs", "InsertToolCallIDs"} {
 		t.Run(step, func(t *testing.T) {
 			t.Parallel()
 			f := setup(t, true)

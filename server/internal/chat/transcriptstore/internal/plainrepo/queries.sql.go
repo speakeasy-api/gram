@@ -2332,8 +2332,9 @@ type UpsertCorrelatedChatMessageRow struct {
 	Inserted       bool
 }
 
-// Returns persisted metering fields and distinguishes initial inserts from
-// native-hook promotions, which must not emit another storage reading.
+// Only its generated params and row types are used: they are the shape of
+// Transcripts.UpsertCorrelatedChatMessage, which runs the repo query of the
+// same name so every write seals and stores metadata. Do not call it.
 func (q *Queries) UpsertCorrelatedChatMessage(ctx context.Context, arg UpsertCorrelatedChatMessageParams) (UpsertCorrelatedChatMessageRow, error) {
 	row := q.db.QueryRow(ctx, upsertCorrelatedChatMessage,
 		arg.ID,
