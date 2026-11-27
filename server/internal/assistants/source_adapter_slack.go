@@ -84,7 +84,7 @@ type slackAdapter struct {
 // uses to decide which built-in the assistant has):
 //   - sourceKindSpeakeasySlack -> "speakeasy-slack" when granted
 //   - sourceKindSlack          -> "assistant-slack" when granted
-//   - otherwise "" (legacy/attached Slack server discovered via list_servers)
+//   - otherwise "" (attached Slack server discovered via list_servers)
 func (a slackAdapter) gatewaySlackSlug(platformSlugs []string) string {
 	if a.preferSpeakeasyApp {
 		if slices.Contains(platformSlugs, platformtools.SpeakeasySlackPlatformToolsetSlug) {
