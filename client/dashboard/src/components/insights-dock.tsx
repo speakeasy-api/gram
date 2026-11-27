@@ -1877,14 +1877,19 @@ function PendingPromptBridge({
 }): null {
   const thread = useAui().thread();
   const isThreadReady = useAuiState(
-    // Wait out a running reply: appending mid-run would interleave turns.
-    ({ thread }) =>
-      !thread.isLoading && !thread.isDisabled && !thread.isRunning,
+    ({ thread }) => !thread.isLoading && !thread.isDisabled,
   );
+  const isRunning = useAuiState(({ thread }) => thread.isRunning);
   const firedNonceRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!pending || !isThreadReady) return;
+    // A new prompt interrupts a running reply, like the composer's stop
+    // button; the effect runs again once the run has stopped.
+    if (isRunning) {
+      thread.cancelRun();
+      return;
+    }
     if (firedNonceRef.current === pending.nonce) return;
     firedNonceRef.current = pending.nonce;
 
@@ -1924,7 +1929,7 @@ function PendingPromptBridge({
     return () => {
       done = true;
     };
-  }, [pending, isThreadReady, thread, onConsume]);
+  }, [pending, isThreadReady, isRunning, thread, onConsume]);
 
   return null;
 }
