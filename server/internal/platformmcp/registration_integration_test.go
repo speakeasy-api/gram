@@ -361,6 +361,51 @@ func TestLiveExternalAuthorizationPreservesAdminAndRejectsDepartedMember(t *test
 	require.ErrorIs(t, err, ErrForbidden)
 }
 
+func TestLiveExternalAuthorizationRejectsDisabledOrganization(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_disabled_organization_authorization")
+	require.NoError(t, err)
+	organizationID := "org_" + uuid.NewString()
+	workosOrganizationID := "org_workos_" + uuid.NewString()
+	_, err = organizationsrepo.New(conn).UpsertOrganizationMetadata(ctx, organizationsrepo.UpsertOrganizationMetadataParams{
+		ID: organizationID, Name: "Disabled organization", Slug: "org-" + uuid.NewString()[:8], WorkosID: conv.ToPGText(workosOrganizationID), Whitelisted: pgtype.Bool{},
+	})
+	require.NoError(t, err)
+	require.NoError(t, authz.SeedSystemRoleGrants(ctx, conn, organizationID))
+	adminID := "admin_" + uuid.NewString()
+	seedPlatformMCPAuthorizationMember(t, ctx, conn, organizationID, adminID, authz.SystemRoleAdmin)
+
+	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient())
+	authorizer := NewLiveOrgAdminAuthorizer(conn, engine)
+	admin := Principal{UserID: adminID, OrganizationID: organizationID, ConnectionID: uuid.NewString(), Generation: uuid.NewString(), ClientID: "client-test", Surface: SurfacePlatformMCP}
+
+	// The connection works while the organization is enabled.
+	_, err = authorizer.PrepareExternalContext(ctx, admin)
+	require.NoError(t, err)
+	selector := NewLiveOrganizationSelector(conn, authorizer)
+	options, err := selector.EligibleOrganizations(ctx, adminID)
+	require.NoError(t, err)
+	require.Len(t, options, 1)
+
+	disabled, err := organizationsrepo.New(conn).DisableOrganizationByWorkosID(ctx, organizationsrepo.DisableOrganizationByWorkosIDParams{
+		WorkosLastEventID: conv.ToPGText("event_disable"),
+		WorkosID:          conv.ToPGText(workosOrganizationID),
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, disabled)
+
+	// An existing connection, a token refresh and the organization picker all
+	// pass through the membership check, so each refuses the disabled organization.
+	_, err = authorizer.PrepareExternalContext(ctx, admin)
+	require.ErrorIs(t, err, ErrForbidden)
+	require.ErrorIs(t, authorizer.RequireLiveMembership(ctx, admin), ErrForbidden)
+	options, err = selector.EligibleOrganizations(ctx, adminID)
+	require.NoError(t, err)
+	require.Empty(t, options)
+}
+
 func seedPlatformMCPAuthorizationMember(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID, userID, roleSlug string) {
 	t.Helper()
 	_, err := usersrepo.New(conn).UpsertUser(ctx, usersrepo.UpsertUserParams{

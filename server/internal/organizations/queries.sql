@@ -817,6 +817,8 @@ SELECT pg_advisory_xact_lock(hashtext(@slug));
 -- Create a Speakeasy organization row from a WorkOS organization event. The caller
 -- chooses the Speakeasy org ID from WorkOS external_id or a deterministic fallback.
 -- Slug is a Speakeasy-owned initial value and is never updated by WorkOS sync.
+-- whitelisted is written explicitly so the dashboard's book-a-demo gate for
+-- these organizations is decided here and not by the column default.
 WITH written AS (
 INSERT INTO organization_metadata (
     id,
@@ -826,6 +828,7 @@ INSERT INTO organization_metadata (
     workos_updated_at,
     workos_last_event_id,
     verified_domains,
+    whitelisted,
     default_host
 ) VALUES (
     @id,
@@ -835,6 +838,7 @@ INSERT INTO organization_metadata (
     @workos_updated_at,
     @workos_last_event_id,
     @verified_domains::text[],
+    TRUE,
     sqlc.narg('default_host')::text
 )
 RETURNING *, (xmax = 0) AS inserted
@@ -942,6 +946,70 @@ JOIN organization_metadata om ON om.id = our.organization_id
 WHERE our.user_id = @user_id
   AND our.deleted_at IS NULL
   AND om.disabled_at IS NULL;
+
+-- name: LockMirroredOrganizationCap :exec
+-- Serializes the mirrored-organization cap for one identity-provider user.
+-- Organization events are processed one organization at a time, so a burst of
+-- new organizations for the same user is handled in parallel transactions.
+-- Without this lock each would see no other organization yet and keep its own.
+SELECT pg_advisory_xact_lock(hashtextextended('mirrored-organization-cap:' || @workos_user_id::text, 0));
+
+-- name: DisableMirroredOrganizationOverCap :one
+-- Disable an organization mirrored from the identity provider when its only
+-- member already has max_other_organizations enabled organizations. Callers
+-- hold LockMirroredOrganizationCap for the user and run this once, when the
+-- membership is first recorded. No row is returned when the organization
+-- stays enabled.
+--
+-- An organization is left alone when any of these hold:
+--   * a Speakeasy flow created it (creation_source is recorded);
+--   * it has SSO, directory sync or a verified domain, which a throwaway
+--     organization does not;
+--   * the user is staff;
+--   * anyone else is a member;
+--   * the user has fewer than max_other_organizations other enabled
+--     organizations.
+UPDATE organization_metadata AS target
+SET disabled_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE target.id = @organization_id
+  AND target.disabled_at IS NULL
+  AND target.creation_source IS NULL
+  AND target.sso_enabled IS NOT TRUE
+  AND target.scim_enabled IS NOT TRUE
+  AND COALESCE(cardinality(target.verified_domains), 0) = 0
+  AND NOT EXISTS (
+      SELECT 1
+      FROM users
+      WHERE users.admin IS TRUE
+        AND (
+            COALESCE(users.id = sqlc.narg('user_id')::text, FALSE)
+            OR COALESCE(users.workos_id = sqlc.narg('workos_user_id')::text, FALSE)
+        )
+  )
+  AND NOT EXISTS (
+      SELECT 1
+      FROM organization_user_relationships AS other_member
+      WHERE other_member.organization_id = target.id
+        AND other_member.deleted_at IS NULL
+        AND NOT (
+            COALESCE(other_member.user_id = sqlc.narg('user_id')::text, FALSE)
+            OR COALESCE(other_member.workos_user_id = sqlc.narg('workos_user_id')::text, FALSE)
+        )
+  )
+  AND (
+      SELECT count(DISTINCT other_org.id)
+      FROM organization_user_relationships AS mine
+      JOIN organization_metadata AS other_org ON other_org.id = mine.organization_id
+      WHERE mine.deleted_at IS NULL
+        AND other_org.id <> target.id
+        AND other_org.disabled_at IS NULL
+        AND (
+            COALESCE(mine.user_id = sqlc.narg('user_id')::text, FALSE)
+            OR COALESCE(mine.workos_user_id = sqlc.narg('workos_user_id')::text, FALSE)
+        )
+  ) >= @max_other_organizations::int
+RETURNING target.id, target.name, target.slug, target.disabled_at;
 
 -- name: DisableOrganizationByWorkosID :execrows
 -- Mark a WorkOS-linked organization as disabled. Append-only: keeps

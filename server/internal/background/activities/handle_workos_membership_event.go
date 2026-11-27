@@ -15,8 +15,10 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/agentownership"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/organizations/orgcap"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
@@ -70,7 +72,7 @@ func handleOrganizationMembershipEvent(ctx context.Context, logger *slog.Logger,
 		return none, fmt.Errorf("get user by workos id %q: %w", payload.UserID, err)
 	}
 
-	lastEventID, rowUpdatedAt, err := getMembershipRelationshipCursor(ctx, orgrepo.New(dbtx), org.ID, gramUserID, payload.ID)
+	known, lastEventID, rowUpdatedAt, err := getMembershipRelationshipCursor(ctx, orgrepo.New(dbtx), org.ID, gramUserID, payload.ID)
 	if err != nil {
 		return none, err
 	}
@@ -97,6 +99,23 @@ func handleOrganizationMembershipEvent(ctx context.Context, logger *slog.Logger,
 
 	if err := upsertOrganizationMembership(ctx, dbtx, org.ID, gramUserID, event, payload); err != nil {
 		return none, err
+	}
+	// Only a membership Speakeasy has never recorded is checked against the
+	// cap. A row that already exists belongs to a long-standing organization,
+	// a login that got here first, or an earlier event that already decided,
+	// and re-checking it would undo an organization staff re-enabled.
+	if !known {
+		capped, err := orgcap.Enforce(ctx, dbtx, audit.NewLogger(), orgcap.NewMembership{
+			OrganizationID: org.ID,
+			UserID:         gramUserID,
+			WorkOSUserID:   payload.UserID,
+		})
+		if err != nil {
+			return none, fmt.Errorf("enforce mirrored organization cap for membership %q: %w", payload.ID, err)
+		}
+		if capped {
+			logger.WarnContext(ctx, "disabled mirrored organization over the per-user cap", attr.SlogOrganizationID(org.ID))
+		}
 	}
 	// Membership changes alter which emails resolve in the identity map.
 	none.refreshIdentityMap = true
@@ -137,7 +156,10 @@ func upsertOrganizationMembership(ctx context.Context, dbtx pgx.Tx, organization
 	return nil
 }
 
-func getMembershipRelationshipCursor(ctx context.Context, repo *orgrepo.Queries, organizationID, gramUserID, workosMembershipID string) (*string, *time.Time, error) {
+// getMembershipRelationshipCursor reads the sync cursor of the relationship row
+// a membership event applies to. known reports whether any such row exists,
+// including a removed one; a row written at login exists but has no cursor.
+func getMembershipRelationshipCursor(ctx context.Context, repo *orgrepo.Queries, organizationID, gramUserID, workosMembershipID string) (known bool, lastEventID *string, rowUpdatedAt *time.Time, err error) {
 	existing, err := repo.GetRelationshipByMembershipID(ctx, conv.ToPGText(workosMembershipID))
 	if errors.Is(err, pgx.ErrNoRows) && gramUserID != "" {
 		existing, err = repo.GetOrganizationRelationshipForUser(ctx, orgrepo.GetOrganizationRelationshipForUserParams{
@@ -147,21 +169,19 @@ func getMembershipRelationshipCursor(ctx context.Context, repo *orgrepo.Queries,
 	}
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return nil, nil, nil
+		return false, nil, nil, nil
 	case err != nil:
-		return nil, nil, fmt.Errorf("get organization membership %q: %w", workosMembershipID, err)
+		return false, nil, nil, fmt.Errorf("get organization membership %q: %w", workosMembershipID, err)
 	}
 
-	var lastEventID *string
 	if existing.WorkosLastEventID.Valid {
 		lastEventID = &existing.WorkosLastEventID.String
 	}
-	var rowUpdatedAt *time.Time
 	if existing.WorkosUpdatedAt.Valid {
 		rowUpdatedAt = &existing.WorkosUpdatedAt.Time
 	}
 
-	return lastEventID, rowUpdatedAt, nil
+	return true, lastEventID, rowUpdatedAt, nil
 }
 
 func decodeWorkOSMembershipPayload(event events.Event) (workosMembershipEventPayload, error) {
