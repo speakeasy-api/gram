@@ -79,6 +79,9 @@ type Manager struct {
 	userRepo     *userRepo.Queries
 	billingRepo  billing.Repository
 	identity     UserResolver
+	// confined maps a user to the only organization their sessions may name
+	// (ConfineUser). Written before the server serves, read-only after.
+	confined map[string]string
 }
 
 func NewManager(
@@ -104,6 +107,7 @@ func NewManager(
 		userRepo:     userRepo.New(db),
 		billingRepo:  billingRepo,
 		identity:     identity,
+		confined:     nil,
 	}
 }
 
@@ -301,6 +305,9 @@ func (s *Manager) StoreSessionIssuedAt(ctx context.Context, session Session, iss
 }
 
 func (s *Manager) UpdateSession(ctx context.Context, expected, replacement Session) error {
+	if organizationID, ok := s.confined[replacement.UserID]; ok && replacement.ActiveOrganizationID != organizationID {
+		return errors.New("update session: this user's sessions are confined to one organization")
+	}
 	updated, err := s.sessionCache.CompareAndSwap(ctx, expected, replacement)
 	if err != nil {
 		return fmt.Errorf("update session: %w", err)

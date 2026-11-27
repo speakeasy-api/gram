@@ -122,6 +122,19 @@ func SeedSystemRoleGrants(ctx context.Context, db *pgxpool.Pool, organizationID 
 // SeedSystemRoleGrantsTx is idempotent: roles that already hold grants are
 // skipped.
 func SeedSystemRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, organizationID string) error {
+	return seedSystemRoleGrantsTx(ctx, dbtx, organizationID, true)
+}
+
+// EnsureSystemRoleGrantsTx writes every default grant of the system roles that
+// the organization lacks, whatever other grants those roles already hold. A
+// reset of a seeded test organization needs this: the seed writes a tool block
+// on the global Admin role before any default exists, and SeedSystemRoleGrantsTx
+// would treat that block as the role already being provisioned.
+func EnsureSystemRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, organizationID string) error {
+	return seedSystemRoleGrantsTx(ctx, dbtx, organizationID, false)
+}
+
+func seedSystemRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, organizationID string, skipProvisioned bool) error {
 	q := repo.New(dbtx)
 	for roleSlug, grants := range SystemRoleGrants {
 		existingRole, err := q.GetGlobalRoleBySlug(ctx, roleSlug)
@@ -171,7 +184,7 @@ func SeedSystemRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, organizationID 
 		if err != nil {
 			return fmt.Errorf("list %s grants: %w", roleSlug, err)
 		}
-		if hasGrants {
+		if hasGrants && skipProvisioned {
 			continue
 		}
 

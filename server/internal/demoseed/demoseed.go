@@ -45,6 +45,9 @@ const (
 	demoSeedLockCleanupTimeout        = 5 * time.Second
 )
 
+// ErrSeedLocked reports that another seed run holds the shared advisory lock.
+var ErrSeedLocked = errors.New("another demo seed run holds the advisory lock; refusing to run concurrently")
+
 // Run replaces the data for spec's tenant while holding the shared advisory
 // lock. The Postgres seed runs in one transaction, so a failed run leaves the
 // previous data in place; each statement in it gets its own statement
@@ -53,7 +56,9 @@ const (
 // materialized-view targets before its inserts incrementally repopulate the
 // summaries.
 //
-// Pass DefaultSpec() for the shared production demo org.
+// Pass DefaultSpec() for the shared production demo org. A nil ch skips the
+// ClickHouse seed entirely, deletes included: a pull request preview shares its
+// environment's ClickHouse and owns only its Postgres database.
 func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.Conn, blob assets.BlobStore, enc *encryption.Client, assistantIssuerURL, serverURL string, spec Spec) error {
 	return runAt(ctx, logger, db, ch, blob, enc, assistantIssuerURL, serverURL, spec, time.Time{})
 }
@@ -96,6 +101,10 @@ func runAt(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver
 		}
 		logger.InfoContext(ctx, "demo seed typed upstream auth ready")
 
+		if ch == nil {
+			logger.InfoContext(ctx, "demo seed skipped clickhouse")
+			return nil
+		}
 		if err := s.runClickHouse(ctx, ch); err != nil {
 			return fmt.Errorf("apply demo seed to clickhouse: %w", err)
 		}
@@ -128,7 +137,7 @@ func withSeedLock(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, fn
 	}
 	if !locked {
 		conn.Release()
-		return errors.New("another demo seed run holds the advisory lock; refusing to run concurrently")
+		return ErrSeedLocked
 	}
 	defer func() {
 		unlockCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), demoSeedLockCleanupTimeout)

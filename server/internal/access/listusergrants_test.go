@@ -102,6 +102,30 @@ func TestService_ListGrants(t *testing.T) {
 	require.Equal(t, "policy_123", byScope["risk_policy:evaluate"].Selectors[0].ResourceID)
 }
 
+// A member's own grants are read from Postgres alone, so an organization with
+// no WorkOS link (a pull request preview's synthetic test organization) is
+// served too. A 400 here trips the dashboard's MembershipSyncGuard on every
+// page.
+func TestService_ListGrants_OrganizationWithoutWorkOSLink(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authCtx.UserID, "member@example.com", "Member User", "workos_user_member", "membership_1")
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), authz.ScopeProjectRead, "project_unlinked")
+	require.NoError(t, orgrepo.New(ti.conn).ClearWorkosOrgID(ctx, authCtx.ActiveOrganizationID))
+
+	result, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{})
+	require.NoError(t, err)
+	require.Len(t, result.Grants, 1)
+	require.Equal(t, string(authz.ScopeProjectRead), result.Grants[0].Scope)
+	require.Len(t, result.Grants[0].Selectors, 1)
+	require.Equal(t, "project_unlinked", result.Grants[0].Selectors[0].ResourceID)
+}
+
 func TestService_ListGrants_DirectSelectors(t *testing.T) {
 	t.Parallel()
 

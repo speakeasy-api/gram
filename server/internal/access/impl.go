@@ -495,10 +495,10 @@ func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*ge
 		return &gen.ListUserGrantsResult{Grants: userVisibleScopeGrants()}, nil
 	}
 
-	ac, _, err := s.roleOrgContext(ctx)
-	if err != nil {
-		return nil, err
-	}
+	// The caller's own grants are pure Postgres, so an organization with no
+	// WorkOS link (a preview's synthetic test organization) is served too;
+	// roleOrgContext's 400 would trip the dashboard's MembershipSyncGuard.
+	ac := acPre
 
 	logger := s.logger.With(
 		attr.SlogOrganizationID(ac.ActiveOrganizationID),
