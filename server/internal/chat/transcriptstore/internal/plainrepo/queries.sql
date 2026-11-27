@@ -812,16 +812,3 @@ WHERE project_id = sqlc.arg(project_id)
   )
 ORDER BY created_at DESC
 LIMIT 1;
-
--- name: WriteMessageBody :one
--- The only statement that writes the protected body columns of an existing
--- message. Call it only through Transcripts.UpdateBody, which locks the row,
--- applies the change in Go and writes the encrypted transcript from what this
--- returns, in the same transaction.
-UPDATE chat_messages AS m
-SET content = @content, content_raw = sqlc.narg('content_raw'), tool_calls = sqlc.narg('tool_calls'),
-    tool_outcome_notes = sqlc.narg('tool_outcome_notes'), tool_call_summaries = sqlc.narg('tool_call_summaries'),
-    storage_error = sqlc.narg('storage_error')
-WHERE m.id = @message_id AND m.project_id = @project_id
-RETURNING m.id, m.chat_id, m.content, m.content_raw, m.tool_calls,
-          m.tool_outcome_notes, m.tool_call_summaries, m.storage_error;

@@ -46,7 +46,7 @@ func editBehindShadow(t *testing.T, ctx context.Context, conn *pgxpool.Pool, pro
 	require.EqualValues(t, 1, changed)
 }
 
-func TestChatSearchAndReadFailClosedOnStaleShadows(t *testing.T) {
+func TestChatSearchAndReadServePlaintextForStaleShadows(t *testing.T) {
 	t.Parallel()
 	f := newChatSearchFixture(t)
 	ctx := f.context(t.Context())
@@ -66,15 +66,20 @@ func TestChatSearchAndReadFailClosedOnStaleShadows(t *testing.T) {
 	require.Len(t, read.Messages, 1)
 	require.Contains(t, read.Messages[0].Text, "rotate the staging certificate")
 
-	// Plaintext edited behind the shadow is never served: both tools fail.
+	// A shadow that disagrees with plaintext edited behind it is logged, and
+	// both tools serve the plaintext row, which stays the source of truth.
 	editBehindShadow(t, ctx, f.db, f.project.ID, messageID)
-	_, err = f.service.Search(ctx, f.principal, f.search("changed"))
-	require.ErrorIs(t, err, transcriptstore.ErrStale)
-	_, err = f.service.Read(ctx, f.principal, ReadChatInput{ProjectID: f.project.ID.String(), ChatID: chatID.String(), MessageID: messageID.String()})
-	require.ErrorIs(t, err, transcriptstore.ErrStale)
+	output, err = f.service.Search(ctx, f.principal, f.search("changed"))
+	require.NoError(t, err)
+	require.Len(t, output.Hits, 1)
+	require.Contains(t, output.Hits[0].Text, "changed")
+	read, err = f.service.Read(ctx, f.principal, ReadChatInput{ProjectID: f.project.ID.String(), ChatID: chatID.String(), MessageID: messageID.String()})
+	require.NoError(t, err)
+	require.Len(t, read.Messages, 1)
+	require.Contains(t, read.Messages[0].Text, "changed")
 }
 
-func TestSessionRecallFailsClosedOnStaleShadows(t *testing.T) {
+func TestSessionRecallServesPlaintextForStaleShadows(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_session_recall_shadow")
@@ -96,7 +101,9 @@ func TestSessionRecallFailsClosedOnStaleShadows(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, out.Digest, "rotate the staging certificate")
 
+	// A disagreeing shadow is logged and the plaintext row is served.
 	editBehindShadow(t, ctx, conn, project.ID, messageID)
-	_, err = svc.ContinueSession(ctx, principal, ContinueSessionInput{SessionID: sessionID})
-	require.ErrorIs(t, err, transcriptstore.ErrStale)
+	out, err = svc.ContinueSession(ctx, principal, ContinueSessionInput{SessionID: sessionID})
+	require.NoError(t, err)
+	require.Contains(t, out.Digest, "changed")
 }

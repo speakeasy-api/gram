@@ -32,7 +32,7 @@ func Leaky(ctx context.Context, q *repo.Queries) {
 	_, _ = q.CountToolCalls(ctx)       // want `do not call "CountToolCalls" here`
 	_, _ = q.FindByNotes(ctx)          // want `do not call "FindByNotes" here`
 	list := q.ListMessages             // want `do not call "ListMessages" here`
-	_ = q.SetNotes(ctx, "id")          // want `do not call "SetNotes" here: it updates the plaintext transcript columns of chat_messages; change the body through transcriptstore.Transcripts.UpdateBody`
+	_ = q.SetNotes(ctx, "id")          // want `do not call "SetNotes" here: it updates the plaintext transcript columns of chat_messages; change the message through transcriptstore.Transcripts.UpdateMessage`
 	_ = q.UpsertMessage(ctx, "id")     // want `do not call "UpsertMessage" here: it updates`
 	_ = q.CreateMessage(ctx, "chat")   // want `do not call "CreateMessage" here: it inserts the plaintext transcript columns of chat_messages; insert messages through the chat message writer`
 	_ = list
@@ -44,6 +44,15 @@ func Clean(ctx context.Context, q *repo.Queries) {
 	_, _ = q.KeyInJSON(ctx)
 }
 
-const rawBodyUpdate = "UPDATE chat_messages SET content = $1 WHERE id = $2" // want `this SQL updates the plaintext transcript columns of chat_messages; change the body through transcriptstore.Transcripts.UpdateBody`
+const rawBodyUpdate = "UPDATE chat_messages SET content = $1 WHERE id = $2" // want `this SQL updates the plaintext transcript columns of chat_messages; change the message through transcriptstore.Transcripts.UpdateMessage`
 
 const rawMarkUpdate = "UPDATE chat_messages SET risk_analyzed_at = now() WHERE id = $1"
+
+const rawBodyInsert = "INSERT INTO chat_messages (chat_id, role, content) VALUES ($1, $2, $3)" // want `this SQL inserts the plaintext transcript columns of chat_messages; insert messages through the chat message writer`
+
+const rawIDInsert = "INSERT INTO chat_messages (chat_id, role) VALUES ($1, $2)"
+
+// SanctionedInsert is on the sanctioned allowlist in the test.
+func (s *Service) SanctionedInsert(ctx context.Context) {
+	_ = "INSERT INTO chat_messages (chat_id, role, content) VALUES ($1, $2, $3)"
+}

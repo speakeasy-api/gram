@@ -69,8 +69,8 @@ Reference these guidelines when:
 
 `chat_messages.content`, `content_raw`, `tool_calls`, `tool_outcome_notes`, `tool_call_summaries` and `storage_error` are the message body. Projects with encrypted transcripts keep a copy in `chat_message_transcripts`, so:
 
-- Never add SQL that updates these columns of an existing message. Change the body through `transcriptstore.Transcripts.UpdateBody`, which locks the row, applies the change in Go and writes every copy in one transaction. Keep non-body columns in your own statements in the same transaction.
-- Read bodies through `transcriptstore.Transcripts`, and insert messages through the chat message writer, which seals them.
+- Never add SQL that updates these columns of an existing message. Change the message through `transcriptstore.Transcripts.UpdateMessage`, which locks the row, applies the change in Go and writes every copy. It does not open a transaction: call `Transcripts.Prepare` before `BEGIN`, pass the transaction, and roll back on error. The same call may change `tool_outcome`, `finish_reason`, `content_hash` and `risk_analyzed_at`; keep other columns in your own statements in that transaction.
+- Read bodies through `transcriptstore.Transcripts`, and insert messages through the chat message writer, which seals them. Never add a sqlc query or raw `INSERT INTO chat_messages` that names these columns elsewhere.
 - The `noplaintexttranscriptread` glint rule fails CI on a violation.
 
 ### Multi-tenancy by project

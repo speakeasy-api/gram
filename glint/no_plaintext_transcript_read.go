@@ -18,7 +18,7 @@ import (
 
 const (
 	noPlaintextTranscriptReadAnalyzer = "noplaintexttranscriptread"
-	noPlaintextTranscriptReadDoc      = "only the transcript store may read, update or insert the plaintext transcript columns of chat_messages; it opens encrypted transcripts on read, writes every copy of a body through Transcripts.UpdateBody, and the chat message writer seals inserts"
+	noPlaintextTranscriptReadDoc      = "only the transcript store may read, update or insert the plaintext transcript columns of chat_messages; it opens encrypted transcripts on read, writes every copy of a body through Transcripts.UpdateMessage, and the chat message writer seals inserts"
 )
 
 type noPlaintextTranscriptReadSettings struct {
@@ -121,7 +121,7 @@ func newNoPlaintextTranscriptReadAnalyzerWith(_ noPlaintextTranscriptReadSetting
 				}
 
 				if use == plaintextTranscriptUpdate {
-					pass.ReportRangef(sel, "do not call %q here: it updates the plaintext transcript columns of chat_messages; change the body through transcriptstore.Transcripts.UpdateBody, which writes every copy (caller %q)", called.Name(), callerOrPackage(caller, pass))
+					pass.ReportRangef(sel, "do not call %q here: it updates the plaintext transcript columns of chat_messages; change the message through transcriptstore.Transcripts.UpdateMessage, which writes every copy (caller %q)", called.Name(), callerOrPackage(caller, pass))
 					return true
 				}
 				if use == plaintextTranscriptInsert {
@@ -132,7 +132,7 @@ func newNoPlaintextTranscriptReadAnalyzerWith(_ noPlaintextTranscriptReadSetting
 				return true
 			})
 
-			reportRawPlaintextTranscriptUpdates(pass, ins)
+			reportRawPlaintextTranscriptWrites(pass, ins, allow, readers)
 			reportStaleAllowlistEntries(pass, allow, readers)
 			return nil, nil
 		},
@@ -407,7 +407,7 @@ func sqlInsertsPlaintextTranscript(sql string) bool {
 // sqlUpdatesPlaintextTranscript reports whether a query updates a plaintext
 // transcript column of chat_messages: an UPDATE of chat_messages, or an INSERT
 // into it with ON CONFLICT DO UPDATE, whose SET clause assigns one. Every body
-// change goes through Transcripts.UpdateBody, which writes every copy.
+// change goes through Transcripts.UpdateMessage, which writes every copy.
 func sqlUpdatesPlaintextTranscript(sql string) bool {
 	s := stripSQLCommentsAndStrings(strings.ToLower(sql))
 	if !sqlUpdateTarget.MatchString(s) && !sqlUpsertTarget.MatchString(s) {
@@ -609,24 +609,43 @@ func isEscapeStringPrefix(s string, i int) bool {
 	return c != '_' && (c < 'a' || c > 'z') && (c < '0' || c > '9')
 }
 
-// reportRawPlaintextTranscriptUpdates flags SQL written as a Go string outside
-// sqlc that updates a plaintext transcript column of chat_messages, which the
-// sqlc call check cannot see. Generated sqlc files are left to that check, and
-// tests may set up stale rows on purpose.
-func reportRawPlaintextTranscriptUpdates(pass *analysis.Pass, ins *inspector.Inspector) {
-	ins.Preorder([]ast.Node{(*ast.BasicLit)(nil)}, func(node ast.Node) {
+// reportRawPlaintextTranscriptWrites flags SQL written as a Go string outside
+// sqlc that updates a plaintext transcript column of chat_messages, or inserts
+// one outside a sanctioned caller, which the sqlc call check cannot see.
+// Generated sqlc files are left to that check, and tests may set up stale rows
+// on purpose.
+func reportRawPlaintextTranscriptWrites(pass *analysis.Pass, ins *inspector.Inspector, allow noPlaintextTranscriptReadAllowlist, readers map[string]bool) {
+	ins.WithStack([]ast.Node{(*ast.BasicLit)(nil)}, func(node ast.Node, push bool, stack []ast.Node) bool {
+		if !push {
+			return true
+		}
 		lit := node.(*ast.BasicLit)
 		if lit.Kind != token.STRING {
-			return
+			return true
 		}
 		filename := pass.Fset.Position(lit.Pos()).Filename
 		if strings.HasSuffix(filename, "_test.go") || strings.HasSuffix(filename, ".sql.go") {
-			return
+			return true
 		}
 		sql, err := strconv.Unquote(lit.Value)
-		if err != nil || !sqlUpdatesPlaintextTranscript(sql) {
-			return
+		if err != nil {
+			return true
 		}
-		pass.ReportRangef(lit, "this SQL updates the plaintext transcript columns of chat_messages; change the body through transcriptstore.Transcripts.UpdateBody, which writes every copy")
+		if sqlUpdatesPlaintextTranscript(sql) {
+			pass.ReportRangef(lit, "this SQL updates the plaintext transcript columns of chat_messages; change the message through transcriptstore.Transcripts.UpdateMessage, which writes every copy")
+			return true
+		}
+		if !sqlInsertsPlaintextTranscript(sql) {
+			return true
+		}
+		caller := enclosingFuncName(pass, stack)
+		if caller != "" {
+			readers[caller] = true
+		}
+		if allow.allowed(caller) {
+			return true
+		}
+		pass.ReportRangef(lit, "this SQL inserts the plaintext transcript columns of chat_messages; insert messages through the chat message writer, which seals them in the same transaction (caller %q)", callerOrPackage(caller, pass))
+		return true
 	})
 }

@@ -14,9 +14,10 @@ func TestNoPlaintextTranscriptRead(t *testing.T) {
 	testdata := analysistest.TestData()
 	analysistest.Run(t, testdata, newNoPlaintextTranscriptReadAnalyzerWith(noPlaintextTranscriptReadSettings{}, noPlaintextTranscriptReadAllowlist{
 		sanctioned: map[string]string{
-			"(*" + reader + ".Service).Sanctioned": "test",
-			"(*" + reader + ".Service).Stale":      "test",
-			reader + ".Gone":                       "test",
+			"(*" + reader + ".Service).Sanctioned":       "test",
+			"(*" + reader + ".Service).Stale":            "test",
+			"(*" + reader + ".Service).SanctionedInsert": "test",
+			reader + ".Gone":                             "test",
 		},
 		pending: map[string]string{
 			reader + ".Pending": "test",

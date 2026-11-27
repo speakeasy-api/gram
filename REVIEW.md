@@ -168,8 +168,8 @@ Instead: add nullable columns, deprecate by making nullable, use expand-contract
 ### Message Bodies
 
 - The body of a chat message is `content`, `content_raw`, `tool_calls`, `tool_outcome_notes`, `tool_call_summaries` and `storage_error` on `chat_messages`. Projects with encrypted transcripts keep a copy in `chat_message_transcripts`.
-- Change the body of an existing message only through `transcriptstore.Transcripts.UpdateBody`, which writes every copy in one transaction. Flag any new SQL (sqlc query or raw string) that updates these columns elsewhere.
-- Read bodies through `transcriptstore.Transcripts`, and insert messages through the chat message writer, which seals them. The `noplaintexttranscriptread` glint rule enforces all three; flag new entries in its allowlists that lack a checkable reason.
+- Change the body of an existing message only through `transcriptstore.Transcripts.UpdateMessage`. It does not open a transaction: the caller calls `Prepare` before `BEGIN`, passes its transaction, and rolls back on error, so every copy changes together. Flag any new SQL (sqlc query or raw string) that updates these columns elsewhere.
+- Read bodies through `transcriptstore.Transcripts`, and insert messages through the chat message writer, which seals them. Flag any new insert of these columns (sqlc query or raw `INSERT INTO chat_messages`) outside that writer and the demo seed. The `noplaintexttranscriptread` glint rule enforces all three; flag new entries in its allowlists that lack a checkable reason.
 
 ### SQLc Queries
 

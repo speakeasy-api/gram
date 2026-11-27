@@ -157,7 +157,7 @@ func (w *ChatMessageWriter) Transcripts() *transcriptstore.Transcripts {
 // transaction as the write, for projects with encrypted transcripts. Configure it before
 // serving requests, after the schema migration and organization key
 // provisioning. It does not encrypt assets or remove plaintext. Body updates
-// outside the writer go through Transcripts.UpdateBody.
+// outside the writer go through UpdateMessage.
 func (w *ChatMessageWriter) WithTranscripts(transcripts *transcriptstore.Transcripts) *ChatMessageWriter {
 	w.transcripts = transcripts
 	return w
@@ -188,6 +188,19 @@ func (w *ChatMessageWriter) prepareTranscripts(ctx context.Context, organization
 func (w *ChatMessageWriter) sealTranscripts(ctx context.Context, db repo.DBTX, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID) error {
 	//nolint:wrapcheck // Seal already wraps with the transcript context.
 	return w.transcripts.Seal(ctx, db, organizationID, projectID, messageIDs)
+}
+
+// UpdateMessage changes an existing message through Transcripts.UpdateMessage,
+// inside the caller's transaction, so every copy of its body the project keeps
+// gets the same value. Call PrepareTranscripts before beginning the
+// transaction. A nil writer updates the plaintext only.
+func (w *ChatMessageWriter) UpdateMessage(ctx context.Context, db repo.DBTX, organizationID string, projectID, chatID, messageID uuid.UUID, apply func(*repo.ChatMessage) error) (bool, error) {
+	var transcripts *transcriptstore.Transcripts
+	if w != nil {
+		transcripts = w.transcripts
+	}
+	//nolint:wrapcheck // UpdateMessage already wraps with the message context.
+	return transcripts.UpdateMessage(ctx, db, organizationID, projectID, chatID, messageID, apply)
 }
 
 func messageWriteIDs(writes []MessageWrite) []uuid.UUID {

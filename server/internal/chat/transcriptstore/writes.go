@@ -8,7 +8,7 @@ import (
 )
 
 // Writes that return a stored body live here too. Every change to the body of
-// an existing message goes through UpdateBody. Plain inserts stay with the
+// an existing message goes through UpdateMessage. Plain inserts stay with the
 // chat message writer, which seals in the same transaction.
 
 // UpsertCorrelatedChatMessageParams is one correlated message to insert or
