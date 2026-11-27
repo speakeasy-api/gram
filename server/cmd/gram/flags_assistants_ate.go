@@ -63,7 +63,15 @@ func installKitATERuntimeFromCLI(c *cli.Context, core *assistants.ServiceCore, r
 		"assistant-ate-template is set", c.String("assistant-ate-template") != "",
 	)
 
-	err := core.InstallKitATERuntime(c.Context, assistants.KitATECompositionConfig{
+	err := core.InstallKitATERuntime(c.Context, kitATECompositionConfigFromCLI(c, redisClient, orgHosts, workerSelector, issuerURL, jwksURL))
+	if err != nil {
+		return fmt.Errorf("install assistant ATE runtime: %w", err)
+	}
+	return nil
+}
+
+func kitATECompositionConfigFromCLI(c *cli.Context, redisClient *redis.Client, orgHosts *orghost.Resolver, workerSelector map[string]string, issuerURL, jwksURL string) assistants.KitATECompositionConfig {
+	return assistants.KitATECompositionConfig{
 		Enabled:        true,
 		Atespace:       c.String("assistant-ate-atespace"),
 		Template:       c.String("assistant-ate-template"),
@@ -100,9 +108,28 @@ func installKitATERuntimeFromCLI(c *cli.Context, core *assistants.ServiceCore, r
 			ClientKeyFile:        c.String("assistant-ate-client-key-file"),
 			AudienceJWTFile:      c.String("assistant-ate-audience-jwt-file"),
 		},
-	})
+	}
+}
+
+// installRetiringKitATERuntimeFromCLI best-effort attaches ATE strictly for
+// cleanup during a rollback off ATE (GRAM_ASSISTANT_ATE_ENABLED=false while
+// ATE flags are still present in the deployment environment). It never fails
+// startup when ATE flags are absent or incomplete.
+func installRetiringKitATERuntimeFromCLI(c *cli.Context, core *assistants.ServiceCore, redisClient *redis.Client, serverURL *url.URL, orgHosts *orghost.Resolver) error {
+	if serverURL == nil || c.String("assistant-ate-api-address") == "" || c.String("assistant-ate-image") == "" {
+		return nil
+	}
+	workerSelector, err := assistants.ParseKitATEWorkerSelector(c.String("assistant-ate-worker-selector"))
 	if err != nil {
-		return fmt.Errorf("install assistant ATE runtime: %w", err)
+		return fmt.Errorf("parse retiring ATE worker selector: %w", err)
+	}
+	issuerURL := strings.TrimSpace(c.String("assistant-ate-issuer-url"))
+	jwksURL := strings.TrimSpace(c.String("assistant-ate-jwks-url"))
+	if jwksURL == "" && issuerURL != "" {
+		jwksURL = strings.TrimRight(issuerURL, "/") + "/openid/v1/jwks"
+	}
+	if err := core.InstallRetiringKitATERuntime(c.Context, kitATECompositionConfigFromCLI(c, redisClient, orgHosts, workerSelector, issuerURL, jwksURL)); err != nil {
+		return fmt.Errorf("install retiring ATE runtime: %w", err)
 	}
 	return nil
 }

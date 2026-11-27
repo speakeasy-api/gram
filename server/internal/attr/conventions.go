@@ -467,6 +467,12 @@ const (
 	AssistantImageRecycleKey            = attribute.Key("gram.assistant.image_recycle")
 	AssistantImageDesiredKey            = attribute.Key("gram.assistant.image_desired")
 	AssistantImageActualKey             = attribute.Key("gram.assistant.image_actual")
+	AssistantATEActorNameKey            = attribute.Key("gram.assistant.ate.actor_name")
+	AssistantATEActorUIDKey             = attribute.Key("gram.assistant.ate.actor_uid")
+	AssistantATEStartupModeKey          = attribute.Key("gram.assistant.ate.startup_mode")
+	AssistantATEReadyDurationMSKey      = attribute.Key("gram.assistant.ate.ready_duration_ms")
+	AssistantATECreateToReadyMSKey      = attribute.Key("gram.assistant.ate.create_to_ready_ms")
+	AssistantATEResumeToReadyMSKey      = attribute.Key("gram.assistant.ate.resume_to_ready_ms")
 	ChatModelKey                        = attribute.Key("gram.chat.model")
 	ChatToolCountKey                    = attribute.Key("gram.chat.tool_count")
 	ChatToolNamesKey                    = attribute.Key("gram.chat.tool_names")
@@ -4581,6 +4587,36 @@ func SlogAssistantImageDesired(v string) slog.Attr {
 func AssistantImageActual(v string) attribute.KeyValue { return AssistantImageActualKey.String(v) }
 func SlogAssistantImageActual(v string) slog.Attr {
 	return slog.String(string(AssistantImageActualKey), v)
+}
+
+func AssistantATEActorName(v string) attribute.KeyValue { return AssistantATEActorNameKey.String(v) }
+func SlogAssistantATEActorName(v string) slog.Attr {
+	return slog.String(string(AssistantATEActorNameKey), v)
+}
+
+func AssistantATEActorUID(v string) attribute.KeyValue { return AssistantATEActorUIDKey.String(v) }
+func SlogAssistantATEActorUID(v string) slog.Attr {
+	return slog.String(string(AssistantATEActorUIDKey), v)
+}
+
+func AssistantATEStartupMode(v string) attribute.KeyValue {
+	return AssistantATEStartupModeKey.String(v)
+}
+
+func SlogAssistantATEStartupMode(v string) slog.Attr {
+	return slog.String(string(AssistantATEStartupModeKey), v)
+}
+
+func SlogAssistantATEReadyDurationMS(v int64) slog.Attr {
+	return slog.Int64(string(AssistantATEReadyDurationMSKey), v)
+}
+
+func SlogAssistantATECreateToReadyMS(v int64) slog.Attr {
+	return slog.Int64(string(AssistantATECreateToReadyMSKey), v)
+}
+
+func SlogAssistantATEResumeToReadyMS(v int64) slog.Attr {
+	return slog.Int64(string(AssistantATEResumeToReadyMSKey), v)
 }
 
 func ChatModel(v string) attribute.KeyValue { return ChatModelKey.String(v) }

@@ -3512,6 +3512,64 @@ func (q *Queries) ListStoppedRuntimesForReap(ctx context.Context, arg ListStoppe
 	return items, nil
 }
 
+const listSupersededKitRuntimes = `-- name: ListSupersededKitRuntimes :many
+SELECT id, assistant_thread_id, assistant_id, project_id, backend, state, warm_until, lease_owner, last_heartbeat_at, backend_metadata_json, ended_at, runtime_version, created_at, updated_at, deleted_at, deleted, ended FROM assistant_runtimes
+WHERE runtime_version = 3
+  AND backend <> $1
+  AND deleted IS FALSE
+  AND ended IS FALSE
+  AND state IN ('active', 'stopped', 'failed')
+ORDER BY updated_at ASC
+LIMIT $2
+`
+
+type ListSupersededKitRuntimesParams struct {
+	TargetBackend string
+	LimitCount    int32
+}
+
+// Live Kit v3 runtime rows parked on a backend different from the deployment's
+// active Kit target backend. Used by the switch reaper so idle runtimes on an
+// old backend converge after a backend flip (e.g. GKE -> ATE or rollback)
+// without waiting for another turn.
+func (q *Queries) ListSupersededKitRuntimes(ctx context.Context, arg ListSupersededKitRuntimesParams) ([]AssistantRuntime, error) {
+	rows, err := q.db.Query(ctx, listSupersededKitRuntimes, arg.TargetBackend, arg.LimitCount)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AssistantRuntime
+	for rows.Next() {
+		var i AssistantRuntime
+		if err := rows.Scan(
+			&i.ID,
+			&i.AssistantThreadID,
+			&i.AssistantID,
+			&i.ProjectID,
+			&i.Backend,
+			&i.State,
+			&i.WarmUntil,
+			&i.LeaseOwner,
+			&i.LastHeartbeatAt,
+			&i.BackendMetadataJson,
+			&i.EndedAt,
+			&i.RuntimeVersion,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+			&i.Ended,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listWarmPendingThreads = `-- name: ListWarmPendingThreads :many
 SELECT DISTINCT t.id
 FROM assistant_threads t

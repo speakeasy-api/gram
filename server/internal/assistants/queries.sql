@@ -2269,3 +2269,17 @@ SELECT EXISTS (
             AND (bpg.expires_at IS NULL OR bpg.expires_at > clock_timestamp())
       )
 )::boolean AS has_grant;
+
+-- name: ListSupersededKitRuntimes :many
+-- Live Kit v3 runtime rows parked on a backend different from the deployment's
+-- active Kit target backend. Used by the switch reaper so idle runtimes on an
+-- old backend converge after a backend flip (e.g. GKE -> ATE or rollback)
+-- without waiting for another turn.
+SELECT * FROM assistant_runtimes
+WHERE runtime_version = 3
+  AND backend <> @target_backend
+  AND deleted IS FALSE
+  AND ended IS FALSE
+  AND state IN ('active', 'stopped', 'failed')
+ORDER BY updated_at ASC
+LIMIT @limit_count;

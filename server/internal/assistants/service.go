@@ -511,6 +511,7 @@ type ServiceCore struct {
 	slackAppCreds     SlackAppCredentialLoader
 	dashboardIngestor DashboardIngestor
 	featureFlags      feature.Provider
+	meter             metric.Meter
 	turnClassified    metric.Int64Counter
 	// outboundOrigin is the pinned origin of the MCP auth CIMD client_id and
 	// redirect_uri. Authorization servers store both, so it stays fixed when
@@ -582,6 +583,7 @@ func NewServiceCore(
 		slackAppCreds:               nil,
 		dashboardIngestor:           nil,
 		featureFlags:                nil,
+		meter:                       meter,
 		turnClassified:              turnClassified,
 		outboundOrigin:              nil,
 		managedCeilingsRepaired:     sync.Map{},
@@ -2318,13 +2320,19 @@ func (s *ServiceCore) ReapStoppedAssistantRuntimes(ctx context.Context, params R
 		return ReapAssistantRuntimesResult{}, fmt.Errorf("batch size must be positive")
 	}
 
+	// First retire any idle Kit v3 runtimes left on a superseded backend
+	// (for example after flipping GRAM_ASSISTANT_ATE_ENABLED on or off) so
+	// they enter the same switch-retirement path below without waiting for
+	// another turn.
+	_, supersededErrors := s.retireSupersededKitBackendRuntimes(ctx, params.BatchSize)
+
 	// Switch retirement intent is committed with the selection update before
 	// any backend stop. Retry it independently of TTL and newer runtimes.
 	pending, err := assistantrepo.New(s.db).ListPendingRuntimeSwitchRetirements(ctx, params.BatchSize)
 	if err != nil {
 		return ReapAssistantRuntimesResult{}, fmt.Errorf("list pending switch retirements: %w", err)
 	}
-	retirementErrors := 0
+	retirementErrors := supersededErrors
 	remaining := params.BatchSize
 	for _, row := range pending {
 		remaining--
@@ -3000,7 +3008,7 @@ func (s *ServiceCore) admitPendingThreadsV2(ctx context.Context, assistant assis
 		return AdmitPendingThreadsResult{ProjectID: assistant.ProjectID, ThreadIDs: nil}, nil
 	}
 
-	row, err := queries.LookupActiveAssistantRuntimeV2(ctx, assistantrepo.LookupActiveAssistantRuntimeV2Params{
+	row, err := queries.GetAssistantRuntimeV2(ctx, assistantrepo.GetAssistantRuntimeV2Params{
 		ProjectID:   assistant.ProjectID,
 		AssistantID: assistant.ID,
 	})
@@ -3013,6 +3021,7 @@ func (s *ServiceCore) admitPendingThreadsV2(ctx context.Context, assistant assis
 	// to `active`; subsequent admits fall through the lookup with row in
 	// active state and admit the rest.
 	firstThreadOnly := false
+	var retiredSuperseded *assistantRuntimeRecord
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		if err := queries.ReserveAssistantRuntimeV2(ctx, assistantrepo.ReserveAssistantRuntimeV2Params{
@@ -3027,11 +3036,6 @@ func (s *ServiceCore) admitPendingThreadsV2(ctx context.Context, assistant assis
 		firstThreadOnly = true
 	case err != nil:
 		return AdmitPendingThreadsResult{}, fmt.Errorf("lookup v2 runtime: %w", err)
-	case row.State == runtimeStateStarting:
-		// Another worker reserved the row but its admitted thread hasn't
-		// finished Ensure yet. Same race condition — don't fan out until
-		// the runtime is active.
-		return AdmitPendingThreadsResult{ProjectID: assistant.ProjectID, ThreadIDs: nil}, nil
 	case row.State == runtimeStateExpiring:
 		// The warm-timer workflow has CASed the row to expiring and is
 		// driving Stop. Signalling threads now would race with that path:
@@ -3040,6 +3044,47 @@ func (s *ServiceCore) admitPendingThreadsV2(ctx context.Context, assistant assis
 		// current one is soft-deleted. Bail out — the thread workflow
 		// signals the coordinator after Stop completes, which retriggers
 		// admit under a clean slot.
+		return AdmitPendingThreadsResult{ProjectID: assistant.ProjectID, ThreadIDs: nil}, nil
+	case row.RuntimeVersion == 3 && row.Backend != selectedBackend:
+		// The deployment's Kit v3 backend flipped (for example GKE -> ATE or
+		// rollback ATE -> GKE). Retire the old-backend runtime through the
+		// existing switch-retirement path — setting ended_at frees
+		// assistant_runtimes_v2_one_per_assistant immediately — and reserve a
+		// fresh runtime on the newly selected backend so threads start fresh
+		// sessions with no manual action.
+		if err := queries.RetireAssistantRuntimesForSwitch(ctx, assistantrepo.RetireAssistantRuntimesForSwitchParams{
+			ProjectID:   assistant.ProjectID,
+			AssistantID: assistant.ID,
+		}); err != nil {
+			return AdmitPendingThreadsResult{}, fmt.Errorf("retire superseded Kit runtime on admit: %w", err)
+		}
+		retiredSuperseded = &assistantRuntimeRecord{
+			LifecycleTx:         nil,
+			Retired:             true,
+			ID:                  row.ID,
+			AssistantThreadID:   row.AssistantThreadID,
+			AssistantID:         row.AssistantID,
+			ProjectID:           row.ProjectID,
+			RuntimeVersion:      row.RuntimeVersion,
+			Backend:             row.Backend,
+			BackendMetadataJSON: row.BackendMetadataJson,
+			State:               "switch_retiring",
+			WarmUntil:           row.WarmUntil,
+		}
+		if err := queries.ReserveAssistantRuntimeV2(ctx, assistantrepo.ReserveAssistantRuntimeV2Params{
+			AssistantThreadID: threads[0].ID,
+			AssistantID:       assistant.ID,
+			ProjectID:         assistant.ProjectID,
+			Backend:           selectedBackend,
+			State:             runtimeStateStarting,
+		}); err != nil {
+			return AdmitPendingThreadsResult{}, fmt.Errorf("reserve replacement Kit assistant runtime: %w", err)
+		}
+		firstThreadOnly = true
+	case row.State == runtimeStateStarting:
+		// Another worker reserved the row but its admitted thread hasn't
+		// finished Ensure yet. Same race condition — don't fan out until
+		// the runtime is active.
 		return AdmitPendingThreadsResult{ProjectID: assistant.ProjectID, ThreadIDs: nil}, nil
 	}
 
@@ -3057,6 +3102,20 @@ func (s *ServiceCore) admitPendingThreadsV2(ctx context.Context, assistant assis
 
 	if err := tx.Commit(ctx); err != nil {
 		return AdmitPendingThreadsResult{}, fmt.Errorf("commit assistant admit tx (v2): %w", err)
+	}
+	if retiredSuperseded != nil {
+		// Best-effort inline cleanup after commit; any failure stays durably
+		// queued in switch_retiring for ReapStoppedAssistantRuntimes to retry.
+		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+		if err := s.finishRuntimeSwitchRetirement(cleanup, *retiredSuperseded); err != nil && s.logger != nil {
+			s.logger.WarnContext(cleanup, "superseded Kit runtime switch retirement pending retry",
+				attr.SlogAssistantID(assistant.ID.String()),
+				attr.SlogAssistantRuntimeID(retiredSuperseded.ID.String()),
+				attr.SlogAssistantRuntimeBackend(retiredSuperseded.Backend),
+				attr.SlogError(err),
+			)
+		}
+		cancel()
 	}
 
 	if firstThreadOnly {
@@ -3163,6 +3222,7 @@ func (s *ServiceCore) EnsureWarmupThread(ctx context.Context, assistantID uuid.U
 		ProjectID:   assistant.ProjectID,
 		AssistantID: assistant.ID,
 	})
+	var retiredSuperseded *assistantRuntimeRecord
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		if err := queries.ReserveAssistantRuntimeV2(ctx, assistantrepo.ReserveAssistantRuntimeV2Params{
@@ -3176,9 +3236,39 @@ func (s *ServiceCore) EnsureWarmupThread(ctx context.Context, assistantID uuid.U
 		}
 	case err != nil:
 		return noop, fmt.Errorf("lookup v2 runtime for warmup: %w", err)
-	case row.AssistantThreadID != threadID || row.State == runtimeStateExpiring:
-		// A real thread owns the boot, or the row is mid-teardown — either
-		// way the existing workflows drive the lifecycle from here.
+	case row.State == runtimeStateExpiring:
+		return noop, nil
+	case row.RuntimeVersion == 3 && row.Backend != selectedBackend:
+		if err := queries.RetireAssistantRuntimesForSwitch(ctx, assistantrepo.RetireAssistantRuntimesForSwitchParams{
+			ProjectID:   assistant.ProjectID,
+			AssistantID: assistant.ID,
+		}); err != nil {
+			return noop, fmt.Errorf("retire superseded Kit runtime on warmup: %w", err)
+		}
+		retiredSuperseded = &assistantRuntimeRecord{
+			LifecycleTx:         nil,
+			Retired:             true,
+			ID:                  row.ID,
+			AssistantThreadID:   row.AssistantThreadID,
+			AssistantID:         row.AssistantID,
+			ProjectID:           row.ProjectID,
+			RuntimeVersion:      row.RuntimeVersion,
+			Backend:             row.Backend,
+			BackendMetadataJSON: row.BackendMetadataJson,
+			State:               "switch_retiring",
+			WarmUntil:           row.WarmUntil,
+		}
+		if err := queries.ReserveAssistantRuntimeV2(ctx, assistantrepo.ReserveAssistantRuntimeV2Params{
+			AssistantThreadID: threadID,
+			AssistantID:       assistant.ID,
+			ProjectID:         assistant.ProjectID,
+			Backend:           selectedBackend,
+			State:             runtimeStateStarting,
+		}); err != nil {
+			return noop, fmt.Errorf("reserve replacement Kit runtime for warmup: %w", err)
+		}
+	case row.AssistantThreadID != threadID:
+		// A real thread owns the boot — existing workflows drive the lifecycle from here.
 		return noop, nil
 		// Else: the warmup thread already owns a live row (an earlier signal
 		// was lost or the workflow died mid-boot) — fall through and
@@ -3187,6 +3277,18 @@ func (s *ServiceCore) EnsureWarmupThread(ctx context.Context, assistantID uuid.U
 
 	if err := tx.Commit(ctx); err != nil {
 		return noop, fmt.Errorf("commit assistant warmup tx: %w", err)
+	}
+	if retiredSuperseded != nil {
+		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+		if err := s.finishRuntimeSwitchRetirement(cleanup, *retiredSuperseded); err != nil && s.logger != nil {
+			s.logger.WarnContext(cleanup, "superseded Kit runtime switch retirement on warmup pending retry",
+				attr.SlogAssistantID(assistant.ID.String()),
+				attr.SlogAssistantRuntimeID(retiredSuperseded.ID.String()),
+				attr.SlogAssistantRuntimeBackend(retiredSuperseded.Backend),
+				attr.SlogError(err),
+			)
+		}
+		cancel()
 	}
 	return WarmupThreadResult{ThreadID: threadID, ProjectID: assistant.ProjectID, ShouldSignal: true}, nil
 }

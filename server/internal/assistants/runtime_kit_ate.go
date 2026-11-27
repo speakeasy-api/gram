@@ -9,19 +9,23 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"maps"
 	"net"
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	ateapiv1 "go.ate.dev/substrate/api/ateapi/v1"
+	"go.opentelemetry.io/otel/metric"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	"github.com/speakeasy-api/gram/server/internal/assistants/ateclient"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
@@ -61,6 +65,13 @@ const (
 
 	// ateInitVersionHeader carries the init helper wire contract version on every response.
 	ateInitVersionHeader = "X-ATE-Init-Version"
+
+	// meterATEActorReadyDuration records actor create->ready and resume->ready durations.
+	meterATEActorReadyDuration = "assistant.ate.actor.ready_duration_ms"
+
+	ateStartupModeColdStart = "cold_start"
+	ateStartupModeResume    = "resume"
+	ateStartupModeWarm      = "warm"
 )
 
 type kitATEControl interface {
@@ -136,12 +147,20 @@ type KitATERuntimeConfig struct {
 
 	// HelperPollInterval overrides the readiness polling interval when positive (for tests).
 	HelperPollInterval time.Duration
+
+	// Logger receives structured ATE actor lifecycle logs (create->ready and resume->ready durations).
+	Logger *slog.Logger
+
+	// Meter optionally records OpenTelemetry histograms for ATE actor startup durations.
+	Meter metric.Meter
 }
 
 // KitATERuntimeBackend runs one ATE actor per assistant thread over native Kit ACP.
 type KitATERuntimeBackend struct {
-	config      KitATERuntimeConfig
-	imageDigest string
+	config        KitATERuntimeConfig
+	imageDigest   string
+	logger        *slog.Logger
+	readyDuration metric.Float64Histogram
 }
 
 type kitATEMetadata struct {
@@ -173,8 +192,29 @@ func NewKitATERuntimeBackend(c KitATERuntimeConfig) (*KitATERuntimeBackend, erro
 	if c.Now == nil {
 		c.Now = time.Now
 	}
+	logger := c.Logger
+	var readyDuration metric.Float64Histogram
+	if c.Meter != nil {
+		hist, histErr := c.Meter.Float64Histogram(
+			meterATEActorReadyDuration,
+			metric.WithDescription("Duration from ATE actor create or resume until Kit ACP app-readyz succeeds"),
+			metric.WithUnit("ms"),
+		)
+		if histErr != nil {
+			if logger != nil {
+				logger.ErrorContext(context.Background(), "create metric", attr.SlogMetricName(meterATEActorReadyDuration), attr.SlogError(histErr))
+			}
+		} else {
+			readyDuration = hist
+		}
+	}
 
-	return &KitATERuntimeBackend{config: c, imageDigest: imageDigest}, nil
+	return &KitATERuntimeBackend{
+		config:        c,
+		imageDigest:   imageDigest,
+		logger:        logger,
+		readyDuration: readyDuration,
+	}, nil
 }
 
 func (k *KitATERuntimeBackend) Backend() string               { return runtimeBackendATE }
@@ -308,8 +348,11 @@ func (k *KitATERuntimeBackend) prepare(ctx context.Context, r assistantRuntimeRe
 		if err != nil {
 			return fmt.Errorf("load ATE thread actor: %w", err)
 		}
+		prepareStart := time.Now()
+		startupMode := ateStartupModeWarm
 		warmUntil := k.config.Now().Add(ateActorWarmWindow)
 		if !known {
+			startupMode = ateStartupModeColdStart
 			entry, err = k.createThreadActor(ctx, locked, thread, kitATEActorName(locked, thread), warmUntil)
 			if err != nil {
 				return err
@@ -318,9 +361,16 @@ func (k *KitATERuntimeBackend) prepare(ctx context.Context, r assistantRuntimeRe
 			if err := k.validateActorRow(locked, entry); err != nil {
 				return err
 			}
-			entry, err = k.ensureActorRunning(ctx, locked, thread, entry, warmUntil)
+			var resumed bool
+			entry, resumed, err = k.ensureActorRunning(ctx, locked, thread, entry, warmUntil)
 			if err != nil {
 				return err
+			}
+			switch {
+			case !entry.Configured:
+				startupMode = ateStartupModeColdStart
+			case resumed:
+				startupMode = ateStartupModeResume
 			}
 		}
 
@@ -392,6 +442,7 @@ func (k *KitATERuntimeBackend) prepare(ctx context.Context, r assistantRuntimeRe
 		if err := waitKitATEHelper(ctx, helper, base+"/app-readyz", k.config.HelperPollInterval); err != nil {
 			return err
 		}
+		k.recordActorReadyDuration(ctx, locked, entry, startupMode, time.Since(prepareStart))
 
 		raw, err := json.Marshal(struct {
 			kitATEMetadata
@@ -458,6 +509,33 @@ func (k *KitATERuntimeBackend) createThreadActor(ctx context.Context, locked ass
 	return inserted, nil
 }
 
+func (k *KitATERuntimeBackend) recordActorReadyDuration(ctx context.Context, r assistantRuntimeRecord, entry kitATEThreadActor, startupMode string, d time.Duration) {
+	ms := float64(d) / float64(time.Millisecond)
+	if k.readyDuration != nil {
+		k.readyDuration.Record(ctx, ms, metric.WithAttributes(attr.AssistantATEStartupMode(startupMode)))
+	}
+	if k.logger == nil {
+		return
+	}
+	args := []any{
+		attr.SlogAssistantID(r.AssistantID.String()),
+		attr.SlogProjectID(r.ProjectID.String()),
+		attr.SlogAssistantRuntimeID(r.ID.String()),
+		attr.SlogAssistantThreadID(entry.ThreadID.String()),
+		attr.SlogAssistantATEActorName(entry.ActorName),
+		attr.SlogAssistantATEActorUID(entry.ActorUID),
+		attr.SlogAssistantATEStartupMode(startupMode),
+		attr.SlogAssistantATEReadyDurationMS(d.Milliseconds()),
+	}
+	switch startupMode {
+	case ateStartupModeColdStart:
+		args = append(args, attr.SlogAssistantATECreateToReadyMS(d.Milliseconds()))
+	case ateStartupModeResume:
+		args = append(args, attr.SlogAssistantATEResumeToReadyMS(d.Milliseconds()))
+	}
+	k.logger.InfoContext(ctx, "ATE thread actor ready", args...)
+}
+
 // ensureActorRunning brings an existing thread actor into ACTOR_STATE_RUNNING:
 //   - SUSPENDED: calls ResumeActor explicitly before dialing the router (the
 //     router only parks requests briefly while an actor wakes).
@@ -465,57 +543,69 @@ func (k *KitATERuntimeBackend) createThreadActor(ctx context.Context, locked ass
 //     durable external rootfs snapshot exists; otherwise (or if revert fails)
 //     retires the broken actor and provisions a fresh replacement automatically.
 //   - DELETING / NotFound: retires the stale row and provisions a replacement.
-func (k *KitATERuntimeBackend) ensureActorRunning(ctx context.Context, locked assistantRuntimeRecord, thread uuid.UUID, entry kitATEThreadActor, warmUntil time.Time) (kitATEThreadActor, error) {
+//
+// The boolean return reports whether the actor resumed from a non-running state
+// (SUSPENDED, CRASHED, REVERTING, or in-flight transition).
+func (k *KitATERuntimeBackend) ensureActorRunning(ctx context.Context, locked assistantRuntimeRecord, thread uuid.UUID, entry kitATEThreadActor, warmUntil time.Time) (kitATEThreadActor, bool, error) {
 	var zero kitATEThreadActor
 	actor, err := k.getActor(ctx, entry)
 	if status.Code(err) == codes.NotFound {
-		return k.retireAndRecreateActor(ctx, locked, thread, entry, warmUntil)
+		replaced, recErr := k.retireAndRecreateActor(ctx, locked, thread, entry, warmUntil)
+		return replaced, false, recErr
 	}
 	if err != nil {
-		return zero, err
+		return zero, false, err
 	}
 
+	resumed := false
 	if state := actor.GetStatus().GetState(); state == ateapiv1.ActorState_ACTOR_STATE_SUSPENDING || state == ateapiv1.ActorState_ACTOR_STATE_RESUMING {
+		resumed = true
 		actor, err = k.waitForStableActorState(ctx, entry)
 		if status.Code(err) == codes.NotFound {
-			return k.retireAndRecreateActor(ctx, locked, thread, entry, warmUntil)
+			replaced, recErr := k.retireAndRecreateActor(ctx, locked, thread, entry, warmUntil)
+			return replaced, false, recErr
 		}
 		if err != nil {
-			return zero, err
+			return zero, false, err
 		}
 	}
 
 	switch actor.GetStatus().GetState() {
 	case ateapiv1.ActorState_ACTOR_STATE_RUNNING:
-		return entry, nil
+		return entry, resumed, nil
 	case ateapiv1.ActorState_ACTOR_STATE_SUSPENDED:
 		_, err := k.config.Client.ResumeActor(ctx, &ateapiv1.ResumeActorRequest{
 			Actor: k.actorRef(entry.ActorName),
 		})
 		if err == nil {
-			return entry, nil
+			return entry, true, nil
 		}
 		if status.Code(err) == codes.FailedPrecondition {
 			// Per ATE v1.0.1 ResumeActor semantics, a missing local snapshot upload
 			// transitions the actor to ACTOR_STATE_CRASHED and returns FailedPrecondition.
 			refreshed, getErr := k.getActor(ctx, entry)
 			if status.Code(getErr) == codes.NotFound {
-				return k.retireAndRecreateActor(ctx, locked, thread, entry, warmUntil)
+				replaced, recErr := k.retireAndRecreateActor(ctx, locked, thread, entry, warmUntil)
+				return replaced, false, recErr
 			}
 			if getErr == nil && (refreshed.GetStatus().GetState() == ateapiv1.ActorState_ACTOR_STATE_CRASHED || refreshed.GetStatus().GetState() == ateapiv1.ActorState_ACTOR_STATE_REVERTING) {
-				return k.recoverCrashedActor(ctx, locked, thread, entry, refreshed, warmUntil)
+				recovered, recErr := k.recoverCrashedActor(ctx, locked, thread, entry, refreshed, warmUntil)
+				return recovered, recovered.Configured, recErr
 			}
 		}
 		if status.Code(err) == codes.NotFound {
-			return k.retireAndRecreateActor(ctx, locked, thread, entry, warmUntil)
+			replaced, recErr := k.retireAndRecreateActor(ctx, locked, thread, entry, warmUntil)
+			return replaced, false, recErr
 		}
-		return zero, fmt.Errorf("ATE ResumeActor: %w", err)
+		return zero, false, fmt.Errorf("ATE ResumeActor: %w", err)
 	case ateapiv1.ActorState_ACTOR_STATE_CRASHED, ateapiv1.ActorState_ACTOR_STATE_REVERTING:
-		return k.recoverCrashedActor(ctx, locked, thread, entry, actor, warmUntil)
+		recovered, recErr := k.recoverCrashedActor(ctx, locked, thread, entry, actor, warmUntil)
+		return recovered, recovered.Configured, recErr
 	case ateapiv1.ActorState_ACTOR_STATE_DELETING:
-		return k.retireAndRecreateActor(ctx, locked, thread, entry, warmUntil)
+		replaced, recErr := k.retireAndRecreateActor(ctx, locked, thread, entry, warmUntil)
+		return replaced, false, recErr
 	default:
-		return zero, fmt.Errorf("unexpected ATE actor state %s", actor.GetStatus().GetState().String())
+		return zero, false, fmt.Errorf("unexpected ATE actor state %s", actor.GetStatus().GetState().String())
 	}
 }
 
@@ -1107,6 +1197,55 @@ func (k *KitATERuntimeBackend) RuntimeExists(ctx context.Context, r assistantRun
 		}
 	}
 	return true, nil
+}
+
+var _ runtimeSwitchCoordinator = (*KitATERuntimeBackend)(nil)
+
+// RuntimeReadyForAdmission checks that the pre-created ATE atespace is
+// reachable before committing a runtime-version switch to Kit on ATE.
+func (k *KitATERuntimeBackend) RuntimeReadyForAdmission(ctx context.Context) error {
+	if _, err := k.config.Client.GetAtespace(ctx, &ateapiv1.GetAtespaceRequest{
+		Atespace: &ateapiv1.ObjectRef{Atespace: "", Name: k.config.Atespace},
+	}); err != nil {
+		return fmt.Errorf("%w: inspect ATE atespace %q: %w", errRuntimeSwitchUnavailable, k.config.Atespace, err)
+	}
+	return nil
+}
+
+// PrepareRuntimeSwitch verifies destination readiness (when switching to v3)
+// and that every active ATE runtime row is settled under the caller's
+// assistant advisory lock before retiring it.
+func (k *KitATERuntimeBackend) PrepareRuntimeSwitch(ctx context.Context, assistant assistantRecord, rows []assistantRuntimeRecord, destination int16) (runtimeSwitchReadiness, error) {
+	result := runtimeSwitchReadiness{
+		DestinationReady: false,
+		Settled:          false,
+		Release:          sync.OnceFunc(func() {}),
+	}
+	if destination != 2 && destination != 3 {
+		return result, errRuntimeSwitchUnavailable
+	}
+	if destination == 3 {
+		if err := k.RuntimeReadyForAdmission(ctx); err != nil {
+			return result, err
+		}
+		result.DestinationReady = true
+	}
+	for _, row := range rows {
+		if row.AssistantID != assistant.ID || row.ProjectID != assistant.ProjectID {
+			return result, ErrKitRuntimeBinding
+		}
+		if _, err := k.metadata(row); err != nil {
+			return result, err
+		}
+		if err := k.config.CheckSettled(ctx, row); err != nil {
+			if errors.Is(err, ErrKitRuntimeBinding) {
+				return result, err
+			}
+			return result, errRuntimeSwitchBusy
+		}
+	}
+	result.Settled = true
+	return result, nil
 }
 
 func kitATETrustedDNSHost(host string) bool {

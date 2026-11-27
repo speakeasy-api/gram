@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/speakeasy-api/gram/server/internal/assistants"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
@@ -54,6 +55,16 @@ func installKitLocalRuntimeFromCLI(logger *slog.Logger, c *cli.Context, core *as
 			logger.WarnContext(c.Context, "ignoring ATE Kit settings: the assistant runtime provider is disabled")
 			return nil
 		}
+		// During forward cutover (GKE -> ATE), if GKE Kit flags are still
+		// present in the environment, best-effort install GKE first so
+		// installKitATERuntimeFromCLI promotes ATE as the active Kit v3
+		// backend and demotes GKE into retiring-only cleanup. Never fail ATE
+		// startup when GKE flags are absent or incomplete.
+		if c.String("assistant-kit-image") != "" && base.Provider == assistants.RuntimeProviderGKE && core != nil {
+			if gkeErr := installKitGKEOrLocalRuntimeFromCLI(c, core, redisClient, serverURL, orgHosts, base); gkeErr != nil {
+				logger.WarnContext(c.Context, "skipping retiring Kit GKE backend during ATE startup", attr.SlogError(gkeErr))
+			}
+		}
 		return installKitATERuntimeFromCLI(c, core, redisClient, serverURL, orgHosts)
 	}
 	if c.String("assistant-kit-image") == "" {
@@ -69,6 +80,22 @@ func installKitLocalRuntimeFromCLI(logger *slog.Logger, c *cli.Context, core *as
 		logger.WarnContext(c.Context, "ignoring Kit settings: the assistant runtime provider is disabled")
 		return nil
 	}
+	if err := installKitGKEOrLocalRuntimeFromCLI(c, core, redisClient, serverURL, orgHosts, base); err != nil {
+		return err
+	}
+	// During rollback (ATE -> GKE), if ATE flags remain configured while
+	// GRAM_ASSISTANT_ATE_ENABLED=false, best-effort attach ATE strictly for
+	// retiring cleanup so existing ATE thread actors and admissions drain.
+	if core != nil {
+		if ateErr := installRetiringKitATERuntimeFromCLI(c, core, redisClient, serverURL, orgHosts); ateErr != nil {
+			logger.WarnContext(c.Context, "skipping retiring Kit ATE backend during rollback startup", attr.SlogError(ateErr))
+		}
+	}
+	return nil
+}
+
+func installKitGKEOrLocalRuntimeFromCLI(c *cli.Context, core *assistants.ServiceCore, redisClient *redis.Client, serverURL *url.URL, orgHosts *orghost.Resolver, base assistants.RuntimeBackendConfig) error {
+	var err error
 	if base.Provider == assistants.RuntimeProviderLocal && c.String("environment") != "local" {
 		return fmt.Errorf("local Kit requires the local environment")
 	}

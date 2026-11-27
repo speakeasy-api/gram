@@ -92,7 +92,138 @@ func (s *ServiceCore) sweepIdleKitRuntimes(ctx context.Context, now time.Time) i
 		}
 	}
 	stopped += s.sweepATEThreadActors(ctx, now)
+	stopped += s.retireAndFinishSupersededKitRuntimes(ctx, runtimeIdleSweepBatch)
 	return stopped
+}
+
+// retireSupersededKitBackendRuntimes transitions idle Kit v3 runtimes parked on
+// a backend different from the deployment's active Kit v3 target backend into
+// switch_retiring (via RetireAssistantRuntimesForSwitch) so the existing switch
+// retirement path tears them down without waiting for another turn. Busy
+// assistants with unsettled events or wakes are skipped.
+func (s *ServiceCore) retireSupersededKitBackendRuntimes(ctx context.Context, limit int32) ([]assistantRuntimeRecord, int) {
+	if limit <= 0 {
+		return nil, 0
+	}
+	targetBackend, err := runtimeBackendForVersion(s.runtime, 3)
+	if err != nil || targetBackend == "" {
+		return nil, 0
+	}
+	rows, err := assistantrepo.New(s.db).ListSupersededKitRuntimes(ctx, assistantrepo.ListSupersededKitRuntimesParams{
+		TargetBackend: targetBackend,
+		LimitCount:    limit,
+	})
+	if err != nil {
+		if s.logger != nil {
+			s.logger.WarnContext(ctx, "list superseded Kit runtimes failed", attr.SlogError(err))
+		}
+		return nil, 1
+	}
+	var (
+		retired []assistantRuntimeRecord
+		errCnt  int
+	)
+	for _, row := range rows {
+		rec, didRetire, retireErr := s.markSupersededKitRuntimeForRetirement(ctx, row.ProjectID, row.AssistantID, row.ID, targetBackend)
+		if retireErr != nil {
+			errCnt++
+			if s.logger != nil {
+				s.logger.WarnContext(ctx, "mark superseded Kit runtime for retirement failed",
+					attr.SlogAssistantID(row.AssistantID.String()),
+					attr.SlogAssistantRuntimeID(row.ID.String()),
+					attr.SlogAssistantRuntimeBackend(row.Backend),
+					attr.SlogError(retireErr),
+				)
+			}
+			continue
+		}
+		if didRetire {
+			retired = append(retired, rec)
+		}
+	}
+	return retired, errCnt
+}
+
+func (s *ServiceCore) markSupersededKitRuntimeForRetirement(ctx context.Context, projectID, assistantID, runtimeID uuid.UUID, targetBackend string) (assistantRuntimeRecord, bool, error) {
+	var zero assistantRuntimeRecord
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return zero, false, fmt.Errorf("begin superseded Kit retirement tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	q := assistantrepo.New(tx)
+	if err := q.AcquireAssistantAdvisoryLock(ctx, assistantID.String()); err != nil {
+		return zero, false, fmt.Errorf("lock superseded Kit retirement: %w", err)
+	}
+	row, err := q.GetAssistantRuntimeV2(ctx, assistantrepo.GetAssistantRuntimeV2Params{
+		ProjectID:   projectID,
+		AssistantID: assistantID,
+	})
+	if err != nil {
+		return zero, false, nil //nolint:nilerr // already ended or retired concurrently
+	}
+	if row.ID != runtimeID || row.RuntimeVersion != 3 || row.Backend == targetBackend {
+		return zero, false, nil
+	}
+	if row.State != runtimeStateActive && row.State != runtimeStateStopped && row.State != runtimeStateFailed {
+		return zero, false, nil
+	}
+	busy, err := q.AssistantHasUnsettledEvents(ctx, assistantrepo.AssistantHasUnsettledEventsParams{
+		ProjectID:   projectID,
+		AssistantID: assistantID,
+	})
+	if err != nil {
+		return zero, false, fmt.Errorf("check unsettled events before superseded Kit retirement: %w", err)
+	}
+	if !busy.Valid || busy.Bool {
+		return zero, false, nil
+	}
+	if err := q.RetireAssistantRuntimesForSwitch(ctx, assistantrepo.RetireAssistantRuntimesForSwitchParams{
+		ProjectID:   projectID,
+		AssistantID: assistantID,
+	}); err != nil {
+		return zero, false, fmt.Errorf("retire superseded Kit runtime: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return zero, false, fmt.Errorf("commit superseded Kit retirement: %w", err)
+	}
+	return assistantRuntimeRecord{
+		LifecycleTx:         nil,
+		Retired:             true,
+		ID:                  row.ID,
+		AssistantThreadID:   row.AssistantThreadID,
+		AssistantID:         row.AssistantID,
+		ProjectID:           row.ProjectID,
+		RuntimeVersion:      row.RuntimeVersion,
+		Backend:             row.Backend,
+		BackendMetadataJSON: row.BackendMetadataJson,
+		State:               "switch_retiring",
+		WarmUntil:           row.WarmUntil,
+	}, true, nil
+}
+
+func (s *ServiceCore) retireAndFinishSupersededKitRuntimes(ctx context.Context, limit int32) int64 {
+	retired, _ := s.retireSupersededKitBackendRuntimes(ctx, limit)
+	var completed int64
+	for _, rec := range retired {
+		rowCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+		err := s.finishRuntimeSwitchRetirement(rowCtx, rec)
+		cancel()
+		if err != nil {
+			if s.logger != nil {
+				s.logger.WarnContext(ctx, "finish superseded Kit runtime retirement failed",
+					attr.SlogAssistantID(rec.AssistantID.String()),
+					attr.SlogAssistantRuntimeID(rec.ID.String()),
+					attr.SlogAssistantRuntimeBackend(rec.Backend),
+					attr.SlogError(err),
+				)
+			}
+			continue
+		}
+		completed++
+	}
+	return completed
 }
 
 // sweepATEThreadActors paginates live running rows in assistant_ate_actors

@@ -92,5 +92,5 @@ func newDisabledRuntimeBackend(backends map[string]RuntimeBackend) (RuntimeBacke
 	if err != nil {
 		return nil, fmt.Errorf("assemble assistant runtime backends: %w", err)
 	}
-	return &versionedRuntimeBackend{legacy: router, kit: nil}, nil
+	return &versionedRuntimeBackend{legacy: router, kit: nil, kitRetiring: nil}, nil
 }
