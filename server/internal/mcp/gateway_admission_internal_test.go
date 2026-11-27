@@ -27,11 +27,12 @@ func TestGatewayCallerFromContextPerson(t *testing.T) {
 
 		require.NoError(t, err)
 		require.Equal(t, gatewayCaller{
-			kind:         gatewayCallerPerson,
-			principal:    principal,
-			owner:        "",
-			ceiling:      nil,
-			projectScope: nil,
+			kind:                gatewayCallerPerson,
+			principal:           principal,
+			owner:               "",
+			ceiling:             nil,
+			projectScope:        nil,
+			principalCredential: false,
 		}, caller)
 	}
 }
