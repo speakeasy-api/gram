@@ -28,11 +28,11 @@ func searchWindowedTarget(m *repo.ListSearchWindowedMessagesRow) transcriptstore
 }
 
 // openTranscriptRows opens a page of chat.load rows through the caller's project.
-// See transcriptstore.Transcripts.Open for the fallback and failure rules.
+// See transcriptstore.OpenChatMessages for the fallback and failure rules.
 func openTranscriptRows[T any](ctx context.Context, s *Service, authCtx *contextvalues.AuthContext, rows []T, targetOf func(*T) transcriptstore.OpenTarget) error {
 	if authCtx == nil || authCtx.ProjectID == nil {
 		return nil
 	}
-	//nolint:wrapcheck // Open already wraps with the transcript read context.
+	//nolint:wrapcheck // OpenChatMessages already wraps with the transcript read context.
 	return transcriptstore.OpenChatMessages(ctx, s.transcripts, authCtx.ActiveOrganizationID, *authCtx.ProjectID, rows, targetOf)
 }
