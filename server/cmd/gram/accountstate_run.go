@@ -10,7 +10,6 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"syscall"
 	"time"
 
@@ -134,12 +133,9 @@ func runAccountState(ctx context.Context, r accountStateRequest) (any, error) {
 	if err = localaccounts.CheckWorkflows(preflight, config); err != nil {
 		return nil, fmt.Errorf("check account workflows: %w", err)
 	}
-	// Product features live on the evictable role; a local stack that gives
-	// that role its own instance names it in GRAM_REDIS_EVICTABLE_ADDR.
+	// Product features live on the evictable role. A local stack keeps every
+	// role on its one Redis, the address the safety fence above has checked.
 	cacheAddress, cachePassword := config.RedisAddress, os.Getenv("GRAM_REDIS_CACHE_PASSWORD")
-	if evictable := strings.TrimSpace(os.Getenv("GRAM_REDIS_EVICTABLE_ADDR")); evictable != "" {
-		cacheAddress, cachePassword = evictable, os.Getenv("GRAM_REDIS_EVICTABLE_PASSWORD")
-	}
 	cacheHost, cachePort, _ := net.SplitHostPort(cacheAddress)
 	if cacheHost == "localhost" {
 		cacheAddress = net.JoinHostPort("127.0.0.1", cachePort)
