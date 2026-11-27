@@ -215,8 +215,9 @@ async function gate(ciRunId: string): Promise<boolean> {
 async function judge(run: CiRun): Promise<string | undefined> {
   if (!run.id) return `no CI run recorded (exit ${run.exitCode})`;
   if (run.exitCode !== 0) return `exit ${run.exitCode}, CI run \`${run.id}\``;
-  if (run.result.error != null) {
-    return `error ${JSON.stringify(run.result.error)}, CI run \`${run.id}\``;
+  const error = run.result.error ?? run.result.apply?.error;
+  if (error != null) {
+    return `error ${JSON.stringify(error)}, CI run \`${run.id}\``;
   }
   if (!(await gate(run.id))) return `failed, CI run \`${run.id}\``;
   return undefined;
