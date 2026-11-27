@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -20,7 +21,7 @@ import (
 )
 
 const (
-	// home is the Kit actor's persistent home directory inside the sandbox rootfs.
+	// home is the actor's persistent home directory inside the sandbox rootfs.
 	home = "/home/kit"
 
 	// maxBootstrap bounds the tar archive uploaded to POST /bootstrap.
@@ -31,7 +32,7 @@ const (
 )
 
 // bootstrapFiles lists the exact archive entries accepted by POST /bootstrap:
-// non-secret Kit config plus the per-actor ACP server credential file.
+// non-secret runtime config plus the per-actor ACP server credential file.
 // Speakeasy API credentials are never delivered into the sandbox; ATE's egress
 // gateway injects the actor JWT on outbound requests.
 var bootstrapFiles = []string{
@@ -46,7 +47,13 @@ type initializer struct {
 	mu       sync.Mutex
 	started  bool
 	launched bool
+	draining bool
 	launch   chan struct{}
+}
+
+type statusResponse struct {
+	Draining bool `json:"draining"`
+	Started  bool `json:"started"`
 }
 
 func (s *initializer) signalLaunchLocked() {
@@ -56,12 +63,25 @@ func (s *initializer) signalLaunchLocked() {
 	}
 }
 
+func (s *initializer) markDraining() {
+	s.mu.Lock()
+	s.draining = true
+	s.mu.Unlock()
+}
+
 func (s *initializer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	switch {
 	case r.Method == http.MethodGet && r.URL.Path == "/readyz":
 		w.WriteHeader(http.StatusOK)
+	case r.Method == http.MethodGet && r.URL.Path == "/status":
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(statusResponse{
+			Draining: s.draining,
+			Started:  s.started,
+		})
 	case r.Method == http.MethodGet && r.URL.Path == "/kit-readyz":
 		conn, err := net.DialTimeout("tcp", "127.0.0.1:8081", time.Second)
 		if err != nil {
@@ -181,11 +201,12 @@ func newInitializer(homeDir string) (*initializer, error) {
 		mu:       sync.Mutex{},
 		started:  false,
 		launched: false,
+		draining: false,
 		launch:   make(chan struct{}),
 	}
 	if _, err := os.Stat(filepath.Join(homeDir, ".kit/ate-initialized")); err == nil {
 		// Resuming from a durable rootfs snapshot: config is already on disk,
-		// so launch Kit immediately without waiting for POST /bootstrap.
+		// so launch immediately without waiting for POST /bootstrap.
 		state.started = true
 		state.signalLaunchLocked()
 	} else if !errors.Is(err, os.ErrNotExist) {
@@ -194,11 +215,32 @@ func newInitializer(homeDir string) (*initializer, error) {
 	return state, nil
 }
 
-func run(ctx context.Context) error {
-	state, err := newInitializer(home)
+// run manages bootstrap HTTP handling, worker-drain SIGTERM trapping, and the
+// launched child process. On SIGTERM (ATE worker drain), PID 1 intentionally
+// stays alive and leaves the child running while advertising draining=true on
+// GET /status so the harness can synchronously suspend the actor with a durable
+// snapshot before the worker's shutdown budget elapses.
+func run(ctx context.Context, homeDir string, listener net.Listener, termCh <-chan os.Signal, childFactory func(context.Context) *exec.Cmd) error {
+	state, err := newInitializer(homeDir)
 	if err != nil {
 		return err
 	}
+
+	stopDrainWatch := make(chan struct{})
+	defer close(stopDrainWatch)
+	go func() {
+		for {
+			select {
+			case <-termCh:
+				state.markDraining()
+			case <-stopDrainWatch:
+				return
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
 	server := &http.Server{
 		Addr:              ":8082",
 		Handler:           state,
@@ -208,8 +250,15 @@ func run(ctx context.Context) error {
 		MaxHeaderBytes:    8192,
 	}
 	errs := make(chan error, 2)
-	go func() { errs <- server.ListenAndServe() }()
+	go func() {
+		if listener != nil {
+			errs <- server.Serve(listener)
+			return
+		}
+		errs <- server.ListenAndServe()
+	}()
 	defer func() { _ = server.Close() }()
+
 	select {
 	case <-ctx.Done():
 		return fmt.Errorf("initialization canceled: %w", ctx.Err())
@@ -217,9 +266,8 @@ func run(ctx context.Context) error {
 		return err
 	case <-state.launch:
 	}
-	command := exec.CommandContext(ctx, "/usr/local/bin/kit", "serve", "--root", home+"/workspace", "--remote-acp", "--no-a2a", "--no-stdio", "--a2a", "0.0.0.0:8081", "--server-credential-file", home+"/.kit/credentials/gateway-token")
-	command.Env = append(os.Environ(), "HOME="+home)
-	command.Stdout, command.Stderr = os.Stdout, os.Stderr
+
+	command := childFactory(ctx)
 	go func() { errs <- command.Run() }()
 	select {
 	case err := <-errs:
@@ -229,10 +277,23 @@ func run(ctx context.Context) error {
 	}
 }
 
+func defaultChildCommand(ctx context.Context) *exec.Cmd {
+	command := exec.CommandContext(ctx, "/usr/local/bin/kit", "serve", "--root", home+"/workspace", "--remote-acp", "--no-a2a", "--no-stdio", "--a2a", "0.0.0.0:8081", "--server-credential-file", home+"/.kit/credentials/gateway-token")
+	command.Env = append(os.Environ(), "HOME="+home)
+	command.Stdout, command.Stderr = os.Stdout, os.Stderr
+	return command
+}
+
 func main() {
-	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
-	err := run(ctx)
+	// Trap SIGTERM for ATE worker-drain eviction without exiting or killing the
+	// child process. Only SIGINT cancels the process context.
+	termCh := make(chan os.Signal, 1)
+	signal.Notify(termCh, syscall.SIGTERM)
+
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT)
+	err := run(ctx, home, nil, termCh, defaultChildCommand)
 	cancel()
+	signal.Stop(termCh)
 	if err != nil && !errors.Is(err, context.Canceled) {
 		log.Print("ATE Kit initialization stopped")
 		os.Exit(1)

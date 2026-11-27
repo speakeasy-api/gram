@@ -46,6 +46,15 @@ const (
 
 	// ateActorWarmWindow keeps a thread actor warm after activity before idle sweep suspends it.
 	ateActorWarmWindow = 10 * time.Minute
+
+	// ateSuspendingWaitTimeout bounds waiting for an in-flight ACTOR_STATE_SUSPENDING transition to finish.
+	ateSuspendingWaitTimeout = 30 * time.Second
+
+	// ateDrainCheckTimeout bounds polling GET /status on kit-ate-init for eviction drain detection.
+	ateDrainCheckTimeout = 5 * time.Second
+
+	// ateDrainSuspendTimeout bounds synchronous durable suspension triggered by worker eviction drain.
+	ateDrainSuspendTimeout = 3 * time.Minute
 )
 
 type kitATEControl interface {
@@ -55,6 +64,8 @@ type kitATEControl interface {
 	CreateActorTemplate(context.Context, *ateapiv1.CreateActorTemplateRequest) (*ateapiv1.ActorTemplate, error)
 	GetActor(context.Context, *ateapiv1.GetActorRequest) (*ateapiv1.Actor, error)
 	CreateActor(context.Context, *ateapiv1.CreateActorRequest) (*ateapiv1.Actor, error)
+	ResumeActor(context.Context, *ateapiv1.ResumeActorRequest) (*ateapiv1.ResumeActorResponse, error)
+	RevertActor(context.Context, *ateapiv1.RevertActorRequest) (*ateapiv1.RevertActorResponse, error)
 	SuspendActor(context.Context, *ateapiv1.SuspendActorRequest) (*ateapiv1.SuspendActorResponse, error)
 	DeleteActor(context.Context, *ateapiv1.DeleteActorRequest) (*ateapiv1.Actor, error)
 	GetActorEgressPolicy(context.Context, *ateapiv1.GetActorEgressPolicyRequest) (*ateapiv1.EgressPolicy, error)
@@ -72,8 +83,15 @@ type KitATERuntimeConfig struct {
 	// Revoke withdraws a thread actor's workload admission during reap.
 	Revoke func(context.Context, assistantRuntimeRecord, *KitWorkloadBinding) error
 
-	// CheckSettled verifies the assistant has no unsettled events or wakes before suspend.
+	// CheckSettled verifies the assistant has no unsettled events or wakes before runtime-wide stop.
 	CheckSettled func(context.Context, assistantRuntimeRecord) error
+
+	// CheckThreadSettled verifies one thread has no unsettled events (excluding
+	// an optional completing event ID) before per-thread idle or drain suspend.
+	CheckThreadSettled func(context.Context, assistantRuntimeRecord, uuid.UUID, uuid.UUID) error
+
+	// ClearThreadSession removes a thread's persisted ACP session mapping when a crashed actor is replaced.
+	ClearThreadSession func(context.Context, assistantRuntimeRecord, uuid.UUID) error
 
 	// Image is the digest-pinned OCI image ref for the ATE Kit runtime.
 	Image string
@@ -171,8 +189,21 @@ func kitATEActorName(r assistantRuntimeRecord, thread uuid.UUID) string {
 	return kitATEActorNamePrefix(r.ID) + hex.EncodeToString(sum[:8])
 }
 
+func kitATEActorThreadPrefix(runtimeID, thread uuid.UUID) string {
+	sum := sha256.Sum256([]byte(thread.String()))
+	return kitATEActorNamePrefix(runtimeID) + hex.EncodeToString(sum[:4])
+}
+
+func kitATEActorReplacementName(r assistantRuntimeRecord, thread, nonce uuid.UUID) string {
+	nonceSum := sha256.Sum256([]byte(nonce.String()))
+	return kitATEActorThreadPrefix(r.ID, thread) + "-" + hex.EncodeToString(nonceSum[:3])
+}
+
 func kitATEActorNameValid(r assistantRuntimeRecord, thread uuid.UUID, name string) bool {
-	return thread != uuid.Nil && name == kitATEActorName(r, thread)
+	if thread == uuid.Nil || len(name) > maxATEDNSLabelLen || !kitATENamePattern.MatchString(name) {
+		return false
+	}
+	return name == kitATEActorName(r, thread) || strings.HasPrefix(name, kitATEActorThreadPrefix(r.ID, thread)+"-")
 }
 
 func (k *KitATERuntimeBackend) metadata(r assistantRuntimeRecord) (kitATEMetadata, error) {
@@ -264,56 +295,16 @@ func (k *KitATERuntimeBackend) prepare(ctx context.Context, r assistantRuntimeRe
 		}
 		warmUntil := k.config.Now().Add(ateActorWarmWindow)
 		if !known {
-			candidate := kitATEThreadActor{
-				ID:         uuid.Nil,
-				RuntimeID:  locked.ID,
-				ThreadID:   thread,
-				ActorName:  kitATEActorName(locked, thread),
-				ActorUID:   "",
-				State:      ateActorStateRunning,
-				Configured: false,
-				Workload:   nil,
-				WarmUntil:  &warmUntil,
-			}
-			actor, err := k.getActor(ctx, candidate)
-			if status.Code(err) == codes.NotFound {
-				actor, err = k.config.Client.CreateActor(ctx, &ateapiv1.CreateActorRequest{
-					Actor: &ateapiv1.Actor{
-						Metadata: &ateapiv1.ResourceMetadata{
-							Atespace:   k.config.Atespace,
-							Name:       candidate.ActorName,
-							Uid:        "",
-							Version:    0,
-							CreateTime: nil,
-							UpdateTime: nil,
-							DeleteTime: nil,
-						},
-						ActorTemplate:  k.actorRef(k.config.Template),
-						WorkerSelector: nil,
-						SourceTag:      nil,
-						Status:         nil,
-					},
-				})
-				if err != nil {
-					return fmt.Errorf("ATE CreateActor: %w", err)
-				}
-			} else if err != nil {
-				return fmt.Errorf("lookup ATE actor: %w", err)
-			}
-			meta := actor.GetMetadata()
-			if meta.GetUid() == "" || meta.GetName() != candidate.ActorName || meta.GetAtespace() != k.config.Atespace {
-				return ErrKitRuntimeBinding
-			}
-			candidate.ActorUID = meta.GetUid()
-			entry, err = k.config.Store.Insert(ctx, locked, candidate)
+			entry, err = k.createThreadActor(ctx, locked, thread, kitATEActorName(locked, thread), warmUntil)
 			if err != nil {
-				return fmt.Errorf("persist ATE thread actor: %w", err)
+				return err
 			}
 		} else {
 			if err := k.validateActorRow(locked, entry); err != nil {
 				return err
 			}
-			if _, err := k.getActor(ctx, entry); err != nil {
+			entry, err = k.ensureActorRunning(ctx, locked, thread, entry, warmUntil)
+			if err != nil {
 				return err
 			}
 		}
@@ -399,6 +390,228 @@ func (k *KitATERuntimeBackend) prepare(ctx context.Context, r assistantRuntimeRe
 	return prepared, entry, token, err
 }
 
+func (k *KitATERuntimeBackend) createThreadActor(ctx context.Context, locked assistantRuntimeRecord, thread uuid.UUID, actorName string, warmUntil time.Time) (kitATEThreadActor, error) {
+	var zero kitATEThreadActor
+	candidate := kitATEThreadActor{
+		ID:         uuid.Nil,
+		RuntimeID:  locked.ID,
+		ThreadID:   thread,
+		ActorName:  actorName,
+		ActorUID:   "",
+		State:      ateActorStateRunning,
+		Configured: false,
+		Workload:   nil,
+		WarmUntil:  &warmUntil,
+	}
+	actor, err := k.getActor(ctx, candidate)
+	if status.Code(err) == codes.NotFound {
+		actor, err = k.config.Client.CreateActor(ctx, &ateapiv1.CreateActorRequest{
+			Actor: &ateapiv1.Actor{
+				Metadata: &ateapiv1.ResourceMetadata{
+					Atespace:   k.config.Atespace,
+					Name:       candidate.ActorName,
+					Uid:        "",
+					Version:    0,
+					CreateTime: nil,
+					UpdateTime: nil,
+					DeleteTime: nil,
+				},
+				ActorTemplate:  k.actorRef(k.config.Template),
+				WorkerSelector: nil,
+				SourceTag:      nil,
+				Status:         nil,
+			},
+		})
+		if err != nil {
+			return zero, fmt.Errorf("ATE CreateActor: %w", err)
+		}
+	} else if err != nil {
+		return zero, fmt.Errorf("lookup ATE actor: %w", err)
+	}
+	meta := actor.GetMetadata()
+	if meta.GetUid() == "" || meta.GetName() != candidate.ActorName || meta.GetAtespace() != k.config.Atespace {
+		return zero, ErrKitRuntimeBinding
+	}
+	candidate.ActorUID = meta.GetUid()
+	inserted, err := k.config.Store.Insert(ctx, locked, candidate)
+	if err != nil {
+		return zero, fmt.Errorf("persist ATE thread actor: %w", err)
+	}
+	return inserted, nil
+}
+
+// ensureActorRunning brings an existing thread actor into ACTOR_STATE_RUNNING:
+//   - SUSPENDED: calls ResumeActor explicitly before dialing the router (the
+//     router only parks requests briefly while an actor wakes).
+//   - CRASHED / REVERTING: calls RevertActor + ResumeActor when a completed
+//     durable external rootfs snapshot exists; otherwise (or if revert fails)
+//     retires the broken actor and provisions a fresh replacement automatically.
+//   - DELETING / NotFound: retires the stale row and provisions a replacement.
+func (k *KitATERuntimeBackend) ensureActorRunning(ctx context.Context, locked assistantRuntimeRecord, thread uuid.UUID, entry kitATEThreadActor, warmUntil time.Time) (kitATEThreadActor, error) {
+	var zero kitATEThreadActor
+	actor, err := k.getActor(ctx, entry)
+	if status.Code(err) == codes.NotFound {
+		return k.retireAndRecreateActor(ctx, locked, thread, entry, warmUntil)
+	}
+	if err != nil {
+		return zero, err
+	}
+
+	if state := actor.GetStatus().GetState(); state == ateapiv1.ActorState_ACTOR_STATE_SUSPENDING || state == ateapiv1.ActorState_ACTOR_STATE_RESUMING {
+		actor, err = k.waitForStableActorState(ctx, entry)
+		if status.Code(err) == codes.NotFound {
+			return k.retireAndRecreateActor(ctx, locked, thread, entry, warmUntil)
+		}
+		if err != nil {
+			return zero, err
+		}
+	}
+
+	switch actor.GetStatus().GetState() {
+	case ateapiv1.ActorState_ACTOR_STATE_RUNNING:
+		return entry, nil
+	case ateapiv1.ActorState_ACTOR_STATE_SUSPENDED:
+		_, err := k.config.Client.ResumeActor(ctx, &ateapiv1.ResumeActorRequest{
+			Actor: k.actorRef(entry.ActorName),
+		})
+		if err == nil {
+			return entry, nil
+		}
+		if status.Code(err) == codes.FailedPrecondition {
+			// Per ATE v1.0.1 ResumeActor semantics, a missing local snapshot upload
+			// transitions the actor to ACTOR_STATE_CRASHED and returns FailedPrecondition.
+			refreshed, getErr := k.getActor(ctx, entry)
+			if status.Code(getErr) == codes.NotFound {
+				return k.retireAndRecreateActor(ctx, locked, thread, entry, warmUntil)
+			}
+			if getErr == nil && (refreshed.GetStatus().GetState() == ateapiv1.ActorState_ACTOR_STATE_CRASHED || refreshed.GetStatus().GetState() == ateapiv1.ActorState_ACTOR_STATE_REVERTING) {
+				return k.recoverCrashedActor(ctx, locked, thread, entry, refreshed, warmUntil)
+			}
+		}
+		if status.Code(err) == codes.NotFound {
+			return k.retireAndRecreateActor(ctx, locked, thread, entry, warmUntil)
+		}
+		return zero, fmt.Errorf("ATE ResumeActor: %w", err)
+	case ateapiv1.ActorState_ACTOR_STATE_CRASHED, ateapiv1.ActorState_ACTOR_STATE_REVERTING:
+		return k.recoverCrashedActor(ctx, locked, thread, entry, actor, warmUntil)
+	case ateapiv1.ActorState_ACTOR_STATE_DELETING:
+		return k.retireAndRecreateActor(ctx, locked, thread, entry, warmUntil)
+	default:
+		return zero, fmt.Errorf("unexpected ATE actor state %s", actor.GetStatus().GetState().String())
+	}
+}
+
+func (k *KitATERuntimeBackend) waitForStableActorState(ctx context.Context, entry kitATEThreadActor) (*ateapiv1.Actor, error) {
+	waitCtx, cancel := context.WithTimeout(ctx, ateSuspendingWaitTimeout)
+	defer cancel()
+	for {
+		actor, err := k.getActor(waitCtx, entry)
+		if err != nil {
+			return nil, err
+		}
+		state := actor.GetStatus().GetState()
+		if state != ateapiv1.ActorState_ACTOR_STATE_SUSPENDING && state != ateapiv1.ActorState_ACTOR_STATE_RESUMING {
+			return actor, nil
+		}
+		timer := time.NewTimer(k.config.HelperPollInterval)
+		select {
+		case <-waitCtx.Done():
+			timer.Stop()
+			return nil, errors.New("ATE actor state transition did not complete before resume")
+		case <-timer.C:
+		}
+	}
+}
+
+func (k *KitATERuntimeBackend) recoverCrashedActor(ctx context.Context, locked assistantRuntimeRecord, thread uuid.UUID, entry kitATEThreadActor, actor *ateapiv1.Actor, warmUntil time.Time) (kitATEThreadActor, error) {
+	if entry.Configured && hasCompletedExternalRootfsSnapshot(actor) {
+		if _, err := k.config.Client.RevertActor(ctx, &ateapiv1.RevertActorRequest{
+			Actor: k.actorRef(entry.ActorName),
+		}); err == nil {
+			if _, err := k.config.Client.ResumeActor(ctx, &ateapiv1.ResumeActorRequest{
+				Actor: k.actorRef(entry.ActorName),
+			}); err == nil {
+				return entry, nil
+			}
+		}
+	}
+	return k.retireAndRecreateActor(ctx, locked, thread, entry, warmUntil)
+}
+
+func (k *KitATERuntimeBackend) retireAndRecreateActor(ctx context.Context, locked assistantRuntimeRecord, thread uuid.UUID, entry kitATEThreadActor, warmUntil time.Time) (kitATEThreadActor, error) {
+	var zero kitATEThreadActor
+	if entry.Workload != nil {
+		if err := k.config.Revoke(ctx, locked, entry.Workload); err != nil {
+			return zero, fmt.Errorf("revoke crashed ATE actor workload: %w", err)
+		}
+	}
+	if _, err := k.config.Client.DeleteActor(ctx, &ateapiv1.DeleteActorRequest{
+		Actor:   k.actorRef(entry.ActorName),
+		Options: &ateapiv1.DeleteOptions{Version: 0, Uid: entry.ActorUID},
+	}); err != nil && status.Code(err) != codes.NotFound {
+		return zero, fmt.Errorf("delete crashed ATE actor: %w", err)
+	}
+	if err := k.config.Store.SoftDelete(ctx, locked, entry.ID); err != nil {
+		return zero, fmt.Errorf("soft-delete crashed ATE actor row: %w", err)
+	}
+	if k.config.ClearThreadSession != nil {
+		if err := k.config.ClearThreadSession(ctx, locked, thread); err != nil {
+			return zero, fmt.Errorf("clear replaced ATE thread session: %w", err)
+		}
+	}
+	replacementName := kitATEActorReplacementName(locked, thread, uuid.New())
+	return k.createThreadActor(ctx, locked, thread, replacementName, warmUntil)
+}
+
+func hasCompletedExternalRootfsSnapshot(actor *ateapiv1.Actor) bool {
+	for _, snap := range actor.GetStatus().GetSnapshots() {
+		if snap.GetFidelity() == ateapiv1.SnapshotFidelity_SNAPSHOT_FIDELITY_ROOTFS &&
+			snap.GetDurableSnapshot().GetState() == ateapiv1.SnapshotStorageState_SNAPSHOT_STORAGE_STATE_COMPLETED {
+			return true
+		}
+	}
+	return false
+}
+
+func isKitATEActorDraining(ctx context.Context, client kitATEControl, actorName string) (bool, error) {
+	checkCtx, cancel := context.WithTimeout(ctx, ateDrainCheckTimeout)
+	defer cancel()
+
+	helper, err := client.ActorHTTPClient(actorName, ateInitPort)
+	if err != nil {
+		return false, fmt.Errorf("create ATE drain status transport: %w", err)
+	}
+	defer helper.CloseIdleConnections()
+
+	base, err := ateclient.ActorEndpoint(actorName, ateInitPort)
+	if err != nil {
+		return false, fmt.Errorf("build ATE drain status endpoint: %w", err)
+	}
+	base = strings.TrimSuffix(base, "/acp")
+
+	req, err := http.NewRequestWithContext(checkCtx, http.MethodGet, base+"/status", nil)
+	if err != nil {
+		return false, fmt.Errorf("build ATE drain status request: %w", err)
+	}
+	res, err := helper.Do(req)
+	if err != nil {
+		return false, fmt.Errorf("query ATE drain status: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return res.Body.Close() })
+
+	if res.StatusCode != http.StatusOK {
+		_, _ = io.Copy(io.Discard, io.LimitReader(res.Body, maxATEHelperErrorBodyBytes))
+		return false, nil
+	}
+	var payload struct {
+		Draining bool `json:"draining"`
+	}
+	if err := json.NewDecoder(io.LimitReader(res.Body, maxATEHelperErrorBodyBytes)).Decode(&payload); err != nil {
+		return false, fmt.Errorf("decode ATE drain status: %w", err)
+	}
+	return payload.Draining, nil
+}
+
 func waitKitATEHelper(ctx context.Context, client *guardian.HTTPClient, endpoint string, pollInterval time.Duration) error {
 	ctx, cancel := context.WithTimeout(ctx, ateHelperReadyTimeout)
 	defer cancel()
@@ -481,10 +694,180 @@ func (k *KitATERuntimeBackend) RunTurn(ctx context.Context, r assistantRuntimeRe
 	if err != nil {
 		return err
 	}
-	if err := p.RunTurn(ctx, prepared, turn); err != nil {
-		return fmt.Errorf("run ATE Kit turn: %w", err)
+	runErr := p.RunTurn(ctx, prepared, turn)
+
+	// If the host worker received a drain SIGTERM while this turn was in flight,
+	// kit-ate-init kept the actor alive so the turn could finish cleanly.
+	// Synchronously suspend the actor now with a durable rootfs snapshot so it
+	// resumes on a healthy worker before the drain budget elapses.
+	drainCtx, drainCancel := context.WithTimeout(context.WithoutCancel(ctx), ateDrainSuspendTimeout)
+	defer drainCancel()
+	if draining, drainErr := isKitATEActorDraining(drainCtx, k.config.Client, t.ActorName); drainErr == nil && draining {
+		if suspendErr := k.suspendDrainingThreadActor(drainCtx, r, turn.ThreadID, turn.EventID); suspendErr != nil {
+			runErr = errors.Join(runErr, fmt.Errorf("suspend draining ATE actor: %w", suspendErr))
+		}
+	}
+
+	if runErr != nil {
+		return fmt.Errorf("run ATE Kit turn: %w", runErr)
 	}
 	return nil
+}
+
+func (k *KitATERuntimeBackend) suspendDrainingThreadActor(ctx context.Context, r assistantRuntimeRecord, threadID, excludeEventID uuid.UUID) error {
+	return k.config.ThreadLifecycle(ctx, r, threadID, func(ctx context.Context, locked assistantRuntimeRecord) error {
+		if _, err := k.metadata(locked); err != nil {
+			return err
+		}
+		t, ok, err := k.config.Store.GetForThread(ctx, locked, threadID)
+		if err != nil {
+			return fmt.Errorf("load draining ATE thread actor: %w", err)
+		}
+		if !ok || t.State != ateActorStateRunning {
+			return nil
+		}
+		if err := k.validateActorRow(locked, t); err != nil {
+			return err
+		}
+		// Skip only if another event on this same thread is already unsettled;
+		// the completing turn's own event_id is excluded because service.go
+		// marks it completed after RunTurn returns.
+		if k.config.CheckThreadSettled != nil {
+			if err := k.config.CheckThreadSettled(ctx, locked, threadID, excludeEventID); err != nil {
+				return nil
+			}
+		} else if err := k.config.CheckSettled(ctx, locked); err != nil {
+			return nil
+		}
+		_, err = k.suspendThreadActorLocked(ctx, locked, t)
+		return err
+	})
+}
+
+// SuspendThreadActor suspends a single thread actor synchronously when either
+// its warm window has elapsed past runtimeIdleSweepGrace or its init helper
+// reports a worker eviction drain (SIGTERM). It acquires only the per-thread
+// lock so active sibling threads of the same assistant are never blocked.
+func (k *KitATERuntimeBackend) SuspendThreadActor(ctx context.Context, r assistantRuntimeRecord, threadID uuid.UUID, now time.Time) (bool, error) {
+	if threadID == uuid.Nil {
+		return false, ErrKitRuntimeBinding
+	}
+	suspended := false
+	err := k.config.ThreadLifecycle(ctx, r, threadID, func(ctx context.Context, locked assistantRuntimeRecord) error {
+		if locked.Retired {
+			return nil
+		}
+		if _, err := k.metadata(locked); err != nil {
+			return err
+		}
+		t, ok, err := k.config.Store.GetForThread(ctx, locked, threadID)
+		if err != nil {
+			return fmt.Errorf("load ATE thread actor for sweep: %w", err)
+		}
+		if !ok || t.State != ateActorStateRunning {
+			return nil
+		}
+		if err := k.validateActorRow(locked, t); err != nil {
+			return err
+		}
+
+		idle := t.WarmUntil != nil && !t.WarmUntil.After(now.Add(-runtimeIdleSweepGrace))
+		draining := false
+		if !idle {
+			var drainErr error
+			draining, drainErr = isKitATEActorDraining(ctx, k.config.Client, t.ActorName)
+			if drainErr != nil || !draining {
+				return nil
+			}
+		}
+
+		// Never interrupt an active turn during periodic sweep: if draining,
+		// RunTurn suspends the actor synchronously as soon as the turn settles.
+		if k.config.CheckThreadSettled != nil {
+			if err := k.config.CheckThreadSettled(ctx, locked, threadID, uuid.Nil); err != nil {
+				return nil
+			}
+		} else if err := k.config.CheckSettled(ctx, locked); err != nil {
+			return nil
+		}
+
+		didSuspend, err := k.suspendThreadActorLocked(ctx, locked, t)
+		if err != nil {
+			return err
+		}
+		suspended = didSuspend
+		return nil
+	})
+	return suspended, err
+}
+
+func (k *KitATERuntimeBackend) suspendThreadActorLocked(ctx context.Context, locked assistantRuntimeRecord, t kitATEThreadActor) (bool, error) {
+	actor, err := k.getActor(ctx, t)
+	if status.Code(err) == codes.NotFound {
+		if delErr := k.config.Store.SoftDelete(ctx, locked, t.ID); delErr != nil {
+			return false, fmt.Errorf("retire missing ATE thread actor: %w", delErr)
+		}
+		if k.config.ClearThreadSession != nil {
+			if clearErr := k.config.ClearThreadSession(ctx, locked, t.ThreadID); clearErr != nil {
+				return false, fmt.Errorf("clear missing ATE thread session: %w", clearErr)
+			}
+		}
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+
+	switch actor.GetStatus().GetState() {
+	case ateapiv1.ActorState_ACTOR_STATE_CRASHED:
+		if _, err := k.config.Store.UpdateState(ctx, locked, t.ID, ateActorStateCrashed, nil); err != nil {
+			return false, fmt.Errorf("record crashed ATE actor state: %w", err)
+		}
+		return false, nil
+	case ateapiv1.ActorState_ACTOR_STATE_SUSPENDED:
+		if !hasCompletedDurableRootfsSnapshot(actor, t.ActorUID) {
+			return false, errors.New("ATE actor has no completed durable rootfs snapshot")
+		}
+		if _, err := k.config.Store.UpdateState(ctx, locked, t.ID, ateActorStateSuspended, nil); err != nil {
+			return false, fmt.Errorf("record ATE actor suspended: %w", err)
+		}
+		return false, nil
+	case ateapiv1.ActorState_ACTOR_STATE_RUNNING:
+		token, err := k.config.Token(ctx, locked, t.ThreadID)
+		if err != nil {
+			return false, err
+		}
+		protocol, err := k.protocol(ctx, locked, t.ThreadID, t, token)
+		if err != nil {
+			return false, err
+		}
+		settled, ok := protocol.(interface {
+			CloseNativeThreadSession(context.Context, assistantRuntimeRecord, uuid.UUID) error
+		})
+		if !ok {
+			return false, errors.New("ATE native checkpoint settlement is unavailable")
+		}
+		if err := settled.CloseNativeThreadSession(ctx, locked, t.ThreadID); err != nil {
+			return false, fmt.Errorf("settle ATE native thread: %w", err)
+		}
+		resp, err := k.config.Client.SuspendActor(ctx, &ateapiv1.SuspendActorRequest{
+			Actor:   k.actorRef(t.ActorName),
+			Options: &ateapiv1.SuspendOptions{Mode: ateapiv1.DurabilityMode_DURABILITY_MODE_SYNCHRONOUS},
+		})
+		if err != nil {
+			return false, fmt.Errorf("ATE SuspendActor: %w", err)
+		}
+		actor = resp.GetActor()
+		if !hasCompletedDurableRootfsSnapshot(actor, t.ActorUID) {
+			return false, errors.New("ATE actor has no completed durable rootfs snapshot")
+		}
+		if _, err := k.config.Store.UpdateState(ctx, locked, t.ID, ateActorStateSuspended, nil); err != nil {
+			return false, fmt.Errorf("record ATE actor suspended: %w", err)
+		}
+		return true, nil
+	default:
+		return false, errors.New("ATE actor is not ready for suspension")
+	}
 }
 
 func (k *KitATERuntimeBackend) InterruptTurn(ctx context.Context, r assistantRuntimeRecord, thread uuid.UUID) (bool, error) {
@@ -547,46 +930,8 @@ func (k *KitATERuntimeBackend) Stop(ctx context.Context, r assistantRuntimeRecor
 			if err := k.validateActorRow(locked, t); err != nil {
 				return err
 			}
-			actor, err := k.getActor(ctx, t)
-			if err != nil {
+			if _, err := k.suspendThreadActorLocked(ctx, locked, t); err != nil {
 				return err
-			}
-			if actor.GetStatus().GetState() != ateapiv1.ActorState_ACTOR_STATE_SUSPENDED {
-				if actor.GetStatus().GetState() != ateapiv1.ActorState_ACTOR_STATE_RUNNING {
-					return errors.New("ATE actor is not ready for suspension")
-				}
-				token, err := k.config.Token(ctx, locked, t.ThreadID)
-				if err != nil {
-					return err
-				}
-				protocol, err := k.protocol(ctx, locked, t.ThreadID, t, token)
-				if err != nil {
-					return err
-				}
-				settled, ok := protocol.(interface {
-					CloseNativeThreadSession(context.Context, assistantRuntimeRecord, uuid.UUID) error
-				})
-				if !ok {
-					return errors.New("ATE native checkpoint settlement is unavailable")
-				}
-				if err := settled.CloseNativeThreadSession(ctx, locked, t.ThreadID); err != nil {
-					return fmt.Errorf("settle ATE native thread: %w", err)
-				}
-				resp, err := k.config.Client.SuspendActor(ctx, &ateapiv1.SuspendActorRequest{
-					Actor:   k.actorRef(t.ActorName),
-					Options: &ateapiv1.SuspendOptions{Mode: ateapiv1.DurabilityMode_DURABILITY_MODE_SYNCHRONOUS},
-				})
-				if err != nil {
-					return fmt.Errorf("ATE SuspendActor: %w", err)
-				}
-				actor = resp.GetActor()
-			}
-
-			if !hasCompletedDurableRootfsSnapshot(actor, t.ActorUID) {
-				return errors.New("ATE actor has no completed durable rootfs snapshot")
-			}
-			if _, err := k.config.Store.UpdateState(ctx, locked, t.ID, ateActorStateSuspended, nil); err != nil {
-				return fmt.Errorf("record ATE actor suspended: %w", err)
 			}
 		}
 		return nil

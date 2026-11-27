@@ -354,6 +354,47 @@ func (s *fakeControlServer) SuspendActor(ctx context.Context, req *ateapiv1.Susp
 	}, nil
 }
 
+func (s *fakeControlServer) ResumeActor(ctx context.Context, req *ateapiv1.ResumeActorRequest) (*ateapiv1.ResumeActorResponse, error) {
+	deadline, _ := ctx.Deadline()
+	s.deadlines <- deadline
+	if req.GetActor().GetName() == "crashed" {
+		return nil, status.Error(codes.FailedPrecondition, "sensitive backend resume detail") //nolint:wrapcheck // gRPC server handler returns status.Error directly.
+	}
+	return &ateapiv1.ResumeActorResponse{
+		Actor: &ateapiv1.Actor{
+			Metadata: &ateapiv1.ResourceMetadata{
+				Atespace: req.GetActor().GetAtespace(),
+				Name:     req.GetActor().GetName(),
+				Uid:      "uid-1",
+			},
+			Status: &ateapiv1.ActorStatus{
+				State: ateapiv1.ActorState_ACTOR_STATE_RUNNING,
+			},
+		},
+		Resumed: true,
+	}, nil
+}
+
+func (s *fakeControlServer) RevertActor(ctx context.Context, req *ateapiv1.RevertActorRequest) (*ateapiv1.RevertActorResponse, error) {
+	deadline, _ := ctx.Deadline()
+	s.deadlines <- deadline
+	if req.GetActor().GetName() == "missing" {
+		return nil, status.Error(codes.NotFound, "sensitive backend revert detail") //nolint:wrapcheck // gRPC server handler returns status.Error directly.
+	}
+	return &ateapiv1.RevertActorResponse{
+		Actor: &ateapiv1.Actor{
+			Metadata: &ateapiv1.ResourceMetadata{
+				Atespace: req.GetActor().GetAtespace(),
+				Name:     req.GetActor().GetName(),
+				Uid:      "uid-1",
+			},
+			Status: &ateapiv1.ActorStatus{
+				State: ateapiv1.ActorState_ACTOR_STATE_SUSPENDED,
+			},
+		},
+	}, nil
+}
+
 func TestControlClientHonorsAPIServerNameAndDeadlines(t *testing.T) {
 	t.Parallel()
 	// Certificate is valid ONLY for api.ate.test (not 127.0.0.1), so dialing
@@ -362,8 +403,8 @@ func TestControlClientHonorsAPIServerNameAndDeadlines(t *testing.T) {
 	cfg, cert, pool := testConfig(t, "api.ate.test")
 
 	sni := make(chan string, 1)
-	deadlines := make(chan time.Time, 4)
-	auth := make(chan string, 4)
+	deadlines := make(chan time.Time, 8)
+	auth := make(chan string, 8)
 
 	server := grpc.NewServer(grpc.Creds(credentials.NewTLS(&tls.Config{
 		GetConfigForClient: func(hello *tls.ClientHelloInfo) (*tls.Config, error) {
@@ -420,6 +461,38 @@ func TestControlClientHonorsAPIServerNameAndDeadlines(t *testing.T) {
 	remaining = time.Until(<-deadlines)
 	require.GreaterOrEqual(t, remaining, 179*time.Second)
 	require.LessOrEqual(t, remaining, suspendRPCTimeout)
+
+	// ResumeActor gets the 2-minute budget and preserves sanitized status codes.
+	_, err = client.ResumeActor(t.Context(), &ateapiv1.ResumeActorRequest{
+		Actor: &ateapiv1.ObjectRef{Atespace: "test-space", Name: "actor-one"},
+	})
+	require.NoError(t, err)
+	remaining = time.Until(<-deadlines)
+	require.GreaterOrEqual(t, remaining, 119*time.Second)
+	require.LessOrEqual(t, remaining, resumeRPCTimeout)
+
+	_, err = client.ResumeActor(t.Context(), &ateapiv1.ResumeActorRequest{
+		Actor: &ateapiv1.ObjectRef{Atespace: "test-space", Name: "crashed"},
+	})
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+	require.NotContains(t, err.Error(), "sensitive backend resume detail")
+	<-deadlines
+
+	// RevertActor gets the 2-minute budget and preserves sanitized status codes.
+	_, err = client.RevertActor(t.Context(), &ateapiv1.RevertActorRequest{
+		Actor: &ateapiv1.ObjectRef{Atespace: "test-space", Name: "actor-one"},
+	})
+	require.NoError(t, err)
+	remaining = time.Until(<-deadlines)
+	require.GreaterOrEqual(t, remaining, 119*time.Second)
+	require.LessOrEqual(t, remaining, revertRPCTimeout)
+
+	_, err = client.RevertActor(t.Context(), &ateapiv1.RevertActorRequest{
+		Actor: &ateapiv1.ObjectRef{Atespace: "test-space", Name: "missing"},
+	})
+	require.Equal(t, codes.NotFound, status.Code(err))
+	require.NotContains(t, err.Error(), "sensitive backend revert detail")
+	<-deadlines
 
 	// Earlier caller deadline still wins over the suspend budget.
 	callerCtx, cancel := context.WithTimeout(t.Context(), time.Second)

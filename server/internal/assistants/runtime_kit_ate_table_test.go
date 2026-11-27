@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
+	ateapiv1 "go.ate.dev/substrate/api/ateapi/v1"
 
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -407,4 +408,159 @@ func TestKitATEActorLookupByUIDUsesUniqueIndex(t *testing.T) {
 	require.NoError(t, rows.Err())
 	plan := strings.Join(planLines, "\n")
 	require.Contains(t, plan, "Index Scan using assistant_ate_actors_actor_uid_key")
+}
+
+func TestKitATEPerThreadIdleAndDrainSweep(t *testing.T) {
+	t.Parallel()
+	const (
+		atespace = "prod-assistants"
+		template = "kit-v1"
+	)
+
+	core, db, runtimeSeed, _, localCfg, _ := kitWorkloadDBFixture(t)
+	cipher, err := encryption.NewWithBytes(make([]byte, 32))
+	require.NoError(t, err)
+	core.encryptionClient = cipher
+
+	origin, err := url.Parse("https://ai.speakeasy.com")
+	require.NoError(t, err)
+	localCfg.Environment = "production"
+	localCfg.nativeIdentity = nil
+	localCfg.Origin = origin
+	localCfg.PersistedMCP = true
+	localCfg.WorkloadIssuerURL = "https://ate-issuer.example.com"
+	localCfg.WorkloadJWKSURL = "https://ate-issuer.example.com/jwks"
+	localCfg.WorkloadIssuerBaseURL = "https://auth.example.com"
+
+	q := assistantrepo.New(db)
+	require.NoError(t, q.SetAssistantDesiredRuntimeVersionForTest(t.Context(), assistantrepo.SetAssistantDesiredRuntimeVersionForTestParams{
+		RuntimeVersion: 3,
+		AssistantID:    runtimeSeed.AssistantID,
+		ProjectID:      runtimeSeed.ProjectID,
+	}))
+
+	threadIdle := insertATEThreadFixture(t, db, runtimeSeed.ProjectID, runtimeSeed.AssistantID, "corr-sweep-idle")
+	threadWarm := insertATEThreadFixture(t, db, runtimeSeed.ProjectID, runtimeSeed.AssistantID, "corr-sweep-warm")
+
+	runtimeID := insertActiveV2RuntimeRow(t, db, runtimeSeed.ProjectID, runtimeSeed.AssistantID, uuid.Nil, runtimeBackendATE, runtimeStateActive, `{}`)
+	require.NoError(t, q.SetKitRuntimeMetadataFixture(t.Context(), assistantrepo.SetKitRuntimeMetadataFixtureParams{
+		RuntimeVersion: 3,
+		Metadata:       []byte(`{}`),
+		ProjectID:      runtimeSeed.ProjectID,
+		RuntimeID:      runtimeID,
+	}))
+
+	cluster, client := startFakeATEStack(t, atespace)
+	compCfg := KitATECompositionConfig{
+		KitLocalCompositionConfig: localCfg,
+		Enabled:                   true,
+		Atespace:                  atespace,
+		Template:                  template,
+		EgressHosts:               []string{"ai.speakeasy.com"},
+	}
+
+	now := time.Now().UTC().Truncate(time.Second)
+	currentTime := now
+	backend, err := NewKitATERuntimeBackend(KitATERuntimeConfig{
+		Image:              testKitATEImage,
+		Atespace:           atespace,
+		Template:           template,
+		ServerURL:          core.serverURL,
+		Client:             client,
+		EgressHosts:        []string{"ai.speakeasy.com"},
+		Bootstrap:          core.kitATECompositionBootstrap(compCfg),
+		Token:              core.kitATEToken,
+		Lifecycle:          core.kitATELifecycle,
+		ThreadLifecycle:    core.kitATEThreadLifecycle,
+		Store:              core.kitATEActorStore(),
+		Revoke:             core.kitATERevoke,
+		CheckSettled:       core.kitATECheckSettled,
+		CheckThreadSettled: core.kitATECheckThreadSettled,
+		ClearThreadSession: core.kitATEClearThreadSession,
+		Now:                func() time.Time { return currentTime },
+		Protocol: func(_ context.Context, _ assistantRuntimeRecord, _ uuid.UUID, _ string, endpoint *url.URL, hc *guardian.HTTPClient, token string) (runtimeProtocol, error) {
+			return &fakeATEProtocol{client: hc, endpoint: endpoint, token: token}, nil
+		},
+		HelperPollInterval: 5 * time.Millisecond,
+	})
+	require.NoError(t, err)
+	core.runtime = backend
+
+	record := assistantRuntimeRecord{
+		ID:                  runtimeID,
+		AssistantID:         runtimeSeed.AssistantID,
+		ProjectID:           runtimeSeed.ProjectID,
+		RuntimeVersion:      3,
+		Backend:             runtimeBackendATE,
+		BackendMetadataJSON: []byte("{}"),
+	}
+	ensureRes, err := backend.Ensure(t.Context(), record)
+	require.NoError(t, err)
+	require.NoError(t, q.UpdateAssistantRuntimeMetadata(t.Context(), assistantrepo.UpdateAssistantRuntimeMetadataParams{
+		BackendMetadataJson: ensureRes.BackendMetadataJSON,
+		RuntimeID:           runtimeID,
+		ProjectID:           runtimeSeed.ProjectID,
+	}))
+	record.BackendMetadataJSON = ensureRes.BackendMetadataJSON
+
+	// Start threadIdle in the past so its warm window has elapsed past grace,
+	// and start threadWarm right now so it remains warm.
+	currentTime = now.Add(-(ateActorWarmWindow + runtimeIdleSweepGrace + time.Minute))
+	require.NoError(t, backend.RunTurn(t.Context(), record, runTurnRequest{
+		ThreadID:        threadIdle,
+		Model:           "openai/gpt-4o-mini",
+		ReasoningEffort: "medium",
+	}))
+	currentTime = now
+	require.NoError(t, backend.RunTurn(t.Context(), record, runTurnRequest{
+		ThreadID:        threadWarm,
+		Model:           "openai/gpt-4o-mini",
+		ReasoningEffort: "medium",
+	}))
+
+	// Sweep suspends only the idle thread actor, leaving the warm sibling running.
+	stopped := core.sweepIdleKitRuntimes(t.Context(), now)
+	require.EqualValues(t, 1, stopped)
+
+	idleRow, err := q.GetAssistantATEActorForThread(t.Context(), assistantrepo.GetAssistantATEActorForThreadParams{
+		ProjectID: runtimeSeed.ProjectID,
+		RuntimeID: runtimeID,
+		ThreadID:  threadIdle,
+	})
+	require.NoError(t, err)
+	require.Equal(t, ateActorStateSuspended, idleRow.State)
+	require.False(t, idleRow.WarmUntil.Valid)
+
+	warmRow, err := q.GetAssistantATEActorForThread(t.Context(), assistantrepo.GetAssistantATEActorForThreadParams{
+		ProjectID: runtimeSeed.ProjectID,
+		RuntimeID: runtimeID,
+		ThreadID:  threadWarm,
+	})
+	require.NoError(t, err)
+	require.Equal(t, ateActorStateRunning, warmRow.State)
+	require.True(t, warmRow.WarmUntil.Valid)
+
+	// Marking the warm thread as draining causes the next sweep to synchronously
+	// suspend it even though its warm window has not elapsed.
+	cluster.mu.Lock()
+	cluster.actors[atespace+"/"+warmRow.ActorName].draining = true
+	cluster.mu.Unlock()
+
+	stopped = core.sweepIdleKitRuntimes(t.Context(), now)
+	require.EqualValues(t, 1, stopped)
+	require.Equal(t, int32(2), cluster.suspendCalls.Load(), "both idle and draining threads must invoke synchronous SuspendActor")
+
+	warmRow, err = q.GetAssistantATEActorForThread(t.Context(), assistantrepo.GetAssistantATEActorForThreadParams{
+		ProjectID: runtimeSeed.ProjectID,
+		RuntimeID: runtimeID,
+		ThreadID:  threadWarm,
+	})
+	require.NoError(t, err)
+	require.Equal(t, ateActorStateSuspended, warmRow.State)
+
+	cluster.mu.Lock()
+	remoteActor := cluster.actors[atespace+"/"+warmRow.ActorName].actor
+	cluster.mu.Unlock()
+	require.Equal(t, ateapiv1.ActorState_ACTOR_STATE_SUSPENDED, remoteActor.GetStatus().GetState())
+	require.True(t, hasCompletedDurableRootfsSnapshot(remoteActor, warmRow.ActorUid))
 }

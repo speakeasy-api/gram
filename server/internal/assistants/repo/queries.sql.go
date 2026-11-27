@@ -1115,6 +1115,25 @@ func (q *Queries) DeleteAssistant(ctx context.Context, arg DeleteAssistantParams
 	return err
 }
 
+const deleteKitRuntimeSessionForThread = `-- name: DeleteKitRuntimeSessionForThread :execrows
+DELETE FROM assistant_kit_sessions
+WHERE project_id = $1 AND runtime_id = $2 AND assistant_thread_id = $3
+`
+
+type DeleteKitRuntimeSessionForThreadParams struct {
+	ProjectID uuid.NullUUID
+	RuntimeID uuid.NullUUID
+	ThreadID  uuid.NullUUID
+}
+
+func (q *Queries) DeleteKitRuntimeSessionForThread(ctx context.Context, arg DeleteKitRuntimeSessionForThreadParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteKitRuntimeSessionForThread, arg.ProjectID, arg.RuntimeID, arg.ThreadID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteProjectManagedAssistant = `-- name: DeleteProjectManagedAssistant :exec
 DELETE FROM project_managed_assistants
 WHERE project_id = $1
@@ -3280,6 +3299,66 @@ func (q *Queries) ListPendingRuntimeSwitchRetirements(ctx context.Context, limit
 			&i.DeletedAt,
 			&i.Deleted,
 			&i.Ended,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRunningAssistantATEActorsPage = `-- name: ListRunningAssistantATEActorsPage :many
+SELECT a.id, a.organization_id, a.project_id, a.assistant_id, a.runtime_id, a.assistant_thread_id, a.actor_name, a.actor_uid, a.state, a.configured, a.workload_binding_json, a.warm_until, a.created_at, a.updated_at, a.deleted_at, a.deleted
+FROM assistant_ate_actors a
+JOIN assistant_runtimes r ON r.id = a.runtime_id AND r.project_id = a.project_id
+JOIN assistants asst ON asst.id = a.assistant_id AND asst.project_id = a.project_id
+WHERE a.state = $1 AND a.deleted IS FALSE
+  AND r.runtime_version = 3 AND r.backend = 'ate' AND r.deleted IS FALSE AND r.ended IS FALSE
+  AND asst.deleted IS FALSE
+  AND a.id > $2
+ORDER BY a.id ASC
+LIMIT $3
+`
+
+type ListRunningAssistantATEActorsPageParams struct {
+	RunningState string
+	AfterID      uuid.UUID
+	LimitCount   int32
+}
+
+// Internal background reaper query (mirrors ListActiveAssistantRuntimes): scans
+// live running ATE thread actors across active runtimes in keyset order so
+// retired runtimes and warm siblings cannot starve draining actors. Every
+// per-actor mutation remains tenant-scoped by (project_id, runtime_id, thread_id).
+func (q *Queries) ListRunningAssistantATEActorsPage(ctx context.Context, arg ListRunningAssistantATEActorsPageParams) ([]AssistantAteActor, error) {
+	rows, err := q.db.Query(ctx, listRunningAssistantATEActorsPage, arg.RunningState, arg.AfterID, arg.LimitCount)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AssistantAteActor
+	for rows.Next() {
+		var i AssistantAteActor
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.AssistantID,
+			&i.RuntimeID,
+			&i.AssistantThreadID,
+			&i.ActorName,
+			&i.ActorUid,
+			&i.State,
+			&i.Configured,
+			&i.WorkloadBindingJson,
+			&i.WarmUntil,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
 		); err != nil {
 			return nil, err
 		}
@@ -5553,6 +5632,37 @@ func (q *Queries) StoreKitProtocolUserEcho(ctx context.Context, arg StoreKitProt
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const threadHasUnsettledEvents = `-- name: ThreadHasUnsettledEvents :one
+SELECT EXISTS (
+  SELECT 1 FROM assistant_thread_events e
+  WHERE e.project_id = $1 AND e.assistant_id = $2
+    AND e.assistant_thread_id = $3
+    AND e.id <> $4
+    AND e.deleted IS FALSE AND e.status NOT IN ('completed', 'failed', 'cancelled')
+) AS busy
+`
+
+type ThreadHasUnsettledEventsParams struct {
+	ProjectID      uuid.UUID
+	AssistantID    uuid.UUID
+	ThreadID       uuid.UUID
+	ExcludeEventID uuid.UUID
+}
+
+// Pass uuid.Nil for exclude_event_id during periodic sweep, or the completing
+// turn's event_id during post-turn drain checks.
+func (q *Queries) ThreadHasUnsettledEvents(ctx context.Context, arg ThreadHasUnsettledEventsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, threadHasUnsettledEvents,
+		arg.ProjectID,
+		arg.AssistantID,
+		arg.ThreadID,
+		arg.ExcludeEventID,
+	)
+	var busy bool
+	err := row.Scan(&busy)
+	return busy, err
 }
 
 const touchProcessingLease = `-- name: TouchProcessingLease :exec

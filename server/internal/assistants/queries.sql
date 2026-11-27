@@ -2198,3 +2198,34 @@ WHERE r.id = @runtime_id AND r.project_id = @project_id AND r.assistant_id = @as
   AND r.runtime_version = 3 AND r.deleted IS FALSE AND r.ended IS FALSE
   AND a.deleted IS FALSE
 ON CONFLICT (runtime_id) DO NOTHING;
+
+-- name: ListRunningAssistantATEActorsPage :many
+-- Internal background reaper query (mirrors ListActiveAssistantRuntimes): scans
+-- live running ATE thread actors across active runtimes in keyset order so
+-- retired runtimes and warm siblings cannot starve draining actors. Every
+-- per-actor mutation remains tenant-scoped by (project_id, runtime_id, thread_id).
+SELECT a.*
+FROM assistant_ate_actors a
+JOIN assistant_runtimes r ON r.id = a.runtime_id AND r.project_id = a.project_id
+JOIN assistants asst ON asst.id = a.assistant_id AND asst.project_id = a.project_id
+WHERE a.state = @running_state AND a.deleted IS FALSE
+  AND r.runtime_version = 3 AND r.backend = 'ate' AND r.deleted IS FALSE AND r.ended IS FALSE
+  AND asst.deleted IS FALSE
+  AND a.id > @after_id
+ORDER BY a.id ASC
+LIMIT @limit_count;
+
+-- name: ThreadHasUnsettledEvents :one
+-- Pass uuid.Nil for exclude_event_id during periodic sweep, or the completing
+-- turn's event_id during post-turn drain checks.
+SELECT EXISTS (
+  SELECT 1 FROM assistant_thread_events e
+  WHERE e.project_id = @project_id AND e.assistant_id = @assistant_id
+    AND e.assistant_thread_id = @thread_id
+    AND e.id <> @exclude_event_id
+    AND e.deleted IS FALSE AND e.status NOT IN ('completed', 'failed', 'cancelled')
+) AS busy;
+
+-- name: DeleteKitRuntimeSessionForThread :execrows
+DELETE FROM assistant_kit_sessions
+WHERE project_id = @project_id AND runtime_id = @runtime_id AND assistant_thread_id = @thread_id;

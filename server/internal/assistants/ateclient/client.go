@@ -38,6 +38,12 @@ const (
 	// defaultRPCTimeout bounds ordinary ATE control-plane RPCs.
 	defaultRPCTimeout = 30 * time.Second
 
+	// resumeRPCTimeout gives ResumeActor time to fetch a durable snapshot on a new worker.
+	resumeRPCTimeout = 2 * time.Minute
+
+	// revertRPCTimeout gives RevertActor time to discard a crashed execution and prune pending snapshots.
+	revertRPCTimeout = 2 * time.Minute
+
 	// suspendRPCTimeout gives synchronous durable rootfs checkpoint uploads time to finish.
 	suspendRPCTimeout = 3 * time.Minute
 
@@ -269,6 +275,26 @@ func (c *Client) SuspendActor(ctx context.Context, req *ateapiv1.SuspendActorReq
 	ctx, cancel := context.WithTimeout(ctx, suspendRPCTimeout)
 	defer cancel()
 	resp, err := c.control.SuspendActor(ctx, req)
+	if err != nil {
+		return nil, sanitizedRPCError(err)
+	}
+	return resp, nil
+}
+
+func (c *Client) ResumeActor(ctx context.Context, req *ateapiv1.ResumeActorRequest) (*ateapiv1.ResumeActorResponse, error) {
+	ctx, cancel := context.WithTimeout(ctx, resumeRPCTimeout)
+	defer cancel()
+	resp, err := c.control.ResumeActor(ctx, req)
+	if err != nil {
+		return nil, sanitizedRPCError(err)
+	}
+	return resp, nil
+}
+
+func (c *Client) RevertActor(ctx context.Context, req *ateapiv1.RevertActorRequest) (*ateapiv1.RevertActorResponse, error) {
+	ctx, cancel := context.WithTimeout(ctx, revertRPCTimeout)
+	defer cancel()
+	resp, err := c.control.RevertActor(ctx, req)
 	if err != nil {
 		return nil, sanitizedRPCError(err)
 	}

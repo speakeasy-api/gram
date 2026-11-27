@@ -121,6 +121,8 @@ func (s *ServiceCore) InstallKitATERuntime(ctx context.Context, c KitATEComposit
 		Store:              s.kitATEActorStore(),
 		Revoke:             s.kitATERevoke,
 		CheckSettled:       s.kitATECheckSettled,
+		CheckThreadSettled: s.kitATECheckThreadSettled,
+		ClearThreadSession: s.kitATEClearThreadSession,
 		Now:                nil,
 		HelperPollInterval: 0,
 	})
@@ -196,6 +198,39 @@ func (s *ServiceCore) kitATECheckSettled(ctx context.Context, r assistantRuntime
 	}
 	if !busy.Valid || busy.Bool {
 		return errors.New("ATE suspension requires settled assistant events and wakes")
+	}
+	return nil
+}
+
+func (s *ServiceCore) kitATECheckThreadSettled(ctx context.Context, r assistantRuntimeRecord, threadID, excludeEventID uuid.UUID) error {
+	if r.LifecycleTx == nil || r.RuntimeVersion != 3 || r.Backend != runtimeBackendATE || threadID == uuid.Nil {
+		return ErrKitRuntimeBinding
+	}
+	busy, err := assistantrepo.New(r.LifecycleTx).ThreadHasUnsettledEvents(ctx, assistantrepo.ThreadHasUnsettledEventsParams{
+		ProjectID:      r.ProjectID,
+		AssistantID:    r.AssistantID,
+		ThreadID:       threadID,
+		ExcludeEventID: excludeEventID,
+	})
+	if err != nil {
+		return fmt.Errorf("check ATE thread unsettled events: %w", err)
+	}
+	if busy {
+		return errors.New("ATE thread suspension requires settled thread events")
+	}
+	return nil
+}
+
+func (s *ServiceCore) kitATEClearThreadSession(ctx context.Context, r assistantRuntimeRecord, threadID uuid.UUID) error {
+	if r.LifecycleTx == nil || r.RuntimeVersion != 3 || r.Backend != runtimeBackendATE || threadID == uuid.Nil {
+		return ErrKitRuntimeBinding
+	}
+	if _, err := assistantrepo.New(r.LifecycleTx).DeleteKitRuntimeSessionForThread(ctx, assistantrepo.DeleteKitRuntimeSessionForThreadParams{
+		ProjectID: uuid.NullUUID{UUID: r.ProjectID, Valid: true},
+		RuntimeID: uuid.NullUUID{UUID: r.ID, Valid: true},
+		ThreadID:  uuid.NullUUID{UUID: threadID, Valid: true},
+	}); err != nil {
+		return fmt.Errorf("delete replaced ATE thread session: %w", err)
 	}
 	return nil
 }

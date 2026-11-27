@@ -3,12 +3,20 @@ package main
 import (
 	"archive/tar"
 	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -90,4 +98,92 @@ func TestBootstrapRejectsTraversalAndSymlinks(t *testing.T) {
 	entries, err := os.ReadDir(outside)
 	require.NoError(t, err)
 	require.Empty(t, entries)
+}
+
+func TestInitTrapsSIGTERMWithoutExitingAndAdvertisesDraining(t *testing.T) {
+	t.Parallel()
+
+	homeDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(homeDir, ".kit"), 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(homeDir, ".kit", "ate-initialized"), []byte("1"), 0o600))
+
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	addr := lis.Addr().String()
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	pidFile := filepath.Join(homeDir, "child.pid")
+	termCh := make(chan os.Signal, 1)
+	done := make(chan error, 1)
+	go func() {
+		done <- run(ctx, homeDir, lis, termCh, func(cmdCtx context.Context) *exec.Cmd {
+			return exec.CommandContext(cmdCtx, "sh", "-c", `echo $$ > "$1"; exec sleep 30`, "_", pidFile)
+		})
+	}()
+
+	getStatus := func() statusResponse {
+		t.Helper()
+		resp, err := http.Get("http://" + addr + "/status")
+		require.NoError(t, err)
+		defer func() { _ = resp.Body.Close() }()
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+		var out statusResponse
+		require.NoError(t, json.NewDecoder(resp.Body).Decode(&out))
+		return out
+	}
+
+	// Wait until HTTP server is accepting requests and child process has written its PID.
+	var childPID int
+	require.Eventually(t, func() bool {
+		resp, err := http.Get("http://" + addr + "/readyz")
+		if err != nil {
+			return false
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return false
+		}
+		raw, err := os.ReadFile(pidFile)
+		if err != nil {
+			return false
+		}
+		pid, err := strconv.Atoi(strings.TrimSpace(string(raw)))
+		if err != nil || pid <= 0 {
+			return false
+		}
+		childPID = pid
+		return true
+	}, 3*time.Second, 10*time.Millisecond)
+
+	before := getStatus()
+	require.False(t, before.Draining)
+	require.True(t, before.Started)
+
+	// Deliver SIGTERM (worker drain). Both PID 1 and the launched child must
+	// stay alive while advertising draining=true for synchronous suspend.
+	termCh <- syscall.SIGTERM
+
+	require.Eventually(t, func() bool {
+		return getStatus().Draining
+	}, 2*time.Second, 10*time.Millisecond)
+
+	select {
+	case err := <-done:
+		t.Fatalf("init exited on SIGTERM (must stay alive for synchronous suspend): %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	require.NoError(t, syscall.Kill(childPID, 0), "child process must survive SIGTERM until harness suspends actor")
+
+	resp, err := http.Get("http://" + addr + "/readyz")
+	require.NoError(t, err)
+	_ = resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	cancel()
+	if err := <-done; err != nil && !errors.Is(err, context.Canceled) {
+		t.Fatalf("unexpected run error on cancel: %v", err)
+	}
 }

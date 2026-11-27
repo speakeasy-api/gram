@@ -48,33 +48,121 @@ func kitProductionRuntime(version int16, backend string) bool {
 	return version == 3 && (backend == runtimeBackendGKE || backend == runtimeBackendATE)
 }
 
+func kitATEBackend(backend RuntimeBackend) *KitATERuntimeBackend {
+	switch b := backend.(type) {
+	case *telemetryRuntimeBackend:
+		return kitATEBackend(b.inner)
+	case *versionedRuntimeBackend:
+		return kitATEBackend(b.kit)
+	case *KitATERuntimeBackend:
+		return b
+	default:
+		return nil
+	}
+}
+
 // sweepIdleKitRuntimes uses the existing durable reaper cadence, not legacy
 // expiry's terminal row transition. Platform MCP parity: this is internal
 // process management, not a new member operation or conversation migration.
 func (s *ServiceCore) sweepIdleKitRuntimes(ctx context.Context, now time.Time) int64 {
+	var stopped int64
 	rows, err := assistantrepo.New(s.db).ListActiveAssistantRuntimes(ctx, runtimeStateActive)
 	if err != nil {
 		s.logger.WarnContext(ctx, "list idle Kit runtimes failed", attr.SlogError(err))
+	} else {
+		attempted := 0
+		for _, row := range rows {
+			// ATE actors are swept per thread below via assistant_ate_actors so
+			// one active thread does not block suspending idle sibling threads.
+			if row.Backend == runtimeBackendATE || !kitProductionRuntime(row.RuntimeVersion, row.Backend) || !row.WarmUntil.Valid || row.WarmUntil.Time.After(now.Add(-runtimeIdleSweepGrace)) {
+				continue
+			}
+			if attempted >= runtimeIdleSweepBatch {
+				break
+			}
+			attempted++
+			rowCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+			didStop, err := s.checkpointIdleKitRuntime(rowCtx, row.ProjectID, row.AssistantID, row.ID, now)
+			cancel()
+			if err != nil {
+				s.logger.WarnContext(ctx, "checkpoint idle Kit runtime failed", attr.SlogAssistantRuntimeID(row.ID.String()), attr.SlogError(err))
+			} else if didStop {
+				stopped++
+			}
+		}
+	}
+	stopped += s.sweepATEThreadActors(ctx, now)
+	return stopped
+}
+
+// sweepATEThreadActors paginates live running rows in assistant_ate_actors
+// (joined to active ATE runtimes so retired rows cannot starve the batch) and
+// synchronously suspends up to runtimeIdleSweepBatch actors per tick that are
+// idle past their warm window or advertising a worker eviction drain (SIGTERM).
+func (s *ServiceCore) sweepATEThreadActors(ctx context.Context, now time.Time) int64 {
+	ate := kitATEBackend(s.runtime)
+	if ate == nil {
 		return 0
 	}
-	var stopped int64
-	attempted := 0
-	for _, row := range rows {
-		if !kitProductionRuntime(row.RuntimeVersion, row.Backend) || !row.WarmUntil.Valid || row.WarmUntil.Time.After(now.Add(-runtimeIdleSweepGrace)) {
-			continue
+	q := assistantrepo.New(s.db)
+	var (
+		stopped int64
+		afterID = uuid.Nil
+	)
+	for stopped < runtimeIdleSweepBatch {
+		actors, err := q.ListRunningAssistantATEActorsPage(ctx, assistantrepo.ListRunningAssistantATEActorsPageParams{
+			RunningState: ateActorStateRunning,
+			AfterID:      afterID,
+			LimitCount:   runtimeIdleSweepBatch,
+		})
+		if err != nil {
+			s.logger.WarnContext(ctx, "list running ATE thread actors failed", attr.SlogError(err))
+			return stopped
 		}
-		if attempted >= runtimeIdleSweepBatch {
+		if len(actors) == 0 {
 			break
 		}
-		attempted++
-		rowCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
-		didStop, err := s.checkpointIdleKitRuntime(rowCtx, row.ProjectID, row.AssistantID, row.ID, now)
-		cancel()
-		if err != nil {
-			s.logger.WarnContext(ctx, "checkpoint idle Kit runtime failed", attr.SlogAssistantRuntimeID(row.ID.String()), attr.SlogError(err))
-		} else if didStop {
-			stopped++
+		for _, actor := range actors {
+			if stopped >= runtimeIdleSweepBatch {
+				return stopped
+			}
+			row, err := q.GetAssistantRuntime(ctx, assistantrepo.GetAssistantRuntimeParams{
+				ID:        actor.RuntimeID,
+				ProjectID: actor.ProjectID,
+			})
+			if err != nil {
+				s.logger.WarnContext(ctx, "read ATE actor runtime failed", attr.SlogAssistantRuntimeID(actor.RuntimeID.String()), attr.SlogError(err))
+				continue
+			}
+			if row.AssistantID != actor.AssistantID || row.RuntimeVersion != 3 || row.Backend != runtimeBackendATE || row.Deleted || row.Ended {
+				continue
+			}
+			rec := assistantRuntimeRecord{
+				ID:                  row.ID,
+				AssistantThreadID:   row.AssistantThreadID,
+				AssistantID:         row.AssistantID,
+				ProjectID:           row.ProjectID,
+				RuntimeVersion:      row.RuntimeVersion,
+				Backend:             row.Backend,
+				BackendMetadataJSON: row.BackendMetadataJson,
+				State:               row.State,
+				WarmUntil:           row.WarmUntil,
+				LifecycleTx:         nil,
+				Retired:             false,
+			}
+			actorCtx, cancel := context.WithTimeout(ctx, ateDrainSuspendTimeout)
+			didStop, err := ate.SuspendThreadActor(actorCtx, rec, actor.AssistantThreadID, now)
+			cancel()
+			if err != nil {
+				s.logger.WarnContext(ctx, "suspend ATE thread actor failed", attr.SlogAssistantRuntimeID(actor.RuntimeID.String()), attr.SlogError(err))
+			} else if didStop {
+				stopped++
+			}
 		}
+		if len(actors) < runtimeIdleSweepBatch {
+			break
+		}
+		afterID = actors[len(actors)-1].ID
 	}
 	return stopped
 }
