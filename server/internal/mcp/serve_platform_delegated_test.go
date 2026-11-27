@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	adminrepo "github.com/speakeasy-api/gram/server/internal/admin/repo"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/assistant_platform_mcp_adapter"
@@ -209,6 +210,66 @@ func TestAssistantPlatformTool_WorkloadTurnIsToldItNeedsAPerson(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(out.Bytes(), &refusal))
 	require.Equal(t, "person_required", refusal.Code)
+}
+
+// An agent turn authenticated before its organization was disabled is refused
+// as the tool's answer. The toolset prepares the acting context before the
+// call, so that step must not fail the request with an unexpected error.
+func TestAssistantPlatformTool_AgentTurnInDisabledOrganizationIsRefused(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti, _ := newTestMCPServiceWithPlatformMCPReadTools(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	_, agentID := managedAssistantWithAgent(t, ti, authCtx)
+	grantProjectRead(t, ti, authCtx)
+	grantLiveOrgAdmin(t, ti, authCtx)
+
+	raw, _, err := ti.principalCredentials.Mint(principalcredential.Credential{
+		OrganizationID:            authCtx.ActiveOrganizationID,
+		ProjectID:                 *authCtx.ProjectID,
+		Principal:                 urn.NewPrincipal(urn.PrincipalTypeAgent, agentID.String()),
+		AuthorizerUserID:          authCtx.UserID,
+		SelectionProfileVersionID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+	require.NoError(t, err)
+	agentCtx, err := ti.principalCredentials.Authenticate(t.Context(), raw)
+	require.NoError(t, err)
+	agentCtx = contextvalues.SetAssistantPrincipal(agentCtx, contextvalues.AssistantPrincipal{AssistantID: uuid.New(), ThreadID: uuid.New()})
+
+	rows, err := adminrepo.New(ti.conn).AdminDisableOrganization(t.Context(), authCtx.ActiveOrganizationID)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), rows)
+
+	authorizer := platformmcp.NewLiveOrgAdminAuthorizer(ti.conn, ti.authzEngine)
+	descriptors := platformmcp.NewRuntimeWithLifecycle(
+		ti.logger, nil, nil, authorizer, "", "test-cursor-key",
+		platformmcp.NewPostgresReader(ti.logger, ti.conn).WithAuthorization(ti.authzEngine), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
+		platformmcp.CatalogDescriptor{},
+	).WithAICatalog(aivendorstest.NewStore()).AssistantTools()
+	var listProjects *assistant_platform_mcp_adapter.Tool
+	for _, tool := range assistant_platform_mcp_adapter.Tools(descriptors, authorizer) {
+		if tool.Descriptor().Name == "list_projects" {
+			listProjects = &tool
+			break
+		}
+	}
+	require.NotNil(t, listProjects)
+
+	actingCtx, err := assistant_platform_mcp_adapter.ActingContext(authorizer)(agentCtx)
+	require.NoError(t, err, "a disabled organization is refused by the call, not failed while preparing it")
+
+	var out bytes.Buffer
+	err = listProjects.Call(actingCtx, toolconfig.ToolCallEnv{}, strings.NewReader(`{}`), &out)
+	require.NoError(t, err, "a refusal is the tool's answer, not a failure the runner would retry")
+	var refusal struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	}
+	require.NoError(t, json.Unmarshal(out.Bytes(), &refusal))
+	require.Equal(t, "organization_disabled", refusal.Code)
+	require.Equal(t, platformmcp.OrganizationDisabledMessage, refusal.Message)
 }
 
 // jsonRPCError reports whether the response is a protocol-level error, as a

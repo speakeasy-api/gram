@@ -73,7 +73,13 @@ var oauthPageScriptURL = func() string {
 var (
 	oauthPageTemplate      = template.Must(template.Must(template.New("platform-mcp-oauth-page").Parse(oauthPageHTML)).Parse(consentpage.LogoTemplate))
 	errPlatformMCPDisabled = fmt.Errorf("platform mcp disabled: %w", ErrForbidden)
-	supportedGrantTypes    = []string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken}
+
+	// errMembershipLost denies a user who is no longer an active member. It is
+	// the only denial that durably ends a connection on refresh; every other
+	// denial can be reversed, so the connection must survive it.
+	errMembershipLost = fmt.Errorf("platform mcp membership lost: %w", ErrForbidden)
+
+	supportedGrantTypes = []string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken}
 
 	// supportedAuthMethods is the token_endpoint_auth_method set this
 	// authorization server accepts, advertised in its RFC 8414 metadata and
@@ -1189,7 +1195,10 @@ func (s *OAuthHTTP) TokenHandler() http.Handler {
 				return
 			}
 			if err := s.gateAndAuthorize(r.Context(), Principal{UserID: subject.ID, OrganizationID: old.Connection.OrganizationID, ConnectionID: old.Connection.ID, Generation: old.Connection.Generation, ClientID: client.ID}); err != nil {
-				if errors.Is(err, ErrForbidden) && !errors.Is(err, errPlatformMCPDisabled) {
+				// Only lost membership ends the connection. A disabled entitlement
+				// or organization can be turned back on, and the connection must
+				// still work when it is.
+				if errors.Is(err, errMembershipLost) {
 					if markErr := s.store.MarkAuthorizationLost(r.Context(), old.Connection.OrganizationID, old.Connection.ID, old.Connection.Generation, now); markErr != nil {
 						writeOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "organization access change could not be recorded")
 						return
@@ -1372,8 +1381,11 @@ func (s *OAuthHTTP) gateAndAuthorize(ctx context.Context, principal Principal) e
 		return errPlatformMCPDisabled
 	}
 	if err := s.authorizer.RequireLiveMembership(ctx, principal); err != nil {
+		if errors.Is(err, ErrOrganizationDisabled) {
+			return ErrOrganizationDisabled
+		}
 		if isAuthorizationDenied(err) {
-			return ErrForbidden
+			return errMembershipLost
 		}
 		return fmt.Errorf("require live organization membership: %w: %w", ErrUnavailable, err)
 	}
@@ -1391,6 +1403,10 @@ func writeAuthorizationGateError(w http.ResponseWriter, r *http.Request, challen
 	// membership ended sends them to a setting that is already on.
 	if errors.Is(err, errPlatformMCPDisabled) {
 		redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: "access_denied", Description: "Platform MCP is not enabled for this organization. An organization admin can enable it in the Speakeasy dashboard."})
+		return
+	}
+	if errors.Is(err, ErrOrganizationDisabled) {
+		redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: "access_denied", Description: OrganizationDisabledMessage})
 		return
 	}
 	redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: "access_denied", Description: "Your account is not an active member of this organization."})
@@ -1489,6 +1505,9 @@ func oauthGateReason(err error) string {
 	if errors.Is(err, errPlatformMCPDisabled) {
 		return "platform_disabled"
 	}
+	if errors.Is(err, ErrOrganizationDisabled) {
+		return "organization_disabled"
+	}
 	if errors.Is(err, ErrForbidden) {
 		return "authorization_denied"
 	}
@@ -1502,6 +1521,10 @@ func writeTokenGateError(w http.ResponseWriter, err error) {
 	setOAuthTelemetryReason(w, oauthGateReason(err))
 	if errors.Is(err, ErrUnavailable) {
 		writeOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "organization access could not be verified")
+		return
+	}
+	if errors.Is(err, ErrOrganizationDisabled) {
+		writeOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidGrant, OrganizationDisabledMessage)
 		return
 	}
 	writeOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidGrant, "organization access is not available")

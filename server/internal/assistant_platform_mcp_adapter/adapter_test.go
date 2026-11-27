@@ -1,8 +1,11 @@
 package assistant_platform_mcp_adapter
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/google/jsonschema-go/jsonschema"
@@ -15,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 )
 
 func projectPolicy() TargetPolicy {
@@ -356,4 +360,53 @@ func TestExternalToolsCarryLogReadRequirement(t *testing.T) {
 	require.Len(t, tools, 2)
 	require.Equal(t, string(authz.ScopeLogRead), tools[0].RequiredScope)
 	require.Empty(t, tools[1].RequiredScope)
+}
+
+// disabledOrganizationAuthorizer reports the organization as disabled at every
+// authorization step a platform tool call takes.
+type disabledOrganizationAuthorizer struct{}
+
+func (disabledOrganizationAuthorizer) PrepareExternalContext(ctx context.Context, _ platformmcp.Principal) (context.Context, error) {
+	return ctx, platformmcp.ErrOrganizationDisabled
+}
+
+func (disabledOrganizationAuthorizer) AuthorizeExternalCall(context.Context, platformmcp.Principal, platformmcp.ExternalAuthorization) error {
+	return platformmcp.ErrOrganizationDisabled
+}
+
+func (disabledOrganizationAuthorizer) RequireLiveMembership(context.Context, platformmcp.Principal) error {
+	return platformmcp.ErrOrganizationDisabled
+}
+
+func (disabledOrganizationAuthorizer) RequireLiveOrgAdmin(context.Context, platformmcp.Principal) error {
+	return platformmcp.ErrOrganizationDisabled
+}
+
+// A disabled organization is the tool's answer, not a failure: the runner
+// retries errors as dropped connections, and no retry succeeds until the
+// organization is re-enabled.
+func TestCallInDisabledOrganizationReturnsRefusal(t *testing.T) {
+	t.Parallel()
+
+	projectID := uuid.New()
+	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
+		ActiveOrganizationID: "org-1",
+		UserID:               "user-1",
+		ProjectID:            &projectID,
+		ProjectSlug:          new("default"),
+	})
+	tools := Tools([]platformmcp.Descriptor{{Name: "list_projects", InputSchema: []byte(`{"type":"object"}`)}}, disabledOrganizationAuthorizer{})
+	require.Len(t, tools, 1)
+
+	var out bytes.Buffer
+	err := tools[0].Call(ctx, toolconfig.ToolCallEnv{}, strings.NewReader(`{}`), &out)
+
+	require.NoError(t, err)
+	var refusal struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	}
+	require.NoError(t, json.Unmarshal(out.Bytes(), &refusal))
+	require.Equal(t, "organization_disabled", refusal.Code)
+	require.Equal(t, platformmcp.OrganizationDisabledMessage, refusal.Message)
 }

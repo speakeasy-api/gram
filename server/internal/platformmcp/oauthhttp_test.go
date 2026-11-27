@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	platformoauth "github.com/speakeasy-api/gram/server/internal/platformmcp/oauth"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
@@ -397,6 +398,141 @@ func TestOAuthHTTPGateErrorsDistinguishUnavailableFromDenied(t *testing.T) {
 	service.gate = oauthTestGate{enabled: false}
 	err = service.gateAndAuthorize(t.Context(), principal)
 	require.ErrorIs(t, err, ErrForbidden)
+
+	require.NotErrorIs(t, err, errMembershipLost)
+
+	service.gate = oauthTestGate{enabled: true}
+	service.authorizer = oauthTestAuthorizer{err: fmt.Errorf("check organization: %w", ErrOrganizationDisabled)}
+	err = service.gateAndAuthorize(t.Context(), principal)
+	require.ErrorIs(t, err, ErrOrganizationDisabled)
+	require.NotErrorIs(t, err, ErrUnavailable)
+	require.NotErrorIs(t, err, errMembershipLost)
+
+	service.authorizer = oauthTestAuthorizer{err: ErrForbidden}
+	err = service.gateAndAuthorize(t.Context(), principal)
+	require.ErrorIs(t, err, errMembershipLost)
+	require.ErrorIs(t, err, ErrForbidden)
+}
+
+func TestOAuthHTTPCodeExchangeRefusesDisabledOrganization(t *testing.T) {
+	t.Parallel()
+
+	service := newTestOAuthHTTP(t)
+	service.authorizer = oauthTestAuthorizer{err: ErrOrganizationDisabled}
+	now := time.Now()
+	grant := platformoauth.Grant{
+		Code:     "code-1",
+		ClientID: "client-1",
+		Connection: platformoauth.Connection{
+			ID: "connection-1", ClientID: "client-1", Subject: "user:user-1", OrganizationID: "org-1", Generation: "generation-1", AuthorizationExpiresAt: now.Add(platformoauth.AuthorizationLifetime),
+		},
+		RedirectURI: "http://127.0.0.1:3000/callback",
+		ExpiresAt:   now.Add(time.Minute),
+	}
+	response := httptest.NewRecorder()
+
+	service.mintAndExchangeGrant(response, httptest.NewRequest(http.MethodPost, "/platform-mcp/token", nil), platformoauth.ConsumeGrantInput{OrganizationID: "org-1", Code: grant.Code, ClientID: grant.ClientID, RedirectURI: grant.RedirectURI, Now: now}, grant, "client-1", "", now)
+
+	require.Equal(t, http.StatusBadRequest, response.Code)
+	body, ok := oautherr.ParseTokenError(response.Body.Bytes())
+	require.True(t, ok, response.Body.String())
+	require.Equal(t, oautherr.CodeInvalidGrant, body.Code)
+	require.Equal(t, OrganizationDisabledMessage, body.Description)
+	require.NotContains(t, response.Body.String(), "access_token")
+}
+
+func TestOAuthHTTPConnectPostRedirectsDisabledOrganization(t *testing.T) {
+	t.Parallel()
+
+	service := newTestOAuthHTTP(t)
+	store := testStore(t, service)
+	require.NoError(t, store.RegisterClient(t.Context(), platformoauth.Client{ID: "client-1", Name: "test", RedirectURIs: []string{"http://127.0.0.1:3000/callback"}}))
+	challenge := oauthChallenge{ID: "challenge-1", ClientID: "client-1", RedirectURI: "http://127.0.0.1:3000/callback", State: "client-state", CSRFToken: "csrf", OrganizationID: "org-1", Subject: "user:user-1", CreatedAt: time.Now()}
+	require.NoError(t, service.cache.Store(t.Context(), challenge))
+	service.authorizer = oauthTestAuthorizer{err: ErrOrganizationDisabled}
+
+	form := url.Values{"state": {challenge.ID}, "csrf_token": {challenge.CSRFToken}, "organization_id": {challenge.OrganizationID}, "action": {"approve"}}
+	request := httptest.NewRequest(http.MethodPost, "/platform-mcp/connect", strings.NewReader(form.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	response := httptest.NewRecorder()
+	service.ConnectHandler().ServeHTTP(response, request)
+
+	require.Equal(t, http.StatusFound, response.Code)
+	location, err := url.Parse(response.Header().Get("Location"))
+	require.NoError(t, err)
+	require.Equal(t, challenge.RedirectURI, location.Scheme+"://"+location.Host+location.Path)
+	require.Equal(t, "access_denied", location.Query().Get("error"))
+	require.Equal(t, OrganizationDisabledMessage, location.Query().Get("error_description"))
+	require.Empty(t, location.Query().Get("code"))
+}
+
+// refreshTestTokenRequest builds a refresh grant request for client-1.
+func refreshTestTokenRequest(refreshToken string) *http.Request {
+	request := httptest.NewRequest(http.MethodPost, "/platform-mcp/token", strings.NewReader("grant_type=refresh_token&refresh_token="+url.QueryEscape(refreshToken)+"&client_id=client-1"))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	return request
+}
+
+// seedRefreshableTestSession registers a client, a connection, and a session
+// for org-1 and returns the session's refresh token.
+func seedRefreshableTestSession(t *testing.T, service *OAuthHTTP) string {
+	t.Helper()
+	store := testStore(t, service)
+	now := time.Now()
+	connection := platformoauth.Connection{ID: "connection-1", ClientID: "client-1", Subject: "user:user-1", OrganizationID: "org-1", Generation: "generation-1", AuthorizationExpiresAt: now.Add(platformoauth.AuthorizationLifetime)}
+	require.NoError(t, store.RegisterClient(t.Context(), platformoauth.Client{ID: "client-1", Name: "test", RedirectURIs: []string{"http://127.0.0.1:3000/callback"}}))
+	require.NoError(t, store.RegisterConnection(t.Context(), connection))
+	refreshToken, err := service.credentials.Issue(refreshTokenCredential, connection.OrganizationID, "")
+	require.NoError(t, err)
+	require.NoError(t, store.CreateSession(t.Context(), platformoauth.Session{ID: "session-1", ClientID: "client-1", Connection: connection, JTI: "jti-1", RefreshHash: opaqueHash(refreshToken), ExpiresAt: now.Add(time.Hour), RefreshExpiresAt: now.Add(time.Hour)}))
+	return refreshToken
+}
+
+// Disabling an organization is reversible, so a refresh refused while it is
+// disabled must leave the connection able to refresh once it is re-enabled.
+func TestOAuthHTTPRefreshForDisabledOrganizationKeepsConnection(t *testing.T) {
+	t.Parallel()
+
+	service := newTestOAuthHTTP(t)
+	refreshToken := seedRefreshableTestSession(t, service)
+	service.authorizer = oauthTestAuthorizer{err: ErrOrganizationDisabled}
+
+	denied := httptest.NewRecorder()
+	service.TokenHandler().ServeHTTP(denied, refreshTestTokenRequest(refreshToken))
+
+	require.Equal(t, http.StatusBadRequest, denied.Code)
+	deniedBody, ok := oautherr.ParseTokenError(denied.Body.Bytes())
+	require.True(t, ok, denied.Body.String())
+	require.Equal(t, oautherr.CodeInvalidGrant, deniedBody.Code)
+	require.Equal(t, OrganizationDisabledMessage, deniedBody.Description)
+
+	service.authorizer = allowAuthorizer{}
+	reenabled := httptest.NewRecorder()
+	service.TokenHandler().ServeHTTP(reenabled, refreshTestTokenRequest(refreshToken))
+
+	require.Equal(t, http.StatusOK, reenabled.Code, reenabled.Body.String())
+}
+
+// Lost membership, unlike a disabled organization, ends the connection.
+func TestOAuthHTTPRefreshAfterLostMembershipEndsConnection(t *testing.T) {
+	t.Parallel()
+
+	service := newTestOAuthHTTP(t)
+	refreshToken := seedRefreshableTestSession(t, service)
+	service.authorizer = oauthTestAuthorizer{err: ErrForbidden}
+
+	denied := httptest.NewRecorder()
+	service.TokenHandler().ServeHTTP(denied, refreshTestTokenRequest(refreshToken))
+	require.Equal(t, http.StatusBadRequest, denied.Code)
+
+	service.authorizer = allowAuthorizer{}
+	retried := httptest.NewRecorder()
+	service.TokenHandler().ServeHTTP(retried, refreshTestTokenRequest(refreshToken))
+
+	require.Equal(t, http.StatusBadRequest, retried.Code)
+	retriedBody, ok := oautherr.ParseTokenError(retried.Body.Bytes())
+	require.True(t, ok, retried.Body.String())
+	require.Equal(t, oautherr.CodeInvalidGrant, retriedBody.Code)
 }
 
 func TestOAuthHTTPConnectPostRedirectsTransientGateError(t *testing.T) {
