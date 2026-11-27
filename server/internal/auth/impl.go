@@ -343,7 +343,11 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		if intent != nil && intent.PartnerCode != "" {
 			return s.redirectPartnerSignupError(ctx, payload, code, err, intent)
 		}
-		logger.ErrorContext(ctx, "signin error", attr.SlogError(err), attr.SlogReason(string(code)))
+		if code == authErrSelfServeDisabled {
+			logger.WarnContext(ctx, "signin refused", attr.SlogError(err), attr.SlogReason(string(code)))
+		} else {
+			logger.ErrorContext(ctx, "signin error", attr.SlogError(err), attr.SlogReason(string(code)))
+		}
 		return &gen.CallbackResult{
 			Location:      s.platformHostURL(ctx, s.cfg.SignInRedirectURL) + "?" + url.Values{"signin_error": {string(code)}}.Encode(),
 			SessionToken:  "",
@@ -1719,7 +1723,11 @@ func (s *Service) persistProvisionedOrganization(
 // /register — making that split persist would mean storing the flow origin on
 // the session, which is not worth it for this path.
 func (s *Service) redirectSignupError(ctx context.Context, payload *gen.CallbackPayload, code authErr, err error) (*gen.CallbackResult, error) {
-	s.logger.ErrorContext(ctx, "signup failed", attr.SlogError(err), attr.SlogReason(string(code)))
+	if code == authErrSelfServeDisabled {
+		s.logger.WarnContext(ctx, "signup refused", attr.SlogError(err), attr.SlogReason(string(code)))
+	} else {
+		s.logger.ErrorContext(ctx, "signup failed", attr.SlogError(err), attr.SlogReason(string(code)))
+	}
 
 	base := strings.TrimRight(s.platformHostURL(ctx, s.cfg.SignInRedirectURL), "/")
 	location := fmt.Sprintf("%s/sign-up?signin_error=%s", base, code)

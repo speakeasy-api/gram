@@ -9,7 +9,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/platformswitches"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
@@ -53,6 +55,9 @@ func TestRegister_RefusedWhileSelfServeDisabled(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, stored.ActiveOrganizationID)
 	require.Empty(t, instance.trialNotifier.trialStarted)
+	orgs, err := orgRepo.New(instance.conn).ListOrganizationsForUser(ctx, conv.ToPGText(userInfo.UserID))
+	require.NoError(t, err)
+	require.Empty(t, orgs, "a refused registration must not persist an organization")
 
 	_, err = platformswitches.Set(ctx, instance.conn, platformswitches.KeySelfServeDisabled, false, "operator@example.com")
 	require.NoError(t, err)
