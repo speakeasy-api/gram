@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -173,15 +172,15 @@ func (s *Service) executeRequest(ctx context.Context, logger *slog.Logger, req c
 	// Using syscall.O_NONBLOCK is not a good idea because the sub-process
 	// might not open the FIFO for writing by the time this process attempts
 	// to read from the pipe. This can result in an io.UnexpectedEOF error.
-	pipech := make(chan *os.File, 1)
-	errch := make(chan error, 1)
-	go func() {
-		resultReader, err := os.OpenFile(filepath.Clean(fifoPath), os.O_RDONLY, os.ModeNamedPipe)
-		if err != nil {
-			errch <- err
-			return
+	pipech, errch := openFIFOReader(fifoPath)
+	// Every return before the reader is handed over leaves it blocked in open
+	// for good, because the subprocess never opens the FIFO. This runs before
+	// the deferred cleanup removes the FIFO.
+	readerHandedOver := false
+	defer func() {
+		if !readerHandedOver {
+			_ = releaseFIFOReader(fifoPath, pipech, errch)
 		}
-		pipech <- resultReader
 	}()
 
 	var pipe *os.File
@@ -206,11 +205,13 @@ func (s *Service) executeRequest(ctx context.Context, logger *slog.Logger, req c
 			http.StatusInternalServerError,
 		)
 	case err := <-errch:
+		readerHandedOver = true
 		return svc.Fault(
 			fmt.Errorf("open pipe (ro): %w", err),
 			http.StatusInternalServerError,
 		)
 	case f := <-pipech:
+		readerHandedOver = true
 		pipe = f
 		defer o11y.LogDefer(ctx, logger, "failed to close tool call pipe", func() error { return pipe.Close() })
 	}
@@ -287,6 +288,12 @@ func (s *Service) executeRequest(ctx context.Context, logger *slog.Logger, req c
 		attr.SlogDuration(time.Duration(executionTime*float64(time.Second))),
 		attr.SlogInFlight(int(s.inFlight.Load())),
 	)
+
+	// The status line is already sent, so a timeout here can only be logged:
+	// the caller sees a cut-off body.
+	if timeoutError(ctx, timeoutCtx, req.timeout) != nil {
+		completionLogger.ErrorContext(ctx, "sub-process exceeded its time limit after it started responding", attr.SlogError(err))
+	}
 
 	var exitErr *exec.ExitError
 	switch {

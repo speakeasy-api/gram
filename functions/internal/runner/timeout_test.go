@@ -4,11 +4,14 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/functions/internal/ipc"
 	"github.com/speakeasy-api/gram/functions/internal/svc"
 )
 
@@ -111,4 +114,42 @@ func requireMethodError(t *testing.T, err error) *svc.MethodError {
 	var methodErr *svc.MethodError
 	require.ErrorAs(t, err, &methodErr)
 	return methodErr
+}
+
+func TestReleaseFIFOReader_UnblocksAnAbandonedReader(t *testing.T) {
+	t.Parallel()
+
+	fifoPath, cleanup, err := ipc.Mkfifo()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = cleanup() })
+
+	// No subprocess ever opens the write end, as when one times out or
+	// crashes before answering.
+	pipech, errch := openFIFOReader(fifoPath)
+
+	done := make(chan bool, 1)
+	go func() { done <- releaseFIFOReader(fifoPath, pipech, errch) }()
+	select {
+	case released := <-done:
+		require.True(t, released, "the reader goroutine must finish")
+	case <-time.After(5 * time.Second):
+		t.Fatal("releaseFIFOReader did not return")
+	}
+}
+
+func TestReleaseFIFOReader_ReaderAlreadyFinished(t *testing.T) {
+	t.Parallel()
+
+	fifoPath, cleanup, err := ipc.Mkfifo()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = cleanup() })
+
+	pipech, errch := openFIFOReader(fifoPath)
+	writer, err := os.OpenFile(filepath.Clean(fifoPath), os.O_WRONLY, os.ModeNamedPipe)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = writer.Close() })
+	require.Eventually(t, func() bool { return len(pipech) == 1 }, 5*time.Second, 5*time.Millisecond)
+
+	require.True(t, releaseFIFOReader(fifoPath, pipech, errch))
+	require.Empty(t, pipech, "the reader's file was taken and closed")
 }
