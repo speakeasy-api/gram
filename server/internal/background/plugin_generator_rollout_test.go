@@ -2,6 +2,7 @@ package background
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/google/uuid"
@@ -13,6 +14,7 @@ import (
 
 	bgactivities "github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func registerPluginRolloutRepairNoop(env *testsuite.TestWorkflowEnvironment) {
@@ -181,6 +183,45 @@ func TestPluginGeneratorRolloutWorkflow_SkipsPlaceholderActor(t *testing.T) {
 	require.NoError(t, env.GetWorkflowResult(&result))
 	require.Equal(t, 1, published)
 	require.Equal(t, PluginGeneratorRolloutResult{Scanned: 2, Published: 1, Skipped: 1, Conflicted: 0, Failed: 0}, result)
+}
+
+// A candidate whose organization was disabled after the sweep listed it is
+// refused once and counted as rejected, not retried or counted as a failure.
+func TestPluginGeneratorRolloutWorkflow_CountsDisabledOrganizationAsRejected(t *testing.T) {
+	t.Parallel()
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	registerPluginRolloutRepairNoop(env)
+
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ bgactivities.ListPluginPublishCandidatesInput) (*bgactivities.ListPluginPublishCandidatesResult, error) {
+			return &bgactivities.ListPluginPublishCandidatesResult{
+				Candidates: []bgactivities.PluginPublishCandidate{{ProjectID: uuid.New(), CreatedByUserID: "user_1"}},
+			}, nil
+		},
+		activity.RegisterOptions{Name: "ListPluginPublishCandidates"},
+	)
+
+	client := &rejectingPublishClient{mu: sync.Mutex{}, calls: 0, err: errDisabledOrganization}
+	var a Activities
+	a.pluginPublisher = bgactivities.NewPluginPublisher(testenv.NewLogger(t), nil, client)
+	env.RegisterActivity(a.PublishPluginProject)
+
+	env.ExecuteWorkflow(PluginGeneratorRolloutWorkflow, PluginGeneratorRolloutInput{
+		BatchSize:      10,
+		CommitMessage:  "Update plugin packages",
+		AfterProjectID: nil,
+		Carried:        PluginGeneratorRolloutResult{Scanned: 0, Published: 0, Skipped: 0, Conflicted: 0, Rejected: 0, Failed: 0},
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError())
+
+	var result PluginGeneratorRolloutResult
+	require.NoError(t, env.GetWorkflowResult(&result))
+	require.Equal(t, PluginGeneratorRolloutResult{Scanned: 1, Published: 0, Skipped: 0, Conflicted: 0, Rejected: 1, Failed: 0}, result)
+	require.Equal(t, 1, client.calls, "a disabled organization's publish must not be retried")
 }
 
 func TestPluginGeneratorRolloutWorkflow_RepairsOnceOnFreshRun(t *testing.T) {

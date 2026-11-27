@@ -1948,6 +1948,12 @@ SELECT
   latest.content,
   latest.created_at AS version_created_at
 FROM skill_share_links l
+JOIN projects p
+  ON p.id = l.project_id
+  AND NOT p.deleted
+JOIN organization_metadata om
+  ON om.id = p.organization_id
+  AND om.disabled_at IS NULL
 JOIN skills s
   ON s.project_id = l.project_id
   AND s.id = l.skill_id
@@ -1973,7 +1979,9 @@ type GetSharedSkillByTokenRow struct {
 
 // Public read for the unauthenticated share-link endpoint. The join pins the
 // share link to its owning project's skill and the lateral picks the latest
-// version by effective promotion time.
+// version by effective promotion time. Links in a deleted project or a
+// disabled organization do not resolve; the latter resolve again once the
+// organization is re-enabled.
 func (q *Queries) GetSharedSkillByToken(ctx context.Context, token string) (GetSharedSkillByTokenRow, error) {
 	row := q.db.QueryRow(ctx, getSharedSkillByToken, token)
 	var i GetSharedSkillByTokenRow
@@ -1999,6 +2007,9 @@ JOIN projects p
   ON p.id = l.project_id
   AND p.organization_id = $1
   AND NOT p.deleted
+JOIN organization_metadata om
+  ON om.id = p.organization_id
+  AND om.disabled_at IS NULL
 JOIN skills s
   ON s.project_id = l.project_id
   AND s.id = l.skill_id
@@ -2030,6 +2041,7 @@ type GetSharedSkillByTokenForOrganizationRow struct {
 // Custom-domain variant of GetSharedSkillByToken: the extra projects join pins
 // the share link to the organization that owns the serving domain, so one
 // tenant's skill can never be rendered under another tenant's custom domain.
+// Like GetSharedSkillByToken, it resolves nothing for a disabled organization.
 func (q *Queries) GetSharedSkillByTokenForOrganization(ctx context.Context, arg GetSharedSkillByTokenForOrganizationParams) (GetSharedSkillByTokenForOrganizationRow, error) {
 	row := q.db.QueryRow(ctx, getSharedSkillByTokenForOrganization, arg.OrganizationID, arg.Token)
 	var i GetSharedSkillByTokenForOrganizationRow
