@@ -153,6 +153,7 @@ func TestPlatformToolsetIdentityIsStableAndDistinct(t *testing.T) {
 	require.NotEqual(t, assistantsID, platformtools.PlatformToolsetID(platformtools.PlatformMCPReadToolsetSlug))
 	require.NotEqual(t, assistantsID, platformtools.PlatformToolsetID(platformtools.AssistantSlackPlatformToolsetSlug))
 	require.NotEqual(t, platformtools.PlatformToolsetID(platformtools.SpeakeasySlackPlatformToolsetSlug), platformtools.PlatformToolsetID(platformtools.AssistantSlackPlatformToolsetSlug))
+	require.Equal(t, "8142a254-e580-54b7-9dae-7151efe642bf", platformtools.PlatformToolsetID(platformtools.AssistantSlackPlatformToolsetSlug).String(), "assistant-slack PlatformToolsetID must stay pinned for dashboard onboarding")
 	require.Equal(t, "Speakeasy assistant tools", platformtools.PlatformToolsetName(platformtools.AssistantsPlatformToolsetSlug))
 	require.Equal(t, "Speakeasy assistant Slack", platformtools.PlatformToolsetName(platformtools.AssistantSlackPlatformToolsetSlug))
 }

@@ -145,6 +145,7 @@ type Server struct {
 	ListAssistantOrganizations                 http.Handler
 	RepairOrganizationAssistantAgentNames      http.Handler
 	BackfillOrganizationAssistantBuiltinGrants http.Handler
+	MigrateOrganizationAssistantSlack          http.Handler
 	ListOrganizationAssistants                 http.Handler
 	MigrateOrganizationAssistantIdentities     http.Handler
 	MigrateOrganizationAssistantsToKit         http.Handler
@@ -315,6 +316,7 @@ func New(
 			{"ListAssistantOrganizations", "GET", "/admin/assistants.organizations"},
 			{"RepairOrganizationAssistantAgentNames", "POST", "/admin/organization.repairAssistantAgentNames"},
 			{"BackfillOrganizationAssistantBuiltinGrants", "POST", "/admin/organization.backfillAssistantBuiltinGrants"},
+			{"MigrateOrganizationAssistantSlack", "POST", "/admin/organization.migrateAssistantSlack"},
 			{"ListOrganizationAssistants", "GET", "/admin/organization.assistants"},
 			{"MigrateOrganizationAssistantIdentities", "POST", "/admin/organization.migrateAssistantIdentities"},
 			{"MigrateOrganizationAssistantsToKit", "POST", "/admin/organization.migrateAssistantsToKit"},
@@ -457,6 +459,7 @@ func New(
 		ListAssistantOrganizations:                 NewListAssistantOrganizationsHandler(e.ListAssistantOrganizations, mux, decoder, encoder, errhandler, formatter),
 		RepairOrganizationAssistantAgentNames:      NewRepairOrganizationAssistantAgentNamesHandler(e.RepairOrganizationAssistantAgentNames, mux, decoder, encoder, errhandler, formatter),
 		BackfillOrganizationAssistantBuiltinGrants: NewBackfillOrganizationAssistantBuiltinGrantsHandler(e.BackfillOrganizationAssistantBuiltinGrants, mux, decoder, encoder, errhandler, formatter),
+		MigrateOrganizationAssistantSlack:          NewMigrateOrganizationAssistantSlackHandler(e.MigrateOrganizationAssistantSlack, mux, decoder, encoder, errhandler, formatter),
 		ListOrganizationAssistants:                 NewListOrganizationAssistantsHandler(e.ListOrganizationAssistants, mux, decoder, encoder, errhandler, formatter),
 		MigrateOrganizationAssistantIdentities:     NewMigrateOrganizationAssistantIdentitiesHandler(e.MigrateOrganizationAssistantIdentities, mux, decoder, encoder, errhandler, formatter),
 		MigrateOrganizationAssistantsToKit:         NewMigrateOrganizationAssistantsToKitHandler(e.MigrateOrganizationAssistantsToKit, mux, decoder, encoder, errhandler, formatter),
@@ -606,6 +609,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListAssistantOrganizations = m(s.ListAssistantOrganizations)
 	s.RepairOrganizationAssistantAgentNames = m(s.RepairOrganizationAssistantAgentNames)
 	s.BackfillOrganizationAssistantBuiltinGrants = m(s.BackfillOrganizationAssistantBuiltinGrants)
+	s.MigrateOrganizationAssistantSlack = m(s.MigrateOrganizationAssistantSlack)
 	s.ListOrganizationAssistants = m(s.ListOrganizationAssistants)
 	s.MigrateOrganizationAssistantIdentities = m(s.MigrateOrganizationAssistantIdentities)
 	s.MigrateOrganizationAssistantsToKit = m(s.MigrateOrganizationAssistantsToKit)
@@ -754,6 +758,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListAssistantOrganizationsHandler(mux, h.ListAssistantOrganizations)
 	MountRepairOrganizationAssistantAgentNamesHandler(mux, h.RepairOrganizationAssistantAgentNames)
 	MountBackfillOrganizationAssistantBuiltinGrantsHandler(mux, h.BackfillOrganizationAssistantBuiltinGrants)
+	MountMigrateOrganizationAssistantSlackHandler(mux, h.MigrateOrganizationAssistantSlack)
 	MountListOrganizationAssistantsHandler(mux, h.ListOrganizationAssistants)
 	MountMigrateOrganizationAssistantIdentitiesHandler(mux, h.MigrateOrganizationAssistantIdentities)
 	MountMigrateOrganizationAssistantsToKitHandler(mux, h.MigrateOrganizationAssistantsToKit)
@@ -7426,6 +7431,60 @@ func NewBackfillOrganizationAssistantBuiltinGrantsHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "backfillOrganizationAssistantBuiltinGrants")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountMigrateOrganizationAssistantSlackHandler configures the mux to serve
+// the "admin" service "migrateOrganizationAssistantSlack" endpoint.
+func MountMigrateOrganizationAssistantSlackHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/organization.migrateAssistantSlack", f)
+}
+
+// NewMigrateOrganizationAssistantSlackHandler creates a HTTP handler which
+// loads the HTTP request and calls the "admin" service
+// "migrateOrganizationAssistantSlack" endpoint.
+func NewMigrateOrganizationAssistantSlackHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeMigrateOrganizationAssistantSlackRequest(mux, decoder)
+		encodeResponse = EncodeMigrateOrganizationAssistantSlackResponse(encoder)
+		encodeError    = EncodeMigrateOrganizationAssistantSlackError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "migrateOrganizationAssistantSlack")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
 		payload, err := decodeRequest(r)
 		if err != nil {

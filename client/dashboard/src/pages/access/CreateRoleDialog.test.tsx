@@ -1319,6 +1319,7 @@ describe("a role read again while the editor is open", () => {
         "static_credential",
         "pass_through",
         "ema",
+        "slack_app",
       ]);
     } finally {
       mocks.authClients = [];

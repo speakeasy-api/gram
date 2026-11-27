@@ -4151,6 +4151,31 @@ func BuildBackfillOrganizationAssistantBuiltinGrantsPayload(adminBackfillOrganiz
 	return v, nil
 }
 
+// BuildMigrateOrganizationAssistantSlackPayload builds the payload for the
+// admin migrateOrganizationAssistantSlack endpoint from CLI flags.
+func BuildMigrateOrganizationAssistantSlackPayload(adminMigrateOrganizationAssistantSlackBody string, adminMigrateOrganizationAssistantSlackAdminSessionToken string) (*admin.MigrateOrganizationAssistantSlackPayload, error) {
+	var err error
+	var body MigrateOrganizationAssistantSlackRequestBody
+	{
+		err = json.Unmarshal([]byte(adminMigrateOrganizationAssistantSlackBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"organization_id\": \"abc123\"\n   }'")
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminMigrateOrganizationAssistantSlackAdminSessionToken != "" {
+			adminSessionToken = &adminMigrateOrganizationAssistantSlackAdminSessionToken
+		}
+	}
+	v := &admin.MigrateOrganizationAssistantSlackPayload{
+		OrganizationID: body.OrganizationID,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
 // BuildListOrganizationAssistantsPayload builds the payload for the admin
 // listOrganizationAssistants endpoint from CLI flags.
 func BuildListOrganizationAssistantsPayload(adminListOrganizationAssistantsOrganizationID string, adminListOrganizationAssistantsAdminSessionToken string) (*admin.ListOrganizationAssistantsPayload, error) {

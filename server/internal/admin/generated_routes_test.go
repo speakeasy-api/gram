@@ -58,6 +58,7 @@ func TestGeneratedAdminRoutes_ExposeExactMigratedMounts(t *testing.T) {
 		"ListAssistantOrganizations":                 "GET /admin/assistants.organizations",
 		"RepairOrganizationAssistantAgentNames":      "POST /admin/organization.repairAssistantAgentNames",
 		"BackfillOrganizationAssistantBuiltinGrants": "POST /admin/organization.backfillAssistantBuiltinGrants",
+		"MigrateOrganizationAssistantSlack":          "POST /admin/organization.migrateAssistantSlack",
 		"ListOrganizationAssistants":                 "GET /admin/organization.assistants",
 		"MigrateOrganizationAssistantIdentities":     "POST /admin/organization.migrateAssistantIdentities",
 		"MigrateOrganizationAssistantsToKit":         "POST /admin/organization.migrateAssistantsToKit",

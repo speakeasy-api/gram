@@ -53,8 +53,11 @@ describe("isOnboardingToolAllowed", () => {
     expect(isOnboardingToolAllowed("attach_toolset", triggerWriter)).toBe(true);
     expect(isOnboardingToolAllowed("create_trigger", triggerWriter)).toBe(true);
     expect(isOnboardingToolAllowed("propose_slack_setup", triggerWriter)).toBe(
-      false,
+      true,
     );
+    expect(
+      isOnboardingToolAllowed("request_slack_credentials", triggerWriter),
+    ).toBe(true);
   });
 
   it.each(["update_assistant", "attach_toolset", "create_trigger"] as const)(

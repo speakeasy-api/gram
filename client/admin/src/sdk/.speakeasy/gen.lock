@@ -129,6 +129,7 @@ trackedFiles:
   src/funcs/adminLogout.ts: {}
   src/funcs/adminMarkEnterpriseTrialConverted.ts: {}
   src/funcs/adminMigrateOrganizationAssistantIdentities.ts: {}
+  src/funcs/adminMigrateOrganizationAssistantSlack.ts: {}
   src/funcs/adminMigrateOrganizationAssistantsToKit.ts: {}
   src/funcs/adminMigrateToGlobalIssuer.ts: {}
   src/funcs/adminPromoteRegistryCandidate.ts: {}
@@ -197,6 +198,8 @@ trackedFiles:
   src/models/components/adminassistantkitmigrationrun.ts: {}
   src/models/components/adminassistantorganization.ts: {}
   src/models/components/adminassistantorganizations.ts: {}
+  src/models/components/adminassistantslackmigrationresult.ts: {}
+  src/models/components/adminassistantslackmigrationrun.ts: {}
   src/models/components/adminauditlog.ts: {}
   src/models/components/adminbackfillmcpauthgrantsresult.ts: {}
   src/models/components/adminbackfillmcpconnectgrantsresult.ts: {}
@@ -385,6 +388,7 @@ trackedFiles:
   src/models/components/markenterprisetrialconvertedresult.ts: {}
   src/models/components/meterusagewindow.ts: {}
   src/models/components/migrateorganizationassistantidentitiesrequestbody.ts: {}
+  src/models/components/migrateorganizationassistantslackrequestbody.ts: {}
   src/models/components/migrateorganizationassistantstokitrequestbody.ts: {}
   src/models/components/migrateremotesessionissuerrequestbody.ts: {}
   src/models/components/migrateremotesessionissuerresult.ts: {}
@@ -643,6 +647,7 @@ trackedFiles:
   src/react-query/adminLogout.ts: {}
   src/react-query/adminMarkEnterpriseTrialConverted.ts: {}
   src/react-query/adminMigrateOrganizationAssistantIdentities.ts: {}
+  src/react-query/adminMigrateOrganizationAssistantSlack.ts: {}
   src/react-query/adminMigrateOrganizationAssistantsToKit.ts: {}
   src/react-query/adminMigrateToGlobalIssuer.ts: {}
   src/react-query/adminOnboardingPlaybooks.core.ts: {}
@@ -1929,6 +1934,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  adminMigrateOrganizationAssistantSlack:
+    speakeasy-default-admin-migrate-organization-assistant-slack:
+      requestBody:
+        application/json: {"organization_id": "<id>"}
+      responses:
+        "200":
+          application/json: {"already_migrated": 22020, "failed": 473308, "migrated": 220020, "needs_identity": 552317, "no_slack": 312426, "organization_id": "<id>", "results": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   adminMigrateOrganizationAssistantsToKit:
     speakeasy-default-admin-migrate-organization-assistants-to-kit:
       requestBody:

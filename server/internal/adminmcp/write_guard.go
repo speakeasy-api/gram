@@ -37,6 +37,7 @@ const (
 	OperationRedeployProject                      WriteOperation = "redeploy_project"
 	OperationRepairAssistantAgentNames            WriteOperation = "repair_organization_assistant_agent_names"
 	OperationBackfillAssistantBuiltinGrants       WriteOperation = "backfill_organization_assistant_builtin_grants"
+	OperationMigrateAssistantSlack                WriteOperation = "migrate_organization_assistant_slack"
 	OperationMigrateAssistantIdentities           WriteOperation = "migrate_organization_assistant_identities"
 	OperationMigrateAssistantsToKit               WriteOperation = "migrate_organization_assistants_to_kit"
 )
@@ -60,6 +61,7 @@ var AllWriteOperations = []WriteOperation{
 	OperationRedeployProject,
 	OperationRepairAssistantAgentNames,
 	OperationBackfillAssistantBuiltinGrants,
+	OperationMigrateAssistantSlack,
 	OperationMigrateAssistantIdentities,
 	OperationMigrateAssistantsToKit,
 }

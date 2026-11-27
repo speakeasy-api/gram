@@ -330,6 +330,39 @@ func (q *Queries) AdminCountOrganizations(ctx context.Context, arg AdminCountOrg
 	return column_1, err
 }
 
+const adminCountToolsetExternalReferences = `-- name: AdminCountToolsetExternalReferences :one
+SELECT (
+    (SELECT count(*) FROM assistant_mcp_servers ams
+     JOIN assistants a ON a.id = ams.assistant_id AND a.deleted IS FALSE
+     WHERE ams.mcp_server_id = $1 AND ams.project_id = $2)
+    + (SELECT count(*) FROM plugin_servers ps
+       WHERE ps.mcp_server_id = $1 AND ps.deleted IS FALSE)
+    + (SELECT count(*) FROM meta_mcp_server_members m
+       WHERE m.mcp_server_id = $1 AND m.project_id = $2 AND m.deleted IS FALSE)
+    + (SELECT count(*) FROM slack_app_toolsets sat
+       JOIN slack_apps sa ON sa.id = sat.slack_app_id AND sa.deleted IS FALSE
+       WHERE sat.toolset_id = $3)
+    + (SELECT count(*) FROM mcp_server_auth_clients msac
+       WHERE msac.mcp_server_id = $1 AND msac.project_id = $2 AND msac.deleted IS FALSE)
+)::bigint AS ref_count
+`
+
+type AdminCountToolsetExternalReferencesParams struct {
+	McpServerID uuid.UUID
+	ProjectID   uuid.UUID
+	ToolsetID   uuid.UUID
+}
+
+// Counts live references to a hosted toolset / MCP server across assistants,
+// plugins, meta MCP servers, Slack apps, and offered auth clients so migration
+// only soft-deletes toolsets that nothing else uses.
+func (q *Queries) AdminCountToolsetExternalReferences(ctx context.Context, arg AdminCountToolsetExternalReferencesParams) (int64, error) {
+	row := q.db.QueryRow(ctx, adminCountToolsetExternalReferences, arg.McpServerID, arg.ProjectID, arg.ToolsetID)
+	var ref_count int64
+	err := row.Scan(&ref_count)
+	return ref_count, err
+}
+
 const adminCountUserOrganizations = `-- name: AdminCountUserOrganizations :one
 SELECT (SELECT count(*) FROM organization_user_relationships m WHERE m.user_id = u.id AND m.deleted IS FALSE) AS total
 FROM users u WHERE u.id = $1::text AND u.deleted_at IS NULL AND u.workos_deleted_at IS NULL
@@ -382,6 +415,27 @@ func (q *Queries) AdminCountUsers(ctx context.Context, arg AdminCountUsersParams
 	return count, err
 }
 
+const adminDetachAssistantMCPServer = `-- name: AdminDetachAssistantMCPServer :execrows
+DELETE FROM assistant_mcp_servers
+WHERE assistant_id = $1
+  AND mcp_server_id = $2
+  AND project_id = $3
+`
+
+type AdminDetachAssistantMCPServerParams struct {
+	AssistantID uuid.UUID
+	McpServerID uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+func (q *Queries) AdminDetachAssistantMCPServer(ctx context.Context, arg AdminDetachAssistantMCPServerParams) (int64, error) {
+	result, err := q.db.Exec(ctx, adminDetachAssistantMCPServer, arg.AssistantID, arg.McpServerID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const adminDisableOrganization = `-- name: AdminDisableOrganization :execrows
 UPDATE organization_metadata
 SET disabled_at = COALESCE(disabled_at, clock_timestamp()),
@@ -419,6 +473,41 @@ func (q *Queries) AdminEnableOrganization(ctx context.Context, id string) (int64
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const adminFindAgentSlackAuthClient = `-- name: AdminFindAgentSlackAuthClient :one
+SELECT ac.id
+FROM mcp_auth_clients ac
+JOIN principal_grants pg
+  ON pg.organization_id = ac.organization_id
+ AND pg.principal_urn = concat('agent:', $1::uuid)
+ AND pg.scope = 'mcp:auth'
+ AND pg.selectors->>'resource_kind' = 'mcp_auth_client'
+ AND pg.selectors->>'resource_id' = ac.id::text
+ AND (pg.expires_at IS NULL OR pg.expires_at > clock_timestamp())
+WHERE ac.organization_id = $2
+  AND (ac.project_id = $3 OR ac.project_id IS NULL)
+  AND ac.client_type = 'slack_app'
+  AND ac.enabled IS TRUE
+  AND ac.deleted IS FALSE
+ORDER BY ac.created_at, ac.id
+LIMIT 1
+`
+
+type AdminFindAgentSlackAuthClientParams struct {
+	AgentID        uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+}
+
+// Finds an existing live, enabled slack_app auth client in the assistant's
+// project (or org-shared) that the assistant's backing agent already holds
+// mcp:auth on.
+func (q *Queries) AdminFindAgentSlackAuthClient(ctx context.Context, arg AdminFindAgentSlackAuthClientParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, adminFindAgentSlackAuthClient, arg.AgentID, arg.OrganizationID, arg.ProjectID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const adminGetConnectGrantExpiryFixture = `-- name: AdminGetConnectGrantExpiryFixture :one
@@ -504,6 +593,28 @@ func (q *Queries) AdminGetEnterpriseTrialRetryOperationIDs(ctx context.Context, 
 	var i AdminGetEnterpriseTrialRetryOperationIDsRow
 	err := row.Scan(&i.ArmOperationID, &i.RearmArmOperationID, &i.MatchingRearmCount)
 	return i, err
+}
+
+const adminGetEnvironmentIDBySlug = `-- name: AdminGetEnvironmentIDBySlug :one
+SELECT e.id
+FROM environments e
+WHERE e.organization_id = $1
+  AND e.project_id = $2
+  AND e.slug = $3
+  AND e.deleted IS FALSE
+`
+
+type AdminGetEnvironmentIDBySlugParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	Slug           string
+}
+
+func (q *Queries) AdminGetEnvironmentIDBySlug(ctx context.Context, arg AdminGetEnvironmentIDBySlugParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, adminGetEnvironmentIDBySlug, arg.OrganizationID, arg.ProjectID, arg.Slug)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const adminGetIssuerFixture = `-- name: AdminGetIssuerFixture :one
@@ -1080,6 +1191,54 @@ func (q *Queries) AdminInsertPrincipalGrantFixture(ctx context.Context, arg Admi
 	return err
 }
 
+const adminListAgentSlackAuthClientGrants = `-- name: AdminListAgentSlackAuthClientGrants :many
+SELECT
+    pg.id AS grant_id,
+    ac.id AS auth_client_id
+FROM principal_grants pg
+JOIN mcp_auth_clients ac
+  ON ac.organization_id = pg.organization_id
+ AND ac.id::text = pg.selectors->>'resource_id'
+ AND ac.client_type = 'slack_app'
+WHERE pg.organization_id = $1
+  AND pg.principal_urn = concat('agent:', $2::uuid)
+  AND pg.scope = 'mcp:auth'
+  AND pg.selectors->>'resource_kind' = 'mcp_auth_client'
+ORDER BY pg.id
+`
+
+type AdminListAgentSlackAuthClientGrantsParams struct {
+	OrganizationID string
+	AgentID        uuid.UUID
+}
+
+type AdminListAgentSlackAuthClientGrantsRow struct {
+	GrantID      uuid.UUID
+	AuthClientID uuid.UUID
+}
+
+// Lists all mcp:auth policy grants held by an agent targeting slack_app auth
+// clients in the organization so migration can consolidate onto one client.
+func (q *Queries) AdminListAgentSlackAuthClientGrants(ctx context.Context, arg AdminListAgentSlackAuthClientGrantsParams) ([]AdminListAgentSlackAuthClientGrantsRow, error) {
+	rows, err := q.db.Query(ctx, adminListAgentSlackAuthClientGrants, arg.OrganizationID, arg.AgentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListAgentSlackAuthClientGrantsRow
+	for rows.Next() {
+		var i AdminListAgentSlackAuthClientGrantsRow
+		if err := rows.Scan(&i.GrantID, &i.AuthClientID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const adminListAssistantAgentNames = `-- name: AdminListAssistantAgentNames :many
 WITH bound AS (
  SELECT a.id AS assistant_id, a.project_id, a.name, g.id AS agent_id, g.name AS agent_name,
@@ -1261,6 +1420,237 @@ func (q *Queries) AdminListAssistantOrganizations(ctx context.Context) ([]AdminL
 	return items, nil
 }
 
+const adminListAssistantSlackMigrationTargets = `-- name: AdminListAssistantSlackMigrationTargets :many
+SELECT
+    a.id AS assistant_id,
+    a.project_id,
+    a.name,
+    g.id AS agent_id
+FROM assistants a
+JOIN projects p
+  ON p.id = a.project_id
+ AND p.organization_id = a.organization_id
+ AND p.deleted IS FALSE
+LEFT JOIN assistant_agent_bindings b
+  ON b.assistant_id = a.id
+ AND b.project_id = a.project_id
+ AND b.organization_id = a.organization_id
+ AND b.deleted IS FALSE
+LEFT JOIN agents g
+  ON g.id = b.agent_id
+ AND g.organization_id = a.organization_id
+ AND g.project_id = a.project_id
+ AND g.deleted IS FALSE
+WHERE a.organization_id = $1
+  AND a.deleted IS FALSE
+ORDER BY a.id
+FOR UPDATE OF a
+`
+
+type AdminListAssistantSlackMigrationTargetsRow struct {
+	AssistantID uuid.UUID
+	ProjectID   uuid.UUID
+	Name        string
+	AgentID     uuid.NullUUID
+}
+
+// Every live assistant in live projects of an organization, with its live bound
+// dedicated agent ID when present. Locked in assistant ID order so concurrent
+// Slack migrations serialize cleanly.
+func (q *Queries) AdminListAssistantSlackMigrationTargets(ctx context.Context, organizationID string) ([]AdminListAssistantSlackMigrationTargetsRow, error) {
+	rows, err := q.db.Query(ctx, adminListAssistantSlackMigrationTargets, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListAssistantSlackMigrationTargetsRow
+	for rows.Next() {
+		var i AdminListAssistantSlackMigrationTargetsRow
+		if err := rows.Scan(
+			&i.AssistantID,
+			&i.ProjectID,
+			&i.Name,
+			&i.AgentID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminListAssistantSlackToolsets = `-- name: AdminListAssistantSlackToolsets :many
+SELECT
+    ams.mcp_server_id,
+    ams.environment_id AS attachment_environment_id,
+    ts.id AS toolset_id,
+    ts.name AS toolset_name,
+    ts.slug AS toolset_slug,
+    ts.default_environment_slug,
+    latest.tool_urns::text[] AS tool_urns
+FROM assistant_mcp_servers ams
+JOIN mcp_servers ms
+  ON ms.id = ams.mcp_server_id
+ AND ms.project_id = ams.project_id
+ AND ms.deleted IS FALSE
+JOIN toolsets ts
+  ON ts.id = ms.toolset_id
+ AND ts.project_id = ams.project_id
+ AND ts.organization_id = $1
+ AND ts.deleted IS FALSE
+JOIN LATERAL (
+    SELECT tv.tool_urns
+    FROM toolset_versions tv
+    WHERE tv.toolset_id = ts.id
+      AND tv.deleted IS FALSE
+    ORDER BY tv.version DESC
+    LIMIT 1
+) latest ON TRUE
+WHERE ams.assistant_id = $2
+  AND ams.project_id = $3
+  AND EXISTS (
+      SELECT 1
+      FROM unnest(latest.tool_urns) AS u(tool_urn)
+      WHERE u.tool_urn LIKE 'tools:platform:slack:%'
+  )
+ORDER BY ts.id
+`
+
+type AdminListAssistantSlackToolsetsParams struct {
+	OrganizationID string
+	AssistantID    uuid.UUID
+	ProjectID      uuid.UUID
+}
+
+type AdminListAssistantSlackToolsetsRow struct {
+	McpServerID             uuid.UUID
+	AttachmentEnvironmentID uuid.NullUUID
+	ToolsetID               uuid.UUID
+	ToolsetName             string
+	ToolsetSlug             string
+	DefaultEnvironmentSlug  pgtype.Text
+	ToolUrns                []string
+}
+
+// Every hosted toolset attached to one assistant whose latest version includes
+// at least one tools:platform:slack:* tool URN.
+func (q *Queries) AdminListAssistantSlackToolsets(ctx context.Context, arg AdminListAssistantSlackToolsetsParams) ([]AdminListAssistantSlackToolsetsRow, error) {
+	rows, err := q.db.Query(ctx, adminListAssistantSlackToolsets, arg.OrganizationID, arg.AssistantID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListAssistantSlackToolsetsRow
+	for rows.Next() {
+		var i AdminListAssistantSlackToolsetsRow
+		if err := rows.Scan(
+			&i.McpServerID,
+			&i.AttachmentEnvironmentID,
+			&i.ToolsetID,
+			&i.ToolsetName,
+			&i.ToolsetSlug,
+			&i.DefaultEnvironmentSlug,
+			&i.ToolUrns,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminListAssistantSlackTriggers = `-- name: AdminListAssistantSlackTriggers :many
+SELECT
+    ti.id,
+    ti.organization_id,
+    ti.project_id,
+    ti.definition_slug,
+    ti.name,
+    ti.environment_id,
+    ti.auth_client_id,
+    ti.target_kind,
+    ti.target_ref,
+    ti.target_display,
+    ti.config_json,
+    ti.status,
+    ti.created_at,
+    ti.updated_at
+FROM trigger_instances ti
+WHERE ti.organization_id = $1
+  AND ti.project_id = $2
+  AND ti.definition_slug = 'slack'
+  AND ti.target_kind = 'assistant'
+  AND ti.target_ref = $3::text
+  AND ti.deleted IS FALSE
+ORDER BY ti.created_at, ti.id
+FOR UPDATE OF ti
+`
+
+type AdminListAssistantSlackTriggersParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	AssistantID    string
+}
+
+type AdminListAssistantSlackTriggersRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	DefinitionSlug string
+	Name           string
+	EnvironmentID  uuid.NullUUID
+	AuthClientID   uuid.NullUUID
+	TargetKind     string
+	TargetRef      string
+	TargetDisplay  string
+	ConfigJson     []byte
+	Status         string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+// Every live Slack trigger instance targeting one assistant in a project.
+func (q *Queries) AdminListAssistantSlackTriggers(ctx context.Context, arg AdminListAssistantSlackTriggersParams) ([]AdminListAssistantSlackTriggersRow, error) {
+	rows, err := q.db.Query(ctx, adminListAssistantSlackTriggers, arg.OrganizationID, arg.ProjectID, arg.AssistantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListAssistantSlackTriggersRow
+	for rows.Next() {
+		var i AdminListAssistantSlackTriggersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.DefinitionSlug,
+			&i.Name,
+			&i.EnvironmentID,
+			&i.AuthClientID,
+			&i.TargetKind,
+			&i.TargetRef,
+			&i.TargetDisplay,
+			&i.ConfigJson,
+			&i.Status,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const adminListCustomDomains = `-- name: AdminListCustomDomains :many
 SELECT
     d.id,
@@ -1413,6 +1803,53 @@ func (q *Queries) AdminListCustomerUsageOrganizations(ctx context.Context) ([]Ad
 			&i.BillingCycleAnchorDay,
 			&i.CreatedAt,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminListEnvironmentSlackEntries = `-- name: AdminListEnvironmentSlackEntries :many
+SELECT
+    ee.name,
+    ee.value
+FROM environment_entries ee
+JOIN environments e
+  ON e.id = ee.environment_id
+ AND e.organization_id = $1
+ AND e.project_id = $2
+ AND e.deleted IS FALSE
+WHERE ee.environment_id = $3
+  AND upper(ee.name) IN ('SLACK_BOT_TOKEN', 'SLACK_USER_TOKEN', 'SLACK_SIGNING_SECRET', 'SLACK_TOKEN')
+ORDER BY ee.name
+`
+
+type AdminListEnvironmentSlackEntriesParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	EnvironmentID  uuid.UUID
+}
+
+type AdminListEnvironmentSlackEntriesRow struct {
+	Name  string
+	Value string
+}
+
+// Reads encrypted Slack environment entries for one environment in a project.
+func (q *Queries) AdminListEnvironmentSlackEntries(ctx context.Context, arg AdminListEnvironmentSlackEntriesParams) ([]AdminListEnvironmentSlackEntriesRow, error) {
+	rows, err := q.db.Query(ctx, adminListEnvironmentSlackEntries, arg.OrganizationID, arg.ProjectID, arg.EnvironmentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListEnvironmentSlackEntriesRow
+	for rows.Next() {
+		var i AdminListEnvironmentSlackEntriesRow
+		if err := rows.Scan(&i.Name, &i.Value); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -3087,6 +3524,84 @@ func (q *Queries) AdminRepairAssistantAgentName(ctx context.Context, arg AdminRe
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const adminRepointSlackTriggerToAuthClient = `-- name: AdminRepointSlackTriggerToAuthClient :one
+UPDATE trigger_instances
+SET
+    auth_client_id = $1,
+    environment_id = NULL,
+    updated_at = clock_timestamp()
+WHERE id = $2
+  AND organization_id = $3
+  AND project_id = $4
+  AND deleted IS FALSE
+RETURNING
+    id,
+    organization_id,
+    project_id,
+    definition_slug,
+    name,
+    environment_id,
+    auth_client_id,
+    target_kind,
+    target_ref,
+    target_display,
+    config_json,
+    status,
+    created_at,
+    updated_at
+`
+
+type AdminRepointSlackTriggerToAuthClientParams struct {
+	AuthClientID   uuid.NullUUID
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+type AdminRepointSlackTriggerToAuthClientRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	DefinitionSlug string
+	Name           string
+	EnvironmentID  uuid.NullUUID
+	AuthClientID   uuid.NullUUID
+	TargetKind     string
+	TargetRef      string
+	TargetDisplay  string
+	ConfigJson     []byte
+	Status         string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+func (q *Queries) AdminRepointSlackTriggerToAuthClient(ctx context.Context, arg AdminRepointSlackTriggerToAuthClientParams) (AdminRepointSlackTriggerToAuthClientRow, error) {
+	row := q.db.QueryRow(ctx, adminRepointSlackTriggerToAuthClient,
+		arg.AuthClientID,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ProjectID,
+	)
+	var i AdminRepointSlackTriggerToAuthClientRow
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.DefinitionSlug,
+		&i.Name,
+		&i.EnvironmentID,
+		&i.AuthClientID,
+		&i.TargetKind,
+		&i.TargetRef,
+		&i.TargetDisplay,
+		&i.ConfigJson,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const adminResolveOrganizationID = `-- name: AdminResolveOrganizationID :one

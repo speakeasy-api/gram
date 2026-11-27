@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -275,6 +276,11 @@ type WriteDependencies struct {
 	// issuer, which leaves migrate_organization_assistant_identities
 	// unimplemented.
 	AssistantIdentities *assistantidentity.Service
+
+	// ApplicationEncryption is nil when the admin server has no application
+	// encryption key, which leaves migrate_organization_assistant_slack
+	// unimplemented.
+	ApplicationEncryption *encryption.Client
 }
 
 // AttachWrites exposes every write operation this server implements while
@@ -307,6 +313,9 @@ func AttachWrites(runtime *Runtime, oauth *StaffOAuth, deps WriteDependencies, w
 	}
 	if deps.AssistantIdentities != nil {
 		tools.writers[OperationMigrateAssistantIdentities] = &assistantIdentityMigrationWriter{runner: runner, identities: deps.AssistantIdentities, writes: writes}
+	}
+	if deps.ApplicationEncryption != nil {
+		tools.writers[OperationMigrateAssistantSlack] = &assistantSlackMigrationWriter{runner: runner, audit: auditLogger, enc: deps.ApplicationEncryption, writes: writes}
 	}
 	if runtime.catalogPromotions != nil {
 		tools.writers[OperationCurateRegistryPromotionCandidate] = &catalogCurationWriter{runner: runner, writes: writes, mutator: runtime.catalogPromotions}
