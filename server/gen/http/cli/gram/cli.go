@@ -16818,7 +16818,7 @@ func authUsage() {
 	fmt.Fprintln(os.Stderr, `    switch-scopes: Switches the authentication scope to a different organization.`)
 	fmt.Fprintln(os.Stderr, `    enter-demo: Switches the current session into the shared read-only demo organization.`)
 	fmt.Fprintln(os.Stderr, `    logout: Logs out the current user by clearing their session.`)
-	fmt.Fprintln(os.Stderr, `    logout-everywhere: Signs the caller out everywhere: ends every dashboard and identity provider session, revokes their sign-ins in every organization, and revokes every MCP grant made from them.`)
+	fmt.Fprintln(os.Stderr, `    logout-everywhere: Signs the caller out everywhere in this partition: ends every dashboard session they hold here, revokes their sign-ins in every organization here, and revokes every MCP grant made from them. Identity provider sessions are shared across partitions, so it also ends every one the user holds, and their next sign-in in any partition asks them to authenticate again. Dashboard sessions, sign-ins and MCP grants in other partitions are not affected; signing out everywhere in each partition ends them.`)
 	fmt.Fprintln(os.Stderr, `    register: Register a new org for a user with their session information.`)
 	fmt.Fprintln(os.Stderr, `    info: Provides information about the current authentication status.`)
 	fmt.Fprintln(os.Stderr, `    transfer-out: Step 2/3 (authorize) of a cross-domain session transfer, on the source platform host. Reached from Step 1/3, transferIn's start mode on the target host; redirects to Step 3/3, transferIn's callback mode there. Authenticates the session from the session cookie or header, checks that its active organization's default host is the target, and stores a one-time transfer code bound to the browser's nonce. Only an ordinary session whose organization lives on the target host can transfer. On any failure the browser is sent to a login page with a signin_error code instead of an error. See the flow diagram in server/internal/auth/transfer.go.`)
@@ -16953,7 +16953,7 @@ func authLogoutEverywhereUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Signs the caller out everywhere: ends every dashboard and identity provider session, revokes their sign-ins in every organization, and revokes every MCP grant made from them.`)
+	fmt.Fprintln(os.Stderr, `Signs the caller out everywhere in this partition: ends every dashboard session they hold here, revokes their sign-ins in every organization here, and revokes every MCP grant made from them. Identity provider sessions are shared across partitions, so it also ends every one the user holds, and their next sign-in in any partition asks them to authenticate again. Dashboard sessions, sign-ins and MCP grants in other partitions are not affected; signing out everywhere in each partition ends them.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)

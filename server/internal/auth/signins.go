@@ -38,11 +38,14 @@ func (s *Service) SetTokenRevoker(tokens signins.TokenRevoker, meterProvider met
 // DrainDeliveries waits, bounded by ctx, for revocation pushes in flight.
 func (s *Service) DrainDeliveries(ctx context.Context) { s.deliverer.Drain(ctx) }
 
-// LogoutEverywhere ends every dashboard and identity provider session the
-// caller holds, revokes their sign-ins in every organization they ever
-// signed in to, and revokes every MCP grant made from them. The revocation,
-// including the dashboard epoch, commits durably first; the epoch is then
-// raised right away and retried from the delivery table if that fails.
+// LogoutEverywhere ends every dashboard session the caller holds in this
+// partition, revokes their sign-ins in every organization they ever signed
+// in to here, and revokes every MCP grant made from them. It also ends every
+// WorkOS session the user holds; those are shared with other partitions,
+// which keep their own dashboard sessions, sign-ins and grants because
+// partitions never call each other. The revocation, including the
+// dashboard epoch, commits durably first; the epoch is then raised right away
+// and retried from the delivery table if that fails.
 func (s *Service) LogoutEverywhere(ctx context.Context, _ *gen.LogoutEverywherePayload) (*gen.LogoutEverywhereResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.SessionID == nil || authCtx.UserID == "" {
