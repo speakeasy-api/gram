@@ -76,7 +76,6 @@ func TestKitATEConcurrentThreadsDoNotWaitOnEachOther(t *testing.T) {
 	localCfg.Environment = "production"
 	localCfg.nativeIdentity = nil
 	localCfg.Origin = origin
-	localCfg.PersistedMCP = true
 	localCfg.WorkloadIssuerURL = "https://ate-issuer.example.com"
 	localCfg.WorkloadJWKSURL = "https://ate-issuer.example.com/jwks"
 	localCfg.WorkloadIssuerBaseURL = "https://auth.example.com"

@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/platformtools"
 )
 
 const assistantSkillSnapshotVersion = 1
@@ -111,6 +112,10 @@ func decodeAssistantSkillSetSnapshot(raw []byte) (assistantSkillSetSnapshot, err
 }
 
 func renderAssistantSkillSetChange(previous, current assistantSkillSetSnapshot) string {
+	return renderAssistantSkillSetChangeForMode(previous, current, MCPDeliveryPerServer)
+}
+
+func renderAssistantSkillSetChangeForMode(previous, current assistantSkillSetSnapshot, mode MCPDeliveryMode) string {
 	previousByID := make(map[uuid.UUID]assistantSkillSnapshot, len(previous.Skills))
 	currentByID := make(map[uuid.UUID]assistantSkillSnapshot, len(current.Skills))
 	for _, skill := range previous.Skills {
@@ -152,6 +157,13 @@ func renderAssistantSkillSetChange(previous, current assistantSkillSetSnapshot) 
 	less(updated)
 	less(removed)
 
+	skillLoadVerb := "Call skills_load with name"
+	skillLoadChangedVerb := "call skills_load with name"
+	if mode.IsGateway() {
+		ref := gatewayToolRef("execute_read_only_tool", platformtools.AssistantsPlatformToolsetSlug, platformtools.ToolNameSkillsLoad)
+		skillLoadVerb = "Call " + ref + " for name"
+		skillLoadChangedVerb = "call " + ref + " for name"
+	}
 	var b strings.Builder
 	b.WriteString("<assistant-environment-change>\n")
 	b.WriteString("EventType: assistant_skill_set_changed\n")
@@ -160,7 +172,7 @@ func renderAssistantSkillSetChange(previous, current assistantSkillSetSnapshot) 
 		b.WriteString("Added skills:\n")
 		for _, skill := range added {
 			name, description := safeSkillMetadata(skill)
-			fmt.Fprintf(&b, "- Name: %s; description: %s. Call skills_load with name %s before relying on this skill.\n", strconv.Quote(name), strconv.Quote(description), strconv.Quote(name))
+			fmt.Fprintf(&b, "- Name: %s; description: %s. %s %s before relying on this skill.\n", strconv.Quote(name), strconv.Quote(description), skillLoadVerb, strconv.Quote(name))
 		}
 	}
 	if len(updated) > 0 {
@@ -169,9 +181,9 @@ func renderAssistantSkillSetChange(previous, current assistantSkillSetSnapshot) 
 			name, description := safeSkillMetadata(skill)
 			oldName, _ := safeSkillMetadata(previousByID[skill.SkillID])
 			if oldName != name {
-				fmt.Fprintf(&b, "- Name: %s (previously %s); description: %s. This skill changed; call skills_load with name %s before relying on it.\n", strconv.Quote(name), strconv.Quote(oldName), strconv.Quote(description), strconv.Quote(name))
+				fmt.Fprintf(&b, "- Name: %s (previously %s); description: %s. This skill changed; %s %s before relying on it.\n", strconv.Quote(name), strconv.Quote(oldName), strconv.Quote(description), skillLoadChangedVerb, strconv.Quote(name))
 			} else {
-				fmt.Fprintf(&b, "- Name: %s; description: %s. This skill changed; call skills_load with name %s before relying on it.\n", strconv.Quote(name), strconv.Quote(description), strconv.Quote(name))
+				fmt.Fprintf(&b, "- Name: %s; description: %s. This skill changed; %s %s before relying on it.\n", strconv.Quote(name), strconv.Quote(description), skillLoadChangedVerb, strconv.Quote(name))
 			}
 		}
 	}

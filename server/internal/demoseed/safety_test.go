@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/demoseedtest"
+	platformtoolscore "github.com/speakeasy-api/gram/server/internal/platformtools/core"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -132,6 +133,11 @@ func TestDemoSeedSafety(t *testing.T) {
 	pgBefore, err := demoseedtest.SnapshotPostgres(ctx, db)
 	require.NoError(t, err)
 	fixtureUUIDs := collectUUIDs(addedRows(pgBaseline, pgBefore))
+	// Built-in platform toolset IDs are deterministic, code-owned global
+	// constants shared across every tenant rather than tenant-owned row IDs.
+	for _, slug := range platformtoolscore.AssistantBuiltinToolsetSlugs(true) {
+		delete(fixtureUUIDs, platformtoolscore.PlatformToolsetID(slug).String())
+	}
 	chBefore, err := demoseedtest.SnapshotClickHouse(ctx, ch, constants.DemoOrganizationID, demoProjects)
 	require.NoError(t, err)
 

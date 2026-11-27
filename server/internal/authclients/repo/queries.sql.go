@@ -438,6 +438,60 @@ func (q *Queries) GetOrganizationUserSessionIssuer(ctx context.Context, arg GetO
 	return i, err
 }
 
+const getSlackAppAuthClientInScope = `-- name: GetSlackAppAuthClientInScope :one
+SELECT ac.id, ac.organization_id, ac.project_id, ac.attachment_scope, ac.client_type, ac.source, ac.name, ac.enabled, ac.created_by_user_id, ac.remote_session_client_id, ac.client_attachment_scope, ac.created_at, ac.updated_at, ac.deleted_at, ac.deleted
+FROM mcp_auth_clients AS ac
+WHERE ac.id = $1
+  AND ac.organization_id = $2
+  AND ac.client_type = 'slack_app'
+  AND ac.deleted IS FALSE
+  AND (
+    ac.project_id IS NULL
+    OR (
+      ac.project_id = $3
+      AND EXISTS (
+        SELECT 1
+        FROM projects p
+        WHERE p.id = ac.project_id
+          AND p.organization_id = ac.organization_id
+          AND p.deleted IS FALSE
+      )
+    )
+  )
+`
+
+type GetSlackAppAuthClientInScopeParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+}
+
+// One live slack_app auth client visible to a project (confined to that project
+// or organization-wide). Returns both enabled and disabled rows so callers can
+// distinguish disabled from missing.
+func (q *Queries) GetSlackAppAuthClientInScope(ctx context.Context, arg GetSlackAppAuthClientInScopeParams) (McpAuthClient, error) {
+	row := q.db.QueryRow(ctx, getSlackAppAuthClientInScope, arg.ID, arg.OrganizationID, arg.ProjectID)
+	var i McpAuthClient
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.AttachmentScope,
+		&i.ClientType,
+		&i.Source,
+		&i.Name,
+		&i.Enabled,
+		&i.CreatedByUserID,
+		&i.RemoteSessionClientID,
+		&i.ClientAttachmentScope,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const isOrganizationWorkloadIssuer = `-- name: IsOrganizationWorkloadIssuer :one
 SELECT EXISTS (
   SELECT 1
@@ -702,6 +756,72 @@ func (q *Queries) ListAuthClients(ctx context.Context, arg ListAuthClientsParams
 		arg.Cursor,
 		arg.LimitValue,
 	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []McpAuthClient
+	for rows.Next() {
+		var i McpAuthClient
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.AttachmentScope,
+			&i.ClientType,
+			&i.Source,
+			&i.Name,
+			&i.Enabled,
+			&i.CreatedByUserID,
+			&i.RemoteSessionClientID,
+			&i.ClientAttachmentScope,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEnabledSlackAppAuthClientsInScope = `-- name: ListEnabledSlackAppAuthClientsInScope :many
+SELECT ac.id, ac.organization_id, ac.project_id, ac.attachment_scope, ac.client_type, ac.source, ac.name, ac.enabled, ac.created_by_user_id, ac.remote_session_client_id, ac.client_attachment_scope, ac.created_at, ac.updated_at, ac.deleted_at, ac.deleted
+FROM mcp_auth_clients AS ac
+WHERE ac.organization_id = $1
+  AND ac.client_type = 'slack_app'
+  AND ac.enabled IS TRUE
+  AND ac.deleted IS FALSE
+  AND (
+    ac.project_id IS NULL
+    OR (
+      ac.project_id = $2
+      AND EXISTS (
+        SELECT 1
+        FROM projects p
+        WHERE p.id = ac.project_id
+          AND p.organization_id = ac.organization_id
+          AND p.deleted IS FALSE
+      )
+    )
+  )
+ORDER BY ac.id
+`
+
+type ListEnabledSlackAppAuthClientsInScopeParams struct {
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+}
+
+// Enabled, live slack_app auth clients visible to one project: clients confined
+// to that project and organization-wide clients. Ordered deterministically by id.
+func (q *Queries) ListEnabledSlackAppAuthClientsInScope(ctx context.Context, arg ListEnabledSlackAppAuthClientsInScopeParams) ([]McpAuthClient, error) {
+	rows, err := q.db.Query(ctx, listEnabledSlackAppAuthClientsInScope, arg.OrganizationID, arg.ProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -1089,6 +1209,57 @@ func (q *Queries) ListServerBackfillAuthClients(ctx context.Context, arg ListSer
 			&i.DeletedAt,
 			&i.Deleted,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSlackAppAuthClientSecrets = `-- name: ListSlackAppAuthClientSecrets :many
+SELECT h.name,
+       h.is_secret,
+       h.value
+FROM mcp_auth_client_headers AS h
+JOIN mcp_auth_clients AS ac
+  ON ac.id = h.auth_client_id
+ AND ac.organization_id = h.organization_id
+ AND ac.client_type = 'slack_app'
+ AND ac.enabled IS TRUE
+ AND ac.deleted IS FALSE
+WHERE h.auth_client_id = $1
+  AND h.organization_id = $2
+  AND h.deleted IS FALSE
+ORDER BY h.name, h.id
+`
+
+type ListSlackAppAuthClientSecretsParams struct {
+	AuthClientID   uuid.UUID
+	OrganizationID string
+}
+
+type ListSlackAppAuthClientSecretsRow struct {
+	Name     string
+	IsSecret bool
+	Value    pgtype.Text
+}
+
+// Stored credential headers of one live, enabled slack_app auth client.
+// Values remain encrypted as stored; callers decrypt in memory and never log
+// or return them.
+func (q *Queries) ListSlackAppAuthClientSecrets(ctx context.Context, arg ListSlackAppAuthClientSecretsParams) ([]ListSlackAppAuthClientSecretsRow, error) {
+	rows, err := q.db.Query(ctx, listSlackAppAuthClientSecrets, arg.AuthClientID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSlackAppAuthClientSecretsRow
+	for rows.Next() {
+		var i ListSlackAppAuthClientSecretsRow
+		if err := rows.Scan(&i.Name, &i.IsSecret, &i.Value); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

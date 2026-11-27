@@ -8717,6 +8717,8 @@ type TriggerInstance struct {
 	// @access: confidential
 	EnvironmentID uuid.NullUUID
 	// @access: confidential
+	AuthClientID uuid.NullUUID
+	// @access: confidential
 	TargetKind string
 	// @access: confidential
 	TargetRef string

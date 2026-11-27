@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strconv"
+
+	"github.com/speakeasy-api/gram/server/internal/platformtools"
 )
 
 type slackSourceRef struct {
@@ -71,7 +74,29 @@ type slackFilePayload struct {
 	URLPrivateDownload string `json:"url_private_download,omitempty"`
 }
 
-type slackAdapter struct{ deterministicChatIDAdapter }
+type slackAdapter struct {
+	deterministicChatIDAdapter
+	preferSpeakeasyApp bool
+}
+
+// gatewaySlackSlug derives the Project Gateway Slack server slug from the
+// assistant's granted platformSlugs (the same source assistantPlatformSlugs
+// uses to decide which built-in the assistant has):
+//   - sourceKindSpeakeasySlack -> "speakeasy-slack" when granted
+//   - sourceKindSlack          -> "assistant-slack" when granted
+//   - otherwise "" (legacy/attached Slack server discovered via list_servers)
+func (a slackAdapter) gatewaySlackSlug(platformSlugs []string) string {
+	if a.preferSpeakeasyApp {
+		if slices.Contains(platformSlugs, platformtools.SpeakeasySlackPlatformToolsetSlug) {
+			return platformtools.SpeakeasySlackPlatformToolsetSlug
+		}
+		return ""
+	}
+	if slices.Contains(platformSlugs, platformtools.AssistantSlackPlatformToolsetSlug) {
+		return platformtools.AssistantSlackPlatformToolsetSlug
+	}
+	return ""
+}
 
 func (slackAdapter) ThreadContext(sourceRefJSON []byte) (string, error) {
 	var ref slackSourceRef
@@ -96,8 +121,13 @@ func (slackAdapter) ThreadContext(sourceRefJSON []byte) (string, error) {
 	return b.String(), nil
 }
 
-func (slackAdapter) OutputChannelGuidance() string {
-	return `## Slack output preferences
+func (a slackAdapter) OutputChannelGuidance() string {
+	return a.OutputChannelGuidanceForMode(MCPDeliveryPerServer, nil)
+}
+
+func (a slackAdapter) OutputChannelGuidanceForMode(mode MCPDeliveryMode, platformSlugs []string) string {
+	if !mode.IsGateway() {
+		return `## Slack output preferences
 
 Text responses are not delivered to the user. To communicate, call a Slack post tool (e.g. platform_slack_post_message, platform_slack_post_ephemeral). If no suitable tool is available, the user will not see your reply.
 
@@ -112,9 +142,38 @@ Depending on how you are set up, you may keep receiving every new message in a S
 When relaying an "assistant_mcp_auth_required" AuthURL, deliver it to the OWNER (per the Owner entry in your instructions, when recorded), not whoever triggered this turn. Prefer platform_slack_post_ephemeral targeted at the owner's Slack user ID so only they see it, and render the AuthURL as a Block Kit actions block containing a single primary button rather than as plain text. If ephemeral can't reach the owner in the current channel, DM the owner instead — but AuthURL expires, so first ask if they're ready to authenticate now and only then re-attempt the tool call to mint a fresh URL for the DM. If the requester is someone other than the owner, also tell them (without the URL) that the owner has to complete the authentication. If neither ephemeral nor DM can reach the owner, don't post the URL.
 
 When relaying a genuine "Connection required" or "Reconnect required" link, deliver it to the person this turn acts for, not the owner: platform_slack_post_ephemeral targeted at that person's Slack user ID, or a DM to them if ephemeral can't reach them. That person is the requester whose message started this turn, or, for a scheduled or resumed turn, the person who asked for it. Never post the link in the channel or thread. If neither reaches them, tell them in the thread, without the link, to open Speakeasy and connect the named server.`
+	}
+
+	slackSlug := a.gatewaySlackSlug(platformSlugs)
+	sendMsg := gatewayToolRef("execute_tool", slackSlug, platformtools.ToolNameSendMessage)
+	postEphemeral := gatewayToolRef("execute_tool", slackSlug, "platform_slack_post_ephemeral")
+	unsubscribe := gatewayToolRef("execute_tool", platformtools.AssistantsPlatformToolsetSlug, "platform_thread_unsubscribe")
+	discoverHint := ""
+	if slackSlug == "" {
+		discoverHint = " Use list_servers and describe_server to find the Slack server slug and its post tools."
+	}
+
+	return fmt.Sprintf(`## Slack output preferences
+
+Text responses are not delivered to the user. To communicate, call a Slack post tool via the Project Gateway (e.g. %s or %s; call describe_tools first if you need its schema).%s If no suitable tool is available, the user will not see your reply.
+
+## Deciding whether to respond
+
+Not every Slack message needs a reply. ALWAYS reply when the turn's message context has "Addressed: true" (you were mentioned, messaged directly, or someone clicked one of your buttons) or the message clearly addresses you (a direct question to you, a follow-up to your last reply). For other thread messages and passive events, first evaluate whether a reply adds value. Stay silent — call no Slack post tool — when the message is clearly directed at another human in the thread, when it asks nothing you can help with, or when you would only restate what has already been said. When staying silent, end the turn without posting anything. Never post a message explaining a tool error or announcing your decision to stay silent.
+
+## Thread subscriptions
+
+Depending on how you are set up, you may keep receiving every new message in a Slack thread after you are mentioned in it. When a thread no longer needs you (its request is resolved, or the people in it are talking among themselves), call %s to stop receiving its messages. A later mention brings you back and gives you the messages you missed. When you start a new thread with %s and want the replies in it to continue this conversation, set route_replies to "self".
+
+When relaying a genuine "Connection required" or "Reconnect required" link, deliver it to the person this turn acts for, not the owner: call %s targeted at that person's Slack user ID, or a DM to them if ephemeral can't reach them. That person is the requester whose message started this turn, or, for a scheduled or resumed turn, the person who asked for it. Never post the link in the channel or thread. If neither reaches them, tell them in the thread, without the link, to open Speakeasy and connect the named server.`,
+		sendMsg, postEphemeral, discoverHint, unsubscribe, sendMsg, postEphemeral)
 }
 
-func (slackAdapter) DecodeTurn(event assistantThreadEventRecord) (string, error) {
+func (a slackAdapter) DecodeTurn(event assistantThreadEventRecord) (string, error) {
+	return a.DecodeTurnForMode(event, MCPDeliveryPerServer, nil)
+}
+
+func (a slackAdapter) DecodeTurnForMode(event assistantThreadEventRecord, mode MCPDeliveryMode, platformSlugs []string) (string, error) {
 	var payload slackEventPayload
 	if err := json.Unmarshal(event.NormalizedPayloadJSON, &payload); err != nil {
 		return "", fmt.Errorf("decode slack event payload: %w", err)
@@ -176,20 +235,32 @@ func (slackAdapter) DecodeTurn(event assistantThreadEventRecord) (string, error)
 		b.WriteString("Attachment contents are not directly visible here; pass an attachment's file id to the Slack platform tools to access it.\n")
 	}
 	b.WriteString("</message-context>\n\n")
-	writeSlackThreadContext(&b, payload)
+	writeSlackThreadContext(&b, payload, mode, a.gatewaySlackSlug(platformSlugs))
 	b.WriteString(payload.Text)
 	return b.String(), nil
 }
 
-func writeSlackThreadContext(b *bytes.Buffer, payload slackEventPayload) {
+func writeSlackThreadContext(b *bytes.Buffer, payload slackEventPayload, mode MCPDeliveryMode, gatewayServerSlug string) {
 	threadContext := payload.ThreadContext
 	if threadContext == nil {
 		return
 	}
+	readTool := "platform_slack_read_thread_messages"
+	if mode.IsGateway() {
+		// The built-in speakeasy-slack toolset does not expose
+		// platform_slack_read_thread_messages; keep the server slug generic so
+		// the model looks up any connected Slack reader server via list_servers
+		// instead of calling a nonexistent tool on speakeasy-slack.
+		readSlug := gatewayServerSlug
+		if readSlug == platformtools.SpeakeasySlackPlatformToolsetSlug {
+			readSlug = ""
+		}
+		readTool = gatewayToolRef("execute_read_only_tool", readSlug, platformtools.ToolNameReadThreadMessages)
+	}
 	b.WriteString("<thread-context>\n")
 	switch {
 	case threadContext.Unavailable:
-		fmt.Fprintf(b, "Earlier messages in this thread could not be loaded. If you need them, read them with platform_slack_read_thread_messages (channel_id %s, thread_ts %s).\n", payload.ChannelID, payload.ThreadID)
+		fmt.Fprintf(b, "Earlier messages in this thread could not be loaded. If you need them, read them with %s (channel_id %s, thread_ts %s).\n", readTool, payload.ChannelID, payload.ThreadID)
 	case len(threadContext.Messages) == 0 && !threadContext.Truncated:
 		b.WriteString("No thread messages were posted since you last saw this thread.\n")
 	default:
@@ -202,7 +273,7 @@ func writeSlackThreadContext(b *bytes.Buffer, payload slackEventPayload) {
 			fmt.Fprintf(b, "- [%s] %s: %s\n", message.Ts, author, strconv.Quote(message.Text))
 		}
 		if threadContext.Truncated {
-			fmt.Fprintf(b, "More messages were posted after these and before the current message. If you need them, read them with platform_slack_read_thread_messages (channel_id %s, thread_ts %s", payload.ChannelID, payload.ThreadID)
+			fmt.Fprintf(b, "More messages were posted after these and before the current message. If you need them, read them with %s (channel_id %s, thread_ts %s", readTool, payload.ChannelID, payload.ThreadID)
 			if n := len(threadContext.Messages); n > 0 {
 				fmt.Fprintf(b, ", oldest %s", threadContext.Messages[n-1].Ts)
 			}

@@ -2472,6 +2472,15 @@ VALUES (
     'backfill'
 );
 
+-- name: SoftDeleteAuthClientFixture :exec
+UPDATE mcp_auth_clients
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE id = @id AND organization_id = @organization_id AND deleted IS FALSE;
+
+-- name: HardDeleteAuthClientFixture :exec
+DELETE FROM mcp_auth_clients
+WHERE id = @id AND organization_id = @organization_id;
+
 -- name: SetWorkloadIssuerWildcardAdmissionForTest :execrows
 -- Test-only fixture for an issuer policy change while admission waits on its lock.
 UPDATE workload_issuers SET allow_wildcard_admission = @allow_wildcard_admission

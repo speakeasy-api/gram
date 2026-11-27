@@ -88,9 +88,6 @@ func validateKitATEComposition(c KitATECompositionConfig) error {
 	if _, err := kitATEImageDigest(c.Image); err != nil {
 		return err
 	}
-	if !c.PersistedMCP {
-		return errors.New("assistant ATE requires persisted assistant MCP attachments")
-	}
 	return validateKitComposition(c.KitLocalCompositionConfig)
 }
 
@@ -143,7 +140,7 @@ func (s *ServiceCore) InstallKitATERuntime(ctx context.Context, c KitATEComposit
 	}
 
 	s.newAssistantRuntimeEligible = func(ctx context.Context, tx pgx.Tx, assistant assistantRecord) (bool, error) {
-		return s.kitGKEAssistantEligible(ctx, tx, assistant, c.KitLocalCompositionConfig)
+		return s.kitAssistantEligible(ctx, tx, assistant, c.OrgHosts)
 	}
 	return nil
 }
@@ -509,6 +506,6 @@ func (s *ServiceCore) kitATEProtocolFactory(c KitATECompositionConfig) func(cont
 		if err != nil {
 			return nil, err
 		}
-		return &kitConfiguredRuntimeProtocol{KitRuntimeProtocol: p, core: s}, nil
+		return &kitConfiguredRuntimeProtocol{KitRuntimeProtocol: p}, nil
 	}
 }

@@ -17555,6 +17555,7 @@ paths:
               - static_credential
               - pass_through
               - ema
+              - slack_app
             type: string
         - allowEmptyValue: true
           description: Pagination cursor.
@@ -92192,6 +92193,7 @@ components:
             - static_credential
             - pass_through
             - ema
+            - slack_app
             - '*'
         connection_owner:
           type: string
@@ -94213,6 +94215,7 @@ components:
             - static_credential
             - pass_through
             - ema
+            - slack_app
         created_at:
           type: string
           description: When the client was created.
@@ -97213,6 +97216,7 @@ components:
             - service_account
             - static_credential
             - pass_through
+            - slack_app
         headers:
           type: array
           items:
@@ -99013,6 +99017,10 @@ components:
     CreateTriggerInstanceForm:
       type: object
       properties:
+        auth_client_id:
+          type: string
+          description: The linked slack_app auth client ID. Mutually exclusive with environment_id.
+          format: uuid
         config:
           type: object
           description: The trigger config payload.
@@ -119889,6 +119897,7 @@ components:
             - static_credential
             - pass_through
             - ema
+            - slack_app
             - '*'
         connection_owner:
           type: string
@@ -126530,6 +126539,10 @@ components:
     TriggerInstance:
       type: object
       properties:
+        auth_client_id:
+          type: string
+          description: The linked slack_app auth client ID. Mutually exclusive with environment_id.
+          format: uuid
         config:
           type: object
           description: The trigger config payload.
@@ -128964,6 +128977,10 @@ components:
     UpdateTriggerInstanceForm:
       type: object
       properties:
+        auth_client_id:
+          type: string
+          description: The linked slack_app auth client ID. Mutually exclusive with environment_id.
+          format: uuid
         config:
           type: object
           description: The trigger config payload.

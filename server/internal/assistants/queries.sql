@@ -2198,3 +2198,43 @@ WHERE r.id = @runtime_id AND r.project_id = @project_id AND r.assistant_id = @as
   AND r.runtime_version = 3 AND r.deleted IS FALSE AND r.ended IS FALSE
   AND a.deleted IS FALSE
 ON CONFLICT (runtime_id) DO NOTHING;
+
+-- name: HasAssistantSlackPlatformGrant :one
+-- Reports whether this assistant's live bound agent holds a non-expired
+-- mcp:connect grant on the built-in assistant-slack platform toolset in this
+-- project, so the per-server fallback path exposes /platform/mcp/assistant-slack
+-- without needing a persisted per-assistant Slack toolset.
+SELECT EXISTS (
+    SELECT 1
+    FROM assistant_agent_bindings b
+    JOIN agents g
+      ON g.id = b.agent_id
+     AND g.organization_id = b.organization_id
+     AND g.project_id = b.project_id
+     AND g.deleted IS FALSE
+     AND g.revoked_at IS NULL
+     AND g.suspended_at IS NULL
+    JOIN principal_grants pg
+      ON pg.organization_id = b.organization_id
+     AND pg.principal_urn = concat('agent:', g.id)
+     AND pg.scope = 'mcp:connect'
+     AND pg.selectors->>'resource_kind' = 'mcp'
+     AND pg.selectors->>'resource_id' = @toolset_id::text
+     AND (pg.selectors->>'project_id' IS NULL OR pg.selectors->>'project_id' = b.project_id::text)
+     AND (pg.expires_at IS NULL OR pg.expires_at > clock_timestamp())
+    WHERE b.assistant_id = @assistant_id
+      AND b.project_id = @project_id
+      AND b.organization_id = @organization_id
+      AND b.deleted IS FALSE
+      AND NOT EXISTS (
+          SELECT 1
+          FROM principal_grants bpg
+          WHERE bpg.organization_id = b.organization_id
+            AND bpg.principal_urn = concat('agent:', g.id)
+            AND bpg.scope = 'mcp:blocked_connect'
+            AND bpg.selectors->>'resource_kind' = 'mcp'
+            AND bpg.selectors->>'resource_id' IN (@toolset_id::text, '*')
+            AND (bpg.selectors->>'project_id' IS NULL OR bpg.selectors->>'project_id' = b.project_id::text)
+            AND (bpg.expires_at IS NULL OR bpg.expires_at > clock_timestamp())
+      )
+)::boolean AS has_grant;

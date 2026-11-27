@@ -15,29 +15,29 @@ import (
 
 func TestKitATEEgressInjectedBootstrapOmitsSandboxCredentials(t *testing.T) {
 	t.Parallel()
-	resource, err := url.Parse("https://tools.example.com/mcp/test")
+	resource, err := url.Parse("https://tools.example.com/mcp/gateway/org/projects/proj")
 	require.NoError(t, err)
 
-	c := KitLocalCompositionConfig{MCPResource: resource}
 	binding := &KitWorkloadBinding{
-		IssuerID: uuid.New(),
-		Subject:  "actor/prod-space/actor-one",
-		Audience: "https://auth.example.com/oauth/test",
-		Identity: assistantidentity.RuntimeIdentity{ProjectID: uuid.New()},
+		MCPProjectGateway: true,
+		IssuerID:          uuid.New(),
+		Subject:           "actor/prod-space/actor-one",
+		Audience:          "https://auth.example.com/oauth/test",
+		Identity:          assistantidentity.RuntimeIdentity{ProjectID: uuid.New()},
 	}
 
-	gkeMCP, err := kitCompositionMCP(c, binding)
+	gkeMCP, err := kitCompositionMCP(resource, binding)
 	require.NoError(t, err)
 	require.Contains(t, string(gkeMCP), KitWorkloadAssertionPath)
 	require.Contains(t, string(gkeMCP), `"workload_identity"`)
 
-	c.ateIdentity = &kitATEWorkloadIdentity{Atespace: "prod-space", ActorName: "actor-one"}
-	ateMCP, err := kitCompositionMCP(c, binding)
+	ateMCP, err := kitProjectGatewayMCPJSON(resource, nil, nil)
 	require.NoError(t, err)
 	require.NotContains(t, string(ateMCP), KitWorkloadAssertionPath)
 	require.NotContains(t, string(ateMCP), "tokenFile")
 	require.NotContains(t, string(ateMCP), "workload_identity")
 	require.Contains(t, string(ateMCP), resource.String())
+	require.Contains(t, string(ateMCP), `"`+kitProjectGatewayServerName+`"`)
 
 	bootstrap := KitLocalBootstrap{
 		Model:              "openai/gpt-4.1-mini",

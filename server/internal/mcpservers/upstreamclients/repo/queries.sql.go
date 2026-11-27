@@ -685,6 +685,7 @@ FROM mcp_auth_client_headers AS h
 JOIN mcp_auth_clients AS ac
   ON ac.id = h.auth_client_id
  AND ac.organization_id = h.organization_id
+ AND ac.client_type <> 'slack_app'
  AND ac.deleted IS FALSE
 WHERE h.auth_client_id = ANY($1::uuid[])
   AND h.organization_id = $2::text
@@ -708,6 +709,8 @@ type ListAuthClientHeadersRow struct {
 
 // A live auth client's own headers, for the proxy to send after the server's
 // non-credential headers. Values stay as stored; secret ones are encrypted.
+// slack_app clients store internal Slack app credentials and are never
+// forwarded as outbound HTTP headers to upstream MCP servers.
 func (q *Queries) ListAuthClientHeaders(ctx context.Context, arg ListAuthClientHeadersParams) ([]ListAuthClientHeadersRow, error) {
 	rows, err := q.db.Query(ctx, listAuthClientHeaders, arg.AuthClientIds, arg.OrganizationID)
 	if err != nil {
@@ -1331,6 +1334,7 @@ LEFT JOIN mcp_auth_clients AS c
   ON c.id = link.auth_client_id
  AND c.organization_id = link.organization_id
  AND (c.project_id IS NULL OR c.project_id = m.project_id)
+ AND c.client_type <> 'slack_app'
  AND c.deleted IS FALSE
  AND c.enabled
 WHERE m.id = ANY($2::uuid[])
@@ -1544,6 +1548,7 @@ LEFT JOIN mcp_auth_clients AS ac
   ON ac.id = $5::uuid
  AND ac.organization_id = p.organization_id
  AND (ac.project_id IS NULL OR ac.project_id = s.project_id)
+ AND ac.client_type <> 'slack_app'
  AND ac.deleted IS FALSE
  AND ac.enabled
  AND EXISTS (
