@@ -435,11 +435,11 @@ func TestATEInitiatingUserAuthz_FourWayIntersectionPerThreadIsolationAndLiveRech
 	//  - threadA: human User A
 	//  - threadB: human User B
 	//  - threadNoUser: explicit "no_user"
-	//  - threadUnrecorded: legacy "not_recorded"
+	//  - threadUnrecorded: "not_recorded"
 	actorA := fx.seedThreadActor(t, "alice", userA, assistants.ATEInitiatorDashboardSender)
 	actorB := fx.seedThreadActor(t, "bob", userB, assistants.ATEInitiatorSlackMapping)
 	actorNoUser := fx.seedThreadActor(t, "cron", "", assistants.ATEInitiatorNoUser)
-	actorUnrecorded := fx.seedThreadActor(t, "legacy", "", assistants.ATEInitiatorNotRecorded)
+	actorUnrecorded := fx.seedThreadActor(t, "unrecorded", "", assistants.ATEInitiatorNotRecorded)
 
 	tokenA := fx.mintActorToken(t, actorA, mcp.DirectWorkloadProjectGatewayAudience)
 	tokenB := fx.mintActorToken(t, actorB, mcp.DirectWorkloadProjectGatewayAudience)
@@ -489,9 +489,9 @@ func TestATEInitiatingUserAuthz_FourWayIntersectionPerThreadIsolationAndLiveRech
 	require.Contains(t, listedNoUser.Body.String(), slugB)
 	require.Contains(t, listedNoUser.Body.String(), slugOwnerOnly)
 
-	// 4. Legacy "not_recorded" row fails closed (401 Unauthorized) on BOTH gateway and inference.
-	listedLegacy := serveProjectGatewayHTTPWithOptions(t, fx.f.ti, fx.gateway, tokenUnrecorded, listServersBody(t), "", nil)
-	require.Equal(t, http.StatusUnauthorized, listedLegacy.Code, listedLegacy.Body.String())
+	// 4. Unrecorded "not_recorded" row fails closed (401 Unauthorized) on BOTH gateway and inference.
+	listedUnrecorded := serveProjectGatewayHTTPWithOptions(t, fx.f.ti, fx.gateway, tokenUnrecorded, listServersBody(t), "", nil)
+	require.Equal(t, http.StatusUnauthorized, listedUnrecorded.Code, listedUnrecorded.Body.String())
 
 	// 5. Managed Kit inference succeeds for User A and records canonical Thread A / Chat A.
 	var inferenceCalls atomic.Int32
@@ -634,7 +634,7 @@ func TestATEInitiatingUserAuthz_PersonalUpstreamConnectionsAndRecoveryLinkBoundT
 	actorA := fx.seedThreadActor(t, "alice-pers", userA, assistants.ATEInitiatorDashboardSender)
 	tokenA := fx.mintActorToken(t, actorA, mcp.DirectWorkloadProjectGatewayAudience)
 
-	// Configure browser session auth for verifying the #9668 recovery link binding.
+	// Configure browser session auth for verifying the OAuth recovery link binding.
 	fx.f.ti.service.SetBrowserSession(func(ctx context.Context, cookie string) (context.Context, error) {
 		if cookie == "" {
 			return ctx, oops.C(oops.CodeUnauthorized)
@@ -655,7 +655,7 @@ func TestATEInitiatingUserAuthz_PersonalUpstreamConnectionsAndRecoveryLinkBoundT
 
 	// 1. Thread A calls server without User A having a personal connection:
 	//    MUST NOT use User B's or the owner's personal token; MUST return a
-	//    #9668 recovery link bound strictly to User A.
+	//    connection recovery link bound strictly to User A.
 	callBody := makeMetaRPCBody(t, mcpversions.MethodToolsCall, map[string]any{
 		"name":      metamcp.ToolExecuteTool,
 		"arguments": map[string]any{"name": memberSlug + "--list_issues", "arguments": map[string]any{}},
