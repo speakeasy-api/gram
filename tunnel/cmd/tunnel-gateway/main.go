@@ -70,7 +70,7 @@ func main() {
 		logger.ErrorContext(context.Background(), "tunnel-gateway route store init failed", slog.Any("error", err))
 		os.Exit(2)
 	}
-	keys, err := buildKeyResolver(context.Background())
+	keys, err := buildKeyResolver(ctx)
 	if err != nil {
 		logger.ErrorContext(context.Background(), "tunnel-gateway key resolver init failed", slog.Any("error", err))
 		os.Exit(2)

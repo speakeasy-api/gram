@@ -77,6 +77,33 @@ func TestRedisStoresUsePinnedEndpointsWithoutSessionsAddress(t *testing.T) {
 	require.Equal(t, []string{"toolset:a:b:1:"}, evictable.Keys())
 }
 
+// TestRedisStoresGuardDedicatedRawClients pins the hook on a client that
+// serves one role: raw users of that client (rate limits, routes, sessions)
+// are checked too, and enforce mode refuses another role's key.
+func TestRedisStoresGuardDedicatedRawClients(t *testing.T) {
+	sessions := miniredis.RunT(t)
+	ops := miniredis.RunT(t)
+	t.Setenv("GRAM_REDIS_OPS_ADDR", ops.Addr())
+	t.Setenv("GRAM_REDIS_OPS_AUTH_MODE", "none")
+	t.Setenv("GRAM_REDIS_OPS_PASSWORD", "")
+	t.Setenv("GRAM_REDIS_OPS_CA_CERT", "")
+	t.Setenv("GRAM_REDIS_ROLE_GUARD", "enforce")
+
+	ctx := t.Context()
+	stores, err := newRedisStores(ctx, testenv.NewLogger(t), testenv.NewMeterProvider(t), redisClientOptions{redisAddr: sessions.Addr(), redisPassword: "", environment: "", enableTracing: false})
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, stores.Close()) })
+
+	require.NoError(t, stores.Ops.Set(ctx, "hook:pending:sid", "o", time.Minute).Err())
+	require.ErrorIs(t, stores.Ops.Set(ctx, "sessions:v2:sid:", "a", time.Minute).Err(), redisrole.ErrWrongRole)
+	require.Equal(t, []string{"hook:pending:sid"}, ops.Keys())
+
+	// Auth and Evictable still share the Sessions client, which cannot tell
+	// them apart, so it carries no hook.
+	require.Same(t, stores.Auth, stores.Evictable.Client)
+	require.NoError(t, stores.Auth.Set(ctx, "toolset:a:b:1:", "e", time.Minute).Err())
+}
+
 func TestRedisStoresReuseSessionsOnRollbackAndDisarm(t *testing.T) {
 	sessions := miniredis.RunT(t)
 	sessions.RequireAuth("sessions-password")

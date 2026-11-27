@@ -133,6 +133,10 @@ async def multi(
     ops_next_addr = os.getenv("GRAM_REDIS_OPS_NEXT_ADDR", "").strip()
     if ops_addr == redis_addr:
         ops_addr = ""
+    # An Ops next instance equal to its current one means no Ops move, as in
+    # the server: the legacy Sessions switch, if any, still applies.
+    if ops_next_addr == (ops_addr or redis_addr or ""):
+        ops_next_addr = ""
     switch_role = ROLE_OPS if ops_addr or ops_next_addr else DEFAULT_ROLE
     if ops_addr:
         redis_addr = ops_addr

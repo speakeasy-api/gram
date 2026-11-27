@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -133,12 +134,17 @@ func runAccountState(ctx context.Context, r accountStateRequest) (any, error) {
 	if err = localaccounts.CheckWorkflows(preflight, config); err != nil {
 		return nil, fmt.Errorf("check account workflows: %w", err)
 	}
-	cacheAddress := config.RedisAddress
+	// Product features live on the evictable role; a local stack that gives
+	// that role its own instance names it in GRAM_REDIS_EVICTABLE_ADDR.
+	cacheAddress, cachePassword := config.RedisAddress, os.Getenv("GRAM_REDIS_CACHE_PASSWORD")
+	if evictable := strings.TrimSpace(os.Getenv("GRAM_REDIS_EVICTABLE_ADDR")); evictable != "" {
+		cacheAddress, cachePassword = evictable, os.Getenv("GRAM_REDIS_EVICTABLE_PASSWORD")
+	}
 	cacheHost, cachePort, _ := net.SplitHostPort(cacheAddress)
 	if cacheHost == "localhost" {
 		cacheAddress = net.JoinHostPort("127.0.0.1", cachePort)
 	}
-	cacheClient := redis.NewClient(&redis.Options{Addr: cacheAddress, Password: os.Getenv("GRAM_REDIS_CACHE_PASSWORD"), DialTimeout: 3 * time.Second, ReadTimeout: 3 * time.Second, WriteTimeout: 3 * time.Second, MaxRetries: -1})
+	cacheClient := redis.NewClient(&redis.Options{Addr: cacheAddress, Password: cachePassword, DialTimeout: 3 * time.Second, ReadTimeout: 3 * time.Second, WriteTimeout: 3 * time.Second, MaxRetries: -1})
 	defer o11y.NoLogDefer(cacheClient.Close)
 	featureCache := cache.NewEvictableRedisAdapter(redisrole.EvictableClient{Client: cacheClient}, redisrole.NewGuard(slog.Default(), metricnoop.NewMeterProvider(), redisrole.GuardReport))
 	features := productfeatures.NewClient(slog.Default(), noop.NewTracerProvider(), db, featureCache)

@@ -635,7 +635,7 @@ func TestConsentRowDedupe_NoRunnerWritesRowsWithoutRedis(t *testing.T) {
 
 	stalled := &stalledDedupeCache{Cache: cache.NoopCache}
 	rec := mcpconnectionattemptstest.New(t)
-	service := &Service{connections: rec.Recorder, userSessionRefreshReplayCoordination: stalled}
+	service := &Service{connections: rec.Recorder, userSessionRefreshReplayCoordination: stalled, connectionAttemptCache: stalled}
 	endpoint, state := gatewayEndpoint(), openState()
 	logger := testenv.NewLogger(t)
 	view := memberView(map[uuid.UUID]gatewayServerStatus{uuid.New(): gatewayServerConnected})

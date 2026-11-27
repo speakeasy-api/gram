@@ -80,6 +80,16 @@ type LocalFixturesOptions struct {
 	MockMCPURL string
 }
 
+// LocalCaches are the Redis clients whose entries the local fixtures clear.
+// A nil client is skipped.
+type LocalCaches struct {
+	// Auth holds the cached user info.
+	Auth *redis.Client
+
+	// Evictable holds the cached product features.
+	Evictable redisrole.EvictableClient
+}
+
 // RunLocalFixtures adds everything the local development organization needs on
 // top of the seeded data, none of which belongs in the shared demo org:
 //
@@ -104,16 +114,6 @@ type LocalFixturesOptions struct {
 // registry entries, platform assets, and system roles are global.
 // Call it only after Run has completed with LocalSpec: the seed deletes and
 // recreates the org's memberships, so adopting you has to come after it.
-// LocalCaches are the Redis clients whose entries the local fixtures clear.
-// A nil client is skipped.
-type LocalCaches struct {
-	// Auth holds the cached user info.
-	Auth *redis.Client
-
-	// Evictable holds the cached product features.
-	Evictable redisrole.EvictableClient
-}
-
 func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, blob assets.BlobStore, caches LocalCaches, opts LocalFixturesOptions) error {
 	spec := LocalSpec()
 	logger = logger.With(attr.SlogComponent("demoseed.local"), attr.SlogOrganizationID(spec.OrgID))

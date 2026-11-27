@@ -309,8 +309,9 @@ func argInt(arg any) (int, bool) {
 		return v, true
 	case int64:
 		return int(v), true
-	case string:
-		n, err := strconv.Atoi(v)
+	case string, []byte:
+		text, _ := argString(v)
+		n, err := strconv.Atoi(text)
 		if err != nil {
 			return 0, false
 		}

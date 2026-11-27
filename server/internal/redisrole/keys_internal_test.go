@@ -27,6 +27,8 @@ func TestCommandKeys(t *testing.T) {
 		{name: "eval", args: []any{"eval", "return 1", 2, "mcpClientInfo:x", "mcpClientInfoLive:x", "arg"}, want: []string{"mcpClientInfo:x", "mcpClientInfoLive:x"}},
 		{name: "evalsha string numkeys", args: []any{"evalsha", "sha", "1", "toolset:a", "arg"}, want: []string{"toolset:a"}},
 		{name: "eval no keys", args: []any{"eval", "return 1", 0, "arg"}, want: nil},
+		{name: "eval byte numkeys", args: []any{"eval", "return 1", []byte("1"), "toolset:a", "arg"}, want: []string{"toolset:a"}},
+		{name: "eval int64 numkeys", args: []any{"eval", "return 1", int64(1), "toolset:a"}, want: []string{"toolset:a"}},
 		{name: "xread", args: []any{"xread", "block", 20000, "streams", "chat:turnframes:a", "chat:turnframes:b", "0", "$"}, want: []string{"chat:turnframes:a", "chat:turnframes:b"}},
 		{name: "xadd", args: []any{"xadd", "chat:turnframes:a", "maxlen", "~", 2000, "*", "f", "v"}, want: []string{"chat:turnframes:a"}},
 		{name: "xreadgroup with a group named streams", args: []any{"xreadgroup", "group", "streams", "consumer", "count", 1, "streams", "chat:turnframes:a", ">"}, want: []string{"chat:turnframes:a"}},
@@ -75,6 +77,18 @@ func TestCommandKeys(t *testing.T) {
 func TestKeyHead(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, "auth:", keyHead("auth:login_nonce:secret"))
-	require.Empty(t, keyHead("nocolon"))
+	tests := []struct {
+		name string
+		key  string
+		want string
+	}{
+		{name: "family head only", key: "auth:login_nonce:secret", want: "auth:"},
+		{name: "no colon", key: "nocolon", want: ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, keyHead(tc.key))
+		})
+	}
 }

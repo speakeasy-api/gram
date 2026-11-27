@@ -637,6 +637,18 @@ func newRedisStores(ctx context.Context, logger *slog.Logger, meterProvider metr
 	if err := stores.Auth.Ping(ctx).Err(); err != nil {
 		return nil, errors.Join(fmt.Errorf("connect to Auth Redis: %w", err), stores.Close())
 	}
+	// A client that serves one role only also checks the keys its raw users
+	// (rate limits, routes, streams, sessions) send. A client shared by several
+	// roles cannot tell them apart; their adapters still check.
+	roleClients := map[*redis.Client][]redisrole.Role{}
+	for role, client := range map[redisrole.Role]*redis.Client{redisrole.RoleAuth: stores.Auth, redisrole.RoleOps: stores.Ops, redisrole.RoleEvictable: stores.Evictable.Client} {
+		roleClients[client] = append(roleClients[client], role)
+	}
+	for client, roles := range roleClients {
+		if len(roles) == 1 {
+			client.AddHook(guard.Hook(roles[0]))
+		}
+	}
 	stores.AuthCache = cache.NewRoleRedisAdapter(stores.Auth, redisrole.RoleAuth, guard)
 	stores.OpsCache = cache.NewRoleRedisAdapter(stores.Ops, redisrole.RoleOps, guard)
 	stores.EvictableCache = cache.NewEvictableRedisAdapter(stores.Evictable, guard)

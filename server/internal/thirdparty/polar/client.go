@@ -175,17 +175,19 @@ func (p *Client) ValidateAndParseWebhookEvent(ctx context.Context, payload []byt
 }
 
 func (p *Client) InvalidateBillingCustomerCaches(ctx context.Context, orgID string) error {
-	err := p.customerStateCache.Delete(ctx, PolarCustomerState{OrganizationID: orgID, CustomerState: nil})
-	if err != nil {
-		return fmt.Errorf("failed to delete customer state cache: %w", err)
+	// The two caches live on different Redis roles, so one being unreachable
+	// must not leave the other stale: both deletes are attempted.
+	var errs []error
+	if err := p.customerStateCache.Delete(ctx, PolarCustomerState{OrganizationID: orgID, CustomerState: nil}); err != nil {
+		errs = append(errs, fmt.Errorf("delete customer state cache: %w", err))
 	}
 
 	//nolint:exhaustruct_v5 // only the org id is needed
 	if err := p.periodUsageStorage.Delete(ctx, PolarPeriodUsageState{OrganizationID: orgID}); err != nil {
-		return fmt.Errorf("failed todelete period usage storage: %w", err)
+		errs = append(errs, fmt.Errorf("delete period usage storage: %w", err))
 	}
 
-	return nil
+	return errors.Join(errs...)
 }
 
 func (p *Client) TrackModelUsage(ctx context.Context, event billing.ModelUsageEvent) {
