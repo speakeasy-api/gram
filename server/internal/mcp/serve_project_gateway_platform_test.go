@@ -2,6 +2,7 @@ package mcp_test
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"testing"
 
@@ -21,8 +22,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -481,4 +484,45 @@ func TestServeProjectGateway_ProvisionedAssistantHasBuiltinsAndRevocationRemoves
 	afterBackfill, err := serveProjectGatewayHTTP(t, ti, fixture, fixture.projectSlug, ordinaryToken, listServersBody(t))
 	require.NoError(t, err)
 	require.Contains(t, afterBackfill.Body.String(), `"slug":"assistants"`)
+
+	// Built-in gateway members are not served for non-whitelisted or disabled organizations.
+	for _, state := range []struct {
+		name        string
+		whitelisted bool
+		disabled    bool
+	}{
+		{name: "not whitelisted", whitelisted: false, disabled: false},
+		{name: "disabled", whitelisted: true, disabled: true},
+	} {
+		require.NoError(t, testrepo.New(ti.conn).SetOrganizationServingStateFixture(ctx, testrepo.SetOrganizationServingStateFixtureParams{
+			ID:          authCtx.ActiveOrganizationID,
+			Whitelisted: state.whitelisted,
+			Disabled:    state.disabled,
+		}))
+		_, err = serveProjectGatewayHTTP(t, ti, fixture, fixture.projectSlug, ordinaryToken, listServersBody(t))
+		require.Error(t, err, state.name)
+		shareable, ok := errors.AsType[*oops.ShareableError](err)
+		require.True(t, ok, state.name)
+		require.Equal(t, oops.CodeNotFound, shareable.Code, state.name)
+		_, err = serveProjectGatewayHTTP(t, ti, fixture, fixture.projectSlug, ordinaryToken, makeMetaRPCBody(t, "tools/call", map[string]any{
+			"name": metamcp.ToolExecuteReadOnlyTool,
+			"arguments": map[string]any{
+				"name":      "assistants--skills_load",
+				"arguments": map[string]any{"name": "missing"},
+			},
+		}))
+		require.Error(t, err, state.name)
+		shareable, ok = errors.AsType[*oops.ShareableError](err)
+		require.True(t, ok, state.name)
+		require.Equal(t, oops.CodeNotFound, shareable.Code, state.name)
+	}
+
+	require.NoError(t, testrepo.New(ti.conn).SetOrganizationServingStateFixture(ctx, testrepo.SetOrganizationServingStateFixtureParams{
+		ID:          authCtx.ActiveOrganizationID,
+		Whitelisted: true,
+		Disabled:    false,
+	}))
+	afterRestore, err := serveProjectGatewayHTTP(t, ti, fixture, fixture.projectSlug, ordinaryToken, listServersBody(t))
+	require.NoError(t, err)
+	require.Contains(t, afterRestore.Body.String(), `"slug":"assistants"`)
 }

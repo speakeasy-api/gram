@@ -83,6 +83,25 @@ describe("configScript", () => {
     },
   );
 
+  it("points the agent at the control plane when its default host does not reach it", () => {
+    const script = configScript({
+      ...config,
+      controlPlaneURL: "https://ai.eu.example.com",
+    });
+    const template = /\$template = @'\n([\s\S]*?)\n'@/.exec(script)?.[1];
+    expect(JSON.parse(template ?? "")).toMatchObject({
+      _control_plane_url: "https://ai.eu.example.com",
+    });
+  });
+
+  it.each([undefined, null])(
+    "leaves the control plane to the agent's default for %s",
+    (controlPlaneURL) => {
+      const script = configScript({ ...config, controlPlaneURL });
+      expect(script).not.toContain("_control_plane_url");
+    },
+  );
+
   it("prefers the enrollment UPN before trying the interactive identity sources", () => {
     const script = configScript(config);
     const lookup = script.split("function Get-EnrolledUserEmail {")[1];
