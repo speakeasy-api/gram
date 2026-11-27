@@ -1088,7 +1088,7 @@ func TestKitSteerSlackThreadPersistsOrderedUserMessagesAndSettlesAll(t *testing.
 	require.Contains(t, receivedPrompts[0], "check deployment status")
 	require.Contains(t, receivedPrompts[1], "U_BOB")
 	require.Contains(t, receivedPrompts[1], "also check staging logs")
-	require.Contains(t, receivedPrompts[1], "platform_slack_post_message", "source instructions travel with steered Slack events")
+	require.Contains(t, receivedPrompts[1], "platform_slack_send_message", "source instructions travel with steered Slack events")
 	mu.Unlock()
 
 	busy, err := assistantrepo.New(db).AssistantHasUnsettledEvents(ctx, assistantrepo.AssistantHasUnsettledEventsParams{

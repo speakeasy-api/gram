@@ -27,6 +27,7 @@ var implicitGatewayPlatformSlugs = []string{
 	platformtools.AssistantsPlatformToolsetSlug,
 	platformtools.PlatformMCPReadToolsetSlug,
 	platformtools.SpeakeasySlackPlatformToolsetSlug,
+	platformtools.AssistantSlackPlatformToolsetSlug,
 }
 
 // platformGatewayCandidates produces synthetic Project Gateway candidates for

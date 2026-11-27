@@ -11,7 +11,6 @@ import (
 	"log/slog"
 	"net/url"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -32,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
+	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/chat"
@@ -508,6 +508,7 @@ type ServiceCore struct {
 	envLoader         toolconfig.EnvironmentLoader
 	slackImages       slackImageFetcher
 	speakeasySlack    SpeakeasySlackTokens
+	slackAppCreds     SlackAppCredentialLoader
 	dashboardIngestor DashboardIngestor
 	featureFlags      feature.Provider
 	turnClassified    metric.Int64Counter
@@ -521,6 +522,8 @@ type ServiceCore struct {
 	// reaches the database for the repair at most once per assistant per
 	// process.
 	managedCeilingsRepaired sync.Map
+
+	projectGatewayEvaluator ProjectGatewayEvaluator
 }
 
 func NewServiceCore(
@@ -576,11 +579,13 @@ func NewServiceCore(
 		envLoader:                   nil,
 		slackImages:                 nil,
 		speakeasySlack:              nil,
+		slackAppCreds:               nil,
 		dashboardIngestor:           nil,
 		featureFlags:                nil,
 		turnClassified:              turnClassified,
 		outboundOrigin:              nil,
 		managedCeilingsRepaired:     sync.Map{},
+		projectGatewayEvaluator:     nil,
 	}
 }
 
@@ -1752,7 +1757,14 @@ func (s *ServiceCore) CreateAssistant(
 	if err := validateReasoningEffort(effort); err != nil {
 		return assistantRecord{}, err
 	}
-	if err := validateRuntimeReasoningEffort(s.newAssistantRuntimeVersion, effort); err != nil {
+	// The Default runtime serves explicit MCP attachments directly.
+	// Kit uses backing-agent grants, so creates with attachments stay on Default.
+	hasInitialAttachments := len(toolsets) > 0 || len(mcpServers) > 0
+	runtimeVersion := s.newAssistantRuntimeVersion
+	if hasInitialAttachments && runtimeVersion == 3 {
+		runtimeVersion = 0
+	}
+	if err := validateRuntimeReasoningEffort(runtimeVersion, effort); err != nil {
 		return assistantRecord{}, err
 	}
 	if createdByUserID == "" {
@@ -1785,7 +1797,7 @@ func (s *ServiceCore) CreateAssistant(
 	if err != nil {
 		return assistantRecord{}, fmt.Errorf("insert assistant: %w", err)
 	}
-	if s.newAssistantRuntimeVersion == 3 {
+	if runtimeVersion == 3 {
 		// This row is new and uncommitted: there is no conversation to migrate.
 		changed, err := queries.SetAssistantDesiredRuntimeVersion(ctx, assistantrepo.SetAssistantDesiredRuntimeVersionParams{
 			RuntimeVersion: 3, AssistantID: created.ID, ProjectID: projectID, ExpectedRuntimeVersion: created.RuntimeVersion,
@@ -1815,12 +1827,7 @@ func (s *ServiceCore) CreateAssistant(
 		return assistantRecord{}, err
 	}
 
-	if provisionIdentity {
-		if err := s.identities.Provision(ctx, tx, assistantidentity.ProvisionParams{OrganizationID: organizationID, ProjectID: projectID, AssistantID: record.ID, ActorUserID: createdByUserID, Staff: nil}); err != nil {
-			return assistantRecord{}, fmt.Errorf("provision assistant identity: %w", err)
-		}
-	}
-	if provisionIdentity && s.newAssistantRuntimeEligible != nil {
+	if !hasInitialAttachments && provisionIdentity && s.newAssistantRuntimeEligible != nil {
 		eligible, err := s.newAssistantRuntimeEligible(ctx, tx, record)
 		if err != nil {
 			return assistantRecord{}, fmt.Errorf("check new assistant Kit eligibility: %w", err)
@@ -1838,6 +1845,11 @@ func (s *ServiceCore) CreateAssistant(
 				return assistantRecord{}, errRuntimeSwitchConflict
 			}
 			record.RuntimeVersion = 3
+		}
+	}
+	if provisionIdentity {
+		if err := s.identities.Provision(ctx, tx, assistantidentity.ProvisionParams{OrganizationID: organizationID, ProjectID: projectID, AssistantID: record.ID, ActorUserID: createdByUserID, Staff: nil}); err != nil {
+			return assistantRecord{}, fmt.Errorf("provision assistant identity: %w", err)
 		}
 	}
 	if err := s.auditAssistantReasoning(ctx, tx, record, nil); err != nil {
@@ -1977,27 +1989,6 @@ func (s *ServiceCore) UpdateAssistant(
 		reasoningBefore = &audit.AssistantReasoningSnapshot{ReasoningEffort: reasoningEffortFromPGText(before.ReasoningEffort)}
 	}
 
-	// Compare canonical persisted attachments inside this transaction, after
-	// normal resolution. Full-form no-op saves are safe; actual Kit connection
-	// changes must roll back until the resident runtime has been retired.
-	var kitAttachmentsBefore []assistantrepo.LoadAssistantMcpServersRow
-	checkKitAttachments := false
-	if toolsets != nil || mcpServers != nil {
-		runtimes, err := queries.ListAssistantRuntimesForSwitch(ctx, assistantrepo.ListAssistantRuntimesForSwitchParams{ProjectID: projectID, AssistantID: assistantID})
-		if err != nil {
-			return assistantRecord{}, fmt.Errorf("check Kit attachment edit safety: %w", err)
-		}
-		for _, runtime := range runtimes {
-			checkKitAttachments = checkKitAttachments || runtime.RuntimeVersion == 3
-		}
-		if checkKitAttachments {
-			kitAttachmentsBefore, err = assistantrepo.New(tx).LoadAssistantMcpServers(ctx, assistantrepo.LoadAssistantMcpServersParams{ProjectID: projectID, AssistantIds: []uuid.UUID{assistantID}})
-			if err != nil {
-				return assistantRecord{}, fmt.Errorf("read Kit attachments before edit: %w", err)
-			}
-		}
-	}
-
 	resolved, err := s.resolveToolsetRefsForWrite(ctx, tx, projectID, toolsets, mcpServers)
 	if err != nil {
 		return assistantRecord{}, err
@@ -2057,16 +2048,6 @@ func (s *ServiceCore) UpdateAssistant(
 		}
 		if err := writeAssistantAttachments(ctx, tx, record.ID, projectID, resolved, toolsets != nil, resolvedMcpServers, mcpServers != nil); err != nil {
 			return assistantRecord{}, err
-		}
-	}
-
-	if checkKitAttachments {
-		after, err := assistantrepo.New(tx).LoadAssistantMcpServers(ctx, assistantrepo.LoadAssistantMcpServersParams{ProjectID: projectID, AssistantIds: []uuid.UUID{assistantID}})
-		if err != nil {
-			return assistantRecord{}, fmt.Errorf("read Kit attachments after edit: %w", err)
-		}
-		if !kitAttachmentSetsEqual(kitAttachmentsBefore, after) {
-			return assistantRecord{}, fmt.Errorf("%w: retire the Kit runtime before changing MCP attachments", errAssistantValidation)
 		}
 	}
 
@@ -3395,8 +3376,9 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 				s.emitAssistantTelemetry(evCtx, assistant, thread, &runtimeRecord, &ev.event, "turn_failed", "assistant turn failed", "ERROR", runErr)
 			}
 
-			if kitProductionRuntime(runtimeRecord.RuntimeVersion, runtimeRecord.Backend) &&
-				(errors.Is(runErr, ErrRuntimeUnhealthy) || errors.Is(runErr, ErrHistoryCorrupted) || errors.Is(runErr, errKitRuntimeUnrecoverable)) {
+			if (kitProductionRuntime(runtimeRecord.RuntimeVersion, runtimeRecord.Backend) &&
+				(errors.Is(runErr, ErrRuntimeUnhealthy) || errors.Is(runErr, ErrHistoryCorrupted) || errors.Is(runErr, errKitRuntimeUnrecoverable))) ||
+				(runtimeRecord.RuntimeVersion == 3 && errors.Is(runErr, errKitRuntimeUnrecoverable)) {
 				// A Kit runtime that cannot serve turns is replaced, dropping its
 				// conversation. Revoke its credentials, then retire it through the
 				// unhealthy-runtime path below.
@@ -3779,6 +3761,9 @@ func (s *ServiceCore) prepareEventPrompt(
 	assistant assistantRecord,
 	runtime assistantRuntimeRecord,
 	event assistantThreadEventRecord,
+	deliveryMode MCPDeliveryMode,
+	platformSlugs []string,
+	preResolvedIdentity *turnIdentity,
 	resolveIdentity bool,
 ) (preparedEventPrompt, error) {
 	var out preparedEventPrompt
@@ -3798,15 +3783,20 @@ func (s *ServiceCore) prepareEventPrompt(
 		if err != nil {
 			return out, err
 		}
-		notice = renderAssistantSkillSetChange(claimedSnapshot, currentSnapshot)
+		notice = renderAssistantSkillSetChangeForMode(claimedSnapshot, currentSnapshot, deliveryMode)
 	}
 
-	if resolveIdentity {
+	haveIdentity := false
+	if preResolvedIdentity != nil {
+		out.identity = *preResolvedIdentity
+		haveIdentity = true
+	} else if resolveIdentity {
 		identity, err := s.resolveTurnIdentity(ctx, assistant, thread, event)
 		if err != nil {
 			return out, err
 		}
 		out.identity = identity
+		haveIdentity = true
 	}
 
 	prompt := ""
@@ -3818,11 +3808,11 @@ func (s *ServiceCore) prepareEventPrompt(
 		if err != nil {
 			return out, err
 		}
-		prompt, err = adapter.DecodeTurn(event)
+		prompt, err = adapterDecodeTurn(adapter, event, deliveryMode, platformSlugs)
 		if err != nil {
 			return out, fmt.Errorf("decode assistant turn: %w", err)
 		}
-		if resolveIdentity {
+		if haveIdentity {
 			senderLine, err := s.speakeasySenderContextLine(ctx, thread, out.identity)
 			if err != nil {
 				return out, err
@@ -3849,7 +3839,7 @@ func (s *ServiceCore) prepareEventPrompt(
 	out.inputParts = inputParts
 
 	if runtime.RuntimeVersion == 3 {
-		sourceInstructions, err := composeInstructions("", thread, nil, s.connectionLinkPrefix())
+		sourceInstructions, err := ComposeInstructionsForMode("", thread, currentSnapshot.Skills, s.connectionLinkPrefix(), deliveryMode, platformSlugs)
 		if err != nil {
 			return out, err
 		}
@@ -3877,23 +3867,31 @@ func (s *ServiceCore) processEventTurnWithProtocol(
 	protocol runtimeProtocol,
 ) error {
 	event := absorbed.snapshot()[0].event
-	prepared, err := s.prepareEventPrompt(ctx, thread, assistant, runtime, event, true)
+	identity, err := s.resolveTurnIdentity(ctx, assistant, thread, event)
+	if err != nil {
+		return err
+	}
+
+	var turnToken string
+	if identity.AgentBacked {
+		turnToken, err = s.mintTurnCredential(ctx, assistant, thread, event, identity)
+	} else {
+		turnToken, err = s.MintThreadScopedRuntimeToken(assistant, thread.ID, identity.UserID)
+	}
+	if err != nil {
+		return err
+	}
+
+	mcpServers, deliveryMode, platformSlugs, err := s.currentRuntimeMCPServersForTurn(ctx, assistant, runtime.RuntimeVersion, identity.AgentBacked, turnToken)
+	if err != nil {
+		return err
+	}
+
+	prepared, err := s.prepareEventPrompt(ctx, thread, assistant, runtime, event, deliveryMode, platformSlugs, &identity, false)
 	if err != nil {
 		return err
 	}
 	absorbed.setInitialSnapshot(prepared.currentSkillSnapshot)
-
-	mcpServers := s.currentRuntimeMCPServers(ctx, assistant)
-
-	var turnToken string
-	if prepared.identity.AgentBacked {
-		turnToken, err = s.mintTurnCredential(ctx, assistant, thread, event, prepared.identity)
-	} else {
-		turnToken, err = s.MintThreadScopedRuntimeToken(assistant, thread.ID, prepared.identity.UserID)
-	}
-	if err != nil {
-		return err
-	}
 
 	var nextSteerEvent func(context.Context) (kitSteerTurn, bool, error)
 	if runtime.RuntimeVersion == 3 {
@@ -3929,7 +3927,7 @@ func (s *ServiceCore) processEventTurnWithProtocol(
 			// Only Speakeasy Slack threads attach a verified sender context line
 			// to the prompt; Kit authentication is runtime-bound workload identity
 			// and never gates or defers a steered event by sender.
-			steerPrepared, prepErr := s.prepareEventPrompt(evCtx, thread, assistant, runtime, ev, thread.SourceKind == sourceKindSpeakeasySlack)
+			steerPrepared, prepErr := s.prepareEventPrompt(evCtx, thread, assistant, runtime, ev, deliveryMode, platformSlugs, nil, thread.SourceKind == sourceKindSpeakeasySlack)
 			if prepErr != nil {
 				// Preparation errors belong to the newly claimed event; settle
 				// or requeue it without disrupting the already-running turn.
@@ -3995,19 +3993,34 @@ func (s *ServiceCore) processEventTurnWithProtocol(
 // dispatch a turn with bogus URLs. Platform toolsets must be included so
 // the reconcile target matches what bootstrap granted — otherwise the
 // runner would treat them as removed and disconnect them mid-thread.
-func (s *ServiceCore) currentRuntimeMCPServers(ctx context.Context, assistant assistantRecord) []runtimeMCPServer {
-	serverURL := s.runtime.ServerURL()
-	if serverURL == nil {
-		return nil
-	}
+func (s *ServiceCore) currentRuntimeMCPServersForTurn(
+	ctx context.Context,
+	assistant assistantRecord,
+	runtimeVersion int16,
+	agentBacked bool,
+	turnToken string,
+) ([]runtimeMCPServer, MCPDeliveryMode, []string, error) {
 	platformSlugs, err := s.assistantPlatformSlugs(ctx, assistant)
 	if err != nil {
-		s.logger.WarnContext(ctx, "resolve platform toolsets for mcp reconcile failed; skipping reconcile",
-			attr.SlogError(err),
-		)
-		return nil
+		return nil, MCPDeliveryPerServer, nil, fmt.Errorf("resolve platform toolsets for mcp reconcile: %w", err)
 	}
-	return resolveAssistantMCPServers(ctx, s.logger, serverURL, assistant.MCPServers, platformSlugs)
+	if runtimeVersion == 3 {
+		// Kit is Project-Gateway-only: mcp.json holds the single project-gateway
+		// entry and turns never pass a per-server overlay. Render turn prompts
+		// and notices in Project Gateway mode through the shared prompt seam.
+		return nil, MCPDeliveryProjectGateway, platformSlugs, nil
+	}
+	serverURL := s.runtime.ServerURL()
+	if serverURL == nil {
+		return nil, MCPDeliveryPerServer, platformSlugs, nil
+	}
+	if agentBacked {
+		elig := s.EvaluateProjectGatewayEligibility(ctx, assistant.OrganizationID, assistant.ProjectID, assistant.ID, serverURL, turnToken, assistant.MCPServers, platformSlugs)
+		if elig.Eligible {
+			return projectGatewayRuntimeServer(elig.GatewayURL), MCPDeliveryProjectGateway, platformSlugs, nil
+		}
+	}
+	return resolveAssistantMCPServers(ctx, s.logger, serverURL, assistant.MCPServers, platformSlugs), MCPDeliveryPerServer, platformSlugs, nil
 }
 
 // assistantPlatformSlugs returns the platform toolset slugs granted to this
@@ -4033,6 +4046,18 @@ func (s *ServiceCore) assistantPlatformSlugs(ctx context.Context, assistant assi
 		// Project has no managed assistant; managed-only tools stay ungranted.
 	default:
 		return nil, fmt.Errorf("resolve managed assistant: %w", mErr)
+	}
+	hasAssistantSlack, err := assistantrepo.New(s.db).HasAssistantSlackPlatformGrant(ctx, assistantrepo.HasAssistantSlackPlatformGrantParams{
+		OrganizationID: assistant.OrganizationID,
+		ProjectID:      assistant.ProjectID,
+		AssistantID:    uuid.NullUUID{UUID: assistant.ID, Valid: true},
+		ToolsetID:      platformtools.PlatformToolsetID(platformtools.AssistantSlackPlatformToolsetSlug).String(),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("resolve assistant-slack platform grant: %w", err)
+	}
+	if hasAssistantSlack {
+		platformSlugs = append(platformSlugs, platformtools.AssistantSlackPlatformToolsetSlug)
 	}
 	return platformSlugs, nil
 }
@@ -4159,8 +4184,36 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 		UpdatedAt:       row.UpdatedAt.Time,
 		DeletedAt:       row.DeletedAt,
 	}
-	if err := s.hydrateAssistantToolSources(ctx, assistant.ProjectID, &assistant); err != nil {
-		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "load assistant tool sources").LogError(ctx, s.logger, logAttrs...)
+	// Gate on the version of the runtime actually serving the thread (not the
+	// assistant's desired version) so bootstrap and turn dispatch agree during
+	// a pending runtime switch. v2/v3 runtimes are keyed by assistant; v1
+	// runtimes are keyed by thread.
+	servingRuntimeVersion := assistant.RuntimeVersion
+	switch activeRuntime, rErr := assistantrepo.New(s.db).GetAssistantRuntimeV2(ctx, assistantrepo.GetAssistantRuntimeV2Params{
+		ProjectID:   thread.ProjectID,
+		AssistantID: assistant.ID,
+	}); {
+	case rErr == nil:
+		servingRuntimeVersion = activeRuntime.RuntimeVersion
+	case errors.Is(rErr, pgx.ErrNoRows):
+		switch threadRuntime, tErr := assistantrepo.New(s.db).GetActiveAssistantRuntimeByThreadID(ctx, assistantrepo.GetActiveAssistantRuntimeByThreadIDParams{
+			AssistantThreadID: thread.ID,
+			ProjectID:         thread.ProjectID,
+		}); {
+		case tErr == nil:
+			servingRuntimeVersion = threadRuntime.RuntimeVersion
+		case errors.Is(tErr, pgx.ErrNoRows):
+		default:
+			return threadBootstrap{}, oops.E(oops.CodeUnexpected, tErr, "load active thread runtime").LogError(ctx, s.logger, logAttrs...)
+		}
+	default:
+		return threadBootstrap{}, oops.E(oops.CodeUnexpected, rErr, "load active assistant runtime").LogError(ctx, s.logger, logAttrs...)
+	}
+
+	if servingRuntimeVersion != 3 {
+		if err := s.hydrateAssistantToolSources(ctx, assistant.ProjectID, &assistant); err != nil {
+			return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "load assistant tool sources").LogError(ctx, s.logger, logAttrs...)
+		}
 	}
 	if err := s.hydrateAssistantSkills(ctx, assistant.ProjectID, &assistant); err != nil {
 		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "load assistant skills").LogError(ctx, s.logger, logAttrs...)
@@ -4195,11 +4248,26 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "resolve managed assistant").LogError(ctx, s.logger, logAttrs...)
 	}
 
-	// Misconfigured toolsets (no MCP slug, MCP disabled) are surfaced as
-	// best-effort URLs rather than aborting the whole bootstrap. The runner
-	// will discover the failure when it tries to list tools and the
-	// assistant can tell the user which integration is broken.
-	mcpServers := resolveAssistantMCPServers(ctx, s.logger, runtimeServerURL, assistant.MCPServers, platformSlugs)
+	deliveryMode := MCPDeliveryPerServer
+	var mcpServers []runtimeMCPServer
+	if servingRuntimeVersion == 3 {
+		deliveryMode = MCPDeliveryProjectGateway
+	} else if _, agentBacked := principalcredential.FromContext(ctx); agentBacked {
+		if rawToken := bootstrapRuntimeToken(ctx); rawToken != "" {
+			elig := s.EvaluateProjectGatewayEligibility(ctx, assistant.OrganizationID, assistant.ProjectID, assistant.ID, runtimeServerURL, rawToken, assistant.MCPServers, platformSlugs)
+			if elig.Eligible {
+				deliveryMode = MCPDeliveryProjectGateway
+				mcpServers = projectGatewayRuntimeServer(elig.GatewayURL)
+			}
+		}
+	}
+	if servingRuntimeVersion != 3 && !deliveryMode.IsGateway() {
+		// Misconfigured toolsets (no MCP slug, MCP disabled) are surfaced as
+		// best-effort URLs rather than aborting the whole bootstrap. The runner
+		// will discover the failure when it tries to list tools and the
+		// assistant can tell the user which integration is broken.
+		mcpServers = resolveAssistantMCPServers(ctx, s.logger, runtimeServerURL, assistant.MCPServers, platformSlugs)
+	}
 
 	// Only the managed assistant's saved prompt is swapped for the current
 	// built-in one; a user-created assistant keeps its prompt verbatim.
@@ -4207,14 +4275,14 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 	switch managed, mErr := assistantrepo.New(s.db).GetManagedAssistantByProject(ctx, assistant.ProjectID); {
 	case mErr == nil:
 		if managed.ID == assistant.ID {
-			baseInstructions = currentAssistantInstructions(assistant.Instructions)
+			baseInstructions = RenderManagedAssistantInstructions(currentAssistantInstructions(assistant.Instructions), deliveryMode)
 		}
 	case errors.Is(mErr, pgx.ErrNoRows):
 	default:
 		return threadBootstrap{}, oops.E(oops.CodeUnexpected, mErr, "resolve managed assistant").LogError(ctx, s.logger, logAttrs...)
 	}
 
-	instructions, err := composeInstructions(baseInstructions, thread, baselineSkills.Skills, s.connectionLinkPrefix())
+	instructions, err := ComposeInstructionsForMode(baseInstructions, thread, baselineSkills.Skills, s.connectionLinkPrefix(), deliveryMode, platformSlugs)
 	if err != nil {
 		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "compose assistant instructions").LogError(ctx, s.logger, logAttrs...)
 	}
@@ -4283,37 +4351,7 @@ A tool error starting "Connection required" or "Reconnect required" is different
 }
 
 func composeInstructions(base string, thread assistantThreadRecord, skills []assistantSkillSnapshot, connectionLinkPrefix string) (string, error) {
-	adapter, err := getSourceAdapter(thread.SourceKind)
-	if err != nil {
-		return "", err
-	}
-	ctxBlock, err := adapter.ThreadContext(thread.SourceRefJSON)
-	if err != nil {
-		return "", fmt.Errorf("load assistant thread context: %w", err)
-	}
-	parts := make([]string, 0, 4)
-	if base != "" {
-		parts = append(parts, base)
-	}
-	if len(skills) > 0 {
-		lines := make([]string, 0, len(skills)+2)
-		lines = append(lines, "## Skills")
-		lines = append(lines, "If a user turn includes a <skill-context> block for one of these skills, its embedded <skill-content> is already loaded and takes precedence for that turn. Do not call mcp__p-assistants_skills_load for that skill in that turn.")
-		for _, skill := range skills {
-			name := strings.Join(strings.Fields(skill.Name), " ")
-			description := conv.TruncateString(strings.Join(strings.Fields(skill.Description), " "), 200)
-			lines = append(lines, "- Name: "+strconv.Quote(name)+"; description: "+strconv.Quote(description)+". Unless this turn already includes a <skill-context> for this skill, call mcp__p-assistants_skills_load with name "+strconv.Quote(name)+" before relying on this skill.")
-		}
-		parts = append(parts, strings.Join(lines, "\n"))
-	}
-	parts = append(parts, mcpAuthAddendum(connectionLinkPrefix))
-	if guidance := adapter.OutputChannelGuidance(); guidance != "" {
-		parts = append(parts, guidance)
-	}
-	if ctxBlock != "" {
-		parts = append(parts, ctxBlock)
-	}
-	return strings.Join(parts, "\n\n"), nil
+	return ComposeInstructionsForMode(base, thread, skills, connectionLinkPrefix, MCPDeliveryPerServer, nil)
 }
 
 // capRuntimeMCPServerID bounds a runner-side MCP server ID. agentkit exposes
@@ -4403,9 +4441,10 @@ func resolveAssistantMCPServers(ctx context.Context, logger *slog.Logger, server
 		}
 		seenIDs[id] = struct{}{}
 		servers = append(servers, runtimeMCPServer{
-			ID:      id,
-			URL:     m.endpointURL(serverURL).String(),
-			Headers: headers,
+			ID:        id,
+			URL:       m.endpointURL(serverURL).String(),
+			Headers:   headers,
+			IsGateway: false,
 		})
 	}
 
@@ -4421,9 +4460,10 @@ func resolveAssistantMCPServers(ctx context.Context, logger *slog.Logger, server
 	// concatenated into the agentkit MCP tool name which has a 64-char cap.
 	for _, slug := range platformToolsets {
 		servers = append(servers, runtimeMCPServer{
-			ID:      "_p-" + slug,
-			URL:     platformtools.PlatformToolsetURL(serverURL, slug),
-			Headers: nil,
+			ID:        "_p-" + slug,
+			URL:       platformtools.PlatformToolsetURL(serverURL, slug),
+			Headers:   nil,
+			IsGateway: false,
 		})
 	}
 

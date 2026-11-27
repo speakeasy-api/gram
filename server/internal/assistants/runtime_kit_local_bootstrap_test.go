@@ -1,15 +1,29 @@
 package assistants
 
 import (
+	"net/url"
+	"strings"
+	"testing"
+
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/stretchr/testify/require"
-	"strings"
-	"testing"
 )
 
 func kitTestWorkloadBootstrap() KitLocalBootstrap {
-	return KitLocalBootstrap{Model: "openai/gpt-4.1-mini", AgentsMD: []byte("caller instructions"), GatewayToken: []byte("private-test-token"), MCPJSON: []byte(`{"mcpServers":{}}`), AssertionFile: KitWorkloadAssertionPath, InferenceEndpoint: "https://ai.speakeasy.com/chat/completions", Workload: &KitWorkloadBinding{IssuerID: uuid.New(), Subject: "system:serviceaccount:test:kit-generation", Audience: "https://issuer.example/oauth/usi/test", Identity: assistantidentity.RuntimeIdentity{ProjectID: uuid.New()}}}
+	workload := &KitWorkloadBinding{
+		MCPProjectGateway: true,
+		IssuerID:          uuid.New(),
+		Subject:           "system:serviceaccount:test:kit-generation",
+		Audience:          "https://issuer.example/oauth/usi/test",
+		Identity:          assistantidentity.RuntimeIdentity{ProjectID: uuid.New()},
+	}
+	gatewayURL, _ := url.Parse("https://api.example/mcp/gateway/org-test/projects/proj-test")
+	mcpJSON, err := kitCompositionMCP(gatewayURL, workload)
+	if err != nil {
+		panic(err)
+	}
+	return KitLocalBootstrap{Model: "openai/gpt-4.1-mini", AgentsMD: []byte("caller instructions"), GatewayToken: []byte("private-test-token"), MCPJSON: mcpJSON, AssertionFile: KitWorkloadAssertionPath, InferenceEndpoint: "https://ai.speakeasy.com/chat/completions", Workload: workload}
 }
 
 func TestKitLocalBootstrapContractValidation(t *testing.T) {
@@ -18,6 +32,15 @@ func TestKitLocalBootstrapContractValidation(t *testing.T) {
 	require.NoError(t, validateKitBootstrap(b))
 	for _, mutate := range []func(*KitLocalBootstrap){
 		func(b *KitLocalBootstrap) { b.Model = "" },
+		func(b *KitLocalBootstrap) {
+			b.MCPJSON = []byte(`{"mcpServers":{}}`)
+		},
+		func(b *KitLocalBootstrap) {
+			b.MCPJSON = []byte(`{"mcpServers":{"other-server":{"type":"streamable-http","url":"https://api.example/mcp/other","headers":{},"auth":{"type":"workload_identity","tokenFile":"/var/run/secrets/speakeasy/workload/assertion","endpointMode":"explicit","grant":"jwtBearer","tokenEndpoint":"https://issuer.example/oauth/usi/test/token","resource":"https://api.example/mcp/other","scope":"mcp:connect"}}}}`)
+		},
+		func(b *KitLocalBootstrap) {
+			b.MCPJSON = []byte(`{"mcpServers":{"project-gateway":{"type":"streamable-http","url":"https://api.example/mcp/gateway/org/projects/p","headers":{},"auth":{"type":"workload_identity","tokenFile":"/var/run/secrets/speakeasy/workload/assertion","endpointMode":"explicit","grant":"jwtBearer","tokenEndpoint":"https://issuer.example/oauth/usi/test/token","resource":"https://api.example/mcp/gateway/org/projects/p","scope":"mcp:connect","extensions":{"project_id":"00000000-0000-0000-0000-000000000001"}}}}}`)
+		},
 		func(b *KitLocalBootstrap) {
 			b.MCPJSON = []byte(`{"mcpServers":{"legacy":{"type":"streamable-http","url":"https://mcp.example/mcp/tools","auth":{"type":"client_credentials","client_secret":"forbidden"}}}}`)
 		},

@@ -7,11 +7,13 @@ export const SLACK_DOCS: IntegrationDoc = {
     "Wire an assistant to a Slack workspace end-to-end: respond to events, talk to users, and react to schedules.",
   body: `# Slack integration
 
-Wire the assistant end-to-end with the user's Slack workspace: it reads/sends messages via the bot AND can be triggered by Slack events. The user installs a Slack connection in their workspace, then pastes credentials into the assistant's environment — Slack does not let us OAuth on their behalf for a brand-new integration.
+Wire the assistant end-to-end with the user's Slack workspace: it reads/sends messages via the built-in assistant Slack tools AND can be triggered by Slack events. The user installs a Slack app in their workspace, then enters its signing secret and tokens in the Slack credentials card — Slack does not let us OAuth on their behalf for a brand-new integration.
 
-## Default rule: per-assistant Slack toolset, never catalog reuse
+## Default rule: built-in Slack tools + dedicated Slack app credentials
 
-Always create a NEW Slack toolset scoped to this assistant. Do not look in \`list_integrations\` or \`list_toolsets\` for an existing Slack toolset to reuse — even if one exists, it likely grants more (or different) capabilities than this assistant needs, and an assistant that shares a Slack toolset with others inherits any capability changes the user makes elsewhere. \`propose_slack_setup\` handles this — it creates a fresh per-assistant toolset every time and attaches only the capability groups the user picks.
+Do not create a Slack toolset, and do not look in \`list_integrations\` or \`list_toolsets\` for a Slack toolset to attach. \`propose_slack_setup\` grants the assistant's agent access to the built-in \`assistant-slack\` toolset, creates a dedicated Slack app credential record for this assistant, and creates the \`slack\` trigger linked to it. Never store \`SLACK_SIGNING_SECRET\`, \`SLACK_BOT_TOKEN\`, or \`SLACK_USER_TOKEN\` in a project environment.
+
+Setting up or updating Slack app credentials requires organization administrator access (\`org:admin\`). If \`propose_slack_setup\` or \`request_slack_credentials\` reports missing permission, tell the user clearly to ask an organization admin to finish connecting Slack.
 
 ## Default rule: always offer a slack trigger
 
@@ -33,27 +35,26 @@ Preselect extra events (\`preselected_events\`) only when the goal needs them, e
 
 To change the reply mode after setup, call \`choose_slack_reply_mode\` (it saves the user's pick to the slack trigger). When the user already said what they want, read the trigger's current config with \`list_triggers\` right before calling \`update_trigger(id, { ...currentConfig, routing: "<mode>" })\`, since \`update_trigger\` replaces the whole config.
 
-## Environment
+## Credentials
 
-The assistant owns one shared environment. Extend it with \`add_environment_keys\`; populate values with \`request_environment_secrets\`. Do not create a separate env per integration.
+Slack credentials live on the assistant's dedicated Slack app auth client, NOT in the assistant's environment. Collect them with \`request_slack_credentials\` (never \`add_environment_keys\` or \`request_environment_secrets\`).
 
 Required keys (listed in the order the user encounters them in Slack's UI — Signing Secret on Basic Information, then bot/user tokens on the Install App / OAuth & Permissions page):
 - \`SLACK_SIGNING_SECRET\` — verifies inbound webhooks from the slack trigger. Required only when \`propose_slack_setup\` created a slack trigger.
-- \`SLACK_BOT_TOKEN\` (xoxb-) — bot Web API auth. Required whenever any Slack capability group is selected.
+- \`SLACK_BOT_TOKEN\` (xoxb-) — bot Web API auth. Required whenever Slack tools are enabled.
 - \`SLACK_USER_TOKEN\` (xoxp-) — user-token Web API auth. The manifest always pre-fills the full user-scope superset so Slack issues xoxp- in the same install as xoxb-.
 
 ## Recommended flow
 
-1. **Propose the setup.** \`propose_slack_setup\` with preselected groups derived from the user's stated goal. Examples (shape, not content): a Q&A helper typically gets \`send\`; a research-and-post bot gets \`send\` + \`read\`; a reaction-driven workflow gets \`react\` plus the \`reactions\` extra event. Pass \`reply_mode\` per "When it replies". The card produces a per-assistant Slack toolset (already attached) and a slack trigger with its \`webhook_url\`. **This tool BLOCKS** until the user submits or skips — never call other tools in parallel with it. If the call returns an error about a toolset-name collision (another project toolset already uses the default name), propose a more distinctive name that hints at what this assistant does, OR ask the user one short question for a name, then re-call with \`toolset_name\` set. Do not show the card a second time before resolving the name.
-2. **Declare keys.** Once \`propose_slack_setup\` resolves, \`add_environment_keys\` with the keys this combination needs (Slack-UI order so the later \`request_environment_secrets\` card matches what the user sees).
-3. **Show the install card.** Skip if \`SLACK_BOT_TOKEN\` is already populated (check \`list_environments\` → \`populated_entry_names\`). Otherwise \`show_slack_app_guide\`. Pass the slack trigger's \`webhook_url\` (from step 1's result) if a trigger was created. The manifest always grants the full bot- and user-scope supersets; do not pass scope overrides. The card walks the user through install + Event Subscriptions Retry. **This tool BLOCKS** until the user clicks "I'm done" — do not call other tools in parallel with it.
-4. **User installs the connection.** Slack mints both \`xoxb-\` (bot) and \`xoxp-\` (user) tokens at install + approval.
-5. **Show the tokens card.** Once the install card resolves with \`installed: true\`, call \`request_environment_secrets\` in the order the user will read them in Slack's UI: \`SLACK_SIGNING_SECRET\` (only if a trigger exists; Basic Information → App Credentials), then \`SLACK_BOT_TOKEN\` (OAuth & Permissions → Bot User OAuth Token), then \`SLACK_USER_TOKEN\` (OAuth & Permissions → User OAuth Token). If the install card resolved with \`cancelled: true\`, do not call \`request_environment_secrets\` — they have nothing to paste.
-6. **Self-handshake** (only when a slack trigger was created). Single short burst, no confirmation:
+1. **Propose the setup.** \`propose_slack_setup\` with preselected groups derived from the user's stated goal. Examples (shape, not content): a Q&A helper typically gets \`send\`; a research-and-post bot gets \`send\` + \`read\`; a reaction-driven workflow gets \`react\` plus the \`reactions\` extra event. Pass \`reply_mode\` per "When it replies". The card links the assistant's agent to the built-in \`assistant-slack\` toolset, creates its dedicated Slack app credential record (\`auth_client_id\`), and creates a slack trigger with its \`webhook_url\`. **This tool BLOCKS** until the user submits or skips — never call other tools in parallel with it.
+2. **Show the install card.** Skip if \`propose_slack_setup\` reported \`bot_token_configured: true\`. Otherwise call \`show_slack_app_guide\`. Pass the slack trigger's \`webhook_url\` (from step 1's result) if a trigger was created. The manifest always grants the full bot- and user-scope supersets; do not pass scope overrides. The card walks the user through install + Event Subscriptions Retry. **This tool BLOCKS** until the user clicks "I'm done" — do not call other tools in parallel with it.
+3. **User installs the connection.** Slack mints both \`xoxb-\` (bot) and \`xoxp-\` (user) tokens at install + approval.
+4. **Show the tokens card.** Once the install card resolves with \`installed: true\` — or immediately after step 1 if step 2 was skipped because \`bot_token_configured: true\` and any required key (such as \`SLACK_SIGNING_SECRET\` or \`SLACK_USER_TOKEN\`) is still missing — call \`request_slack_credentials\` (passing \`auth_client_id\` from step 1) in the order the user will read them in Slack's UI: \`SLACK_SIGNING_SECRET\` (only if a trigger exists; Basic Information → App Credentials), then \`SLACK_BOT_TOKEN\` (OAuth & Permissions → Bot User OAuth Token), then \`SLACK_USER_TOKEN\` (OAuth & Permissions → User OAuth Token). If the install card resolved with \`cancelled: true\`, do not call \`request_slack_credentials\` — they have nothing to paste.
+5. **Self-handshake** (only when a slack trigger was created). Single short burst, no confirmation:
    - **a.** Ask for the user's Slack handle.
    - **b.** DM the user a greeting in the assistant's voice (the persona picked via \`propose_personality\`). Do not template.
    - **c.** **Record the owner.** You resolved the user's Slack user ID to DM them — persist it: re-call \`set_tasks\` with the current \`# Tasks\` body plus an \`## Owner\` subsection recording the owner's Slack handle and user ID (\`U…\`), and stating that MCP/OAuth authentication can only be completed by the owner — auth prompts go to them (ephemeral or DM), and anyone else who trips an auth flow is simply told the owner has to complete it. Without this, the assistant can't tell the owner apart from whoever happens to message it and may prompt the wrong person to authenticate.
-7. **Offer to narrow the filter** (only when a slack trigger was created). After the self-handshake, prompt the user in plain English to scope the trigger further — see "Filter narrowing" below. Skip only if the user has already given a tight filter or has explicitly said the firehose is fine.
+6. **Offer to narrow the filter** (only when a slack trigger was created). After the self-handshake, prompt the user in plain English to scope the trigger further — see "Filter narrowing" below. Skip only if the user has already given a tight filter or has explicitly said the firehose is fine.
 
 ## Filter narrowing — plain English to CEL
 
@@ -74,10 +75,9 @@ Only when the user has explicitly said the assistant should NOT react to Slack e
 
 Same as the recommended flow with these differences:
 - In step 1, run \`propose_slack_setup\` with \`skip_slack_events: true\`. No slack trigger is created.
-- In step 2, do NOT add \`SLACK_SIGNING_SECRET\` — there is no inbound webhook to verify. Still declare \`SLACK_BOT_TOKEN\` and \`SLACK_USER_TOKEN\`.
-- In step 3, call \`show_slack_app_guide\` without \`webhook_url\`. The manifest is scope-only (no \`event_subscriptions\`); both xoxb- and xoxp- are still issued.
-- In step 5, omit \`SLACK_SIGNING_SECRET\` from the secrets request.
-- Skip steps 6a–b and 7 — without a trigger, the bot will never see the reply anyway. Still record the owner (step 6c): ask for the user's Slack handle, resolve it to their user ID with the Slack user-lookup/search tools, and write the \`## Owner\` subsection.
+- In step 2, call \`show_slack_app_guide\` without \`webhook_url\`. The manifest is scope-only (no \`event_subscriptions\`); both xoxb- and xoxp- are still issued.
+- In step 4, omit \`SLACK_SIGNING_SECRET\` from \`request_slack_credentials\`, collecting only \`SLACK_BOT_TOKEN\` and \`SLACK_USER_TOKEN\`.
+- Skip steps 5a–b and 6 — without a trigger, the bot will never see the reply anyway. Still record the owner (step 5c): ask for the user's Slack handle, resolve it to their user ID with the Slack user-lookup/search tools, and write the \`## Owner\` subsection.
 
 ## Webhook URL not yet available
 
@@ -98,7 +98,7 @@ If for some reason the webhook URL isn't returned at step 1 (e.g. trigger creati
 
 ## Gotchas
 
-- **Busy channels.** With the \`channels\` reply mode and no filter, every message in every channel the bot is in wakes the assistant. Offer the filter-narrowing pass in step 7.
+- **Busy channels.** With the \`channels\` reply mode and no filter, every message in every channel the bot is in wakes the assistant. Offer the filter-narrowing pass in step 6.
 - **Install ≠ Create.** \`xoxb-\` only appears after install + approval. Users frequently stop after Create.
 - **Scope changes need re-install.** Ship the full intended scope list in the first manifest — including user scopes.
 - **App name unique per workspace.** \`duplicate_app_name\` → suggest renaming.

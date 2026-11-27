@@ -8,11 +8,12 @@ use agentkit_mcp::{
     McpStreamableHttpPostResponse,
 };
 use async_trait::async_trait;
+use futures::StreamExt;
 use http::{HeaderMap, HeaderName, HeaderValue};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, Middleware, Next};
 use reqwest_retry::RetryTransientMiddleware;
 use reqwest_retry::policies::ExponentialBackoff;
-use rmcp::model::ClientRequest;
+use rmcp::model::{ClientRequest, ServerJsonRpcMessage, ServerResult};
 use rmcp::transport::streamable_http_client::StreamableHttpClient as RmcpStreamableHttpClient;
 use thiserror::Error;
 
@@ -140,6 +141,7 @@ pub struct McpSessionClient {
     inner: reqwest::Client,
     token: String,
     static_headers: HeaderMap,
+    instructions_slot: Option<Arc<RwLock<Option<String>>>>,
 }
 
 impl McpSessionClient {
@@ -148,7 +150,13 @@ impl McpSessionClient {
             inner,
             token,
             static_headers,
+            instructions_slot: None,
         }
+    }
+
+    pub fn with_instructions_slot(mut self, slot: Arc<RwLock<Option<String>>>) -> Self {
+        self.instructions_slot = Some(slot);
+        self
     }
 
     fn merged_headers(
@@ -178,13 +186,19 @@ impl McpHttpClient for McpSessionClient {
     ) -> Result<McpStreamableHttpPostResponse, McpStreamableHttpError<reqwest::Error>> {
         let token = self.bearer();
         let mut headers = self.merged_headers(custom_headers);
+        let capture_instructions = self.instructions_slot.is_some()
+            && matches!(
+                &message,
+                ClientJsonRpcMessage::Request(req)
+                    if matches!(req.request, ClientRequest::InitializeRequest(_))
+            );
         // Tool calls carry the trace context agentkit's request decorator
         // captured for them, so the server's MCP request links to the runner
         // trace.
         if let Some(McpTraceHeaders(trace)) = call_trace_headers(&message) {
             headers.extend(trace.clone());
         }
-        RmcpStreamableHttpClient::post_message(
+        let response = RmcpStreamableHttpClient::post_message(
             &self.inner,
             uri,
             message,
@@ -192,7 +206,14 @@ impl McpHttpClient for McpSessionClient {
             token,
             headers,
         )
-        .await
+        .await?;
+        if !capture_instructions {
+            return Ok(response);
+        }
+        let Some(slot) = self.instructions_slot.clone() else {
+            return Ok(response);
+        };
+        Ok(capture_initialize_instructions(response, slot))
     }
 
     async fn delete_session(
@@ -237,6 +258,52 @@ fn call_trace_headers(message: &ClientJsonRpcMessage) -> Option<&McpTraceHeaders
             _ => None,
         },
         _ => None,
+    }
+}
+
+fn extract_initialize_instructions(message: &ServerJsonRpcMessage) -> Option<String> {
+    let ServerJsonRpcMessage::Response(response) = message else {
+        return None;
+    };
+    let ServerResult::InitializeResult(init) = &response.result else {
+        return None;
+    };
+    init.instructions
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+}
+
+fn store_instructions(slot: &Arc<RwLock<Option<String>>>, instructions: Option<String>) {
+    *slot
+        .write()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) = instructions;
+}
+
+fn capture_initialize_instructions(
+    response: McpStreamableHttpPostResponse,
+    slot: Arc<RwLock<Option<String>>>,
+) -> McpStreamableHttpPostResponse {
+    match response {
+        McpStreamableHttpPostResponse::Json(message, session_id) => {
+            store_instructions(&slot, extract_initialize_instructions(&message));
+            McpStreamableHttpPostResponse::Json(message, session_id)
+        }
+        McpStreamableHttpPostResponse::Sse(stream, session_id) => {
+            store_instructions(&slot, None);
+            let wrapped = stream.inspect(move |event| {
+                if let Ok(sse) = event
+                    && let Some(data) = sse.data.as_deref()
+                    && let Ok(message) = serde_json::from_str::<ServerJsonRpcMessage>(data)
+                    && let Some(instructions) = extract_initialize_instructions(&message)
+                {
+                    store_instructions(&slot, Some(instructions));
+                }
+            });
+            McpStreamableHttpPostResponse::Sse(Box::pin(wrapped), session_id)
+        }
+        other => other,
     }
 }
 
@@ -287,5 +354,107 @@ mod tests {
         assert_eq!(tokens.current().unwrap(), "opaque-original");
         tokens.rotate("opaque-next").unwrap();
         assert_eq!(tokens.current().unwrap(), "opaque-next");
+    }
+
+    #[tokio::test]
+    async fn capture_initialize_instructions_handles_sse_and_blank_values() {
+        use axum::{Router, http::header::CONTENT_TYPE, routing::post};
+        use rmcp::model::{
+            ClientCapabilities, Implementation, InitializeRequest, InitializeRequestParams,
+            JsonRpcRequest, NumberOrString, ProtocolVersion,
+        };
+        use std::sync::Mutex;
+
+        let next_instructions: Arc<Mutex<Option<String>>> =
+            Arc::new(Mutex::new(Some("  Use list_servers first.  \n".into())));
+        let server_instructions = Arc::clone(&next_instructions);
+
+        let app = Router::new().route(
+            "/sse-gateway",
+            post(move || {
+                let instructions = server_instructions.lock().unwrap().clone();
+                async move {
+                    let body = serde_json::json!({
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "result": {
+                            "protocolVersion": "2025-03-26",
+                            "capabilities": { "tools": {} },
+                            "serverInfo": { "name": "project-gateway", "version": "1.0.0" },
+                            "instructions": instructions,
+                        }
+                    });
+                    (
+                        [(CONTENT_TYPE, "text/event-stream")],
+                        format!("event: message\ndata: {body}\n\n"),
+                    )
+                }
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server_task = tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        let init_msg = || {
+            let mut params = InitializeRequestParams::new(
+                ClientCapabilities::default(),
+                Implementation::new("runner-test", "1.0.0"),
+            );
+            params.protocol_version = ProtocolVersion::V_2025_03_26;
+            ClientJsonRpcMessage::Request(JsonRpcRequest {
+                jsonrpc: Default::default(),
+                id: NumberOrString::Number(1),
+                request: ClientRequest::InitializeRequest(InitializeRequest::new(params)),
+            })
+        };
+
+        let slot = Arc::new(RwLock::new(None));
+        let client = McpSessionClient::new(reqwest::Client::new(), "tok".into(), HeaderMap::new())
+            .with_instructions_slot(Arc::clone(&slot));
+        let uri: Arc<str> = format!("http://{addr}/sse-gateway").into();
+
+        // 1. SSE initialize response trims and stores non-empty instructions.
+        let resp = client
+            .post_message(Arc::clone(&uri), init_msg(), None, None, HashMap::new())
+            .await
+            .unwrap();
+        let McpStreamableHttpPostResponse::Sse(mut stream, _) = resp else {
+            panic!("expected SSE response");
+        };
+        while stream.next().await.is_some() {}
+        assert_eq!(
+            slot.read().unwrap().as_deref(),
+            Some("Use list_servers first.")
+        );
+
+        // 2. SSE initialize response with whitespace-only instructions clears
+        // any prior value to None.
+        *next_instructions.lock().unwrap() = Some("  \t\n ".into());
+        let resp = client
+            .post_message(Arc::clone(&uri), init_msg(), None, None, HashMap::new())
+            .await
+            .unwrap();
+        let McpStreamableHttpPostResponse::Sse(mut stream, _) = resp else {
+            panic!("expected SSE response");
+        };
+        while stream.next().await.is_some() {}
+        assert_eq!(slot.read().unwrap().as_deref(), None);
+
+        // 3. SSE initialize response with empty instructions keeps slot None.
+        store_instructions(&slot, Some("stale".into()));
+        *next_instructions.lock().unwrap() = Some(String::new());
+        let resp = client
+            .post_message(uri, init_msg(), None, None, HashMap::new())
+            .await
+            .unwrap();
+        let McpStreamableHttpPostResponse::Sse(mut stream, _) = resp else {
+            panic!("expected SSE response");
+        };
+        while stream.next().await.is_some() {}
+        assert_eq!(slot.read().unwrap().as_deref(), None);
+
+        server_task.abort();
     }
 }

@@ -14,7 +14,7 @@ import (
 	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 )
 
-const organizationWhitelistSideEffects = "Changes the dashboard's demo-access gate when session information is refreshed. Removing whitelisting may show the demo gate or existing trial-ended screen; it is not credential revocation and does not stop in-flight work. Whitelisting suppresses base-tier access-paused billing notifications. Does not change account type, subscriptions, trial records, provider keys or disabled state. Organisations with any trial record, regardless of tier or lifecycle state, are unavailable for this MCP operation. Existing signup, billing and trial lifecycle flows may change whitelisting independently. Records a tenant audit event."
+const organizationWhitelistSideEffects = "Changes the dashboard's demo-access gate when session information is refreshed. Removing whitelisting may show the demo gate or existing trial-ended screen, and stops Speakeasy serving the organization's MCP servers, organization gateway and agent gateways from their next request; it is not credential revocation and does not stop in-flight work. Whitelisting suppresses base-tier access-paused billing notifications. Does not change account type, subscriptions, trial records, provider keys or disabled state. Organisations with any trial record, regardless of tier or lifecycle state, are unavailable for this MCP operation. Existing signup, billing and trial lifecycle flows may change whitelisting independently. Records a tenant audit event."
 
 var errWhitelistTrial = errors.New("organisations with a trial record are unavailable for this whitelist operation; use the staff dashboard")
 
@@ -24,7 +24,7 @@ type OrganizationWhitelistInput struct {
 	OrganizationID string `json:"organization_id" jsonschema:"Exact canonical organization ID from find_organizations, not a slug"`
 
 	// Whitelisted is the desired demo-gate setting.
-	Whitelisted bool `json:"whitelisted" jsonschema:"Whether to bypass the dashboard demo-access gate; does not enable a disabled organization or revoke credentials"`
+	Whitelisted bool `json:"whitelisted" jsonschema:"Whether to bypass the dashboard demo-access gate and serve the organization's MCP servers; does not enable a disabled organization or revoke credentials"`
 }
 
 type organizationWhitelistReceipt struct {

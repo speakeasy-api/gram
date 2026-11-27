@@ -246,9 +246,10 @@ type threadBootstrap struct {
 }
 
 type runtimeMCPServer struct {
-	ID      string            `json:"id"`
-	URL     string            `json:"url"`
-	Headers map[string]string `json:"headers,omitempty"`
+	ID        string            `json:"id"`
+	URL       string            `json:"url"`
+	Headers   map[string]string `json:"headers,omitempty"`
+	IsGateway bool              `json:"is_gateway,omitempty"`
 }
 
 // runtimeMessage is the wire shape for a single replayed transcript entry sent

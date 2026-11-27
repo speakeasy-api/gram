@@ -2,14 +2,21 @@
 //!
 //! Tool definitions serialize ahead of the message history in every
 //! provider's prompt-cache prefix, so any change to the declared tool set
-//! invalidates the cache for the entire transcript. The runner therefore
-//! declares a fixed tool set for the lifetime of a thread and never
-//! advertises MCP tools directly: [`HiddenCatalogSource`] exposes the MCP
-//! catalog for name-based dispatch (direct calls and compose scripts)
-//! while advertising nothing, and `tool_search` delivers schemas in-band
-//! as tool results. Providers accept histories containing calls to
-//! undeclared names; models that grammar-constrain function names to the
-//! declared set route through `compose` instead.
+//! invalidates the cache for the entire transcript. The runner handles MCP
+//! exposure in two modes:
+//! - Per-server mode: declares a fixed tool set and never advertises MCP tools
+//!   directly; [`HiddenCatalogSource`] exposes the MCP catalog for name-based
+//!   dispatch (direct calls and compose scripts) while advertising nothing,
+//!   and `tool_search` delivers schemas in-band as tool results. Providers
+//!   accept histories containing calls to undeclared names; models that
+//!   grammar-constrain function names to the declared set route through
+//!   `compose` instead.
+//! - Single Project Gateway mode: [`HiddenCatalogSource`] directly advertises
+//!   the Project Gateway's fixed set of progressive-discovery meta-tools under
+//!   their bare names (`list_servers`, `describe_server`, `describe_tools`,
+//!   `execute_tool`, `execute_read_only_tool`, `connection_status`) while
+//!   [`PerServerOnlyToolSource`] omits `tool_search`, keeping the declared tool
+//!   set fixed without a redundant catalog search layer.
 
 use std::sync::Arc;
 
@@ -23,31 +30,68 @@ use async_trait::async_trait;
 use serde_json::json;
 use tokio::sync::{mpsc, oneshot};
 
-use crate::mcp_actor::{KnownTools, McpCmd};
+use crate::mcp_actor::{GatewayModeState, KnownTools, McpCmd};
 
-/// Exposes the MCP catalog for dispatch without advertising any specs.
+/// Exposes the MCP catalog for dispatch:
+/// - In per-server mode: advertises no specs (the declared tool set stays
+///   frozen for prompt-cache stability and `tool_search` delivers schemas).
+/// - In single Project Gateway mode: directly advertises the gateway's fixed
+///   meta-tools (`list_servers`, `describe_server`, `describe_tools`,
+///   `execute_tool`, `execute_read_only_tool`, `connection_status`) under
+///   their bare names so the model invokes them without `tool_search`.
 pub struct HiddenCatalogSource {
     catalog: Arc<CatalogReader>,
     cmd_tx: mpsc::Sender<McpCmd>,
     known: KnownTools,
+    gateway_mode: GatewayModeState,
 }
 
 impl HiddenCatalogSource {
-    pub fn new(catalog: CatalogReader, cmd_tx: mpsc::Sender<McpCmd>, known: KnownTools) -> Self {
+    pub fn new(
+        catalog: CatalogReader,
+        cmd_tx: mpsc::Sender<McpCmd>,
+        known: KnownTools,
+        gateway_mode: GatewayModeState,
+    ) -> Self {
         Self {
             catalog: Arc::new(catalog),
             cmd_tx,
             known,
+            gateway_mode,
         }
     }
 }
 
 impl ToolSource for HiddenCatalogSource {
     fn specs(&self) -> Vec<ToolSpec> {
+        if self.gateway_mode.is_active() {
+            return self.gateway_mode.specs();
+        }
         Vec::new()
     }
 
     fn get(&self, name: &ToolName) -> Option<Arc<dyn Tool>> {
+        if let Some((bare_spec, namespaced)) = self.gateway_mode.resolve_bare(&name.0) {
+            if let Some(inner) = self.catalog.get(&namespaced) {
+                return Some(Arc::new(AliasedTool {
+                    spec: bare_spec,
+                    inner: Arc::new(ReconnectingTool {
+                        inner,
+                        cmd_tx: self.cmd_tx.clone(),
+                    }),
+                }));
+            }
+            if self.known.contains(&namespaced.0) {
+                return Some(Arc::new(AliasedTool {
+                    spec: bare_spec,
+                    inner: Arc::new(DeferredMcpTool {
+                        spec: placeholder_spec(&namespaced),
+                        catalog: self.catalog.clone(),
+                        cmd_tx: self.cmd_tx.clone(),
+                    }),
+                }));
+            }
+        }
         if let Some(inner) = self.catalog.get(name) {
             return Some(Arc::new(ReconnectingTool {
                 inner,
@@ -67,10 +111,85 @@ impl ToolSource for HiddenCatalogSource {
 
     fn drain_catalog_events(&self) -> Vec<ToolCatalogEvent> {
         // Drain the underlying broadcast receiver but surface nothing:
-        // the declared tool set is frozen, and catalog changes reach the
-        // model through the disclosure notices and tool_search instead.
+        // per-server mode keeps specs frozen, and gateway mode refreshes
+        // directly from GatewayModeState on every loop step.
         let _ = self.catalog.drain_catalog_events();
         Vec::new()
+    }
+}
+
+/// Wraps a tool under a bare alias (e.g. `execute_tool` -> `mcp_gateway_execute_tool`)
+/// while preserving the underlying tool's execution, permissions, and reconnect
+/// behavior.
+struct AliasedTool {
+    spec: ToolSpec,
+    inner: Arc<dyn Tool>,
+}
+
+#[async_trait]
+impl Tool for AliasedTool {
+    fn spec(&self) -> &ToolSpec {
+        &self.spec
+    }
+
+    fn current_spec(&self) -> Option<ToolSpec> {
+        Some(self.spec.clone())
+    }
+
+    fn proposed_requests(
+        &self,
+        request: &ToolRequest,
+    ) -> Result<Vec<Box<dyn PermissionRequest>>, ToolError> {
+        self.inner.proposed_requests(request)
+    }
+
+    async fn invoke(
+        &self,
+        request: ToolRequest,
+        ctx: &mut ToolContext<'_>,
+    ) -> Result<ToolResult, ToolError> {
+        self.inner.invoke(request, ctx).await
+    }
+
+    async fn invoke_outcome(
+        &self,
+        request: ToolRequest,
+        ctx: &mut ToolContext<'_>,
+    ) -> ToolExecutionOutcome {
+        self.inner.invoke_outcome(request, ctx).await
+    }
+}
+
+/// Exposes a tool (specifically `tool_search`) only in per-server mode; in
+/// single Project Gateway mode it is omitted from declared specs and dispatch
+/// so the model never sees a misleading empty catalog.
+pub struct PerServerOnlyToolSource {
+    tool: Arc<dyn Tool>,
+    gateway_mode: GatewayModeState,
+}
+
+impl PerServerOnlyToolSource {
+    pub fn new(tool: impl Tool + 'static, gateway_mode: GatewayModeState) -> Self {
+        Self {
+            tool: Arc::new(tool),
+            gateway_mode,
+        }
+    }
+}
+
+impl ToolSource for PerServerOnlyToolSource {
+    fn specs(&self) -> Vec<ToolSpec> {
+        if self.gateway_mode.is_active() {
+            return Vec::new();
+        }
+        vec![self.tool.spec().clone()]
+    }
+
+    fn get(&self, name: &ToolName) -> Option<Arc<dyn Tool>> {
+        if self.gateway_mode.is_active() {
+            return None;
+        }
+        (self.tool.spec().name == *name).then(|| Arc::clone(&self.tool))
     }
 }
 
@@ -277,7 +396,15 @@ fn placeholder_spec_described(name: &ToolName, description: &str) -> ToolSpec {
 /// instructive error. Mounted last so real tools always win; its purpose is
 /// to turn calls to hallucinated or undiscovered names into a recovery path
 /// instead of a bare "tool not found".
-pub struct UnknownToolSource;
+pub struct UnknownToolSource {
+    gateway_mode: GatewayModeState,
+}
+
+impl UnknownToolSource {
+    pub fn new(gateway_mode: GatewayModeState) -> Self {
+        Self { gateway_mode }
+    }
+}
 
 impl ToolSource for UnknownToolSource {
     fn specs(&self) -> Vec<ToolSpec> {
@@ -287,12 +414,14 @@ impl ToolSource for UnknownToolSource {
     fn get(&self, name: &ToolName) -> Option<Arc<dyn Tool>> {
         Some(Arc::new(UnknownTool {
             spec: placeholder_spec_described(name, UNRESOLVED_TOOL_DESCRIPTION),
+            gateway_mode: self.gateway_mode.clone(),
         }))
     }
 }
 
 struct UnknownTool {
     spec: ToolSpec,
+    gateway_mode: GatewayModeState,
 }
 
 #[async_trait]
@@ -310,9 +439,14 @@ impl Tool for UnknownTool {
         request: ToolRequest,
         _ctx: &mut ToolContext<'_>,
     ) -> Result<ToolResult, ToolError> {
+        let message = if self.gateway_mode.is_active() {
+            unknown_gateway_tool_message(&self.spec.name)
+        } else {
+            unknown_tool_message(&self.spec.name)
+        };
         Ok(ToolResult::new(ToolResultPart::error(
             request.call_id,
-            ToolOutput::text(unknown_tool_message(&self.spec.name)),
+            ToolOutput::text(message),
         )))
     }
 }
@@ -321,6 +455,14 @@ fn unknown_tool_message(name: &ToolName) -> String {
     format!(
         "tool '{name}' is not in the catalog. Use tool_search to discover available \
          tools and their schemas, then call a discovered tool by its exact name."
+    )
+}
+
+fn unknown_gateway_tool_message(name: &ToolName) -> String {
+    format!(
+        "tool '{name}' is not in the declared toolset. Use list_servers, describe_server, \
+         and describe_tools to discover member tools, then call execute_read_only_tool or \
+         execute_tool with '<server_slug>--<tool_name>'."
     )
 }
 
@@ -367,7 +509,12 @@ mod tests {
         let (writer, reader) = dynamic_catalog("mcp");
         writer.upsert(echo());
         let (cmd_tx, _cmd_rx) = mpsc::channel(1);
-        let source = HiddenCatalogSource::new(reader, cmd_tx, KnownTools::default());
+        let source = HiddenCatalogSource::new(
+            reader,
+            cmd_tx,
+            KnownTools::default(),
+            GatewayModeState::default(),
+        );
 
         assert!(source.specs().is_empty());
         assert!(source.get(&ToolName::new("mcp_srv_echo")).is_some());
@@ -380,7 +527,7 @@ mod tests {
 
     #[test]
     fn unknown_tool_resolves_any_name_without_advertising() {
-        let source = UnknownToolSource;
+        let source = UnknownToolSource::new(GatewayModeState::default());
         let tool = source.get(&ToolName::new("gobblygoop")).unwrap();
         assert!(
             tool.current_spec().is_none(),
@@ -472,10 +619,12 @@ mod tests {
                 }
             }
         });
-        let executor =
-            BasicToolExecutor::new([
-                Arc::new(HiddenCatalogSource::new(reader, cmd_tx, known)) as Arc<dyn ToolSource>
-            ]);
+        let executor = BasicToolExecutor::new([Arc::new(HiddenCatalogSource::new(
+            reader,
+            cmd_tx,
+            known,
+            GatewayModeState::default(),
+        )) as Arc<dyn ToolSource>]);
         let approval = ApprovalRequest {
             task_id: None,
             call_id: None,
