@@ -789,7 +789,7 @@ type AssistantAteActor struct {
 	// @access: confidential
 	WarmUntil pgtype.Timestamptz
 	// WorkOS user ID of the human who initiated this thread, or NULL for userless or unrecorded actors. Immutable after insert.
-	// @access: confidential
+	// @access: confidential-pii
 	InitiatingUserID pgtype.Text
 	// How initiating_user_id was resolved at thread actor creation (Go constants are canonical; defaults to not_recorded for pre-existing rows). Immutable after insert.
 	// @access: confidential
