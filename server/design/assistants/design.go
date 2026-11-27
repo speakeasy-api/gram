@@ -173,6 +173,39 @@ var _ = Service("assistants", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SendAssistantMessage"}`)
 	})
 
+	Method("inferIntent", func() {
+		Description("Infer what the calling user is trying to do from their recent dashboard activity, so the Project Assistant can open with a specific offer of help instead of an empty prompt. The activity journal is sent by the dashboard and is not stored. Returns no goal when the activity is too thin to infer a task.")
+
+		Payload(func() {
+			Attribute("assistant_id", String, "The Project Assistant the inference is for.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("current_path", String, "The dashboard path the user is on, without the organization and project prefix.", func() {
+				MaxLength(500)
+			})
+			Attribute("activity", ArrayOf(AssistantActivityEntry), "The user's recent dashboard activity, oldest first.", func() {
+				MaxLength(60)
+			})
+			Required("assistant_id", "activity")
+
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(AssistantIntent)
+
+		HTTP(func() {
+			POST("/rpc/assistants.inferIntent")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "inferAssistantIntent")
+		Meta("openapi:extension:x-speakeasy-name-override", "inferIntent")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "InferAssistantIntent", "type": "mutation"}`)
+	})
+
 	Method("interruptTurn", func() {
 		Description("Stop whatever a conversation is currently generating. Cancels turns still queued on the conversation's thread and interrupts the turn in flight on the assistant runtime, so the reply stops where it is rather than finishing in the background. Idempotent and safe to call when nothing is running: `stopped` is false when the reply had already finished.")
 
@@ -370,6 +403,34 @@ var SendMessageAttachment = Type("SendMessageAttachment", func() {
 var ListAssistantsResult = Type("ListAssistantsResult", func() {
 	Attribute("assistants", ArrayOf(shared.Assistant), "Assistants for the current project.")
 	Required("assistants")
+})
+
+var AssistantActivityEntry = Type("AssistantActivityEntry", func() {
+	Description("One thing the user did or saw in the dashboard.")
+	Attribute("at", String, "When it happened.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("kind", String, "What kind of entry this is.", func() {
+		Enum("page", "action", "error", "signal")
+	})
+	Attribute("detail", String, "A short description, such as a page title, an action and its outcome, or an error message.", func() {
+		MaxLength(300)
+	})
+	Required("at", "kind", "detail")
+})
+
+var AssistantIntent = Type("AssistantIntent", func() {
+	Description("What the user appears to be trying to do, inferred from their recent activity.")
+	Attribute("goal", String, "The task the user appears to be working on. Absent when no task can be inferred.")
+	Attribute("stage", String, "Where the user is in that task.")
+	Attribute("blocker", String, "What appears to be stopping the user. Absent when nothing is.")
+	Attribute("frustration", String, "How stuck the user appears to be.", func() {
+		Enum("none", "low", "medium", "high")
+	})
+	Attribute("opener", String, "A short, specific line the assistant can open with. Absent when there is nothing specific to say.")
+	Attribute("suggested_prompts", ArrayOf(String), "Up to three short prompts the user can send.")
+	Attribute("confidence", Float64, "How sure the inference is, from 0 to 1.")
+	Required("frustration", "suggested_prompts", "confidence")
 })
 
 var InterruptTurnResult = Type("InterruptTurnResult", func() {

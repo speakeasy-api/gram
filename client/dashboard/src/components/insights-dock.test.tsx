@@ -69,6 +69,11 @@ const mocks = vi.hoisted(() => ({
       ],
     },
   })),
+  intent: null as {
+    opener?: string;
+    suggestedPrompts: string[];
+  } | null,
+  intentActive: vi.fn((_active: boolean) => undefined),
 }));
 
 vi.mock("@/elements", async () => {
@@ -180,6 +185,13 @@ vi.mock("@/hooks/useServerAssistantTransport", () => ({
     };
   },
 }));
+vi.mock("@/components/assistant-activity", () => ({
+  useRecordDashboardActivity: vi.fn(),
+  useAssistantIntent: ({ active }: { active: boolean }) => {
+    mocks.intentActive(active);
+    return mocks.intent;
+  },
+}));
 vi.mock("@/hooks/useDrainInfiniteQuery", () => ({
   useDrainInfiniteQuery: vi.fn(),
 }));
@@ -256,6 +268,8 @@ vi.mock("react-router", async (importOriginal) => ({
 
 afterEach(cleanup);
 beforeEach(() => {
+  mocks.intent = null;
+  mocks.intentActive.mockClear();
   mocks.recentChats = undefined;
   mocks.listeners.clear();
   mocks.elementsConfig.mockClear();
@@ -842,6 +856,26 @@ describe("InsightsProvider", () => {
       await waitFor(() => expect(mocks.composerText).toBe("pending draft"));
       expect(mocks.runtimeMount).toHaveBeenCalledTimes(1);
       expect(mocks.switchToNewThread).toHaveBeenCalledTimes(1);
+    });
+
+    it("opens with what the user seems to be doing", () => {
+      mocks.assistantReady = false;
+      mocks.intent = {
+        opener: "Discover keeps failing for billing-api. Want me to check it?",
+        suggestedPrompts: ["Why does Discover fail?"],
+      };
+      render(page());
+      const input = screen.getByLabelText("Ask the Project Assistant");
+      act(() => input.focus());
+      expect(mocks.intentActive).toHaveBeenLastCalledWith(true);
+      expect(
+        screen.getByText(
+          "Discover keeps failing for billing-api. Want me to check it?",
+        ),
+      ).toBeTruthy();
+      expect(
+        screen.getByRole("button", { name: "Why does Discover fail?" }),
+      ).toBeTruthy();
     });
 
     it("does not replay the focus shortcut when connection hands over a draft", () => {
