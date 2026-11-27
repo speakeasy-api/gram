@@ -313,6 +313,10 @@ type fakeControlServer struct {
 	auth      chan string
 }
 
+func (s *fakeControlServer) GetAtespace(_ context.Context, _ *ateapiv1.GetAtespaceRequest) (*ateapiv1.Atespace, error) {
+	return nil, status.Error(codes.NotFound, "atespace created lazily") //nolint:wrapcheck // gRPC server handler returns status.Error directly.
+}
+
 func (s *fakeControlServer) GetActor(ctx context.Context, req *ateapiv1.GetActorRequest) (*ateapiv1.Actor, error) {
 	if md, ok := metadata.FromIncomingContext(ctx); ok {
 		if vals := md.Get("authorization"); len(vals) > 0 {
@@ -453,12 +457,9 @@ func TestControlClientRejectsMismatchedAPIServerName(t *testing.T) {
 	cfg.RouterAddress = cfg.APIAddress
 	cfg.APIServerName = "wrong.ate.test"
 	client, err := New(t.Context(), cfg)
-	require.NoError(t, err)
-	defer func() { _ = client.Close() }()
-
-	_, err = client.GetActor(t.Context(), &ateapiv1.GetActorRequest{
-		Actor: &ateapiv1.ObjectRef{Atespace: "test-space", Name: "actor-one"},
-	})
+	if client != nil {
+		_ = client.Close()
+	}
 	require.Error(t, err)
 }
 

@@ -613,6 +613,13 @@ func TestKitATEBackendPrepareTurnStopResumeAndReap(t *testing.T) {
 	require.NotContains(t, string(actorEntry.bootstrapFiles[".kit/config.toml"]), "tokenFile")
 	require.NotContains(t, string(actorEntry.bootstrapFiles[".kit/credentials/mcp.json"]), "workload_identity")
 	require.NotNil(t, actorEntry.egressPolicy)
+	require.Len(t, actorEntry.egressPolicy.GetRules(), 1)
+	rule := actorEntry.egressPolicy.GetRules()[0]
+	require.Nil(t, rule.GetHttp())
+	require.Nil(t, rule.GetHttps())
+	require.Equal(t, []string{"ai.speakeasy.com", "api.speakeasy.test", "tools.speakeasy.test"}, rule.GetTlsPassthrough().GetHostnames())
+	require.Nil(t, rule.GetTlsPassthrough().GetPorts().GetAll())
+	require.Equal(t, []int32{443}, rule.GetTlsPassthrough().GetPorts().GetNumbers())
 	cluster.mu.Unlock()
 
 	// Verify metadata does not persist unused SnapshotURI.

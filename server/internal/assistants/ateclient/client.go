@@ -15,7 +15,9 @@ import (
 
 	ateapiv1 "go.ate.dev/substrate/api/ateapi/v1"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/status"
 
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
@@ -172,12 +174,27 @@ func New(ctx context.Context, cfg Config) (*Client, error) {
 		return nil, errors.New("create ATE control connection")
 	}
 
-	return &Client{
+	c := &Client{
 		config:    cfg,
 		conn:      conn,
 		control:   ateapiv1.NewControlClient(conn),
 		tlsConfig: tlsConfig,
-	}, nil
+	}
+
+	// Verify the authenticated mTLS/JWT control-plane handshake at startup so
+	// misconfigured addresses, CAs, server names, or credentials fail fast.
+	// NotFound is expected when the atespace will be created lazily on Ensure.
+	probeCtx, cancel := context.WithTimeout(ctx, cfg.ConnectTimeout)
+	defer cancel()
+	_, err = c.control.GetAtespace(probeCtx, &ateapiv1.GetAtespaceRequest{
+		Atespace: &ateapiv1.ObjectRef{Atespace: "", Name: cfg.Atespace},
+	})
+	if err != nil && status.Code(err) != codes.NotFound {
+		_ = conn.Close()
+		return nil, fmt.Errorf("verify ATE control connection: %w", sanitizedRPCError(err))
+	}
+
+	return c, nil
 }
 
 // Close closes the underlying gRPC control-plane connection.
