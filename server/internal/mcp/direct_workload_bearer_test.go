@@ -735,3 +735,52 @@ func TestDirectWorkloadBearer_GatewayAdmissionMetrics(t *testing.T) {
 	)])
 	require.Len(t, points, 3)
 }
+
+func TestDirectWorkloadBearer_DisabledAndNonWhitelistedOrgRefused(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name        string
+		whitelisted bool
+		disabled    bool
+	}{
+		{name: "disabled", whitelisted: true, disabled: true},
+		{name: "not_whitelisted", whitelisted: false, disabled: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			f := newWorkloadGrantFixture(t)
+			f.setAssertionReuse(t, true)
+			gateway, _, _ := seedDirectWorkloadProjectGateway(t, f)
+			enableWorkloadInference(t, f)
+
+			upstream := &workloadInferenceCompletionClient{}
+			router := newDirectWorkloadChatMux(t, f, upstream)
+			projectPath := "/projects/" + f.fx.target.ProjectID.String() + "/chat/completions"
+
+			token := f.directAssertion(t, f.subject, mcp.DirectWorkloadProjectGatewayAudience, mcp.DirectWorkloadInferenceAudience)
+
+			// Warm Stage-1 cache on both Project Gateway and project-scoped inference while org is served.
+			gwResp, err := serveProjectGatewayHTTP(t, f.ti, gateway, gateway.projectSlug, token, listServersBody(t))
+			require.NoError(t, err)
+			require.Equal(t, http.StatusOK, gwResp.Code, gwResp.Body.String())
+
+			w := postCompletionRequest(router, projectPath, token, nil, "")
+			require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+			require.Len(t, upstream.requests, 1)
+
+			// Flip organization serving state; next request must be refused immediately despite Stage-1 cache.
+			require.NoError(t, testrepo.New(f.ti.conn).SetOrganizationServingStateFixture(f.ctx, testrepo.SetOrganizationServingStateFixtureParams{
+				ID:          f.fx.orgID,
+				Whitelisted: tc.whitelisted,
+				Disabled:    tc.disabled,
+			}))
+
+			_, err = serveProjectGatewayHTTP(t, f.ti, gateway, gateway.projectSlug, token, listServersBody(t))
+			requireOopsCode(t, err, oops.CodeNotFound)
+
+			w = postCompletionRequest(router, projectPath, token, nil, "")
+			require.Equal(t, http.StatusUnauthorized, w.Code, w.Body.String())
+			require.Len(t, upstream.requests, 1, "disabled or non-whitelisted organization must not reach inference upstream")
+		})
+	}
+}

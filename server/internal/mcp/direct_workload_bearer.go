@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/orgserving"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	assertioncore "github.com/speakeasy-api/gram/server/internal/usersessions/assertion"
@@ -411,6 +412,17 @@ func (s *Service) authorizeDirectWorkloadInference(
 	}
 	if err != nil {
 		return ctx, true, fmt.Errorf("authorize workload inference: %w", err)
+	}
+
+	organization, err := s.orgsRepo.GetOrganizationMetadata(ctx, project.OrganizationID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ctx, true, oops.C(oops.CodeUnauthorized)
+	}
+	if err != nil {
+		return ctx, true, fmt.Errorf("authorize workload inference: %w", err)
+	}
+	if orgserving.Check(organization) != orgserving.RefusalNone {
+		return ctx, true, oops.E(oops.CodeUnauthorized, nil, "invalid inference credential")
 	}
 
 	// Project-scoped inference has no user_session_issuer in the route; key
