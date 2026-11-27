@@ -144,6 +144,15 @@ func NewChatMessageWriter(logger *slog.Logger, db *pgxpool.Pool, assetStorage as
 	return w, shutdown
 }
 
+// Transcripts returns the reader for chat message bodies the writer seals
+// for. Nil-safe; nil reads plaintext.
+func (w *ChatMessageWriter) Transcripts() *transcriptstore.Transcripts {
+	if w == nil {
+		return nil
+	}
+	return w.transcripts
+}
+
 // WithTranscripts seals an encrypted copy of each message in the same
 // transaction as the write, for projects with encrypted transcripts. Configure it before
 // serving requests, after the schema migration and organization key
@@ -611,7 +620,7 @@ func (w *ChatMessageWriter) WriteCorrelated(ctx context.Context, projectID uuid.
 		return 0, fmt.Errorf("get project organization id: %w", err)
 	}
 
-	upsert := repo.UpsertCorrelatedChatMessageParams{
+	upsert := transcriptstore.UpsertCorrelatedChatMessageParams{
 		ID:                param.ID,
 		ChatID:            param.ChatID,
 		Role:              param.Role,
@@ -662,7 +671,7 @@ func (w *ChatMessageWriter) WriteCorrelated(ctx context.Context, projectID uuid.
 
 // writeCorrelatedIn is WriteCorrelated inside its transaction. It reports
 // whether a row was inserted or promoted.
-func (w *ChatMessageWriter) writeCorrelatedIn(ctx context.Context, tx pgx.Tx, organizationID string, projectID uuid.UUID, upsert repo.UpsertCorrelatedChatMessageParams, writes []MessageWrite, occurredAt time.Time) (bool, error) {
+func (w *ChatMessageWriter) writeCorrelatedIn(ctx context.Context, tx pgx.Tx, organizationID string, projectID uuid.UUID, upsert transcriptstore.UpsertCorrelatedChatMessageParams, writes []MessageWrite, occurredAt time.Time) (bool, error) {
 	param := writes[0].Params
 	if err := requireChatProject(ctx, tx, param.ChatID, param.ProjectID); err != nil {
 		return false, err

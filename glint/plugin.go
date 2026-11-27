@@ -40,6 +40,7 @@ type ruleSettings struct {
 	ResearchImportBoundary     researchImportBoundarySettings     `json:"research-import-boundary"`
 	NoRawAuthzChecks           noRawAuthzChecksSettings           `json:"no-raw-authz-checks"`
 	NoPublicSchemaSql          noPublicSchemaSqlSettings          `json:"no-public-schema-sql"`
+	NoPlaintextTranscriptRead  noPlaintextTranscriptReadSettings  `json:"no-plaintext-transcript-read"`
 }
 
 type plugin struct {
@@ -116,6 +117,9 @@ func (p *plugin) BuildAnalyzers() ([]*analysis.Analyzer, error) {
 	}
 	if !p.settings.Rules.NoPublicSchemaSql.Disabled {
 		analyzers = append(analyzers, newNoPublicSchemaSqlAnalyzer(p.settings.Rules.NoPublicSchemaSql))
+	}
+	if !p.settings.Rules.NoPlaintextTranscriptRead.Disabled {
+		analyzers = append(analyzers, newNoPlaintextTranscriptReadAnalyzer(p.settings.Rules.NoPlaintextTranscriptRead))
 	}
 
 	return analyzers, nil

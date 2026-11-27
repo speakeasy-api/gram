@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"log/slog"
 	"strings"
 	"time"
@@ -51,12 +52,22 @@ type Service struct {
 	authz      *authz.Engine
 	features   feature.Provider
 	chatWriter *chat.ChatMessageWriter
-	completion openrouter.CompletionClient
-	jev        *intentpolicy.JevEvaluator
-	guardrail  intentpolicy.Guardrail
-	engine     *intentpolicy.Engine
-	results    gcp.Publisher[*intentpolicyv1.Assessment]
-	now        func() time.Time
+	// transcripts reads chat message bodies, opening encrypted shadows for
+	// the projects that keep them. Nil reads plaintext.
+	transcripts *transcriptstore.Transcripts
+	completion  openrouter.CompletionClient
+	jev         *intentpolicy.JevEvaluator
+	guardrail   intentpolicy.Guardrail
+	engine      *intentpolicy.Engine
+	results     gcp.Publisher[*intentpolicyv1.Assessment]
+	now         func() time.Time
+}
+
+// WithTranscripts makes session analysis read message bodies from encrypted
+// shadows for the projects that keep them.
+func (s *Service) WithTranscripts(transcripts *transcriptstore.Transcripts) *Service {
+	s.transcripts = transcripts
+	return s
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -84,19 +95,20 @@ func NewService(
 		return nil, fmt.Errorf("compile intent guardrail: %w", err)
 	}
 	return &Service{
-		tracer:     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/intentpolicies"),
-		logger:     logger,
-		db:         db,
-		auth:       auth.New(logger, db, sessions, authzEngine),
-		authz:      authzEngine,
-		features:   features,
-		chatWriter: chatWriter,
-		completion: completion,
-		jev:        intentpolicy.NewJevEvaluator(jevClassifier),
-		guardrail:  guardrail,
-		engine:     engine,
-		results:    results,
-		now:        time.Now,
+		transcripts: nil,
+		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/intentpolicies"),
+		logger:      logger,
+		db:          db,
+		auth:        auth.New(logger, db, sessions, authzEngine),
+		authz:       authzEngine,
+		features:    features,
+		chatWriter:  chatWriter,
+		completion:  completion,
+		jev:         intentpolicy.NewJevEvaluator(jevClassifier),
+		guardrail:   guardrail,
+		engine:      engine,
+		results:     results,
+		now:         time.Now,
 	}, nil
 }
 
@@ -194,7 +206,7 @@ func (s *Service) AnalyzeSession(ctx context.Context, payload *gen.AnalyzeSessio
 		}
 		generation = &latest
 	}
-	rows, err := q.ListChatMessagesByGeneration(ctx, chatrepo.ListChatMessagesByGenerationParams{ChatID: chatID, ProjectID: projectID, Generation: *generation})
+	rows, err := s.transcripts.ListChatMessagesByGeneration(ctx, s.db, projectID, chatID, *generation)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load chat messages").LogError(ctx, logger)
 	}

@@ -1265,7 +1265,7 @@ func newStartCommand() *cli.Command {
 			// L1 prompt-injection engine is the LLM judge (POC-193). A completions
 			// client is always constructed, so the judge is always available.
 			hookJudgeLimiter := openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient))
-			hookPIScanner := promptinjection.NewScanner(logger, newPICascade(ctx, logger, tracerProvider, meterProvider, completionsClient, guardianPolicy, openRouter, orEndpoints, db).Classify)
+			hookPIScanner := promptinjection.NewScanner(logger, newPICascade(ctx, logger, tracerProvider, meterProvider, completionsClient, guardianPolicy, openRouter, orEndpoints, db, transcripts).Classify)
 
 			hookPromptJudge := ppopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, hookJudgeLimiter).Evaluate
 			hookPromptPolicyScanner := promptpolicy.NewScanner(logger, hookPromptJudge)
@@ -1335,8 +1335,9 @@ func newStartCommand() *cli.Command {
 				WithRiskFindings(chatRiskFindings).
 				WithTranscripts(transcripts).
 				WithStreamRotation(meterProvider, c.Duration("stream-max-age")).
-				WithMaskedSummaries(chat.NewSummaryGenerator(db, chatClient, chatredact.New()))
+				WithMaskedSummaries(chat.NewSummaryGenerator(db, chatClient, chatredact.New()).WithTranscripts(transcripts))
 			assistantsCore := assistants.NewServiceCore(logger, tracerProvider, meterProvider, db, guardianPolicy, encryptionClient, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemLogger, contextWindowResolver, auditLogger, assistantIdentities, authzEngine)
+			assistantsCore.SetTranscripts(transcripts)
 			assistantsCore.SetWakeCanceller(triggerApp)
 			assistantsCore.SetDashboardIngestor(triggerApp)
 			assistantsCore.SetChatMessageWriter(chatWriter)
@@ -1856,6 +1857,7 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("create intent policies service: %w", err)
 			}
+			intentPoliciesSvc.WithTranscripts(transcripts)
 			intentpolicies.Attach(mux, intentPoliciesSvc)
 			chatanalysis.Attach(mux, chatanalysis.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger,
 				&background.TemporalChatAnalysisSignaler{TemporalEnv: temporalEnv, Logger: logger}))
@@ -2062,6 +2064,7 @@ func newStartCommand() *cli.Command {
 				return err
 			}
 			platformMCPCfg := platformMCPConfig{
+				Transcripts:               transcripts,
 				AICatalog:                 aiCatalog,
 				CustomDomainTargetSuffix:  customDomainTargetSuffix,
 				DeploymentRedeploy:        deploymentsService,
@@ -2264,6 +2267,7 @@ func newStartCommand() *cli.Command {
 				platformToolsets,
 				approvalService,
 			)
+			riskService.WithTranscripts(transcripts)
 			chatWriter.AddObserver(riskService)
 			risk.Attach(mux, riskService)
 
@@ -2347,7 +2351,7 @@ func newStartCommand() *cli.Command {
 					close(workerInterruptCh)
 				})
 				group.Go(func() {
-					piScanner := promptinjection.NewScanner(logger, newPICascade(ctx, logger, tracerProvider, meterProvider, completionsClient, guardianPolicy, openRouter, orEndpoints, db).Classify)
+					piScanner := promptinjection.NewScanner(logger, newPICascade(ctx, logger, tracerProvider, meterProvider, completionsClient, guardianPolicy, openRouter, orEndpoints, db, transcripts).Classify)
 
 					var slackDirectoryRefresher slackdirectoryconnections.TokenRefresher
 					if id, secret := c.String("slack-client-id"), c.String("slack-client-secret"); id != "" && id != "unset" && secret != "" && secret != "unset" {
@@ -2356,6 +2360,7 @@ func newStartCommand() *cli.Command {
 
 					temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 						Connections:                    connectionRecorder,
+						Transcripts:                    transcripts,
 						FleetHealthCache:               admin.NewHookClientsCache(logger, cache.NewRedisCacheAdapter(redisClient), tm.NewHookClients(chDB), deviceagentversions.NewStore(redisClient)),
 						HookFleetMetrics:               newHookFleetMetrics(ctx, logger, meterProvider, db, chReadDB),
 						CatalogPromotions:              catalogpromotion.New(db, mcpregistry.New(db, registryValidator).WithAssetBaseURL(siteURL), productFeatures, tm.NewMCPServerHealth(db, chDB), catalogPromotionDelivery(c, guardianPolicy), guardianPolicy),

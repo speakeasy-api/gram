@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"log/slog"
 	"net/url"
 	"slices"
@@ -481,6 +482,10 @@ type DashboardIngestor interface {
 }
 
 type ServiceCore struct {
+	// transcripts reads chat message bodies, opening encrypted shadows for
+	// the projects that keep them. Nil reads plaintext.
+	transcripts *transcriptstore.Transcripts
+
 	// Set only by production Kit composition; existing assistants are untouched.
 	newAssistantRuntimeVersion  int16
 	newAssistantRuntimeEligible func(context.Context, pgx.Tx, assistantRecord) (bool, error)
@@ -551,6 +556,7 @@ func NewServiceCore(
 	}
 
 	return &ServiceCore{
+		transcripts:                 nil,
 		newAssistantRuntimeVersion:  0,
 		newAssistantRuntimeEligible: nil,
 		identities:                  identities,
@@ -582,6 +588,12 @@ func NewServiceCore(
 		outboundOrigin:              nil,
 		managedCeilingsRepaired:     sync.Map{},
 	}
+}
+
+// SetTranscripts wires the reader for chat message bodies. Set after
+// construction, before the transcript shadow is configured in some commands.
+func (s *ServiceCore) SetTranscripts(transcripts *transcriptstore.Transcripts) {
+	s.transcripts = transcripts
 }
 
 // SetWakeCanceller is set after construction to break an import cycle:
@@ -4379,10 +4391,7 @@ func (s *ServiceCore) selfHealCorruptHistory(ctx context.Context, chatID uuid.UU
 	}
 	billingUserID := conv.FromPGTextOrEmpty[string](chatRow.UserID)
 
-	messages, err := chatrepo.New(s.db).ListLatestGenerationChatMessages(ctx, chatrepo.ListLatestGenerationChatMessagesParams{
-		ChatID:    chatID,
-		ProjectID: projectID,
-	})
+	messages, err := s.transcripts.ListLatestGenerationChatMessages(ctx, s.db, projectID, chatID)
 	if err != nil {
 		return fmt.Errorf("self-heal: list chat messages: %w", err)
 	}
@@ -4480,10 +4489,7 @@ func (s *ServiceCore) selfHealCorruptHistory(ctx context.Context, chatID uuid.UU
 
 func (s *ServiceCore) loadChatHistory(ctx context.Context, chatID uuid.UUID, projectID uuid.UUID) ([]runtimeMessage, error) {
 	// Earlier generations are audit-only snapshots; only the latest is the live transcript.
-	messages, err := chatrepo.New(s.db).ListLatestGenerationChatMessages(ctx, chatrepo.ListLatestGenerationChatMessagesParams{
-		ChatID:    chatID,
-		ProjectID: projectID,
-	})
+	messages, err := s.transcripts.ListLatestGenerationChatMessages(ctx, s.db, projectID, chatID)
 	if err != nil {
 		return nil, fmt.Errorf("list assistant chat messages: %w", err)
 	}

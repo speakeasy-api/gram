@@ -3,12 +3,12 @@ package evaluation
 import (
 	"context"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"testing"
 
 	"github.com/google/uuid"
 	conversationv1 "github.com/speakeasy-api/gram/infra/gen/gram/conversation/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
-	"github.com/speakeasy-api/gram/server/internal/sigint/repo"
 	"github.com/speakeasy-api/gram/server/internal/streams"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/mock"
@@ -22,7 +22,7 @@ type countingMessages struct {
 	err      error
 }
 
-func (s *countingMessages) LoadMessages(ctx context.Context, org string, project uuid.UUID, ids []uuid.UUID) ([]repo.LoadEvaluationMessagesRow, error) {
+func (s *countingMessages) LoadMessages(ctx context.Context, org string, project uuid.UUID, ids []uuid.UUID) ([]transcriptstore.LoadEvaluationMessagesRow, error) {
 	s.requests[org+"/"+project.String()] = append(s.requests[org+"/"+project.String()], ids...)
 	if s.err != nil {
 		return nil, s.err

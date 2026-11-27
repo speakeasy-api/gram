@@ -28,7 +28,7 @@ func TestJudgeWindowBoundsAndTenantIsolation(t *testing.T) {
 		ids[i], err = queries.CreateChatMessageForTest(ctx, riskrepo.CreateChatMessageForTestParams{ChatID: chatID, ProjectID: uuid.NullUUID{UUID: projectID, Valid: true}, Content: fmt.Sprintf("message %d", i), UserID: pgtype.Text{String: "", Valid: false}, ExternalUserID: pgtype.Text{String: "", Valid: false}})
 		require.NoError(t, err)
 	}
-	loader := judgemessage.NewWindowLoader(ti.conn)
+	loader := judgemessage.NewWindowLoader(ti.conn, nil)
 	target := judgemessage.New(message.User, "", "message 3")
 	target.AnchorID, target.ChatID = ids[3], chatID
 	window, err := loader.Load(ctx, orgID, projectID.String(), target)
@@ -67,7 +67,7 @@ func TestJudgeWindowRespectsGenerations(t *testing.T) {
 	require.NoError(t, err)
 	currentID, err := queries.CreateJudgeWindowMessageForTest(ctx, riskrepo.CreateJudgeWindowMessageForTestParams{ChatID: chatID, ProjectID: uuid.NullUUID{UUID: projectID, Valid: true}, Content: "current", Generation: 1})
 	require.NoError(t, err)
-	loader := judgemessage.NewWindowLoader(ti.conn)
+	loader := judgemessage.NewWindowLoader(ti.conn, nil)
 	target := judgemessage.New(message.User, "", "current")
 	target.AnchorID, target.ChatID = currentID, chatID
 	window, err := loader.Load(ctx, orgID, projectID.String(), target)
@@ -107,7 +107,7 @@ func TestJudgeWindowBoundsLegacyToolJSON(t *testing.T) {
 	require.NoError(t, err)
 	target := judgemessage.New(message.User, "", "live")
 	target.ChatID = chatID
-	window, err := judgemessage.NewWindowLoader(ti.conn).Load(ctx, orgID, projectID.String(), target)
+	window, err := judgemessage.NewWindowLoader(ti.conn, nil).Load(ctx, orgID, projectID.String(), target)
 	require.NoError(t, err)
 	require.Len(t, window.Messages, 3)
 	require.Empty(t, window.Messages[0].ToolCalls)

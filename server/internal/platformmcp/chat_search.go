@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/chat/chattitle"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"github.com/speakeasy-api/gram/server/internal/chatredact"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -60,12 +61,15 @@ var (
 // their own sessions and their owned agents' sessions; an explicit transcript
 // grant widens that to the project. Organization administration never does.
 type ChatSearchService struct {
-	db         *pgxpool.Pool
-	engine     *authz.Engine
-	audit      *audit.Logger
-	budget     OperationBudget
-	references *subjectReferenceCodec
-	redactor   *chatredact.Redactor
+	db *pgxpool.Pool
+	// transcripts reads message bodies, opening encrypted shadows for the
+	// projects that keep them. Nil reads plaintext.
+	transcripts *transcriptstore.Transcripts
+	engine      *authz.Engine
+	audit       *audit.Logger
+	budget      OperationBudget
+	references  *subjectReferenceCodec
+	redactor    *chatredact.Redactor
 }
 
 // NewChatSearchService composes the external-only transcript tools. Missing
@@ -75,7 +79,17 @@ func NewChatSearchService(db *pgxpool.Pool, engine *authz.Engine, auditLogger *a
 	if db == nil || engine == nil || auditLogger == nil || !budget.valid() || err != nil {
 		return nil
 	}
-	return &ChatSearchService{db: db, engine: engine, audit: auditLogger, budget: budget, references: codec, redactor: chatredact.New()}
+	return &ChatSearchService{db: db, transcripts: nil, engine: engine, audit: auditLogger, budget: budget, references: codec, redactor: chatredact.New()}
+}
+
+// WithTranscripts makes chat search and read open message bodies through
+// transcripts. Nil-safe.
+func (s *ChatSearchService) WithTranscripts(transcripts *transcriptstore.Transcripts) *ChatSearchService {
+	if s == nil {
+		return nil
+	}
+	s.transcripts = transcripts
+	return s
 }
 
 func (s *ChatSearchService) valid() bool {
@@ -317,8 +331,9 @@ func (s *ChatSearchService) Search(ctx context.Context, principal Principal, inp
 		}
 	}
 
-	rows, err := platformrepo.New(s.db).SearchPlatformChatMessages(ctx, platformrepo.SearchPlatformChatMessagesParams{
-		ProjectID: project.ID, OrganizationID: principal.OrganizationID,
+	rows, err := s.transcripts.SearchPlatformChatMessages(ctx, s.db, transcriptstore.SearchPlatformChatMessagesParams{
+		OpenShadows: false,
+		ProjectID:   project.ID, OrganizationID: principal.OrganizationID,
 		FromTime: conv.ToPGTimestamptz(from), ToTime: conv.ToPGTimestamptz(to),
 		// The own scope is ANDed with every caller filter, so owner_user_id,
 		// participant_id and chat_ids can only narrow what the member may see.
@@ -508,7 +523,7 @@ func (s *ChatSearchService) Read(ctx context.Context, principal Principal, input
 	if err := s.recordAccess(ctx, principal, project.ID, chatID, chat.OwnerUserID); err != nil {
 		return zero, err
 	}
-	rows, err := queries.ReadPlatformChatMessages(ctx, platformrepo.ReadPlatformChatMessagesParams{ProjectID: project.ID, OrganizationID: principal.OrganizationID, MessageID: messageID, ChatID: chatID, ContextSize: int32(size), FollowingLimit: int32(size + 1)})
+	rows, err := s.transcripts.ReadPlatformChatMessages(ctx, s.db, transcriptstore.ReadPlatformChatMessagesParams{OpenShadows: false, ProjectID: project.ID, OrganizationID: principal.OrganizationID, MessageID: messageID, ChatID: chatID, ContextSize: int32(size), FollowingLimit: int32(size + 1)})
 	if err != nil {
 		return zero, fmt.Errorf("read chat messages: %w", err)
 	}

@@ -377,7 +377,7 @@ func TestRetroExclusion_RegexReconstruction(t *testing.T) {
 	// Reconstruct and match exactly as the reconcile activity does: load the
 	// anchor, resolve the chat it is attributed to, hydrate, then gate the
 	// candidates on the recorded match length.
-	reveal := risk.NewRevealMatcher(testenv.NewLogger(t), pgRepo, nil)
+	reveal := risk.NewRevealMatcher(testenv.NewLogger(t), ti.conn, nil, nil)
 	c := candidates[0]
 	row := &chrepo.RiskFindingUnmaskRow{
 		ID:             c.ID,
@@ -609,7 +609,7 @@ func TestRetroExclusion_RegexSkipsReparentedCandidate(t *testing.T) {
 		OrganizationID: orgID,
 	}
 
-	reveal := risk.NewRevealMatcher(testenv.NewLogger(t), pgRepo, nil)
+	reveal := risk.NewRevealMatcher(testenv.NewLogger(t), ti.conn, nil, nil)
 	anchor := reveal.LoadAnchor(ctx, projectID, row)
 	require.Equal(t, uuid.NullUUID{UUID: anchorChat, Valid: true}, anchor.ChatID)
 

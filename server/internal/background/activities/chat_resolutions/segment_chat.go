@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"log/slog"
 	"strings"
 	"time"
@@ -19,16 +20,20 @@ import (
 )
 
 type SegmentChat struct {
-	logger     *slog.Logger
-	repo       *repo.Queries
-	chatClient openrouter.CompletionClient
+	logger      *slog.Logger
+	db          *pgxpool.Pool
+	repo        *repo.Queries
+	chatClient  openrouter.CompletionClient
+	transcripts *transcriptstore.Transcripts
 }
 
-func NewSegmentChat(logger *slog.Logger, db *pgxpool.Pool, chatClient openrouter.CompletionClient) *SegmentChat {
+func NewSegmentChat(logger *slog.Logger, db *pgxpool.Pool, chatClient openrouter.CompletionClient, transcripts *transcriptstore.Transcripts) *SegmentChat {
 	return &SegmentChat{
-		logger:     logger,
-		repo:       repo.New(db),
-		chatClient: chatClient,
+		logger:      logger,
+		db:          db,
+		repo:        repo.New(db),
+		chatClient:  chatClient,
+		transcripts: transcripts,
 	}
 }
 
@@ -53,7 +58,7 @@ type SegmentChatOutput struct {
 }
 
 func (s *SegmentChat) Do(ctx context.Context, args SegmentChatArgs) (*SegmentChatOutput, error) {
-	messages, err := loadMessagesAtPinnedGeneration(ctx, s.repo, args.ChatID, args.ProjectID, args.Generation)
+	messages, err := loadMessagesAtPinnedGeneration(ctx, s.repo, s.transcripts, s.db, args.ChatID, args.ProjectID, args.Generation)
 	if err != nil {
 		return nil, err
 	}

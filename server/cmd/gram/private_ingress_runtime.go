@@ -254,6 +254,10 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	r.cleanup = append(r.cleanup, stop)
 	turnStream := chat.NewTurnStream(redisClient)
 	chatWriter = chatWriter.WithTurnStream(turnStream)
+	transcripts, err := configureTranscripts(ctx, c, db, chatWriter, orgEncryption, logger, tracerProvider, meterProvider)
+	if err != nil {
+		return nil, err
+	}
 	efficacySignaler := background.NewThrottledSignaler(&background.TemporalSkillEfficacySignaler{TemporalEnv: r.Temporal, Logger: logger}, background.SkillEfficacySignalCooldown, logger)
 	analysisSignaler := background.NewThrottledSignaler(&background.TemporalChatAnalysisSignaler{TemporalEnv: r.Temporal, Logger: logger}, background.ChatAnalysisSignalCooldown, logger)
 	r.cleanup = append(r.cleanup, efficacySignaler.Shutdown, analysisSignaler.Shutdown)
@@ -267,6 +271,7 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 		// require_approval policies deny here with a clear message instead of
 		// pointing agents at a server they may not reach.
 		nil,
+		transcripts,
 	)
 	if err != nil {
 		return nil, err
@@ -324,9 +329,7 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	}
 	clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
 	clientAssertionSigner.PinManagedSigner(c.String(identityProviderSigningServiceAccount))
-	if _, err := configureTranscripts(ctx, c, db, chatWriter, orgEncryption, logger, tracerProvider, meterProvider); err != nil {
-		return nil, err
-	}
+	assistantsCore.SetTranscripts(transcripts)
 	issuerGate := newInternalSessionIssuerGate(c, db, featureFlags, false)
 	issuerSigner := internalsessionissuers.NewSigner(logger, tracerProvider, meterProvider, db, issuerGate, gcpIdentity, kmsSigningClients, internalIssuerSignerConfig(c, callbackOrigins.Outbound))
 	issuerGate.SetSigningAuthority(issuerSigner.CheckAuthority)

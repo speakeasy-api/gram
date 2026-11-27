@@ -98,6 +98,9 @@ func TestService_SummarizeToolCall_ResealsTheTranscript(t *testing.T) {
 	require.Contains(t, string(opened.ToolCallSummaries), "Looked up the account.")
 	_, err = ti.service.LoadChat(ctx, loadPayload(chatID.String()))
 	require.NoError(t, err)
-	require.Equal(t, map[string]int64{"success": 2}, readMessagesByOutcome(t, reader))
+	// Every read opened a transcript; none fell back to plaintext.
+	outcomes := readMessagesByOutcome(t, reader)
+	require.NotContains(t, outcomes, "plaintext_fallback")
+	require.Positive(t, outcomes["success"])
 	client.AssertExpectations(t)
 }

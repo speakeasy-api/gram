@@ -10,41 +10,35 @@ import (
 
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
-// MessageUpdater changes the protected fields of an existing message, so every copy of
-// it (plaintext and encrypted transcript) gets the same value, inside a
-// transaction from Begin, which loads the key before the transaction begins.
-type MessageUpdater interface {
-	Begin(ctx context.Context, projectID uuid.UUID) (pgx.Tx, error)
-	UpdateChatMessage(ctx context.Context, db repo.DBTX, organizationID string, projectID, chatID, messageID uuid.UUID, apply func(*repo.ChatMessage) error) (bool, error)
-}
-
 type AnalyzeSegment struct {
 	logger          *slog.Logger
 	repo            *repo.Queries
 	chatClient      openrouter.CompletionClient
+	db              *pgxpool.Pool
 	telemetryLogger *telemetry.Logger
-	messages        MessageUpdater
+	transcripts     *transcriptstore.Transcripts
 }
 
-func NewAnalyzeSegment(logger *slog.Logger, db *pgxpool.Pool, chatClient openrouter.CompletionClient, telemetryLogger *telemetry.Logger, messages MessageUpdater) *AnalyzeSegment {
+func NewAnalyzeSegment(logger *slog.Logger, db *pgxpool.Pool, chatClient openrouter.CompletionClient, telemetryLogger *telemetry.Logger, transcripts *transcriptstore.Transcripts) *AnalyzeSegment {
 	return &AnalyzeSegment{
 		logger:          logger,
 		repo:            repo.New(db),
 		chatClient:      chatClient,
+		db:              db,
 		telemetryLogger: telemetryLogger,
-		messages:        messages,
+		transcripts:     transcripts,
 	}
 }
 
@@ -76,7 +70,7 @@ type segmentAnalysisResult struct {
 }
 
 func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error {
-	allMessages, err := loadMessagesAtPinnedGeneration(ctx, a.repo, args.ChatID, args.ProjectID, args.Generation)
+	allMessages, err := loadMessagesAtPinnedGeneration(ctx, a.repo, a.transcripts, a.db, args.ChatID, args.ProjectID, args.Generation)
 	if err != nil {
 		return err
 	}
@@ -111,7 +105,7 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 	score := min(max(result.Score, 0), 100)
 	// Outcome notes are part of the protected fields, which may be encrypted,
 	// so Begin loads the key before the transaction begins.
-	tx, err := a.messages.Begin(ctx, args.ProjectID)
+	tx, err := a.transcripts.Begin(ctx, a.db, args.OrgID, args.ProjectID)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
@@ -137,7 +131,7 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 	// the notes, in step.
 	for _, msgID := range updated {
 		tc := judged[msgID]
-		_, err := a.messages.UpdateChatMessage(ctx, tx, args.OrgID, args.ProjectID, args.ChatID, msgID, func(m *repo.ChatMessage) error {
+		_, err := a.transcripts.UpdateChatMessage(ctx, tx, args.OrgID, args.ProjectID, args.ChatID, msgID, func(m *repo.ChatMessage) error {
 			m.ToolOutcome = conv.ToPGText(tc.Outcome)
 			m.ToolOutcomeNotes = conv.ToPGText(tc.Notes)
 			return nil

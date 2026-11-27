@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"strings"
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/message"
-	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
 
 // Window is ordered evidence for one target and at most four neighbors.
@@ -23,9 +23,17 @@ type Window struct {
 }
 
 // WindowLoader retrieves conversation evidence only after a prefilter escalates.
-type WindowLoader struct{ db repo.DBTX }
+type WindowLoader struct {
+	db          transcriptstore.DBTX
+	transcripts *transcriptstore.Transcripts
+}
 
-func NewWindowLoader(db repo.DBTX) *WindowLoader { return &WindowLoader{db: db} }
+// NewWindowLoader reads evidence from db through transcripts, which opens
+// encrypted shadows for the projects that keep them. A nil transcripts reads
+// plaintext.
+func NewWindowLoader(db transcriptstore.DBTX, transcripts *transcriptstore.Transcripts) *WindowLoader {
+	return &WindowLoader{db: db, transcripts: transcripts}
+}
 
 func (l *WindowLoader) Load(ctx context.Context, orgID, projectID string, target Message) (Window, error) {
 	window := Window{Messages: []Payload{RenderPayload(target)}, TargetIndex: 0}
@@ -37,7 +45,7 @@ func (l *WindowLoader) Load(ctx context.Context, orgID, projectID string, target
 	if err != nil {
 		return Window{Messages: nil, TargetIndex: 0}, fmt.Errorf("parse judge context project: %w", err)
 	}
-	rows, err := repo.New(l.db).GetJudgeMessageWindow(ctx, repo.GetJudgeMessageWindowParams{
+	rows, err := l.transcripts.GetJudgeMessageWindow(ctx, l.db, transcriptstore.JudgeWindowParams{
 		AnchorID: target.AnchorID, ChatID: target.ChatID, ProjectID: project, OrganizationID: orgID,
 	})
 	if err != nil {
@@ -46,7 +54,7 @@ func (l *WindowLoader) Load(ctx context.Context, orgID, projectID string, target
 	return windowFromRows(target, rows)
 }
 
-func windowFromRows(target Message, rows []repo.GetJudgeMessageWindowRow) (Window, error) {
+func windowFromRows(target Message, rows []transcriptstore.JudgeWindowMessage) (Window, error) {
 	window := Window{Messages: make([]Payload, 0, len(rows)), TargetIndex: -1}
 	if len(rows) > 5 {
 		return window, errors.New("judge context exceeds five messages")

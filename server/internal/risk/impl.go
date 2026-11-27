@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"log/slog"
 	"regexp"
 	"slices"
@@ -101,6 +102,9 @@ type RiskPolicyResultsCleaner interface {
 }
 
 type Service struct {
+	// transcripts reads chat message bodies, opening encrypted shadows for
+	// the projects that keep them. Nil reads plaintext.
+	transcripts                  *transcriptstore.Transcripts
 	tracer                       trace.Tracer
 	logger                       *slog.Logger
 	db                           *pgxpool.Pool
@@ -177,7 +181,8 @@ func NewObserver(
 	riskRecorder *metering.RiskRecorder,
 ) chat.MessageObserver {
 	return &Service{
-		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/risk"),
+		transcripts: nil,
+		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/risk"),
 
 		logger:                       logger.With(attr.SlogComponent("risk")),
 		db:                           db,
@@ -253,10 +258,11 @@ func NewService(
 	}
 
 	return &Service{
-		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/risk"),
-		logger: logger,
-		db:     db,
-		repo:   repo.New(db),
+		transcripts: nil,
+		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/risk"),
+		logger:      logger,
+		db:          db,
+		repo:        repo.New(db),
 		policies: policycore.NewWithToolAnnotations(db, tooldisposition.New(logger, db, cacheImpl), policycore.MutationDependencies{
 			Transactor:       db,
 			Auditor:          policyMutationAuditor{logger: auditLogger},
@@ -3024,10 +3030,7 @@ func (s *Service) evaluateGuardrailForChat(
 		return nil, oops.E(oops.CodeUnexpected, err, "load chat").LogError(ctx, s.logger)
 	}
 
-	rows, err := chatRepo.ListLatestGenerationChatMessages(ctx, chatrepo.ListLatestGenerationChatMessagesParams{
-		ChatID:    chatID,
-		ProjectID: projectID,
-	})
+	rows, err := s.transcripts.ListLatestGenerationChatMessages(ctx, s.db, projectID, chatID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load chat messages").LogError(ctx, s.logger)
 	}
@@ -3989,4 +3992,11 @@ func (s *Service) toolApprovalsEnabled(ctx context.Context, authCtx *contextvalu
 		)
 	}
 	return evaluation == feature.EvaluationEnabled
+}
+
+// WithTranscripts makes guardrail evaluation read message bodies from
+// encrypted shadows for the projects that keep them.
+func (s *Service) WithTranscripts(transcripts *transcriptstore.Transcripts) *Service {
+	s.transcripts = transcripts
+	return s
 }

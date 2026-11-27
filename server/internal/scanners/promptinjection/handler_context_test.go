@@ -18,7 +18,7 @@ func TestParentlessPartDoesNotLoadLiveHistory(t *testing.T) {
 	target := promptInjectionJudgeMessage(event)
 	require.Equal(t, uuid.Nil, target.AnchorID)
 	require.Equal(t, uuid.Nil, target.ChatID)
-	window, err := judgemessage.NewWindowLoader(nil).Load(t.Context(), "", "", target)
+	window, err := judgemessage.NewWindowLoader(nil, nil).Load(t.Context(), "", "", target)
 	require.NoError(t, err)
 	require.Len(t, window.Messages, 1)
 	parentID := uuid.New()

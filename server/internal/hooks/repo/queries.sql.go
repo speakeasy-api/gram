@@ -100,35 +100,6 @@ func (q *Queries) EmployeeHasSharedExternalOrg(ctx context.Context, arg Employee
 	return column_1, err
 }
 
-const findAssistantToolCallMessageID = `-- name: FindAssistantToolCallMessageID :one
-SELECT id
-FROM chat_messages
-WHERE project_id = $1
-  AND chat_id = $2
-  AND role = 'assistant'
-  AND tool_calls IS NOT NULL
-  AND EXISTS (
-    SELECT 1
-    FROM jsonb_array_elements(tool_calls) tc
-    WHERE tc->>'id' = $3::text
-  )
-ORDER BY created_at DESC
-LIMIT 1
-`
-
-type FindAssistantToolCallMessageIDParams struct {
-	ProjectID  uuid.NullUUID
-	ChatID     uuid.UUID
-	ToolCallID string
-}
-
-func (q *Queries) FindAssistantToolCallMessageID(ctx context.Context, arg FindAssistantToolCallMessageIDParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, findAssistantToolCallMessageID, arg.ProjectID, arg.ChatID, arg.ToolCallID)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
-}
-
 const getChatProjectID = `-- name: GetChatProjectID :one
 SELECT project_id
 FROM chats

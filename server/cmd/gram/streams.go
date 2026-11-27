@@ -649,7 +649,9 @@ func newStreamsCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("create gitleaks enforcement handler: %w", err)
 			}
-			promptInjectionScanner := promptinjection.NewScanner(logger, newPICascade(ctx, logger, tracerProvider, meterProvider, completionsClient, guardianPolicy, openRouter, orEndpoints, db).Classify)
+			// The streams process does not configure transcript shadows, so the
+			// judge's evidence window reads plaintext here for every project.
+			promptInjectionScanner := promptinjection.NewScanner(logger, newPICascade(ctx, logger, tracerProvider, meterProvider, completionsClient, guardianPolicy, openRouter, orEndpoints, db, nil).Classify)
 			promptInjectionHandler := promptinjection.NewHandler(logger, meterProvider, promptInjectionScanner, findingsPub, riskRecorder)
 			promptInjectionEnforceHandler, err := promptinjection.NewEnforceHandler(
 				logger,

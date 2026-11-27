@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"log/slog"
 	"slices"
 	"strings"
@@ -25,16 +26,20 @@ import (
 )
 
 type GenerateChatTitle struct {
-	logger     *slog.Logger
-	repo       *repo.Queries
-	chatClient openrouter.CompletionClient
+	logger      *slog.Logger
+	db          *pgxpool.Pool
+	repo        *repo.Queries
+	chatClient  openrouter.CompletionClient
+	transcripts *transcriptstore.Transcripts
 }
 
-func NewGenerateChatTitle(logger *slog.Logger, db *pgxpool.Pool, chatClient openrouter.CompletionClient) *GenerateChatTitle {
+func NewGenerateChatTitle(logger *slog.Logger, db *pgxpool.Pool, chatClient openrouter.CompletionClient, transcripts *transcriptstore.Transcripts) *GenerateChatTitle {
 	return &GenerateChatTitle{
-		logger:     logger,
-		repo:       repo.New(db),
-		chatClient: chatClient,
+		logger:      logger,
+		db:          db,
+		repo:        repo.New(db),
+		chatClient:  chatClient,
+		transcripts: transcripts,
 	}
 }
 
@@ -96,10 +101,7 @@ func (g *GenerateChatTitle) Do(ctx context.Context, args GenerateChatTitleArgs) 
 		return nil
 	}
 
-	messages, err := g.repo.ListLatestGenerationChatMessages(ctx, repo.ListLatestGenerationChatMessagesParams{
-		ChatID:    chatID,
-		ProjectID: chatRow.ProjectID,
-	})
+	messages, err := g.transcripts.ListLatestGenerationChatMessages(ctx, g.db, chatRow.ProjectID, chatID)
 	if err != nil {
 		return fmt.Errorf("list chat messages: %w", err)
 	}

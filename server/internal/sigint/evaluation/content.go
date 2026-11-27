@@ -8,6 +8,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"io"
 	"net/url"
 	"os"
@@ -18,7 +20,6 @@ import (
 	"cloud.google.com/go/storage"
 	"github.com/speakeasy-api/gram/server/internal/classifier"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
-	"github.com/speakeasy-api/gram/server/internal/sigint/repo"
 )
 
 // BlobReader reads immutable assets through the configured storage backend.
@@ -116,12 +117,12 @@ type messageState struct {
 
 // targetContent projects the target onto the same content-only shape as history.
 // Target attribution and the ordering anchor remain on the conversation input.
-func targetContent(row repo.LoadEvaluationMessagesRow) repo.LoadEvaluationHistoryRow {
+func targetContent(row transcriptstore.LoadEvaluationMessagesRow) transcriptstore.LoadEvaluationHistoryRow {
 	var assetURL string
 	if row.ContentAssetUrl.Valid {
 		assetURL = row.ContentAssetUrl.String
 	}
-	return repo.LoadEvaluationHistoryRow{
+	return transcriptstore.LoadEvaluationHistoryRow{
 		ID:              row.ID,
 		Role:            row.Role,
 		Content:         row.Content,
@@ -131,10 +132,13 @@ func targetContent(row repo.LoadEvaluationMessagesRow) repo.LoadEvaluationHistor
 		RowLocalContent: row.RowLocalContent,
 		AttachmentUris:  row.AttachmentUris,
 		ContentTooLarge: false,
+		// The row is already opened; it carries no shadow of its own.
+		ShadowCiphertext: pgtype.Text{String: "", Valid: false},
+		ShadowCurrent:    false,
 	}
 }
 
-func inputWithBudget(ctx context.Context, reader BlobReader, project string, m repo.LoadEvaluationHistoryRow, budget int) (classifier.Entry, error) {
+func inputWithBudget(ctx context.Context, reader BlobReader, project string, m transcriptstore.LoadEvaluationHistoryRow, budget int) (classifier.Entry, error) {
 	var empty classifier.Entry
 	if m.ContentTooLarge {
 		return empty, permanent("content_too_large")

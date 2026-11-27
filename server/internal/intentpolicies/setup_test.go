@@ -11,6 +11,7 @@ import (
 
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/OpenRouterTeam/go-sdk/optionalnullable"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	intentpolicyv1 "github.com/speakeasy-api/gram/infra/gen/gram/intentpolicy/v1"
@@ -20,10 +21,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"github.com/speakeasy-api/gram/server/internal/classifier"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/intentpolicies"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption/orgencryptiontest"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -108,8 +113,17 @@ func newTestService(t *testing.T, jev classifier.Classifier) (context.Context, *
 
 func newTestServiceWithFlags(t *testing.T, jev classifier.Classifier, flags feature.Provider) (context.Context, *intentpolicies.Service) {
 	t.Helper()
-	ctx, svc, _ := newTestServiceWithResults(t, jev, flags)
+	ctx, svc, _, _ := newTestServiceWith(t, jev, flags, false)
 	return ctx, svc
+}
+
+// newTestServiceWithShadows also returns the database. With shadows, the
+// caller's project keeps encrypted transcript shadows: uploads capture them
+// and analysis reads through them.
+func newTestServiceWithShadows(t *testing.T, jev classifier.Classifier, flags feature.Provider, shadows bool) (context.Context, *intentpolicies.Service, *pgxpool.Pool) {
+	t.Helper()
+	ctx, svc, conn, _ := newTestServiceWith(t, jev, flags, shadows)
+	return ctx, svc, conn
 }
 
 // recordingPublisher captures published assessments and settles every publish
@@ -136,6 +150,12 @@ func (p *recordingPublisher) published() []*intentpolicyv1.Assessment {
 
 func newTestServiceWithResults(t *testing.T, jev classifier.Classifier, flags feature.Provider) (context.Context, *intentpolicies.Service, *recordingPublisher) {
 	t.Helper()
+	ctx, svc, _, results := newTestServiceWith(t, jev, flags, false)
+	return ctx, svc, results
+}
+
+func newTestServiceWith(t *testing.T, jev classifier.Classifier, flags feature.Provider, shadows bool) (context.Context, *intentpolicies.Service, *pgxpool.Pool, *recordingPublisher) {
+	t.Helper()
 	ctx := t.Context()
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
@@ -161,7 +181,21 @@ func newTestServiceWithResults(t *testing.T, jev classifier.Classifier, flags fe
 
 	svc, err := intentpolicies.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, flags, writer, geminiStub{CompletionClient: nil, body: geminiBenign}, jev, results)
 	require.NoError(t, err)
-	return ctx, svc, results
+	if !shadows {
+		return ctx, svc, conn, results
+	}
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	keys := orgencryptiontest.New(t, conn)
+	require.NoError(t, keys.Provisioner.EnsureUseCase(ctx, authCtx.ActiveOrganizationID, orgencryption.UseCaseChatTranscripts, orgencryption.SystemActor()))
+	store, err := transcriptstore.New(conn, keys.Service, logger, tracerProvider, testenv.NewMeterProvider(t))
+	require.NoError(t, err)
+	transcripts := transcriptstore.NewTranscripts(store, *authCtx.ProjectID)
+	writer.WithTranscripts(transcripts)
+	svc.WithTranscripts(transcripts)
+	return ctx, svc, conn, results
 }
 
 func requireOopsCode(t *testing.T, err error, code oops.Code) {

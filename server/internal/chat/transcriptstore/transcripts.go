@@ -3,6 +3,7 @@ package transcriptstore
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -22,6 +23,10 @@ type Transcripts struct {
 	store     *Store
 	projects  map[uuid.UUID]struct{}
 	encrypted map[uuid.UUID]struct{}
+
+	// organizations caches each listed project's organization, which opening
+	// a shadow needs and most readers do not have at hand.
+	organizations *sync.Map
 }
 
 // NewTranscripts encrypts transcripts for the listed projects only. An empty list
@@ -36,7 +41,7 @@ func NewTranscripts(store *Store, projectIDs ...uuid.UUID) *Transcripts {
 	for _, projectID := range projectIDs {
 		projects[projectID] = struct{}{}
 	}
-	return &Transcripts{store: store, projects: projects, encrypted: map[uuid.UUID]struct{}{}}
+	return &Transcripts{store: store, projects: projects, encrypted: map[uuid.UUID]struct{}{}, organizations: &sync.Map{}}
 }
 
 // WithEncryptedProjects puts projects in encrypted mode: the transcript is the

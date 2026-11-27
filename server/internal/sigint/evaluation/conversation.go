@@ -3,6 +3,7 @@ package evaluation
 import (
 	"context"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"maps"
 	"time"
 
@@ -16,7 +17,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/sigint/matching"
 	"github.com/speakeasy-api/gram/server/internal/sigint/readings"
-	"github.com/speakeasy-api/gram/server/internal/sigint/repo"
 	"github.com/speakeasy-api/gram/server/internal/streams"
 )
 
@@ -25,34 +25,35 @@ const ConversationMessageKind = "conversation.message"
 
 // MessageSource resolves a tenant's persisted messages in a single batch.
 type MessageSource interface {
-	LoadMessages(context.Context, string, uuid.UUID, []uuid.UUID) ([]repo.LoadEvaluationMessagesRow, error)
+	LoadMessages(context.Context, string, uuid.UUID, []uuid.UUID) ([]transcriptstore.LoadEvaluationMessagesRow, error)
 }
 
 // HistorySource resolves non-system predecessors of a persisted target snapshot,
 // newest first. System messages do not consume the history limit. Inline payloads
 // beyond the byte budget are replaced by ContentTooLarge markers before transfer.
 type HistorySource interface {
-	LoadHistory(context.Context, string, uuid.UUID, repo.LoadEvaluationMessagesRow, int, int) ([]repo.LoadEvaluationHistoryRow, error)
+	LoadHistory(context.Context, string, uuid.UUID, transcriptstore.LoadEvaluationMessagesRow, int, int) ([]transcriptstore.LoadEvaluationHistoryRow, error)
 }
 
 // LoadHistory pins context to the target's tenant, conversation, generation and timestamp.
-func (r *Repository) LoadHistory(ctx context.Context, org string, project uuid.UUID, target repo.LoadEvaluationMessagesRow, limit, budget int) ([]repo.LoadEvaluationHistoryRow, error) {
-	rows, err := repo.New(r.db).LoadEvaluationHistory(ctx, repo.LoadEvaluationHistoryParams{
+func (r *Repository) LoadHistory(ctx context.Context, org string, project uuid.UUID, target transcriptstore.LoadEvaluationMessagesRow, limit, budget int) ([]transcriptstore.LoadEvaluationHistoryRow, error) {
+	rows, err := r.transcripts.LoadEvaluationHistory(ctx, r.db, transcriptstore.LoadEvaluationHistoryParams{
+		OpenShadows:    false,
 		OrganizationID: org, ProjectID: project, ChatID: target.ChatID, Generation: target.Generation,
 		TargetID: target.ID, TargetCreatedAt: target.CreatedAt, TargetSeq: target.Seq, HistoryLimit: conv.SafeInt32(limit),
 		ContentBudget: int64(budget),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("load evaluation history: %w", err)
+		return nil, err //nolint:wrapcheck // transcriptstore already names the query in the error.
 	}
 	return rows, nil
 }
 
 // LoadMessages reads non-system message state and attachment locators together.
-func (r *Repository) LoadMessages(ctx context.Context, org string, project uuid.UUID, ids []uuid.UUID) ([]repo.LoadEvaluationMessagesRow, error) {
-	rows, err := repo.New(r.db).LoadEvaluationMessages(ctx, repo.LoadEvaluationMessagesParams{OrganizationID: org, ProjectID: project, MessageIds: ids})
+func (r *Repository) LoadMessages(ctx context.Context, org string, project uuid.UUID, ids []uuid.UUID) ([]transcriptstore.LoadEvaluationMessagesRow, error) {
+	rows, err := r.transcripts.LoadEvaluationMessages(ctx, r.db, transcriptstore.LoadEvaluationMessagesParams{OpenShadows: false, OrganizationID: org, ProjectID: project, MessageIds: ids})
 	if err != nil {
-		return nil, fmt.Errorf("load evaluation messages: %w", err)
+		return nil, err //nolint:wrapcheck // transcriptstore already names the query in the error.
 	}
 
 	return rows, nil
@@ -127,7 +128,7 @@ func (h *ConversationHandler) HandleBatchWithResult(ctx context.Context, message
 			continue
 		}
 
-		byID := make(map[uuid.UUID]repo.LoadEvaluationMessagesRow, len(rows))
+		byID := make(map[uuid.UUID]transcriptstore.LoadEvaluationMessagesRow, len(rows))
 		for _, row := range rows {
 			byID[row.ID] = row
 		}
@@ -170,7 +171,7 @@ func (h *ConversationHandler) Handle(ctx context.Context, m *conversationv1.Mess
 	return h.evaluate(ctx, m, rows[0])
 }
 
-func (h *ConversationHandler) evaluate(ctx context.Context, m *conversationv1.MessageEvent, row repo.LoadEvaluationMessagesRow) error {
+func (h *ConversationHandler) evaluate(ctx context.Context, m *conversationv1.MessageEvent, row transcriptstore.LoadEvaluationMessagesRow) error {
 	p := row
 	if p.ID.String() != m.GetMessageId() || p.ProjectID.UUID.String() != m.GetProjectId() || p.ChatID.String() != m.GetConversationId() {
 		var event Event
@@ -189,7 +190,7 @@ func (h *ConversationHandler) evaluate(ctx context.Context, m *conversationv1.Me
 
 type conversationInput struct {
 	message *conversationv1.MessageEvent
-	stored  repo.LoadEvaluationMessagesRow
+	stored  transcriptstore.LoadEvaluationMessagesRow
 	blobs   BlobReader
 	history HistorySource
 }

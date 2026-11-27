@@ -71,18 +71,19 @@ func (g *GetUserFeedbackForChat) Do(ctx context.Context, args GetUserFeedbackFor
 		return nil, fmt.Errorf("list user feedback: %w", err)
 	}
 
-	messages, err := g.repo.ListChatMessagesByGeneration(ctx, repo.ListChatMessagesByGenerationParams{
+	// Only the message order matters here, so read IDs and never a body.
+	messageIDs, err := g.repo.ListChatMessageIDsByGeneration(ctx, repo.ListChatMessageIDsByGenerationParams{
 		ChatID:     args.ChatID,
 		ProjectID:  args.ProjectID,
 		Generation: generation,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("list chat messages by generation: %w", err)
+		return nil, fmt.Errorf("list chat message ids by generation: %w", err)
 	}
 
-	messageIndexMap := make(map[uuid.UUID]int, len(messages))
-	for i, msg := range messages {
-		messageIndexMap[msg.ID] = i
+	messageIndexMap := make(map[uuid.UUID]int, len(messageIDs))
+	for i, id := range messageIDs {
+		messageIndexMap[id] = i
 	}
 
 	userFeedback := make([]UserFeedback, 0, len(feedback))

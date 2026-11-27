@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"log/slog"
 	"slices"
 	"sort"
@@ -89,6 +90,9 @@ type RecallRiskFindingReader interface {
 // carry organization + owner user_id + not-deleted + the personal-account
 // exclusion), so there is no fetch-then-authorize step anywhere in this file.
 type SessionRecallService struct {
+	// transcripts reads message bodies, opening encrypted shadows for the
+	// projects that keep them. Nil reads plaintext.
+	transcripts   *transcriptstore.Transcripts
 	logger        *slog.Logger
 	db            *pgxpool.Pool
 	repo          *platformrepo.Queries
@@ -117,6 +121,7 @@ func NewSessionRecallService(
 	budget OperationBudget,
 ) *SessionRecallService {
 	return &SessionRecallService{
+		transcripts:   nil,
 		logger:        logger,
 		db:            db,
 		repo:          repo,
@@ -126,6 +131,13 @@ func NewSessionRecallService(
 		budget:        budget,
 		handoffMinter: nil,
 	}
+}
+
+// WithTranscripts makes session recall open message bodies through
+// transcripts.
+func (s *SessionRecallService) WithTranscripts(transcripts *transcriptstore.Transcripts) *SessionRecallService {
+	s.transcripts = transcripts
+	return s
 }
 
 func (s *SessionRecallService) WithHandoffMinter(minter SessionHandoffMinter) *SessionRecallService {
@@ -220,7 +232,7 @@ func (s *SessionRecallService) riskFindingMasks(
 	ctx context.Context,
 	principal Principal,
 	chatID, projectID uuid.UUID,
-	messages []platformrepo.ListOwnedChatTranscriptMessagesForRecallRow,
+	messages []transcriptstore.ListOwnedChatTranscriptMessagesForRecallRow,
 ) (findingMasks, error) {
 	policies, err := riskrepo.New(s.db).ListEnabledRiskPolicyIDsByOrganizationProject(ctx, riskrepo.ListEnabledRiskPolicyIDsByOrganizationProjectParams{
 		OrganizationID: principal.OrganizationID,
@@ -275,8 +287,9 @@ func (s *SessionRecallService) renderOwnedSessionDigest(ctx context.Context, pri
 	if err != nil {
 		return empty, fmt.Errorf("resolve owned session for recall: %w", err)
 	}
-	messages, err := s.repo.ListOwnedChatTranscriptMessagesForRecall(ctx, platformrepo.ListOwnedChatTranscriptMessagesForRecallParams{
-		ChatID: chatID, ProjectID: uuid.NullUUID{UUID: row.ProjectID, Valid: true}, OrganizationID: principal.OrganizationID,
+	messages, err := s.transcripts.ListOwnedChatTranscriptMessagesForRecall(ctx, s.db, transcriptstore.ListOwnedChatTranscriptMessagesForRecallParams{
+		OpenShadows: false,
+		ChatID:      chatID, ProjectID: uuid.NullUUID{UUID: row.ProjectID, Valid: true}, OrganizationID: principal.OrganizationID,
 		UserID: principal.UserID, RowLimit: recallMessageRowCap,
 	})
 	if err != nil {
@@ -469,7 +482,7 @@ type findingMasks struct {
 // finding's bytes, overlapping spans, spans anchored somewhere other than the
 // content column) has its entire prose replaced by withheldContentPlaceholder
 // rather than served with a known finding unmasked.
-func maskFindingSpans(rows []platformrepo.ListOwnedChatTranscriptMessagesForRecallRow, findings []chrepo.RiskFindingUnmaskRow) findingMasks {
+func maskFindingSpans(rows []transcriptstore.ListOwnedChatTranscriptMessagesForRecallRow, findings []chrepo.RiskFindingUnmaskRow) findingMasks {
 	if len(findings) == 0 {
 		return findingMasks{content: nil, neutralized: 0, withheld: 0}
 	}
@@ -529,7 +542,7 @@ func maskFindingSpans(rows []platformrepo.ListOwnedChatTranscriptMessagesForReca
 	return applyFindingMasks(rows, byMessage)
 }
 
-func applyFindingMasks(rows []platformrepo.ListOwnedChatTranscriptMessagesForRecallRow, byMessage map[uuid.UUID]*recallMessageSpans) findingMasks {
+func applyFindingMasks(rows []transcriptstore.ListOwnedChatTranscriptMessagesForRecallRow, byMessage map[uuid.UUID]*recallMessageSpans) findingMasks {
 	out := findingMasks{content: make(map[uuid.UUID]string, len(byMessage)), neutralized: 0, withheld: 0}
 	for _, row := range rows {
 		ms, ok := byMessage[row.ID]
@@ -618,7 +631,7 @@ type transcriptTurns struct {
 // findings are unknown); tool-call names from such rows still render, because
 // the recall path redacts tool payloads unconditionally and names come from
 // the tool_calls column, not the unanalyzed prose.
-func turnsFromRows(rows []platformrepo.ListOwnedChatTranscriptMessagesForRecallRow, masked map[uuid.UUID]string) transcriptTurns {
+func turnsFromRows(rows []transcriptstore.ListOwnedChatTranscriptMessagesForRecallRow, masked map[uuid.UUID]string) transcriptTurns {
 	out := transcriptTurns{turns: make([]sessionhandoff.Turn, 0, len(rows)), offloaded: 0, unanalyzed: 0, undecodedToolCalls: 0, source: ""}
 	for _, row := range rows {
 		if row.Role == "system" {

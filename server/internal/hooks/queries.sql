@@ -407,21 +407,6 @@ DO UPDATE SET
   , updated_at     = clock_timestamp()
 RETURNING linked_user_id;
 
--- name: FindAssistantToolCallMessageID :one
-SELECT id
-FROM chat_messages
-WHERE project_id = sqlc.arg(project_id)
-  AND chat_id = sqlc.arg(chat_id)
-  AND role = 'assistant'
-  AND tool_calls IS NOT NULL
-  AND EXISTS (
-    SELECT 1
-    FROM jsonb_array_elements(tool_calls) tc
-    WHERE tc->>'id' = sqlc.arg(tool_call_id)::text
-  )
-ORDER BY created_at DESC
-LIMIT 1;
-
 -- name: InsertShadowMCPBlockResult :exec
 INSERT INTO risk_results (
     id

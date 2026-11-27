@@ -56,7 +56,7 @@ func (f *transcriptWriterFixture) message(content string) chat.MessageWrite {
 
 func (f *transcriptWriterFixture) assertTranscript(t *testing.T, id uuid.UUID) {
 	t.Helper()
-	row, err := chatrepo.New(f.conn).GetKitProjectionMessage(t.Context(), chatrepo.GetKitProjectionMessageParams{ProjectID: uuid.NullUUID{UUID: f.projectID, Valid: true}, ID: id})
+	row, err := (*transcriptstore.Transcripts)(nil).GetKitProjectionMessage(t.Context(), f.conn, f.projectID, id)
 	require.NoError(t, err)
 	opened, err := f.store.Load(t.Context(), f.orgID, f.projectID, id)
 	require.NoError(t, err)
@@ -105,7 +105,7 @@ func TestTranscriptWriterNative(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, 1, n)
 	f.assertTranscript(t, m.Params.ID)
-	row, err := chatrepo.New(f.conn).GetKitProjectionMessage(t.Context(), chatrepo.GetKitProjectionMessageParams{ProjectID: uuid.NullUUID{UUID: f.projectID, Valid: true}, ID: m.Params.ID})
+	row, err := (*transcriptstore.Transcripts)(nil).GetKitProjectionMessage(t.Context(), f.conn, f.projectID, m.Params.ID)
 	require.NoError(t, err)
 	require.Equal(t, m.Params.Content, row.Content, "transcript storage must retain plaintext")
 }
@@ -356,7 +356,7 @@ func TestTranscriptWriterEncryptedRepatchKeepsRiskAnalysis(t *testing.T) {
 	changed, err = f.writer.ProjectMessage(t.Context(), f.projectID, m.Params.ID, guard, build)
 	require.NoError(t, err)
 	require.False(t, changed, "an unchanged re-patch changes nothing")
-	row, err := chatrepo.New(f.conn).GetKitProjectionMessage(t.Context(), chatrepo.GetKitProjectionMessageParams{ProjectID: uuid.NullUUID{UUID: f.projectID, Valid: true}, ID: m.Params.ID})
+	row, err := (*transcriptstore.Transcripts)(nil).GetKitProjectionMessage(t.Context(), f.conn, f.projectID, m.Params.ID)
 	require.NoError(t, err)
 	require.Empty(t, row.Content, "encrypted mode keeps the plaintext empty")
 	require.True(t, row.RiskAnalyzedAt.Valid, "an unchanged re-patch keeps the completed risk analysis")
@@ -365,7 +365,7 @@ func TestTranscriptWriterEncryptedRepatchKeepsRiskAnalysis(t *testing.T) {
 	changed, err = f.writer.ProjectMessage(t.Context(), f.projectID, m.Params.ID, guard, build)
 	require.NoError(t, err)
 	require.True(t, changed)
-	row, err = chatrepo.New(f.conn).GetKitProjectionMessage(t.Context(), chatrepo.GetKitProjectionMessageParams{ProjectID: uuid.NullUUID{UUID: f.projectID, Valid: true}, ID: m.Params.ID})
+	row, err = (*transcriptstore.Transcripts)(nil).GetKitProjectionMessage(t.Context(), f.conn, f.projectID, m.Params.ID)
 	require.NoError(t, err)
 	require.False(t, row.RiskAnalyzedAt.Valid, "changed content is analyzed again")
 	encrypted := transcriptstore.NewTranscripts(f.store).WithEncryptedProjects(f.projectID)
@@ -405,7 +405,7 @@ func TestTranscriptWriterEncryptedInsertsStoreNoPlaintext(t *testing.T) {
 		external.Params.ID:   {content: "EXAMPLE imported content", toolCalls: ""},
 	}
 	for id, want := range wants {
-		row, err := chatrepo.New(f.conn).GetKitProjectionMessage(t.Context(), chatrepo.GetKitProjectionMessageParams{ProjectID: uuid.NullUUID{UUID: f.projectID, Valid: true}, ID: id})
+		row, err := (*transcriptstore.Transcripts)(nil).GetKitProjectionMessage(t.Context(), f.conn, f.projectID, id)
 		require.NoError(t, err)
 		require.Empty(t, row.Content, "chat_messages never holds the plaintext")
 		require.Empty(t, row.ToolCalls)

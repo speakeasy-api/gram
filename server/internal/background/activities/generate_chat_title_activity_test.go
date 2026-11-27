@@ -118,7 +118,7 @@ func (c titleTestChat) get(t *testing.T) chatrepo.GetChatRow {
 func (c titleTestChat) run(t *testing.T, client openrouter.CompletionClient) {
 	t.Helper()
 
-	act := activities.NewGenerateChatTitle(testenv.NewLogger(t), c.conn, client)
+	act := activities.NewGenerateChatTitle(testenv.NewLogger(t), c.conn, client, nil)
 	require.NoError(t, act.Do(t.Context(), activities.GenerateChatTitleArgs{
 		ChatID: c.chatID.String(), OrgID: c.orgID, ProjectID: c.projectID.String(),
 	}))

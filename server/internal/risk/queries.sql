@@ -831,61 +831,6 @@ SET risk_analyzed_at = clock_timestamp()
 WHERE id = ANY(@content_part_ids::uuid[])
   AND project_id = @project_id;
 
--- name: GetMessageContentBatch :many
--- The scanned user's id rides along so the LLM judge's completion telemetry
--- can attribute scanning volume to whose traffic was analyzed. Same
--- attribution rule as the risk overview top users: the message's own user_id
--- wins, the chat owner's is the fallback — and a soft-deleted chat's owner
--- never is, while its messages remain eligible for scanning.
--- The lateral probes capture bounded causal context at the same event read:
--- the latest preceding user request and the latest tool result strictly after
--- that request. chat_messages_chat_id_created_at_idx supports both reverse
--- time probes; seq deterministically orders equal timestamps.
---
--- created_at bounds the shadow-MCP scanner's ClickHouse provenance lookup to
--- the batch's own time range, keeping that query on the telemetry table's
--- time-ordered primary key instead of scanning the full retention window.
---
--- source names the agent that recorded the message (Codex, Cursor, the ingest
--- adapter, ...). The shadow-MCP scanner attributes its provenance-resolution
--- metric to it, which is the one attribution available when the call resolved
--- to no telemetry row at all — precisely the population that metric exists to
--- measure.
--- Both message queries validate their chat against the row's project before
--- returning linkage. Content-part parents additionally must belong to the
--- content part's chat, so corrupt cross-tenant or cross-chat ids never leave
--- this boundary.
-SELECT cm.id, cm.chat_id, cm.role, cm.content, cm.tool_calls, cm.created_at, cm.source,
-  COALESCE(NULLIF(cm.user_id, ''), CASE WHEN c.deleted IS FALSE THEN NULLIF(c.user_id, '') END, '')::TEXT AS chat_user_id,
-  COALESCE(prior_user_request.content, '')::TEXT AS prior_user_request,
-  COALESCE(recent_tool.content, '')::TEXT AS recent_untrusted_content
-FROM chat_messages cm
-JOIN chats c ON c.id = cm.chat_id
-  AND c.project_id = cm.project_id
-LEFT JOIN LATERAL (
-  SELECT LEFT(prev.content, 4000) AS content, prev.created_at, prev.seq
-  FROM chat_messages prev
-  WHERE prev.chat_id = cm.chat_id
-    AND prev.project_id = cm.project_id
-    AND prev.role = 'user'
-    AND (prev.created_at, prev.seq) < (cm.created_at, cm.seq)
-  ORDER BY prev.created_at DESC, prev.seq DESC
-  LIMIT 1
-) prior_user_request ON TRUE
-LEFT JOIN LATERAL (
-  SELECT LEFT(prev.content, 4000) AS content
-  FROM chat_messages prev
-  WHERE prev.chat_id = cm.chat_id
-    AND prev.project_id = cm.project_id
-    AND prev.role = 'tool'
-    AND (prev.created_at, prev.seq) < (cm.created_at, cm.seq)
-    AND (prev.created_at, prev.seq) > (prior_user_request.created_at, prior_user_request.seq)
-  ORDER BY prev.created_at DESC, prev.seq DESC
-  LIMIT 1
-) recent_tool ON TRUE
-WHERE cm.id = ANY(@ids::uuid[])
-  AND cm.project_id = @project_id;
-
 -- name: GetContentPartBatch :many
 SELECT ccp.id, c.id AS chat_id, cm.id AS parent_chat_message_id, ccp.kind AS message_type,
   ccp.content_asset_url, ccp.created_at, ccp.source,
@@ -1800,28 +1745,6 @@ WHERE tcb.project_id = @project_id
   AND tcb.deleted IS FALSE
 ORDER BY tcb.chat_message_id, tcb.created_at DESC;
 
--- name: GetChatMessageForUnmask :one
--- Source material for the ClickHouse-backed reveal path: the anchored chat
--- message's recorded content and tool calls, which the reveal reconstructs the
--- raw match from (see unmask_ch.go). role gates the scan-surface composition
--- exactly like batch analysis (only assistant tool-request messages compose
--- tool-call arguments into the scanned text). chat_id backs the chat:read
--- authorization check when the ClickHouse row carries no denormalized chat id.
-SELECT cm.id, cm.chat_id, cm.role, cm.content, cm.tool_calls, cm.created_at
-FROM chat_messages cm
-WHERE cm.id = @id
-  AND cm.project_id = @project_id
-  -- Nothing in the schema ties a message's project_id to its chat's, so a
-  -- message pointing at a chat in another project is rejected outright: the
-  -- chat:read gate is evaluated against the finding's chat id, and serving
-  -- content anchored in a foreign chat would bypass it.
-  AND EXISTS (
-    SELECT 1
-    FROM chats c
-    WHERE c.id = cm.chat_id
-      AND c.project_id = cm.project_id
-  );
-
 -- name: GetChatContentPartForUnmask :one
 -- Content-part variant of GetChatMessageForUnmask: the part's content lives in
 -- the assets blob store, so this returns the asset URL for the caller to read
@@ -2000,55 +1923,6 @@ UPDATE chat_messages
 SET external_user_id = @external_user_id
 WHERE id = @id
   AND project_id = @project_id;
-
--- name: GetJudgeMessageWindow :many
--- Two bounded index probes around a tenant-validated anchor. Keep the target
--- even when no neighbors exist; an absent target is never a valid window.
--- Tool evidence remains valid JSON: one overflow call/rune preserves truncation
--- indicators in the renderer without transferring the full stored payload.
-WITH target AS (
-  SELECT cm.id, cm.chat_id, cm.project_id, cm.role, cm.content, cm.tool_calls, cm.created_at, cm.seq, cm.generation FROM chat_messages cm
-  JOIN chats c ON c.id = cm.chat_id AND c.project_id = cm.project_id
-  JOIN projects p ON p.id = c.project_id
-  WHERE cm.id = @anchor_id::uuid AND cm.project_id = @project_id::uuid
-    AND p.organization_id = @organization_id::text
-)
-SELECT evidence.id, evidence.role, LEFT(evidence.content, 4001)::text AS content,
-  COALESCE((SELECT jsonb_agg(jsonb_build_object('function', jsonb_build_object(
-    'name', LEFT(call->'function'->>'name', 257),
-    'arguments', LEFT(call->'function'->>'arguments', 4001))))
-    FROM jsonb_array_elements(jsonb_path_query_array(
-      COALESCE(NULLIF(CASE WHEN jsonb_typeof(evidence.tool_calls) = 'string'
-        THEN (evidence.tool_calls #>> '{}')::jsonb
-        ELSE evidence.tool_calls END, 'null'::jsonb), '[]'::jsonb),
-      '$[0 to 8]')) AS call), '[]'::jsonb)::text AS tool_calls
-FROM (
-SELECT n.id, n.chat_id, n.project_id, n.role, n.content, n.tool_calls, n.created_at, n.seq FROM target t
-JOIN LATERAL (
-  (SELECT prev.id, prev.chat_id, prev.project_id, prev.role, prev.content, prev.tool_calls, prev.created_at, prev.seq FROM chat_messages prev
-   WHERE prev.chat_id = t.chat_id AND prev.project_id = t.project_id AND prev.generation = t.generation
-     AND (prev.created_at, prev.seq) < (t.created_at, t.seq)
-   ORDER BY prev.created_at DESC, prev.seq DESC LIMIT 2)
-  UNION ALL
-  SELECT t.id, t.chat_id, t.project_id, t.role, t.content, t.tool_calls, t.created_at, t.seq
-  UNION ALL
-  (SELECT next.id, next.chat_id, next.project_id, next.role, next.content, next.tool_calls, next.created_at, next.seq FROM chat_messages next
-   WHERE next.chat_id = t.chat_id AND next.project_id = t.project_id AND next.generation = t.generation
-     AND (next.created_at, next.seq) > (t.created_at, t.seq)
-   ORDER BY next.created_at, next.seq LIMIT 2)
-) n ON TRUE
-UNION ALL
-(SELECT recent.id, recent.chat_id, recent.project_id, recent.role, recent.content, recent.tool_calls, recent.created_at, recent.seq FROM chat_messages recent
- JOIN chats c ON c.id = recent.chat_id AND c.project_id = recent.project_id
- JOIN projects p ON p.id = c.project_id
- WHERE @anchor_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid
-   AND recent.chat_id = @chat_id::uuid AND recent.project_id = @project_id::uuid
-   AND p.organization_id = @organization_id::text
-   AND recent.generation = (SELECT MAX(latest.generation) FROM chat_messages latest
-     WHERE latest.chat_id = @chat_id::uuid AND latest.project_id = @project_id::uuid)
- ORDER BY recent.created_at DESC, recent.seq DESC LIMIT 4)
-) evidence
-ORDER BY evidence.created_at, evidence.seq;
 
 -- name: CreateJudgeWindowMessageForTest :one
 INSERT INTO chat_messages (chat_id, project_id, role, content, generation)

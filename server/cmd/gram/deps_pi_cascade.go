@@ -3,6 +3,7 @@ package gram
 import (
 	"context"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"log/slog"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -19,7 +20,7 @@ import (
 // Decisions models on the partition's inference host, the Jev prefilter is
 // unavailable and every message is labeled unavailable rather than sending
 // prompts outside the partition.
-func newPICascade(ctx context.Context, logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, client openrouter.CompletionClient, policy *guardian.Policy, provisioner openrouter.Provisioner, endpoints openrouter.Endpoints, db repo.DBTX) *piopenrouter.Cascade {
+func newPICascade(ctx context.Context, logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, client openrouter.CompletionClient, policy *guardian.Policy, provisioner openrouter.Provisioner, endpoints openrouter.Endpoints, db repo.DBTX, transcripts *transcriptstore.Transcripts) *piopenrouter.Cascade {
 	var jev typesafe.Evaluator = typesafe.Unavailable{}
 	if endpoints.ServesDecisionModels {
 		jev = typesafe.New(policy.PooledClient(), func(ctx context.Context, orgID string) (string, error) {
@@ -33,5 +34,5 @@ func newPICascade(ctx context.Context, logger *slog.Logger, tracerProvider trace
 		logger.WarnContext(ctx, "prompt injection detection is unavailable: OpenRouter serves no Decisions models in this partition")
 	}
 
-	return piopenrouter.NewCascade(logger, tracerProvider, meterProvider, client, jev, judgemessage.NewWindowLoader(db).Load)
+	return piopenrouter.NewCascade(logger, tracerProvider, meterProvider, client, jev, judgemessage.NewWindowLoader(db, transcripts).Load)
 }

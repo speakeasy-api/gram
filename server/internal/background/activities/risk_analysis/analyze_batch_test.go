@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"strings"
 	"sync"
 	"testing"
@@ -386,10 +387,7 @@ func TestBatchContentQueriesRejectForeignChatsAndMismatchedParent(t *testing.T) 
 	})
 	require.NoError(t, err)
 
-	messageRows, err := queries.GetMessageContentBatch(t.Context(), riskrepo.GetMessageContentBatchParams{
-		Ids:       []uuid.UUID{foreignChatMessageID},
-		ProjectID: uuid.NullUUID{UUID: td.projectID, Valid: true},
-	})
+	messageRows, err := (*transcriptstore.Transcripts)(nil).GetMessageContentBatch(t.Context(), conn, td.projectID, []uuid.UUID{foreignChatMessageID})
 	require.NoError(t, err)
 	require.Empty(t, messageRows)
 

@@ -5,12 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"slices"
 
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/classifier"
-	"github.com/speakeasy-api/gram/server/internal/sigint/repo"
 )
 
 // conversationBuffer bounds history to the largest runnable sensor window and
@@ -22,7 +22,7 @@ type conversationBuffer struct {
 	target        classifier.Entry
 	targetErr     error
 	historyLoaded bool
-	historyRows   []repo.LoadEvaluationHistoryRow
+	historyRows   []transcriptstore.LoadEvaluationHistoryRow
 	historyErr    error
 	resolved      map[uuid.UUID]classifier.Entry
 	resolvedBytes int
@@ -106,7 +106,7 @@ func (b *conversationBuffer) Resolve(ctx context.Context, size int) (ResolvedInp
 	return ResolvedInput{State: entry, MessageCount: len(state.Messages), Truncated: truncated}, nil
 }
 
-func (b *conversationBuffer) resolveMessage(ctx context.Context, row repo.LoadEvaluationHistoryRow, budget int) (classifier.Entry, error) {
+func (b *conversationBuffer) resolveMessage(ctx context.Context, row transcriptstore.LoadEvaluationHistoryRow, budget int) (classifier.Entry, error) {
 	if entry, ok := b.resolved[row.ID]; ok {
 		return entry, nil
 	}

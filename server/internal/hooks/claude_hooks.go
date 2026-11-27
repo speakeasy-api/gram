@@ -1584,11 +1584,7 @@ func (s *Service) recordShadowMCPBlockFinding(
 	}
 
 	chatID := sessionIDToUUID(*payload.SessionID)
-	msgID, err := s.repo.FindAssistantToolCallMessageID(ctx, repo.FindAssistantToolCallMessageIDParams{
-		ProjectID:  uuid.NullUUID{UUID: projectID, Valid: true},
-		ChatID:     chatID,
-		ToolCallID: *payload.ToolUseID,
-	})
+	msgID, err := s.writer.Transcripts().FindAssistantToolCallMessageID(ctx, s.db, projectID, chatID, *payload.ToolUseID)
 	if err != nil {
 		// Most common cause: SessionCapture feature flag is off, so the
 		// tool-call chat_message was never persisted. The ClickHouse path

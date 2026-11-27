@@ -239,8 +239,8 @@ func (t *Transcripts) InsertExternalChatMessage(ctx context.Context, db chatrepo
 // and cannot be promoted. For an inserted row the returned content and tool
 // calls are the params', in every mode; for a promoted one they are its
 // columns.
-func (t *Transcripts) UpsertCorrelatedChatMessage(ctx context.Context, db chatrepo.DBTX, organizationID string, projectID uuid.UUID, params chatrepo.UpsertCorrelatedChatMessageParams) (chatrepo.UpsertCorrelatedChatMessageRow, bool, error) {
-	var stored chatrepo.UpsertCorrelatedChatMessageRow
+func (t *Transcripts) UpsertCorrelatedChatMessage(ctx context.Context, db chatrepo.DBTX, organizationID string, projectID uuid.UUID, params UpsertCorrelatedChatMessageParams) (UpsertCorrelatedChatMessageRow, bool, error) {
+	var stored UpsertCorrelatedChatMessageRow
 	if params.ProjectID != projectID {
 		return stored, false, fmt.Errorf("%w: the message belongs to another project", ErrInvalid)
 	}
@@ -262,7 +262,7 @@ func (t *Transcripts) UpsertCorrelatedChatMessage(ctx context.Context, db chatre
 			return 0, fmt.Errorf("upsert correlated chat message: %w", err)
 		}
 		found = true
-		stored = chatrepo.UpsertCorrelatedChatMessageRow(row)
+		stored = UpsertCorrelatedChatMessageRow(row)
 		if !row.Inserted {
 			return 0, nil
 		}
@@ -375,7 +375,7 @@ func externalRow(r chatrepo.CreateExternalChatMessageParams, w write) repo.Inser
 	}
 }
 
-func correlatedRow(r chatrepo.UpsertCorrelatedChatMessageParams, w write) repo.UpsertCorrelatedChatMessageParams {
+func correlatedRow(r UpsertCorrelatedChatMessageParams, w write) repo.UpsertCorrelatedChatMessageParams {
 	return repo.UpsertCorrelatedChatMessageParams{
 		ID: r.ID, ChatID: r.ChatID, Role: r.Role, ProjectID: r.ProjectID,
 		Content: w.stored.Content, ContentRaw: w.stored.ContentRaw, ContentAssetUrl: r.ContentAssetUrl,

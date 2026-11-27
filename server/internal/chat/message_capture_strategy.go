@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"log/slog"
 	"strings"
 
@@ -164,7 +165,7 @@ type matchResult struct {
 	generation    int32
 	matchedPrefix int
 	diverged      bool
-	previous      []repo.ListChatMessagesForMatchRow
+	previous      []transcriptstore.ListChatMessagesForMatchRow
 }
 
 // matchIncomingAgainstStored finds the longest matching prefix between
@@ -182,11 +183,7 @@ func (s *ChatMessageCaptureStrategy) matchIncomingAgainstStored(ctx context.Cont
 		return matchResult{}, oops.E(oops.CodeUnexpected, err, "get chat generation")
 	}
 
-	stored, err := s.repo.ListChatMessagesForMatch(ctx, repo.ListChatMessagesForMatchParams{
-		ChatID:     chatID,
-		ProjectID:  projectID,
-		Generation: currentGen,
-	})
+	stored, err := s.writer.Transcripts().ListChatMessagesForMatch(ctx, s.db, projectID, chatID, currentGen)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "failed to list chat messages for match", attr.SlogError(err))
 		return matchResult{}, oops.E(oops.CodeUnexpected, err, "list chat messages for match")

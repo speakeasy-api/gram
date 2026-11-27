@@ -57,8 +57,7 @@ func (w *ChatMessageWriter) projectMessage(ctx context.Context, tx pgx.Tx, proje
 	if err := guard(ctx, tx); err != nil {
 		return 0, none, fmt.Errorf("admit message projection: %w", err)
 	}
-	q := repo.New(tx)
-	row, err := q.GetKitProjectionMessage(ctx, repo.GetKitProjectionMessageParams{ProjectID: uuid.NullUUID{UUID: projectID, Valid: true}, ID: messageID})
+	row, err := w.transcripts.GetKitProjectionMessage(ctx, tx, projectID, messageID)
 	exists := err == nil
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return 0, none, fmt.Errorf("load projected message: %w", err)

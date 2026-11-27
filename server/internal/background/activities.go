@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"log/slog"
 	"net/netip"
 	"net/url"
@@ -42,7 +43,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
-	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/chat/summaryjudge"
 	"github.com/speakeasy-api/gram/server/internal/deviceintegrations"
 	"github.com/speakeasy-api/gram/server/internal/email"
@@ -275,6 +275,7 @@ func NewActivities(
 	signInEpochs signins.EpochRaiser,
 	serverURL *url.URL,
 	staffOrg staff.Organization,
+	transcripts *transcriptstore.Transcripts,
 ) *Activities {
 	spendRulesCH := spendrulesch.New(chConn)
 	riskFindingsCH := riskchrepo.New(chConn)
@@ -302,6 +303,7 @@ func NewActivities(
 	if err != nil {
 		panic(fmt.Errorf("new analyze batch: %w", err))
 	}
+	analyzeBatch.WithTranscripts(transcripts)
 
 	telemetryLogPublisher := telemetry.NewLogPublisher(logger, tracerProvider, meterProvider, publishers.TelemetryLogs)
 
@@ -318,7 +320,7 @@ func NewActivities(
 	chatAnalysisJudges, err := analysis.NewJudges(
 		analysis.NewWorkUnitsJudge(logger, tracerProvider, chatClient, judgeRateLimiter),
 		businessmemory.NewJudge(logger, tracerProvider, db, chatClient, judgeRateLimiter),
-		summaryjudge.NewJudge(logger, db, chatClient, judgeRateLimiter),
+		summaryjudge.NewJudge(logger, db, chatClient, judgeRateLimiter).WithTranscripts(transcripts),
 	)
 	if err != nil {
 		panic(fmt.Errorf("new chat analysis judges: %w", err))
@@ -406,7 +408,7 @@ func NewActivities(
 
 	var skillSuggestionAnalyzer *activities.SkillSuggestionAnalyzer
 	if db != nil && chatClient != nil && skillSuggestionSignaler != nil && judgeRateLimiter != nil {
-		engine, err := suggest.NewEngine(suggest.DefaultConfig(), logger, db, telemetryRepo, chatrepo.New(db), chatClient, judgeRateLimiter)
+		engine, err := suggest.NewEngine(suggest.DefaultConfig(), logger, db, telemetryRepo, efficacy.NewTranscriptSource(db, transcripts), chatClient, judgeRateLimiter)
 		if err != nil {
 			panic(fmt.Errorf("new skill suggestion engine: %w", err))
 		}
@@ -457,7 +459,7 @@ func NewActivities(
 		promoteStagedTelemetry:           activities.NewPromoteStagedTelemetry(logger, chConn, cacheAdapter, telemetryLogPublisher),
 		listStagedTelemetryProjects:      activities.NewListStagedTelemetryProjects(logger, chConn),
 		mcpConnectionOutcomesDaily:       activities.NewMCPConnectionOutcomesDaily(logger, meterProvider, db, chConn, staffOrg),
-		generateChatTitle:                activities.NewGenerateChatTitle(logger, db, chatClient),
+		generateChatTitle:                activities.NewGenerateChatTitle(logger, db, chatClient, transcripts),
 		memoryDigests:                    activities.NewMemoryDigests(logger, db, chatClient),
 		processDeployment:                activities.NewProcessDeployment(logger, tracerProvider, meterProvider, guardianPolicy, db, features, assetStorage, billingRepo),
 		provisionFunctionsAccess:         activities.NewProvisionFunctionsAccess(logger, db, runnerKeys),
@@ -477,14 +479,14 @@ func NewActivities(
 		dispatchTrigger:                  activities.NewDispatchTrigger(triggerApp),
 		processScheduledTrigger:          activities.NewProcessScheduledTrigger(triggerApp),
 		markTriggerFired:                 activities.NewMarkTriggerFired(triggerApp),
-		segmentChat:                      resolution_activities.NewSegmentChat(logger, db, chatClient),
+		segmentChat:                      resolution_activities.NewSegmentChat(logger, db, chatClient, transcripts),
 		deleteChatResolutions:            resolution_activities.NewDeleteChatResolutions(db),
-		analyzeSegment:                   resolution_activities.NewAnalyzeSegment(logger, db, chatClient, telemetryLogger, chatWriter),
+		analyzeSegment:                   resolution_activities.NewAnalyzeSegment(logger, db, chatClient, telemetryLogger, transcripts),
 		getUserFeedbackForChat:           resolution_activities.NewGetUserFeedbackForChat(logger, db),
 		fetchUnanalyzedMessages:          risk_analysis.NewFetchUnanalyzed(logger, tracerProvider, db),
 		analyzeBatch:                     analyzeBatch,
 		markMessagesAnalyzed:             risk_analysis.NewMarkMessagesAnalyzed(logger, tracerProvider, db),
-		reconcileExclusion:               risk_exclusion.NewReconcile(logger, tracerProvider, meterProvider, db, riskFindingsCH, riskFingerprinter, assetStorage, disableRiskRetroReconcile),
+		reconcileExclusion:               risk_exclusion.NewReconcile(logger, tracerProvider, meterProvider, db, riskFindingsCH, riskFingerprinter, assetStorage, disableRiskRetroReconcile).WithTranscripts(transcripts),
 		skillObservationReconciler:       activities.NewSkillObservationReconciler(db, telemetryRepo),
 		cleanRiskPolicyResults:           risk_policy.NewCleanup(logger, tracerProvider, db),
 		admitAssistantThreads:            activities.NewAdmitAssistantThreads(assistantsCore),
@@ -525,7 +527,7 @@ func NewActivities(
 			meterProvider,
 			db,
 			productFeatures,
-			efficacy.NewPublisher(logger, tracerProvider, db, telemetryRepo, efficacy.NewJudge(logger, tracerProvider, chatClient, judgeRateLimiter), skillSuggestionSignaler, riskRecorder),
+			efficacy.NewPublisher(logger, tracerProvider, db, telemetryRepo, efficacy.NewJudge(logger, tracerProvider, chatClient, judgeRateLimiter), skillSuggestionSignaler, riskRecorder).WithTranscripts(transcripts),
 			&TemporalSkillEfficacySignaler{TemporalEnv: temporalEnv, Logger: logger},
 		),
 		skillSuggestionAnalyzer: skillSuggestionAnalyzer,
@@ -542,7 +544,7 @@ func NewActivities(
 		chatAnalysisScorer: activities.NewChatAnalysisScorer(
 			db,
 			chatAnalysisJudges,
-			analysis.NewPublisher(logger, tracerProvider, db, telemetryRepo, telemetryLogger, chatAnalysisJudges),
+			analysis.NewPublisher(logger, tracerProvider, db, telemetryRepo, telemetryLogger, chatAnalysisJudges).WithTranscripts(transcripts),
 			&TemporalChatAnalysisSignaler{TemporalEnv: temporalEnv, Logger: logger},
 		),
 	}

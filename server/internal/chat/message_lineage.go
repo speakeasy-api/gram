@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 
 	"github.com/google/uuid"
 
@@ -31,8 +32,8 @@ type MessageLineage struct {
 
 // MarkCompactedLineage identifies retained history in a producer-declared
 // compaction. Unmatched text is synthetic, never newly observed human speech.
-func MarkCompactedLineage(ctx context.Context, db repo.DBTX, projectID, chatID uuid.UUID, generation int32, writes []MessageWrite) error {
-	previous, err := repo.New(db).ListChatMessagesForMatch(ctx, repo.ListChatMessagesForMatchParams{ProjectID: projectID, ChatID: chatID, Generation: generation})
+func MarkCompactedLineage(ctx context.Context, transcripts *transcriptstore.Transcripts, db repo.DBTX, projectID, chatID uuid.UUID, generation int32, writes []MessageWrite) error {
+	previous, err := transcripts.ListChatMessagesForMatch(ctx, db, projectID, chatID, generation)
 	if err != nil {
 		return fmt.Errorf("load compaction lineage: %w", err)
 	}
@@ -51,8 +52,8 @@ func MarkCompactedLineage(ctx context.Context, db repo.DBTX, projectID, chatID u
 // transcriptLineage matches positional prefixes and a retained contiguous tail
 // anchored at the previous transcript's end. An isolated repeated phrase is not
 // sufficient to deduplicate a new user turn. Matches never cross conversations.
-func transcriptLineage(previous []repo.ListChatMessagesForMatchRow, incoming []messageSlot, compacted bool) []*MessageLineage {
-	stored := make([]repo.ListChatMessagesForMatchRow, 0, len(previous))
+func transcriptLineage(previous []transcriptstore.ListChatMessagesForMatchRow, incoming []messageSlot, compacted bool) []*MessageLineage {
+	stored := make([]transcriptstore.ListChatMessagesForMatchRow, 0, len(previous))
 	for _, row := range previous {
 		if !slotFromStored(row.Role, row.Content, row.ToolCallID.String, row.ToolCalls).isBlankAssistant() {
 			stored = append(stored, row)

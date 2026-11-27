@@ -3,6 +3,7 @@ package risk_analysis
 import (
 	"context"
 	"encoding/json"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"log/slog"
 	"strings"
 	"time"
@@ -152,7 +153,7 @@ type recordedToolCall struct {
 
 const malformedToolCallsName = "tool_calls"
 
-func newBatchMessages(ctx context.Context, logger *slog.Logger, rows []repo.GetMessageContentBatchRow) []batchMessage {
+func newBatchMessages(ctx context.Context, logger *slog.Logger, rows []transcriptstore.GetMessageContentBatchRow) []batchMessage {
 	messages := make([]batchMessage, 0, len(rows))
 	for _, row := range rows {
 		msg, ok := newBatchMessage(ctx, logger, row.ID, row.Role, row.Content, row.ToolCalls)

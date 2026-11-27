@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"github.com/speakeasy-api/gram/server/internal/chatredact"
 	"github.com/speakeasy-api/gram/server/internal/memorygate"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -60,7 +61,9 @@ type GeneratedSummary struct {
 // marks it redacted. The dashboard Summarize action and the background summary
 // job share it, so one summary serves both the dashboard and team memory.
 type SummaryGenerator struct {
+	db          *pgxpool.Pool
 	repo        *repo.Queries
+	transcripts *transcriptstore.Transcripts
 	client      openrouter.CompletionClient
 	redactor    *chatredact.Redactor
 	model       string
@@ -73,7 +76,17 @@ func NewSummaryGenerator(db *pgxpool.Pool, client openrouter.CompletionClient, r
 	if db == nil || client == nil || redactor == nil {
 		return nil
 	}
-	return &SummaryGenerator{repo: repo.New(db), client: client, redactor: redactor, model: SummaryModel, usageSource: billing.ModelUsageSourceGram, keySlot: ""}
+	return &SummaryGenerator{db: db, repo: repo.New(db), transcripts: nil, client: client, redactor: redactor, model: SummaryModel, usageSource: billing.ModelUsageSourceGram, keySlot: ""}
+}
+
+// WithTranscripts makes the generator read message bodies from encrypted
+// shadows for the projects that keep them. Nil-safe.
+func (g *SummaryGenerator) WithTranscripts(transcripts *transcriptstore.Transcripts) *SummaryGenerator {
+	if g == nil {
+		return nil
+	}
+	g.transcripts = transcripts
+	return g
 }
 
 // SummaryDraft is a masked summary that has not been stored yet.
@@ -151,10 +164,7 @@ func (g *SummaryGenerator) Generate(ctx context.Context, orgID string, projectID
 func (g *SummaryGenerator) Draft(ctx context.Context, orgID string, projectID, chatID uuid.UUID) (SummaryDraft, error) {
 	empty := SummaryDraft{Summary: "", CoveredThrough: pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}}
 
-	messages, err := g.repo.ListLatestGenerationChatMessages(ctx, repo.ListLatestGenerationChatMessagesParams{
-		ChatID:    chatID,
-		ProjectID: projectID,
-	})
+	messages, err := g.transcripts.ListLatestGenerationChatMessages(ctx, g.db, projectID, chatID)
 	if err != nil {
 		return empty, fmt.Errorf("list chat messages: %w", err)
 	}

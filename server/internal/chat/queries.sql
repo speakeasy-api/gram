@@ -245,70 +245,6 @@ WHERE chat_id = @chat_id
     WHERE chats.id = ai_integration_config_chats.chat_id AND chats.project_id = @project_id
   );
 
--- name: CreateChatMessage :copyfrom
--- id is caller-supplied because ChatMessageWriter must know the durable message
--- identity before COPY FROM so transactional side effects use the same id.
--- created_at is caller-supplied so hook-captured messages carry the event's
--- original occurred_at: spool replays arrive after newer live rows, and
--- insert-time stamps would sort them out of conversation order. Transcript
--- readers order by (created_at, seq).
-INSERT INTO chat_messages (
-    id
-  , chat_id
-  , role
-  , project_id
-  , content
-  , content_raw
-  , content_asset_url
-  , storage_error
-  , model
-  , message_id
-  , tool_call_id
-  , user_id
-  , external_user_id
-  , finish_reason
-  , tool_calls
-  , prompt_tokens
-  , completion_tokens
-  , total_tokens
-  , origin
-  , user_agent
-  , ip_address
-  , source
-  , content_hash
-  , generation
-  , replayed
-  , created_at
-)
-VALUES (
-    @id
-  , @chat_id
-  , @role
-  , @project_id::uuid
-  , @content
-  , @content_raw
-  , @content_asset_url
-  , @storage_error
-  , @model
-  , @message_id
-  , @tool_call_id
-  , @user_id
-  , @external_user_id
-  , @finish_reason
-  , @tool_calls
-  , @prompt_tokens
-  , @completion_tokens
-  , @total_tokens
-  , @origin
-  , @user_agent
-  , @ip_address
-  , @source
-  , @content_hash
-  , @generation
-  , @replayed
-  , @created_at
-);
-
 -- name: GetMessagesForPublication :many
 -- Read authoritative identity and attribution in the write transaction.
 -- Content is fetched by consumers, never serialized into these events.
@@ -364,81 +300,6 @@ SELECT m.id, m.chat_id, m.role, m.created_at, m.source, m.replayed, m.model,
 FROM messages m
 JOIN departments d ON d.actor_id = m.actor_id AND d.email = m.email
 ORDER BY m.seq;
-
--- name: UpsertCorrelatedChatMessage :one
--- Returns persisted metering fields and distinguishes initial inserts from
--- native-hook promotions, which must not emit another storage reading.
-INSERT INTO chat_messages (
-    id
-  , chat_id
-  , role
-  , project_id
-  , content
-  , content_raw
-  , content_asset_url
-  , storage_error
-  , model
-  , message_id
-  , tool_call_id
-  , user_id
-  , external_user_id
-  , external_message_id
-  , finish_reason
-  , tool_calls
-  , prompt_tokens
-  , completion_tokens
-  , total_tokens
-  , origin
-  , user_agent
-  , ip_address
-  , source
-  , content_hash
-  , generation
-  , replayed
-  , created_at
-)
-VALUES (
-    @id
-  , @chat_id
-  , @role
-  , @project_id::uuid
-  , @content
-  , @content_raw
-  , @content_asset_url
-  , @storage_error
-  , @model
-  , @message_id
-  , @tool_call_id
-  , @user_id
-  , @external_user_id
-  , @external_message_id
-  , @finish_reason
-  , @tool_calls
-  , @prompt_tokens
-  , @completion_tokens
-  , @total_tokens
-  , @origin
-  , @user_agent
-  , @ip_address
-  , @source
-  , @content_hash
-  , @generation
-  , @replayed
-  , @created_at
-)
-ON CONFLICT (chat_id, external_message_id) WHERE external_message_id IS NOT NULL
-DO UPDATE SET
-    source = EXCLUDED.source
-  , user_id = COALESCE(EXCLUDED.user_id, chat_messages.user_id)
-  , external_user_id = COALESCE(EXCLUDED.external_user_id, chat_messages.external_user_id)
-  , model = COALESCE(EXCLUDED.model, chat_messages.model)
-  , replayed = chat_messages.replayed OR EXCLUDED.replayed
-  , created_at = EXCLUDED.created_at
-  , risk_analyzed_at = NULL
-WHERE chat_messages.project_id = EXCLUDED.project_id
-  AND EXCLUDED.source IN ('codex', 'opencode', 'openclaw')
-  AND chat_messages.source = 'litellm'
-RETURNING id, content, tool_calls, model, user_id, external_user_id, source, user_agent, (xmax = 0) AS inserted;
 
 -- name: AcquireChatPromptCorrelationLock :exec
 SELECT pg_advisory_xact_lock(hashtextextended(
@@ -541,69 +402,6 @@ WHERE ccp.chat_id = @chat_id
     OR ccp.parent_chat_message_id = ANY(@parent_chat_message_ids::uuid[])
   )
 ORDER BY created_at ASC, id ASC;
-
--- name: CreateExternalChatMessage :one
--- The writer supplies the candidate id before insertion so a newly inserted
--- message and its atomic meter reading share one durable identity.
-INSERT INTO chat_messages (
-    id
-  , chat_id
-  , role
-  , project_id
-  , content
-  , content_raw
-  , content_asset_url
-  , storage_error
-  , model
-  , message_id
-  , tool_call_id
-  , user_id
-  , external_user_id
-  , external_message_id
-  , finish_reason
-  , tool_calls
-  , prompt_tokens
-  , completion_tokens
-  , total_tokens
-  , origin
-  , user_agent
-  , ip_address
-  , source
-  , content_hash
-  , generation
-  , created_at
-)
-VALUES (
-    @id
-  , @chat_id
-  , @role
-  , @project_id::uuid
-  , @content
-  , @content_raw
-  , @content_asset_url
-  , @storage_error
-  , @model
-  , @message_id
-  , @tool_call_id
-  , @user_id
-  , @external_user_id
-  , @external_message_id
-  , @finish_reason
-  , @tool_calls
-  , @prompt_tokens
-  , @completion_tokens
-  , @total_tokens
-  , @origin
-  , @user_agent
-  , @ip_address
-  , @source
-  , @content_hash
-  , @generation
-  , @created_at
-)
-ON CONFLICT (chat_id, external_message_id) WHERE external_message_id IS NOT NULL
-DO NOTHING
-RETURNING id;
 
 -- name: GetProjectOrganizationID :one
 SELECT organization_id
@@ -1369,104 +1167,16 @@ FROM chats
 WHERE project_id = @project_id
   AND id = ANY(@ids::uuid[]);
 
--- name: SumMessageTokenStatsByDay :many
--- Daily message-level token stats for the billing details table
--- (telemetry.queryTumDetails): tokens in messages carrying at least one
--- active risk_results finding (found, not excluded or dismissed, under an
--- enabled policy), and tokens in tool-call messages: tool results (role 'tool')
--- plus messages carrying a non-empty tool_calls array, mirroring the
--- getTraceEntryType classification in GetChatEntryTotals. Bucketed by the
--- message's UTC day so the series lines up with the ClickHouse daily
--- aggregates.
-SELECT
-  (date_trunc('day', cm.created_at AT TIME ZONE 'utc'))::timestamp AS day,
-  COALESCE(SUM(cm.total_tokens) FILTER (WHERE rm.chat_message_id IS NOT NULL), 0)::bigint AS risky_message_tokens,
-  COALESCE(SUM(cm.total_tokens) FILTER (WHERE
-    cm.role = 'tool'
-    OR CASE
-      WHEN cm.tool_calls IS NULL THEN false
-      WHEN jsonb_typeof(cm.tool_calls) = 'array'
-        THEN jsonb_array_length(cm.tool_calls) > 0
-      -- Some rows store tool_calls double-encoded (a JSON string holding the
-      -- array); treat any non-empty/non-"[]" string as carrying tool calls.
-      WHEN jsonb_typeof(cm.tool_calls) = 'string'
-        THEN btrim(cm.tool_calls #>> '{}') NOT IN ('', '[]', 'null')
-      ELSE false
-    END
-  ), 0)::bigint AS tool_message_tokens
-FROM chat_messages cm
-LEFT JOIN (
-  SELECT DISTINCT rr.chat_message_id
-  FROM risk_results rr
-  JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
-  WHERE rr.project_id = ANY(@project_ids::uuid[])
-    AND rr.found IS TRUE
-    AND rr.excluded_at IS NULL
-    AND rr.false_positive_at IS NULL
-) rm ON rm.chat_message_id = cm.id
-WHERE cm.project_id = ANY(@project_ids::uuid[])
-  AND cm.created_at >= @from_time
-  AND cm.created_at < @to_time
-GROUP BY 1
-ORDER BY 1;
-
 -- name: ListChatMessages :many
+-- Tests and fixtures only. Production code reads message bodies through
+-- transcriptstore.Transcripts, which opens encrypted shadows; the
+-- no-plaintext-transcript-read lint rule rejects any production call.
 -- Transcript order is (created_at, seq): created_at carries the event's
 -- original occurred_at for hook-captured messages (spool replays arrive out
 -- of insert order), and seq breaks ties stably for same-timestamp rows.
 SELECT * FROM chat_messages
 WHERE chat_id = @chat_id AND project_id = @project_id::uuid
 ORDER BY created_at ASC, seq ASC;
-
--- name: ListClaudeUserMessagesForPromptAttachmentParent :many
-SELECT cm.id, cm.content
-FROM chat_messages cm
-WHERE cm.chat_id = @chat_id
-  AND cm.project_id = @project_id::uuid
-  AND cm.role = 'user'
-  AND cm.content != ''
-ORDER BY cm.seq DESC, cm.created_at DESC;
-
--- name: ListChatTranscriptMessagesPage :many
--- Keyset page of one chat's messages, newest first, carrying only the columns
--- transcript rendering reads. A transcript reader that pulled the whole chat
--- held every message of an unbounded session in memory to then throw most of
--- them away, so it walks backwards a page at a time instead and stops as soon
--- as the rendering starts dropping messages: the trim is oldest-first, so every
--- unread row is older than the ones already being dropped and would be dropped
--- too.
---
--- The same project filter as ListChatMessages, so a page can never cross a
--- project boundary. CountChatMessages supplies the total once per transcript;
--- repeating a windowed count on every page makes long transcripts quadratic.
---
--- The cursor is the full transcript key (created_at, seq, id): created_at and
--- seq alone are not unique, and a tie split across a page boundary would either
--- repeat or skip a message.
-SELECT
-  cm.id,
-  cm.seq,
-  cm.created_at,
-  cm.role,
-  cm.content,
-  cm.tool_calls,
-  cm.tool_call_id,
-  cm.tool_urn,
-  cm.tool_outcome,
-  cm.tool_outcome_notes
-FROM chat_messages cm
-WHERE cm.chat_id = @chat_id
-  AND cm.project_id = @project_id::uuid
-  AND (
-    sqlc.narg('cursor_created_at')::timestamptz IS NULL
-    OR (cm.created_at, cm.seq, cm.id) < (
-      sqlc.narg('cursor_created_at')::timestamptz,
-      sqlc.narg('cursor_seq')::bigint,
-      sqlc.narg('cursor_id')::uuid
-    )
-  )
-ORDER BY cm.created_at DESC, cm.seq DESC, cm.id DESC
-LIMIT @lim::integer;
 
 -- name: CountChatMessages :one
 -- Must match ListChatMessages' project_id filter, otherwise count and the
@@ -1487,243 +1197,30 @@ SELECT
 FROM chat_messages
 WHERE chat_id = @chat_id AND project_id = @project_id::uuid;
 
--- name: GetChatEntryTotals :one
--- Per-generation trace-entry totals for the chat detail filter bar. The detail
--- sheet paginates messages, so counts derived from the loaded page understate
--- the chat; these totals describe the whole generation regardless of which page
--- is in view. Each message maps to exactly one entry, mirroring the client's
--- getTraceEntryType precedence: a message carrying a non-empty tool_calls array
--- is a tool call regardless of role, otherwise the role decides. risk_findings
--- counts messages the caller's ClickHouse finding anchors flag
--- (@risk_message_ids), directly or through an attachment hanging off them
--- (@risk_content_part_ids).
-WITH ordered AS (
-  SELECT
-    cm.id,
-    cm.role,
-    CASE
-      WHEN cm.tool_calls IS NULL THEN false
-      WHEN jsonb_typeof(cm.tool_calls) = 'array'
-        THEN jsonb_array_length(cm.tool_calls) > 0
-      -- Some rows store tool_calls double-encoded (a JSON string holding the
-      -- array); treat any non-empty/non-"[]" string as carrying tool calls.
-      WHEN jsonb_typeof(cm.tool_calls) = 'string'
-        THEN btrim(cm.tool_calls #>> '{}') NOT IN ('', '[]', 'null')
-      ELSE false
-    END AS has_tool_calls
-  FROM chat_messages cm
-  WHERE cm.chat_id = @chat_id
-    AND cm.project_id = @project_id::uuid
-    AND cm.generation = @generation::integer
-),
--- Prompts whose attachments hold an active finding. Such a finding has no
--- chat_message_id, so it flags the prompt the attachment hangs off.
-attachment_risk_prompts AS (
-  SELECT ccp.parent_chat_message_id AS id
-  FROM chat_content_parts ccp
-  WHERE ccp.chat_id = @chat_id
-    AND ccp.project_id = @project_id::uuid
-    AND ccp.deleted IS FALSE
-    AND ccp.parent_chat_message_id IS NOT NULL
-    AND ccp.id = ANY(@risk_content_part_ids::uuid[])
-)
-SELECT
-  COUNT(*) FILTER (WHERE has_tool_calls OR role IN ('user', 'assistant', 'tool'))::bigint AS total,
-  COUNT(*) FILTER (WHERE NOT has_tool_calls AND role = 'user')::bigint AS user_messages,
-  COUNT(*) FILTER (WHERE NOT has_tool_calls AND role = 'assistant')::bigint AS assistant_messages,
-  COUNT(*) FILTER (WHERE has_tool_calls)::bigint AS tool_calls,
-  COUNT(*) FILTER (WHERE NOT has_tool_calls AND role = 'tool')::bigint AS tool_results,
-  (
-    SELECT COUNT(*)::bigint FROM ordered o
-    WHERE o.id = ANY(@risk_message_ids::uuid[])
-    OR o.id IN (SELECT id FROM attachment_risk_prompts)
-  )::bigint AS risk_findings
-FROM ordered;
-
--- name: ListLatestGenerationChatMessages :many
--- Returns only the latest-generation rows; older generations are audit-only.
-SELECT cm.* FROM chat_messages cm
-WHERE cm.chat_id = @chat_id
-  AND cm.project_id = @project_id::uuid
-  AND cm.generation = (SELECT MAX(generation) FROM chat_messages WHERE chat_id = @chat_id AND project_id = @project_id::uuid)
-ORDER BY cm.created_at ASC, cm.seq ASC;
-
--- name: ListChatMessagesByGeneration :many
--- Returns rows for an explicit generation, used to pin a snapshot across
--- multiple reads (e.g. across Temporal activities) so indices stay stable
--- even if a new generation is appended mid-workflow.
-SELECT cm.* FROM chat_messages cm
-WHERE cm.chat_id = @chat_id
-  AND cm.project_id = @project_id::uuid
-  AND cm.generation = @generation::integer
-ORDER BY cm.created_at ASC, cm.seq ASC;
-
 -- name: GetMaxGenerationForChat :one
 SELECT COALESCE(MAX(generation), 0)::integer AS generation FROM chat_messages
 WHERE chat_id = @chat_id AND project_id = @project_id::uuid;
 
--- name: ListChatMessagesBeforePage :many
--- Keyset page within a generation, newest first. The cursor stays the anchor
--- row's seq (stable, unique, already in the API), but position is compared in
--- transcript order (created_at, seq) so pages agree with the display order
--- even when spool-replayed rows carry backdated created_at. Returns rows
--- strictly before the anchor, or the newest page when @before_seq is NULL.
--- Order DESC so LIMIT keeps the most recent rows; the caller reverses to
--- ascending for display. Fetch @lim = pageSize+1 to detect whether more older
--- rows remain.
-SELECT cm.* FROM chat_messages cm
-WHERE cm.chat_id = @chat_id
-  AND cm.project_id = @project_id::uuid
-  AND cm.generation = @generation::integer
-  AND (
-    sqlc.narg('before_seq')::bigint IS NULL
-    OR (cm.created_at, cm.seq) < (
-      SELECT a.created_at, a.seq FROM chat_messages a
-      WHERE a.chat_id = @chat_id
-        AND a.project_id = @project_id::uuid
-        AND a.seq = sqlc.narg('before_seq')::bigint
-    )
-    -- A cursor whose anchor row no longer resolves must not dead-end the
-    -- page (a tuple comparison against an empty subquery is NULL): fall
-    -- back to the plain seq comparison the pre-tuple cursor used.
-    OR (
-      NOT EXISTS (
-        SELECT 1 FROM chat_messages a
-        WHERE a.chat_id = @chat_id
-          AND a.project_id = @project_id::uuid
-          AND a.seq = sqlc.narg('before_seq')::bigint
-      )
-      AND cm.seq < sqlc.narg('before_seq')::bigint
-    )
-  )
-ORDER BY cm.created_at DESC, cm.seq DESC
-LIMIT @lim::integer;
-
--- name: ListChatMessagesAfterPage :many
--- Keyset page within a generation, oldest first. Same anchor-row cursor
--- resolution as ListChatMessagesBeforePage. Returns rows strictly after the
--- anchor in transcript order, or the oldest page (start of the thread) when
--- @after_seq is NULL. Fetch @lim = pageSize+1 to detect whether more newer
--- rows remain.
-SELECT cm.* FROM chat_messages cm
-WHERE cm.chat_id = @chat_id
-  AND cm.project_id = @project_id::uuid
-  AND cm.generation = @generation::integer
-  AND (
-    sqlc.narg('after_seq')::bigint IS NULL
-    OR (cm.created_at, cm.seq) > (
-      SELECT a.created_at, a.seq FROM chat_messages a
-      WHERE a.chat_id = @chat_id
-        AND a.project_id = @project_id::uuid
-        AND a.seq = sqlc.narg('after_seq')::bigint
-    )
-    -- Same missing-anchor fallback as ListChatMessagesBeforePage.
-    OR (
-      NOT EXISTS (
-        SELECT 1 FROM chat_messages a
-        WHERE a.chat_id = @chat_id
-          AND a.project_id = @project_id::uuid
-          AND a.seq = sqlc.narg('after_seq')::bigint
-      )
-      AND cm.seq > sqlc.narg('after_seq')::bigint
-    )
-  )
-ORDER BY cm.created_at ASC, cm.seq ASC
-LIMIT @lim::integer;
-
--- name: ListRiskWindowedMessages :many
--- Risk-only view: returns every message within +/- @context_size ordinal
--- positions of any active risk finding in the generation, ordered oldest to
--- newest. rn is the message's 1-based ordinal within the generation and total
--- is the generation's message count, so the caller can fold consecutive rn into
--- contiguous segments and decide whether earlier (rn > 1) or later (rn < total)
--- messages remain to be expanded. Overlapping windows merge naturally via set
--- membership. is_risk flags the seed rows (the flagged messages themselves) so
--- the caller can return the explicit risk seq list (context rows are
--- is_risk = false).
-WITH ordered AS (
-  SELECT
-    cm.*,
-    row_number() OVER (ORDER BY cm.created_at, cm.seq) AS rn,
-    count(*) OVER () AS total
-  FROM chat_messages cm
-  WHERE cm.chat_id = @chat_id
-    AND cm.project_id = @project_id::uuid
-    AND cm.generation = @generation::integer
-),
--- Prompts whose attachments hold an active finding. Such a finding has no
--- chat_message_id, so it flags the prompt the attachment hangs off.
-attachment_risk_prompts AS (
-  SELECT ccp.parent_chat_message_id AS id
-  FROM chat_content_parts ccp
-  WHERE ccp.chat_id = @chat_id
-    AND ccp.project_id = @project_id::uuid
-    AND ccp.deleted IS FALSE
-    AND ccp.parent_chat_message_id IS NOT NULL
-    AND ccp.id = ANY(@risk_content_part_ids::uuid[])
-),
-risk_rns AS (
-  SELECT o.rn FROM ordered o
-  WHERE o.id = ANY(@risk_message_ids::uuid[])
-  OR o.id IN (SELECT id FROM attachment_risk_prompts)
-)
-SELECT
-  o.*,
-  EXISTS (SELECT 1 FROM risk_rns r WHERE r.rn = o.rn) AS is_risk
-FROM ordered o
-WHERE EXISTS (
-  SELECT 1 FROM risk_rns r
-  WHERE o.rn BETWEEN r.rn - @context_size::bigint AND r.rn + @context_size::bigint
-)
-ORDER BY o.created_at ASC, o.seq ASC;
-
--- name: ListSearchWindowedMessages :many
--- Query-search view: same windowing as ListRiskWindowedMessages, but the seed
--- rows are messages whose searchable text matches @query (case-insensitive
--- substring over the narrative content, the tool-call name/arguments JSON, and
--- any structured/multimodal content) instead of messages with a risk finding.
--- Each match is padded with +/- @context_size ordinal positions. rn/total drive
--- segment folding and the has_more flags; is_match flags the seed rows so the
--- caller can return the explicit jump-to-match seq list (context rows are
--- is_match = false). Seed matches are capped at @match_limit (earliest first by
--- ordinal) to bound the response on broad queries. Asset-offloaded content (too
--- large to store inline) is not searchable here.
-WITH ordered AS (
-  SELECT
-    cm.*,
-    row_number() OVER (ORDER BY cm.created_at, cm.seq) AS rn,
-    count(*) OVER () AS total
-  FROM chat_messages cm
-  WHERE cm.chat_id = @chat_id
-    AND cm.project_id = @project_id::uuid
-    AND cm.generation = @generation::integer
-),
-match_rns AS (
-  SELECT o.rn FROM ordered o
-  WHERE o.content ILIKE '%' || @query::text || '%'
-     OR (o.tool_calls IS NOT NULL AND o.tool_calls::text ILIKE '%' || @query::text || '%')
-     OR (o.content_raw IS NOT NULL AND o.content_raw::text ILIKE '%' || @query::text || '%')
-  ORDER BY o.rn
-  LIMIT @match_limit::integer
-)
-SELECT
-  o.*,
-  EXISTS (SELECT 1 FROM match_rns m WHERE m.rn = o.rn) AS is_match
-FROM ordered o
-WHERE EXISTS (
-  SELECT 1 FROM match_rns m
-  WHERE o.rn BETWEEN m.rn - @context_size::bigint AND m.rn + @context_size::bigint
-)
-ORDER BY o.created_at ASC, o.seq ASC;
-
--- name: ListChatMessagesForMatch :many
-SELECT id, role, content, tool_call_id, tool_calls, original_message_id,
-  COALESCE(capture_kind, CASE WHEN generation = 0 THEN 'original' ELSE 'unknown' END)::text AS capture_kind
-FROM chat_messages
-WHERE chat_id = @chat_id
-  AND project_id = @project_id::uuid
-  AND generation = @generation
+-- name: ListChatMessageIDsByGeneration :many
+-- The IDs of one generation's messages in transcript order, for readers that
+-- index messages and never read their bodies.
+SELECT id FROM chat_messages
+WHERE chat_id = @chat_id AND project_id = @project_id::uuid AND generation = @generation::integer
 ORDER BY created_at ASC, seq ASC;
+
+-- name: GetLastChatMessageID :one
+-- The newest message of the chat's latest generation, without its body.
+SELECT m.id FROM chat_messages m
+WHERE m.chat_id = @chat_id AND m.project_id = @project_id::uuid
+  AND m.generation = (SELECT MAX(latest.generation) FROM chat_messages latest WHERE latest.chat_id = @chat_id AND latest.project_id = @project_id::uuid)
+ORDER BY m.created_at DESC, m.seq DESC
+LIMIT 1;
+
+-- name: GetChatMessageChatAndRole :one
+-- The chat and role of one message, for correlation checks that never read
+-- its body.
+SELECT chat_id, role FROM chat_messages
+WHERE project_id = @project_id::uuid AND id = @id;
 
 -- name: SetMessageCaptureLineage :exec
 UPDATE chat_messages m
@@ -1781,27 +1278,6 @@ SET summary = @summary,
     updated_at = NOW()
 WHERE chats.id = @id AND chats.project_id = @project_id AND chats.deleted IS FALSE
 RETURNING summary, summary_generated_at;
-
--- name: GetToolCallSummaryContext :one
--- Fetch the owning call message and its matching result within one project and
--- chat. The handler validates that tool_calls contains the requested call id.
-SELECT
-  calls.tool_calls,
-  calls.tool_call_summaries,
-  results.content::text AS result_content
-FROM chat_messages AS calls
-JOIN chat_messages AS results
-  ON results.chat_id = calls.chat_id
-  AND results.project_id = calls.project_id
-  AND results.tool_call_id = @tool_call_id
-  AND results.generation = calls.generation
-  AND results.role = 'tool'
-WHERE calls.id = @message_id
-  AND calls.chat_id = @chat_id
-  AND calls.project_id = @project_id::uuid
-  AND calls.role = 'assistant'
-ORDER BY results.created_at ASC, results.seq ASC, results.id ASC
-LIMIT 1;
 
 -- name: CreateChatMessageReturningID :one
 -- Inserts a message fixture while exposing its durable id to callers that need
@@ -2352,8 +1828,6 @@ FROM ancestry ORDER BY root_id, (slack_channel_id IS NULL), depth;
 -- Test fixture: hold the lock an ordinary helper capture takes on its own row.
 SELECT id FROM chats WHERE id = @id AND project_id = @project_id FOR NO KEY UPDATE;
 
--- name: GetKitProjectionMessage :one
-SELECT * FROM chat_messages WHERE project_id = @project_id AND id = @id;
 
 -- name: ValidateKitTranscriptBinding :one
 SELECT t.id FROM assistant_threads t
@@ -2415,3 +1889,130 @@ SELECT (
 FROM chats c
 LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
 WHERE c.id = @id AND c.project_id = @project_id;
+
+-- name: CreateChatMessage :copyfrom
+-- id is caller-supplied because ChatMessageWriter must know the durable message
+-- identity before COPY FROM so transactional side effects use the same id.
+-- created_at is caller-supplied so hook-captured messages carry the event's
+-- original occurred_at: spool replays arrive after newer live rows, and
+-- insert-time stamps would sort them out of conversation order. Transcript
+-- readers order by (created_at, seq).
+INSERT INTO chat_messages (
+    id
+  , chat_id
+  , role
+  , project_id
+  , content
+  , content_raw
+  , content_asset_url
+  , storage_error
+  , model
+  , message_id
+  , tool_call_id
+  , user_id
+  , external_user_id
+  , finish_reason
+  , tool_calls
+  , prompt_tokens
+  , completion_tokens
+  , total_tokens
+  , origin
+  , user_agent
+  , ip_address
+  , source
+  , content_hash
+  , generation
+  , replayed
+  , created_at
+)
+VALUES (
+    @id
+  , @chat_id
+  , @role
+  , @project_id::uuid
+  , @content
+  , @content_raw
+  , @content_asset_url
+  , @storage_error
+  , @model
+  , @message_id
+  , @tool_call_id
+  , @user_id
+  , @external_user_id
+  , @finish_reason
+  , @tool_calls
+  , @prompt_tokens
+  , @completion_tokens
+  , @total_tokens
+  , @origin
+  , @user_agent
+  , @ip_address
+  , @source
+  , @content_hash
+  , @generation
+  , @replayed
+  , @created_at
+);
+
+-- name: CreateExternalChatMessage :one
+-- The writer supplies the candidate id before insertion so a newly inserted
+-- message and its atomic meter reading share one durable identity.
+INSERT INTO chat_messages (
+    id
+  , chat_id
+  , role
+  , project_id
+  , content
+  , content_raw
+  , content_asset_url
+  , storage_error
+  , model
+  , message_id
+  , tool_call_id
+  , user_id
+  , external_user_id
+  , external_message_id
+  , finish_reason
+  , tool_calls
+  , prompt_tokens
+  , completion_tokens
+  , total_tokens
+  , origin
+  , user_agent
+  , ip_address
+  , source
+  , content_hash
+  , generation
+  , created_at
+)
+VALUES (
+    @id
+  , @chat_id
+  , @role
+  , @project_id::uuid
+  , @content
+  , @content_raw
+  , @content_asset_url
+  , @storage_error
+  , @model
+  , @message_id
+  , @tool_call_id
+  , @user_id
+  , @external_user_id
+  , @external_message_id
+  , @finish_reason
+  , @tool_calls
+  , @prompt_tokens
+  , @completion_tokens
+  , @total_tokens
+  , @origin
+  , @user_agent
+  , @ip_address
+  , @source
+  , @content_hash
+  , @generation
+  , @created_at
+)
+ON CONFLICT (chat_id, external_message_id) WHERE external_message_id IS NOT NULL
+DO NOTHING
+RETURNING id;

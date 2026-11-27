@@ -497,6 +497,6 @@ func TestInsertRefusesAnotherProjectsMessage(t *testing.T) {
 	require.ErrorIs(t, err, ErrInvalid)
 	_, err = transcripts.InsertExternalChatMessage(t.Context(), f.db, f.org, f.project, chatrepo.CreateExternalChatMessageParams{ID: uuid.New(), ChatID: f.chat, Role: "user", ProjectID: uuid.New(), Content: "EXAMPLE"})
 	require.ErrorIs(t, err, ErrInvalid)
-	_, _, err = transcripts.UpsertCorrelatedChatMessage(t.Context(), f.db, f.org, f.project, chatrepo.UpsertCorrelatedChatMessageParams{ID: uuid.New(), ChatID: f.chat, Role: "user", ProjectID: uuid.New(), Content: "EXAMPLE"})
+	_, _, err = transcripts.UpsertCorrelatedChatMessage(t.Context(), f.db, f.org, f.project, UpsertCorrelatedChatMessageParams{ID: uuid.New(), ChatID: f.chat, Role: "user", ProjectID: uuid.New(), Content: "EXAMPLE"})
 	require.ErrorIs(t, err, ErrInvalid)
 }
