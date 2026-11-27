@@ -4,8 +4,6 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-
-	"github.com/speakeasy-api/gram/server/internal/platformtools"
 )
 
 // sourceAdapter renders the per-source pieces of an assistant turn: the
@@ -34,10 +32,10 @@ func (deterministicChatIDAdapter) ChatID(assistantID uuid.UUID, correlationID st
 }
 
 var sourceAdapters = map[string]sourceAdapter{
-	sourceKindSlack: slackAdapter{deterministicChatIDAdapter: deterministicChatIDAdapter{}, gatewayServerSlug: ""},
+	sourceKindSlack: slackAdapter{deterministicChatIDAdapter: deterministicChatIDAdapter{}, preferSpeakeasyApp: false},
 	// Speakeasy Slack app events decode like a customer Slack app's, and in
-	// Project Gateway mode target the built-in speakeasy-slack server slug.
-	sourceKindSpeakeasySlack: slackAdapter{deterministicChatIDAdapter: deterministicChatIDAdapter{}, gatewayServerSlug: platformtools.SpeakeasySlackPlatformToolsetSlug},
+	// Project Gateway mode target speakeasy-slack when granted in platformSlugs.
+	sourceKindSpeakeasySlack: slackAdapter{deterministicChatIDAdapter: deterministicChatIDAdapter{}, preferSpeakeasyApp: true},
 	sourceKindMSTeams:        msteamsAdapter{deterministicChatIDAdapter: deterministicChatIDAdapter{}},
 	sourceKindLinear:         linearAdapter{deterministicChatIDAdapter: deterministicChatIDAdapter{}},
 	sourceKindGithub:         githubAdapter{deterministicChatIDAdapter: deterministicChatIDAdapter{}},

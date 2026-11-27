@@ -6,6 +6,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/platformtools"
 )
 
 func TestMCPDeliveryMode_ManagedInstructions(t *testing.T) {
@@ -44,8 +46,13 @@ func TestMCPDeliveryMode_ComposeInstructionsAndSkills(t *testing.T) {
 		LastEventAt:   time.Now(),
 	}
 	prefix := "https://app.example.com/mcp/connection_recovery/"
+	managedSlackSlugs := []string{
+		platformtools.AssistantsPlatformToolsetSlug,
+		platformtools.PlatformMCPReadToolsetSlug,
+		platformtools.SpeakeasySlackPlatformToolsetSlug,
+	}
 
-	perServer, err := ComposeInstructionsForMode("Base", slackThread, skills, prefix, MCPDeliveryPerServer)
+	perServer, err := ComposeInstructionsForMode("Base", slackThread, skills, prefix, MCPDeliveryPerServer, managedSlackSlugs)
 	require.NoError(t, err)
 	legacy, err := composeInstructions("Base", slackThread, skills, prefix)
 	require.NoError(t, err)
@@ -54,7 +61,8 @@ func TestMCPDeliveryMode_ComposeInstructionsAndSkills(t *testing.T) {
 	require.Contains(t, perServer, "assistant_mcp_auth_required")
 	require.Contains(t, perServer, "tool_search")
 
-	gateway, err := ComposeInstructionsForMode("Base", slackThread, skills, prefix, MCPDeliveryProjectGateway)
+	// Managed assistant on the first-party Speakeasy Slack app names speakeasy-slack.
+	gateway, err := ComposeInstructionsForMode("Base", slackThread, skills, prefix, MCPDeliveryProjectGateway, managedSlackSlugs)
 	require.NoError(t, err)
 	require.NotContains(t, gateway, "mcp__p-assistants_skills_load")
 	require.NotContains(t, gateway, "assistant_mcp_auth_required")
@@ -63,18 +71,43 @@ func TestMCPDeliveryMode_ComposeInstructionsAndSkills(t *testing.T) {
 	require.Contains(t, gateway, "execute_tool with speakeasy-slack--platform_slack_send_message")
 	require.Contains(t, gateway, "execute_tool with speakeasy-slack--platform_slack_post_ephemeral")
 	require.NotContains(t, gateway, "speakeasy-slack--platform_slack_post_message")
+	require.NotContains(t, gateway, "assistant-slack--")
 	require.Contains(t, gateway, "execute_tool with assistants--platform_thread_unsubscribe")
 	require.Contains(t, gateway, prefix)
 	require.Contains(t, gateway, "connection_status")
 
-	// Custom Slack app (not Speakeasy Slack) prompts discovery via list_servers
-	// rather than hardcoding speakeasy-slack.
+	// Customer-owned Slack app assistant granted the assistant-slack built-in
+	// names assistant-slack directly without a list_servers discovery hint.
 	customSlackThread := slackThread
 	customSlackThread.SourceKind = sourceKindSlack
-	customGateway, err := ComposeInstructionsForMode("Base", customSlackThread, nil, prefix, MCPDeliveryProjectGateway)
+	assistantSlackSlugs := []string{
+		platformtools.AssistantsPlatformToolsetSlug,
+		platformtools.AssistantSlackPlatformToolsetSlug,
+	}
+	assistantSlackGateway, err := ComposeInstructionsForMode("Base", customSlackThread, nil, prefix, MCPDeliveryProjectGateway, assistantSlackSlugs)
+	require.NoError(t, err)
+	require.Contains(t, assistantSlackGateway, "execute_tool with assistant-slack--platform_slack_send_message")
+	require.Contains(t, assistantSlackGateway, "execute_tool with assistant-slack--platform_slack_post_ephemeral")
+	require.Contains(t, assistantSlackGateway, "execute_tool with assistants--platform_thread_unsubscribe")
+	require.NotContains(t, assistantSlackGateway, "speakeasy-slack--")
+	require.NotContains(t, assistantSlackGateway, "list_servers")
+
+	// Per-server mode for customer Slack stays byte-for-byte unchanged.
+	assistantSlackPerServer, err := ComposeInstructionsForMode("Base", customSlackThread, nil, prefix, MCPDeliveryPerServer, assistantSlackSlugs)
+	require.NoError(t, err)
+	legacyCustomSlack, err := composeInstructions("Base", customSlackThread, nil, prefix)
+	require.NoError(t, err)
+	require.Equal(t, legacyCustomSlack, assistantSlackPerServer)
+
+	// Unmigrated customer Slack assistant (no assistant-slack grant in platformSlugs)
+	// keeps the generic <server_slug> guidance and prompts list_servers discovery.
+	legacySlackSlugs := []string{platformtools.AssistantsPlatformToolsetSlug}
+	customGateway, err := ComposeInstructionsForMode("Base", customSlackThread, nil, prefix, MCPDeliveryProjectGateway, legacySlackSlugs)
 	require.NoError(t, err)
 	require.Contains(t, customGateway, "list_servers")
 	require.Contains(t, customGateway, "execute_tool with <server_slug>--platform_slack_send_message")
+	require.NotContains(t, customGateway, "assistant-slack--")
+	require.NotContains(t, customGateway, "speakeasy-slack--")
 	require.Contains(t, customGateway, "execute_tool with assistants--platform_thread_unsubscribe")
 
 	// Dashboard adapter omits legacy assistant_mcp_auth_required in gateway mode
@@ -89,7 +122,7 @@ func TestMCPDeliveryMode_ComposeInstructionsAndSkills(t *testing.T) {
 		SourceRefJSON: []byte(`{"user_id":"user-1"}`),
 		LastEventAt:   time.Now(),
 	}
-	dashGateway, err := ComposeInstructionsForMode("Base", dashThread, nil, prefix, MCPDeliveryProjectGateway)
+	dashGateway, err := ComposeInstructionsForMode("Base", dashThread, nil, prefix, MCPDeliveryProjectGateway, legacySlackSlugs)
 	require.NoError(t, err)
 	require.NotContains(t, dashGateway, "assistant_mcp_auth_required")
 	require.Contains(t, dashGateway, `When relaying a genuine "Connection required" or "Reconnect required" link`)
@@ -102,17 +135,40 @@ func TestMCPDeliveryMode_SlackTurnDecodeAndSkillSnapshot(t *testing.T) {
 		EventID:               "evt-1",
 		NormalizedPayloadJSON: []byte(`{"event_type":"message","addressed":true,"team_id":"T1","channel_id":"C1","thread_id":"1.0","text":"hi","thread_context":{"unavailable":true}}`),
 	}
-	adapter, err := getSourceAdapter(sourceKindSpeakeasySlack)
+	speakeasyAdapter, err := getSourceAdapter(sourceKindSpeakeasySlack)
 	require.NoError(t, err)
+	speakeasySlugs := []string{
+		platformtools.AssistantsPlatformToolsetSlug,
+		platformtools.PlatformMCPReadToolsetSlug,
+		platformtools.SpeakeasySlackPlatformToolsetSlug,
+	}
 
-	perServerTurn, err := adapterDecodeTurn(adapter, event, MCPDeliveryPerServer)
+	perServerTurn, err := adapterDecodeTurn(speakeasyAdapter, event, MCPDeliveryPerServer, speakeasySlugs)
 	require.NoError(t, err)
 	require.Contains(t, perServerTurn, "read them with platform_slack_read_thread_messages")
 
-	gatewayTurn, err := adapterDecodeTurn(adapter, event, MCPDeliveryProjectGateway)
+	// speakeasy-slack does not expose platform_slack_read_thread_messages, so keep generic <server_slug>.
+	gatewayTurn, err := adapterDecodeTurn(speakeasyAdapter, event, MCPDeliveryProjectGateway, speakeasySlugs)
 	require.NoError(t, err)
 	require.Contains(t, gatewayTurn, "execute_read_only_tool with <server_slug>--platform_slack_read_thread_messages")
 	require.NotContains(t, gatewayTurn, "speakeasy-slack--platform_slack_read_thread_messages")
+
+	// assistant-slack exposes all Slack platform tools including platform_slack_read_thread_messages.
+	customerAdapter, err := getSourceAdapter(sourceKindSlack)
+	require.NoError(t, err)
+	assistantSlackSlugs := []string{
+		platformtools.AssistantsPlatformToolsetSlug,
+		platformtools.AssistantSlackPlatformToolsetSlug,
+	}
+	assistantSlackTurn, err := adapterDecodeTurn(customerAdapter, event, MCPDeliveryProjectGateway, assistantSlackSlugs)
+	require.NoError(t, err)
+	require.Contains(t, assistantSlackTurn, "execute_read_only_tool with assistant-slack--platform_slack_read_thread_messages")
+
+	// Unmigrated customer Slack (no assistant-slack grant) keeps generic <server_slug>.
+	legacySlackTurn, err := adapterDecodeTurn(customerAdapter, event, MCPDeliveryProjectGateway, []string{platformtools.AssistantsPlatformToolsetSlug})
+	require.NoError(t, err)
+	require.Contains(t, legacySlackTurn, "execute_read_only_tool with <server_slug>--platform_slack_read_thread_messages")
+	require.NotContains(t, legacySlackTurn, "assistant-slack--")
 
 	prev := assistantSkillSetSnapshot{Version: assistantSkillSnapshotVersion, Skills: nil}
 	curr := assistantSkillSetSnapshot{

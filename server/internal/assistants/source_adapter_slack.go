@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strconv"
 
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
@@ -75,7 +76,26 @@ type slackFilePayload struct {
 
 type slackAdapter struct {
 	deterministicChatIDAdapter
-	gatewayServerSlug string
+	preferSpeakeasyApp bool
+}
+
+// gatewaySlackSlug derives the Project Gateway Slack server slug from the
+// assistant's granted platformSlugs (the same source assistantPlatformSlugs
+// uses to decide which built-in the assistant has):
+//   - sourceKindSpeakeasySlack -> "speakeasy-slack" when granted
+//   - sourceKindSlack          -> "assistant-slack" when granted
+//   - otherwise "" (legacy/attached Slack server discovered via list_servers)
+func (a slackAdapter) gatewaySlackSlug(platformSlugs []string) string {
+	if a.preferSpeakeasyApp {
+		if slices.Contains(platformSlugs, platformtools.SpeakeasySlackPlatformToolsetSlug) {
+			return platformtools.SpeakeasySlackPlatformToolsetSlug
+		}
+		return ""
+	}
+	if slices.Contains(platformSlugs, platformtools.AssistantSlackPlatformToolsetSlug) {
+		return platformtools.AssistantSlackPlatformToolsetSlug
+	}
+	return ""
 }
 
 func (slackAdapter) ThreadContext(sourceRefJSON []byte) (string, error) {
@@ -102,10 +122,10 @@ func (slackAdapter) ThreadContext(sourceRefJSON []byte) (string, error) {
 }
 
 func (a slackAdapter) OutputChannelGuidance() string {
-	return a.OutputChannelGuidanceForMode(MCPDeliveryPerServer)
+	return a.OutputChannelGuidanceForMode(MCPDeliveryPerServer, nil)
 }
 
-func (a slackAdapter) OutputChannelGuidanceForMode(mode MCPDeliveryMode) string {
+func (a slackAdapter) OutputChannelGuidanceForMode(mode MCPDeliveryMode, platformSlugs []string) string {
 	if !mode.IsGateway() {
 		return `## Slack output preferences
 
@@ -124,7 +144,7 @@ When relaying an "assistant_mcp_auth_required" AuthURL, deliver it to the OWNER 
 When relaying a genuine "Connection required" or "Reconnect required" link, deliver it to the person this turn acts for, not the owner: platform_slack_post_ephemeral targeted at that person's Slack user ID, or a DM to them if ephemeral can't reach them. That person is the requester whose message started this turn, or, for a scheduled or resumed turn, the person who asked for it. Never post the link in the channel or thread. If neither reaches them, tell them in the thread, without the link, to open Speakeasy and connect the named server.`
 	}
 
-	slackSlug := a.gatewayServerSlug
+	slackSlug := a.gatewaySlackSlug(platformSlugs)
 	sendMsg := gatewayToolRef("execute_tool", slackSlug, platformtools.ToolNameSendMessage)
 	postEphemeral := gatewayToolRef("execute_tool", slackSlug, "platform_slack_post_ephemeral")
 	unsubscribe := gatewayToolRef("execute_tool", platformtools.AssistantsPlatformToolsetSlug, "platform_thread_unsubscribe")
@@ -150,10 +170,10 @@ When relaying a genuine "Connection required" or "Reconnect required" link, deli
 }
 
 func (a slackAdapter) DecodeTurn(event assistantThreadEventRecord) (string, error) {
-	return a.DecodeTurnForMode(event, MCPDeliveryPerServer)
+	return a.DecodeTurnForMode(event, MCPDeliveryPerServer, nil)
 }
 
-func (a slackAdapter) DecodeTurnForMode(event assistantThreadEventRecord, mode MCPDeliveryMode) (string, error) {
+func (a slackAdapter) DecodeTurnForMode(event assistantThreadEventRecord, mode MCPDeliveryMode, platformSlugs []string) (string, error) {
 	var payload slackEventPayload
 	if err := json.Unmarshal(event.NormalizedPayloadJSON, &payload); err != nil {
 		return "", fmt.Errorf("decode slack event payload: %w", err)
@@ -215,7 +235,7 @@ func (a slackAdapter) DecodeTurnForMode(event assistantThreadEventRecord, mode M
 		b.WriteString("Attachment contents are not directly visible here; pass an attachment's file id to the Slack platform tools to access it.\n")
 	}
 	b.WriteString("</message-context>\n\n")
-	writeSlackThreadContext(&b, payload, mode, a.gatewayServerSlug)
+	writeSlackThreadContext(&b, payload, mode, a.gatewaySlackSlug(platformSlugs))
 	b.WriteString(payload.Text)
 	return b.String(), nil
 }

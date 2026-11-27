@@ -3,17 +3,23 @@ package mcp_test
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
+	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
+	"github.com/speakeasy-api/gram/server/internal/authclients"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -28,6 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	featuresrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -319,4 +326,182 @@ func TestEvaluateProjectGatewayForTurnCredential_UnbackfilledAgentMissingBuiltin
 		PlatformToolsetSlug: "",
 		EnvironmentSlug:     "",
 	}}, eval.Members)
+}
+
+func TestEvaluateProjectGatewayForTurnCredential_AssistantSlackAuthClientsDoNotFlapEligibility(t *testing.T) {
+	t.Parallel()
+	f := newWorkloadGrantFixture(t)
+	ctx := f.ctx
+	ti := f.ti
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	fixture := seedOrganizationGateway(t, ctx, ti)
+	grantProjectRead(t, ti, authCtx)
+	ti.features.SetFlag(feature.FlagProjectGatewayMachineAccess, authCtx.ActiveOrganizationID, true)
+
+	ti.slackTransport.set(func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{"ok":true,"channel":"C123","ts":"1700000000.000100"}`)),
+			Request:    req,
+		}, nil
+	})
+
+	seedSlackAppClient := func(name, botToken string) uuid.UUID {
+		clientID, err := testrepo.New(ti.conn).CreateAuthClientFixture(ctx, testrepo.CreateAuthClientFixtureParams{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			ProjectID:      uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+			ClientType:     authz.AuthClientTypeSlackApp,
+			Name:           name,
+		})
+		require.NoError(t, err)
+		encToken, err := ti.enc.Encrypt([]byte(botToken))
+		require.NoError(t, err)
+		require.NoError(t, testrepo.New(ti.conn).CreateAuthClientHeaderFixture(ctx, testrepo.CreateAuthClientHeaderFixtureParams{
+			AuthClientID:   clientID,
+			OrganizationID: authCtx.ActiveOrganizationID,
+			Name:           authclients.SlackHeaderBotToken,
+			IsSecret:       true,
+			Value:          pgtype.Text{String: encToken, Valid: true},
+		}))
+		return clientID
+	}
+	clientA := seedSlackAppClient("Slack A", "xoxb-elig-a")
+	clientB := seedSlackAppClient("Slack B", "xoxb-elig-b")
+
+	assistantsID := platformtools.PlatformToolsetID(platformtools.AssistantsPlatformToolsetSlug)
+	assistantSlackID := platformtools.PlatformToolsetID(platformtools.AssistantSlackPlatformToolsetSlug)
+	agentPrincipal := urn.NewPrincipal(urn.PrincipalTypeAgent, f.agentID.String())
+
+	// Grant both acting user and agent mcp:connect on assistants + assistant-slack,
+	// and owner wildcard mcp:auth (as default roles do).
+	for _, id := range []uuid.UUID{assistantsID, assistantSlackID} {
+		seedUserMCPConnectGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authCtx.UserID, id.String())
+		seedPrincipalMCPConnectGrant(t, ctx, ti, authCtx.ActiveOrganizationID, agentPrincipal, id)
+	}
+	ownerAuthSel, err := authz.AuthClientSelector(authz.WildcardResource, "").MarshalJSON()
+	require.NoError(t, err)
+	_, err = accessrepo.New(ti.conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		PrincipalUrn:   urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		Scope:          string(authz.ScopeMCPAuth),
+		Selectors:      ownerAuthSel,
+	})
+	require.NoError(t, err)
+
+	binding := seedAssistantThreadBinding(t, ctx, ti, authCtx)
+	humanToken, err := ti.assistantTokens.MintTurnCredential(ctx, principalcredential.Credential{
+		OrganizationID:            authCtx.ActiveOrganizationID,
+		ProjectID:                 *authCtx.ProjectID,
+		Principal:                 agentPrincipal,
+		AuthorizerUserID:          authCtx.UserID,
+		SelectionProfileVersionID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	}, binding)
+	require.NoError(t, err)
+	workloadToken, err := ti.assistantTokens.MintTurnCredential(ctx, principalcredential.Credential{
+		OrganizationID:            authCtx.ActiveOrganizationID,
+		ProjectID:                 *authCtx.ProjectID,
+		Principal:                 urn.NewWorkloadPrincipal(f.issuerID, f.subject),
+		AuthorizerUserID:          "",
+		SelectionProfileVersionID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	}, binding)
+	require.NoError(t, err)
+
+	workerEvaluator := mcp.NewProjectGatewayEvaluator(mcp.ProjectGatewayEvaluatorConfig{
+		Logger:               ti.logger,
+		MeterProvider:        testenv.NewMeterProvider(t),
+		DB:                   ti.conn,
+		Environment:          environments.NewEnvironmentEntries(ti.logger, ti.conn, ti.enc, mcpmetadata_repo.New(ti.conn)),
+		Encryption:           ti.enc,
+		Cache:                testenv.NewMemoryCache(),
+		Authz:                ti.authzEngine,
+		Features:             ti.features,
+		PrincipalCredentials: ti.principalCredentials,
+		AssistantTokens:      ti.assistantTokens,
+		ServerURL:            ti.serverURL,
+		PlatformExtras:       nil,
+	})
+
+	httpsServerURL, err := url.Parse("https://api.example.test")
+	require.NoError(t, err)
+
+	assertAdmittedStable := func(stage string) {
+		t.Helper()
+		for _, tc := range []struct {
+			name  string
+			token string
+		}{
+			{name: "human", token: humanToken},
+			{name: "workload", token: workloadToken},
+		} {
+			eval, evalErr := ti.service.EvaluateProjectGatewayForTurnCredential(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, tc.token, httpsServerURL)
+			require.NoError(t, evalErr, "%s/%s", stage, tc.name)
+			require.True(t, eval.Admitted, "%s/%s: reason=%s", stage, tc.name, eval.Reason)
+
+			workerEval, wErr := workerEvaluator.EvaluateProjectGatewayForTurnCredential(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, tc.token, httpsServerURL)
+			require.NoError(t, wErr, "%s/%s", stage, tc.name)
+			require.Equal(t, eval, workerEval, "%s/%s", stage, tc.name)
+
+			slugs := map[string]bool{}
+			for _, m := range eval.Members {
+				if m.PlatformToolsetSlug != "" {
+					slugs[m.PlatformToolsetSlug] = true
+				}
+			}
+			require.Equal(t, map[string]bool{
+				platformtools.AssistantsPlatformToolsetSlug:     true,
+				platformtools.AssistantSlackPlatformToolsetSlug: true,
+			}, slugs, "%s/%s: admitted platform slugs must stay stable", stage, tc.name)
+		}
+	}
+
+	callSend := func() (string, bool) {
+		resp, callErr := serveProjectGatewayHTTP(t, ti, fixture, fixture.projectSlug, humanToken, makeMetaRPCBody(t, "tools/call", map[string]any{
+			"name": metamcp.ToolExecuteTool,
+			"arguments": map[string]any{
+				"name":      platformtools.AssistantSlackPlatformToolsetSlug + "--" + platformtools.ToolNameSendMessage,
+				"arguments": map[string]any{"channel_id": "C123", "text": "hello"},
+			},
+		}))
+		require.NoError(t, callErr)
+		require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+		return metaToolResultText(t, decodeRPCResponse(t, resp))
+	}
+
+	// Stage 0: zero slack_app mcp:auth grants -> eligibility admits assistant-slack
+	// (no flapping), tool call fails closed.
+	assertAdmittedStable("zero_clients")
+	text, isErr := callSend()
+	require.True(t, isErr)
+	require.Contains(t, text, "no Slack app auth client is authorized")
+
+	// Stage 1: one slack_app mcp:auth grant -> eligibility unchanged, tool succeeds.
+	_, err = accessrepo.New(ti.conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		PrincipalUrn:   agentPrincipal,
+		Scope:          string(authz.ScopeMCPAuth),
+		Selectors:      mustMarshalSelector(t, assistantidentity.AssistantSlackAuthGrant(clientA).Selector),
+	})
+	require.NoError(t, err)
+	assertAdmittedStable("one_client")
+	text, isErr = callSend()
+	require.False(t, isErr, text)
+	require.Contains(t, text, `"ok":true`)
+
+	// Stage 2: two slack_app mcp:auth grants -> eligibility still unchanged (no
+	// flapping), tool call fails closed with ambiguity error.
+	_, err = accessrepo.New(ti.conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		PrincipalUrn:   agentPrincipal,
+		Scope:          string(authz.ScopeMCPAuth),
+		Selectors:      mustMarshalSelector(t, assistantidentity.AssistantSlackAuthGrant(clientB).Selector),
+	})
+	require.NoError(t, err)
+	assertAdmittedStable("two_clients")
+	text, isErr = callSend()
+	require.True(t, isErr)
+	require.Contains(t, text, "multiple Slack app auth clients")
 }

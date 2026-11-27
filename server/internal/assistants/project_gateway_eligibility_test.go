@@ -11,17 +11,23 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/gen/types"
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
+	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	"github.com/speakeasy-api/gram/server/internal/orggateway"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type stubProjectGatewayEvaluator struct {
@@ -355,4 +361,155 @@ func TestDefaultRuntimeTurnAndBootstrap_UsesProjectGatewayAndFallsBack(t *testin
 	require.NoError(t, err)
 	require.Equal(t, wantFallback, fallbackBootstrap.MCPServers)
 	require.Contains(t, fallbackBootstrap.Instructions, "assistant_mcp_auth_required")
+}
+
+func TestDefaultRuntime_AssistantSlackBuiltInVsLegacySlackToolset(t *testing.T) {
+	t.Parallel()
+
+	db, err := assistantsInfra.CloneTestDatabase(t, "default_runtime_assistant_slack_gw")
+	require.NoError(t, err)
+	ctx := t.Context()
+	project := newProvisioningProject(t, db, "slack-gw-proj")
+	seedProjectRead(t, db, "user-1", project)
+
+	core := newProvisioningCore(t, db)
+	redisClient, err := assistantsInfra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+	engine := authz.NewEngine(testenv.NewLogger(t), db, authztest.ChallengeLoggingAlwaysDisabled, nil, authz.EngineOpts{
+		AdmitPrincipalCredential: runtimepolicy.AdmitPrincipalCredential,
+		AdmitWorkloadSession:     runtimepolicy.AdmitWorkloadSession,
+	})
+	manager := assistanttokens.New("test-secret", db, engine, newTestPrincipalCredentials(t, db), cache.NewRedisCacheAdapter(redisClient))
+	core.assistantTokens = manager
+
+	runTurnMCP := &atomic.Pointer[[]runtimeMCPServer]{}
+	runTurnPrompt := &atomic.Pointer[string]{}
+	runTurnToken := &atomic.Pointer[string]{}
+	core.runtime = testRuntimeBackend{
+		backend:           runtimeBackendGKE,
+		runTurnMCPServers: runTurnMCP,
+		runTurnPrompt:     runTurnPrompt,
+		runTurnToken:      runTurnToken,
+	}
+
+	gatewayURL := "https://api.example.test/mcp/org/acme/projects/slack-gw-proj"
+
+	// 1. Eligible assistant with built-in assistant-slack:
+	//    - agent holds mcp:connect on PlatformToolsetID("assistant-slack"), so
+	//      assistantPlatformSlugs includes "assistant-slack"
+	//    - gateway admits ["assistants", "assistant-slack"]
+	//    - both turn dispatch and bootstrap use the single gateway entry and
+	//      Slack guidance + turn decode name assistant-slack--<tool>.
+	migrated, err := core.CreateAssistant(ctx, "org-test", project, "user-1", "Migrated Slack Assistant", "openai/gpt-4o-mini", "You are helpful.", nil, nil, 300, 1, StatusActive, true, nil, nil)
+	require.NoError(t, err)
+	require.NotNil(t, migrated.AgentID)
+
+	assistantSlackID := platformtools.PlatformToolsetID(platformtools.AssistantSlackPlatformToolsetSlug)
+	selBytes, err := assistantidentity.BuiltinConnectGrant(project, platformtools.AssistantSlackPlatformToolsetSlug).Selector.MarshalJSON()
+	require.NoError(t, err)
+	_, err = accessrepo.New(db).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
+		OrganizationID: "org-test",
+		PrincipalUrn:   urn.NewPrincipal(urn.PrincipalTypeAgent, *migrated.AgentID),
+		Scope:          string(authz.ScopeMCPConnect),
+		Selectors:      selBytes,
+	})
+	require.NoError(t, err)
+
+	migratedThread := seedThreadWithEvent(t, db, migrated.ID, "slack-migrated", "slack:T1:C1:1.0", eventStatusPending)
+	core.SetProjectGatewayEvaluator(&stubProjectGatewayEvaluator{
+		eval: func(_ context.Context, _ string, _ uuid.UUID, _ string, _ *url.URL) (orggateway.ProjectGatewayEvaluation, error) {
+			return orggateway.ProjectGatewayEvaluation{
+				Admitted:   true,
+				GatewayURL: gatewayURL,
+				Members: []orggateway.ProjectGatewayMember{
+					{
+						ServerID:            platformtools.PlatformToolsetID(platformtools.AssistantsPlatformToolsetSlug),
+						PlatformToolsetSlug: platformtools.AssistantsPlatformToolsetSlug,
+					},
+					{
+						ServerID:            assistantSlackID,
+						PlatformToolsetSlug: platformtools.AssistantSlackPlatformToolsetSlug,
+					},
+				},
+			}, nil
+		},
+	})
+
+	slackPayload := []byte(`{"event_type":"message","addressed":true,"team_id":"T1","channel_id":"C1","thread_id":"1.0","user_id":"U1","text":"hi","thread_context":{"unavailable":true}}`)
+	_, err = core.processEventTurn(ctx, assistantThreadRecord{
+		ID: migratedThread, ProjectID: project, AssistantID: migrated.ID, SourceKind: sourceKindSlack, SourceRefJSON: []byte(`{"team_id":"T1","channel_id":"C1","thread_id":"1.0","user_id":"U1"}`),
+	}, migrated, assistantRuntimeRecord{RuntimeVersion: 2}, assistantThreadEventRecord{
+		ID: uuid.New(), EventID: uuid.NewString(), NormalizedPayloadJSON: slackPayload,
+	})
+	require.NoError(t, err)
+	wantGateway := []runtimeMCPServer{{
+		ID:        projectGatewayRuntimeServerID,
+		URL:       gatewayURL,
+		Headers:   map[string]string{},
+		IsGateway: true,
+	}}
+	require.Equal(t, wantGateway, *runTurnMCP.Load())
+	require.Contains(t, *runTurnPrompt.Load(), "execute_read_only_tool with assistant-slack--platform_slack_read_thread_messages")
+
+	migratedTok := *runTurnToken.Load()
+	migratedAuthed, _, err := manager.AuthorizeRuntime(ctx, "Bearer "+migratedTok)
+	require.NoError(t, err)
+	migratedBootstrap, err := core.BuildThreadBootstrap(withBootstrapRuntimeToken(migratedAuthed, migratedTok), project, migratedThread, migrated.ID)
+	require.NoError(t, err)
+	require.Equal(t, wantGateway, migratedBootstrap.MCPServers)
+	require.Contains(t, migratedBootstrap.Instructions, "execute_tool with assistant-slack--platform_slack_send_message")
+	require.Contains(t, migratedBootstrap.Instructions, "execute_tool with assistant-slack--platform_slack_post_ephemeral")
+	require.NotContains(t, migratedBootstrap.Instructions, "speakeasy-slack--")
+	require.NotContains(t, migratedBootstrap.Instructions, "assistant_mcp_auth_required")
+
+	// 2. Legacy assistant still on a per-assistant Slack toolset (no assistant-slack
+	//    grant, legacy Slack MCP server attached, not admitted on the gateway):
+	//    both turn dispatch and bootstrap fall back to the per-server list and
+	//    per-server Slack guidance unchanged.
+	legacyToolset, err := toolsetsrepo.New(db).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
+		OrganizationID: "org-test",
+		ProjectID:      project,
+		Name:           "Legacy Assistant Slack",
+		Slug:           "legacy-slack-bot",
+		Description:    conv.ToPGText("Legacy per-assistant Slack toolset"),
+	})
+	require.NoError(t, err)
+	createCanonicalWrapper(t, db, legacyToolset, "legacy-slack-bot", visibility.Private)
+	legacyAssistant, err := core.CreateAssistant(ctx, "org-test", project, "user-1", "Legacy Slack Assistant", "openai/gpt-4o-mini", "You are helpful.", nil, []*types.AssistantMCPServerRef{{McpServerSlug: "legacy-slack-bot"}}, 300, 1, StatusActive, true, func(uuid.UUID) bool { return true }, nil)
+	require.NoError(t, err)
+	legacyThread := seedThreadWithEvent(t, db, legacyAssistant.ID, "slack-legacy", "slack:T1:C2:2.0", eventStatusPending)
+
+	// Gateway admits only "assistants" (not the unmigrated legacy Slack server).
+	core.SetProjectGatewayEvaluator(&stubProjectGatewayEvaluator{
+		eval: func(_ context.Context, _ string, _ uuid.UUID, _ string, _ *url.URL) (orggateway.ProjectGatewayEvaluation, error) {
+			return orggateway.ProjectGatewayEvaluation{
+				Admitted:   true,
+				GatewayURL: gatewayURL,
+				Members: []orggateway.ProjectGatewayMember{{
+					ServerID:            platformtools.PlatformToolsetID(platformtools.AssistantsPlatformToolsetSlug),
+					PlatformToolsetSlug: platformtools.AssistantsPlatformToolsetSlug,
+				}},
+			}, nil
+		},
+	})
+
+	_, err = core.processEventTurn(ctx, assistantThreadRecord{
+		ID: legacyThread, ProjectID: project, AssistantID: legacyAssistant.ID, SourceKind: sourceKindSlack, SourceRefJSON: []byte(`{"team_id":"T1","channel_id":"C2","thread_id":"2.0","user_id":"U1"}`),
+	}, legacyAssistant, assistantRuntimeRecord{RuntimeVersion: 2}, assistantThreadEventRecord{
+		ID: uuid.New(), EventID: uuid.NewString(), NormalizedPayloadJSON: slackPayload,
+	})
+	require.NoError(t, err)
+	wantLegacyPerServer := resolveAssistantMCPServers(ctx, testenv.NewLogger(t), core.runtime.ServerURL(), legacyAssistant.MCPServers, []string{platformtools.AssistantsPlatformToolsetSlug})
+	require.Equal(t, wantLegacyPerServer, *runTurnMCP.Load())
+	require.Contains(t, *runTurnPrompt.Load(), "read them with platform_slack_read_thread_messages")
+	require.NotContains(t, *runTurnPrompt.Load(), "assistant-slack--")
+
+	legacyTok := *runTurnToken.Load()
+	legacyAuthed, _, err := manager.AuthorizeRuntime(ctx, "Bearer "+legacyTok)
+	require.NoError(t, err)
+	legacyBootstrap, err := core.BuildThreadBootstrap(withBootstrapRuntimeToken(legacyAuthed, legacyTok), project, legacyThread, legacyAssistant.ID)
+	require.NoError(t, err)
+	require.Equal(t, wantLegacyPerServer, legacyBootstrap.MCPServers)
+	require.Contains(t, legacyBootstrap.Instructions, "assistant_mcp_auth_required")
+	require.NotContains(t, legacyBootstrap.Instructions, "assistant-slack--")
 }

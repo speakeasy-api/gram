@@ -41,10 +41,10 @@ func (dashboardAdapter) ThreadContext(sourceRefJSON []byte) (string, error) {
 }
 
 func (d dashboardAdapter) OutputChannelGuidance() string {
-	return d.OutputChannelGuidanceForMode(MCPDeliveryPerServer)
+	return d.OutputChannelGuidanceForMode(MCPDeliveryPerServer, nil)
 }
 
-func (dashboardAdapter) OutputChannelGuidanceForMode(mode MCPDeliveryMode) string {
+func (dashboardAdapter) OutputChannelGuidanceForMode(mode MCPDeliveryMode, _ []string) string {
 	authLine := "When relaying an \"assistant_mcp_auth_required\" AuthURL, render it as a clickable Markdown link in your reply (e.g. `[Authorize](<AuthURL>)`) — the dashboard reader IS the owner, no tool call is needed.\n"
 	if mode.IsGateway() {
 		authLine = ""

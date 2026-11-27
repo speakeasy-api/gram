@@ -3656,7 +3656,7 @@ func (s *ServiceCore) processEventTurnWithProtocol(
 		return nil, err
 	}
 
-	mcpServers, deliveryMode := s.currentRuntimeMCPServersForTurn(ctx, assistant, runtime.RuntimeVersion, identity.AgentBacked, turnToken)
+	mcpServers, deliveryMode, platformSlugs := s.currentRuntimeMCPServersForTurn(ctx, assistant, runtime.RuntimeVersion, identity.AgentBacked, turnToken)
 
 	notice := ""
 	if event.SkillSetSnapshot != nil {
@@ -3676,7 +3676,7 @@ func (s *ServiceCore) processEventTurnWithProtocol(
 		if err != nil {
 			return nil, err
 		}
-		prompt, err = adapterDecodeTurn(adapter, event, deliveryMode)
+		prompt, err = adapterDecodeTurn(adapter, event, deliveryMode, platformSlugs)
 		if err != nil {
 			return nil, fmt.Errorf("decode assistant turn: %w", err)
 		}
@@ -3704,7 +3704,7 @@ func (s *ServiceCore) processEventTurnWithProtocol(
 	var canonicalUserMessageID uuid.UUID
 	var sourceInstructions string
 	if runtime.RuntimeVersion == 3 {
-		sourceInstructions, err = ComposeInstructionsForMode("", thread, nil, s.connectionLinkPrefix(), deliveryMode)
+		sourceInstructions, err = ComposeInstructionsForMode("", thread, nil, s.connectionLinkPrefix(), deliveryMode, platformSlugs)
 		if err != nil {
 			return nil, err
 		}
@@ -3753,25 +3753,25 @@ func (s *ServiceCore) currentRuntimeMCPServersForTurn(
 	runtimeVersion int16,
 	agentBacked bool,
 	turnToken string,
-) ([]runtimeMCPServer, MCPDeliveryMode) {
+) ([]runtimeMCPServer, MCPDeliveryMode, []string) {
 	serverURL := s.runtime.ServerURL()
 	if serverURL == nil {
-		return nil, MCPDeliveryPerServer
+		return nil, MCPDeliveryPerServer, nil
 	}
 	platformSlugs, err := s.assistantPlatformSlugs(ctx, assistant)
 	if err != nil {
 		s.logger.WarnContext(ctx, "resolve platform toolsets for mcp reconcile failed; skipping reconcile",
 			attr.SlogError(err),
 		)
-		return nil, MCPDeliveryPerServer
+		return nil, MCPDeliveryPerServer, nil
 	}
 	if runtimeVersion != 3 && agentBacked {
 		elig := s.EvaluateProjectGatewayEligibility(ctx, assistant.OrganizationID, assistant.ProjectID, assistant.ID, serverURL, turnToken, assistant.MCPServers, platformSlugs)
 		if elig.Eligible {
-			return projectGatewayRuntimeServer(elig.GatewayURL), MCPDeliveryProjectGateway
+			return projectGatewayRuntimeServer(elig.GatewayURL), MCPDeliveryProjectGateway, platformSlugs
 		}
 	}
-	return resolveAssistantMCPServers(ctx, s.logger, serverURL, assistant.MCPServers, platformSlugs), MCPDeliveryPerServer
+	return resolveAssistantMCPServers(ctx, s.logger, serverURL, assistant.MCPServers, platformSlugs), MCPDeliveryPerServer, platformSlugs
 }
 
 // assistantPlatformSlugs returns the platform toolset slugs granted to this
@@ -4027,7 +4027,7 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 		return threadBootstrap{}, oops.E(oops.CodeUnexpected, mErr, "resolve managed assistant").LogError(ctx, s.logger, logAttrs...)
 	}
 
-	instructions, err := ComposeInstructionsForMode(baseInstructions, thread, baselineSkills.Skills, s.connectionLinkPrefix(), deliveryMode)
+	instructions, err := ComposeInstructionsForMode(baseInstructions, thread, baselineSkills.Skills, s.connectionLinkPrefix(), deliveryMode, platformSlugs)
 	if err != nil {
 		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "compose assistant instructions").LogError(ctx, s.logger, logAttrs...)
 	}
@@ -4096,7 +4096,7 @@ A tool error starting "Connection required" or "Reconnect required" is different
 }
 
 func composeInstructions(base string, thread assistantThreadRecord, skills []assistantSkillSnapshot, connectionLinkPrefix string) (string, error) {
-	return ComposeInstructionsForMode(base, thread, skills, connectionLinkPrefix, MCPDeliveryPerServer)
+	return ComposeInstructionsForMode(base, thread, skills, connectionLinkPrefix, MCPDeliveryPerServer, nil)
 }
 
 // capRuntimeMCPServerID bounds a runner-side MCP server ID. agentkit exposes

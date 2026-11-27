@@ -102,13 +102,17 @@ A tool error starting "Connection required" or "Reconnect required" is different
 }
 
 // ComposeInstructionsForMode composes the system instructions for an assistant
-// thread under mode. Exported so both Default and Kit runtimes share one seam.
+// thread under mode. platformSlugs is the assistant's granted built-in list
+// from assistantPlatformSlugs so gateway-mode guidance names the exact built-in
+// server slug (e.g. assistant-slack vs speakeasy-slack) without guessing.
+// Exported so both Default and Kit runtimes share one seam.
 func ComposeInstructionsForMode(
 	base string,
 	thread assistantThreadRecord,
 	skills []assistantSkillSnapshot,
 	connectionLinkPrefix string,
 	mode MCPDeliveryMode,
+	platformSlugs []string,
 ) (string, error) {
 	adapter, err := getSourceAdapter(thread.SourceKind)
 	if err != nil {
@@ -126,7 +130,7 @@ func ComposeInstructionsForMode(
 		parts = append(parts, renderSkillsInstructions(skills, mode))
 	}
 	parts = append(parts, mcpAuthAddendumForMode(connectionLinkPrefix, mode))
-	if guidance := adapterOutputChannelGuidance(adapter, mode); guidance != "" {
+	if guidance := adapterOutputChannelGuidance(adapter, mode, platformSlugs); guidance != "" {
 		parts = append(parts, guidance)
 	}
 	if ctxBlock != "" {
@@ -136,23 +140,23 @@ func ComposeInstructionsForMode(
 }
 
 type modeAwareOutputGuidance interface {
-	OutputChannelGuidanceForMode(mode MCPDeliveryMode) string
+	OutputChannelGuidanceForMode(mode MCPDeliveryMode, platformSlugs []string) string
 }
 
 type modeAwareTurnDecoder interface {
-	DecodeTurnForMode(event assistantThreadEventRecord, mode MCPDeliveryMode) (string, error)
+	DecodeTurnForMode(event assistantThreadEventRecord, mode MCPDeliveryMode, platformSlugs []string) (string, error)
 }
 
-func adapterOutputChannelGuidance(adapter sourceAdapter, mode MCPDeliveryMode) string {
+func adapterOutputChannelGuidance(adapter sourceAdapter, mode MCPDeliveryMode, platformSlugs []string) string {
 	if aware, ok := adapter.(modeAwareOutputGuidance); ok {
-		return aware.OutputChannelGuidanceForMode(mode)
+		return aware.OutputChannelGuidanceForMode(mode, platformSlugs)
 	}
 	return adapter.OutputChannelGuidance()
 }
 
-func adapterDecodeTurn(adapter sourceAdapter, event assistantThreadEventRecord, mode MCPDeliveryMode) (string, error) {
+func adapterDecodeTurn(adapter sourceAdapter, event assistantThreadEventRecord, mode MCPDeliveryMode, platformSlugs []string) (string, error) {
 	if aware, ok := adapter.(modeAwareTurnDecoder); ok {
-		out, err := aware.DecodeTurnForMode(event, mode)
+		out, err := aware.DecodeTurnForMode(event, mode, platformSlugs)
 		if err != nil {
 			return "", fmt.Errorf("decode turn for mode: %w", err)
 		}
