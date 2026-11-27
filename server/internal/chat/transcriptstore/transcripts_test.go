@@ -116,7 +116,9 @@ func TestTranscriptsGateByProject(t *testing.T) {
 	f.insert(t, other, offList)
 	for _, id := range []uuid.UUID{unlisted, offList} {
 		_, err := fixturerepo.New(f.db).MessageMetadata(t.Context(), id)
-		require.Error(t, err, "a project off the list captures nothing")
+		require.NoError(t, err, "every mode writes the metadata")
+		_, err = f.store.Load(t.Context(), f.org, f.project, id)
+		require.ErrorIs(t, err, ErrNotFound, "a project off the list seals nothing")
 	}
 
 	enabled := NewTranscripts(f.store, f.project)

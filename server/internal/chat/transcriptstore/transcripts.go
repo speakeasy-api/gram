@@ -112,15 +112,11 @@ func (t *Transcripts) Mode(projectID uuid.UUID) Mode {
 // change fails. It reports whether anything changed. Call Prepare before
 // beginning the transaction, and roll back on error.
 func (t *Transcripts) UpdateChatMessage(ctx context.Context, db repo.DBTX, organizationID string, projectID, chatID, messageID uuid.UUID, apply func(*chatrepo.ChatMessage) error) (bool, error) {
-	mode := t.Mode(projectID)
-	if mode == ModePlaintext {
-		changed, err := updateChatMessage(ctx, db, nil, false, organizationID, projectID, chatID, messageID, apply)
-		if err != nil {
-			return false, fmt.Errorf("update chat message: %w", err)
-		}
-		return changed, nil
+	p, err := t.protector(db, organizationID, projectID)
+	if err != nil {
+		return false, fmt.Errorf("update chat message: %w", err)
 	}
-	changed, err := t.store.updateChatMessageIn(ctx, db, mode == ModeEncrypted, organizationID, projectID, chatID, messageID, apply)
+	changed, err := p.update(ctx, chatID, messageID, apply)
 	if err != nil {
 		return false, fmt.Errorf("update chat message: %w", err)
 	}
