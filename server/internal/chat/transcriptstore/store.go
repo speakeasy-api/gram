@@ -339,6 +339,15 @@ func sameRow(before, after chatrepo.ChatMessage) bool {
 			}
 			continue
 		}
+		xt, xIsText := x.(pgtype.Text)
+		yt, yIsText := y.(pgtype.Text)
+		if xIsText && yIsText {
+			// A NULL text's String is ignored, as Postgres ignores it.
+			if xt.Valid != yt.Valid || (xt.Valid && xt.String != yt.String) {
+				return false
+			}
+			continue
+		}
 		if !reflect.DeepEqual(x, y) {
 			return false
 		}

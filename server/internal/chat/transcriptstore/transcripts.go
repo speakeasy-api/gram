@@ -16,7 +16,7 @@ import (
 // the decision a caller would otherwise repeat: whether a project has encrypted
 // transcripts, so its messages are sealed on write and opened on read. Today
 // that is the projects on GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS. Every other
-// project reads plaintext: inserts, updates and Open touch no transcript. A nil *Transcripts
+// project reads plaintext: inserts, updates and OpenChatMessages touch no transcript. A nil *Transcripts
 // means no project has encrypted transcripts.
 type Transcripts struct {
 	store     *Store
@@ -158,7 +158,7 @@ func (t *Transcripts) UpdateChatMessage(ctx context.Context, db repo.DBTX, organ
 	return changed, nil
 }
 
-// OpenTarget is one loaded message for Open: its ID, and Set, which writes
+// OpenTarget is one loaded message for OpenChatMessages: its ID, and Set, which writes
 // the opened protected fields into the row the caller loaded. Each row type's
 // Set writes only the fields that row has.
 type OpenTarget struct {
