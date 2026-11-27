@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	slackclient "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
@@ -1052,6 +1053,18 @@ func (a *App) ProcessEvent(ctx context.Context, instance triggerrepo.TriggerInst
 
 	if instance.Status != StatusActive {
 		a.deliveryLogger.LogTriggerDelivery(ctx, instance, envelope, DeliveryStatusSkipped, "trigger is paused", nil)
+		return nil, nil
+	}
+
+	// Triggers fire with nobody signed in, so the session and API key checks
+	// that refuse a disabled organization never run for them.
+	org, err := orgrepo.New(a.db).GetOrganizationMetadata(ctx, instance.OrganizationID)
+	if err != nil {
+		a.deliveryLogger.LogTriggerDelivery(ctx, instance, envelope, DeliveryStatusFailed, "load organization", err)
+		return nil, fmt.Errorf("load trigger organization: %w", err)
+	}
+	if org.DisabledAt.Valid {
+		a.deliveryLogger.LogTriggerDelivery(ctx, instance, envelope, DeliveryStatusSkipped, "organization is disabled", nil)
 		return nil, nil
 	}
 
