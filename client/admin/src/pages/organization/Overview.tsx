@@ -17,6 +17,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { AdoptionDashboardLink } from "@/pages/organization/AdoptionDashboardLink";
+import { FunctionTimeout } from "@/pages/organization/FunctionTimeout";
 import { OnboardingPlaybook } from "@/pages/organization/OnboardingPlaybook";
 import { TrialFacts, TrialSummary } from "@/pages/organization/TrialFacts";
 import { OrganizationActions } from "@/pages/organizations/OrganizationActions";
@@ -482,6 +483,9 @@ export function Overview({
           </Row>
           <Row label="Adoption Dashboard Link">
             <AdoptionDashboardLink key={org.id} org={org} />
+          </Row>
+          <Row label="Function Timeout">
+            <FunctionTimeout key={org.id} org={org} />
           </Row>
           <TrialFacts org={org} />
         </Panel>

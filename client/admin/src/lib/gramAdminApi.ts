@@ -296,6 +296,11 @@ export type AdminOrganization = {
   // Staff-entered link to the organization's adoption dashboard. Absent when
   // none is set, and absent on list rows: only the record read selects it.
   adoption_dashboard_url?: string;
+  // How long one Speakeasy Function invocation may run, in seconds: the
+  // staff-set limit, or the platform default when none is set. Both fields are
+  // absent on list rows: only the record read selects them.
+  function_timeout_seconds?: number;
+  function_timeout_is_default?: boolean;
   member_count: number;
   created_at: string;
   updated_at: string;
@@ -334,6 +339,25 @@ export function setAdoptionDashboardUrl(
 ): Promise<AdminOrganization> {
   return gramAdminMutation<AdminOrganization>(
     "/admin/organization.setAdoptionDashboardUrl",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+}
+
+export type SetFunctionTimeoutRequest = {
+  organization_id: string;
+  // The limit in seconds, or absent to restore the platform default.
+  function_timeout_seconds?: number;
+};
+
+export function setFunctionTimeout(
+  body: SetFunctionTimeoutRequest,
+): Promise<AdminOrganization> {
+  return gramAdminMutation<AdminOrganization>(
+    "/admin/organization.setFunctionTimeout",
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
