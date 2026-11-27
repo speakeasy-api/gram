@@ -1085,11 +1085,14 @@ SELECT
   , s.auto_paused_at
   , s.last_push_digest
   , s.last_poll_success_at
+  , (om.disabled_at IS NOT NULL)::boolean AS organization_disabled
 FROM device_integration_syncs s
 JOIN device_integration_schedules sch
   ON sch.id = s.device_integration_schedule_id
 JOIN device_integration_configs c
   ON c.id = sch.device_integration_config_id
+JOIN organization_metadata om
+  ON om.id = c.organization_id
 WHERE s.id = $1
 `
 
@@ -1110,6 +1113,7 @@ type GetSyncTargetRow struct {
 	AutoPausedAt         pgtype.Timestamptz
 	LastPushDigest       pgtype.Text
 	LastPollSuccessAt    pgtype.Timestamptz
+	OrganizationDisabled bool
 }
 
 func (q *Queries) GetSyncTarget(ctx context.Context, syncID uuid.UUID) (GetSyncTargetRow, error) {
@@ -1132,6 +1136,7 @@ func (q *Queries) GetSyncTarget(ctx context.Context, syncID uuid.UUID) (GetSyncT
 		&i.AutoPausedAt,
 		&i.LastPushDigest,
 		&i.LastPollSuccessAt,
+		&i.OrganizationDisabled,
 	)
 	return i, err
 }
@@ -2270,6 +2275,9 @@ JOIN organization_metadata om
 WHERE c.enabled IS TRUE
   AND c.deleted IS FALSE
   AND sch.disabled_at IS NULL
+  -- A disabled organization's syncs stay due without being selected, so they
+  -- run on the first tick after the organization is re-enabled.
+  AND om.disabled_at IS NULL
   AND s.auto_paused_at IS NULL
   AND s.next_poll_after <= clock_timestamp()
   AND NOT (s.id = ANY ($1::uuid[]))

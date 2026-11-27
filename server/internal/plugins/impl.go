@@ -2256,6 +2256,11 @@ func requirePluginAPIKeyCreator(ctx context.Context, db usersrepo.DBTX, organiza
 // the same publish cannot change that.
 var ErrPluginAPIKeyCreatorNotMember = errors.New("no organization member is available as the plugin publish actor")
 
+// ErrOrganizationDisabled reports that the project's organization is disabled,
+// so nothing is published for it: no GitHub commit and no new plugin API keys.
+// Retrying is refused the same way until the organization is re-enabled.
+var ErrOrganizationDisabled = errors.New("organization is disabled")
+
 // resolvePublishActor picks the users.id the publish's API keys are attributed
 // to (see ResolvePluginPublishActor). The user who made the change wins while
 // they are a member of the organization; a Speakeasy admin editing another
@@ -2456,6 +2461,16 @@ type publishOutcome struct {
 }
 
 func (s *Service) publishProject(ctx context.Context, input publishProjectInput) (*publishOutcome, error) {
+	// Every publish path ends here, including background publishes that were
+	// queued before the organization was disabled.
+	disabled, err := s.repo.IsOrganizationDisabled(ctx, input.OrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "check organization status").LogError(ctx, s.logger)
+	}
+	if disabled {
+		return nil, oops.E(oops.CodeForbidden, ErrOrganizationDisabled, "organization is disabled")
+	}
+
 	actorID, err := s.resolvePublishActor(ctx, input.ProjectID, input.OrganizationID, input.Actor.CreatedByUserID)
 	if err != nil {
 		return nil, err
