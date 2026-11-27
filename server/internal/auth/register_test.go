@@ -123,10 +123,6 @@ func TestService_Register(t *testing.T) {
 		organizations, err := orgRepo.New(instance.conn).ListOrganizationsForUser(ctx, conv.ToPGText(userInfo.UserID))
 		require.NoError(t, err)
 		require.Len(t, organizations, 1)
-
-		refused, err := instance.sessionManager.GetSession(ctx, t.Name()+"-second")
-		require.NoError(t, err)
-		require.Equal(t, organizations[0].ID, refused.ActiveOrganizationID)
 	})
 
 	t.Run("concurrent registrations create one organization", func(t *testing.T) {

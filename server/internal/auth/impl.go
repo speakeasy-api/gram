@@ -1545,11 +1545,6 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 	})
 	if err != nil {
 		if errors.Is(err, orgcap.ErrUserHasOrganization) {
-			// Move this session into the organization the user already has, so
-			// the tab that tried to register a second one is not left without one.
-			if switchErr := s.activateExistingOrganization(ctx, *authCtx.SessionID, authCtx.UserID); switchErr != nil {
-				return oops.E(oops.CodeUnexpected, switchErr, "error switching to existing organization").LogError(ctx, s.logger)
-			}
 			return oops.E(oops.CodeConflict, err, "user already has an organization").LogWarn(ctx, s.logger)
 		}
 		if oops.IsClientFault(err) {
@@ -1568,26 +1563,6 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 		return oops.E(oops.CodeUnexpected, err, "error storing session").LogError(ctx, s.logger)
 	}
 
-	return nil
-}
-
-func (s *Service) activateExistingOrganization(ctx context.Context, sessionID, userID string) error {
-	organizations, err := s.orgRepo.ListOrganizationsForUser(ctx, conv.ToPGText(userID))
-	if err != nil {
-		return fmt.Errorf("list user organizations: %w", err)
-	}
-	if len(organizations) == 0 {
-		return nil
-	}
-	existingSession, err := s.sessions.GetSession(ctx, sessionID)
-	if err != nil {
-		return fmt.Errorf("load session: %w", err)
-	}
-	updatedSession := existingSession
-	updatedSession.ActiveOrganizationID = organizations[0].ID
-	if err := s.sessions.UpdateSession(ctx, existingSession, updatedSession); err != nil {
-		return fmt.Errorf("store session: %w", err)
-	}
 	return nil
 }
 
