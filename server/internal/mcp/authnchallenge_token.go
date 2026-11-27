@@ -1970,17 +1970,6 @@ func (s *Service) writeRefreshTokenReplay(
 			writeErr := writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidGrant, "refreshed session is no longer active; sign in again")
 			return refuseInboundRefresh(ctx, tracker, r, writeErr, reason, mcpconnectionattempts.Subject(payload.Subject))
 		}
-		// Nor a successor for a user staff blocked since the rotation.
-		blocked, blockErr := s.sessions.IsUserBlocked(ctx, payload.Subject.ID)
-		if blockErr != nil {
-			return oops.E(oops.CodeUnexpected, blockErr, "check refresh token replay user").LogError(ctx, logger)
-		}
-		if blocked {
-			userblock.LogRefusal(ctx, logger, "mcp_refresh_token_replay", payload.Subject.ID)
-			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", refreshUserDisabled)
-			writeErr := writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidGrant, "refresh_token is unknown or already used")
-			return refuseInboundRefresh(ctx, tracker, r, writeErr, refreshUserDisabled, mcpconnectionattempts.Subject(payload.Subject))
-		}
 	}
 	endpointIssuer, err := s.issuerURL(endpoint, baseURL)
 	if err != nil {
@@ -2695,6 +2684,17 @@ func (s *Service) humanReplayRevoked(ctx context.Context, endpoint *ResolvedMcpE
 	session, err := q.GetUserSessionByJTI(ctx, usersessions_repo.GetUserSessionByJTIParams{UserSessionIssuerID: endpoint.UserSessionIssuerID, Jti: jti})
 	if err != nil {
 		return replayLookupFailureReason(err, "refresh_token_revoked"), false, err
+	}
+	// Nor a successor for a user staff blocked since the rotation.
+	if session.SubjectUrn.Kind == urn.SessionSubjectKindUser {
+		blocked, err := s.sessions.IsUserBlocked(ctx, session.SubjectUrn.ID)
+		if err != nil {
+			return refreshReplayLookupFailed, false, err
+		}
+		if blocked {
+			userblock.LogRefusal(ctx, s.logger, "mcp_refresh_token_replay", session.SubjectUrn.ID)
+			return refreshUserDisabled, false, nil
+		}
 	}
 	if !session.SignInID.Valid {
 		return "", true, nil
