@@ -37,6 +37,11 @@ const mocks = vi.hoisted(() => ({
     remoteMcpServerId?: string;
     tunneledMcpServerId?: string;
   }>,
+  extraMetaMcpServers: [] as Array<{
+    id: string;
+    name: string;
+    memberCount: number;
+  }>,
   step: "scope",
 }));
 
@@ -224,6 +229,7 @@ vi.mock("@gram/client/react-query/metaMcpServers.js", () => ({
     data: {
       metaMcpServers: [
         { id: "gateway-1", name: "Support gateway", memberCount: 1 },
+        ...mocks.extraMetaMcpServers,
       ],
     },
     isLoading: false,
@@ -1462,7 +1468,7 @@ describe("PolicyMCPScopePicker all-server selection", () => {
     });
   });
 
-  it("disambiguates duplicate server display names by slug", () => {
+  it("disambiguates duplicate server display names by slug and gateways by id", () => {
     mocks.extraMcpServers = [
       {
         id: "77777777-7777-4777-8777-777777777771",
@@ -1477,6 +1483,9 @@ describe("PolicyMCPScopePicker all-server selection", () => {
         remoteMcpServerId: "remote-4",
       },
     ];
+    mocks.extraMetaMcpServers = [
+      { id: "gateway-2", name: "Support gateway", memberCount: 2 },
+    ];
     try {
       render(<ScopePickerHarness />);
 
@@ -1486,10 +1495,17 @@ describe("PolicyMCPScopePicker all-server selection", () => {
       expect(
         screen.getByRole("checkbox", { name: "Linear (eng-linear)" }),
       ).toBeTruthy();
+      expect(
+        screen.getByRole("checkbox", { name: "Support gateway (gateway-1)" }),
+      ).toBeTruthy();
+      expect(
+        screen.getByRole("checkbox", { name: "Support gateway (gateway-2)" }),
+      ).toBeTruthy();
       // Servers with unique names keep their plain name as their accessible label.
       expect(screen.getByRole("checkbox", { name: "Docs MCP" })).toBeTruthy();
     } finally {
       mocks.extraMcpServers = [];
+      mocks.extraMetaMcpServers = [];
     }
   });
 });

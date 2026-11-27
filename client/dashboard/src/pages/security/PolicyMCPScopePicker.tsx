@@ -619,10 +619,13 @@ export function PolicyMCPScopePicker({
                               : `${ruleTools(server).length}/${server.tools.length}`;
                   const hasDuplicateName =
                     (nameCounts.get(server.name.toLocaleLowerCase()) ?? 0) > 1;
-                  const checkboxLabel =
-                    hasDuplicateName && server.slug
-                      ? `${server.name} (${server.slug})`
-                      : server.name;
+                  const checkboxLabel = hasDuplicateName
+                    ? `${server.name} (${server.slug ?? server.id})`
+                    : server.name;
+                  const secondaryLabel = hasDuplicateName
+                    ? (server.slug ??
+                      (server.kind === "gateway" ? "Gateway" : null))
+                    : null;
                   return (
                     <div
                       key={server.id}
@@ -665,9 +668,9 @@ export function PolicyMCPScopePicker({
                         <span className="block truncate text-sm">
                           {server.name}
                         </span>
-                        {hasDuplicateName && server.slug ? (
+                        {secondaryLabel ? (
                           <span className="text-muted-foreground block truncate font-mono text-[11px]">
-                            {server.slug}
+                            {secondaryLabel}
                           </span>
                         ) : null}
                       </span>
