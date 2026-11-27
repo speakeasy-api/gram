@@ -21,7 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
-func createOrgFixture(t *testing.T, db testrepo.DBTX, id string, disabled bool) error {
+func createOrgFixture(t *testing.T, db testrepo.DBTX, id string, disabled bool) {
 	t.Helper()
 	params := testrepo.CreateOrganizationMetadataFixtureParams{
 		ID: id, Name: id, Slug: id, GramAccountType: "free",
@@ -32,7 +32,7 @@ func createOrgFixture(t *testing.T, db testrepo.DBTX, id string, disabled bool) 
 	if disabled {
 		params.DisabledAt = conv.ToPGTimestamptz(time.Now())
 	}
-	return testrepo.New(db).CreateOrganizationMetadataFixture(t.Context(), params)
+	require.NoError(t, testrepo.New(db).CreateOrganizationMetadataFixture(t.Context(), params))
 }
 
 func TestOrgDisabledCheckerCachesAndExpires(t *testing.T) {
@@ -40,7 +40,7 @@ func TestOrgDisabledCheckerCachesAndExpires(t *testing.T) {
 
 	db := newTestDatabase(t)
 	ctx := t.Context()
-	require.NoError(t, createOrgFixture(t, db, "org_checker", false))
+	createOrgFixture(t, db, "org_checker", false)
 
 	now := time.Now()
 	checker := newOrgDisabledChecker(db)
@@ -73,7 +73,7 @@ func TestTransformHandlersDropDisabledOrganizations(t *testing.T) {
 
 	db := newTestDatabase(t)
 	ctx := t.Context()
-	require.NoError(t, createOrgFixture(t, db, disabledOrgID, true))
+	createOrgFixture(t, db, disabledOrgID, true)
 
 	logPub := gcp.NewMockPublisher[*otelv1.LogRecord]()
 	logs := NewLogTransformHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), logPub, db, cache.NoopCache)
