@@ -200,14 +200,8 @@ func isAuthorizationDenied(err error) bool {
 }
 
 func (a *LiveOrgAdminAuthorizer) RequireLiveMembership(ctx context.Context, principal Principal) error {
-	_, err := a.liveMembershipOrganization(ctx, principal)
-	return err
-}
-
-func (a *LiveOrgAdminAuthorizer) liveMembershipOrganization(ctx context.Context, principal Principal) (organizationsrepo.OrganizationMetadatum, error) {
-	var none organizationsrepo.OrganizationMetadatum
 	if a == nil || a.db == nil || principal.UserID == "" || principal.OrganizationID == "" {
-		return none, ErrUnavailable
+		return ErrUnavailable
 	}
 	// A disabled organization denies exactly like a lapsed membership. Every
 	// Platform MCP request and OAuth exchange passes through here, so
@@ -217,22 +211,12 @@ func (a *LiveOrgAdminAuthorizer) liveMembershipOrganization(ctx context.Context,
 		OrganizationID: principal.OrganizationID,
 	})
 	if err != nil {
-		return none, fmt.Errorf("check active organization membership: %w", err)
+		return fmt.Errorf("check active organization membership: %w", err)
 	}
 	if !member {
-		return none, ErrForbidden
+		return ErrForbidden
 	}
-	organization, err := organizationsrepo.New(a.db).GetOrganizationMetadata(ctx, principal.OrganizationID)
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return none, ErrForbidden
-	case err != nil:
-		return none, fmt.Errorf("load organization for membership check: %w", err)
-	}
-	if organization.DisabledAt.Valid {
-		return none, ErrOrganizationDisabled
-	}
-	return organization, nil
+	return nil
 }
 
 // HasLiveOrgAdmin checks current membership and grants without recording a

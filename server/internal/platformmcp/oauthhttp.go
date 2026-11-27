@@ -1379,9 +1379,6 @@ func (s *OAuthHTTP) gateAndAuthorize(ctx context.Context, principal Principal) e
 		return errPlatformMCPDisabled
 	}
 	if err := s.authorizer.RequireLiveMembership(ctx, principal); err != nil {
-		if errors.Is(err, ErrOrganizationDisabled) {
-			return ErrOrganizationDisabled
-		}
 		if isAuthorizationDenied(err) {
 			return ErrForbidden
 		}
@@ -1401,10 +1398,6 @@ func writeAuthorizationGateError(w http.ResponseWriter, r *http.Request, challen
 	// membership ended sends them to a setting that is already on.
 	if errors.Is(err, errPlatformMCPDisabled) {
 		redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: "access_denied", Description: "Platform MCP is not enabled for this organization. An organization admin can enable it in the Speakeasy dashboard."})
-		return
-	}
-	if errors.Is(err, ErrOrganizationDisabled) {
-		redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: "access_denied", Description: "This organization is disabled. Reach out to support@speakeasy.com for more information."})
 		return
 	}
 	redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: "access_denied", Description: "Your account is not an active member of this organization."})

@@ -30,10 +30,6 @@ var (
 	ErrUnauthorized = errors.New("platform mcp unauthorized")
 	ErrForbidden    = errors.New("platform mcp forbidden")
 	ErrUnavailable  = errors.New("platform mcp unavailable")
-
-	// ErrOrganizationDisabled is a forbidden membership whose organization staff
-	// or the per-user organization limit disabled.
-	ErrOrganizationDisabled = fmt.Errorf("organization disabled: %w", ErrForbidden)
 )
 
 // ActingSurface names the surface a call arrives through. Audit has to be able
@@ -362,14 +358,10 @@ func (r *Runtime) Handler() http.Handler {
 		}
 		ctx, err := r.authorizer.PrepareExternalContext(req.Context(), principal)
 		if err != nil {
-			switch {
-			case errors.Is(err, ErrOrganizationDisabled):
-				r.recordAuthOutcome(req.Context(), "access_denied", "organization_disabled")
-				http.Error(w, "this organization is disabled, please reach out to support@speakeasy.com for more information", http.StatusForbidden)
-			case isAuthorizationDenied(err):
+			if isAuthorizationDenied(err) {
 				r.recordAuthOutcome(req.Context(), "access_denied", "membership_denied")
 				http.Error(w, "forbidden", http.StatusForbidden)
-			default:
+			} else {
 				r.recordAuthOutcome(req.Context(), "temporarily_unavailable", "authorization_unavailable")
 				http.Error(w, "unavailable", http.StatusServiceUnavailable)
 			}
