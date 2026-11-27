@@ -101,7 +101,7 @@ func (s *Service) admitGatewayCaller(
 	authedCtx, authentication, toolSelection, err := s.authenticateIssuerGate(ctx, w, r, authToken, baseURL, endpoint)
 	if err != nil {
 		if target.kind == gatewayKindOrganization {
-			if callerKind, ok := s.rejectedMachineCallerKind(ctx, authToken, endpoint.OrganizationID); ok {
+			if callerKind, ok := s.rejectedMachineCallerKind(ctx, authToken, endpoint); ok {
 				decision, decisionErr := target.admits(newGatewayCaller(callerKind), endpoint.ProjectID, false)
 				if decisionErr == nil {
 					s.metrics.RecordGatewayAdmission(ctx, callerKind.String(), target.kind.String(), decision.admitted, string(decision.refusalReason))
@@ -165,7 +165,8 @@ func (s *Service) admitGatewayCaller(
 
 // rejectedMachineCallerKind attributes a valid machine credential that the
 // people-only organization gateway rejects before shared admission runs.
-func (s *Service) rejectedMachineCallerKind(ctx context.Context, token, organizationID string) (gatewayCallerKind, bool) {
+func (s *Service) rejectedMachineCallerKind(ctx context.Context, token string, endpoint *ResolvedMcpEndpoint) (gatewayCallerKind, bool) {
+	organizationID := endpoint.OrganizationID
 	if principalcredential.IsToken(token) {
 		authed, err := s.principalCredentials.Authenticate(ctx, token)
 		if err != nil {
@@ -186,6 +187,12 @@ func (s *Service) rejectedMachineCallerKind(ctx context.Context, token, organiza
 	}
 	if s.isWorkloadSessionBearer(token) {
 		return gatewayCallerWorkload, true
+	}
+	if isDirectWorkloadBearer(token) {
+		if _, err := s.authenticateDirectWorkloadBearer(ctx, endpoint.workloadTenancy(), DirectWorkloadProjectGatewayAudience, token); err == nil {
+			return gatewayCallerWorkload, true
+		}
+		return 0, false
 	}
 	if !strings.HasPrefix(token, "gram_") {
 		return 0, false
