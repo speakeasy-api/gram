@@ -42,12 +42,21 @@ func newTranscriptWriterFixture(t *testing.T, provision, sealed bool) *transcrip
 	}
 	store, err := transcriptstore.New(ti.conn, ti.fixture.Service, testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t))
 	require.NoError(t, err)
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, nil)
-	t.Cleanup(func() { require.NoError(t, shutdown(context.Background())) })
+	f := &transcriptWriterFixture{testInstance: ti, projectID: p.ID, chatID: chatID, writer: nil, store: store}
+	var transcripts *transcriptstore.Transcripts
 	if sealed {
-		writer.WithTranscripts(transcriptstore.NewTranscripts(store, p.ID))
+		transcripts = transcriptstore.NewTranscripts(store, p.ID)
 	}
-	return &transcriptWriterFixture{testInstance: ti, projectID: p.ID, chatID: chatID, writer: writer, store: store}
+	f.useTranscripts(t, transcripts)
+	return f
+}
+
+// useTranscripts replaces the fixture's writer with one built with transcripts.
+func (f *transcriptWriterFixture) useTranscripts(t *testing.T, transcripts *transcriptstore.Transcripts) {
+	t.Helper()
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), f.conn, nil, transcripts)
+	t.Cleanup(func() { require.NoError(t, shutdown(context.Background())) })
+	f.writer = writer
 }
 
 func (f *transcriptWriterFixture) message(content string) chat.MessageWrite {
@@ -253,11 +262,11 @@ func TestTranscriptWriterOptOutWithoutStorageOrKeys(t *testing.T) {
 
 	// Neither an accidentally empty allowlist nor another project may widen
 	// capture to this project or start consulting unavailable transcript storage.
-	f.writer.WithTranscripts(transcriptstore.NewTranscripts(f.store, []uuid.UUID{}...))
+	f.useTranscripts(t, transcriptstore.NewTranscripts(f.store, []uuid.UUID{}...))
 	n, err = f.writer.Write(t.Context(), f.projectID, []chat.MessageWrite{f.message("EXAMPLE empty allowlist")})
 	require.NoError(t, err)
 	require.EqualValues(t, 1, n)
-	f.writer.WithTranscripts(transcriptstore.NewTranscripts(f.store, uuid.New()))
+	f.useTranscripts(t, transcriptstore.NewTranscripts(f.store, uuid.New()))
 	n, err = f.writer.Write(t.Context(), f.projectID, []chat.MessageWrite{f.message("EXAMPLE excluded project")})
 	require.NoError(t, err)
 	require.EqualValues(t, 1, n)
@@ -333,7 +342,7 @@ func TestTranscriptWriterProjection(t *testing.T) {
 func TestTranscriptWriterEncryptedRepatchKeepsRiskAnalysis(t *testing.T) {
 	t.Parallel()
 	f := newTranscriptWriterFixture(t, true, false)
-	f.writer.WithTranscripts(transcriptstore.NewTranscripts(f.store).WithEncryptedProjects(f.projectID))
+	f.useTranscripts(t, transcriptstore.NewTranscripts(f.store).WithEncryptedProjects(f.projectID))
 	m := f.message("EXAMPLE encrypted projection")
 	m.Params.Source = conv.ToPGText("kit")
 	m.Params.ToolCalls = []byte(`[{"id":"example-call","type":"function","function":{"name":"example","arguments":"{}"}}]`)
@@ -380,7 +389,7 @@ func TestTranscriptWriterEncryptedInsertsStoreNoPlaintext(t *testing.T) {
 	t.Parallel()
 	f := newTranscriptWriterFixture(t, true, false)
 	encrypted := transcriptstore.NewTranscripts(f.store).WithEncryptedProjects(f.projectID)
-	f.writer.WithTranscripts(encrypted)
+	f.useTranscripts(t, encrypted)
 
 	plain := f.message("EXAMPLE plain write")
 	plain.Params.ToolCalls = []byte(`[{"id":"example-call","type":"function","function":{"name":"example","arguments":"{}"}}]`)

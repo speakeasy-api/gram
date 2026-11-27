@@ -58,7 +58,7 @@ func TestChatStorageReadingPipelineToClickHouse(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, assetstest.NewTestBlobStore(t))
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, assetstest.NewTestBlobStore(t), nil)
 	t.Cleanup(func() { _ = shutdown(context.WithoutCancel(t.Context())) })
 	writes := []chat.MessageWrite{{
 		Params: chatrepo.CreateChatMessageParams{

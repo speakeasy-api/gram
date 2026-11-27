@@ -21,7 +21,7 @@ import (
 
 func tagWriter(t *testing.T, ti *chatTestInstance) *chat.ChatMessageWriter {
 	t.Helper()
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, assetstest.NewTestBlobStore(t))
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, assetstest.NewTestBlobStore(t), nil)
 	t.Cleanup(func() { require.NoError(t, shutdown(t.Context())) })
 	return writer
 }

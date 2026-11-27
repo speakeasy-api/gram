@@ -20,7 +20,7 @@ func TestReadingsForMessagesLogsAndSkipsMeteringFailure(t *testing.T) {
 	t.Parallel()
 	var logs bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&logs, nil))
-	writer, shutdown := NewChatMessageWriter(logger, nil, nil)
+	writer, shutdown := NewChatMessageWriter(logger, nil, nil, nil)
 	t.Cleanup(func() {
 		require.NoError(t, shutdown(context.WithoutCancel(t.Context())))
 	})

@@ -100,7 +100,7 @@ func TestStoreMessages_DeduplicatesContentAddressableWrites(t *testing.T) {
 	ctx, conn, projectID, orgID := t.Context(), ti.conn, ti.projectID, ti.orgID
 
 	counting := newCountingBlobStore(t)
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, counting)
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, counting, nil)
 	t.Cleanup(func() { _ = shutdown(t.Context()) })
 
 	s := chat.NewChatMessageCaptureStrategy(testenv.NewLogger(t), testenv.NewMeterProvider(t), conn, writer)

@@ -105,13 +105,13 @@ func TestTranscriptsGateByProject(t *testing.T) {
 	t.Parallel()
 	f := setup(t, true)
 	var none *Transcripts
-	require.False(t, none.Enabled(f.project))
+	require.False(t, none.Enabled(t.Context(), f.project))
 	unlisted := uuid.New()
 	written := f.insert(t, none, unlisted)
 	require.Equal(t, "sensitive example", written.Content, "plaintext mode writes the plaintext")
 
 	other := NewTranscripts(f.store, uuid.New())
-	require.False(t, other.Enabled(f.project))
+	require.False(t, other.Enabled(t.Context(), f.project))
 	offList := uuid.New()
 	f.insert(t, other, offList)
 	for _, id := range []uuid.UUID{unlisted, offList} {
@@ -122,7 +122,7 @@ func TestTranscriptsGateByProject(t *testing.T) {
 	}
 
 	enabled := NewTranscripts(f.store, f.project)
-	require.True(t, enabled.Enabled(f.project))
+	require.True(t, enabled.Enabled(t.Context(), f.project))
 	sealed := uuid.New()
 	written = f.insert(t, enabled, sealed)
 	require.Equal(t, "sensitive example", written.Content, "shadow mode keeps the plaintext")
@@ -359,7 +359,7 @@ func TestUpdateMessageStartsFromTheTranscriptOrThePlaintext(t *testing.T) {
 func TestNewTranscriptsNeedsAStoreForListedProjects(t *testing.T) {
 	t.Parallel()
 	require.Panics(t, func() { NewTranscripts(nil, uuid.New()) })
-	require.NotPanics(t, func() { require.False(t, NewTranscripts(nil).Enabled(uuid.New())) })
+	require.NotPanics(t, func() { require.False(t, NewTranscripts(nil).Enabled(t.Context(), uuid.New())) })
 }
 
 // In encrypted mode the transcript is the only copy of the body: updates start
@@ -370,8 +370,8 @@ func TestEncryptedMode(t *testing.T) {
 	f := setup(t, true)
 	ctx := t.Context()
 	encrypted := NewTranscripts(f.store).WithEncryptedProjects(f.project)
-	require.Equal(t, ModeEncrypted, encrypted.Mode(f.project))
-	require.True(t, encrypted.Enabled(f.project))
+	require.Equal(t, ModeEncrypted, encrypted.Mode(t.Context(), f.project))
+	require.True(t, encrypted.Enabled(t.Context(), f.project))
 	fixtures := fixturerepo.New(f.db)
 	open := func(id uuid.UUID) (openRow, error) {
 		t.Helper()
@@ -452,10 +452,10 @@ func TestModes(t *testing.T) {
 	f := setup(t, false)
 	shadow, other := uuid.New(), uuid.New()
 	transcripts := NewTranscripts(f.store, shadow)
-	require.Equal(t, ModeShadow, transcripts.Mode(shadow))
-	require.Equal(t, ModePlaintext, transcripts.Mode(other))
+	require.Equal(t, ModeShadow, transcripts.Mode(t.Context(), shadow))
+	require.Equal(t, ModePlaintext, transcripts.Mode(t.Context(), other))
 	var none *Transcripts
-	require.Equal(t, ModePlaintext, none.Mode(shadow))
+	require.Equal(t, ModePlaintext, none.Mode(t.Context(), shadow))
 	require.Panics(t, func() { NewTranscripts(nil).WithEncryptedProjects(shadow) })
 }
 

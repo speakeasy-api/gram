@@ -430,7 +430,7 @@ func TestWriteMessagePagesAdvancesChatsCursor(t *testing.T) {
 	created := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderAnthropicCompliance, "anthropic-key", true, true, &extOrgID, &watermark)
 	cfg := created.Config
 
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil)
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil, nil)
 	t.Cleanup(func() { _ = shutdown(context.Background()) })
 
 	svc := NewComplianceImportService(testenv.NewLogger(t), conn, nil, writer, func(context.Context, string, int) {})

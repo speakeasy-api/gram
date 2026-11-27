@@ -44,7 +44,7 @@ func newTestStore(t *testing.T) (*postgresStore, *pgxpool.Pool, Config) {
 	require.NoError(t, err)
 	project, err := projectsrepo.New(db).CreateProject(t.Context(), projectsrepo.CreateProjectParams{Name: "Inference Example", Slug: "example", OrganizationID: orgID})
 	require.NoError(t, err)
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), db, assetstest.NewTestBlobStore(t))
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), db, assetstest.NewTestBlobStore(t), nil)
 	t.Cleanup(func() { require.NoError(t, shutdown(context.WithoutCancel(t.Context()))) })
 	return &postgresStore{db: db, writer: writer, logger: testenv.NewLogger(t)}, db, Config{ID: "example", OrganizationID: orgID, ProjectID: project.ID, TenantID: "tenant-example", SigningSecrets: nil}
 }

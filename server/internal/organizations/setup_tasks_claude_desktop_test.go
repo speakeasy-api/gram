@@ -37,7 +37,7 @@ func TestService_ListSetupTasksCompletesClaudeDesktopOnceACoworkTranscriptArrive
 	marketplacetokenstest.Plant(t, ti.conn, *ac.ProjectID, "synthetic-marketplace-token")
 
 	chats := chatrepo.New(ti.conn)
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, nil)
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, nil, nil)
 	t.Cleanup(func() { _ = shutdown(t.Context()) })
 	storeMessage := func(origin string) {
 		t.Helper()

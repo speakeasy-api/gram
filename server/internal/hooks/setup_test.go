@@ -206,7 +206,7 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	assetStorage := assetstest.NewTestBlobStore(t)
-	chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(logger, conn, assetStorage)
+	chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(logger, conn, assetStorage, nil)
 	t.Cleanup(func() { _ = chatWriterShutdown(t.Context()) })
 	siteURL, err := url.Parse("https://app.example.test")
 	require.NoError(t, err)

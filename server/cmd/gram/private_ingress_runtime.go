@@ -250,7 +250,11 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 		toolIOLogsEnabled, tm.NewLogPublisher(logger, tracerProvider, meterProvider, publishers.TelemetryLogs))
 	r.cleanup = append(r.cleanup, stop)
 	telemSvc := tm.NewService(logger, tracerProvider, db, chDB, chDB, sessionManager, chatSessions, logsEnabled, newFeatureChecker(logger, productFeatures, productfeatures.FeatureSessionCapture), posthogClient, authzEngine, featureFlags)
-	chatWriter, stop := chat.NewChatMessageWriter(logger, db, assetStorage)
+	transcripts, err := configureTranscripts(ctx, c, db, orgEncryption, featureFlags, logger, tracerProvider, meterProvider)
+	if err != nil {
+		return nil, err
+	}
+	chatWriter, stop := chat.NewChatMessageWriter(logger, db, assetStorage, transcripts)
 	r.cleanup = append(r.cleanup, stop)
 	turnStream := chat.NewTurnStream(redisClient)
 	chatWriter = chatWriter.WithTurnStream(turnStream)
@@ -324,9 +328,6 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	}
 	clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
 	clientAssertionSigner.PinManagedSigner(c.String(identityProviderSigningServiceAccount))
-	if _, err := configureTranscripts(ctx, c, db, chatWriter, orgEncryption, logger, tracerProvider, meterProvider); err != nil {
-		return nil, err
-	}
 	issuerGate := newInternalSessionIssuerGate(c, db, featureFlags, false)
 	issuerSigner := internalsessionissuers.NewSigner(logger, tracerProvider, meterProvider, db, issuerGate, gcpIdentity, kmsSigningClients, internalIssuerSignerConfig(c, callbackOrigins.Outbound))
 	issuerGate.SetSigningAuthority(issuerSigner.CheckAuthority)

@@ -63,7 +63,7 @@ func TestKitTranscriptToolProjectionReplay(t *testing.T) {
 	require.NoError(t, queries.ReserveAssistantRuntimeV2(t.Context(), assistantrepo.ReserveAssistantRuntimeV2Params{ProjectID: project, AssistantID: assistant, AssistantThreadID: thread, Backend: "local", State: "active"}))
 	runtimeRow, err := queries.GetAssistantRuntimeV2(t.Context(), assistantrepo.GetAssistantRuntimeV2Params{ProjectID: project, AssistantID: assistant})
 	require.NoError(t, err)
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), db, assetstest.NewTestBlobStore(t))
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), db, assetstest.NewTestBlobStore(t), nil)
 	t.Cleanup(func() { _ = shutdown(context.WithoutCancel(t.Context())) })
 	var b KitTranscriptBinding
 	b.RuntimeID, b.ProjectID, b.AssistantID = runtimeRow.ID, project, assistant

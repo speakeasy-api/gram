@@ -5,7 +5,7 @@ Six `chat_messages` columns are protected fields: `content`, `content_raw`, `too
 ## Modes
 
 - **Plaintext:** no transcript.
-- **Shadow** (`GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS`): plaintext and transcript. Reads and updates decrypt the transcript and compare it with the plaintext; a mismatch is logged by field size, never contents, and plaintext wins. `Backfill` reseals from plaintext; run it before re-adding a removed project.
+- **Shadow** (`GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS`, or the `chat-transcript-shadow` PostHog flag for the project's organization): plaintext and transcript. Reads and updates decrypt the transcript and compare it with the plaintext; a mismatch is logged by field size, never contents, and plaintext wins. `Backfill` reseals from plaintext; run it before re-adding a removed project or turning the flag back on for an organization.
 - **Encrypted:** transcript only, plaintext columns empty; inserts never write plaintext; a missing transcript is an error. Not configurable yet.
 
 ## Writes

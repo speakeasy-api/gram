@@ -51,12 +51,15 @@ type write struct {
 	meta metadata
 }
 
-func (t *Transcripts) protector(db repo.DBTX, organizationID string, projectID uuid.UUID) (*protector, error) {
+// protector reads the project's mode with the caller's transaction, so a
+// project the feature flag puts in shadow mode seals only once Prepare has
+// provisioned its organization's key.
+func (t *Transcripts) protector(ctx context.Context, db repo.DBTX, organizationID string, projectID uuid.UUID) (*protector, error) {
 	var store *Store
 	if t != nil {
 		store = t.store
 	}
-	return store.protector(db, organizationID, projectID, t.Mode(projectID))
+	return store.protector(db, organizationID, projectID, t.decide(ctx, db, projectID).mode)
 }
 
 // protector builds the codec from the cached key before anything is written,
@@ -161,7 +164,7 @@ func (t *Transcripts) InsertChatMessages(ctx context.Context, db chatrepo.DBTX, 
 			return 0, fmt.Errorf("%w: a message belongs to another project", ErrInvalid)
 		}
 	}
-	p, err := t.protector(db, organizationID, projectID)
+	p, err := t.protector(ctx, db, organizationID, projectID)
 	if err != nil {
 		return 0, err
 	}
@@ -203,7 +206,7 @@ func (t *Transcripts) InsertExternalChatMessage(ctx context.Context, db chatrepo
 	if params.ProjectID != projectID {
 		return false, fmt.Errorf("%w: the message belongs to another project", ErrInvalid)
 	}
-	p, err := t.protector(db, organizationID, projectID)
+	p, err := t.protector(ctx, db, organizationID, projectID)
 	if err != nil {
 		return false, err
 	}
@@ -244,7 +247,7 @@ func (t *Transcripts) UpsertCorrelatedChatMessage(ctx context.Context, db chatre
 	if params.ProjectID != projectID {
 		return stored, false, fmt.Errorf("%w: the message belongs to another project", ErrInvalid)
 	}
-	p, err := t.protector(db, organizationID, projectID)
+	p, err := t.protector(ctx, db, organizationID, projectID)
 	if err != nil {
 		return stored, false, err
 	}

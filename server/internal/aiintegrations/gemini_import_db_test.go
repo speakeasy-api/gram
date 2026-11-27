@@ -25,7 +25,7 @@ func TestGeminiImportStoresTranscriptsIdempotentlyAndLinksOwner(t *testing.T) {
 	user, err := usersrepo.New(conn).UpsertUser(ctx, usersrepo.UpsertUserParams{ID: "user_" + uuid.NewString(), Email: "person@example.com", DisplayName: "Example Person", PhotoUrl: conv.ToPGTextEmpty(""), Admin: false})
 	require.NoError(t, err)
 	require.NoError(t, testrepo.New(conn).CreateOrganizationUserRelationshipFixture(ctx, testrepo.CreateOrganizationUserRelationshipFixtureParams{OrganizationID: orgID, UserID: conv.ToPGText(user.ID)}))
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil)
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil, nil)
 	t.Cleanup(func() { _ = shutdown(context.Background()) })
 	beats := 0
 	svc := NewGeminiImportService(testenv.NewLogger(t), conn, nil, writer, func(context.Context, string, int) { beats++ })

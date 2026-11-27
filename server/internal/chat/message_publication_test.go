@@ -51,7 +51,7 @@ func TestConversationEventsDoNotUploadLargeBodies(t *testing.T) {
 			ctx := initSessionCtx(t, ti)
 			chatID := seedChat(t, ctx, ti, "u", "", "large reference event")
 			// No asset store: publication must succeed even above the old spill limit.
-			writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, nil)
+			writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, nil, nil)
 			t.Cleanup(func() { _ = shutdown(context.WithoutCancel(t.Context())) })
 			params := minimalChatMessageParams(chatID, ti.projectID)
 			params.Model = conv.ToPGText("anthropic/claude-opus-5")
@@ -97,7 +97,7 @@ func TestConversationEventPreservesIngestionContext(t *testing.T) {
 	ti := newTestChatService(t)
 	ctx := initSessionCtx(t, ti)
 	chatID := seedChat(t, ctx, ti, "u", "", "event provenance")
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, nil)
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, nil, nil)
 	t.Cleanup(func() { _ = shutdown(context.WithoutCancel(t.Context())) })
 	params := minimalChatMessageParams(chatID, ti.projectID)
 	params.Content = ""
@@ -140,7 +140,7 @@ func TestConversationOutboxFailureRollsBackMessageAndMeter(t *testing.T) {
 	ctx := initSessionCtx(t, ti)
 	chatID := seedChat(t, ctx, ti, "u", "", "outbox rollback")
 	require.NoError(t, testrepo.New(ti.conn).RejectPublishOutboxWritesFixture(ctx))
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, nil)
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, nil, nil)
 	t.Cleanup(func() { _ = shutdown(context.WithoutCancel(t.Context())) })
 	params := minimalChatMessageParams(chatID, ti.projectID)
 	params.Content = ""
@@ -156,7 +156,7 @@ func TestConversationEventReferencesImportedMessageWithAttachments(t *testing.T)
 	ti := newTestChatService(t)
 	ctx := initSessionCtx(t, ti)
 	chatID := seedChat(t, ctx, ti, "u", "", "imported parts")
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, ti.assets)
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, ti.assets, nil)
 	t.Cleanup(func() { _ = shutdown(context.WithoutCancel(t.Context())) })
 	assetURL, err := writer.WriteContentPartAsset(ctx, ti.projectID, chatID, []byte("attached content"))
 	require.NoError(t, err)
@@ -253,7 +253,7 @@ func TestConversationEventDepartmentResolution(t *testing.T) {
 					require.EqualValues(t, 1, deleted)
 				}
 			}
-			writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, nil)
+			writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, nil, nil)
 			t.Cleanup(func() { require.NoError(t, shutdown(context.WithoutCancel(t.Context()))) })
 			params := minimalChatMessageParams(chatID, ti.projectID)
 			params.UserID = conv.ToPGTextEmpty(tc.actor)
@@ -291,7 +291,7 @@ func TestConversationEventDepartmentsStayAlignedAcrossBatchIdentities(t *testing
 		})
 		require.NoError(t, err)
 	}
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, nil)
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, nil, nil)
 	t.Cleanup(func() { require.NoError(t, shutdown(context.WithoutCancel(t.Context()))) })
 	var writes []chat.MessageWrite
 	expected := map[string]string{}
@@ -345,7 +345,7 @@ func TestConversationEventSnapshotSurvivesDirectoryChangeAndConflict(t *testing.
 	directory := directoryrepo.New(ti.conn)
 	_, err := directory.UpsertDirectoryUser(ctx, profile)
 	require.NoError(t, err)
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, nil)
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, nil, nil)
 	t.Cleanup(func() { require.NoError(t, shutdown(context.WithoutCancel(t.Context()))) })
 	write := chat.ExternalMessageWrite{Params: repo.CreateExternalChatMessageParams{
 		ID: uuid.New(), ProjectID: ti.projectID, ChatID: chatID, Role: "user", UserID: conv.ToPGText("actor"),
@@ -374,7 +374,7 @@ func TestCaptureLineageMutationRequiresOrganization(t *testing.T) {
 	ti := newTestChatService(t)
 	ctx := initSessionCtx(t, ti)
 	chatID := seedChat(t, ctx, ti, "owner", "", "Lineage scope")
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, nil)
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, nil, nil)
 	t.Cleanup(func() { require.NoError(t, shutdown(context.WithoutCancel(t.Context()))) })
 	params := minimalChatMessageParams(chatID, ti.projectID)
 	_, err := writer.Write(ctx, ti.projectID, []chat.MessageWrite{{Params: params}})

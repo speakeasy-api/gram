@@ -61,7 +61,9 @@ func newIntentPoliciesImportCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("parse local project id: %w", err)
 			}
-			writer, shutdown := chat.NewChatMessageWriter(logger, db, nil)
+			// Imports into the local demo project only, which has no encrypted
+			// transcripts, so nothing is sealed.
+			writer, shutdown := chat.NewChatMessageWriter(logger, db, nil, nil)
 			defer o11y.NoLogDefer(func() error { return shutdown(ctx) })
 
 			imported, skipped := 0, 0

@@ -165,6 +165,27 @@ func (q *Queries) DeleteToolCallIDs(ctx context.Context, arg DeleteToolCallIDsPa
 	return err
 }
 
+const getProjectOrganization = `-- name: GetProjectOrganization :one
+SELECT p.organization_id, o.slug AS organization_slug
+FROM projects p
+JOIN organization_metadata o ON o.id = p.organization_id
+WHERE p.id = $1
+`
+
+type GetProjectOrganizationRow struct {
+	OrganizationID   string
+	OrganizationSlug string
+}
+
+// The organization a project belongs to, with the slug the transcript feature
+// flag is targeted by.
+func (q *Queries) GetProjectOrganization(ctx context.Context, projectID uuid.UUID) (GetProjectOrganizationRow, error) {
+	row := q.db.QueryRow(ctx, getProjectOrganization, projectID)
+	var i GetProjectOrganizationRow
+	err := row.Scan(&i.OrganizationID, &i.OrganizationSlug)
+	return i, err
+}
+
 type InsertChatMessagesParams struct {
 	ID               uuid.UUID
 	ChatID           uuid.UUID

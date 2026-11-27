@@ -137,7 +137,7 @@ func (f *sweepFixture) newContentPartFinding(
 	match string,
 ) chrepo.RiskFindingRow {
 	t.Helper()
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), f.pool, assetStorage)
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), f.pool, assetStorage, nil)
 	t.Cleanup(func() { _ = shutdown(t.Context()) })
 	assetURL, err := writer.WriteContentPartAsset(t.Context(), f.projectID, f.chatID, []byte(match))
 	require.NoError(t, err)

@@ -107,7 +107,7 @@ func TestCodexCloudProcessPageWritesChatAndMessagesIdempotently(t *testing.T) {
 	cfg := created.Config
 	cfg.ProjectID = project.ID
 
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil)
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil, nil)
 	t.Cleanup(func() { _ = shutdown(context.Background()) })
 
 	heartbeats := 0
@@ -265,7 +265,7 @@ func TestCodexCloudTitleBackfillsWhenPromptArrivesInLaterFile(t *testing.T) {
 	cfg := created.Config
 	cfg.ProjectID = project.ID
 
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil)
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil, nil)
 	t.Cleanup(func() { _ = shutdown(context.Background()) })
 
 	responseOnly := `{"event_id":"cdx_r1","type":"CODEX_LOG","actor":{"type":"ACCOUNT_USER","user_id":"oai_user_1","user_email":"grace@example.com"},"timestamp":"2026-07-28T11:00:00Z","client_id":"CODEX_WEB","event_details":{"detail_type":"PROMPT_RESPONSE_RECEIVED","session_id":"22222222-3333-4444-8555-666666666666","model":"gpt-5.5","response_text":"Done, the migration is applied.","status":"completed"}}` + "\n"
@@ -348,7 +348,7 @@ func TestCodexCloudMalformedTimestampCountsOncePerEvent(t *testing.T) {
 	cfg := created.Config
 	cfg.ProjectID = project.ID
 
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil)
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil, nil)
 	t.Cleanup(func() { _ = shutdown(context.Background()) })
 
 	// A single admitted event whose timestamp is a unix epoch rather than
@@ -396,7 +396,7 @@ func TestSyncCodexCloudSessionsRejectsMisconfiguredIntegrations(t *testing.T) {
 	t.Parallel()
 
 	ctx, conn, store, _ := newStoreTestDB(t)
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil)
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil, nil)
 	t.Cleanup(func() { _ = shutdown(context.Background()) })
 	svc := NewCodexCloudImportService(testenv.NewLogger(t), store, conn, nil, writer, func(context.Context, int) {})
 
@@ -469,7 +469,7 @@ func TestCodexCloudCountsEventsMissingIdentifiers(t *testing.T) {
 	cfg := created.Config
 	cfg.ProjectID = project.ID
 
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil)
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil, nil)
 	t.Cleanup(func() { _ = shutdown(context.Background()) })
 
 	// Both clear the client and detail-type gates; one lacks session_id, the

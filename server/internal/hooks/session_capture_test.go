@@ -38,7 +38,7 @@ func TestPromptFallbackSuppressesLargeDuplicateWithoutAssetStorage(t *testing.T)
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	ti.service.productFeatures = alwaysEnabledFeatures{}
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, nil)
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, nil, nil)
 	t.Cleanup(func() { _ = shutdown(context.WithoutCancel(t.Context())) })
 	ti.service.writer = writer
 	authCtx, ok := contextvalues.GetAuthContext(ctx)

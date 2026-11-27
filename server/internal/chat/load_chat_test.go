@@ -146,7 +146,7 @@ func TestLoadChat_ContentPartAssetReadFailureLeavesTranscriptIntact(t *testing.T
 	chatID := seedChat(t, ctx, ti, authCtx.UserID, "", "content parts")
 	msgID := seedMessageContent(t, ctx, ti, chatID, "review this attachment")
 
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, ti.assets)
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, ti.assets, nil)
 	t.Cleanup(func() { _ = shutdown(t.Context()) })
 	validContent := "asset-backed content"
 	validURL, err := writer.WriteContentPartAsset(ctx, ti.projectID, chatID, []byte(validContent))
@@ -240,7 +240,7 @@ func TestLoadChat_ContentPartsScopedToPage(t *testing.T) {
 	olderMsgID := seedMessageContent(t, ctx, ti, chatID, "older prompt")
 	newerMsgID := seedMessageContent(t, ctx, ti, chatID, "newer prompt")
 
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, ti.assets)
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, ti.assets, nil)
 	t.Cleanup(func() { _ = shutdown(t.Context()) })
 	assetURL, err := writer.WriteContentPartAsset(ctx, ti.projectID, chatID, []byte("attachment body"))
 	require.NoError(t, err)
@@ -540,7 +540,7 @@ func TestLoadChat_RiskOnly_AttachmentFinding(t *testing.T) {
 	ids := seedNMessages(t, ctx, ti, chatID, 30)
 	seqs := allSeqs(t, ctx, ti, chatID, ids)
 
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, ti.assets)
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, ti.assets, nil)
 	t.Cleanup(func() { _ = shutdown(t.Context()) })
 	assetURL, err := writer.WriteContentPartAsset(ctx, ti.projectID, chatID, []byte("attachment body"))
 	require.NoError(t, err)
