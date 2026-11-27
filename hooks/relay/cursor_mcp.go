@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -106,12 +107,24 @@ func cursorServerIdentifier(projectsDir string, session agenthooks.SessionInfo, 
 		return ""
 	}
 
+	// A multi-root workspace has one mcps directory per root, and the same
+	// server name can mean a Cursor server in one and a user server in
+	// another. Every directory that knows the server must agree.
+	var identifiers []string
 	for _, mcpsDir := range cursorWorkspaceMCPDirs(projectsDir, session) {
-		if identifier, found := matchCursorServer(mcpsDir, serverName, toolName); found {
-			return identifier
+		identifier, found := matchCursorServer(mcpsDir, serverName, toolName)
+		if !found {
+			continue
 		}
+		if identifier == "" {
+			return ""
+		}
+		identifiers = append(identifiers, identifier)
 	}
-	return ""
+	if len(identifiers) == 0 {
+		return ""
+	}
+	return agreeingCursorIdentifier(identifiers)
 }
 
 // cursorWorkspaceMCPDirs lists the existing mcps directories of the session's
@@ -190,7 +203,7 @@ func readCursorServerMetadata(path string) (cursorServerMetadata, bool) {
 	}
 	metadata.ServerIdentifier = strings.TrimSpace(metadata.ServerIdentifier)
 	metadata.ServerName = strings.TrimSpace(metadata.ServerName)
-	return metadata, metadata.ServerIdentifier != ""
+	return metadata, cursorIdentifierPattern.MatchString(metadata.ServerIdentifier)
 }
 
 func cursorServerHasTool(serverDir, toolName string) bool {
@@ -216,9 +229,19 @@ func isCursorBuiltinIdentifier(identifier string) bool {
 	return strings.HasPrefix(identifier, cursorBuiltinIdentifierPrefix)
 }
 
+// cursorIdentifierPattern is the shape of the directory-name identifiers
+// Cursor gives its servers ("cursor-ide-browser", "user-vendor.ext-Tracker").
+// The identifier is sent as the server identity, so a value with spaces or
+// other characters, which could carry command text or a credential, is
+// never used.
+var cursorIdentifierPattern = regexp.MustCompile(`^[A-Za-z0-9._-]{1,200}$`)
+
 // isCursorServerIdentifier reports whether a value has the shape of a Cursor
 // server identifier.
 func isCursorServerIdentifier(identifier string) bool {
+	if !cursorIdentifierPattern.MatchString(identifier) {
+		return false
+	}
 	return strings.HasPrefix(identifier, cursorBuiltinIdentifierPrefix) ||
 		strings.HasPrefix(identifier, cursorPluginIdentifierPrefix) ||
 		strings.HasPrefix(identifier, cursorUserIdentifierPrefix)

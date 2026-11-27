@@ -104,6 +104,37 @@ func TestCursorServerIdentifierSameNameAcrossPlugins(t *testing.T) {
 	require.Equal(t, "plugin-one-Linear", cursorServerIdentifier(projectsDir, session, "Linear", ""))
 }
 
+func TestCursorServerIdentifierAcrossWorkspaceRoots(t *testing.T) {
+	t.Parallel()
+
+	projectsDir := t.TempDir()
+	writeCursorServer(t, projectsDir, "Users-dev-code-first", "cursor-linear", "Linear")
+	writeCursorServer(t, projectsDir, "Users-dev-code-second", "user-linear", "Linear")
+	writeCursorServer(t, projectsDir, "Users-dev-code-first", "plugin-one-Tracker", "Tracker")
+	writeCursorServer(t, projectsDir, "Users-dev-code-second", "plugin-two-Tracker", "Tracker")
+	session := agenthooks.SessionInfo{CWD: "", WorkspaceRoots: []string{"/Users/dev/code/first", "/Users/dev/code/second"}}
+
+	require.Empty(t, cursorServerIdentifier(projectsDir, session, "Linear", ""),
+		"roots that disagree on who provides the server leave it undecided")
+	require.Equal(t, "plugin-one-Tracker", cursorServerIdentifier(projectsDir, session, "Tracker", ""))
+}
+
+func TestCursorServerIdentifierRejectsMalformedIdentifiers(t *testing.T) {
+	t.Parallel()
+
+	projectsDir := t.TempDir()
+	serverDir := filepath.Join(projectsDir, "Users-dev-code-app", "mcps", "odd")
+	require.NoError(t, os.MkdirAll(serverDir, 0o700))
+	raw, err := json.Marshal(cursorServerMetadata{ServerIdentifier: "cursor-x --token=abc", ServerName: "odd"})
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(serverDir, cursorServerMetadataFile), raw, 0o600))
+	session := agenthooks.SessionInfo{CWD: "/Users/dev/code/app", WorkspaceRoots: nil}
+
+	require.Empty(t, cursorServerIdentifier(projectsDir, session, "odd", ""))
+	require.False(t, isCursorServerIdentifier("cursor-x --token=abc"))
+	require.True(t, isCursorServerIdentifier("user-vendor.ext-Tracker"))
+}
+
 func TestCursorServerIdentifierWithoutProjectsDir(t *testing.T) {
 	t.Parallel()
 

@@ -177,6 +177,8 @@ func TestCursorServerIdentifiers(t *testing.T) {
 	require.True(t, shadowmcp.IsCursorUserInstalledIdentifier("user-vendor.ext-Tracker"))
 	require.False(t, shadowmcp.IsCursorUserInstalledIdentifier("user-"))
 	require.False(t, shadowmcp.IsCursorServerIdentifier("Linear"))
+	require.False(t, shadowmcp.IsCursorServerIdentifier("cursor-x --token=abc"), "an identity with spaces is not a Cursor identifier")
+	require.True(t, shadowmcp.IsCursorServerIdentifier("user-vendor.ext-Tracker"))
 }
 
 func TestHasInstalledServerNamePrefix(t *testing.T) {

@@ -292,9 +292,19 @@ func IsCursorUserInstalledIdentifier(identifier string) bool {
 	return hasNonEmptySuffix(identifier, cursorPluginIdentifierPrefix) || hasNonEmptySuffix(identifier, cursorUserIdentifierPrefix)
 }
 
+// cursorIdentifierPattern is the shape of the directory-name identifiers
+// Cursor gives its servers. A reported identity with spaces or other
+// characters is not a Cursor identifier, whatever its prefix, so it is
+// judged as a launch command instead.
+var cursorIdentifierPattern = regexp.MustCompile(`^[A-Za-z0-9._-]{1,200}$`)
+
 // IsCursorServerIdentifier reports whether a value has the shape of a Cursor
 // server identifier.
 func IsCursorServerIdentifier(identifier string) bool {
+	identifier = strings.TrimSpace(identifier)
+	if !cursorIdentifierPattern.MatchString(identifier) {
+		return false
+	}
 	return IsCursorBuiltinIdentifier(identifier) || IsCursorUserInstalledIdentifier(identifier)
 }
 
