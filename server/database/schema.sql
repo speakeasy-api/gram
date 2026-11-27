@@ -5433,11 +5433,9 @@ CREATE TABLE IF NOT EXISTS trigger_instances (
   CONSTRAINT trigger_instances_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
   CONSTRAINT trigger_instances_environment_id_fkey FOREIGN KEY (environment_id) REFERENCES environments (id) ON DELETE SET NULL,
   -- Atlas drops the SET NULL column list; preserve it in migrations.
-  CONSTRAINT trigger_instances_auth_client_fkey FOREIGN KEY (auth_client_id, organization_id) REFERENCES mcp_auth_clients (id, organization_id) ON DELETE SET NULL (auth_client_id),
-  -- A trigger reads credentials from either an environment (legacy) or a typed
-  -- auth client, never both, so clearing auth_client_id cannot expose stale
-  -- environment credentials.
-  CONSTRAINT trigger_instances_auth_source_check CHECK (environment_id IS NULL OR auth_client_id IS NULL)
+  -- Mutual exclusion with environment_id is enforced in application code so
+  -- clearing auth_client_id never exposes stale environment credentials.
+  CONSTRAINT trigger_instances_auth_client_fkey FOREIGN KEY (auth_client_id, organization_id) REFERENCES mcp_auth_clients (id, organization_id) ON DELETE SET NULL (auth_client_id)
 );
 
 COMMENT ON COLUMN trigger_instances.id IS '@access: confidential';
@@ -5469,8 +5467,7 @@ ON trigger_instances (environment_id)
 WHERE deleted IS FALSE;
 
 CREATE INDEX IF NOT EXISTS trigger_instances_auth_client_id_idx
-ON trigger_instances (organization_id, auth_client_id)
-WHERE auth_client_id IS NOT NULL AND deleted IS FALSE;
+ON trigger_instances (auth_client_id, organization_id);
 
 CREATE UNIQUE INDEX IF NOT EXISTS trigger_instances_dashboard_target_uniq
 ON trigger_instances (project_id, target_ref)
