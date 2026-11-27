@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/Label";
 import { Link as ExternalLink } from "@/components/ui/Link";
 import { Text } from "@/components/ui/Text";
 import { useAgentToken } from "@/hooks/useAgentToken";
+import { clientServerURLOverride } from "@/lib/client-host";
 import { agentEgressHosts } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
 import { useQuery } from "@tanstack/react-query";
@@ -145,6 +146,7 @@ function CloudSetupScript({
       sha256,
       orgToken,
       email: identityEmail.trim(),
+      controlPlaneURL: clientServerURLOverride("deviceAgent"),
     });
 
   const {
