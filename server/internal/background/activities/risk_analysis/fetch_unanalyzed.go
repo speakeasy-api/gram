@@ -2,10 +2,12 @@ package risk_analysis
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -66,6 +68,20 @@ func (a *FetchUnanalyzed) Do(ctx context.Context, args FetchUnanalyzedArgs) (_ *
 	}()
 
 	queries := repo.New(a.db)
+	empty := &FetchUnanalyzedResult{MessageIDs: nil, ContentPartIDs: nil, Policies: nil}
+
+	// Messages captured before the organization was disabled stay unanalyzed,
+	// so they are scanned if it is re-enabled within the lookback window.
+	disabled, err := queries.IsProjectOrganizationDisabled(ctx, args.ProjectID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return empty, nil
+	case err != nil:
+		return nil, fmt.Errorf("check organization disabled: %w", err)
+	case disabled:
+		span.SetAttributes(attribute.Bool("risk.organization_disabled", true))
+		return empty, nil
+	}
 
 	policies, err := queries.ListEnabledUnscopedRiskPoliciesByProject(ctx, args.ProjectID)
 	if err != nil {

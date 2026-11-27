@@ -68,6 +68,15 @@ func TestEvaluationMessageBatchScopesAndSplitProjection(t *testing.T) {
 	rows, err = source.LoadMessages(ctx, auth.ActiveOrganizationID, project, []uuid.UUID{uuid.New()})
 	require.NoError(t, err)
 	require.Empty(t, rows)
+
+	_, err = ti.conn.Exec(ctx, "UPDATE organization_metadata SET disabled_at = clock_timestamp() WHERE id = $1", auth.ActiveOrganizationID)
+	require.NoError(t, err)
+	rows, err = source.LoadMessages(ctx, auth.ActiveOrganizationID, project, ids)
+	require.NoError(t, err)
+	require.Empty(t, rows, "a disabled organization's queued messages are not evaluated")
+	_, err = ti.conn.Exec(ctx, "UPDATE organization_metadata SET disabled_at = NULL WHERE id = $1", auth.ActiveOrganizationID)
+	require.NoError(t, err)
+
 	require.NoError(t, fixtures.ForceSoftDeleteChat(ctx, chatID))
 
 	rows, err = source.LoadMessages(ctx, auth.ActiveOrganizationID, project, ids)

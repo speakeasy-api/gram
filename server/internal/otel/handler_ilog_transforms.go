@@ -26,6 +26,7 @@ type LogTransformHandler struct {
 	instruments  *enrich.Instruments
 	logPublisher gcp.Publisher[*otelv1.LogRecord]
 	enrichers    []enrich.LogEnricher
+	orgs         *orgDisabledChecker
 }
 
 func NewLogTransformHandler(
@@ -51,10 +52,19 @@ func NewLogTransformHandler(
 		instruments:  in,
 		logPublisher: logPublisher,
 		enrichers:    enrichers,
+		orgs:         newOrgDisabledChecker(replicaDB),
 	}
 }
 
 func (h *LogTransformHandler) Handle(ctx context.Context, record *otelv1.InboundLogRecord, _ gcp.MessageMetadata) error {
+	if disabled, err := h.orgs.Disabled(ctx, record.GetProvenance().GetOrganizationId()); err != nil {
+		return o11y.LogError(ctx, h.logger, err, "failed to check organization status")
+	} else if disabled {
+		// Acknowledged without publishing: a disabled organization's queued
+		// telemetry is dropped rather than redelivered.
+		return nil
+	}
+
 	out, err := transformInboundLog(ctx, h.instruments, record, h.enrichers)
 	if err != nil {
 		return o11y.LogError(ctx, h.logger, err, "failed to transform inbound log record")

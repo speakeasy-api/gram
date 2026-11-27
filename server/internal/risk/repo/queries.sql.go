@@ -2677,6 +2677,20 @@ func (q *Queries) IsOrganizationHooksFailOpenEnabled(ctx context.Context, organi
 	return enabled, err
 }
 
+const isProjectOrganizationDisabled = `-- name: IsProjectOrganizationDisabled :one
+SELECT (om.disabled_at IS NOT NULL)::boolean AS disabled
+FROM projects p
+JOIN organization_metadata om ON om.id = p.organization_id
+WHERE p.id = $1
+`
+
+func (q *Queries) IsProjectOrganizationDisabled(ctx context.Context, projectID uuid.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, isProjectOrganizationDisabled, projectID)
+	var disabled bool
+	err := row.Scan(&disabled)
+	return disabled, err
+}
+
 const linkChatUserAccountForTest = `-- name: LinkChatUserAccountForTest :exec
 UPDATE chats
 SET user_account_id = $1

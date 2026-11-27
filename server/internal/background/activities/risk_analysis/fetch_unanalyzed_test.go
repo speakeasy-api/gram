@@ -137,3 +137,26 @@ func TestFetchUnanalyzed_RespectsBatchLimit(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, result.MessageIDs, 2)
 }
+
+func TestFetchUnanalyzed_DisabledOrganizationLeavesMessagesUnanalyzed(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+	seedMessages(t, conn, td, 2)
+
+	_, err := conn.Exec(t.Context(), "UPDATE organization_metadata SET disabled_at = clock_timestamp() WHERE id = $1", td.orgID)
+	require.NoError(t, err)
+
+	activity := risk_analysis.NewFetchUnanalyzed(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn)
+	args := risk_analysis.FetchUnanalyzedArgs{ProjectID: td.projectID, IDLowerBound: zeroLowerBound, BatchLimit: 100}
+	result, err := activity.Do(t.Context(), args)
+	require.NoError(t, err)
+	require.Empty(t, result.MessageIDs)
+	require.Empty(t, result.Policies)
+
+	_, err = conn.Exec(t.Context(), "UPDATE organization_metadata SET disabled_at = NULL WHERE id = $1", td.orgID)
+	require.NoError(t, err)
+	result, err = activity.Do(t.Context(), args)
+	require.NoError(t, err)
+	require.Len(t, result.MessageIDs, 2, "re-enabling scans what was captured before the disable")
+}

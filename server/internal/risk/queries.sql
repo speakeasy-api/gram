@@ -149,6 +149,12 @@ WHERE organization_id = @organization_id
   AND enabled IS TRUE
   AND deleted IS FALSE;
 
+-- name: IsProjectOrganizationDisabled :one
+SELECT (om.disabled_at IS NOT NULL)::boolean AS disabled
+FROM projects p
+JOIN organization_metadata om ON om.id = p.organization_id
+WHERE p.id = @project_id;
+
 -- name: ListEnabledUnscopedRiskPoliciesByProject :many
 -- MCP-scoped policies are evaluated only at the MCP seams.
 SELECT *

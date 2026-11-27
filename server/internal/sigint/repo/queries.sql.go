@@ -976,8 +976,10 @@ SELECT m.id, m.chat_id, m.project_id, m.seq, m.generation, m.created_at,
 FROM chat_messages m
 JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
 JOIN projects p ON p.id = m.project_id
+JOIN organization_metadata om ON om.id = p.organization_id
 WHERE m.project_id = $1::uuid AND p.organization_id = $2
   AND p.deleted IS FALSE AND c.deleted IS FALSE
+  AND om.disabled_at IS NULL
   AND m.role <> 'system'
   AND m.id = ANY($3::uuid[])
 `
@@ -1008,6 +1010,8 @@ type LoadEvaluationMessagesRow struct {
 }
 
 // One tenant-pinned read resolves the batch and its current attachment locators.
+// A disabled organization's messages resolve to no rows, so queued events are
+// acknowledged without evaluation.
 // System messages are excluded for every input strategy.
 func (q *Queries) LoadEvaluationMessages(ctx context.Context, arg LoadEvaluationMessagesParams) ([]LoadEvaluationMessagesRow, error) {
 	rows, err := q.db.Query(ctx, loadEvaluationMessages, arg.ProjectID, arg.OrganizationID, arg.MessageIds)

@@ -26,6 +26,7 @@ type SpanTransformHandler struct {
 	instruments   *enrich.Instruments
 	spanPublisher gcp.Publisher[*otelv1.Span]
 	enrichers     []enrich.SpanEnricher
+	orgs          *orgDisabledChecker
 }
 
 func NewSpanTransformHandler(
@@ -50,10 +51,19 @@ func NewSpanTransformHandler(
 		instruments:   in,
 		spanPublisher: spanPublisher,
 		enrichers:     enrichers,
+		orgs:          newOrgDisabledChecker(replicaDB),
 	}
 }
 
 func (h *SpanTransformHandler) Handle(ctx context.Context, m *otelv1.InboundSpan, _ gcp.MessageMetadata) error {
+	if disabled, err := h.orgs.Disabled(ctx, m.GetProvenance().GetOrganizationId()); err != nil {
+		return o11y.LogError(ctx, h.logger, err, "failed to check organization status")
+	} else if disabled {
+		// Acknowledged without publishing: a disabled organization's queued
+		// telemetry is dropped rather than redelivered.
+		return nil
+	}
+
 	out, err := transformInboundSpan(ctx, h.instruments, m, h.enrichers)
 	if err != nil {
 		return o11y.LogError(ctx, h.logger, err, "failed to transform inbound span")
