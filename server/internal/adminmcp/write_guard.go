@@ -36,6 +36,7 @@ const (
 	OperationUploadPlatformImage                  WriteOperation = "upload_platform_image"
 	OperationRedeployProject                      WriteOperation = "redeploy_project"
 	OperationRepairAssistantAgentNames            WriteOperation = "repair_organization_assistant_agent_names"
+	OperationBackfillAssistantBuiltinGrants       WriteOperation = "backfill_organization_assistant_builtin_grants"
 	OperationMigrateAssistantIdentities           WriteOperation = "migrate_organization_assistant_identities"
 	OperationMigrateAssistantsToKit               WriteOperation = "migrate_organization_assistants_to_kit"
 )
@@ -58,6 +59,7 @@ var AllWriteOperations = []WriteOperation{
 	OperationUploadPlatformImage,
 	OperationRedeployProject,
 	OperationRepairAssistantAgentNames,
+	OperationBackfillAssistantBuiltinGrants,
 	OperationMigrateAssistantIdentities,
 	OperationMigrateAssistantsToKit,
 }

@@ -5,6 +5,7 @@ INSERT INTO trigger_instances (
     definition_slug,
     name,
     environment_id,
+    auth_client_id,
     target_kind,
     target_ref,
     target_display,
@@ -16,6 +17,7 @@ INSERT INTO trigger_instances (
     @definition_slug,
     @name,
     @environment_id,
+    @auth_client_id,
     @target_kind,
     @target_ref,
     @target_display,
@@ -127,6 +129,10 @@ SET
     environment_id = CASE
         WHEN @update_environment_id::boolean THEN sqlc.narg('environment_id')::uuid
         ELSE environment_id
+    END,
+    auth_client_id = CASE
+        WHEN @update_auth_client_id::boolean THEN sqlc.narg('auth_client_id')::uuid
+        ELSE auth_client_id
     END,
     target_kind = COALESCE(sqlc.narg('target_kind'), target_kind),
     target_ref = COALESCE(sqlc.narg('target_ref'), target_ref),

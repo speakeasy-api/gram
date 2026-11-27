@@ -269,12 +269,14 @@ func (q *Queries) GetAssetsByID(ctx context.Context, arg GetAssetsByIDParams) ([
 }
 
 const getChatAttachmentAssetURL = `-- name: GetChatAttachmentAssetURL :one
-SELECT name, url, sha256, organization_id, content_type, content_length, updated_at
+SELECT assets.name, assets.url, assets.sha256, assets.organization_id, assets.content_type, assets.content_length, assets.updated_at
 FROM assets
+JOIN projects p ON p.id = assets.project_id
+JOIN organization_metadata om ON om.id = p.organization_id AND om.disabled_at IS NULL
 WHERE
-  id = $1 AND kind = 'chat_attachment'
-  AND project_id = $2::uuid
-  AND deleted = false
+  assets.id = $1 AND assets.kind = 'chat_attachment'
+  AND assets.project_id = $2::uuid
+  AND assets.deleted = false
 `
 
 type GetChatAttachmentAssetURLParams struct {
@@ -292,6 +294,8 @@ type GetChatAttachmentAssetURLRow struct {
 	UpdatedAt      pgtype.Timestamptz
 }
 
+// A disabled organization's attachments are not served, including through
+// signed URLs minted before it was disabled.
 func (q *Queries) GetChatAttachmentAssetURL(ctx context.Context, arg GetChatAttachmentAssetURLParams) (GetChatAttachmentAssetURLRow, error) {
 	row := q.db.QueryRow(ctx, getChatAttachmentAssetURL, arg.ID, arg.ProjectID)
 	var i GetChatAttachmentAssetURLRow

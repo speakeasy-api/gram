@@ -36,6 +36,10 @@ export type UpdateTriggerInstanceFormTargetKind = ClosedEnum<
 
 export type UpdateTriggerInstanceForm = {
   /**
+   * The linked slack_app auth client ID. Mutually exclusive with environment_id.
+   */
+  authClientId?: string | undefined;
+  /**
    * The trigger config payload.
    */
   config?: { [k: string]: any } | undefined;
@@ -81,6 +85,7 @@ export const UpdateTriggerInstanceFormTargetKind$outboundSchema: z.ZodMiniEnum<
 
 /** @internal */
 export type UpdateTriggerInstanceForm$Outbound = {
+  auth_client_id?: string | undefined;
   config?: { [k: string]: any } | undefined;
   environment_id?: string | undefined;
   id: string;
@@ -97,6 +102,7 @@ export const UpdateTriggerInstanceForm$outboundSchema: z.ZodMiniType<
   UpdateTriggerInstanceForm
 > = z.pipe(
   z.object({
+    authClientId: z.optional(z.string()),
     config: z.optional(z.record(z.string(), z.any())),
     environmentId: z.optional(z.string()),
     id: z.string(),
@@ -108,6 +114,7 @@ export const UpdateTriggerInstanceForm$outboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      authClientId: "auth_client_id",
       environmentId: "environment_id",
       targetDisplay: "target_display",
       targetKind: "target_kind",

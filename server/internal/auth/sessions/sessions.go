@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv/orgaccount"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/userblock"
 	userRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
@@ -79,6 +80,7 @@ type Manager struct {
 	userRepo     *userRepo.Queries
 	billingRepo  billing.Repository
 	identity     UserResolver
+	userBlock    *userblock.Gate
 }
 
 func NewManager(
@@ -104,6 +106,7 @@ func NewManager(
 		userRepo:     userRepo.New(db),
 		billingRepo:  billingRepo,
 		identity:     identity,
+		userBlock:    userblock.NewGate(db),
 	}
 }
 
@@ -126,6 +129,9 @@ func (s *Manager) Authenticate(ctx context.Context, key string) (context.Context
 		return ctx, oops.E(oops.CodeUnavailable, err, "error checking auth session").LogError(ctx, s.logger)
 	}
 	if err := s.checkValidAfter(ctx, session); err != nil {
+		return ctx, err
+	}
+	if err := s.CheckUserBlock(ctx, session.UserID); err != nil {
 		return ctx, err
 	}
 
@@ -227,6 +233,39 @@ func (s *Manager) Authenticate(ctx context.Context, key string) (context.Context
 	}
 
 	return ctx, nil
+}
+
+// CheckUserBlock rejects userID when staff blocked it from the platform.
+// Authenticate calls it on every dashboard request, and the chat-session
+// token manager on every chat token.
+func (s *Manager) CheckUserBlock(ctx context.Context, userID string) error {
+	if s == nil {
+		return oops.E(oops.CodeUnexpected, nil, "session manager is not configured")
+	}
+	if s.userBlock == nil {
+		return nil
+	}
+	if err := s.userBlock.Check(ctx, s.logger, "dashboard_session", userID); err != nil {
+		return fmt.Errorf("session user: %w", err)
+	}
+	return nil
+}
+
+// IsUserBlocked reports whether staff blocked userID from the platform, for
+// callers that map the verdict to their own transport errors.
+func (s *Manager) IsUserBlocked(ctx context.Context, userID string) (bool, error) {
+	// A missing manager fails closed rather than letting a blocked user in.
+	if s == nil {
+		return false, errors.New("check user block: session manager is not configured")
+	}
+	if s.userBlock == nil {
+		return false, nil
+	}
+	blocked, err := s.userBlock.Blocked(ctx, userID)
+	if err != nil {
+		return false, fmt.Errorf("check user block: %w", err)
+	}
+	return blocked, nil
 }
 
 func (s *Manager) refreshSession(ctx context.Context, session Session) error {

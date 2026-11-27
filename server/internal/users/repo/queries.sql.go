@@ -68,7 +68,7 @@ func (q *Queries) DuplicateOrganizationUserEmailFixture(ctx context.Context, arg
 }
 
 const getConnectedUserByEmail = `-- name: GetConnectedUserByEmail :one
-SELECT u.id, u.email, u.display_name, u.photo_url, u.admin, u.last_login, u.workos_id, u.workos_created_at, u.workos_updated_at, u.workos_deleted_at, u.deleted_at, u.created_at, u.updated_at FROM users u
+SELECT u.id, u.email, u.display_name, u.photo_url, u.admin, u.last_login, u.workos_id, u.workos_created_at, u.workos_updated_at, u.workos_deleted_at, u.deleted_at, u.blacklisted_at, u.created_at, u.updated_at FROM users u
 JOIN organization_user_relationships our ON our.user_id = u.id
 WHERE lower(u.email) = lower($1)
   AND u.deleted_at IS NULL
@@ -102,6 +102,7 @@ func (q *Queries) GetConnectedUserByEmail(ctx context.Context, arg GetConnectedU
 		&i.WorkosUpdatedAt,
 		&i.WorkosDeletedAt,
 		&i.DeletedAt,
+		&i.BlacklistedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -109,7 +110,7 @@ func (q *Queries) GetConnectedUserByEmail(ctx context.Context, arg GetConnectedU
 }
 
 const getConnectedUsersByEmails = `-- name: GetConnectedUsersByEmails :many
-SELECT DISTINCT ON (lower(u.email)) u.id, u.email, u.display_name, u.photo_url, u.admin, u.last_login, u.workos_id, u.workos_created_at, u.workos_updated_at, u.workos_deleted_at, u.deleted_at, u.created_at, u.updated_at FROM users u
+SELECT DISTINCT ON (lower(u.email)) u.id, u.email, u.display_name, u.photo_url, u.admin, u.last_login, u.workos_id, u.workos_created_at, u.workos_updated_at, u.workos_deleted_at, u.deleted_at, u.blacklisted_at, u.created_at, u.updated_at FROM users u
 JOIN organization_user_relationships our ON our.user_id = u.id
 WHERE lower(u.email) = ANY(ARRAY(SELECT lower(e) FROM unnest($1::text[]) AS e))
   AND u.deleted_at IS NULL
@@ -148,6 +149,7 @@ func (q *Queries) GetConnectedUsersByEmails(ctx context.Context, arg GetConnecte
 			&i.WorkosUpdatedAt,
 			&i.WorkosDeletedAt,
 			&i.DeletedAt,
+			&i.BlacklistedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -162,7 +164,7 @@ func (q *Queries) GetConnectedUsersByEmails(ctx context.Context, arg GetConnecte
 }
 
 const getConnectedUsersByIDs = `-- name: GetConnectedUsersByIDs :many
-SELECT u.id, u.email, u.display_name, u.photo_url, u.admin, u.last_login, u.workos_id, u.workos_created_at, u.workos_updated_at, u.workos_deleted_at, u.deleted_at, u.created_at, u.updated_at FROM users u
+SELECT u.id, u.email, u.display_name, u.photo_url, u.admin, u.last_login, u.workos_id, u.workos_created_at, u.workos_updated_at, u.workos_deleted_at, u.deleted_at, u.blacklisted_at, u.created_at, u.updated_at FROM users u
 JOIN organization_user_relationships our ON our.user_id = u.id
 WHERE u.id = ANY($1::text[])
   AND our.organization_id = $2
@@ -199,6 +201,7 @@ func (q *Queries) GetConnectedUsersByIDs(ctx context.Context, arg GetConnectedUs
 			&i.WorkosUpdatedAt,
 			&i.WorkosDeletedAt,
 			&i.DeletedAt,
+			&i.BlacklistedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -213,7 +216,7 @@ func (q *Queries) GetConnectedUsersByIDs(ctx context.Context, arg GetConnectedUs
 }
 
 const getConnectedUsersByWorkosIDs = `-- name: GetConnectedUsersByWorkosIDs :many
-SELECT u.id, u.email, u.display_name, u.photo_url, u.admin, u.last_login, u.workos_id, u.workos_created_at, u.workos_updated_at, u.workos_deleted_at, u.deleted_at, u.created_at, u.updated_at FROM users u
+SELECT u.id, u.email, u.display_name, u.photo_url, u.admin, u.last_login, u.workos_id, u.workos_created_at, u.workos_updated_at, u.workos_deleted_at, u.deleted_at, u.blacklisted_at, u.created_at, u.updated_at FROM users u
 JOIN organization_user_relationships our ON our.user_id = u.id
 WHERE u.workos_id = ANY($1::text[])
   AND our.organization_id = $2
@@ -246,6 +249,7 @@ func (q *Queries) GetConnectedUsersByWorkosIDs(ctx context.Context, arg GetConne
 			&i.WorkosUpdatedAt,
 			&i.WorkosDeletedAt,
 			&i.DeletedAt,
+			&i.BlacklistedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -260,7 +264,7 @@ func (q *Queries) GetConnectedUsersByWorkosIDs(ctx context.Context, arg GetConne
 }
 
 const getConnectedUsersMatchingEmails = `-- name: GetConnectedUsersMatchingEmails :many
-SELECT u.id, u.email, u.display_name, u.photo_url, u.admin, u.last_login, u.workos_id, u.workos_created_at, u.workos_updated_at, u.workos_deleted_at, u.deleted_at, u.created_at, u.updated_at FROM users u
+SELECT u.id, u.email, u.display_name, u.photo_url, u.admin, u.last_login, u.workos_id, u.workos_created_at, u.workos_updated_at, u.workos_deleted_at, u.deleted_at, u.blacklisted_at, u.created_at, u.updated_at FROM users u
 JOIN organization_user_relationships our ON our.user_id = u.id
 WHERE lower(u.email) = ANY(ARRAY(SELECT lower(e) FROM unnest($1::text[]) AS e))
   AND u.deleted_at IS NULL
@@ -297,6 +301,7 @@ func (q *Queries) GetConnectedUsersMatchingEmails(ctx context.Context, arg GetCo
 			&i.WorkosUpdatedAt,
 			&i.WorkosDeletedAt,
 			&i.DeletedAt,
+			&i.BlacklistedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -311,7 +316,7 @@ func (q *Queries) GetConnectedUsersMatchingEmails(ctx context.Context, arg GetCo
 }
 
 const getUser = `-- name: GetUser :one
-SELECT id, email, display_name, photo_url, admin, last_login, workos_id, workos_created_at, workos_updated_at, workos_deleted_at, deleted_at, created_at, updated_at FROM users
+SELECT id, email, display_name, photo_url, admin, last_login, workos_id, workos_created_at, workos_updated_at, workos_deleted_at, deleted_at, blacklisted_at, created_at, updated_at FROM users
 WHERE id = $1
 `
 
@@ -330,6 +335,7 @@ func (q *Queries) GetUser(ctx context.Context, id string) (User, error) {
 		&i.WorkosUpdatedAt,
 		&i.WorkosDeletedAt,
 		&i.DeletedAt,
+		&i.BlacklistedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -337,7 +343,7 @@ func (q *Queries) GetUser(ctx context.Context, id string) (User, error) {
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, display_name, photo_url, admin, last_login, workos_id, workos_created_at, workos_updated_at, workos_deleted_at, deleted_at, created_at, updated_at FROM users
+SELECT id, email, display_name, photo_url, admin, last_login, workos_id, workos_created_at, workos_updated_at, workos_deleted_at, deleted_at, blacklisted_at, created_at, updated_at FROM users
 WHERE email = $1
 `
 
@@ -356,6 +362,7 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.WorkosUpdatedAt,
 		&i.WorkosDeletedAt,
 		&i.DeletedAt,
+		&i.BlacklistedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -376,7 +383,7 @@ func (q *Queries) GetUserIDByWorkosID(ctx context.Context, workosID pgtype.Text)
 }
 
 const getUsersByIDs = `-- name: GetUsersByIDs :many
-SELECT id, email, display_name, photo_url, admin, last_login, workos_id, workos_created_at, workos_updated_at, workos_deleted_at, deleted_at, created_at, updated_at FROM users
+SELECT id, email, display_name, photo_url, admin, last_login, workos_id, workos_created_at, workos_updated_at, workos_deleted_at, deleted_at, blacklisted_at, created_at, updated_at FROM users
 WHERE id = ANY($1::text[])
 `
 
@@ -401,6 +408,7 @@ func (q *Queries) GetUsersByIDs(ctx context.Context, ids []string) ([]User, erro
 			&i.WorkosUpdatedAt,
 			&i.WorkosDeletedAt,
 			&i.DeletedAt,
+			&i.BlacklistedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -415,7 +423,7 @@ func (q *Queries) GetUsersByIDs(ctx context.Context, ids []string) ([]User, erro
 }
 
 const getUsersByWorkosIDs = `-- name: GetUsersByWorkosIDs :many
-SELECT id, email, display_name, photo_url, admin, last_login, workos_id, workos_created_at, workos_updated_at, workos_deleted_at, deleted_at, created_at, updated_at FROM users
+SELECT id, email, display_name, photo_url, admin, last_login, workos_id, workos_created_at, workos_updated_at, workos_deleted_at, deleted_at, blacklisted_at, created_at, updated_at FROM users
 WHERE workos_id = ANY($1::text[])
 `
 
@@ -440,6 +448,7 @@ func (q *Queries) GetUsersByWorkosIDs(ctx context.Context, workosIds []string) (
 			&i.WorkosUpdatedAt,
 			&i.WorkosDeletedAt,
 			&i.DeletedAt,
+			&i.BlacklistedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -451,6 +460,24 @@ func (q *Queries) GetUsersByWorkosIDs(ctx context.Context, workosIds []string) (
 		return nil, err
 	}
 	return items, nil
+}
+
+const isEmailBlacklisted = `-- name: IsEmailBlacklisted :one
+SELECT EXISTS (
+  SELECT 1
+  FROM users
+  WHERE lower(email) = lower($1::text)
+    AND blacklisted_at IS NOT NULL
+)::boolean AS blacklisted
+`
+
+// Whether a blocked user holds this email, read uncached, matched
+// case-insensitively. Login checks it before writing anything for the user.
+func (q *Queries) IsEmailBlacklisted(ctx context.Context, email string) (bool, error) {
+	row := q.db.QueryRow(ctx, isEmailBlacklisted, email)
+	var blacklisted bool
+	err := row.Scan(&blacklisted)
+	return blacklisted, err
 }
 
 const isPlatformAdminEmail = `-- name: IsPlatformAdminEmail :one
@@ -475,8 +502,61 @@ func (q *Queries) IsPlatformAdminEmail(ctx context.Context, email string) (bool,
 	return is_admin, err
 }
 
+const isUserBlacklisted = `-- name: IsUserBlacklisted :one
+SELECT EXISTS (
+  SELECT 1
+  FROM users
+  WHERE id = $1
+    AND blacklisted_at IS NOT NULL
+)::boolean AS blacklisted
+`
+
+// Whether staff blocked this user from the platform, read uncached. Login,
+// invite and approval paths use it so a fresh block applies at once; request
+// authentication uses the in-memory snapshot in package userblock instead.
+// An unknown user is not blocked; the caller's own user lookup rejects it.
+func (q *Queries) IsUserBlacklisted(ctx context.Context, id string) (bool, error) {
+	row := q.db.QueryRow(ctx, isUserBlacklisted, id)
+	var blacklisted bool
+	err := row.Scan(&blacklisted)
+	return blacklisted, err
+}
+
+const listBlacklistedUsers = `-- name: ListBlacklistedUsers :many
+SELECT id, lower(email)::text AS email
+FROM users
+WHERE blacklisted_at IS NOT NULL
+`
+
+type ListBlacklistedUsersRow struct {
+	ID    string
+	Email string
+}
+
+// Every user staff blocked from the platform. Each server process loads this
+// set every few seconds so request authentication checks it in memory.
+func (q *Queries) ListBlacklistedUsers(ctx context.Context) ([]ListBlacklistedUsersRow, error) {
+	rows, err := q.db.Query(ctx, listBlacklistedUsers)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListBlacklistedUsersRow
+	for rows.Next() {
+		var i ListBlacklistedUsersRow
+		if err := rows.Scan(&i.ID, &i.Email); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockUserForPlatformAdminCheck = `-- name: LockUserForPlatformAdminCheck :one
-SELECT id, email, display_name, photo_url, admin, last_login, workos_id, workos_created_at, workos_updated_at, workos_deleted_at, deleted_at, created_at, updated_at FROM users
+SELECT id, email, display_name, photo_url, admin, last_login, workos_id, workos_created_at, workos_updated_at, workos_deleted_at, deleted_at, blacklisted_at, created_at, updated_at FROM users
 WHERE id = $1
 FOR SHARE
 `
@@ -496,6 +576,7 @@ func (q *Queries) LockUserForPlatformAdminCheck(ctx context.Context, id string) 
 		&i.WorkosUpdatedAt,
 		&i.WorkosDeletedAt,
 		&i.DeletedAt,
+		&i.BlacklistedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -535,6 +616,28 @@ type SetOrganizationUserEmailFixtureParams struct {
 
 func (q *Queries) SetOrganizationUserEmailFixture(ctx context.Context, arg SetOrganizationUserEmailFixtureParams) error {
 	_, err := q.db.Exec(ctx, setOrganizationUserEmailFixture, arg.Email, arg.UserID, arg.OrganizationID)
+	return err
+}
+
+const setUserBlacklisted = `-- name: SetUserBlacklisted :exec
+UPDATE users
+SET blacklisted_at = CASE
+    WHEN $1::boolean THEN COALESCE(blacklisted_at, clock_timestamp())
+    ELSE NULL
+  END,
+  updated_at = clock_timestamp()
+WHERE id = $2
+`
+
+type SetUserBlacklistedParams struct {
+	Blacklisted bool
+	ID          string
+}
+
+// Applies the block state staff set through WorkOS user metadata. Keeps the
+// original timestamp when the user is already blocked.
+func (q *Queries) SetUserBlacklisted(ctx context.Context, arg SetUserBlacklistedParams) error {
+	_, err := q.db.Exec(ctx, setUserBlacklisted, arg.Blacklisted, arg.ID)
 	return err
 }
 
@@ -652,7 +755,7 @@ ON CONFLICT (id) DO UPDATE SET
   updated_at = clock_timestamp(),
   workos_deleted_at = NULL,
   deleted_at = NULL
-RETURNING id, email, display_name, photo_url, admin, last_login, workos_id, workos_created_at, workos_updated_at, workos_deleted_at, deleted_at, created_at, updated_at, (xmax = 0) AS was_created
+RETURNING id, email, display_name, photo_url, admin, last_login, workos_id, workos_created_at, workos_updated_at, workos_deleted_at, deleted_at, blacklisted_at, created_at, updated_at, (xmax = 0) AS was_created
 `
 
 type UpsertUserParams struct {
@@ -675,6 +778,7 @@ type UpsertUserRow struct {
 	WorkosUpdatedAt pgtype.Timestamptz
 	WorkosDeletedAt pgtype.Timestamptz
 	DeletedAt       pgtype.Timestamptz
+	BlacklistedAt   pgtype.Timestamptz
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
 	WasCreated      bool
@@ -704,6 +808,7 @@ func (q *Queries) UpsertUser(ctx context.Context, arg UpsertUserParams) (UpsertU
 		&i.WorkosUpdatedAt,
 		&i.WorkosDeletedAt,
 		&i.DeletedAt,
+		&i.BlacklistedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.WasCreated,

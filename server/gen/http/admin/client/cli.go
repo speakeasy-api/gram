@@ -4125,6 +4125,32 @@ func BuildRepairOrganizationAssistantAgentNamesPayload(adminRepairOrganizationAs
 	return v, nil
 }
 
+// BuildBackfillOrganizationAssistantBuiltinGrantsPayload builds the payload
+// for the admin backfillOrganizationAssistantBuiltinGrants endpoint from CLI
+// flags.
+func BuildBackfillOrganizationAssistantBuiltinGrantsPayload(adminBackfillOrganizationAssistantBuiltinGrantsBody string, adminBackfillOrganizationAssistantBuiltinGrantsAdminSessionToken string) (*admin.BackfillOrganizationAssistantBuiltinGrantsPayload, error) {
+	var err error
+	var body BackfillOrganizationAssistantBuiltinGrantsRequestBody
+	{
+		err = json.Unmarshal([]byte(adminBackfillOrganizationAssistantBuiltinGrantsBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"organization_id\": \"abc123\"\n   }'")
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminBackfillOrganizationAssistantBuiltinGrantsAdminSessionToken != "" {
+			adminSessionToken = &adminBackfillOrganizationAssistantBuiltinGrantsAdminSessionToken
+		}
+	}
+	v := &admin.BackfillOrganizationAssistantBuiltinGrantsPayload{
+		OrganizationID: body.OrganizationID,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
 // BuildListOrganizationAssistantsPayload builds the payload for the admin
 // listOrganizationAssistants endpoint from CLI flags.
 func BuildListOrganizationAssistantsPayload(adminListOrganizationAssistantsOrganizationID string, adminListOrganizationAssistantsAdminSessionToken string) (*admin.ListOrganizationAssistantsPayload, error) {

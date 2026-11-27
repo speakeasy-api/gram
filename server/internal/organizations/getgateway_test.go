@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	featuresrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -53,6 +54,29 @@ func TestService_GetGateway_Available(t *testing.T) {
 	require.NotNil(t, res.URL)
 	require.Equal(t, "http://localhost:35291/mcp/gateway/"+authCtx.OrganizationSlug, *res.URL)
 	require.Nil(t, res.UnavailableReason)
+}
+
+// An organization that is not whitelisted is served no MCP servers, so it is
+// not offered a gateway either. It reports as disabled: the reason is only
+// shown in a dashboard such an organization cannot reach.
+func TestService_GetGateway_NotWhitelisted(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	createGatewayIssuer(t, ctx, ti, authCtx.ActiveOrganizationID)
+	require.NoError(t, testrepo.New(ti.conn).SetOrganizationServingStateFixture(ctx, testrepo.SetOrganizationServingStateFixtureParams{
+		ID: authCtx.ActiveOrganizationID, Whitelisted: false, Disabled: false,
+	}))
+
+	res, err := ti.service.GetGateway(ctx, &gen.GetGatewayPayload{})
+
+	require.NoError(t, err)
+	require.False(t, res.Available)
+	require.Nil(t, res.URL)
+	require.NotNil(t, res.UnavailableReason)
+	require.Equal(t, "organization_disabled", *res.UnavailableReason)
 }
 
 func TestService_GetGateway_NoOrganizationIssuer(t *testing.T) {

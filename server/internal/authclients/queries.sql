@@ -578,3 +578,70 @@ WHERE credential_kind = 'issuance_profile'
   AND mcp_server_id = @mcp_server_id
   AND organization_id = @organization_id
   AND deleted IS FALSE;
+
+-- name: ListEnabledSlackAppAuthClientsInScope :many
+-- Enabled, live slack_app auth clients visible to one project: clients confined
+-- to that project and organization-wide clients. Ordered deterministically by id.
+SELECT ac.*
+FROM mcp_auth_clients AS ac
+WHERE ac.organization_id = @organization_id
+  AND ac.client_type = 'slack_app'
+  AND ac.enabled IS TRUE
+  AND ac.deleted IS FALSE
+  AND (
+    ac.project_id IS NULL
+    OR (
+      ac.project_id = @project_id
+      AND EXISTS (
+        SELECT 1
+        FROM projects p
+        WHERE p.id = ac.project_id
+          AND p.organization_id = ac.organization_id
+          AND p.deleted IS FALSE
+      )
+    )
+  )
+ORDER BY ac.id;
+
+-- name: GetSlackAppAuthClientInScope :one
+-- One live slack_app auth client visible to a project (confined to that project
+-- or organization-wide). Returns both enabled and disabled rows so callers can
+-- distinguish disabled from missing.
+SELECT ac.*
+FROM mcp_auth_clients AS ac
+WHERE ac.id = @id
+  AND ac.organization_id = @organization_id
+  AND ac.client_type = 'slack_app'
+  AND ac.deleted IS FALSE
+  AND (
+    ac.project_id IS NULL
+    OR (
+      ac.project_id = @project_id
+      AND EXISTS (
+        SELECT 1
+        FROM projects p
+        WHERE p.id = ac.project_id
+          AND p.organization_id = ac.organization_id
+          AND p.deleted IS FALSE
+      )
+    )
+  );
+
+-- name: ListSlackAppAuthClientSecrets :many
+-- Stored credential headers of one live, enabled slack_app auth client.
+-- Values remain encrypted as stored; callers decrypt in memory and never log
+-- or return them.
+SELECT h.name,
+       h.is_secret,
+       h.value
+FROM mcp_auth_client_headers AS h
+JOIN mcp_auth_clients AS ac
+  ON ac.id = h.auth_client_id
+ AND ac.organization_id = h.organization_id
+ AND ac.client_type = 'slack_app'
+ AND ac.enabled IS TRUE
+ AND ac.deleted IS FALSE
+WHERE h.auth_client_id = @auth_client_id
+  AND h.organization_id = @organization_id
+  AND h.deleted IS FALSE
+ORDER BY h.name, h.id;

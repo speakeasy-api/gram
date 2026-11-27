@@ -5,6 +5,7 @@
 import { adminAssignOrganizationOnboardingPlaybook } from "../funcs/adminAssignOrganizationOnboardingPlaybook.js";
 import { adminBackfillMcpAuthGrants } from "../funcs/adminBackfillMcpAuthGrants.js";
 import { adminBackfillMcpConnectGrants } from "../funcs/adminBackfillMcpConnectGrants.js";
+import { adminBackfillOrganizationAssistantBuiltinGrants } from "../funcs/adminBackfillOrganizationAssistantBuiltinGrants.js";
 import { adminBulkUpdateAccountType } from "../funcs/adminBulkUpdateAccountType.js";
 import { adminCancelStripeSubscription } from "../funcs/adminCancelStripeSubscription.js";
 import { adminChangeTrialEndDate } from "../funcs/adminChangeTrialEndDate.js";
@@ -141,6 +142,7 @@ import { adminUploadPlatformImage } from "../funcs/adminUploadPlatformImage.js";
 import { adminVerifyGcpIamPlatformCredential } from "../funcs/adminVerifyGcpIamPlatformCredential.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { AdminAssistantAgentNameRepairRun } from "../models/components/adminassistantagentnamerepairrun.js";
+import { AdminAssistantBuiltinGrantBackfillRun } from "../models/components/adminassistantbuiltingrantbackfillrun.js";
 import { AdminAssistantIdentityMigrationRun } from "../models/components/adminassistantidentitymigrationrun.js";
 import { AdminAssistantKitMigrationRun } from "../models/components/adminassistantkitmigrationrun.js";
 import { AdminAssistantOrganizations } from "../models/components/adminassistantorganizations.js";
@@ -213,6 +215,7 @@ import { AdminUpstreamOAuthMigrationRun } from "../models/components/adminupstre
 import { AdminUpstreamOAuthMigrationStatus } from "../models/components/adminupstreamoauthmigrationstatus.js";
 import { AssignOrganizationOnboardingPlaybookRequestBody } from "../models/components/assignorganizationonboardingplaybookrequestbody.js";
 import { BackfillMcpConnectGrantsRequestBody } from "../models/components/backfillmcpconnectgrantsrequestbody.js";
+import { BackfillOrganizationAssistantBuiltinGrantsRequestBody } from "../models/components/backfillorganizationassistantbuiltingrantsrequestbody.js";
 import { BulkUpdateAccountTypeRequestBody } from "../models/components/bulkupdateaccounttyperequestbody.js";
 import { CancelStripeSubscriptionRequestBody } from "../models/components/cancelstripesubscriptionrequestbody.js";
 import { ChangeTrialEndDateRequestBody } from "../models/components/changetrialenddaterequestbody.js";
@@ -921,6 +924,23 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AdminOrganizationAssistants> {
     return unwrapAsync(adminListOrganizationAssistants(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * backfillOrganizationAssistantBuiltinGrants admin
+   *
+   * @remarks
+   * Grants every live agent-backed assistant in one organization explicit mcp:connect policy grants for its built-in toolsets (assistants for every assistant; platform and speakeasy-slack as well for managed assistants). Idempotent, so it is safe to run again.
+   */
+  async backfillOrganizationAssistantBuiltinGrants(
+    request: BackfillOrganizationAssistantBuiltinGrantsRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminAssistantBuiltinGrantBackfillRun> {
+    return unwrapAsync(adminBackfillOrganizationAssistantBuiltinGrants(
       this,
       request,
       options,

@@ -19,6 +19,7 @@ export const AgentPolicySelectorClientType = {
   StaticCredential: "static_credential",
   PassThrough: "pass_through",
   Ema: "ema",
+  SlackApp: "slack_app",
   Wildcard: "*",
 } as const;
 /**

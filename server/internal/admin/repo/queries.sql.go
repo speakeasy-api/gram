@@ -1143,6 +1143,83 @@ func (q *Queries) AdminListAssistantAgentNames(ctx context.Context, organization
 	return items, nil
 }
 
+const adminListAssistantBuiltinGrantTargets = `-- name: AdminListAssistantBuiltinGrantTargets :many
+SELECT
+    a.id AS assistant_id,
+    a.project_id,
+    a.name,
+    g.id AS agent_id,
+    g.name AS agent_name,
+    EXISTS (
+        SELECT 1
+        FROM project_managed_assistants pma
+        WHERE pma.project_id = a.project_id
+          AND pma.assistant_id = a.id
+    )::boolean AS is_managed,
+    COALESCE(
+        (
+            SELECT array_agg(DISTINCT ti.auth_client_id ORDER BY ti.auth_client_id)
+            FROM trigger_instances ti
+            WHERE ti.project_id = a.project_id
+              AND ti.definition_slug = 'slack'
+              AND ti.target_kind = 'assistant'
+              AND ti.target_ref = a.id::text
+              AND ti.auth_client_id IS NOT NULL
+              AND ti.deleted IS FALSE
+        ),
+        ARRAY[]::uuid[]
+    )::uuid[] AS slack_auth_client_ids
+FROM assistants a
+JOIN projects p ON p.id = a.project_id AND p.organization_id = a.organization_id AND p.deleted IS FALSE
+JOIN assistant_agent_bindings b ON b.assistant_id = a.id AND b.project_id = a.project_id AND b.organization_id = a.organization_id AND b.deleted IS FALSE
+JOIN agents g ON g.id = b.agent_id AND g.organization_id = a.organization_id AND g.project_id = a.project_id AND g.deleted IS FALSE
+WHERE a.organization_id = $1
+  AND a.deleted IS FALSE
+ORDER BY a.id
+FOR UPDATE OF a, b, g
+`
+
+type AdminListAssistantBuiltinGrantTargetsRow struct {
+	AssistantID        uuid.UUID
+	ProjectID          uuid.UUID
+	Name               string
+	AgentID            uuid.UUID
+	AgentName          string
+	IsManaged          bool
+	SlackAuthClientIds []uuid.UUID
+}
+
+// Every live assistant of an organization with a live bound dedicated agent,
+// plus whether it is the project's managed assistant. Locked in assistant ID
+// order so concurrent backfills serialize cleanly.
+func (q *Queries) AdminListAssistantBuiltinGrantTargets(ctx context.Context, organizationID string) ([]AdminListAssistantBuiltinGrantTargetsRow, error) {
+	rows, err := q.db.Query(ctx, adminListAssistantBuiltinGrantTargets, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListAssistantBuiltinGrantTargetsRow
+	for rows.Next() {
+		var i AdminListAssistantBuiltinGrantTargetsRow
+		if err := rows.Scan(
+			&i.AssistantID,
+			&i.ProjectID,
+			&i.Name,
+			&i.AgentID,
+			&i.AgentName,
+			&i.IsManaged,
+			&i.SlackAuthClientIds,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const adminListAssistantOrganizations = `-- name: AdminListAssistantOrganizations :many
 SELECT o.id, o.name, o.slug, count(*)::bigint AS assistants
 FROM organization_metadata o

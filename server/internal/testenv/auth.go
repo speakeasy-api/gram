@@ -102,11 +102,13 @@ func InitAuthContext(t *testing.T, ctx context.Context, conn *pgxpool.Pool, sess
 	// Upsert organization metadata in the database
 	orgQueries := orgRepo.New(conn)
 	_, err = orgQueries.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
-		ID:             mockidp.MockOrgID,
-		Name:           mockidp.MockOrgName,
-		Slug:           mockidp.MockOrgSlug,
-		WorkosID:       pgtype.Text{String: mockidp.MockOrgID, Valid: true},
-		Whitelisted:    pgtype.Bool{Bool: false, Valid: false},
+		ID:       mockidp.MockOrgID,
+		Name:     mockidp.MockOrgName,
+		Slug:     mockidp.MockOrgSlug,
+		WorkosID: pgtype.Text{String: mockidp.MockOrgID, Valid: true},
+		// Whitelisted, like an organization using the product: Speakeasy serves
+		// no MCP servers for an organization that is not.
+		Whitelisted:    pgtype.Bool{Bool: true, Valid: true},
 		CreationSource: pgtype.Text{String: "", Valid: false},
 		DefaultHost:    pgtype.Text{String: "", Valid: false},
 	})

@@ -1200,6 +1200,8 @@ func newStartCommand() *cli.Command {
 			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemLogger, auditLogger, serverURL, siteURL, platformHosts, slackClient, cache.NewRedisCacheAdapter(redisClient), assistantIdentities)
 			speakeasySlackDirectory := newSpeakeasySlackDirectory(c, db, encryptionClient, guardianPolicy, auditLogger)
 			triggerApp.SetSpeakeasySlackTokens(speakeasySlackDirectory)
+			slackAppCredentials := authclients.NewSlackAppCredentialStore(db, authzEngine, encryptionClient)
+			triggerApp.SetSlackAppAuthClientLoader(slackAppCredentials)
 
 			platformFeatureChecker := productFeatures.PlatformFeatureCheck
 
@@ -1349,6 +1351,7 @@ func newStartCommand() *cli.Command {
 			assistantsCore.SetAssetSigningKey(c.String(usersessions.JWTSigningKeyFlag))
 			assistantsCore.SetSlackImageInlining(env, slackapi.NewClient("", guardianPolicy.PooledClient()))
 			assistantsCore.SetSpeakeasySlackTokens(speakeasySlackDirectory)
+			assistantsCore.SetSlackAppCredentials(slackAppCredentials)
 			assistantsCore.SetFeatureProvider(featureFlags)
 			assistantsCore.SetSiteURL(siteURL)
 			assistantsCore.SetOutboundCallbackOrigin(callbackOrigins.Outbound)
@@ -2305,6 +2308,7 @@ func newStartCommand() *cli.Command {
 				PlatformMCPReadTools:         assistant_platform_mcp_adapter.ExternalTools(platformMCPAssistant.Tools, platformMCPAssistant.Authorizer),
 				PlatformMCPReadActingContext: assistant_platform_mcp_adapter.ActingContext(platformMCPAssistant.Authorizer),
 				SpeakeasySlackTools:          platformtoolsruntime.SpeakeasySlackTools(guardianPolicy.PooledClient(), triggerApp, speakeasySlackDirectory),
+				AssistantSlackTools:          platformtoolsruntime.AssistantSlackTools(guardianPolicy.PooledClient(), triggerApp, encryptionClient, serverURL, slackAppCredentials),
 			}))
 
 			// Requests get their own base context so the shutdown deadline can

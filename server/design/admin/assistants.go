@@ -110,6 +110,20 @@ func assistantMethods() {
 		Meta("openapi:extension:x-speakeasy-name-override", "repairOrganizationAssistantAgentNames")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name":"AdminRepairOrganizationAssistantAgentNames"}`)
 	})
+	Method("backfillOrganizationAssistantBuiltinGrants", func() {
+		Description("Grants every live agent-backed assistant in one organization explicit mcp:connect policy grants for its built-in toolsets (assistants for every assistant; platform and speakeasy-slack as well for managed assistants). Idempotent, so it is safe to run again.")
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("organization_id")
+			Attribute("organization_id", String, "The organization ID.")
+			Meta("openapi:typename", "BackfillOrganizationAssistantBuiltinGrantsRequestBody")
+		})
+		Result(AdminAssistantBuiltinGrantBackfillRun)
+		HTTP(func() { POST("/admin/organization.backfillAssistantBuiltinGrants"); Response(StatusOK) })
+		Meta("openapi:operationId", "adminBackfillOrganizationAssistantBuiltinGrants")
+		Meta("openapi:extension:x-speakeasy-name-override", "backfillOrganizationAssistantBuiltinGrants")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name":"AdminBackfillOrganizationAssistantBuiltinGrants"}`)
+	})
 	Method("listOrganizationAssistants", func() {
 		Description("Lists every live assistant of one organization with its identity state, runtime, and whether its creator is still a member.")
 
@@ -214,4 +228,24 @@ var AdminAssistantAgentNameRepairRun = Type("AdminAssistantAgentNameRepairRun", 
 	Attribute("conflicts", Int64)
 	Attribute("failed", Int64)
 	Attribute("results", ArrayOf(AdminAssistantAgentNameRepairResult))
+})
+var AdminAssistantBuiltinGrantBackfillResult = Type("AdminAssistantBuiltinGrantBackfillResult", func() {
+	Description("What the built-in toolset Connect grant backfill did to one agent-backed assistant.")
+	Required("assistant_id", "project_id", "name", "outcome", "grants_added")
+	Attribute("assistant_id", String, "The assistant ID.", func() { Format(FormatUUID) })
+	Attribute("project_id", String, "The assistant's project ID.", func() { Format(FormatUUID) })
+	Attribute("name", String, "The assistant name.")
+	Attribute("outcome", String, "granted when the run added one or more missing built-in Connect grants, already_granted when every built-in Connect grant was already present permanently, and failed when writing failed.", func() {
+		Enum("granted", "already_granted", "failed")
+	})
+	Attribute("grants_added", Int64, "How many built-in Connect grants were written or promoted to permanent for this assistant.")
+})
+var AdminAssistantBuiltinGrantBackfillRun = Type("AdminAssistantBuiltinGrantBackfillRun", func() {
+	Description("The result of backfilling built-in toolset Connect grants for one organization's agent-backed assistants.")
+	Required("organization_id", "granted", "already_granted", "failed", "results")
+	Attribute("organization_id", String, "The organization ID.")
+	Attribute("granted", Int64, "Assistants whose agents received one or more built-in Connect grants.")
+	Attribute("already_granted", Int64, "Assistants whose agents already held all required permanent built-in Connect grants.")
+	Attribute("failed", Int64, "Assistants whose backfill failed. Running again retries them.")
+	Attribute("results", ArrayOf(AdminAssistantBuiltinGrantBackfillResult), "One result per live agent-backed assistant.")
 })

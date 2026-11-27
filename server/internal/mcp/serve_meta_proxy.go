@@ -833,6 +833,9 @@ func (s *Service) describeMetaMember(ctx context.Context, logger *slog.Logger, g
 		// never includes local tools; they are offered as on a live listing.
 		return withLocalToolsInCatalog(catalog, s.memberLocalTools(ctx, logger, gate.organizationID, member)), nil
 	}
+	if member.backend == metaMemberBackendPlatform {
+		return s.describePlatformMember(ctx, logger, gate, member)
+	}
 	if member.backend == metaMemberBackendHosted {
 		return s.describeMemberToolset(ctx, logger, gate, member)
 	}
