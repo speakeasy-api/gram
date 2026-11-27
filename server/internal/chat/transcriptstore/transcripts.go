@@ -138,12 +138,12 @@ type Body struct {
 	StorageError      *pgtype.Text
 }
 
-// Open replaces each body with its encrypted copy when the project has
-// encrypted transcripts, in one LoadMany call. A message with no encrypted copy
-// yet keeps its plaintext and counts as plaintext_fallback, so messages written
-// before sealing began still load. A stale or unopenable copy fails the whole
-// read: it means sealing or the data is broken, and plaintext must not hide
-// that.
+// Open replaces each body with its decrypted transcript when the project has
+// encrypted transcripts, in one LoadMany call; in plaintext mode it reads no
+// transcript. A message with no transcript yet keeps its plaintext and counts as
+// plaintext_fallback. A transcript that disagrees with its plaintext row is
+// logged as an error, counted as stale, and the plaintext is kept, the same rule
+// UpdateBody follows. A transcript that cannot be decrypted fails the read.
 func (t *Transcripts) Open(ctx context.Context, organizationID string, projectID uuid.UUID, bodies []Body) error {
 	if len(bodies) == 0 || !t.Enabled(projectID) {
 		return nil

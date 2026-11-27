@@ -145,7 +145,7 @@ func plaintextRow(id uuid.UUID) openRow {
 	}
 }
 
-func TestOpenRowsServesShadowsFallsBackAndFailsStale(t *testing.T) {
+func TestOpenRowsServesTranscriptsAndFallsBackToPlaintext(t *testing.T) {
 	t.Parallel()
 	f := setup(t, true)
 	shadowed, unshadowed := uuid.New(), uuid.New()
@@ -174,8 +174,9 @@ func TestOpenRowsServesShadowsFallsBackAndFailsStale(t *testing.T) {
 	_, err = fixturerepo.New(f.db).ChangeContent(t.Context(), shadowed, project(f.project))
 	require.NoError(t, err)
 	stale := []openRow{plaintextRow(shadowed)}
-	err = OpenRows(t.Context(), transcripts, f.org, f.project, stale, openRowBody)
-	require.ErrorIs(t, err, ErrStale, "a stale shadow fails the read instead of serving plaintext")
+	stale[0].content = "changed"
+	require.NoError(t, OpenRows(t.Context(), transcripts, f.org, f.project, stale, openRowBody))
+	require.Equal(t, "changed", stale[0].content, "a disagreeing transcript is logged and the plaintext is kept")
 }
 
 func TestToolCallIDsStayWithTheirProject(t *testing.T) {
@@ -229,6 +230,16 @@ func TestUpdateBodyKeepsEveryCopyCurrent(t *testing.T) {
 	opened, err := f.store.Load(ctx, f.org, f.project, id)
 	require.NoError(t, err, "plaintext and transcript agree")
 	require.Equal(t, "changed note", *opened.ToolOutcomeNotes)
+
+	changed, err = f.updateBody(t, transcripts, f.chat, id, func(m *transcriptcrypto.Message) error {
+		m.ToolCallSummaries = []byte(`{"example":"summary","other":"done"}`)
+		return nil
+	})
+	require.NoError(t, err)
+	require.True(t, changed)
+	opened, err = f.store.Load(ctx, f.org, f.project, id)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"example":"summary","other":"done"}`, string(opened.ToolCallSummaries))
 
 	changed, err = f.updateBody(t, transcripts, f.chat, id, setNotes("changed note"))
 	require.NoError(t, err)

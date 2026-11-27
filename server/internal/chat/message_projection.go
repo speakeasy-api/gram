@@ -1,7 +1,6 @@
 package chat
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -11,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptcrypto"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 )
 
@@ -123,7 +123,9 @@ func (w *ChatMessageWriter) ProjectMessage(ctx context.Context, projectID, messa
 func (w *ChatMessageWriter) patchProjection(ctx context.Context, tx pgx.Tx, projectID uuid.UUID, row repo.ChatMessage, write MessageWrite, prepared error) (int64, error) {
 	q := repo.New(tx)
 	bodyChanged := false
-	if row.Content != write.Params.Content || !bytes.Equal(row.ContentRaw, write.Params.ContentRaw) || !bytes.Equal(row.ToolCalls, write.Params.ToolCalls) {
+	// Postgres re-serializes jsonb, so compare the stored JSON by value: an
+	// unchanged patch must not lock the row and open its transcript.
+	if row.Content != write.Params.Content || !transcriptstore.SameJSON(row.ContentRaw, write.Params.ContentRaw) || !transcriptstore.SameJSON(row.ToolCalls, write.Params.ToolCalls) {
 		if prepared != nil && w.transcripts.Enabled(projectID) {
 			return 0, prepared
 		}

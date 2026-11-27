@@ -115,13 +115,8 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 	// key loads before the transaction below begins, but only when some outcome
 	// will be written. A segment that writes none must not fail on the key.
 	var prepared error
-	for _, tc := range result.ToolCalls {
-		absoluteIndex := args.StartIndex + tc.MessageIndex
-		if absoluteIndex < 0 || absoluteIndex >= len(allMessages) {
-			continue
-		}
+	if writesAnOutcome(result.ToolCalls, args.StartIndex, len(allMessages)) {
 		prepared = a.bodies.PrepareTranscripts(ctx, args.ProjectID)
-		break
 	}
 
 	// Use transaction for atomic updates
@@ -430,4 +425,16 @@ func (a *AnalyzeSegment) formatUserFeedback(userFeedback []UserFeedback) string 
 		}
 	}
 	return feedbackText.String()
+}
+
+// writesAnOutcome reports whether any analyzed tool call maps to a message in
+// the chat, so the segment will write at least one outcome.
+func writesAnOutcome(toolCalls []toolCallAnalysis, startIndex, messageCount int) bool {
+	for _, tc := range toolCalls {
+		absoluteIndex := startIndex + tc.MessageIndex
+		if absoluteIndex >= 0 && absoluteIndex < messageCount {
+			return true
+		}
+	}
+	return false
 }

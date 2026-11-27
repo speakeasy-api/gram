@@ -227,6 +227,9 @@ func updateBody(ctx context.Context, db repo.DBTX, store *Store, organizationID 
 		return false, fmt.Errorf("apply message body change: %w", err)
 	}
 	if sameMessage(before, body) {
+		if store != nil && consistent {
+			store.metrics.check(ctx, projectID, outcomeSuccess)
+		}
 		return false, nil
 	}
 	written, err := q.WriteMessageBody(ctx, repo.WriteMessageBodyParams{
@@ -264,10 +267,12 @@ func updateBody(ctx context.Context, db repo.DBTX, store *Store, organizationID 
 func (s *Store) sanityCheck(ctx context.Context, q *repo.Queries, codec *transcriptcrypto.Codec, organizationID string, projectID uuid.UUID, row repo.SnapshotRow, consistent bool) error {
 	ciphertext, err := q.CurrentCiphertext(ctx, repo.CurrentCiphertextParams{MessageID: row.ID, ProjectID: projectID, OrganizationID: organizationID})
 	if err != nil {
+		s.metrics.check(ctx, projectID, outcomeError)
 		return safe(err)
 	}
 	opened, err := codec.Decrypt(ctx, transcriptcrypto.Identity{ProjectID: projectID, ChatID: row.ChatID, MessageID: row.ID}, ciphertext)
 	if err != nil {
+		s.metrics.check(ctx, projectID, outcomeError)
 		return safe(err)
 	}
 	if mismatch := describeMismatch(opened, sourceOf(row)); len(mismatch) > 0 {
@@ -300,15 +305,15 @@ func (s *Store) hydrate(ctx context.Context, q *repo.Queries, codec *transcriptc
 		return plain, false, nil
 	}
 	if err != nil {
+		s.metrics.check(ctx, projectID, outcomeError)
 		return plain, false, safe(err)
 	}
 	opened, err := codec.Decrypt(ctx, transcriptcrypto.Identity{ProjectID: projectID, ChatID: row.ChatID, MessageID: row.ID}, ciphertext)
 	if err != nil {
+		s.metrics.check(ctx, projectID, outcomeError)
 		return plain, false, safe(err)
 	}
-	if mismatch := describeMismatch(opened, plain); len(mismatch) > 0 {
-		s.logger.ErrorContext(ctx, "encrypted transcript disagrees with the plaintext row, discarding it and using the plaintext row",
-			attr.SlogProjectID(projectID.String()), attr.SlogMessageID(row.ID.String()), attr.SlogTranscriptShadowMismatch(mismatch))
+	if !s.agrees(ctx, "update", projectID, row.ID, opened, plain) {
 		s.metrics.check(ctx, projectID, outcomeHydrateMismatch)
 		return plain, false, nil
 	}
@@ -475,9 +480,10 @@ func writeMetadata(ctx context.Context, q *repo.Queries, projectID uuid.UUID, ro
 	return nil
 }
 
-// Load refuses missing and legacy transcripts, and stale ones: a transcript
-// that decrypts to anything but the current body, which only a write that
-// bypassed the application can leave behind.
+// Load is the strict single-message check that tests and tools use: it refuses
+// missing and legacy transcripts, and stale ones, a transcript that decrypts to
+// anything but the current body. Readers use LoadMany, which serves plaintext
+// instead.
 func (s *Store) Load(ctx context.Context, organizationID string, projectID, messageID uuid.UUID) (transcriptcrypto.Message, error) {
 	var zero transcriptcrypto.Message
 	if organizationID == "" || projectID == uuid.Nil || messageID == uuid.Nil {
@@ -510,9 +516,9 @@ func (s *Store) Load(ctx context.Context, organizationID string, projectID, mess
 // cold one unwraps the organization's key once for the page. A message with no
 // transcript, or only a legacy one with source_hash, is left out of the result,
 // and the caller serves its plaintext.
-// Every shadow that does exist gets Load's checks, and one that is stale or not
-// authentic fails the whole page: an existing shadow is never skipped in favour
-// of plaintext. Duplicate IDs are opened once.
+// A transcript that disagrees with its plaintext row is logged and left out
+// too, so the caller serves plaintext; one that cannot be decrypted fails the
+// whole page. Duplicate IDs are opened once.
 func (s *Store) LoadMany(ctx context.Context, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID) (map[uuid.UUID]transcriptcrypto.Message, error) {
 	if len(messageIDs) == 0 {
 		return map[uuid.UUID]transcriptcrypto.Message{}, nil
@@ -526,7 +532,7 @@ func (s *Store) LoadMany(ctx context.Context, organizationID string, projectID u
 	defer span.End()
 
 	start := time.Now()
-	opened, err := s.loadMany(ctx, organizationID, projectID, messageIDs)
+	opened, stale, err := s.loadMany(ctx, organizationID, projectID, messageIDs)
 	result := classify(err)
 	s.metrics.read.recordDuration(ctx, projectID, time.Since(start), result)
 
@@ -544,20 +550,24 @@ func (s *Store) LoadMany(ctx context.Context, organizationID string, projectID u
 			missing++
 		}
 	}
-	s.metrics.read.recordMessages(ctx, projectID, len(messageIDs)-missing, outcomeSuccess)
+	// A disagreeing transcript is left out too, so it is served from
+	// plaintext, but counted as stale rather than as a plain fallback.
+	missing -= stale
+	s.metrics.read.recordMessages(ctx, projectID, len(messageIDs)-missing-stale, outcomeSuccess)
 	s.metrics.read.recordMessages(ctx, projectID, missing, outcomePlaintextFallback)
+	s.metrics.read.recordMessages(ctx, projectID, stale, outcomeStale)
 	span.SetAttributes(attr.TranscriptShadowPlaintextFallbackCount(missing))
 	return opened, nil
 }
 
-func (s *Store) loadMany(ctx context.Context, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID) (map[uuid.UUID]transcriptcrypto.Message, error) {
+func (s *Store) loadMany(ctx context.Context, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID) (map[uuid.UUID]transcriptcrypto.Message, int, error) {
 	if organizationID == "" || projectID == uuid.Nil {
-		return nil, ErrInvalid
+		return nil, 0, ErrInvalid
 	}
 	wanted := make(map[uuid.UUID]struct{}, len(messageIDs))
 	for _, id := range messageIDs {
 		if id == uuid.Nil {
-			return nil, ErrInvalid
+			return nil, 0, ErrInvalid
 		}
 		wanted[id] = struct{}{}
 	}
@@ -568,29 +578,47 @@ func (s *Store) loadMany(ctx context.Context, organizationID string, projectID u
 
 	rows, err := repo.New(s.db).LoadMany(ctx, repo.LoadManyParams{MessageIds: ids, ProjectID: project(projectID), OrganizationID: organizationID})
 	if err != nil {
-		return nil, safe(err)
+		return nil, 0, safe(err)
 	}
 	if len(rows) == 0 {
-		return map[uuid.UUID]transcriptcrypto.Message{}, nil
+		return map[uuid.UUID]transcriptcrypto.Message{}, 0, nil
 	}
 
 	codec, err := transcriptcrypto.New(s.service, organizationID)
 	if err != nil {
-		return nil, safe(err)
+		return nil, 0, safe(err)
 	}
 	opened := make(map[uuid.UUID]transcriptcrypto.Message, len(rows))
+	stale := 0
 	for _, row := range rows {
 		msg, err := codec.Decrypt(ctx, transcriptcrypto.Identity{ProjectID: projectID, ChatID: row.ChatID, MessageID: row.ID}, row.Ciphertext)
 		if err != nil {
-			return nil, safe(err)
+			return nil, 0, safe(err)
 		}
 		source := message(row.Content, row.ContentRaw, row.ToolCalls, row.ToolOutcomeNotes, row.ToolCallSummaries, row.StorageError)
-		if !sameMessage(msg, source) {
-			return nil, ErrStale
+		if !s.agrees(ctx, "read", projectID, row.ID, msg, source) {
+			stale++
+			continue
 		}
 		opened[row.ID] = msg
 	}
-	return opened, nil
+	return opened, stale, nil
+}
+
+// agrees compares a decrypted transcript with its plaintext row, the same way
+// on every read and update path. In shadow mode the plaintext row is the
+// source of truth: a transcript that disagrees is logged as an error with each
+// differing field's size and nullness, never its contents, and the caller uses
+// the plaintext row instead.
+func (s *Store) agrees(ctx context.Context, path string, projectID, messageID uuid.UUID, transcript, plain transcriptcrypto.Message) bool {
+	mismatch := describeMismatch(transcript, plain)
+	if len(mismatch) == 0 {
+		return true
+	}
+	s.logger.ErrorContext(ctx, "encrypted transcript disagrees with the plaintext row, using the plaintext row",
+		attr.SlogProjectID(projectID.String()), attr.SlogMessageID(messageID.String()),
+		attr.SlogTranscriptShadowMismatch(mismatch), attr.SlogReason(path))
+	return false
 }
 
 type Page struct {
@@ -656,6 +684,13 @@ func (s *Store) Progress(ctx context.Context, organizationID string, projectID u
 func sameMessage(a, b transcriptcrypto.Message) bool {
 	return len(differingFields(a, b)) == 0
 }
+
+// SameJSON reports whether two JSON documents hold the same value, ignoring
+// formatting and key order, with numbers compared exactly. Both nil is equal;
+// nil and non-nil are not. It is how the transcript store compares bodies, so a
+// caller can use it to skip an update that would change nothing.
+func SameJSON(a, b []byte) bool { return sameJSON(a, b) }
+
 func sameJSON(a, b []byte) bool {
 	if a == nil || b == nil {
 		return a == nil && b == nil
