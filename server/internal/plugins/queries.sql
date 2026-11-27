@@ -816,6 +816,12 @@ ORDER BY plugin_id, server_id;
 -- name: GetOrganizationName :one
 SELECT name FROM organization_metadata WHERE id = @id;
 
+-- name: IsOrganizationDisabled :one
+-- Reports whether the organization is disabled. Every publish reads it first,
+-- so a disabled organization's marketplace gets no new commits and no newly
+-- minted plugin API keys.
+SELECT (disabled_at IS NOT NULL)::boolean AS disabled FROM organization_metadata WHERE id = @id;
+
 -- name: IsOrganizationFeatureEnabled :one
 -- Reports whether an organization feature flag is enabled. Mirrors the
 -- productfeatures service's read against organization_features so the generator
@@ -851,7 +857,8 @@ WHERE project_id = @project_id;
 -- ResolvePluginPublishActor. Page before resolving actors; key lookups use
 -- the existing (organization_id, project_id, id) index prefix.
 -- This is a deliberate cross-project sweep, so unlike the tenant-scoped
--- queries it is not constrained to a single project_id.
+-- queries it is not constrained to a single project_id. Projects of disabled
+-- organizations are left out: nothing is published for them.
 WITH candidate_projects AS MATERIALIZED (
   SELECT cp.project_id, p.organization_id
   FROM (
@@ -860,6 +867,7 @@ WITH candidate_projects AS MATERIALIZED (
     SELECT dp.project_id FROM plugins dp WHERE dp.is_default IS TRUE AND dp.deleted IS FALSE AND dp.project_id > @after_project_id
   ) cp
   JOIN projects p ON p.id = cp.project_id AND p.deleted IS FALSE
+  JOIN organization_metadata o ON o.id = p.organization_id AND o.disabled_at IS NULL
   ORDER BY cp.project_id ASC
   LIMIT @result_limit
 )
