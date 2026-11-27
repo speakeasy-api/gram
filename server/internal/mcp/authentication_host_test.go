@@ -602,7 +602,11 @@ func TestAuthenticationHost_SharedOptedInMCPHostServesRecordedIssuer(t *testing.
 
 // A client registered with the issuer an MCP server used before it moved to
 // another issuer is unknown to the new one, so its refresh is refused with
-// invalid_client, the error that sends a client back to discovery.
+// invalid_client (RFC 6749 §5.2), not invalid_grant. The MCP TypeScript SDK
+// answers invalid_client by clearing its stored registration and discovery,
+// so it registers again from the protected resource metadata, which names the
+// current issuer. On invalid_grant it would keep the recorded metadata and
+// start sign-in there.
 func TestAuthenticationHost_MovedServerRefusesPreviousIssuerClient(t *testing.T) {
 	t.Parallel()
 
