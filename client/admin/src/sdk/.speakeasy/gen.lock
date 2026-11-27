@@ -32,6 +32,8 @@ trackedFiles:
   FUNCTIONS.md: {}
   REACT_QUERY.md: {}
   src/core.ts: {}
+  src/funcs/adminAdminGetSelfServeStatus.ts: {}
+  src/funcs/adminAdminSetSelfServeDisabled.ts: {}
   src/funcs/adminAssignOrganizationOnboardingPlaybook.ts: {}
   src/funcs/adminBackfillMcpAuthGrants.ts: {}
   src/funcs/adminBackfillMcpConnectGrants.ts: {}
@@ -312,6 +314,7 @@ trackedFiles:
   src/models/components/adminrunnerkeyorganizationbackfill.ts: {}
   src/models/components/adminsecretbackfillorganization.ts: {}
   src/models/components/adminsecretbackfills.ts: {}
+  src/models/components/adminselfservestatus.ts: {}
   src/models/components/adminsession.ts: {}
   src/models/components/adminsignupoffer.ts: {}
   src/models/components/adminspendbreakdownresponse.ts: {}
@@ -414,6 +417,7 @@ trackedFiles:
   src/models/components/setorganizationhooksrolloutrequestbody.ts: {}
   src/models/components/setorganizationonboardingstackrequestbody.ts: {}
   src/models/components/setregistryentrypublishedrequestbody.ts: {}
+  src/models/components/setselfservedisabledrequestbody.ts: {}
   src/models/components/setstripecustomerrequestbody.ts: {}
   src/models/components/setstripesubscriptionrequestbody.ts: {}
   src/models/components/spendbucket.ts: {}
@@ -498,6 +502,9 @@ trackedFiles:
   src/models/operations/adminserveimage.ts: {}
   src/react-query/_context.tsx: {}
   src/react-query/_types.ts: {}
+  src/react-query/adminAdminGetSelfServeStatus.core.ts: {}
+  src/react-query/adminAdminGetSelfServeStatus.ts: {}
+  src/react-query/adminAdminSetSelfServeDisabled.ts: {}
   src/react-query/adminBackfillMcpAuthGrants.ts: {}
   src/react-query/adminBackfillMcpConnectGrants.ts: {}
   src/react-query/adminBulkUpdateAccountType.ts: {}
@@ -1475,6 +1482,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  adminGetSelfServeStatus:
+    speakeasy-default-admin-get-self-serve-status:
+      responses:
+        "200":
+          application/json: {"disabled": true}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   adminGetSession:
     speakeasy-default-admin-get-session:
       responses:
@@ -2251,6 +2267,17 @@ examples:
       responses:
         "200":
           application/json: {"created_at": "1708711107630", "data_json": "<value>", "id": "<id>", "issues": [{"message": "<value>", "path": "/var/mail"}], "published": false, "updated_at": "1735612556541"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  adminSetSelfServeDisabled:
+    speakeasy-default-admin-set-self-serve-disabled:
+      requestBody:
+        application/json: {"disabled": true}
+      responses:
+        "200":
+          application/json: {"disabled": false}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
