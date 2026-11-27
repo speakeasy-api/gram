@@ -912,6 +912,45 @@ CREATE UNIQUE INDEX IF NOT EXISTS skill_versions_skill_id_id_key ON skill_versio
 CREATE INDEX IF NOT EXISTS skill_versions_skill_id_created_at_id_idx ON skill_versions (skill_id, created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS skill_versions_skill_id_effective_at_id_idx ON skill_versions (skill_id, COALESCE(promoted_at, created_at) DESC, id DESC);
 
+-- Supporting files of a skill version, per the Agent Skills directory layout
+-- (scripts/, references/, assets/ and any other file next to SKILL.md).
+-- SKILL.md itself stays in skill_versions.content. Rows are immutable: a
+-- changed file produces a new skill version.
+CREATE TABLE IF NOT EXISTS skill_version_files (
+  skill_version_id uuid NOT NULL,
+  skill_id uuid NOT NULL,
+  project_id uuid NOT NULL,
+
+  path TEXT NOT NULL,
+  content bytea NOT NULL,
+  sha256 TEXT NOT NULL,
+  size_bytes bigint NOT NULL,
+  content_type TEXT NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT skill_version_files_pkey PRIMARY KEY (skill_version_id, path),
+  CONSTRAINT skill_version_files_skill_id_skill_version_id_fkey FOREIGN KEY (skill_id, skill_version_id) REFERENCES skill_versions (skill_id, id) ON DELETE CASCADE,
+  CONSTRAINT skill_version_files_project_id_skill_id_fkey FOREIGN KEY (project_id, skill_id) REFERENCES skills (project_id, id) ON DELETE CASCADE,
+  CONSTRAINT skill_version_files_path_check CHECK (path <> '' AND char_length(path) <= 512),
+  CONSTRAINT skill_version_files_content_size_check CHECK (octet_length(content) <= 5242880)
+);
+
+COMMENT ON COLUMN skill_version_files.skill_version_id IS '@access: confidential';
+COMMENT ON COLUMN skill_version_files.skill_id IS '@access: confidential';
+COMMENT ON COLUMN skill_version_files.project_id IS '@access: confidential';
+COMMENT ON COLUMN skill_version_files.path IS 'Slash-separated path relative to the skill root, for example references/REFERENCE.md.
+@access: opaque-confidential';
+COMMENT ON COLUMN skill_version_files.content IS 'Exact file bytes. May be executable code or binary data.
+@access: opaque-restricted';
+COMMENT ON COLUMN skill_version_files.sha256 IS 'Lowercase hex SHA-256 of content.
+@access: confidential';
+COMMENT ON COLUMN skill_version_files.size_bytes IS '@access: confidential';
+COMMENT ON COLUMN skill_version_files.content_type IS '@access: confidential';
+COMMENT ON COLUMN skill_version_files.created_at IS '@access: confidential';
+
+CREATE INDEX IF NOT EXISTS skill_version_files_project_id_skill_id_idx ON skill_version_files (project_id, skill_id);
+
 CREATE TABLE IF NOT EXISTS skill_version_lineages (
   skill_version_id uuid NOT NULL,
   skill_id uuid NOT NULL,

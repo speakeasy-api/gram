@@ -7836,6 +7836,30 @@ type SkillVersion struct {
 	CreatedByUserID string
 }
 
+type SkillVersionFile struct {
+	// @access: confidential
+	SkillVersionID uuid.UUID
+	// @access: confidential
+	SkillID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// Slash-separated path relative to the skill root, for example references/REFERENCE.md.
+	// @access: opaque-confidential
+	Path string
+	// Exact file bytes. May be executable code or binary data.
+	// @access: opaque-restricted
+	Content []byte
+	// Lowercase hex SHA-256 of content.
+	// @access: confidential
+	Sha256 string
+	// @access: confidential
+	SizeBytes int64
+	// @access: confidential
+	ContentType string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+}
+
 type SkillVersionLineage struct {
 	// @access: confidential
 	SkillVersionID uuid.UUID
