@@ -157,6 +157,83 @@ func TestShouldAutoCloseFirstParty(t *testing.T) {
 	require.True(t, shouldAutoCloseFirstParty(true, []remoteSessionCard{connected, {Connected: true, CanValidate: true, Verified: true}}))
 }
 
+func TestShouldAutoCloseCodeReconnect(t *testing.T) {
+	t.Parallel()
+
+	connected := remoteSessionCard{Connected: true}
+	disconnected := remoteSessionCard{Connected: false}
+	catalogID := uuid.New()
+
+	for _, tc := range []struct {
+		name       string
+		binding    *CodeReconnectBinding
+		firstParty bool
+		cards      []remoteSessionCard
+		want       bool
+	}{
+		{name: "nil binding without cards", binding: nil, firstParty: true, cards: nil, want: false},
+		{name: "nil binding with connected card", binding: nil, firstParty: true, cards: []remoteSessionCard{connected}, want: true},
+		{name: "pending catalog review without cards", binding: &CodeReconnectBinding{CatalogID: catalogID}, firstParty: true, cards: nil, want: false},
+		{name: "pending catalog review with connected card", binding: &CodeReconnectBinding{CatalogID: catalogID}, firstParty: true, cards: []remoteSessionCard{connected}, want: false},
+		{name: "canceled catalog review without cards", binding: &CodeReconnectBinding{CatalogID: catalogID, CatalogComplete: true, CatalogCanceled: true}, firstParty: true, cards: nil, want: false},
+		{name: "canceled catalog review with connected card", binding: &CodeReconnectBinding{CatalogID: catalogID, CatalogComplete: true, CatalogCanceled: true}, firstParty: true, cards: []remoteSessionCard{connected}, want: false},
+		{name: "approved no-sign-in catalog review", binding: &CodeReconnectBinding{CatalogID: catalogID, CatalogComplete: true}, firstParty: true, cards: nil, want: true},
+		{name: "approved non-first-party catalog review", binding: &CodeReconnectBinding{CatalogID: catalogID, CatalogComplete: true}, firstParty: false, cards: nil, want: false},
+		{name: "approved OAuth catalog review with connected card", binding: &CodeReconnectBinding{CatalogID: catalogID, CatalogComplete: true}, firstParty: true, cards: []remoteSessionCard{connected}, want: true},
+		{name: "approved OAuth catalog review with disconnected card", binding: &CodeReconnectBinding{CatalogID: catalogID, CatalogComplete: true}, firstParty: true, cards: []remoteSessionCard{disconnected}, want: false},
+		{name: "unbound no-sign-in reconnect", binding: &CodeReconnectBinding{}, firstParty: true, cards: nil, want: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, shouldAutoCloseCodeReconnect(tc.binding, tc.firstParty, tc.cards))
+		})
+	}
+}
+
+func TestConsentTemplateFocusLockedHidesBackToAllServers(t *testing.T) {
+	t.Parallel()
+
+	focus := &gatewayServer{Slug: "db-tunnel", Name: "Database Tunnel", Status: gatewayServerNoSignIn}
+	render := func(data consentTemplateData) string {
+		t.Helper()
+		var page bytes.Buffer
+		require.NoError(t, consentTemplate.Execute(&page, data))
+		return normalizeWhitespace(page.String())
+	}
+
+	unlocked := render(consentTemplateData{
+		ClientName: "Speakeasy", MCPSlug: "gw", MCPRouteBase: mcproute.MCP, State: "s", CSRFToken: "c",
+		FirstParty: true, Gateway: &gatewayConsentView{Focus: focus},
+	})
+	require.Contains(t, unlocked, "data-gateway-back")
+	require.Contains(t, unlocked, "Back to all servers")
+
+	lockedFallback := render(consentTemplateData{
+		ClientName: "Speakeasy", MCPSlug: "gw", MCPRouteBase: mcproute.MCP, State: "s", CSRFToken: "c",
+		FirstParty: true, FocusLocked: true, Gateway: &gatewayConsentView{Focus: focus},
+	})
+	require.NotContains(t, lockedFallback, "data-gateway-back")
+	require.NotContains(t, lockedFallback, "Back to all servers")
+	require.Contains(t, lockedFallback, "Reconnect this gateway in your AI client to approve its tools.")
+
+	lockedCanceled := render(consentTemplateData{
+		ClientName: "Speakeasy", MCPSlug: "gw", MCPRouteBase: mcproute.MCP, State: "s", CSRFToken: "c",
+		FirstParty: true, FocusLocked: true, CatalogCanceled: true, Gateway: &gatewayConsentView{Focus: focus},
+	})
+	require.NotContains(t, lockedCanceled, "data-gateway-back")
+	require.Contains(t, lockedCanceled, "No tool changes were approved. You can close this tab.")
+
+	lockedExpired := render(consentTemplateData{
+		ClientName: "Speakeasy", MCPSlug: "gw", MCPRouteBase: mcproute.MCP, State: "s", CSRFToken: "c",
+		FirstParty: true, FocusLocked: true,
+		ApprovalError: &consentApprovalError{Message: "Session expired. Please reconnect."},
+		Gateway:       &gatewayConsentView{Focus: focus},
+	})
+	require.NotContains(t, lockedExpired, "data-gateway-back")
+	require.Contains(t, lockedExpired, "Session expired. Please reconnect.")
+	require.Contains(t, lockedExpired, "You can close this tab.")
+}
+
 func TestConsentTemplateShowsAutoRefreshAndServiceExpiry(t *testing.T) {
 	t.Parallel()
 

@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -604,6 +605,15 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (ret
 	}
 	challengeState.Federation = nil // Drop nonce and PKCE; Browser must survive consent and remote linking.
 	challengeState.AuthorizerImpersonated = &impersonated
+	catalogFallback := false
+	if challengeState.CodeReconnect.catalogPending() && !challengeState.CodeReconnect.ReviewReady {
+		fallback, rerr := s.prepareDirectCodeReconnectReview(r, logger, t, endpoint, &challengeState)
+		if rerr != nil {
+			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
+			return rerr
+		}
+		catalogFallback = fallback
+	}
 	if err := s.authnChallengeCache.Store(ctx, challengeState); err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
 		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
@@ -618,6 +628,18 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (ret
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
 		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return oops.E(oops.CodeUnexpected, err, "build consent URL").LogError(ctx, logger)
+	}
+	if catalogFallback {
+		parsed, parseErr := url.Parse(consentURL)
+		if parseErr != nil {
+			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
+			return oops.E(oops.CodeUnexpected, parseErr, "parse reconnect consent URL").LogError(ctx, logger)
+		}
+		query := parsed.Query()
+		query.Set("catalog_reconnect", "required")
+		parsed.RawQuery = query.Encode()
+		consentURL = parsed.String()
 	}
 	s.connections.Step(ctx, challengeState.connectionAttempt(s.aiCatalog.SnapshotFor(ctx), endpoint), mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.ResultSignedIn, mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Subject(&subject))
 	t.Continue()

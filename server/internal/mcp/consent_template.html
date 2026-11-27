@@ -947,25 +947,34 @@
           Connection complete. This tab will close automatically.
         </p>
         {{else if and .ApprovalError .Gateway .Gateway.Focus}}
+        {{if not .FocusLocked}}
         <div class="px-6 py-6 sm:px-8">
           <a href="{{.ConsentPath}}?state={{.State}}&server=" class="underline" data-gateway-back>Back to all servers</a>
         </div>
+        {{else}}
+        <p class="text-sm text-muted-foreground px-6 py-6 sm:px-8">
+          You can close this tab.
+        </p>
+        {{end}}
         {{else if and .Gateway .Gateway.Focus}}
         <div class="flex flex-col gap-4 px-6 py-6 sm:px-8" data-gateway-focus-footer>
           <p class="text-sm text-muted-foreground">
-            {{if .Gateway.Focus.HostedSetupNotice}}{{.Gateway.Focus.HostedSetupNotice}}
+            {{if .CatalogCanceled}}No tool changes were approved. You can close this tab.
+            {{else if .Gateway.Focus.HostedSetupNotice}}{{.Gateway.Focus.HostedSetupNotice}}
             {{else if .Gateway.Focus.NotSetUp}}{{.Gateway.Focus.Name}} signs people in through a service that isn't set up on this gateway yet, so it can't be connected here. Ask an administrator to set up sign-in for it.
             {{else if .Gateway.Focus.AddressNotice}}{{.Gateway.Focus.AddressNotice}}
             {{else if .Gateway.Focus.ConnectionUnavailable}}{{.Gateway.Focus.Name}}'s sign-in has expired and hasn't been renewed. Try again shortly.
             {{else if .Gateway.Focus.NeedsSignIn}}Connecting is all {{.Gateway.Focus.Name}} needs. As soon as a service above is connected, it works through this gateway, with nothing else to approve.
-            {{if .FirstParty}}Go back to your AI client and try again. You can close this tab.{{else}}Go back to all servers to finish giving {{.ClientName}} access.{{end}}{{else}}{{.Gateway.Focus.Name}} needs no sign-in, so it works through this gateway with nothing to connect.{{end}}
+            {{if .FirstParty}}Go back to your AI client and try again. You can close this tab.{{else}}Go back to all servers to finish giving {{.ClientName}} access.{{end}}{{else if .FocusLocked}}{{.Gateway.Focus.Name}} needs no sign-in. Reconnect this gateway in your AI client to approve its tools. You can close this tab.{{else}}{{.Gateway.Focus.Name}} needs no sign-in, so it works through this gateway with nothing to connect.{{end}}
           </p>
+          {{if not .FocusLocked}}
           <a
             href="{{.ConsentPath}}?state={{.State}}&server="
             class="bg-card interact:bg-accent flex h-10 w-full items-center justify-center border px-6 text-sm sm:w-fit"
             data-gateway-back
             >Back to all servers</a
           >
+          {{end}}
         </div>
         {{else if .FirstParty}}
         <p class="text-sm text-muted-foreground px-6 py-6 sm:px-8">
