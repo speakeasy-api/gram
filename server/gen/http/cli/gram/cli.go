@@ -132,7 +132,7 @@ func UsageCommands() []string {
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-image-from-url|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
 		"organization-assets upload-organization-image",
 		"assistant-memories (list-assistant-memories|get-assistant-memory|delete-assistant-memory)",
-		"assistants (list-assistants|get-assistant|create-assistant|update-assistant|delete-assistant|send-message|interrupt-turn|get-managed-assistant|ensure-managed-assistant|list-execution-profiles|set-execution-profile-choice)",
+		"assistants (list-assistants|get-assistant|create-assistant|update-assistant|delete-assistant|send-message|infer-intent|interrupt-turn|get-managed-assistant|ensure-managed-assistant|list-execution-profiles|set-execution-profile-choice)",
 		"auditlogs (list|list-facets)",
 		"auth (callback|login|switch-scopes|enter-demo|logout|logout-everywhere|register|info|transfer-out|transfer-in)",
 		"auth-clients (list-auth-clients|get-auth-client|update-auth-client|create-auth-client|attach-auth-client-to-mcp-server|set-auth-client-headers|detach-auth-client-from-mcp-server|list-mcp-server-auth-client-choices|list-issuance-profiles|set-issuance-profile|delete-issuance-profile|get-mcp-server-authentication|set-mcp-server-upstream-auth-requirement|get-auth-client-audience|set-auth-client-audience)",
@@ -713,6 +713,11 @@ func ParseEndpoint(
 		assistantsSendMessageBodyFlag             = assistantsSendMessageFlags.String("body", "REQUIRED", "")
 		assistantsSendMessageSessionTokenFlag     = assistantsSendMessageFlags.String("session-token", "", "")
 		assistantsSendMessageProjectSlugInputFlag = assistantsSendMessageFlags.String("project-slug-input", "", "")
+
+		assistantsInferIntentFlags                = flag.NewFlagSet("infer-intent", flag.ExitOnError)
+		assistantsInferIntentBodyFlag             = assistantsInferIntentFlags.String("body", "REQUIRED", "")
+		assistantsInferIntentSessionTokenFlag     = assistantsInferIntentFlags.String("session-token", "", "")
+		assistantsInferIntentProjectSlugInputFlag = assistantsInferIntentFlags.String("project-slug-input", "", "")
 
 		assistantsInterruptTurnFlags                = flag.NewFlagSet("interrupt-turn", flag.ExitOnError)
 		assistantsInterruptTurnBodyFlag             = assistantsInterruptTurnFlags.String("body", "REQUIRED", "")
@@ -5970,6 +5975,7 @@ func ParseEndpoint(
 	assistantsUpdateAssistantFlags.Usage = assistantsUpdateAssistantUsage
 	assistantsDeleteAssistantFlags.Usage = assistantsDeleteAssistantUsage
 	assistantsSendMessageFlags.Usage = assistantsSendMessageUsage
+	assistantsInferIntentFlags.Usage = assistantsInferIntentUsage
 	assistantsInterruptTurnFlags.Usage = assistantsInterruptTurnUsage
 	assistantsGetManagedAssistantFlags.Usage = assistantsGetManagedAssistantUsage
 	assistantsEnsureManagedAssistantFlags.Usage = assistantsEnsureManagedAssistantUsage
@@ -7639,6 +7645,9 @@ func ParseEndpoint(
 
 			case "send-message":
 				epf = assistantsSendMessageFlags
+
+			case "infer-intent":
+				epf = assistantsInferIntentFlags
 
 			case "interrupt-turn":
 				epf = assistantsInterruptTurnFlags
@@ -11195,6 +11204,9 @@ func ParseEndpoint(
 			case "send-message":
 				endpoint = c.SendMessage()
 				data, err = assistantsc.BuildSendMessagePayload(*assistantsSendMessageBodyFlag, *assistantsSendMessageSessionTokenFlag, *assistantsSendMessageProjectSlugInputFlag)
+			case "infer-intent":
+				endpoint = c.InferIntent()
+				data, err = assistantsc.BuildInferIntentPayload(*assistantsInferIntentBodyFlag, *assistantsInferIntentSessionTokenFlag, *assistantsInferIntentProjectSlugInputFlag)
 			case "interrupt-turn":
 				endpoint = c.InterruptTurn()
 				data, err = assistantsc.BuildInterruptTurnPayload(*assistantsInterruptTurnBodyFlag, *assistantsInterruptTurnSessionTokenFlag, *assistantsInterruptTurnProjectSlugInputFlag)
@@ -16457,6 +16469,7 @@ func assistantsUsage() {
 	fmt.Fprintln(os.Stderr, `    update-assistant: Update an assistant.`)
 	fmt.Fprintln(os.Stderr, `    delete-assistant: Delete an assistant.`)
 	fmt.Fprintln(os.Stderr, `    send-message: Send a message from the dashboard to an assistant as the calling user. Continue an existing conversation by passing its chat_id (from listChats), or omit chat_id to start a new conversation — the server mints and returns a fresh chat id. The reply is delivered asynchronously; poll the chat service (loadChat) to read it.`)
+	fmt.Fprintln(os.Stderr, `    infer-intent: Infer what the calling user is trying to do from their recent dashboard activity, so the Project Assistant can open with a specific offer of help instead of an empty prompt. The activity journal is sent by the dashboard and is not stored. Returns no goal when the activity is too thin to infer a task.`)
 	fmt.Fprintln(os.Stderr, `    interrupt-turn: Stop whatever a conversation is currently generating. Cancels turns still queued on the conversation's thread and interrupts the turn in flight on the assistant runtime, so the reply stops where it is rather than finishing in the background. Idempotent and safe to call when nothing is running: `+"`"+`stopped`+"`"+` is false when the reply had already finished.`)
 	fmt.Fprintln(os.Stderr, `    get-managed-assistant: Get the project's built-in Project Assistant if it exists. Returns 404 when no managed assistant has been provisioned yet — call ensureManagedAssistant to create one.`)
 	fmt.Fprintln(os.Stderr, `    ensure-managed-assistant: Get the project's built-in Project Assistant, provisioning it on first access. Idempotent — safe to call on every sidebar open.`)
@@ -16594,6 +16607,28 @@ func assistantsSendMessageUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistants send-message --body '{\n      \"assistant_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"attachments\": [\n         {\n            \"asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"name\": \"aaa\"\n         },\n         {\n            \"asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"name\": \"aaa\"\n         },\n         {\n            \"asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"name\": \"aaa\"\n         }\n      ],\n      \"chat_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"idempotency_key\": \"aaa\",\n      \"message\": \"aaa\",\n      \"skill_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\",\n         \"550e8400-e29b-41d4-a716-446655440000\",\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ]\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func assistantsInferIntentUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] assistants infer-intent", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Infer what the calling user is trying to do from their recent dashboard activity, so the Project Assistant can open with a specific offer of help instead of an empty prompt. The activity journal is sent by the dashboard and is not stored. Returns no goal when the activity is too thin to infer a task.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistants infer-intent --body '{\n      \"activity\": [\n         {\n            \"at\": \"1970-01-01T00:00:01Z\",\n            \"detail\": \"aaa\",\n            \"kind\": \"action\"\n         },\n         {\n            \"at\": \"1970-01-01T00:00:01Z\",\n            \"detail\": \"aaa\",\n            \"kind\": \"action\"\n         },\n         {\n            \"at\": \"1970-01-01T00:00:01Z\",\n            \"detail\": \"aaa\",\n            \"kind\": \"action\"\n         }\n      ],\n      \"assistant_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"current_path\": \"aaa\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func assistantsInterruptTurnUsage() {
