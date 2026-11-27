@@ -13,7 +13,7 @@ import (
 func TestToolCatalogStore_UncachedOptionReadsPastTheCache(t *testing.T) {
 	t.Parallel()
 
-	cached := tooldisposition.New(testenv.NewLogger(t), nil, cache.NoopCache)
+	cached := tooldisposition.New(testenv.NewLogger(t), nil, cache.NoopEvictableCache)
 	manager := &ProxyManager{toolDispositions: cached}
 
 	require.Same(t, cached, manager.toolCatalogStore(newProxyBuildOptions(nil)), "proxies read through the cache by default")

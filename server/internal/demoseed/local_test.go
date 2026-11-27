@@ -21,7 +21,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
-	"github.com/speakeasy-api/gram/server/internal/redisrole"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/users"
 )

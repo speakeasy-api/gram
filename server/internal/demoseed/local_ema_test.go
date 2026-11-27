@@ -23,7 +23,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/demoseed/fixture/fixtureauth"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/associationbackfill"
-	"github.com/speakeasy-api/gram/server/internal/redisrole"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )

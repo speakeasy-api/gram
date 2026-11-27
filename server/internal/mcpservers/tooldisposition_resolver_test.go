@@ -283,6 +283,9 @@ type unreachableCache struct {
 	cache.Cache
 }
 
+// EvictableRole lets the failing cache stand in for the evictable role.
+func (unreachableCache) EvictableRole() {}
+
 func (unreachableCache) Get(context.Context, string, any) error {
 	return errors.New("cache unreachable")
 }

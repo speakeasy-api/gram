@@ -556,10 +556,10 @@ func newRedisStores(ctx context.Context, logger *slog.Logger, meterProvider metr
 	}
 	mode, err := redisrole.ParseGuardMode(modeName)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("GRAM_REDIS_ROLE_GUARD: %w", err)
 	}
 	guard := redisrole.NewGuard(logger, meterProvider, mode)
-	stores := &redisStores{}
+	stores := &redisStores{Auth: nil, AuthCache: nil, Ops: nil, OpsSwitchRole: "", OpsCache: nil, Evictable: redisrole.EvictableClient{Client: nil}, EvictableCache: nil}
 	destinations := []**redis.Client{&stores.Auth, &stores.Ops, &stores.Evictable.Client}
 	fallback := redisconn.PasswordEndpoint(strings.TrimSpace(opts.redisAddr), opts.redisPassword)
 	fallbackNext := redisswitch.NextFromEnv()
@@ -572,7 +572,7 @@ func newRedisStores(ctx context.Context, logger *slog.Logger, meterProvider metr
 	for i, binding := range bindings {
 		current := redisconn.EndpointFromEnv(binding.prefix)
 		if current.Addr == fallback.Addr {
-			current = redisconn.Endpoint{}
+			current = redisconn.Endpoint{Addr: "", Auth: redisconn.AuthNone, Password: "", CACertPEM: "", ServerName: ""}
 		}
 		var next redisconn.Endpoint
 		if binding.role != "" {
@@ -583,7 +583,7 @@ func newRedisStores(ctx context.Context, logger *slog.Logger, meterProvider metr
 			effectiveAddr = fallback.Addr
 		}
 		if next.Addr == effectiveAddr {
-			next = redisconn.Endpoint{}
+			next = redisconn.Endpoint{Addr: "", Auth: redisconn.AuthNone, Password: "", CACertPEM: "", ServerName: ""}
 		}
 		role := binding.role
 		if current.Addr == "" && next.Addr == "" {

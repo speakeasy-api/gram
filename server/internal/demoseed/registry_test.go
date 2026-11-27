@@ -8,7 +8,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
-	"github.com/speakeasy-api/gram/server/internal/redisrole"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
 )

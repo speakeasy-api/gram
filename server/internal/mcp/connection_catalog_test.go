@@ -796,6 +796,9 @@ func TestConnectionCatalogProtocolLoadCost(t *testing.T) {
 			upstream := newCatalogUpstream(t, 150)
 			seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Source", "source", 1, upstream.url)
 			if mode == metamcp.DiscoveryModeCode {
+				// Consent reads the entitlement from this test's database, so
+				// it must be granted before the approval offers Code Mode.
+				enableCodeMode(t, ctx, ti)
 				mcp.SetTestCodeExecutor(ti.service.Service, &recordingCodeExecutor{run: func(ctx context.Context, _ string, host codemode.Host) (*codemode.ExecutionResult, error) {
 					enableCodeMode(t, ctx, ti)
 					_, err := host.Servers(ctx, codemode.PageArgs{})

@@ -141,14 +141,14 @@ type mcpServiceDependencies struct {
 	// from Postgres rather than the shared feature cache.
 	AuthFeatureChecker platformtools.FeatureChecker
 	PlatformToolsets   map[string]platformtools.Toolset
-	Identity               mcp.IdentityResolver
-	Challenges             *remotesessions.ChallengeManager
-	ProtectedResources     *protectedresource.Prober
-	CallbackOrigins        remotesessions.CallbackOrigins
-	PlatformHosts          map[string]string
-	CallerAssertions       *mcpauthz.Issuer
-	IssuerGate             *internalsessionissuers.Gate
-	IssuerSigner           *internalsessionissuers.Signer
+	Identity           mcp.IdentityResolver
+	Challenges         *remotesessions.ChallengeManager
+	ProtectedResources *protectedresource.Prober
+	CallbackOrigins    remotesessions.CallbackOrigins
+	PlatformHosts      map[string]string
+	CallerAssertions   *mcpauthz.Issuer
+	IssuerGate         *internalsessionissuers.Gate
+	IssuerSigner       *internalsessionissuers.Signer
 }
 
 func newMCPService(c *cli.Context, d mcpServiceDependencies) (service *mcp.Service, err error) {
