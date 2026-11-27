@@ -187,9 +187,6 @@ func (i *Issuer) Authenticate(ctx context.Context, raw string) (context.Context,
 	if err != nil {
 		return ctx, fmt.Errorf("load device-agent token organization: %w", err)
 	}
-	if org.DisabledAt.Valid {
-		return ctx, fmt.Errorf("%w: organization is disabled", ErrInvalid)
-	}
 	ceiling, version, err := EncodeCeiling(c.OrganizationID)
 	if err != nil {
 		return ctx, err
