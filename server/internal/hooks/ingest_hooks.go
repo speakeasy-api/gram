@@ -1101,8 +1101,18 @@ func (s *Service) cachePartialMCPList(ctx context.Context, projectID, sessionID 
 	}
 	key := sessionPartialMCPListCacheKey(projectID, sessionID)
 	var stored []MCPServerEntry
-	if err := s.cache.Get(ctx, key, &stored); err == nil {
+	switch err := s.cache.Get(ctx, key, &stored); {
+	case err == nil:
 		entries = mergePartialMCPLists(stored, entries)
+	case !errors.Is(err, redisCache.ErrCacheMiss):
+		// The stored list could not be read, so writing now would replace
+		// the evidence it holds rather than add to it.
+		s.logger.WarnContext(ctx, "failed to read partial MCP list; skipping write",
+			attr.SlogEvent("hook_partial_mcp_list_cache_get_failed"),
+			attr.SlogError(err),
+			attr.SlogGenAIConversationID(sessionID),
+		)
+		return
 	}
 	if err := s.cache.Set(ctx, key, entries, sessionMCPListTTL); err != nil {
 		s.logger.WarnContext(ctx, "failed to cache partial MCP list",

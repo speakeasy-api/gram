@@ -370,3 +370,20 @@ func TestIngest_CompleteMCPInventoryClearsPartial(t *testing.T) {
 	_, err = ti.service.getCachedPartialMCPList(ctx, sessionID)
 	require.Error(t, err, "the complete snapshot clears the partial list")
 }
+
+// TestIngest_PartialMCPInventoryKeepsUnreadableList: when the stored partial
+// list cannot be read, a new delivery does not overwrite it, since a write
+// would replace the evidence it holds rather than add to it.
+func TestIngest_PartialMCPInventoryKeepsUnreadableList(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	sessionID := uuid.NewString()
+	key := sessionPartialMCPListCacheKey(testProjectID(t, ctx), sessionID)
+	require.NoError(t, ti.service.cache.Set(ctx, key, map[string]int{"unreadable": 1}, sessionMCPListTTL))
+
+	ingestCanonicalInventory(t, ctx, ti, sessionID, false, linearInventoryEntry("", "npx linear-mcp"))
+
+	var kept map[string]int
+	require.NoError(t, ti.service.cache.Get(ctx, key, &kept))
+	require.Equal(t, map[string]int{"unreadable": 1}, kept)
+}
