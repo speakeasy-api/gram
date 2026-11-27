@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -78,6 +79,12 @@ func (s *Service) handleGetThreadBootstrap(w http.ResponseWriter, r *http.Reques
 	if err := s.allowBootstrap(ctx, principal.AssistantID, principal.ThreadID); err != nil {
 		return err
 	}
+
+	rawToken := strings.TrimSpace(token)
+	if len(rawToken) >= len("bearer ") && strings.EqualFold(rawToken[:len("bearer ")], "bearer ") {
+		rawToken = strings.TrimSpace(rawToken[len("bearer "):])
+	}
+	ctx = withBootstrapRuntimeToken(ctx, rawToken)
 
 	result, err := s.core.BuildThreadBootstrap(ctx, projectID, threadID, principal.AssistantID)
 	if err != nil {

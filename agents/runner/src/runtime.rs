@@ -28,7 +28,7 @@ use tracing_opentelemetry::OpenTelemetrySpanExt as _;
 
 use agentkit_compaction::{AgentBuilderCompactorExt, CompactionReason, Compactor};
 
-use crate::catalog::{HiddenCatalogSource, UnknownToolSource};
+use crate::catalog::{HiddenCatalogSource, PerServerOnlyToolSource, UnknownToolSource};
 use crate::clip::ClippedToolSource;
 use crate::compaction::{
     Compaction, EpochCompactor, PersistingCompactor, PrimaryCompaction, TranscriptEpoch,
@@ -40,7 +40,9 @@ use crate::http_layer::{TokenRegistry, build_bootstrap_client, build_http};
 use crate::mcp_actor::{McpCmd, spawn_mcp_actor};
 use crate::telemetry::{FirstTokenObserver, SpanIdentity};
 use crate::tools;
-use crate::wire::{McpServer, RunnerContent, RunnerContentPart, RunnerMessage, ThreadBootstrap};
+use crate::wire::{
+    McpServer, RunnerContent, RunnerContentPart, RunnerMessage, ThreadBootstrap, is_gateway_mode,
+};
 use crate::workdir::ASSISTANT_WORKDIR;
 
 const TOOL_RESULT_SPILL_DIR: &str = "tool-results";
@@ -411,24 +413,14 @@ async fn spawn_thread(
 ) -> Result<Arc<ConfiguredThread>, RunnerError> {
     let (inbox_tx, inbox_rx) = mpsc::unbounded_channel::<QueuedTurn>();
     let (notice_tx, notice_rx) = mpsc::unbounded_channel::<RunnerContent>();
-    let (mcp_inbox_tx, mut mcp_inbox_rx) = mpsc::unbounded_channel::<String>();
 
-    let notice_inbox_tx = notice_tx.clone();
-    tokio::spawn(async move {
-        while let Some(notice) = mcp_inbox_rx.recv().await {
-            if notice_inbox_tx.send(RunnerContent::Text(notice)).is_err() {
-                break;
-            }
-        }
-    });
-
-    let (mcp_cmd_tx, mcp_catalog, mcp_known_tools) = spawn_mcp_actor(
+    let (mcp_cmd_tx, mcp_catalog, mcp_known_tools, gateway_mode) = spawn_mcp_actor(
         host.gram_client.clone(),
         host.mcp_http_client.clone(),
         &thread_id,
         &bootstrap.mcp_servers,
         &tokens,
-        mcp_inbox_tx,
+        notice_tx.clone(),
     )?;
 
     let chat_id = bootstrap.chat_id.clone();
@@ -498,7 +490,7 @@ async fn spawn_thread(
     if !bootstrap.instructions.is_empty() {
         transcript.push(Item::text(ItemKind::System, &bootstrap.instructions));
     }
-    if !bootstrap.mcp_servers.is_empty() {
+    if !bootstrap.mcp_servers.is_empty() && !is_gateway_mode(&bootstrap.mcp_servers) {
         transcript.push(Item::text(
             ItemKind::System,
             mcp_disclosure_item(&bootstrap.mcp_servers),
@@ -519,27 +511,31 @@ async fn spawn_thread(
     let transcript_epoch = TranscriptEpoch::default();
     let native_tools = ToolRegistry::new()
         .with(tools::bun_run::bun_run)
-        .with(tools::tool_search::ToolSearchTool::new(
-            mcp_catalog.clone(),
-            mcp_cmd_tx.clone(),
-            transcript_epoch.clone(),
-        ))
         .with(tools::inspect_asset::InspectAssetTool::new(
             notice_tx.clone(),
         ));
+    let tool_search_source = PerServerOnlyToolSource::new(
+        tools::tool_search::ToolSearchTool::new(
+            mcp_catalog.clone(),
+            mcp_cmd_tx.clone(),
+            transcript_epoch.clone(),
+        ),
+        gateway_mode.clone(),
+    );
 
-    // MCP tools resolve by name but are never advertised: the declared tool
-    // set stays frozen for the thread's lifetime so the provider prompt
-    // cache survives catalog churn. UnknownToolSource sits last so a call
-    // to an undiscovered or hallucinated name returns a recovery hint
-    // instead of a bare not-found.
+    // Per-server MCP tools resolve by name without being advertised so the
+    // declared tool set stays frozen for prompt-cache stability. In single
+    // Project Gateway mode, HiddenCatalogSource directly exposes the fixed
+    // gateway meta-tools under bare names and tool_search is omitted.
     let compose_source = agentkit_tool_compose::ComposeTool::wrap(HiddenCatalogSource::new(
         mcp_catalog,
         mcp_cmd_tx.clone(),
         mcp_known_tools,
+        gateway_mode.clone(),
     ))
+    .with_source(tool_search_source)
     .with_source(native_tools.merge(agentkit_tool_fs::registry()))
-    .with_source(UnknownToolSource);
+    .with_source(UnknownToolSource::new(gateway_mode));
     let clipped_source = ClippedToolSource::new(compose_source, host.spill_root.clone());
 
     // One controller per thread: the interrupt route bumps it, and the loop —
@@ -1213,6 +1209,7 @@ mod tests {
                 id: "next-turn-only".into(),
                 url: "https://example.com/mcp".into(),
                 headers: Default::default(),
+                is_gateway: false,
             }]),
             otel_parent: opentelemetry::Context::new(),
         })

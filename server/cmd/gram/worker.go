@@ -46,6 +46,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
 	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
+	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
@@ -803,7 +804,9 @@ func newWorkerCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("configure principal credential signer: %w", err)
 			}
-			assistantTokenManager := assistanttokens.New(c.String(usersessions.JWTSigningKeyFlag), db, authzEngine, principalcredential.New(platformSigner, db), cache.NewRedisCacheAdapter(redisClient))
+			principalCredentials := principalcredential.New(platformSigner, db)
+			redisCache := cache.NewRedisCacheAdapter(redisClient)
+			assistantTokenManager := assistanttokens.New(c.String(usersessions.JWTSigningKeyFlag), db, authzEngine, principalCredentials, redisCache)
 
 			chatClient := chat.NewAgenticChatClient(completionsClient)
 
@@ -847,6 +850,19 @@ func newWorkerCommand() *cli.Command {
 			assistantsCore.SetSpeakeasySlackTokens(speakeasySlackDirectory)
 			assistantsCore.SetSlackAppCredentials(slackAppCredentials)
 			assistantsCore.SetFeatureProvider(featureFlags)
+			assistantsCore.SetProjectGatewayEvaluator(mcp.NewProjectGatewayEvaluator(mcp.ProjectGatewayEvaluatorConfig{
+				Logger:               logger,
+				MeterProvider:        meterProvider,
+				DB:                   db,
+				Environment:          env,
+				Encryption:           encryptionClient,
+				Cache:                redisCache,
+				Authz:                authzEngine,
+				Features:             featureFlags,
+				PrincipalCredentials: principalCredentials,
+				AssistantTokens:      assistantTokenManager,
+				PlatformExtras:       nil,
+			}))
 			// Turns this worker runs relay the connection links the MCP service
 			// issues on the dashboard origin, as the server's turns do.
 			assistantsCore.SetSiteURL(siteURL)

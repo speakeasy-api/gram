@@ -8,11 +8,12 @@ use agentkit_mcp::{
     McpStreamableHttpPostResponse,
 };
 use async_trait::async_trait;
+use futures::StreamExt;
 use http::{HeaderMap, HeaderName, HeaderValue};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, Middleware, Next};
 use reqwest_retry::RetryTransientMiddleware;
 use reqwest_retry::policies::ExponentialBackoff;
-use rmcp::model::ClientRequest;
+use rmcp::model::{ClientRequest, ServerJsonRpcMessage, ServerResult};
 use rmcp::transport::streamable_http_client::StreamableHttpClient as RmcpStreamableHttpClient;
 use thiserror::Error;
 
@@ -140,6 +141,7 @@ pub struct McpSessionClient {
     inner: reqwest::Client,
     token: String,
     static_headers: HeaderMap,
+    instructions_slot: Option<Arc<RwLock<Option<String>>>>,
 }
 
 impl McpSessionClient {
@@ -148,7 +150,13 @@ impl McpSessionClient {
             inner,
             token,
             static_headers,
+            instructions_slot: None,
         }
+    }
+
+    pub fn with_instructions_slot(mut self, slot: Arc<RwLock<Option<String>>>) -> Self {
+        self.instructions_slot = Some(slot);
+        self
     }
 
     fn merged_headers(
@@ -178,13 +186,19 @@ impl McpHttpClient for McpSessionClient {
     ) -> Result<McpStreamableHttpPostResponse, McpStreamableHttpError<reqwest::Error>> {
         let token = self.bearer();
         let mut headers = self.merged_headers(custom_headers);
+        let capture_instructions = self.instructions_slot.is_some()
+            && matches!(
+                &message,
+                ClientJsonRpcMessage::Request(req)
+                    if matches!(req.request, ClientRequest::InitializeRequest(_))
+            );
         // Tool calls carry the trace context agentkit's request decorator
         // captured for them, so the server's MCP request links to the runner
         // trace.
         if let Some(McpTraceHeaders(trace)) = call_trace_headers(&message) {
             headers.extend(trace.clone());
         }
-        RmcpStreamableHttpClient::post_message(
+        let response = RmcpStreamableHttpClient::post_message(
             &self.inner,
             uri,
             message,
@@ -192,7 +206,14 @@ impl McpHttpClient for McpSessionClient {
             token,
             headers,
         )
-        .await
+        .await?;
+        if !capture_instructions {
+            return Ok(response);
+        }
+        let Some(slot) = self.instructions_slot.clone() else {
+            return Ok(response);
+        };
+        Ok(capture_initialize_instructions(response, slot))
     }
 
     async fn delete_session(
@@ -237,6 +258,52 @@ fn call_trace_headers(message: &ClientJsonRpcMessage) -> Option<&McpTraceHeaders
             _ => None,
         },
         _ => None,
+    }
+}
+
+fn extract_initialize_instructions(message: &ServerJsonRpcMessage) -> Option<String> {
+    let ServerJsonRpcMessage::Response(response) = message else {
+        return None;
+    };
+    let ServerResult::InitializeResult(init) = &response.result else {
+        return None;
+    };
+    init.instructions
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+}
+
+fn store_instructions(slot: &Arc<RwLock<Option<String>>>, instructions: Option<String>) {
+    *slot
+        .write()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) = instructions;
+}
+
+fn capture_initialize_instructions(
+    response: McpStreamableHttpPostResponse,
+    slot: Arc<RwLock<Option<String>>>,
+) -> McpStreamableHttpPostResponse {
+    match response {
+        McpStreamableHttpPostResponse::Json(message, session_id) => {
+            store_instructions(&slot, extract_initialize_instructions(&message));
+            McpStreamableHttpPostResponse::Json(message, session_id)
+        }
+        McpStreamableHttpPostResponse::Sse(stream, session_id) => {
+            store_instructions(&slot, None);
+            let wrapped = stream.inspect(move |event| {
+                if let Ok(sse) = event
+                    && let Some(data) = sse.data.as_deref()
+                    && let Ok(message) = serde_json::from_str::<ServerJsonRpcMessage>(data)
+                    && let Some(instructions) = extract_initialize_instructions(&message)
+                {
+                    store_instructions(&slot, Some(instructions));
+                }
+            });
+            McpStreamableHttpPostResponse::Sse(Box::pin(wrapped), session_id)
+        }
+        other => other,
     }
 }
 
