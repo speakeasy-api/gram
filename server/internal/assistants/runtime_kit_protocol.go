@@ -240,6 +240,7 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 	var replayEcho *kitacp.Notification
 	var replayEchoID string
 	var replayTail []kitacp.Notification
+	var replayTailAgentIndex map[string]int
 	work, cancel := context.WithCancel(ctx)
 	defer cancel()
 	flushReplayHold := func() error {
@@ -257,6 +258,7 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 		replayEcho = nil
 		replayEchoID = ""
 		replayTail = nil
+		replayTailAgentIndex = nil
 		return nil
 	}
 	projection := make(chan error, 1)
@@ -316,6 +318,18 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 				return err
 			}
 			if replayEcho != nil {
+				// Coalesce reduced agent_message replacements in place so long
+				// streamed replies retain only the latest accumulated frame.
+				if (envelope.Update.Kind == "agent_message" || envelope.Update.Kind == "agent_message_chunk") && envelope.Update.ID != "" {
+					if idx, ok := replayTailAgentIndex[envelope.Update.ID]; ok {
+						replayTail[idx] = canonical
+						return nil
+					}
+					if replayTailAgentIndex == nil {
+						replayTailAgentIndex = map[string]int{}
+					}
+					replayTailAgentIndex[envelope.Update.ID] = len(replayTail)
+				}
 				replayTail = append(replayTail, canonical)
 				return nil
 			}
