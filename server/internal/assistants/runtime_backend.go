@@ -42,6 +42,11 @@ type runTurnRequest struct {
 	// reconcile newly attached or detached servers into a live thread
 	// without re-running the full thread bootstrap.
 	MCPServers []runtimeMCPServer
+
+	// Initiator carries the server-resolved initiating user for this turn
+	// (populated strictly from resolveTurnIdentity). On ATE, it is persisted
+	// once when the thread's first actor row is created and never overwritten.
+	Initiator ateThreadInitiator
 }
 
 type RuntimeBackend interface {

@@ -2122,13 +2122,27 @@ WHERE project_id = @project_id AND runtime_id = @runtime_id AND assistant_thread
   AND deleted IS FALSE
 FOR UPDATE;
 
+-- name: GetEarliestAssistantATEActorInitiatorForThread :one
+-- Returns the thread's earliest recorded ATE actor initiator across all
+-- runtimes (including soft-deleted rows) so replacement actors inherit the
+-- original initiating user immutably. Uses assistant_ate_actors_project_thread_idx.
+SELECT initiating_user_id, initiating_user_resolution
+FROM assistant_ate_actors
+WHERE project_id = @project_id
+  AND assistant_thread_id = @thread_id
+  AND initiating_user_resolution <> 'not_recorded'
+ORDER BY created_at ASC, id ASC
+LIMIT 1;
+
 -- name: InsertAssistantATEActor :one
 INSERT INTO assistant_ate_actors (
   organization_id, project_id, assistant_id, runtime_id, assistant_thread_id,
-  actor_name, actor_uid, state, configured, workload_binding_json, warm_until
+  actor_name, actor_uid, state, configured, workload_binding_json, warm_until,
+  initiating_user_id, initiating_user_resolution
 )
 SELECT a.organization_id, r.project_id, r.assistant_id, r.id, t.id,
-  @actor_name, @actor_uid, @state, @configured, @workload_binding_json, @warm_until
+  @actor_name, @actor_uid, @state, @configured, @workload_binding_json, @warm_until,
+  @initiating_user_id, @initiating_user_resolution
 FROM assistant_runtimes r
 JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
 JOIN assistant_threads t ON t.assistant_id = a.id AND t.project_id = a.project_id

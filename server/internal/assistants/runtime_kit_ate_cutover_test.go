@@ -262,7 +262,7 @@ func TestKitATECutover_RollbackAdmissionRetiresATEActorsAndAdmissions(t *testing
 	}))
 	ateRecord.BackendMetadataJSON = ensureRes.BackendMetadataJSON
 	require.NoError(t, ateBackend.RunTurn(ctx, ateRecord, runTurnRequest{
-		ThreadID: threadID, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium",
+		ThreadID: threadID, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium", Initiator: ateThreadInitiator{Resolution: ATEInitiatorNoUser},
 	}))
 
 	// Confirm actor row + ATE actor + workload admission are live before rollback.
@@ -409,7 +409,7 @@ func TestKitATECutover_SwitchReaperConvergesIdleOldBackendRuntimesBothDirections
 		}))
 		ateRec.BackendMetadataJSON = ensureRes.BackendMetadataJSON
 		require.NoError(t, ateBackend.RunTurn(ctx, ateRec, runTurnRequest{
-			ThreadID: threadID, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium",
+			ThreadID: threadID, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium", Initiator: ateThreadInitiator{Resolution: ATEInitiatorNoUser},
 		}))
 
 		// Flip back to GKE (ATE disabled, ATE kept in retiring-only cleanup).
@@ -486,12 +486,12 @@ func TestKitATE_RecordsColdStartAndResumeDurationMetricsAndLogs(t *testing.T) {
 
 	// 1. Cold start turn.
 	require.NoError(t, ateBackend.RunTurn(ctx, rec, runTurnRequest{
-		ThreadID: threadID, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium",
+		ThreadID: threadID, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium", Initiator: ateThreadInitiator{Resolution: ATEInitiatorNoUser},
 	}))
 	// 2. Suspend then resume turn.
 	require.NoError(t, ateBackend.Stop(ctx, rec))
 	require.NoError(t, ateBackend.RunTurn(ctx, rec, runTurnRequest{
-		ThreadID: threadID, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium",
+		ThreadID: threadID, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium", Initiator: ateThreadInitiator{Resolution: ATEInitiatorNoUser},
 	}))
 
 	// Verify structured logs carry both cold_start (create_to_ready_ms) and resume (resume_to_ready_ms).

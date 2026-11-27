@@ -165,6 +165,7 @@ func TestKitATEConcurrentThreadsDoNotWaitOnEachOther(t *testing.T) {
 		ThreadID:        thread1,
 		Model:           "openai/gpt-4o-mini",
 		ReasoningEffort: "medium",
+		Initiator:       ateThreadInitiator{Resolution: ATEInitiatorNoUser},
 	}))
 	protoTurns[thread1]++
 
@@ -199,12 +200,14 @@ func TestKitATEConcurrentThreadsDoNotWaitOnEachOther(t *testing.T) {
 		ThreadID:        thread2,
 		Model:           "openai/gpt-4o-mini",
 		ReasoningEffort: "medium",
+		Initiator:       ateThreadInitiator{Resolution: ATEInitiatorNoUser},
 	}))
 	// Also verify a warm second turn on thread 2 completes while tx1 still holds thread 1's lock.
 	require.NoError(t, backend.RunTurn(t2Ctx, record, runTurnRequest{
 		ThreadID:        thread2,
 		Model:           "openai/gpt-4o-mini",
 		ReasoningEffort: "medium",
+		Initiator:       ateThreadInitiator{Resolution: ATEInitiatorNoUser},
 	}))
 
 	// Both actors are directly addressable by actor_uid while tx1 is still open.
@@ -300,29 +303,31 @@ func TestKitATEActorLookupByUIDUsesUniqueIndex(t *testing.T) {
 	thread2 := insertATEThreadFixture(t, db, projectID, assistantID, "corr-uid-2")
 
 	actor1, err := q.InsertAssistantATEActor(t.Context(), assistantrepo.InsertAssistantATEActorParams{
-		ActorName:           "spk-kit-actor-one",
-		ActorUid:            "uid-actor-one",
-		State:               ateActorStateRunning,
-		Configured:          true,
-		WorkloadBindingJson: nil,
-		WarmUntil:           pgtype.Timestamptz{},
-		RuntimeID:           runtimeID,
-		ProjectID:           projectID,
-		AssistantID:         assistantID,
-		ThreadID:            thread1,
+		ActorName:                "spk-kit-actor-one",
+		ActorUid:                 "uid-actor-one",
+		State:                    ateActorStateRunning,
+		Configured:               true,
+		WorkloadBindingJson:      nil,
+		WarmUntil:                pgtype.Timestamptz{},
+		InitiatingUserResolution: ATEInitiatorNoUser,
+		RuntimeID:                runtimeID,
+		ProjectID:                projectID,
+		AssistantID:              assistantID,
+		ThreadID:                 thread1,
 	})
 	require.NoError(t, err)
 
 	// Duplicate live (runtime_id, assistant_thread_id) is rejected by unique index.
 	_, err = q.InsertAssistantATEActor(t.Context(), assistantrepo.InsertAssistantATEActorParams{
-		ActorName:   "spk-kit-actor-dup-thread",
-		ActorUid:    "uid-actor-dup-thread",
-		State:       ateActorStateRunning,
-		Configured:  false,
-		RuntimeID:   runtimeID,
-		ProjectID:   projectID,
-		AssistantID: assistantID,
-		ThreadID:    thread1,
+		ActorName:                "spk-kit-actor-dup-thread",
+		ActorUid:                 "uid-actor-dup-thread",
+		State:                    ateActorStateRunning,
+		Configured:               false,
+		InitiatingUserResolution: ATEInitiatorNoUser,
+		RuntimeID:                runtimeID,
+		ProjectID:                projectID,
+		AssistantID:              assistantID,
+		ThreadID:                 thread1,
 	})
 	var pgErr *pgconn.PgError
 	require.ErrorAs(t, err, &pgErr)
@@ -330,14 +335,15 @@ func TestKitATEActorLookupByUIDUsesUniqueIndex(t *testing.T) {
 
 	// Duplicate live actor_uid is rejected by unique index.
 	_, err = q.InsertAssistantATEActor(t.Context(), assistantrepo.InsertAssistantATEActorParams{
-		ActorName:   "spk-kit-actor-dup-uid",
-		ActorUid:    "uid-actor-one",
-		State:       ateActorStateRunning,
-		Configured:  false,
-		RuntimeID:   runtimeID,
-		ProjectID:   projectID,
-		AssistantID: assistantID,
-		ThreadID:    thread2,
+		ActorName:                "spk-kit-actor-dup-uid",
+		ActorUid:                 "uid-actor-one",
+		State:                    ateActorStateRunning,
+		Configured:               false,
+		InitiatingUserResolution: ATEInitiatorNoUser,
+		RuntimeID:                runtimeID,
+		ProjectID:                projectID,
+		AssistantID:              assistantID,
+		ThreadID:                 thread2,
 	})
 	require.ErrorAs(t, err, &pgErr)
 	require.Equal(t, pgerrcode.UniqueViolation, pgErr.Code)
@@ -360,15 +366,34 @@ func TestKitATEActorLookupByUIDUsesUniqueIndex(t *testing.T) {
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 
 	replacement, err := q.InsertAssistantATEActor(t.Context(), assistantrepo.InsertAssistantATEActorParams{
-		ActorName:   "spk-kit-actor-one-v2",
-		ActorUid:    "uid-actor-one-v2",
-		State:       ateActorStateRunning,
-		Configured:  true,
-		RuntimeID:   runtimeID,
-		ProjectID:   projectID,
-		AssistantID: assistantID,
-		ThreadID:    thread1,
+		ActorName:                "spk-kit-actor-one-v2",
+		ActorUid:                 "uid-actor-one-v2",
+		State:                    ateActorStateRunning,
+		Configured:               true,
+		InitiatingUserResolution: ATEInitiatorNoUser,
+		RuntimeID:                runtimeID,
+		ProjectID:                projectID,
+		AssistantID:              assistantID,
+		ThreadID:                 thread1,
 	})
+	require.NoError(t, err)
+
+	// Seed a sibling actor in the same project and refresh planner stats so
+	// PostgreSQL sees project_id has multiple rows while actor_uid is unique.
+	_, err = q.InsertAssistantATEActor(t.Context(), assistantrepo.InsertAssistantATEActorParams{
+		ActorName:                "spk-kit-actor-two",
+		ActorUid:                 "uid-actor-two",
+		State:                    ateActorStateRunning,
+		Configured:               true,
+		InitiatingUserResolution: ATEInitiatorNoUser,
+		RuntimeID:                runtimeID,
+		ProjectID:                projectID,
+		AssistantID:              assistantID,
+		ThreadID:                 thread2,
+	})
+	require.NoError(t, err)
+	//nolint:glint // notestingrawsql: Refresh planner statistics so EXPLAIN evaluates index selectivity deterministically.
+	_, err = db.Exec(t.Context(), "ANALYZE assistant_ate_actors")
 	require.NoError(t, err)
 
 	// Capture the actual SQLc-generated query and verify PostgreSQL uses the
@@ -508,12 +533,14 @@ func TestKitATEPerThreadIdleAndDrainSweep(t *testing.T) {
 		ThreadID:        threadIdle,
 		Model:           "openai/gpt-4o-mini",
 		ReasoningEffort: "medium",
+		Initiator:       ateThreadInitiator{Resolution: ATEInitiatorNoUser},
 	}))
 	currentTime = now
 	require.NoError(t, backend.RunTurn(t.Context(), record, runTurnRequest{
 		ThreadID:        threadWarm,
 		Model:           "openai/gpt-4o-mini",
 		ReasoningEffort: "medium",
+		Initiator:       ateThreadInitiator{Resolution: ATEInitiatorNoUser},
 	}))
 
 	// Sweep suspends only the idle thread actor, leaving the warm sibling running.
