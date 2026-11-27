@@ -54,9 +54,9 @@ func TestMCPDeliveryMode_ComposeInstructionsAndSkills(t *testing.T) {
 
 	perServer, err := ComposeInstructionsForMode("Base", slackThread, skills, prefix, MCPDeliveryPerServer, managedSlackSlugs)
 	require.NoError(t, err)
-	legacy, err := composeInstructions("Base", slackThread, skills, prefix)
+	defaultMode, err := composeInstructions("Base", slackThread, skills, prefix)
 	require.NoError(t, err)
-	require.Equal(t, legacy, perServer)
+	require.Equal(t, defaultMode, perServer)
 	require.Contains(t, perServer, "mcp__p-assistants_skills_load")
 	require.Contains(t, perServer, "assistant_mcp_auth_required")
 	require.Contains(t, perServer, "tool_search")
@@ -92,17 +92,17 @@ func TestMCPDeliveryMode_ComposeInstructionsAndSkills(t *testing.T) {
 	require.NotContains(t, assistantSlackGateway, "speakeasy-slack--")
 	require.NotContains(t, assistantSlackGateway, "list_servers")
 
-	// Per-server mode for customer Slack stays byte-for-byte unchanged.
+	// Per-server mode for customer Slack matches composeInstructions.
 	assistantSlackPerServer, err := ComposeInstructionsForMode("Base", customSlackThread, nil, prefix, MCPDeliveryPerServer, assistantSlackSlugs)
 	require.NoError(t, err)
-	legacyCustomSlack, err := composeInstructions("Base", customSlackThread, nil, prefix)
+	defaultCustomSlack, err := composeInstructions("Base", customSlackThread, nil, prefix)
 	require.NoError(t, err)
-	require.Equal(t, legacyCustomSlack, assistantSlackPerServer)
+	require.Equal(t, defaultCustomSlack, assistantSlackPerServer)
 
-	// Unmigrated customer Slack assistant (no assistant-slack grant in platformSlugs)
-	// keeps the generic <server_slug> guidance and prompts list_servers discovery.
-	legacySlackSlugs := []string{platformtools.AssistantsPlatformToolsetSlug}
-	customGateway, err := ComposeInstructionsForMode("Base", customSlackThread, nil, prefix, MCPDeliveryProjectGateway, legacySlackSlugs)
+	// Customer Slack assistant without an assistant-slack grant keeps the
+	// generic <server_slug> guidance and prompts list_servers discovery.
+	attachedSlackSlugs := []string{platformtools.AssistantsPlatformToolsetSlug}
+	customGateway, err := ComposeInstructionsForMode("Base", customSlackThread, nil, prefix, MCPDeliveryProjectGateway, attachedSlackSlugs)
 	require.NoError(t, err)
 	require.Contains(t, customGateway, "list_servers")
 	require.Contains(t, customGateway, "execute_tool with <server_slug>--platform_slack_send_message")
@@ -110,7 +110,7 @@ func TestMCPDeliveryMode_ComposeInstructionsAndSkills(t *testing.T) {
 	require.NotContains(t, customGateway, "speakeasy-slack--")
 	require.Contains(t, customGateway, "execute_tool with assistants--platform_thread_unsubscribe")
 
-	// Dashboard adapter omits legacy assistant_mcp_auth_required in gateway mode
+	// Dashboard adapter omits assistant_mcp_auth_required in gateway mode
 	// while keeping personal connection recovery guidance.
 	dashThread := assistantThreadRecord{
 		ID:            uuid.New(),
@@ -122,7 +122,7 @@ func TestMCPDeliveryMode_ComposeInstructionsAndSkills(t *testing.T) {
 		SourceRefJSON: []byte(`{"user_id":"user-1"}`),
 		LastEventAt:   time.Now(),
 	}
-	dashGateway, err := ComposeInstructionsForMode("Base", dashThread, nil, prefix, MCPDeliveryProjectGateway, legacySlackSlugs)
+	dashGateway, err := ComposeInstructionsForMode("Base", dashThread, nil, prefix, MCPDeliveryProjectGateway, attachedSlackSlugs)
 	require.NoError(t, err)
 	require.NotContains(t, dashGateway, "assistant_mcp_auth_required")
 	require.Contains(t, dashGateway, `When relaying a genuine "Connection required" or "Reconnect required" link`)
@@ -164,11 +164,11 @@ func TestMCPDeliveryMode_SlackTurnDecodeAndSkillSnapshot(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, assistantSlackTurn, "execute_read_only_tool with assistant-slack--platform_slack_read_thread_messages")
 
-	// Unmigrated customer Slack (no assistant-slack grant) keeps generic <server_slug>.
-	legacySlackTurn, err := adapterDecodeTurn(customerAdapter, event, MCPDeliveryProjectGateway, []string{platformtools.AssistantsPlatformToolsetSlug})
+	// Customer Slack without an assistant-slack grant keeps generic <server_slug>.
+	attachedSlackTurn, err := adapterDecodeTurn(customerAdapter, event, MCPDeliveryProjectGateway, []string{platformtools.AssistantsPlatformToolsetSlug})
 	require.NoError(t, err)
-	require.Contains(t, legacySlackTurn, "execute_read_only_tool with <server_slug>--platform_slack_read_thread_messages")
-	require.NotContains(t, legacySlackTurn, "assistant-slack--")
+	require.Contains(t, attachedSlackTurn, "execute_read_only_tool with <server_slug>--platform_slack_read_thread_messages")
+	require.NotContains(t, attachedSlackTurn, "assistant-slack--")
 
 	prev := assistantSkillSetSnapshot{Version: assistantSkillSnapshotVersion, Skills: nil}
 	curr := assistantSkillSetSnapshot{

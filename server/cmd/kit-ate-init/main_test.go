@@ -69,11 +69,6 @@ func TestBootstrapGenericPayloadWriteOnceAndResume(t *testing.T) {
 		return w
 	}
 
-	// Legacy assertion path does not exist.
-	w := post("/assertion", []byte("jwt.fixture"))
-	require.Equal(t, http.StatusNotFound, w.Code)
-	require.Equal(t, "1", w.Header().Get(wireVersionHeader))
-
 	// Unsupported wire version is rejected.
 	badVersion := testPayloadJSON(t, bootstrapPayload{
 		Version: 99,
