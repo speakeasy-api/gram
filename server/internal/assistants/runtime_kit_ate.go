@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net"
 	"net/http"
 	"net/url"
@@ -55,11 +56,16 @@ const (
 
 	// ateDrainSuspendTimeout bounds synchronous durable suspension triggered by worker eviction drain.
 	ateDrainSuspendTimeout = 3 * time.Minute
+
+	// ateInitWireVersion is the expected X-ATE-Init-Version header and bootstrap payload version.
+	ateInitWireVersion = 1
+
+	// ateInitVersionHeader carries the init helper wire contract version on every response.
+	ateInitVersionHeader = "X-ATE-Init-Version"
 )
 
 type kitATEControl interface {
 	GetAtespace(context.Context, *ateapiv1.GetAtespaceRequest) (*ateapiv1.Atespace, error)
-	CreateAtespace(context.Context, *ateapiv1.CreateAtespaceRequest) (*ateapiv1.Atespace, error)
 	GetActorTemplate(context.Context, *ateapiv1.GetActorTemplateRequest) (*ateapiv1.ActorTemplate, error)
 	CreateActorTemplate(context.Context, *ateapiv1.CreateActorTemplateRequest) (*ateapiv1.ActorTemplate, error)
 	GetActor(context.Context, *ateapiv1.GetActorRequest) (*ateapiv1.Actor, error)
@@ -80,6 +86,9 @@ type KitATERuntimeConfig struct {
 	// EgressHosts are operator-approved DNS hostnames allowed for actor egress.
 	EgressHosts []string
 
+	// WorkerSelector holds the label selector applied to created ActorTemplates.
+	WorkerSelector map[string]string
+
 	// Revoke withdraws a thread actor's workload admission during reap.
 	Revoke func(context.Context, assistantRuntimeRecord, *KitWorkloadBinding) error
 
@@ -96,10 +105,10 @@ type KitATERuntimeConfig struct {
 	// Image is the digest-pinned OCI image ref for the ATE Kit runtime.
 	Image string
 
-	// Atespace is the ATE namespace owning templates and thread actors.
+	// Atespace is the pre-created ATE namespace owning templates and thread actors.
 	Atespace string
 
-	// Template is the ATE ActorTemplate name used to create thread actors.
+	// Template is the ATE ActorTemplate base name (versioned by image digest).
 	Template string
 
 	// ServerURL is the deployment's base URL.
@@ -134,13 +143,16 @@ type KitATERuntimeConfig struct {
 }
 
 // KitATERuntimeBackend runs one ATE actor per assistant thread over native Kit ACP.
-type KitATERuntimeBackend struct{ config KitATERuntimeConfig }
+type KitATERuntimeBackend struct {
+	config      KitATERuntimeConfig
+	imageDigest string
+}
 
 type kitATEMetadata struct {
 	RuntimeID   uuid.UUID `json:"runtime_id"`
 	AssistantID uuid.UUID `json:"assistant_id"`
 	ProjectID   uuid.UUID `json:"project_id"`
-	Image       string    `json:"image"`
+	ImageDigest string    `json:"image_digest"`
 	Atespace    string    `json:"atespace"`
 	Template    string    `json:"template"`
 	EgressHosts []string  `json:"egress_hosts"`
@@ -150,9 +162,14 @@ var _ RuntimeBackend = (*KitATERuntimeBackend)(nil)
 
 // NewKitATERuntimeBackend validates configuration and builds a KitATERuntimeBackend.
 func NewKitATERuntimeBackend(c KitATERuntimeConfig) (*KitATERuntimeBackend, error) {
-	if !kitGKEExplicitImage(c.Image) || !strings.Contains(c.Image, "@sha256:") || !kitATENamePattern.MatchString(c.Atespace) || !kitATENamePattern.MatchString(c.Template) || c.ServerURL == nil || c.Client == nil || c.Bootstrap == nil || c.Token == nil || c.Protocol == nil || c.Lifecycle == nil || c.ThreadLifecycle == nil || c.Store == nil || c.Revoke == nil || c.CheckSettled == nil {
-		return nil, errors.New("ATE runtime requires a digest-pinned image, actor scope, authenticated client, actor store, and lifecycle callbacks")
+	imageDigest, err := kitATEImageDigest(c.Image)
+	if err != nil || !kitATENamePattern.MatchString(c.Atespace) || len(c.Atespace) > maxATEDNSLabelLen || !kitATENamePattern.MatchString(c.Template) || len(c.Template) > maxATETemplateBaseLen || c.ServerURL == nil || c.Client == nil || c.Bootstrap == nil || c.Token == nil || c.Protocol == nil || c.Lifecycle == nil || c.ThreadLifecycle == nil || c.Store == nil || c.Revoke == nil || c.CheckSettled == nil {
+		return nil, errors.New("ATE runtime requires a digest-pinned image, actor scope, worker selector, authenticated client, actor store, and lifecycle callbacks")
 	}
+	if err := validateKitATEWorkerSelector(c.WorkerSelector); err != nil {
+		return nil, err
+	}
+	c.WorkerSelector = maps.Clone(c.WorkerSelector)
 
 	c.EgressHosts = append(append([]string(nil), c.EgressHosts...), c.ServerURL.Hostname())
 	for i, host := range c.EgressHosts {
@@ -172,13 +189,17 @@ func NewKitATERuntimeBackend(c KitATERuntimeConfig) (*KitATERuntimeBackend, erro
 		c.Now = time.Now
 	}
 
-	return &KitATERuntimeBackend{config: c}, nil
+	return &KitATERuntimeBackend{config: c, imageDigest: imageDigest}, nil
 }
 
 func (k *KitATERuntimeBackend) Backend() string               { return runtimeBackendATE }
 func (k *KitATERuntimeBackend) SupportsBackend(b string) bool { return b == runtimeBackendATE }
 func (k *KitATERuntimeBackend) ImageRef() string              { return k.config.Image }
 func (k *KitATERuntimeBackend) ServerURL() *url.URL           { u := *k.config.ServerURL; return &u }
+
+func (k *KitATERuntimeBackend) templateVersionName() string {
+	return kitATETemplateVersionName(k.config.Template, k.imageDigest)
+}
 
 func kitATEActorNamePrefix(runtimeID uuid.UUID) string {
 	return "spk-kit-" + strings.ReplaceAll(runtimeID.String(), "-", "") + "-"
@@ -216,13 +237,13 @@ func (k *KitATERuntimeBackend) metadata(r assistantRuntimeRecord) (kitATEMetadat
 			RuntimeID:   r.ID,
 			AssistantID: r.AssistantID,
 			ProjectID:   r.ProjectID,
-			Image:       k.config.Image,
+			ImageDigest: k.imageDigest,
 			Atespace:    k.config.Atespace,
 			Template:    k.config.Template,
 			EgressHosts: append([]string(nil), k.config.EgressHosts...),
 		}, nil
 	}
-	if json.Unmarshal(r.BackendMetadataJSON, &m) != nil || m.RuntimeID != r.ID || m.AssistantID != r.AssistantID || m.ProjectID != r.ProjectID || m.Atespace != k.config.Atespace || m.Template != k.config.Template || m.Image != k.config.Image || !slices.Equal(m.EgressHosts, k.config.EgressHosts) {
+	if json.Unmarshal(r.BackendMetadataJSON, &m) != nil || m.RuntimeID != r.ID || m.AssistantID != r.AssistantID || m.ProjectID != r.ProjectID || m.Atespace != k.config.Atespace || m.Template != k.config.Template || !ateImageDigestPattern.MatchString(m.ImageDigest) || !slices.Equal(m.EgressHosts, k.config.EgressHosts) {
 		return m, ErrKitRuntimeBinding
 	}
 	return m, nil
@@ -246,7 +267,7 @@ func (k *KitATERuntimeBackend) getActor(ctx context.Context, t kitATEThreadActor
 	}
 	meta := actor.GetMetadata()
 	tmpl := actor.GetActorTemplate()
-	if meta.GetAtespace() != k.config.Atespace || meta.GetName() != t.ActorName || meta.GetUid() == "" || (t.ActorUID != "" && meta.GetUid() != t.ActorUID) || tmpl.GetAtespace() != k.config.Atespace || tmpl.GetName() != k.config.Template {
+	if meta.GetAtespace() != k.config.Atespace || meta.GetName() != t.ActorName || meta.GetUid() == "" || (t.ActorUID != "" && meta.GetUid() != t.ActorUID) || tmpl.GetAtespace() != k.config.Atespace || !kitATETemplateVersionMatches(k.config.Template, tmpl.GetName()) {
 		return nil, ErrKitRuntimeBinding
 	}
 	return actor, nil
@@ -267,6 +288,9 @@ func (k *KitATERuntimeBackend) Ensure(ctx context.Context, r assistantRuntimeRec
 	if err != nil {
 		return RuntimeBackendEnsureResult{}, fmt.Errorf("count ATE actors during ensure: %w", err)
 	}
+	// Update runtime metadata to track the active image digest; existing actors
+	// remain on their own digest-versioned template until recreated.
+	m.ImageDigest = k.imageDigest
 	raw, err := json.Marshal(m)
 	if err != nil {
 		return RuntimeBackendEnsureResult{}, fmt.Errorf("encode ATE ensure metadata: %w", err)
@@ -345,12 +369,15 @@ func (k *KitATERuntimeBackend) prepare(ctx context.Context, r assistantRuntimeRe
 			if err := k.ensureEgress(ctx, entry.ActorName, bootstrap); err != nil {
 				return err
 			}
-			archive, err := kitBootstrapArchive(bootstrap)
+			payload, err := kitATEBootstrapPayload(bootstrap)
 			if err != nil {
 				return err
 			}
-			code, err := kitATEPost(ctx, helper, base+"/bootstrap", archive)
-			if err != nil || (code != http.StatusNoContent && code != http.StatusConflict) {
+			code, err := kitATEPost(ctx, helper, base+"/bootstrap", payload)
+			if err != nil {
+				return fmt.Errorf("ATE Kit bootstrap failed: %w", err)
+			}
+			if code != http.StatusNoContent && code != http.StatusConflict {
 				return errors.New("ATE Kit bootstrap failed")
 			}
 			entry.Configured = true
@@ -371,7 +398,7 @@ func (k *KitATERuntimeBackend) prepare(ctx context.Context, r assistantRuntimeRe
 			return ErrKitRuntimeBinding
 		}
 
-		if err := waitKitATEHelper(ctx, helper, base+"/kit-readyz", k.config.HelperPollInterval); err != nil {
+		if err := waitKitATEHelper(ctx, helper, base+"/app-readyz", k.config.HelperPollInterval); err != nil {
 			return err
 		}
 
@@ -416,7 +443,7 @@ func (k *KitATERuntimeBackend) createThreadActor(ctx context.Context, locked ass
 					UpdateTime: nil,
 					DeleteTime: nil,
 				},
-				ActorTemplate:  k.actorRef(k.config.Template),
+				ActorTemplate:  k.actorRef(k.templateVersionName()),
 				WorkerSelector: nil,
 				SourceTag:      nil,
 				Status:         nil,
@@ -612,6 +639,62 @@ func isKitATEActorDraining(ctx context.Context, client kitATEControl, actorName 
 	return payload.Draining, nil
 }
 
+type kitATEBootstrapDir struct {
+	Path string `json:"path"`
+	Mode uint32 `json:"mode"`
+}
+
+type kitATEBootstrapFile struct {
+	Path    string `json:"path"`
+	Mode    uint32 `json:"mode"`
+	Content []byte `json:"content"`
+}
+
+type kitATEBootstrapRequest struct {
+	Version int                   `json:"version"`
+	Dirs    []kitATEBootstrapDir  `json:"dirs"`
+	Files   []kitATEBootstrapFile `json:"files"`
+}
+
+// kitATEBootstrapPayload builds the versioned generic bootstrap payload for
+// kit-ate-init so all Kit-specific paths and contents stay in server code.
+func kitATEBootstrapPayload(b KitLocalBootstrap) ([]byte, error) {
+	if err := validateKitBootstrap(b); err != nil {
+		return nil, err
+	}
+	if len(b.GatewayToken) < 32 || bytes.ContainsAny(b.GatewayToken, " \r\n\x00") {
+		return nil, errors.New("invalid ATE Kit gateway token")
+	}
+	payload := kitATEBootstrapRequest{
+		Version: ateInitWireVersion,
+		Dirs: []kitATEBootstrapDir{
+			{Path: ".kit", Mode: 0o700},
+			{Path: ".kit/credentials", Mode: 0o700},
+			{Path: "workspace", Mode: 0o700},
+		},
+		Files: []kitATEBootstrapFile{
+			{Path: ".kit/AGENTS.md", Mode: 0o600, Content: b.AgentsMD},
+			{Path: ".kit/config.toml", Mode: 0o600, Content: []byte(kitBootstrapConfig(b))},
+			{Path: ".kit/credentials/mcp.json", Mode: 0o600, Content: b.MCPJSON},
+			{Path: ".kit/credentials/gateway-token", Mode: 0o600, Content: b.GatewayToken},
+		},
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("encode ATE bootstrap payload: %w", err)
+	}
+	return raw, nil
+}
+
+func validateATEInitVersionHeader(res *http.Response) error {
+	got := res.Header.Get(ateInitVersionHeader)
+	want := fmt.Sprintf("%d", ateInitWireVersion)
+	if got != want {
+		return fmt.Errorf("ATE init helper version mismatch: got %q, want %q", got, want)
+	}
+	return nil
+}
+
 func waitKitATEHelper(ctx context.Context, client *guardian.HTTPClient, endpoint string, pollInterval time.Duration) error {
 	ctx, cancel := context.WithTimeout(ctx, ateHelperReadyTimeout)
 	defer cancel()
@@ -632,7 +715,7 @@ func waitKitATEHelper(ctx context.Context, client *guardian.HTTPClient, endpoint
 		if err == nil {
 			_ = res.Body.Close()
 			if res.StatusCode == http.StatusOK {
-				return nil
+				return validateATEInitVersionHeader(res)
 			}
 			if res.StatusCode != http.StatusServiceUnavailable {
 				return errors.New("ATE initialization endpoint rejected")
@@ -654,7 +737,7 @@ func kitATEPost(ctx context.Context, c *guardian.HTTPClient, endpoint string, bo
 	if err != nil {
 		return 0, fmt.Errorf("build ATE bootstrap request: %w", err)
 	}
-	req.Header.Set("Content-Type", "application/octet-stream")
+	req.Header.Set("Content-Type", "application/json")
 
 	res, err := c.Do(req)
 	if err != nil {
@@ -663,6 +746,9 @@ func kitATEPost(ctx context.Context, c *guardian.HTTPClient, endpoint string, bo
 	defer o11y.NoLogDefer(func() error { return res.Body.Close() })
 
 	_, _ = io.Copy(io.Discard, io.LimitReader(res.Body, maxATEHelperErrorBodyBytes))
+	if err := validateATEInitVersionHeader(res); err != nil {
+		return res.StatusCode, err
+	}
 	return res.StatusCode, nil
 }
 

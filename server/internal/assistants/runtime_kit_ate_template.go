@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"maps"
 	"net/url"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -27,51 +28,116 @@ const (
 
 	// ateHTTPSPort is the sole outbound destination port permitted by actor egress policy.
 	ateHTTPSPort int32 = 443
+
+	// ateTemplateDigestSuffixLen is the number of lowercase hex characters from
+	// the image sha256 digest appended to the ActorTemplate base name.
+	ateTemplateDigestSuffixLen = 12
+
+	// maxATETemplateBaseLen bounds the base template name so "<base>-<12-hex>" fits in a 63-char DNS label.
+	maxATETemplateBaseLen = maxATEDNSLabelLen - 1 - ateTemplateDigestSuffixLen
 )
 
-var ateKitWorkerLabels = map[string]string{"workload-type": "ate-poc"}
+var (
+	ateImageDigestPattern      = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
+	ateDigestSuffixPattern     = regexp.MustCompile(`^[0-9a-f]{12}$`)
+	ateWorkerLabelKeyPattern   = regexp.MustCompile(`^(?:[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?/)?[A-Za-z0-9](?:[A-Za-z0-9_.-]*[A-Za-z0-9])?$`)
+	ateWorkerLabelValuePattern = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9_.-]*[A-Za-z0-9])?$`)
+)
+
+// ParseKitATEWorkerSelector parses a comma-separated list of key=value worker
+// selector labels (for example "workload-type=ate-assistants,tier=prod").
+func ParseKitATEWorkerSelector(raw string) (map[string]string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, errors.New("ATE worker selector is required")
+	}
+	labels := map[string]string{}
+	for pair := range strings.SplitSeq(raw, ",") {
+		pair = strings.TrimSpace(pair)
+		key, val, ok := strings.Cut(pair, "=")
+		if !ok || key == "" || val == "" || strings.Contains(val, "=") {
+			return nil, errors.New("ATE worker selector must be comma-separated key=value pairs")
+		}
+		if len(key) > 253 || len(val) > maxATEDNSLabelLen || !ateWorkerLabelKeyPattern.MatchString(key) || !ateWorkerLabelValuePattern.MatchString(val) {
+			return nil, fmt.Errorf("invalid ATE worker selector label %q=%q", key, val)
+		}
+		if _, dup := labels[key]; dup {
+			return nil, fmt.Errorf("duplicate ATE worker selector label %q", key)
+		}
+		labels[key] = val
+	}
+	if len(labels) == 0 {
+		return nil, errors.New("ATE worker selector must contain at least one label")
+	}
+	return labels, nil
+}
+
+func validateKitATEWorkerSelector(labels map[string]string) error {
+	if len(labels) == 0 {
+		return errors.New("ATE worker selector must contain at least one label")
+	}
+	for key, val := range labels {
+		if len(key) > 253 || len(val) > maxATEDNSLabelLen || !ateWorkerLabelKeyPattern.MatchString(key) || !ateWorkerLabelValuePattern.MatchString(val) {
+			return fmt.Errorf("invalid ATE worker selector label %q=%q", key, val)
+		}
+	}
+	return nil
+}
+
+// kitATEImageDigest extracts the canonical "sha256:<64-lowercase-hex>" digest
+// from an explicit digest-pinned OCI image reference, ignoring any mutable tag
+// component (for example "<repo>:sha-<commit>@sha256:<digest>").
+func kitATEImageDigest(ref string) (string, error) {
+	if !kitGKEExplicitImage(ref) {
+		return "", errors.New("ATE image must be an explicit digest-pinned reference")
+	}
+	_, digest, ok := strings.Cut(ref, "@")
+	if !ok || !ateImageDigestPattern.MatchString(digest) {
+		return "", errors.New("ATE image must include a canonical @sha256:<64-hex> digest")
+	}
+	return digest, nil
+}
+
+func kitATETemplateVersionName(baseTemplate, imageDigest string) string {
+	hexDigest := strings.TrimPrefix(imageDigest, "sha256:")
+	return baseTemplate + "-" + hexDigest[:ateTemplateDigestSuffixLen]
+}
+
+func kitATETemplateVersionMatches(baseTemplate, actual string) bool {
+	if actual == baseTemplate {
+		return true
+	}
+	suffix, ok := strings.CutPrefix(actual, baseTemplate+"-")
+	return ok && ateDigestSuffixPattern.MatchString(suffix)
+}
 
 func (k *KitATERuntimeBackend) ensureTemplate(ctx context.Context) error {
 	_, err := k.config.Client.GetAtespace(ctx, &ateapiv1.GetAtespaceRequest{
 		Atespace: &ateapiv1.ObjectRef{Atespace: "", Name: k.config.Atespace},
 	})
 	if status.Code(err) == codes.NotFound {
-		_, err = k.config.Client.CreateAtespace(ctx, &ateapiv1.CreateAtespaceRequest{
-			Atespace: &ateapiv1.Atespace{
-				Metadata: &ateapiv1.ResourceMetadata{
-					Atespace:   "",
-					Name:       k.config.Atespace,
-					Uid:        "",
-					Version:    0,
-					CreateTime: nil,
-					UpdateTime: nil,
-					DeleteTime: nil,
-				},
-			},
-		})
-		if status.Code(err) == codes.AlreadyExists {
-			err = nil
-		}
+		return fmt.Errorf("ATE atespace %q does not exist; pre-create it before enabling the ATE backend", k.config.Atespace)
 	}
 	if err != nil {
-		return fmt.Errorf("ensure ATE atespace: %w", err)
+		return fmt.Errorf("verify ATE atespace: %w", err)
 	}
 
+	templateName := k.templateVersionName()
 	desired := &ateapiv1.ActorTemplate{
 		Metadata: &ateapiv1.ResourceMetadata{
 			Atespace:   k.config.Atespace,
-			Name:       k.config.Template,
+			Name:       templateName,
 			Uid:        "",
 			Version:    0,
 			CreateTime: nil,
 			UpdateTime: nil,
 			DeleteTime: nil,
 		},
-		WorkerSelector: &ateapiv1.Selector{MatchLabels: maps.Clone(ateKitWorkerLabels)},
+		WorkerSelector: &ateapiv1.Selector{MatchLabels: maps.Clone(k.config.WorkerSelector)},
 		Containers: []*ateapiv1.Container{{
 			Name:    "kit",
 			Image:   k.config.Image,
-			Command: []string{"/usr/local/bin/kit-ate-init"},
+			Command: nil,
 			Args:    nil,
 			Env:     nil,
 			WakeupProbe: &ateapiv1.WakeupProbe{
@@ -99,7 +165,7 @@ func (k *KitATERuntimeBackend) ensureTemplate(ctx context.Context) error {
 	}
 
 	existing, err := k.config.Client.GetActorTemplate(ctx, &ateapiv1.GetActorTemplateRequest{
-		ActorTemplate: k.actorRef(k.config.Template),
+		ActorTemplate: k.actorRef(templateName),
 	})
 	if status.Code(err) == codes.NotFound {
 		existing, err = k.config.Client.CreateActorTemplate(ctx, &ateapiv1.CreateActorTemplateRequest{
@@ -107,7 +173,7 @@ func (k *KitATERuntimeBackend) ensureTemplate(ctx context.Context) error {
 		})
 		if status.Code(err) == codes.AlreadyExists {
 			existing, err = k.config.Client.GetActorTemplate(ctx, &ateapiv1.GetActorTemplateRequest{
-				ActorTemplate: k.actorRef(k.config.Template),
+				ActorTemplate: k.actorRef(templateName),
 			})
 		}
 	}
@@ -115,26 +181,30 @@ func (k *KitATERuntimeBackend) ensureTemplate(ctx context.Context) error {
 		return fmt.Errorf("ensure ATE actor template: %w", err)
 	}
 
-	if !matchesKitATETemplate(existing, k.config.Image) {
-		return errors.New("ATE template does not match the configured Kit image and rootfs contract")
+	if !matchesKitATETemplate(existing, k.imageDigest, k.config.WorkerSelector) {
+		return errors.New("ATE template does not match the configured Kit image digest, worker selector, and rootfs contract")
 	}
 	return nil
 }
 
-func matchesKitATETemplate(existing *ateapiv1.ActorTemplate, image string) bool {
+func matchesKitATETemplate(existing *ateapiv1.ActorTemplate, expectedDigest string, expectedWorkerSelector map[string]string) bool {
 	containers := existing.GetContainers()
 	if len(containers) != 1 {
 		return false
 	}
 	c := containers[0]
+	existingDigest, err := kitATEImageDigest(c.GetImage())
+	if err != nil || existingDigest != expectedDigest {
+		return false
+	}
 	probe := c.GetWakeupProbe()
 	limits := existing.GetResources().GetLimits()
 	snap := existing.GetSnapshotConfig()
 
 	return c.GetName() == "kit" &&
-		c.GetImage() == image &&
-		slices.Equal(c.GetCommand(), []string{"/usr/local/bin/kit-ate-init"}) &&
-		maps.Equal(existing.GetWorkerSelector().GetMatchLabels(), ateKitWorkerLabels) &&
+		len(c.GetCommand()) == 0 &&
+		len(c.GetArgs()) == 0 &&
+		maps.Equal(existing.GetWorkerSelector().GetMatchLabels(), expectedWorkerSelector) &&
 		probe.GetHttpGet().GetPort() == ateInitPort &&
 		probe.GetHttpGet().GetPath() == "/readyz" &&
 		probe.GetTimeoutSeconds() == ateKitWakeupTimeoutSeconds &&

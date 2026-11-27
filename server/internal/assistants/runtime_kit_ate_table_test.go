@@ -106,6 +106,7 @@ func TestKitATEConcurrentThreadsDoNotWaitOnEachOther(t *testing.T) {
 		Enabled:                   true,
 		Atespace:                  atespace,
 		Template:                  template,
+		WorkerSelector:            testKitATEWorkerSelector,
 		EgressHosts:               []string{"ai.speakeasy.com"},
 	}
 
@@ -117,6 +118,7 @@ func TestKitATEConcurrentThreadsDoNotWaitOnEachOther(t *testing.T) {
 		Image:           testKitATEImage,
 		Atespace:        atespace,
 		Template:        template,
+		WorkerSelector:  testKitATEWorkerSelector,
 		ServerURL:       core.serverURL,
 		Client:          client,
 		EgressHosts:     []string{"ai.speakeasy.com"},
@@ -456,6 +458,7 @@ func TestKitATEPerThreadIdleAndDrainSweep(t *testing.T) {
 		Enabled:                   true,
 		Atespace:                  atespace,
 		Template:                  template,
+		WorkerSelector:            testKitATEWorkerSelector,
 		EgressHosts:               []string{"ai.speakeasy.com"},
 	}
 
@@ -465,6 +468,7 @@ func TestKitATEPerThreadIdleAndDrainSweep(t *testing.T) {
 		Image:              testKitATEImage,
 		Atespace:           atespace,
 		Template:           template,
+		WorkerSelector:     testKitATEWorkerSelector,
 		ServerURL:          core.serverURL,
 		Client:             client,
 		EgressHosts:        []string{"ai.speakeasy.com"},

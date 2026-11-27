@@ -53,8 +53,11 @@ type KitATECompositionConfig struct {
 	// Atespace is the target ATE namespace.
 	Atespace string
 
-	// Template is the target ATE ActorTemplate name.
+	// Template is the target ATE ActorTemplate base name (versioned by image digest).
 	Template string
+
+	// WorkerSelector holds the label selector applied to created ActorTemplates.
+	WorkerSelector map[string]string
 
 	// EgressHosts lists operator-approved extra DNS hostnames for actor egress.
 	EgressHosts []string
@@ -70,16 +73,20 @@ func validateKitATEComposition(c KitATECompositionConfig) error {
 	if !c.Enabled {
 		return errors.New("assistant ATE runtime is not enabled")
 	}
-	for _, name := range []string{c.Atespace, c.Template} {
-		if len(name) > maxATEDNSLabelLen || !kitATENamePattern.MatchString(name) {
-			return errors.New("assistant ATE requires explicit DNS-label atespace and template names")
-		}
+	if len(c.Atespace) > maxATEDNSLabelLen || !kitATENamePattern.MatchString(c.Atespace) {
+		return errors.New("assistant ATE requires an explicit DNS-label atespace name")
+	}
+	if len(c.Template) > maxATETemplateBaseLen || !kitATENamePattern.MatchString(c.Template) {
+		return errors.New("assistant ATE requires an explicit DNS-label template base name (max 50 chars)")
+	}
+	if err := validateKitATEWorkerSelector(c.WorkerSelector); err != nil {
+		return err
 	}
 	if c.nativeIdentity != nil || c.WorkloadSubject != "" || c.WorkloadAssertionFile != "" || c.Network != "" || c.ExtraCACertFile != "" || c.AllowInsecureInference {
 		return errors.New("assistant ATE rejects GKE identity, operator assertions, and local network or TLS overrides")
 	}
-	if !kitGKEExplicitImage(c.Image) {
-		return errors.New("assistant ATE requires an explicit non-latest image tag or digest")
+	if _, err := kitATEImageDigest(c.Image); err != nil {
+		return err
 	}
 	if !c.PersistedMCP {
 		return errors.New("assistant ATE requires persisted assistant MCP attachments")
@@ -110,6 +117,7 @@ func (s *ServiceCore) InstallKitATERuntime(ctx context.Context, c KitATEComposit
 		Image:              c.Image,
 		Atespace:           c.Atespace,
 		Template:           c.Template,
+		WorkerSelector:     c.WorkerSelector,
 		ServerURL:          s.serverURL,
 		Client:             client,
 		EgressHosts:        append(slices.Clone(c.EgressHosts), c.Origin.Hostname(), s.serverURL.Hostname()),

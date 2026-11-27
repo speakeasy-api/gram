@@ -10,4 +10,5 @@ USER 0:0
 COPY --from=build --chmod=0755 /kit-ate-init /usr/local/bin/kit-ate-init
 USER 1000:1000
 ENV HOME=/home/kit
-ENTRYPOINT ["/usr/local/bin/kit-ate-init"]
+ENTRYPOINT ["/usr/local/bin/kit-ate-init", "--root=/home/kit", "--probe-addr=127.0.0.1:8081", "--"]
+CMD ["/usr/local/bin/kit", "serve", "--root", "/home/kit/workspace", "--remote-acp", "--no-a2a", "--no-stdio", "--a2a", "0.0.0.0:8081", "--server-credential-file", "/home/kit/.kit/credentials/gateway-token"]

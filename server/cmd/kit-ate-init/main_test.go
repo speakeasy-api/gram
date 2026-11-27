@@ -1,7 +1,6 @@
 package main
 
 import (
-	"archive/tar"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -21,79 +20,139 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func testArchive(t *testing.T, names []string) []byte {
+func testPayloadJSON(t *testing.T, p bootstrapPayload) []byte {
 	t.Helper()
-	var b bytes.Buffer
-	w := tar.NewWriter(&b)
-	for _, name := range names {
-		data := []byte("fixture")
-		if name == ".kit/credentials/gateway-token" {
-			data = []byte(strings.Repeat("x", 43))
-		}
-		require.NoError(t, w.WriteHeader(&tar.Header{Name: name, Mode: 0o600, Size: int64(len(data)), Typeflag: tar.TypeReg}))
-		_, err := w.Write(data)
-		require.NoError(t, err)
-	}
-	require.NoError(t, w.Close())
-	return b.Bytes()
+	raw, err := json.Marshal(p)
+	require.NoError(t, err)
+	return raw
 }
 
-func TestBootstrapLaunchesOnceAndRemovesAssertionEndpoint(t *testing.T) {
+func testConfigForRoot(rootDir, probeAddr string) config {
+	return config{
+		rootDir:   rootDir,
+		probeAddr: probeAddr,
+		listen:    defaultListenAddr,
+		marker:    defaultMarkerRelPath,
+		command:   []string{"/bin/true"},
+	}
+}
+
+func TestParseConfigRequiresFlagsAndCommand(t *testing.T) {
 	t.Parallel()
-	homeDir := t.TempDir()
-	s, err := newInitializer(homeDir)
+	_, err := parseConfig(nil)
+	require.Error(t, err)
+	_, err = parseConfig([]string{"--root=/tmp/r", "--probe-addr=127.0.0.1:8081"})
+	require.Error(t, err)
+
+	cfg, err := parseConfig([]string{"--root=/tmp/r", "--probe-addr=127.0.0.1:8081", "--", "/usr/bin/app", "--flag"})
+	require.NoError(t, err)
+	require.Equal(t, "/tmp/r", cfg.rootDir)
+	require.Equal(t, "127.0.0.1:8081", cfg.probeAddr)
+	require.Equal(t, []string{"/usr/bin/app", "--flag"}, cfg.command)
+}
+
+func TestBootstrapGenericPayloadWriteOnceAndResume(t *testing.T) {
+	t.Parallel()
+	rootDir := t.TempDir()
+	probeLis, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	defer func() { _ = probeLis.Close() }()
+
+	cfg := testConfigForRoot(rootDir, probeLis.Addr().String())
+	s, err := newInitializer(cfg)
 	require.NoError(t, err)
 
-	post := func(path string, body []byte) int {
+	post := func(path string, body []byte) *httptest.ResponseRecorder {
 		r := httptest.NewRequest(http.MethodPost, path, bytes.NewReader(body))
 		w := httptest.NewRecorder()
 		s.ServeHTTP(w, r)
-		return w.Code
+		return w
 	}
 
-	// Assertion delivery is removed; ATE egress injects actor JWTs.
-	require.Equal(t, http.StatusNotFound, post("/assertion", []byte("jwt.fixture")))
+	// Legacy assertion path does not exist.
+	w := post("/assertion", []byte("jwt.fixture"))
+	require.Equal(t, http.StatusNotFound, w.Code)
+	require.Equal(t, "1", w.Header().Get(wireVersionHeader))
 
-	archive := testArchive(t, bootstrapFiles)
-	require.Equal(t, http.StatusNoContent, post("/bootstrap", archive))
+	// Unsupported wire version is rejected.
+	badVersion := testPayloadJSON(t, bootstrapPayload{
+		Version: 99,
+		Files:   []bootstrapFile{{Path: "conf/app.toml", Mode: 0o600, Content: []byte("ok")}},
+	})
+	require.Equal(t, http.StatusBadRequest, post("/bootstrap", badVersion).Code)
+
+	payload := testPayloadJSON(t, bootstrapPayload{
+		Version: wireVersion,
+		Dirs: []bootstrapDir{
+			{Path: "conf", Mode: 0o700},
+			{Path: "work", Mode: 0o700},
+		},
+		Files: []bootstrapFile{
+			{Path: "conf/app.toml", Mode: 0o600, Content: []byte("model = 'test'\n")},
+			{Path: "conf/secret.token", Mode: 0o600, Content: []byte(strings.Repeat("x", 43))},
+		},
+	})
+	require.Equal(t, http.StatusNoContent, post("/bootstrap", payload).Code)
 
 	select {
 	case <-s.launch:
 	default:
-		t.Fatal("Kit was not launched after bootstrap")
+		t.Fatal("workload was not launched after bootstrap")
 	}
 
 	// Write-once: subsequent bootstrap attempts are rejected.
-	require.Equal(t, http.StatusConflict, post("/bootstrap", archive))
+	require.Equal(t, http.StatusConflict, post("/bootstrap", payload).Code)
 
-	_, err = os.Stat(filepath.Join(homeDir, ".kit/ate-initialized"))
+	// Files and generic marker exist on disk with exact content and permissions.
+	data, err := os.ReadFile(filepath.Join(rootDir, "conf/app.toml"))
+	require.NoError(t, err)
+	require.Equal(t, "model = 'test'\n", string(data))
+	_, err = os.Stat(filepath.Join(rootDir, defaultMarkerRelPath))
 	require.NoError(t, err)
 
-	// Resuming from a durable rootfs snapshot launches Kit immediately without /bootstrap.
-	restored, err := newInitializer(homeDir)
+	// Generic /app-readyz probes the configured --probe-addr.
+	req := httptest.NewRequest(http.MethodGet, "/app-readyz", nil)
+	rec := httptest.NewRecorder()
+	s.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, "1", rec.Header().Get(wireVersionHeader))
+
+	// Resuming from a durable rootfs snapshot launches immediately without /bootstrap.
+	restored, err := newInitializer(cfg)
 	require.NoError(t, err)
 	select {
 	case <-restored.launch:
 	default:
-		t.Fatal("resumed actor did not launch Kit immediately")
+		t.Fatal("resumed actor did not launch workload immediately")
 	}
-
-	r := httptest.NewRequest(http.MethodPost, "/bootstrap", bytes.NewReader(archive))
-	w := httptest.NewRecorder()
-	restored.ServeHTTP(w, r)
-	require.Equal(t, http.StatusConflict, w.Code)
+	rec = httptest.NewRecorder()
+	restored.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/bootstrap", bytes.NewReader(payload)))
+	require.Equal(t, http.StatusConflict, rec.Code)
 }
 
-func TestBootstrapRejectsTraversalAndSymlinks(t *testing.T) {
+func TestBootstrapRejectsTraversalAbsolutePathsSymlinksAndBadModes(t *testing.T) {
 	t.Parallel()
-	s, err := newInitializer(t.TempDir())
+	rootDir := t.TempDir()
+	s, err := newInitializer(testConfigForRoot(rootDir, "127.0.0.1:8081"))
 	require.NoError(t, err)
 
-	require.Error(t, s.install(testArchive(t, append(append([]string{}, bootstrapFiles...), "../outside"))))
+	for _, bad := range []bootstrapPayload{
+		{Version: wireVersion, Files: []bootstrapFile{{Path: "../outside", Mode: 0o600, Content: []byte("x")}}},
+		{Version: wireVersion, Files: []bootstrapFile{{Path: "/etc/passwd", Mode: 0o600, Content: []byte("x")}}},
+		{Version: wireVersion, Files: []bootstrapFile{{Path: defaultMarkerRelPath, Mode: 0o600, Content: []byte("x")}}},
+		{Version: wireVersion, Files: []bootstrapFile{{Path: "a/b", Mode: 0o600, Content: []byte("1")}, {Path: "a/b", Mode: 0o600, Content: []byte("2")}}},
+		{Version: wireVersion, Files: []bootstrapFile{{Path: "a/b", Mode: os.ModeSetuid | 0o600, Content: []byte("x")}}},
+		{Version: wireVersion, Dirs: []bootstrapDir{{Path: "../escape", Mode: 0o700}}, Files: []bootstrapFile{{Path: "ok.txt", Mode: 0o600, Content: []byte("x")}}},
+	} {
+		require.Error(t, s.install(testPayloadJSON(t, bad)))
+	}
 
 	outside := t.TempDir()
-	require.NoError(t, os.Symlink(outside, filepath.Join(s.home, ".kit")))
-	require.Error(t, s.install(testArchive(t, bootstrapFiles)))
+	require.NoError(t, os.Symlink(outside, filepath.Join(rootDir, "conf")))
+	require.Error(t, s.install(testPayloadJSON(t, bootstrapPayload{
+		Version: wireVersion,
+		Files:   []bootstrapFile{{Path: "conf/escape.txt", Mode: 0o600, Content: []byte("nope")}},
+	})))
 
 	entries, err := os.ReadDir(outside)
 	require.NoError(t, err)
@@ -103,9 +162,8 @@ func TestBootstrapRejectsTraversalAndSymlinks(t *testing.T) {
 func TestInitTrapsSIGTERMWithoutExitingAndAdvertisesDraining(t *testing.T) {
 	t.Parallel()
 
-	homeDir := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(homeDir, ".kit"), 0o700))
-	require.NoError(t, os.WriteFile(filepath.Join(homeDir, ".kit", "ate-initialized"), []byte("1"), 0o600))
+	rootDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(rootDir, defaultMarkerRelPath), []byte("1"), 0o600))
 
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
@@ -114,11 +172,12 @@ func TestInitTrapsSIGTERMWithoutExitingAndAdvertisesDraining(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
-	pidFile := filepath.Join(homeDir, "child.pid")
+	pidFile := filepath.Join(rootDir, "child.pid")
+	cfg := testConfigForRoot(rootDir, "127.0.0.1:8081")
 	termCh := make(chan os.Signal, 1)
 	done := make(chan error, 1)
 	go func() {
-		done <- run(ctx, homeDir, lis, termCh, func(cmdCtx context.Context) *exec.Cmd {
+		done <- run(ctx, cfg, lis, termCh, func(cmdCtx context.Context) *exec.Cmd {
 			return exec.CommandContext(cmdCtx, "sh", "-c", `echo $$ > "$1"; exec sleep 30`, "_", pidFile)
 		})
 	}()
@@ -129,12 +188,12 @@ func TestInitTrapsSIGTERMWithoutExitingAndAdvertisesDraining(t *testing.T) {
 		require.NoError(t, err)
 		defer func() { _ = resp.Body.Close() }()
 		require.Equal(t, http.StatusOK, resp.StatusCode)
+		require.Equal(t, "1", resp.Header.Get(wireVersionHeader))
 		var out statusResponse
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&out))
 		return out
 	}
 
-	// Wait until HTTP server is accepting requests and child process has written its PID.
 	var childPID int
 	require.Eventually(t, func() bool {
 		resp, err := http.Get("http://" + addr + "/readyz")
@@ -158,6 +217,7 @@ func TestInitTrapsSIGTERMWithoutExitingAndAdvertisesDraining(t *testing.T) {
 	}, 3*time.Second, 10*time.Millisecond)
 
 	before := getStatus()
+	require.Equal(t, wireVersion, before.Version)
 	require.False(t, before.Draining)
 	require.True(t, before.Started)
 
