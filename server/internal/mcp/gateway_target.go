@@ -132,7 +132,10 @@ func (t gatewayTarget) admits(caller gatewayCaller, projectID uuid.UUID, machine
 			// live agent policy rather than naming a gateway target. Its
 			// projectScope confines it to one project, and member authorization
 			// checks each member separately against live agent and owner policy.
-			return true, nil
+			if caller.projectScope == nil {
+				return refuseGateway(gatewayRefusalProjectScopeMismatch), nil
+			}
+			return admitGateway(), nil
 		}
 		// The workload credential ceiling must authorize this gateway target.
 		check, ok := t.authorizationTarget(projectID)
