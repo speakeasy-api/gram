@@ -42,7 +42,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 )
 
-const testKitATEImage = "ghcr.io/speakeasy-api/kit-ate@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+const (
+	testKitATEImageDigestA = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	testKitATEImageDigestB = "sha256:fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
+	testKitATEImage        = "ghcr.io/speakeasy-api/kit-ate@" + testKitATEImageDigestA
+)
+
+var testKitATEWorkerSelector = map[string]string{"workload-type": "ate-assistants"}
 
 type fakeATEActor struct {
 	actor          *ateapiv1.Actor
@@ -56,12 +62,14 @@ type fakeATEActor struct {
 type fakeATECluster struct {
 	ateapiv1.UnimplementedControlServer
 
-	mu         sync.Mutex
-	atespaces  map[string]*ateapiv1.Atespace
-	templates  map[string]*ateapiv1.ActorTemplate
-	actors     map[string]*fakeATEActor
-	nextUID    int
-	mintCalled atomic.Bool
+	mu                   sync.Mutex
+	atespaces            map[string]*ateapiv1.Atespace
+	templates            map[string]*ateapiv1.ActorTemplate
+	actors               map[string]*fakeATEActor
+	nextUID              int
+	mintCalled           atomic.Bool
+	createAtespaceCalled atomic.Bool
+	createTemplateCalls  atomic.Int32
 
 	bootstrapCalls   atomic.Int32
 	assertionCalls   atomic.Int32
@@ -88,16 +96,9 @@ func (f *fakeATECluster) GetAtespace(_ context.Context, req *ateapiv1.GetAtespac
 	return space, nil
 }
 
-func (f *fakeATECluster) CreateAtespace(_ context.Context, req *ateapiv1.CreateAtespaceRequest) (*ateapiv1.Atespace, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	name := req.GetAtespace().GetMetadata().GetName()
-	if _, exists := f.atespaces[name]; exists {
-		return nil, status.Error(codes.AlreadyExists, "atespace exists") //nolint:wrapcheck // gRPC server handler returns status.Error directly.
-	}
-	space := &ateapiv1.Atespace{Metadata: &ateapiv1.ResourceMetadata{Name: name, Uid: "space-" + name}}
-	f.atespaces[name] = space
-	return space, nil
+func (f *fakeATECluster) CreateAtespace(_ context.Context, _ *ateapiv1.CreateAtespaceRequest) (*ateapiv1.Atespace, error) {
+	f.createAtespaceCalled.Store(true)
+	return nil, status.Error(codes.PermissionDenied, "server principal cannot create atespaces") //nolint:wrapcheck // gRPC server handler returns status.Error directly.
 }
 
 func (f *fakeATECluster) GetActorTemplate(_ context.Context, req *ateapiv1.GetActorTemplateRequest) (*ateapiv1.ActorTemplate, error) {
@@ -120,6 +121,7 @@ func (f *fakeATECluster) CreateActorTemplate(_ context.Context, req *ateapiv1.Cr
 		return nil, status.Error(codes.AlreadyExists, "template exists") //nolint:wrapcheck // gRPC server handler returns status.Error directly.
 	}
 	f.templates[key] = tmpl
+	f.createTemplateCalls.Add(1)
 	return tmpl, nil
 }
 
@@ -402,6 +404,9 @@ func (p *fakeATEProtocol) CloseNativeThreadSession(_ context.Context, _ assistan
 func startFakeATEStack(t *testing.T, atespace string) (*fakeATECluster, *ateclient.Client) {
 	t.Helper()
 	cluster := newFakeATECluster()
+	cluster.atespaces[atespace] = &ateapiv1.Atespace{
+		Metadata: &ateapiv1.ResourceMetadata{Name: atespace, Uid: "space-" + atespace},
+	}
 
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
@@ -438,9 +443,14 @@ func startFakeATEStack(t *testing.T, atespace string) (*fakeATECluster, *ateclie
 
 	grpcServer := grpc.NewServer(grpc.Creds(credentials.NewTLS(&tls.Config{
 		Certificates: []tls.Certificate{cert},
-		ClientCAs:    pool,
-		ClientAuth:   tls.RequireAndVerifyClientCert,
+		ClientAuth:   tls.RequestClientCert,
 		MinVersion:   tls.VersionTLS12,
+		VerifyConnection: func(cs tls.ConnectionState) error {
+			if len(cs.PeerCertificates) > 0 {
+				return errors.New("control API must not receive router client certificate")
+			}
+			return nil
+		},
 	})))
 	ateapiv1.RegisterControlServer(grpcServer, cluster)
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
@@ -508,12 +518,13 @@ func TestKitATEBackendPrepareTurnStopResumeAndReap(t *testing.T) {
 	agentID := uuid.New()
 
 	backend, err := NewKitATERuntimeBackend(KitATERuntimeConfig{
-		Image:       testKitATEImage,
-		Atespace:    atespace,
-		Template:    template,
-		ServerURL:   serverURL,
-		Client:      client,
-		EgressHosts: []string{"ai.speakeasy.com", "tools.speakeasy.test"},
+		Image:          testKitATEImage,
+		Atespace:       atespace,
+		Template:       template,
+		WorkerSelector: testKitATEWorkerSelector,
+		ServerURL:      serverURL,
+		Client:         client,
+		EgressHosts:    []string{"ai.speakeasy.com", "tools.speakeasy.test"},
 		Lifecycle: func(ctx context.Context, r assistantRuntimeRecord, op func(context.Context, assistantRuntimeRecord) error) error {
 			mu.Lock()
 			r.BackendMetadataJSON = append([]byte(nil), storedMetadata...)
@@ -684,7 +695,10 @@ func TestKitATEActorNamesBindThreadAndGeneration(t *testing.T) {
 
 func TestKitATEMetadataRejectsForeignBinding(t *testing.T) {
 	t.Parallel()
-	k := &KitATERuntimeBackend{config: KitATERuntimeConfig{Image: "fixture", Atespace: "prod-space", Template: "kit"}}
+	k := &KitATERuntimeBackend{
+		config:      KitATERuntimeConfig{Image: testKitATEImage, Atespace: "prod-space", Template: "kit"},
+		imageDigest: testKitATEImageDigestA,
+	}
 	r := assistantRuntimeRecord{ID: uuid.New(), AssistantID: uuid.New(), ProjectID: uuid.New(), Backend: runtimeBackendATE, RuntimeVersion: 3}
 	m, err := k.metadata(r)
 	require.NoError(t, err)
@@ -696,6 +710,221 @@ func TestKitATEMetadataRejectsForeignBinding(t *testing.T) {
 	r.ProjectID = uuid.New()
 	_, err = k.metadata(r)
 	require.ErrorIs(t, err, ErrKitRuntimeBinding)
+}
+
+func TestParseKitATEWorkerSelector(t *testing.T) {
+	t.Parallel()
+	labels, err := ParseKitATEWorkerSelector("workload-type=ate-assistants,tier=prod")
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{"workload-type": "ate-assistants", "tier": "prod"}, labels)
+
+	for _, invalid := range []string{"", "   ", "noequals", "=val", "key=", "a=b,a=c", "bad key=val", "key=bad val"} {
+		_, err := ParseKitATEWorkerSelector(invalid)
+		require.Error(t, err, invalid)
+	}
+}
+
+func TestKitATEEnsureFailsWhenAtespaceMissing(t *testing.T) {
+	t.Parallel()
+	const (
+		atespace = "prod-assistants"
+		template = "kit-v1"
+	)
+	cluster, client := startFakeATEStack(t, atespace)
+	// Remove the pre-created atespace after client startup to verify Ensure fails clearly
+	// without attempting CreateAtespace.
+	cluster.mu.Lock()
+	delete(cluster.atespaces, atespace)
+	cluster.mu.Unlock()
+
+	serverURL, err := url.Parse("https://api.speakeasy.test")
+	require.NoError(t, err)
+	backend, err := NewKitATERuntimeBackend(KitATERuntimeConfig{
+		Image:          testKitATEImage,
+		Atespace:       atespace,
+		Template:       template,
+		WorkerSelector: testKitATEWorkerSelector,
+		ServerURL:      serverURL,
+		Client:         client,
+		Lifecycle: func(ctx context.Context, r assistantRuntimeRecord, op func(context.Context, assistantRuntimeRecord) error) error {
+			return op(ctx, r)
+		},
+		Token: func(context.Context, assistantRuntimeRecord, uuid.UUID) (string, error) { return "tok", nil },
+		Bootstrap: func(context.Context, assistantRuntimeRecord, uuid.UUID, string) (KitLocalBootstrap, error) {
+			return KitLocalBootstrap{}, nil
+		},
+		Protocol: func(context.Context, assistantRuntimeRecord, uuid.UUID, string, *url.URL, *guardian.HTTPClient, string) (runtimeProtocol, error) {
+			return nil, nil
+		},
+		Revoke:       func(context.Context, assistantRuntimeRecord, *KitWorkloadBinding) error { return nil },
+		CheckSettled: func(context.Context, assistantRuntimeRecord) error { return nil },
+	})
+	require.NoError(t, err)
+
+	_, err = backend.Ensure(t.Context(), assistantRuntimeRecord{
+		ID:                  uuid.New(),
+		AssistantID:         uuid.New(),
+		ProjectID:           uuid.New(),
+		RuntimeVersion:      3,
+		Backend:             runtimeBackendATE,
+		BackendMetadataJSON: []byte("{}"),
+	})
+	require.ErrorContains(t, err, `ATE atespace "prod-assistants" does not exist`)
+	require.False(t, cluster.createAtespaceCalled.Load(), "server must never call CreateAtespace")
+}
+
+func TestKitATEImageIdentityKeysOnDigestOnly(t *testing.T) {
+	t.Parallel()
+	const (
+		atespace = "prod-assistants"
+		template = "kit-v1"
+	)
+	cluster, client := startFakeATEStack(t, atespace)
+	serverURL, err := url.Parse("https://api.speakeasy.test")
+	require.NoError(t, err)
+
+	var (
+		mu             sync.Mutex
+		storedMetadata = []byte("{}")
+	)
+	runtimeID := uuid.New()
+	assistantID := uuid.New()
+	projectID := uuid.New()
+	thread1 := uuid.New()
+	thread2 := uuid.New()
+	issuerID := uuid.New()
+	agentID := uuid.New()
+
+	newBackend := func(imageRef string) *KitATERuntimeBackend {
+		t.Helper()
+		b, err := NewKitATERuntimeBackend(KitATERuntimeConfig{
+			Image:          imageRef,
+			Atespace:       atespace,
+			Template:       template,
+			WorkerSelector: testKitATEWorkerSelector,
+			ServerURL:      serverURL,
+			Client:         client,
+			EgressHosts:    []string{"ai.speakeasy.com"},
+			Lifecycle: func(ctx context.Context, r assistantRuntimeRecord, op func(context.Context, assistantRuntimeRecord) error) error {
+				mu.Lock()
+				r.BackendMetadataJSON = append([]byte(nil), storedMetadata...)
+				mu.Unlock()
+				progressCtx := context.WithValue(ctx, kitAdmissionProgressKey{}, kitAdmissionProgressWriter(func(_ context.Context, raw []byte) error {
+					mu.Lock()
+					storedMetadata = append([]byte(nil), raw...)
+					mu.Unlock()
+					return nil
+				}))
+				return op(progressCtx, r)
+			},
+			Token: func(_ context.Context, _ assistantRuntimeRecord, thread uuid.UUID) (string, error) {
+				return kitATEActorToken("root-secret", thread.String()), nil
+			},
+			Bootstrap: func(_ context.Context, _ assistantRuntimeRecord, thread uuid.UUID, actorName string) (KitLocalBootstrap, error) {
+				return KitLocalBootstrap{
+					Model:              "openai/gpt-4.1-mini",
+					ReasoningEffort:    "medium",
+					EgressInjectedAuth: true,
+					InferenceEndpoint:  "https://ai.speakeasy.com/chat/completions",
+					AgentsMD:           []byte("# Speakeasy assistant\n"),
+					MCPJSON:            []byte(`{"mcpServers":{}}`),
+					GatewayToken:       []byte(kitATEActorToken("root-secret", thread.String())),
+					Workload: &KitWorkloadBinding{
+						IssuerID: issuerID,
+						Subject:  "actor/" + atespace + "/" + actorName,
+						Audience: "https://api.speakeasy.test/oauth/usi/test",
+						Identity: assistantidentity.RuntimeIdentity{
+							OrganizationID:    "org_test",
+							ProjectID:         projectID,
+							AssistantID:       assistantID,
+							AgentID:           agentID,
+							BindingID:         uuid.New(),
+							BindingGeneration: 1,
+						},
+					},
+				}, nil
+			},
+			Protocol: func(_ context.Context, _ assistantRuntimeRecord, _ uuid.UUID, _ string, endpoint *url.URL, hc *guardian.HTTPClient, token string) (runtimeProtocol, error) {
+				return &fakeATEProtocol{client: hc, endpoint: endpoint, token: token}, nil
+			},
+			Revoke:             func(context.Context, assistantRuntimeRecord, *KitWorkloadBinding) error { return nil },
+			CheckSettled:       func(context.Context, assistantRuntimeRecord) error { return nil },
+			HelperPollInterval: 5 * time.Millisecond,
+		})
+		require.NoError(t, err)
+		return b
+	}
+
+	record := assistantRuntimeRecord{
+		ID:                  runtimeID,
+		AssistantID:         assistantID,
+		ProjectID:           projectID,
+		RuntimeVersion:      3,
+		Backend:             runtimeBackendATE,
+		BackendMetadataJSON: []byte("{}"),
+	}
+
+	// Release 1: tag sha-111... with digest A.
+	imgRel1 := "gcr.io/example/gram-ate-runtime:sha-1111111111111111111111111111111111111111@" + testKitATEImageDigestA
+	b1 := newBackend(imgRel1)
+	res1, err := b1.Ensure(t.Context(), record)
+	require.NoError(t, err)
+	storedMetadata = res1.BackendMetadataJSON
+	record.BackendMetadataJSON = res1.BackendMetadataJSON
+	require.Equal(t, int32(1), cluster.createTemplateCalls.Load())
+	tmplA := kitATETemplateVersionName(template, testKitATEImageDigestA)
+
+	require.NoError(t, b1.RunTurn(t.Context(), record, runTurnRequest{ThreadID: thread1, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium"}))
+	require.NoError(t, b1.Stop(t.Context(), record))
+
+	actor1Key := atespace + "/" + kitATEActorName(record, thread1)
+	cluster.mu.Lock()
+	uid1 := cluster.actors[actor1Key].actor.GetMetadata().GetUid()
+	require.Equal(t, tmplA, cluster.actors[actor1Key].actor.GetActorTemplate().GetName())
+	require.Equal(t, testKitATEWorkerSelector, cluster.templates[atespace+"/"+tmplA].GetWorkerSelector().GetMatchLabels())
+	cluster.mu.Unlock()
+
+	// Release 2: different commit tag, SAME digest A -> NO new template, NO actor replacement.
+	imgRel2 := "gcr.io/example/gram-ate-runtime:sha-2222222222222222222222222222222222222222@" + testKitATEImageDigestA
+	b2 := newBackend(imgRel2)
+	record.BackendMetadataJSON = storedMetadata
+	res2, err := b2.Ensure(t.Context(), record)
+	require.NoError(t, err)
+	storedMetadata = res2.BackendMetadataJSON
+	record.BackendMetadataJSON = res2.BackendMetadataJSON
+	require.Equal(t, int32(1), cluster.createTemplateCalls.Load(), "same digest with new tag must not create a new template")
+
+	require.NoError(t, b2.RunTurn(t.Context(), record, runTurnRequest{ThreadID: thread1, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium"}))
+	require.Equal(t, int32(1), cluster.bootstrapCalls.Load(), "existing actor must not be replaced on tag-only release")
+	require.NoError(t, b2.Stop(t.Context(), record))
+
+	// Release 3: DIFFERENT digest B -> creates new template version <template>-<digestB[:12]>;
+	// existing suspended actor keeps running on old template/image until recreated,
+	// while a new thread immediately uses the new template version.
+	imgRel3 := "gcr.io/example/gram-ate-runtime:sha-3333333333333333333333333333333333333333@" + testKitATEImageDigestB
+	b3 := newBackend(imgRel3)
+	record.BackendMetadataJSON = storedMetadata
+	res3, err := b3.Ensure(t.Context(), record)
+	require.NoError(t, err)
+	storedMetadata = res3.BackendMetadataJSON
+	record.BackendMetadataJSON = res3.BackendMetadataJSON
+	require.Equal(t, int32(2), cluster.createTemplateCalls.Load(), "new digest must create a new template version")
+	tmplB := kitATETemplateVersionName(template, testKitATEImageDigestB)
+	require.NotEqual(t, tmplA, tmplB)
+
+	// Existing suspended actor resumes cleanly on its existing template (tmplA) and UID.
+	require.NoError(t, b3.RunTurn(t.Context(), record, runTurnRequest{ThreadID: thread1, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium"}))
+	cluster.mu.Lock()
+	require.Equal(t, uid1, cluster.actors[actor1Key].actor.GetMetadata().GetUid())
+	require.Equal(t, tmplA, cluster.actors[actor1Key].actor.GetActorTemplate().GetName())
+	cluster.mu.Unlock()
+
+	// New thread uses the new template version (tmplB).
+	require.NoError(t, b3.RunTurn(t.Context(), record, runTurnRequest{ThreadID: thread2, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium"}))
+	actor2Key := atespace + "/" + kitATEActorName(record, thread2)
+	cluster.mu.Lock()
+	require.Equal(t, tmplB, cluster.actors[actor2Key].actor.GetActorTemplate().GetName())
+	cluster.mu.Unlock()
 }
 
 func TestKitATETrustedEgressHosts(t *testing.T) {

@@ -152,13 +152,20 @@ func New(ctx context.Context, cfg Config) (*Client, error) {
 		return nil, err
 	}
 
-	tlsConfig := &tls.Config{
+	routerTLS := &tls.Config{
 		MinVersion:           tls.VersionTLS12,
 		RootCAs:              pool,
 		GetClientCertificate: loadCert,
 	}
-	apiTLS := tlsConfig.Clone()
-	apiTLS.ServerName = cfg.APIServerName
+	// The control API verifies pod-identity client certs if given, whereas the
+	// client certificate here is signed by the dedicated router ingress CA.
+	// Present NO client certificate to the control API; authenticate solely via
+	// the rotating bearer JWT read from AudienceJWTFile on every RPC.
+	apiTLS := &tls.Config{
+		MinVersion: tls.VersionTLS12,
+		RootCAs:    pool,
+		ServerName: cfg.APIServerName,
+	}
 
 	dialOptions := []grpc.DialOption{
 		grpc.WithTransportCredentials(credentials.NewTLS(apiTLS)),
@@ -178,19 +185,21 @@ func New(ctx context.Context, cfg Config) (*Client, error) {
 		config:    cfg,
 		conn:      conn,
 		control:   ateapiv1.NewControlClient(conn),
-		tlsConfig: tlsConfig,
+		tlsConfig: routerTLS,
 	}
 
-	// Verify the authenticated mTLS/JWT control-plane handshake at startup so
-	// misconfigured addresses, CAs, server names, or credentials fail fast.
-	// NotFound is expected when the atespace will be created lazily on Ensure.
+	// Verify the authenticated bearer/TLS control-plane handshake and that the
+	// pre-created atespace exists at startup so misconfiguration fails fast.
 	probeCtx, cancel := context.WithTimeout(ctx, cfg.ConnectTimeout)
 	defer cancel()
 	_, err = c.control.GetAtespace(probeCtx, &ateapiv1.GetAtespaceRequest{
 		Atespace: &ateapiv1.ObjectRef{Atespace: "", Name: cfg.Atespace},
 	})
-	if err != nil && status.Code(err) != codes.NotFound {
+	if err != nil {
 		_ = conn.Close()
+		if status.Code(err) == codes.NotFound {
+			return nil, fmt.Errorf("ATE atespace %q does not exist; pre-create it before enabling the ATE backend", cfg.Atespace)
+		}
 		return nil, fmt.Errorf("verify ATE control connection: %w", sanitizedRPCError(err))
 	}
 
@@ -209,16 +218,6 @@ func (c *Client) GetAtespace(ctx context.Context, req *ateapiv1.GetAtespaceReque
 	ctx, cancel := context.WithTimeout(ctx, c.config.RPCTimeout)
 	defer cancel()
 	resp, err := c.control.GetAtespace(ctx, req)
-	if err != nil {
-		return nil, sanitizedRPCError(err)
-	}
-	return resp, nil
-}
-
-func (c *Client) CreateAtespace(ctx context.Context, req *ateapiv1.CreateAtespaceRequest) (*ateapiv1.Atespace, error) {
-	ctx, cancel := context.WithTimeout(ctx, c.config.RPCTimeout)
-	defer cancel()
-	resp, err := c.control.CreateAtespace(ctx, req)
 	if err != nil {
 		return nil, sanitizedRPCError(err)
 	}
