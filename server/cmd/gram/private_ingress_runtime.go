@@ -324,7 +324,7 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	issuerSigner := internalsessionissuers.NewSigner(logger, tracerProvider, meterProvider, db, issuerGate, gcpIdentity, kmsSigningClients, internalIssuerSignerConfig(c, callbackOrigins.Outbound))
 	issuerGate.SetSigningAuthority(issuerSigner.CheckAuthority)
 	issuerGate.SetEnableAuthority(issuerSigner.CheckEnableAuthority)
-	tunnelHTTPClient, err := newTunnelHTTPClient(c, guardianPolicy, stores.Ops)
+	tunnelHTTPClient, err := newTunnelHTTPClient(c, guardianPolicy, stores)
 	if err != nil {
 		return nil, fmt.Errorf("build tunnel http client: %w", err)
 	}

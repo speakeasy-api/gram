@@ -91,6 +91,25 @@ SELECT EXISTS (
 	return ok, nil
 }
 
+// CarriesOAuth reports whether a live remote session issuer sends its OAuth
+// back-channel calls through the tunnel.
+func (r *PostgresKeyResolver) CarriesOAuth(ctx context.Context, tunnelID string) (bool, error) {
+	var ok bool
+	err := r.db.QueryRow(ctx, `
+SELECT EXISTS (
+  SELECT 1
+  FROM remote_session_issuers
+  WHERE tunneled_mcp_server_id = $1::uuid
+    AND deleted IS FALSE
+)
+`, tunnelID).Scan(&ok)
+	if err != nil {
+		return false, fmt.Errorf("check tunnel oauth binding: %w", err)
+	}
+	return ok, nil
+}
+
 var _ KeyResolver = (*PostgresKeyResolver)(nil)
+var _ AuthRouteEligibility = (*PostgresKeyResolver)(nil)
 var _ ConnectionRecorder = (*PostgresKeyResolver)(nil)
 var _ ActiveTunnelChecker = (*PostgresKeyResolver)(nil)

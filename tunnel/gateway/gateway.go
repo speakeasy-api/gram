@@ -56,6 +56,10 @@ type Config struct {
 	// AuthzPublicKeys contains only SPKI public PEM keys published for caller assertions.
 	AuthzPublicKeys string
 
+	// AuthRoutes copies the routes of OAuth tunnels to the auth role. Nil
+	// leaves the auth role untouched.
+	AuthRoutes *AuthRouteMirror
+
 	routeRefreshInterval time.Duration
 }
 
@@ -65,6 +69,7 @@ type Gateway struct {
 	keys            KeyResolver
 	reg             *registry
 	reconciler      *routeReconciler
+	authRoutes      *authRouteMirror
 	logger          *slog.Logger
 	publicKeys      *jwks.Set
 	metricsMu       sync.Mutex
@@ -90,12 +95,21 @@ func New(cfg Config, keys KeyResolver, routes route.Store, logger *slog.Logger) 
 	if err != nil {
 		return nil, fmt.Errorf("parse GRAM_AUTHZ_PUBLIC_KEYS: %w", err)
 	}
+	if cfg.AuthRoutes != nil && (cfg.AuthRoutes.Routes == nil || cfg.AuthRoutes.Eligibility == nil) {
+		return nil, errors.New("auth route mirror needs a route store and an eligibility check")
+	}
 	reg := newRegistry()
+	reconciler := newRouteReconciler(reg, keys, routes, cfg.AdvertiseAddr, logger, cfg.routeRefreshInterval)
+	var authRoutes *authRouteMirror
+	if cfg.AuthRoutes != nil {
+		authRoutes = newAuthRouteMirror(*cfg.AuthRoutes, reg, &reconciler.address, logger, cfg.routeRefreshInterval)
+	}
 	return &Gateway{
 		cfg:             cfg,
 		keys:            keys,
 		reg:             reg,
-		reconciler:      newRouteReconciler(reg, keys, routes, cfg.AdvertiseAddr, logger, cfg.routeRefreshInterval),
+		reconciler:      reconciler,
+		authRoutes:      authRoutes,
 		logger:          logger,
 		publicKeys:      publicKeys,
 		metricsMu:       sync.Mutex{},
@@ -142,10 +156,20 @@ func (g *Gateway) Drain(ctx context.Context) {
 	g.drain.Do(func() {
 		tunnelIDs := g.reg.beginDrain()
 		g.reconciler.requestDrain(ctx, tunnelIDs)
+		if g.authRoutes != nil {
+			g.authRoutes.requestDrain(ctx)
+		}
 	})
 	select {
 	case <-g.reconciler.done:
 	case <-ctx.Done():
+		return
+	}
+	if g.authRoutes != nil {
+		select {
+		case <-g.authRoutes.done:
+		case <-ctx.Done():
+		}
 	}
 }
 
@@ -281,6 +305,7 @@ func (g *Gateway) handleConnect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	g.reconciler.nudge(tunnelID)
+	g.authRoutes.nudge()
 	g.logger.InfoContext(r.Context(), "tunnel connected",
 		slog.String("tunnel_id", tunnelID), slog.String("session_id", sessionID),
 		slog.String("agent_version", agentVersion), slog.Int("active", g.reg.activeSessions()))
@@ -295,6 +320,7 @@ func (g *Gateway) handleConnect(w http.ResponseWriter, r *http.Request) {
 	remove()
 	g.recordMetrics(tunnelID, 0)
 	g.reconciler.nudge(tunnelID)
+	g.authRoutes.nudge()
 	g.logger.InfoContext(context.Background(), "tunnel disconnected",
 		slog.String("tunnel_id", tunnelID), slog.String("session_id", sessionID),
 		slog.Int("active", g.reg.activeSessions()))
@@ -514,6 +540,7 @@ func (g *Gateway) RevokeTunnel(ctx context.Context, tunnelID string) int {
 		revoker.Revoke(tunnelID)
 	}
 	killed := g.reg.kill(tunnelID)
+	g.authRoutes.revoke(tunnelID)
 	g.reconciler.requestRevoke(ctx, tunnelID)
 	return killed
 }

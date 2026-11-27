@@ -80,6 +80,12 @@ Redis is live data-plane state:
   while an agent is connected.
 - `tunnel_connections:<tunnelID>`: owner-scoped live connection snapshots for
   UI/API overview data, merged on read.
+- `auth_tunnel_routes:<tunnelID>`: the same sorted set, on the auth role's
+  Redis, for tunnels a remote session issuer sends its OAuth back-channel calls
+  through. The gateway writes it when `GRAM_REDIS_AUTH_ADDR` is set, from its
+  own loop, so an operations outage or instance move does not stop it. The
+  server reads it first for those calls when `GRAM_TUNNEL_AUTH_ROUTE_MIRROR` is
+  on, falling back to `tunnel_routes:`.
 
 ## Diagnostics and activity
 

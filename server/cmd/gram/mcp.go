@@ -381,7 +381,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	issuerGate.SetSigningAuthority(issuerSigner.CheckAuthority)
 	issuerGate.SetEnableAuthority(issuerSigner.CheckEnableAuthority)
 
-	tunnelHTTPClient, err := newTunnelHTTPClient(c, guardianPolicy, stores.Ops)
+	tunnelHTTPClient, err := newTunnelHTTPClient(c, guardianPolicy, stores)
 	if err != nil {
 		return fmt.Errorf("build tunnel http client: %w", err)
 	}

@@ -144,6 +144,11 @@ var manifest = []Family{
 	{Prefix: "userInfo:", Role: RoleAuth},
 	{Prefix: "sessionPolicy:", Role: RoleAuth},
 
+	// Auth: the tunnel gateway's copy of the live routes of tunnels that carry
+	// OAuth back-channel calls, so those calls do not depend on the ops
+	// instance. The bulk routes stay on ops.
+	{Prefix: "auth_tunnel_routes:", Role: RoleAuth},
+
 	// Auth: rate limits charged on synchronous authentication paths. Most
 	// fail closed on a store error, so they must not depend on the ops
 	// instance.
