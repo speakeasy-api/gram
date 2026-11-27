@@ -158,11 +158,12 @@ func organizationMetadata(result UpsertOrganizationMetadataWithRequestsRow) Orga
 		VerifiedDomains:    result.VerifiedDomains,
 		CreationSource:     result.CreationSource,
 		DefaultHost:        result.DefaultHost,
-		// The WorkOS upsert does not return this staff-only column, and no
-		// caller of this path reads it.
-		AdoptionDashboardUrl: pgtype.Text{String: "", Valid: false},
-		CreatedAt:            result.CreatedAt,
-		UpdatedAt:            result.UpdatedAt,
-		DisabledAt:           result.DisabledAt,
+		// The WorkOS upsert does not return these staff-only columns, and no
+		// caller of this path reads them.
+		AdoptionDashboardUrl:   pgtype.Text{String: "", Valid: false},
+		FunctionTimeoutSeconds: pgtype.Int4{Int32: 0, Valid: false},
+		CreatedAt:              result.CreatedAt,
+		UpdatedAt:              result.UpdatedAt,
+		DisabledAt:             result.DisabledAt,
 	}
 }

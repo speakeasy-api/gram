@@ -88,6 +88,10 @@ CREATE TABLE IF NOT EXISTS organization_metadata (
   -- admin overview. NULL when none has been set. URL shape is validated in
   -- application code.
   adoption_dashboard_url TEXT,
+  -- Staff-set limit, in seconds, on how long one Speakeasy Function invocation
+  -- may run. NULL means the platform default. Bounds are validated in
+  -- application code.
+  function_timeout_seconds INTEGER,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -116,6 +120,8 @@ COMMENT ON COLUMN organization_metadata.creation_source IS '@access: confidentia
 COMMENT ON COLUMN organization_metadata.default_host IS '@access: confidential';
 COMMENT ON COLUMN organization_metadata.adoption_dashboard_url IS 'Staff-entered link to the adoption dashboard for this organization.
 @access: restricted';
+COMMENT ON COLUMN organization_metadata.function_timeout_seconds IS 'Staff-set limit in seconds on one function invocation; NULL means the platform default.
+@access: confidential';
 COMMENT ON COLUMN organization_metadata.created_at IS '@access: confidential';
 COMMENT ON COLUMN organization_metadata.updated_at IS '@access: confidential';
 COMMENT ON COLUMN organization_metadata.disabled_at IS '@access: confidential';
