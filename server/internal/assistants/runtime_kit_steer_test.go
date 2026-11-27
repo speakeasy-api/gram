@@ -62,7 +62,7 @@ func (b *kitSteerBackendStub) Status(ctx context.Context, r assistantRuntimeReco
 func (b *kitSteerBackendStub) Backend() string                  { return runtimeBackendLocal }
 func (b *kitSteerBackendStub) SupportsBackend(name string) bool { return name == runtimeBackendLocal }
 func (b *kitSteerBackendStub) ServerURL() *url.URL              { return nil }
-func (b *kitSteerBackendStub) ImageRef() string                 { return "kit-test:v0.3.1" }
+func (b *kitSteerBackendStub) ImageRef() string                 { return "kit-test:latest" }
 func (b *kitSteerBackendStub) Ensure(context.Context, assistantRuntimeRecord) (RuntimeBackendEnsureResult, error) {
 	return RuntimeBackendEnsureResult{}, nil
 }
@@ -797,7 +797,7 @@ func TestKitSteerInterruptAfterInsertionSettlesAllEvents(t *testing.T) {
 	require.False(t, busy.Bool, "both inserted events must be settled after turn cancel")
 }
 
-func TestKitLegacyGatewayKeepsOneTurnPerEvent(t *testing.T) {
+func TestKitWithoutSteerCapabilityKeepsOneTurnPerEvent(t *testing.T) {
 	t.Parallel()
 	const catalog = `{"configOptions":[{"configId":"model","type":"select","currentValue":"speakeasy:openai/gpt-4o-mini","options":[{"value":"speakeasy:openai/gpt-4o-mini"}]},{"configId":"reasoning_effort","type":"select","currentValue":"medium","options":[{"value":"low"},{"value":"medium"},{"value":"high"}]}]}`
 
@@ -827,10 +827,10 @@ func TestKitLegacyGatewayKeepsOneTurnPerEvent(t *testing.T) {
 			if msg.Method == "initialize" {
 				mu.Lock()
 				connections++
-				connID := fmt.Sprintf("legacy-conn-%d", connections)
+				connID := fmt.Sprintf("no-steer-conn-%d", connections)
 				mu.Unlock()
 				w.Header().Set("Acp-Connection-Id", connID)
-				// Kit 0.2.x: kit/session/status advertised, no prompt delivery capability.
+				// Harness advertises kit/session/status without the steer delivery capability.
 				_, _ = fmt.Fprintf(w, `{"jsonrpc":"2.0","id":%s,"result":{"capabilities":{"_meta":{"kit/session/status":{}}}}}`, msg.ID)
 				return
 			}
@@ -842,7 +842,7 @@ func TestKitLegacyGatewayKeepsOneTurnPerEvent(t *testing.T) {
 			case "session/close":
 				ch <- fmt.Sprintf("data: {\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{}}\n\n", msg.ID)
 			case "session/new":
-				ch <- fmt.Sprintf("data: {\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":%s}\n\n", msg.ID, strings.TrimSuffix(catalog, "}")+`,"sessionId":"legacy-fifo-session"}`)
+				ch <- fmt.Sprintf("data: {\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":%s}\n\n", msg.ID, strings.TrimSuffix(catalog, "}")+`,"sessionId":"single-turn-session"}`)
 			case "session/resume":
 				ch <- fmt.Sprintf("data: {\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":%s}\n\n", msg.ID, catalog)
 			case "session/prompt":
@@ -860,7 +860,7 @@ func TestKitLegacyGatewayKeepsOneTurnPerEvent(t *testing.T) {
 				}
 				mu.Unlock()
 				msgID := fmt.Sprintf("u%d", n)
-				ch <- fmt.Sprintf(`data: {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"legacy-fifo-session","update":{"sessionUpdate":"user_message","messageId":%q,"content":[{"type":"text","text":"m%d"}]}}}`+"\n\n", msgID, n)
+				ch <- fmt.Sprintf(`data: {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"single-turn-session","update":{"sessionUpdate":"user_message","messageId":%q,"content":[{"type":"text","text":"m%d"}]}}}`+"\n\n", msgID, n)
 				ch <- fmt.Sprintf("data: {\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{\"messageId\":%q}}\n\n", msg.ID, msgID)
 				if n == 1 {
 					close(firstPromptRunning)
@@ -876,15 +876,15 @@ func TestKitLegacyGatewayKeepsOneTurnPerEvent(t *testing.T) {
 						turn1Active = false
 						mu.Unlock()
 						active = false
-						ch <- `data: {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"legacy-fifo-session","update":{"sessionUpdate":"agent_message_chunk","messageId":"a1","content":{"type":"text","text":"reply1"}}}}` + "\n\n"
-						ch <- `data: {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"legacy-fifo-session","update":{"sessionUpdate":"state_update","state":"idle","stopReason":"end_turn"}}}` + "\n\n"
+						ch <- `data: {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"single-turn-session","update":{"sessionUpdate":"agent_message_chunk","messageId":"a1","content":{"type":"text","text":"reply1"}}}}` + "\n\n"
+						ch <- `data: {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"single-turn-session","update":{"sessionUpdate":"state_update","state":"idle","stopReason":"end_turn"}}}` + "\n\n"
 					default:
 					}
 				} else {
-					ch <- `data: {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"legacy-fifo-session","update":{"sessionUpdate":"agent_message_chunk","messageId":"a2","content":{"type":"text","text":"reply2"}}}}` + "\n\n"
-					ch <- `data: {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"legacy-fifo-session","update":{"sessionUpdate":"state_update","state":"idle","stopReason":"end_turn"}}}` + "\n\n"
+					ch <- `data: {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"single-turn-session","update":{"sessionUpdate":"agent_message_chunk","messageId":"a2","content":{"type":"text","text":"reply2"}}}}` + "\n\n"
+					ch <- `data: {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"single-turn-session","update":{"sessionUpdate":"state_update","state":"idle","stopReason":"end_turn"}}}` + "\n\n"
 				}
-				ch <- fmt.Sprintf("data: {\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{\"sessionId\":\"legacy-fifo-session\",\"settled\":%t,\"foregroundActive\":%t,\"backgroundActive\":false,\"pendingBackgroundTerminals\":false,\"activeSubagents\":0}}\n\n", msg.ID, !active, active)
+				ch <- fmt.Sprintf("data: {\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{\"sessionId\":\"single-turn-session\",\"settled\":%t,\"foregroundActive\":%t,\"backgroundActive\":false,\"pendingBackgroundTerminals\":false,\"activeSubagents\":0}}\n\n", msg.ID, !active, active)
 			}
 		case http.MethodGet:
 			ch := make(chan string, 32)
@@ -927,21 +927,21 @@ func TestKitLegacyGatewayKeepsOneTurnPerEvent(t *testing.T) {
 	}
 
 	insertDashboardEventFixture(t, ctx, db, key, chatID, "second")
-	// Let several status ticks pass while turn 1 is still active; legacy gateway
-	// must not receive event 2 mid-turn.
+	// Let several status ticks pass while turn 1 is still active; a harness
+	// without the steer capability must not receive event 2 mid-turn.
 	require.Never(t, func() bool {
 		mu.Lock()
 		defer mu.Unlock()
 		return promptCount > 1
-	}, 400*time.Millisecond, 25*time.Millisecond, "legacy gateway must not deliver event 2 while turn 1 is active")
+	}, 400*time.Millisecond, 25*time.Millisecond, "harness without steer capability must not deliver event 2 while turn 1 is active")
 	close(turn1Released)
 
 	require.NoError(t, <-done)
 
 	mu.Lock()
-	require.False(t, sawDelivery, "legacy gateway must not receive delivery field")
-	require.False(t, promptWhileActive, "legacy gateway must keep one-turn-per-event behavior")
-	require.Equal(t, 2, connections, "each event runs its own turn on a legacy gateway")
+	require.False(t, sawDelivery, "must omit delivery when steer capability is not advertised")
+	require.False(t, promptWhileActive, "must keep one-turn-per-event behavior when steer capability is not advertised")
+	require.Equal(t, 2, connections, "each event must run its own turn when steer capability is not advertised")
 	require.Equal(t, 2, promptCount)
 	mu.Unlock()
 }
