@@ -32,7 +32,7 @@ func newMeteredTranscriptShadowStore(t *testing.T, ti *chatTestInstance) (*trans
 	keys := orgencryptiontest.New(t, ti.conn)
 	require.NoError(t, keys.Provisioner.EnsureUseCase(t.Context(), ti.orgID, orgencryption.UseCaseChatTranscripts, orgencryption.SystemActor()))
 	reader := sdkmetric.NewManualReader()
-	store, err := transcriptstore.New(ti.conn, keys.Service, testenv.NewTracerProvider(t), sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)))
+	store, err := transcriptstore.New(ti.conn, keys.Service, testenv.NewLogger(t), testenv.NewTracerProvider(t), sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)))
 	require.NoError(t, err)
 	return store, reader
 }

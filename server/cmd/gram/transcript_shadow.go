@@ -3,6 +3,7 @@ package gram
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/google/uuid"
@@ -40,7 +41,7 @@ func parseTranscriptShadowProjectIDs(values []string) ([]uuid.UUID, error) {
 // and wires the writer to seal them. Plaintext remains authoritative for every
 // other project; startup never backfills old messages. It returns nil when no
 // project has encrypted transcripts.
-func configureTranscripts(ctx context.Context, c *cli.Context, db *pgxpool.Pool, writer *chat.ChatMessageWriter, orgEncryption orgEncryptionDeps, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider) (*transcriptstore.Transcripts, error) {
+func configureTranscripts(ctx context.Context, c *cli.Context, db *pgxpool.Pool, writer *chat.ChatMessageWriter, orgEncryption orgEncryptionDeps, logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider) (*transcriptstore.Transcripts, error) {
 	var none *transcriptstore.Transcripts
 	values := c.StringSlice(chatTranscriptShadowProjectIDsFlag)
 	if len(values) == 0 {
@@ -82,7 +83,7 @@ func configureTranscripts(ctx context.Context, c *cli.Context, db *pgxpool.Pool,
 		}
 	}
 	// Build the store first: it can fail, and provisioning mints keys.
-	store, err := transcriptstore.New(db, orgEncryption.Service, tracerProvider, meterProvider)
+	store, err := transcriptstore.New(db, orgEncryption.Service, logger, tracerProvider, meterProvider)
 	if err != nil {
 		return none, fmt.Errorf("create chat transcript shadow store: %w", err)
 	}

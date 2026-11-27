@@ -2958,9 +2958,9 @@ func (s *Service) SummarizeToolCall(ctx context.Context, payload *gen.SummarizeT
 		return nil, oops.E(oops.CodeUnexpected, err, "encode tool summary response").LogError(ctx, s.logger)
 	}
 
-	// The summary is part of the message body, so its encrypted transcript gets
-	// the same change in the same transaction, with the key loaded before it
-	// begins.
+	// The summary is part of the message body, so it goes through UpdateBody,
+	// which writes it to every copy of the body in one transaction. The key
+	// loads before the transaction begins.
 	if err := s.transcripts.Prepare(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "prepare tool call summary transcript").LogError(ctx, s.logger)
 	}
@@ -2969,14 +2969,7 @@ func (s *Service) SummarizeToolCall(ctx context.Context, payload *gen.SummarizeT
 		return nil, oops.E(oops.CodeUnexpected, err, "begin tool call summary transaction").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
-	stored, err := repo.New(tx).StoreToolCallSummary(ctx, repo.StoreToolCallSummaryParams{
-		ToolCallID: payload.ToolCallID, Summary: encodedRecord, MessageID: messageID,
-		ChatID: chatID, ProjectID: *authCtx.ProjectID,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "persist tool call summary").LogError(ctx, s.logger)
-	}
-	err = s.transcripts.Update(ctx, tx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, messageID, func(m *transcriptcrypto.Message) error {
+	_, err = s.transcripts.UpdateBody(ctx, tx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, chatID, messageID, func(m *transcriptcrypto.Message) error {
 		summaries, err := setToolCallSummary(m.ToolCallSummaries, payload.ToolCallID, encodedRecord)
 		if err != nil {
 			return err
@@ -2985,19 +2978,16 @@ func (s *Service) SummarizeToolCall(ctx context.Context, payload *gen.SummarizeT
 		return nil
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "update tool call summary transcript").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "persist tool call summary").LogError(ctx, s.logger)
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit tool call summary").LogError(ctx, s.logger)
 	}
-	if err := json.Unmarshal([]byte(stored), &record); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "decode stored tool summary").LogError(ctx, s.logger)
-	}
 	return &gen.SummarizeToolCallResult{Summary: record.Summary, Impact: record.Impact, Cached: false}, nil
 }
 
-// setToolCallSummary is StoreToolCallSummary's jsonb_set in Go: it sets one
-// call's summary and keeps the summaries of sibling calls.
+// setToolCallSummary sets one call's summary and keeps the summaries of
+// sibling calls carried by the same assistant message.
 func setToolCallSummary(summaries []byte, toolCallID string, summary []byte) ([]byte, error) {
 	merged := map[string]json.RawMessage{}
 	if len(summaries) > 0 {

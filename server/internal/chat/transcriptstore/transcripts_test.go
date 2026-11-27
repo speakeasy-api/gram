@@ -7,7 +7,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
-	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptcrypto"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore/fixturerepo"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore/repo"
@@ -195,10 +194,27 @@ func TestToolCallIDsStayWithTheirProject(t *testing.T) {
 	require.Equal(t, []string{"example"}, ids)
 }
 
-// Each body update changes the plaintext in SQL and the transcript in Go, in
-// one transaction: the transcript stays current, and a kit patch's metadata
-// and tool-call IDs are measured again from the new body.
-func TestBodyUpdatesKeepTheTranscriptCurrent(t *testing.T) {
+// updateBody runs one UpdateBody in its own committed transaction.
+func (f *fixture) updateBody(t *testing.T, transcripts *Transcripts, chatID, id uuid.UUID, apply func(*transcriptcrypto.Message) error) (bool, error) {
+	t.Helper()
+	tx, err := f.db.Begin(t.Context()) //nolint:glint // notestingrawsql: caller-owned transaction boundary is the behavior under test.
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback(t.Context()) }()
+	changed, err := transcripts.UpdateBody(t.Context(), tx, f.org, f.project, chatID, id, apply)
+	if err != nil {
+		return false, err
+	}
+	require.NoError(t, tx.Commit(t.Context()))
+	return changed, nil
+}
+
+func setNotes(v string) func(*transcriptcrypto.Message) error {
+	return func(m *transcriptcrypto.Message) error { m.ToolOutcomeNotes = &v; return nil }
+}
+
+// In shadow mode one change, made once in Go, lands in the plaintext row, the
+// transcript, the metadata and the tool-call IDs.
+func TestUpdateBodyKeepsEveryCopyCurrent(t *testing.T) {
 	t.Parallel()
 	f := setup(t, true)
 	ctx := t.Context()
@@ -206,133 +222,106 @@ func TestBodyUpdatesKeepTheTranscriptCurrent(t *testing.T) {
 	f.add(t, id)
 	f.capture(t, id)
 	transcripts := NewTranscripts(f.store, f.project)
-	text := func(v string) pgtype.Text { return pgtype.Text{String: v, Valid: true} }
-	inTx := func(update func(chatrepo.DBTX), apply func(*transcriptcrypto.Message) error) {
-		t.Helper()
-		tx, err := f.db.Begin(ctx) //nolint:glint // notestingrawsql: caller-owned transaction boundary is the behavior under test.
-		require.NoError(t, err)
-		defer func() { _ = tx.Rollback(ctx) }()
-		update(tx)
-		require.NoError(t, transcripts.Update(ctx, tx, f.org, f.project, id, apply))
-		require.NoError(t, tx.Commit(ctx))
-	}
 
-	inTx(func(db chatrepo.DBTX) {
-		require.NoError(t, chatrepo.New(db).UpdateToolCallOutcome(ctx, chatrepo.UpdateToolCallOutcomeParams{ToolOutcome: text("success"), ToolOutcomeNotes: text("changed note"), ID: id, ProjectID: f.project}))
-	}, func(m *transcriptcrypto.Message) error {
-		notes := "changed note"
-		m.ToolOutcomeNotes = &notes
-		return nil
-	})
-	opened, err := f.store.Load(ctx, f.org, f.project, id)
+	changed, err := f.updateBody(t, transcripts, f.chat, id, setNotes("changed note"))
 	require.NoError(t, err)
+	require.True(t, changed)
+	opened, err := f.store.Load(ctx, f.org, f.project, id)
+	require.NoError(t, err, "plaintext and transcript agree")
 	require.Equal(t, "changed note", *opened.ToolOutcomeNotes)
 
-	inTx(func(db chatrepo.DBTX) {
-		_, err := chatrepo.New(db).StoreToolCallSummary(ctx, chatrepo.StoreToolCallSummaryParams{ToolCallID: "other", Summary: []byte(`"done"`), MessageID: id, ChatID: f.chat, ProjectID: f.project})
-		require.NoError(t, err)
-	}, func(m *transcriptcrypto.Message) error {
-		m.ToolCallSummaries = []byte(`{"example":"summary","other":"done"}`)
-		return nil
-	})
-	opened, err = f.store.Load(ctx, f.org, f.project, id)
+	changed, err = f.updateBody(t, transcripts, f.chat, id, setNotes("changed note"))
 	require.NoError(t, err)
-	require.JSONEq(t, `{"example":"summary","other":"done"}`, string(opened.ToolCallSummaries))
+	require.False(t, changed, "the same value is not written again")
 
-	_, err = fixturerepo.New(f.db).SetSource(ctx, pgtype.Text{String: "kit", Valid: true}, id)
-	require.NoError(t, err)
-	inTx(func(db chatrepo.DBTX) {
-		_, err := chatrepo.New(db).PatchKitProjectionMessage(ctx, chatrepo.PatchKitProjectionMessageParams{
-			Content: "patched", ContentRaw: nil, ToolCalls: []byte(`[{"id":"call_new"}]`), ContentHash: nil, FinishReason: text("stop"),
-			ProjectID: uuid.NullUUID{UUID: f.project, Valid: true}, ChatID: f.chat, ID: id,
-		})
-		require.NoError(t, err)
-	}, func(m *transcriptcrypto.Message) error {
-		m.Content, m.ContentRaw, m.ToolCalls = "patched", nil, []byte(`[{"id":"call_new"}]`)
+	changed, err = f.updateBody(t, transcripts, f.chat, id, func(m *transcriptcrypto.Message) error {
+		m.Content, m.ToolCalls = "patched", []byte(`[{"id":"call_new"}]`)
 		return nil
 	})
+	require.NoError(t, err)
+	require.True(t, changed)
 	opened, err = f.store.Load(ctx, f.org, f.project, id)
 	require.NoError(t, err)
 	require.Equal(t, "patched", opened.Content)
 	ids, err := fixturerepo.New(f.db).ShadowToolCallIDs(ctx, id)
 	require.NoError(t, err)
-	require.Equal(t, []string{"call_new"}, ids, "the patch's tool-call IDs are measured from the new body")
+	require.Equal(t, []string{"call_new"}, ids, "tool-call IDs are measured from the new body")
+
+	_, err = f.updateBody(t, transcripts, uuid.New(), id, setNotes("other chat"))
+	require.ErrorIs(t, err, ErrNotFound, "the message must belong to the named chat")
 	progress, err := f.store.Progress(ctx, f.org, f.project)
 	require.NoError(t, err)
 	require.Equal(t, Progress{Current: 1}, progress)
 }
 
-// Update builds on the decrypted transcript, not on the plaintext. When the
-// two disagree, the change cannot make them agree, and Update refuses to seal.
-func TestUpdateBuildsOnTheTranscript(t *testing.T) {
+// In plaintext mode UpdateBody writes the plaintext row and the metadata, and
+// no transcript.
+func TestUpdateBodyInPlaintextMode(t *testing.T) {
+	t.Parallel()
+	f := setup(t, true)
+	ctx := t.Context()
+	id := uuid.New()
+	f.add(t, id)
+	var none *Transcripts
+
+	changed, err := f.updateBody(t, none, f.chat, id, func(m *transcriptcrypto.Message) error {
+		m.Content = "plain update"
+		return nil
+	})
+	require.NoError(t, err)
+	require.True(t, changed)
+	snapshot, err := fixturerepo.New(f.db).MessageSnapshot(ctx, id, project(f.project))
+	require.NoError(t, err)
+	require.Contains(t, snapshot, `"content": "plain update"`)
+	_, err = fixturerepo.New(f.db).ShadowMetadata(ctx, id)
+	require.NoError(t, err, "metadata is written in every mode")
+	progress, err := f.store.Progress(ctx, f.org, f.project)
+	require.NoError(t, err)
+	require.Equal(t, Progress{Waiting: 1}, progress, "no transcript")
+}
+
+// In shadow mode the update starts from the decrypted transcript. When there
+// is none, only a legacy one, or one that disagrees with the plaintext row,
+// it starts from the plaintext row, which stays the source of truth, and the
+// write seals a current transcript.
+func TestUpdateBodyStartsFromTheTranscriptOrThePlaintext(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
-	setNotes := func(v string) func(*transcriptcrypto.Message) error {
-		return func(m *transcriptcrypto.Message) error { m.ToolOutcomeNotes = &v; return nil }
+	for _, tc := range []struct {
+		name    string
+		prepare func(*fixture, uuid.UUID)
+		content string
+	}{
+		{name: "no transcript", prepare: func(*fixture, uuid.UUID) {}, content: "sensitive example"},
+		{name: "legacy transcript", prepare: func(f *fixture, id uuid.UUID) {
+			f.capture(t, id)
+			_, err := fixturerepo.New(f.db).MakeLegacyCopy(ctx, id, project(f.project))
+			require.NoError(t, err)
+			_, err = fixturerepo.New(f.db).ChangeContent(ctx, id, project(f.project))
+			require.NoError(t, err)
+		}, content: "changed"},
+		{name: "transcript disagrees with the plaintext", prepare: func(f *fixture, id uuid.UUID) {
+			f.capture(t, id)
+			// A write that bypassed UpdateBody left the transcript behind.
+			_, err := fixturerepo.New(f.db).ChangeContent(ctx, id, project(f.project))
+			require.NoError(t, err)
+		}, content: "changed"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			f := setup(t, true)
+			id := uuid.New()
+			f.add(t, id)
+			tc.prepare(f, id)
+			changed, err := f.updateBody(t, NewTranscripts(f.store, f.project), f.chat, id, setNotes("note"))
+			require.NoError(t, err)
+			require.True(t, changed)
+			opened, err := f.store.Load(ctx, f.org, f.project, id)
+			require.NoError(t, err)
+			require.Equal(t, tc.content, opened.Content, "the plaintext row is kept")
+			require.Equal(t, "note", *opened.ToolOutcomeNotes)
+		})
 	}
-	run := func(f *fixture, id uuid.UUID, notes string) error {
-		tx, err := f.db.Begin(ctx) //nolint:glint // notestingrawsql: caller-owned transaction boundary is the behavior under test.
-		require.NoError(t, err)
-		defer func() { _ = tx.Rollback(ctx) }()
-		require.NoError(t, chatrepo.New(tx).UpdateToolCallOutcome(ctx, chatrepo.UpdateToolCallOutcomeParams{ToolOutcome: pgtype.Text{String: "success", Valid: true}, ToolOutcomeNotes: pgtype.Text{String: notes, Valid: true}, ID: id, ProjectID: f.project}))
-		if err := NewTranscripts(f.store, f.project).Update(ctx, tx, f.org, f.project, id, setNotes(notes)); err != nil {
-			return err
-		}
-		return tx.Commit(ctx)
-	}
-
-	t.Run("no transcript starts from the plaintext", func(t *testing.T) {
-		t.Parallel()
-		f := setup(t, true)
-		id := uuid.New()
-		f.add(t, id)
-		require.NoError(t, run(f, id, "first note"))
-		opened, err := f.store.Load(ctx, f.org, f.project, id)
-		require.NoError(t, err)
-		require.Equal(t, "first note", *opened.ToolOutcomeNotes)
-	})
-
-	t.Run("a legacy transcript starts from the plaintext", func(t *testing.T) {
-		t.Parallel()
-		f := setup(t, true)
-		id := uuid.New()
-		f.add(t, id)
-		f.capture(t, id)
-		_, err := fixturerepo.New(f.db).MakeLegacyCopy(ctx, id, project(f.project))
-		require.NoError(t, err)
-		_, err = fixturerepo.New(f.db).ChangeContent(ctx, id, project(f.project))
-		require.NoError(t, err)
-		require.NoError(t, run(f, id, "note"))
-		opened, err := f.store.Load(ctx, f.org, f.project, id)
-		require.NoError(t, err)
-		require.Equal(t, "changed", opened.Content, "the stale legacy body was not carried forward")
-	})
-
-	t.Run("a transcript that disagrees with the plaintext is refused", func(t *testing.T) {
-		t.Parallel()
-		f := setup(t, true)
-		id := uuid.New()
-		f.add(t, id)
-		f.capture(t, id)
-		// A write that bypassed the application left the transcript behind.
-		_, err := fixturerepo.New(f.db).ChangeContent(ctx, id, project(f.project))
-		require.NoError(t, err)
-		require.ErrorIs(t, run(f, id, "note"), ErrStale)
-	})
-
-	t.Run("a change that differs from the SQL update is refused", func(t *testing.T) {
-		t.Parallel()
-		f := setup(t, true)
-		id := uuid.New()
-		f.add(t, id)
-		f.capture(t, id)
-		tx, err := f.db.Begin(ctx) //nolint:glint // notestingrawsql: caller-owned transaction boundary is the behavior under test.
-		require.NoError(t, err)
-		defer func() { _ = tx.Rollback(ctx) }()
-		require.NoError(t, chatrepo.New(tx).UpdateToolCallOutcome(ctx, chatrepo.UpdateToolCallOutcomeParams{ToolOutcome: pgtype.Text{String: "success", Valid: true}, ToolOutcomeNotes: pgtype.Text{String: "in SQL", Valid: true}, ID: id, ProjectID: f.project}))
-		err = NewTranscripts(f.store, f.project).Update(ctx, tx, f.org, f.project, id, setNotes("in Go"))
-		require.ErrorIs(t, err, ErrStale)
-	})
 }
 
 // Listed projects without a store would silently skip encryption, so building

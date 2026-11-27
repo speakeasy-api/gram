@@ -357,3 +357,64 @@ func (q *Queries) UpdateMessageMetadata(ctx context.Context, arg UpdateMessageMe
 	}
 	return result.RowsAffected(), nil
 }
+
+const writeMessageBody = `-- name: WriteMessageBody :one
+UPDATE chat_messages AS m
+SET content = $1, content_raw = $2, tool_calls = $3,
+    tool_outcome_notes = $4, tool_call_summaries = $5,
+    storage_error = $6
+WHERE m.id = $7 AND m.project_id = $8
+RETURNING m.id, m.chat_id, m.content, m.content_raw, m.tool_calls,
+          m.tool_outcome_notes, m.tool_call_summaries, m.storage_error
+`
+
+type WriteMessageBodyParams struct {
+	Content           string
+	ContentRaw        []byte
+	ToolCalls         []byte
+	ToolOutcomeNotes  pgtype.Text
+	ToolCallSummaries []byte
+	StorageError      pgtype.Text
+	MessageID         uuid.UUID
+	ProjectID         uuid.NullUUID
+}
+
+type WriteMessageBodyRow struct {
+	ID                uuid.UUID
+	ChatID            uuid.UUID
+	Content           string
+	ContentRaw        []byte
+	ToolCalls         []byte
+	ToolOutcomeNotes  pgtype.Text
+	ToolCallSummaries []byte
+	StorageError      pgtype.Text
+}
+
+// The only statement that writes the protected body columns of an existing
+// message. Call it only through Transcripts.UpdateBody, which locks the row,
+// applies the change in Go and writes the encrypted transcript from what this
+// returns, in the same transaction.
+func (q *Queries) WriteMessageBody(ctx context.Context, arg WriteMessageBodyParams) (WriteMessageBodyRow, error) {
+	row := q.db.QueryRow(ctx, writeMessageBody,
+		arg.Content,
+		arg.ContentRaw,
+		arg.ToolCalls,
+		arg.ToolOutcomeNotes,
+		arg.ToolCallSummaries,
+		arg.StorageError,
+		arg.MessageID,
+		arg.ProjectID,
+	)
+	var i WriteMessageBodyRow
+	err := row.Scan(
+		&i.ID,
+		&i.ChatID,
+		&i.Content,
+		&i.ContentRaw,
+		&i.ToolCalls,
+		&i.ToolOutcomeNotes,
+		&i.ToolCallSummaries,
+		&i.StorageError,
+	)
+	return i, err
+}

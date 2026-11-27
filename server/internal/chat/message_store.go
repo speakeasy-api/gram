@@ -149,7 +149,7 @@ func NewChatMessageWriter(logger *slog.Logger, db *pgxpool.Pool, assetStorage as
 // transaction as the write, for projects with encrypted transcripts. Configure it before
 // serving requests, after the schema migration and organization key
 // provisioning. It does not encrypt assets or remove plaintext. Body updates
-// outside the writer change the transcript through UpdateTranscript.
+// outside the writer go through UpdateMessageBody.
 func (w *ChatMessageWriter) WithTranscripts(transcripts *transcriptstore.Transcripts) *ChatMessageWriter {
 	w.transcripts = transcripts
 	return w
@@ -182,17 +182,17 @@ func (w *ChatMessageWriter) sealTranscripts(ctx context.Context, db repo.DBTX, o
 	return w.transcripts.Seal(ctx, db, organizationID, projectID, messageIDs)
 }
 
-// UpdateTranscript changes the encrypted transcript of a message whose body
-// the caller just updated in plaintext, inside the caller's transaction: it
-// decrypts the transcript, applies the same change in Go and re-encrypts. Call
-// PrepareTranscripts before beginning the transaction. A nil writer, or a
-// project without encrypted transcripts, updates nothing.
-func (w *ChatMessageWriter) UpdateTranscript(ctx context.Context, db repo.DBTX, organizationID string, projectID, messageID uuid.UUID, apply func(*transcriptcrypto.Message) error) error {
-	if w == nil {
-		return nil
+// UpdateMessageBody changes the body of an existing message through
+// Transcripts.UpdateBody, inside the caller's transaction, so every copy the
+// project keeps gets the same value. Call PrepareTranscripts before beginning
+// the transaction. A nil writer updates the plaintext only.
+func (w *ChatMessageWriter) UpdateMessageBody(ctx context.Context, db repo.DBTX, organizationID string, projectID, chatID, messageID uuid.UUID, apply func(*transcriptcrypto.Message) error) (bool, error) {
+	var transcripts *transcriptstore.Transcripts
+	if w != nil {
+		transcripts = w.transcripts
 	}
-	//nolint:wrapcheck // Update already wraps with the transcript context.
-	return w.transcripts.Update(ctx, db, organizationID, projectID, messageID, apply)
+	//nolint:wrapcheck // UpdateBody already wraps with the message body context.
+	return transcripts.UpdateBody(ctx, db, organizationID, projectID, chatID, messageID, apply)
 }
 
 func messageWriteIDs(writes []MessageWrite) []uuid.UUID {

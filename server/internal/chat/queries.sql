@@ -1810,28 +1810,12 @@ INSERT INTO chat_messages (chat_id, project_id, role, content, tool_calls, tool_
 VALUES (@chat_id, @project_id, @role, @content, sqlc.narg('tool_calls'), sqlc.narg('tool_call_id'))
 RETURNING id;
 
--- name: StoreToolCallSummary :one
--- Preserve summaries for sibling calls carried by the same assistant message.
--- The summary is part of the body: the caller applies the same change to the
--- encrypted transcript in the same transaction.
-UPDATE chat_messages AS m
-SET tool_call_summaries = jsonb_set(
-  COALESCE(m.tool_call_summaries, '{}'::jsonb),
-  ARRAY[@tool_call_id::text],
-  @summary::jsonb
-)
-WHERE m.id = @message_id
-  AND m.chat_id = @chat_id
-  AND m.project_id = @project_id::uuid
-RETURNING (m.tool_call_summaries -> @tool_call_id::text)::text AS summary;
-
 -- name: UpdateToolCallOutcome :exec
--- tool_outcome_notes is part of the body: the caller applies the same change
--- to the encrypted transcript in the same transaction.
-UPDATE chat_messages AS m
-SET tool_outcome = @tool_outcome,
-    tool_outcome_notes = @tool_outcome_notes
-WHERE m.id = @id AND m.project_id = @project_id::uuid;
+-- tool_outcome only. The notes are part of the message body, so they go
+-- through transcriptstore.Transcripts.UpdateBody in the same transaction.
+UPDATE chat_messages
+SET tool_outcome = @tool_outcome
+WHERE id = @id AND project_id = @project_id::uuid;
 
 -- name: InsertChatResolution :one
 -- Nothing in the schema ties chat_resolutions.project_id to its chat's, so the
@@ -2378,27 +2362,16 @@ SELECT id FROM chats WHERE id = @id AND project_id = @project_id FOR NO KEY UPDA
 -- name: GetKitProjectionMessage :one
 SELECT * FROM chat_messages WHERE project_id = @project_id AND id = @id;
 
--- name: PatchKitProjectionMessage :execrows
--- A body change drops the metadata and tool-call IDs measured from the old
--- body; the caller applies the same change to the encrypted transcript in the
--- same transaction, which measures them again.
-WITH body_changed AS (
-  SELECT cm.id FROM chat_messages cm
-  WHERE cm.project_id = @project_id AND cm.chat_id = @chat_id AND cm.id = @id AND cm.source = 'kit'
-    AND (cm.content IS DISTINCT FROM @content OR cm.content_raw IS DISTINCT FROM @content_raw OR cm.tool_calls IS DISTINCT FROM @tool_calls)
-), stale_tool_call_ids AS (
-  DELETE FROM chat_message_tool_call_ids tc
-  WHERE tc.project_id = @project_id AND tc.message_id IN (SELECT bc.id FROM body_changed bc)
-)
-UPDATE chat_messages AS m SET content = @content, content_raw = @content_raw,
- tool_calls = @tool_calls, content_hash = @content_hash, finish_reason = @finish_reason,
- risk_analyzed_at = CASE WHEN m.id IN (SELECT bc.id FROM body_changed bc) THEN NULL ELSE m.risk_analyzed_at END,
- tool_call_count = CASE WHEN m.id IN (SELECT bc.id FROM body_changed bc) THEN NULL ELSE m.tool_call_count END,
- content_bytes = CASE WHEN m.id IN (SELECT bc.id FROM body_changed bc) THEN NULL ELSE m.content_bytes END,
- content_raw_bytes = CASE WHEN m.id IN (SELECT bc.id FROM body_changed bc) THEN NULL ELSE m.content_raw_bytes END,
- tool_calls_bytes = CASE WHEN m.id IN (SELECT bc.id FROM body_changed bc) THEN NULL ELSE m.tool_calls_bytes END
+-- name: PatchKitProjectionFields :execrows
+-- The non-body fields of a kit projection patch. The body (content,
+-- content_raw, tool_calls) goes through transcriptstore.Transcripts.UpdateBody
+-- in the same transaction first, which reports whether it changed; a body
+-- change also clears the risk mark so the new body is analyzed again.
+UPDATE chat_messages AS m
+SET content_hash = @content_hash, finish_reason = @finish_reason,
+    risk_analyzed_at = CASE WHEN @body_changed::boolean THEN NULL ELSE m.risk_analyzed_at END
 WHERE m.project_id = @project_id AND m.chat_id = @chat_id AND m.id = @id AND m.source = 'kit'
-AND (m.content IS DISTINCT FROM @content OR m.content_raw IS DISTINCT FROM @content_raw OR m.tool_calls IS DISTINCT FROM @tool_calls OR m.finish_reason IS DISTINCT FROM @finish_reason);
+  AND (@body_changed::boolean OR m.content_hash IS DISTINCT FROM @content_hash OR m.finish_reason IS DISTINCT FROM @finish_reason);
 
 -- name: ValidateKitTranscriptBinding :one
 SELECT t.id FROM assistant_threads t
