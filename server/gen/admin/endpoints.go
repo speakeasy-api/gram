@@ -141,6 +141,7 @@ type Endpoints struct {
 	ListAssistantOrganizations                 goa.Endpoint
 	RepairOrganizationAssistantAgentNames      goa.Endpoint
 	BackfillOrganizationAssistantBuiltinGrants goa.Endpoint
+	MigrateOrganizationAssistantSlack          goa.Endpoint
 	ListOrganizationAssistants                 goa.Endpoint
 	MigrateOrganizationAssistantIdentities     goa.Endpoint
 	MigrateOrganizationAssistantsToKit         goa.Endpoint
@@ -307,6 +308,7 @@ func NewEndpoints(s Service) *Endpoints {
 		ListAssistantOrganizations:                 NewListAssistantOrganizationsEndpoint(s, a.APIKeyAuth),
 		RepairOrganizationAssistantAgentNames:      NewRepairOrganizationAssistantAgentNamesEndpoint(s, a.APIKeyAuth),
 		BackfillOrganizationAssistantBuiltinGrants: NewBackfillOrganizationAssistantBuiltinGrantsEndpoint(s, a.APIKeyAuth),
+		MigrateOrganizationAssistantSlack:          NewMigrateOrganizationAssistantSlackEndpoint(s, a.APIKeyAuth),
 		ListOrganizationAssistants:                 NewListOrganizationAssistantsEndpoint(s, a.APIKeyAuth),
 		MigrateOrganizationAssistantIdentities:     NewMigrateOrganizationAssistantIdentitiesEndpoint(s, a.APIKeyAuth),
 		MigrateOrganizationAssistantsToKit:         NewMigrateOrganizationAssistantsToKitEndpoint(s, a.APIKeyAuth),
@@ -453,6 +455,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListAssistantOrganizations = m(e.ListAssistantOrganizations)
 	e.RepairOrganizationAssistantAgentNames = m(e.RepairOrganizationAssistantAgentNames)
 	e.BackfillOrganizationAssistantBuiltinGrants = m(e.BackfillOrganizationAssistantBuiltinGrants)
+	e.MigrateOrganizationAssistantSlack = m(e.MigrateOrganizationAssistantSlack)
 	e.ListOrganizationAssistants = m(e.ListOrganizationAssistants)
 	e.MigrateOrganizationAssistantIdentities = m(e.MigrateOrganizationAssistantIdentities)
 	e.MigrateOrganizationAssistantsToKit = m(e.MigrateOrganizationAssistantsToKit)
@@ -3286,6 +3289,29 @@ func NewBackfillOrganizationAssistantBuiltinGrantsEndpoint(s Service, authAPIKey
 			return nil, err
 		}
 		return s.BackfillOrganizationAssistantBuiltinGrants(ctx, p)
+	}
+}
+
+// NewMigrateOrganizationAssistantSlackEndpoint returns an endpoint function
+// that calls the method "migrateOrganizationAssistantSlack" of service "admin".
+func NewMigrateOrganizationAssistantSlackEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*MigrateOrganizationAssistantSlackPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.MigrateOrganizationAssistantSlack(ctx, p)
 	}
 }
 

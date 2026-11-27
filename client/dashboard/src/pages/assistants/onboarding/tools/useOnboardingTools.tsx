@@ -1,6 +1,10 @@
 import { useProject, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
+import {
+  ASSISTANT_SLACK_TOOLSET_ID,
+  SLACK_APP_AUTH_CLIENT_SCOPE,
+} from "@/lib/auth-clients";
 import { DEFAULT_ASSISTANT_MODEL } from "@/lib/models";
 import { defineFrontendTool, type FrontendTool } from "@/elements";
 import type { Gram } from "@gram/client";
@@ -22,24 +26,36 @@ import {
   SLACK_REPLY_MODES,
   type SlackReplyMode,
 } from "../slackCapabilities";
-import { SLACK_TOOL_URN_PREFIX } from "../slackManifest";
 import {
   ProposeNameComponent,
   ProposePersonalityComponent,
   ProposeSlackSetupComponent,
   ChooseSlackReplyModeComponent,
   RequestEnvironmentSecretsComponent,
+  RequestSlackCredentialsComponent,
   ShowSlackAppGuideComponent,
   ShowWebhookUrlComponent,
 } from "./components";
 
 type DraftHandle = ReturnType<typeof useAssistantDraft>;
 
-type ToolDeps = {
+export type ToolDeps = {
   sdk: Gram;
   organizationId: string;
+  projectId: string;
+  canManageAuthClients: boolean;
   draft: DraftHandle;
 };
+
+const SLACK_APP_SECRET_KEYS = new Set([
+  "SLACK_SIGNING_SECRET",
+  "SLACK_BOT_TOKEN",
+  "SLACK_USER_TOKEN",
+  "SLACK_TOKEN",
+]);
+
+const SLACK_PERMISSION_DENIED_MESSAGE =
+  "Connecting Slack requires organization administrator access to create and store Slack app credentials. Ask an organization admin to finish setting up Slack for this assistant.";
 
 type ToolResult<T extends Record<string, unknown> = Record<string, unknown>> =
   | ({ ok: true } & T)
@@ -260,23 +276,23 @@ type AssistantForBehavior = {
 async function recomputeBehaviorSection(
   deps: ToolDeps,
   assistant?: AssistantForBehavior,
+  extraToolUrns?: string[],
 ): Promise<void> {
   const { sdk, draft } = deps;
   const a = assistant ?? draft.assistant;
   if (!a) return;
-  let urns: string[] = [];
+  const set = new Set<string>(extraToolUrns ?? []);
   if (a.toolsets.length > 0) {
     const list = await sdk.toolsets.list().catch(() => null);
     const summaries = list?.toolsets ?? [];
     const bySlug = new Map(summaries.map((t) => [t.slug, t]));
-    const set = new Set<string>();
     for (const ref of a.toolsets) {
       const ts = bySlug.get(ref.toolsetSlug);
       if (!ts) continue;
       for (const t of ts.tools) set.add(t.toolUrn);
     }
-    urns = [...set];
   }
+  const urns = [...set];
   const behaviorBody = computeBehaviorSection(urns);
   const nextInstructions = setSection(a.instructions, "Behavior", behaviorBody);
   if (nextInstructions === a.instructions) return;
@@ -440,7 +456,9 @@ function resolveSkillByName(skills: Skill[], requestedName: string): Skill {
   );
 }
 
-function buildAssistantTools(deps: ToolDeps) {
+export function buildAssistantTools(
+  deps: ToolDeps,
+): Record<OnboardingToolName, FrontendTool<Record<string, unknown>, unknown>> {
   const { sdk, draft, organizationId } = deps;
 
   // Live mirror of the assistant — `draft` is closure-captured by streamText
@@ -1560,6 +1578,15 @@ function buildAssistantTools(deps: ToolDeps) {
         const { keys, environment_slug } = args as RequestSecretsArgs;
         const toolCallId = ctx.toolCallId ?? "";
 
+        const slackKeys = keys
+          .map((k) => k.name.trim().toUpperCase())
+          .filter((name) => SLACK_APP_SECRET_KEYS.has(name));
+        if (slackKeys.length > 0) {
+          return errResult(
+            `Slack credentials (${slackKeys.join(", ")}) must be saved to the assistant's Slack app auth client via request_slack_credentials, never to an environment.`,
+          );
+        }
+
         const preNotes: string[] = [];
         let envSlug: string;
         try {
@@ -1969,13 +1996,13 @@ function buildAssistantTools(deps: ToolDeps) {
         if (userInput.installed) {
           return okResult({
             installed: true,
-            note: "User confirmed the Slack app is installed. Proceed to request_environment_secrets in Slack-UI order: SLACK_SIGNING_SECRET (if a slack trigger exists), SLACK_BOT_TOKEN, and SLACK_USER_TOKEN (if any attached tool needs a user token).",
+            note: "User confirmed the Slack app is installed. Proceed to request_slack_credentials (passing auth_client_id from propose_slack_setup) in Slack-UI order: SLACK_SIGNING_SECRET (if a slack trigger exists), SLACK_BOT_TOKEN, and SLACK_USER_TOKEN.",
           });
         }
         return okResult({
           installed: false,
           cancelled: true,
-          note: "User skipped the Slack app guide. Acknowledge briefly and do NOT call request_environment_secrets for Slack credentials in this turn — they have nothing to paste. Suggest they revisit installation later from the Environments page or by asking you to retry.",
+          note: "User skipped the Slack app guide. Acknowledge briefly and do NOT call request_slack_credentials in this turn — they have nothing to paste. Suggest they revisit installation later by asking you to reconnect Slack.",
         });
       },
     },
@@ -2172,13 +2199,105 @@ function buildAssistantTools(deps: ToolDeps) {
     toolset_name?: string;
   };
 
+  const findAssistantSlackAuthClient = async (
+    assistantId: string,
+    agentId?: string,
+  ) => {
+    const existingTrigger = await findSlackTrigger(assistantId);
+    if (existingTrigger?.authClientId) {
+      const existing = await sdk.authClients
+        .get({ id: existingTrigger.authClientId })
+        .catch(() => null);
+      if (existing && existing.clientType === "slack_app") {
+        return existing;
+      }
+    }
+    if (!agentId) return undefined;
+    const grants = await sdk.agents
+      .listPolicyGrants({ agentId })
+      .catch(() => null);
+    const grantedClientIds = new Set(
+      (grants ?? [])
+        .filter(
+          (g) =>
+            g.scope === "mcp:auth" &&
+            g.selector?.resourceKind === "mcp_auth_client" &&
+            g.selector?.resourceId,
+        )
+        .map((g) => g.selector.resourceId),
+    );
+    if (grantedClientIds.size === 0) return undefined;
+    const pages = await sdk.authClients
+      .list({ clientType: "slack_app" })
+      .catch(() => null);
+    if (!pages) return undefined;
+    for await (const page of pages) {
+      const match = (page.result.items ?? []).find(
+        (c) =>
+          c.clientType === "slack_app" &&
+          grantedClientIds.has(c.id) &&
+          (!c.projectId || c.projectId === deps.projectId),
+      );
+      if (match) return match;
+    }
+    return undefined;
+  };
+
+  const ensureAssistantSlackGrants = async (
+    agentId: string,
+    authClientId: string,
+  ) => {
+    const grants =
+      (await sdk.agents.listPolicyGrants({ agentId }).catch(() => null)) ?? [];
+    const hasConnect = grants.some(
+      (g) =>
+        g.scope === "mcp:connect" &&
+        g.selector?.resourceKind === "mcp" &&
+        g.selector?.resourceId === ASSISTANT_SLACK_TOOLSET_ID &&
+        (!g.selector?.projectId || g.selector.projectId === deps.projectId),
+    );
+    if (!hasConnect) {
+      await sdk.agents.createPolicyGrant({
+        createAgentPolicyGrantForm: {
+          agentId,
+          effect: "allow",
+          scope: "mcp:connect",
+          selector: {
+            resourceKind: "mcp",
+            resourceId: ASSISTANT_SLACK_TOOLSET_ID,
+            projectId: deps.projectId,
+          },
+        },
+      });
+    }
+    const hasAuth = grants.some(
+      (g) =>
+        g.scope === "mcp:auth" &&
+        g.selector?.resourceKind === "mcp_auth_client" &&
+        g.selector?.resourceId === authClientId,
+    );
+    if (!hasAuth) {
+      await sdk.agents.createPolicyGrant({
+        createAgentPolicyGrantForm: {
+          agentId,
+          effect: "allow",
+          scope: "mcp:auth",
+          selector: {
+            resourceKind: "mcp_auth_client",
+            resourceId: authClientId,
+          },
+        },
+      });
+    }
+  };
+
   const propose_slack_setup = defineFrontendTool<
     ProposeSlackSetupArgs,
     ToolResult
   >(
     {
       description:
-        "Show the Slack setup card. The user picks which Slack capabilities the assistant has, when it replies, and any extra Slack events that wake it up. On submit, this tool creates a dedicated per-assistant Slack toolset with only the chosen tools (never reuse a catalog toolset), attaches it to the assistant's shared env, and creates a slack trigger unless skip_slack_events is set. Returns the webhook_url to pass into show_slack_app_guide. Never call this tool in the same turn as show_slack_app_guide or request_environment_secrets — propose_slack_setup first, wait for it to resolve, then continue with declare-keys → install card → secrets card in subsequent turns. Pass plausible preselected capabilities derived from the user's stated goal. If the result is an error about a toolset-name collision, propose a more distinctive name in chat (or ask the user), then re-call with the chosen name in toolset_name.",
+        "Show the Slack setup card. The user picks which Slack capabilities the assistant has, when it replies, and any extra Slack events that wake it up. On submit, this tool creates (or reuses) a dedicated slack_app auth client for this assistant, grants its backing agent mcp:connect on the built-in assistant-slack toolset and mcp:auth on the Slack auth client, and creates a slack trigger linked to that auth client unless skip_slack_events is set. It never creates a per-assistant Slack toolset or stores Slack secrets in an environment. Returns auth_client_id and webhook_url. Never call this tool in the same turn as show_slack_app_guide or request_slack_credentials.",
       parameters: z.object({
         preselected_capabilities: z
           .array(capabilitySlugEnum)
@@ -2203,36 +2322,14 @@ function buildAssistantTools(deps: ToolDeps) {
           .describe(
             "Set only when the user explicitly said the assistant must not react to anything in Slack. No slack trigger is created.",
           ),
-        toolset_name: z
-          .string()
-          .min(1)
-          .max(128)
-          .optional()
-          .describe(
-            "Override the default Slack toolset name. Defaults to `<assistant name> Slack`. Set this on retry when an earlier call reported the default name was taken by another toolset in the project.",
-          ),
       }),
-      execute: async (rawArgs, ctx) => {
-        const args = rawArgs as ProposeSlackSetupArgs;
-        const toolCallId = ctx.toolCallId ?? "";
-        const assistantName = live.name ?? draft.assistant?.name ?? "Assistant";
-        const desiredToolsetName: string =
-          args.toolset_name ?? `${assistantName} Slack`;
-        const preflight = await sdk.toolsets.list().catch(() => null);
-        const attachedSlugsPre = new Set(
-          (live.toolsets ?? draft.assistant?.toolsets ?? []).map(
-            (t) => t.toolsetSlug,
-          ),
-        );
-        const conflict = preflight?.toolsets.find(
-          (t) => t.name === desiredToolsetName && !attachedSlugsPre.has(t.slug),
-        );
-        if (conflict) {
-          return errResult(
-            `Toolset name "${desiredToolsetName}" is already taken by another toolset in this project. Ask the user for a more distinctive name (or propose one, e.g. derived from what this assistant does), then re-call propose_slack_setup with toolset_name=<chosen-name>. Do not render the card until you've picked a name.`,
-            { collided_name: desiredToolsetName },
-          );
+      execute: async (_rawArgs, ctx) => {
+        if (!deps.canManageAuthClients) {
+          return errResult(SLACK_PERMISSION_DENIED_MESSAGE, {
+            required_scope: SLACK_APP_AUTH_CLIENT_SCOPE,
+          });
         }
+        const toolCallId = ctx.toolCallId ?? "";
         type SubmitPayload = {
           success: boolean;
           cancelled?: boolean;
@@ -2253,7 +2350,7 @@ function buildAssistantTools(deps: ToolDeps) {
         if (!userInput.success) {
           return okResult({
             cancelled: true,
-            note: "User skipped Slack setup. Acknowledge briefly and do not call show_slack_app_guide or request_environment_secrets for Slack credentials in this turn — they have nothing to set up yet.",
+            note: "User skipped Slack setup. Acknowledge briefly and do not call show_slack_app_guide or request_slack_credentials in this turn — they have nothing to set up yet.",
           });
         }
 
@@ -2267,72 +2364,28 @@ function buildAssistantTools(deps: ToolDeps) {
           try {
             const a = await ensureAssistant(deps, {}, live.id);
             trackLive(a);
-            const envResult = await ensureAssistantEnv(deps, a.name);
-            const notes: string[] = [];
-            if (envResult.note) notes.push(envResult.note);
-
-            const [existingToolsets, allAssistants] = await Promise.all([
-              sdk.toolsets.list().catch(() => null),
-              sdk.assistants.list().catch(() => null),
-            ]);
-            const attachedSlugs = new Set(a.toolsets.map((t) => t.toolsetSlug));
-            const sharedSlugs = new Set<string>();
-            for (const other of allAssistants?.assistants ?? []) {
-              if (other.id === a.id) continue;
-              for (const ref of other.toolsets ?? []) {
-                sharedSlugs.add(ref.toolsetSlug);
-              }
-            }
-            const existingSlackToolset = existingToolsets?.toolsets.find(
-              (t) =>
-                attachedSlugs.has(t.slug) &&
-                !sharedSlugs.has(t.slug) &&
-                t.tools.some((tool) =>
-                  tool.toolUrn?.startsWith(SLACK_TOOL_URN_PREFIX),
-                ),
-            );
-
-            let toolsetSlug: string | undefined;
-            if (toolUrns.length > 0) {
-              const upserted = existingSlackToolset
-                ? await sdk.toolsets.updateBySlug({
-                    slug: existingSlackToolset.slug,
-                    updateToolsetRequestBody: { toolUrns },
-                  })
-                : await sdk.toolsets.create({
-                    createToolsetRequestBody: {
-                      name: desiredToolsetName,
-                      description: `Slack capabilities for ${a.name}.`,
-                      toolUrns,
-                      defaultEnvironmentSlug: envResult.env.slug,
-                    },
-                  });
-              toolsetSlug = upserted.slug;
-              const next = a.toolsets
-                .filter((t) => t.toolsetSlug !== upserted.slug)
-                .concat([
-                  {
-                    toolsetSlug: upserted.slug,
-                    environmentSlug: envResult.env.slug,
-                  },
-                ]);
-              const updated = await sdk.assistants.update({
-                updateAssistantForm: { id: a.id, toolsets: next },
-              });
-              draft.setAssistant(updated);
-              trackLive(updated);
-              await recomputeBehaviorSection(deps, updated);
-            } else if (existingSlackToolset) {
-              const next = a.toolsets.filter(
-                (t) => t.toolsetSlug !== existingSlackToolset.slug,
+            if (!a.agentId) {
+              return errResult(
+                "This assistant does not have a dedicated agent identity yet. Refresh or ask an administrator to provision its agent identity before connecting Slack.",
               );
-              const updated = await sdk.assistants.update({
-                updateAssistantForm: { id: a.id, toolsets: next },
-              });
-              draft.setAssistant(updated);
-              trackLive(updated);
-              await recomputeBehaviorSection(deps, updated);
             }
+
+            let authClient = await findAssistantSlackAuthClient(
+              a.id,
+              a.agentId,
+            );
+            if (!authClient) {
+              authClient = await sdk.authClients.create({
+                createAuthClientRequestBody: {
+                  clientType: "slack_app",
+                  name: `${a.name} Slack`,
+                  projectId: deps.projectId,
+                },
+              });
+            }
+
+            await ensureAssistantSlackGrants(a.agentId, authClient.id);
+            await recomputeBehaviorSection(deps, a, toolUrns);
 
             const existingSlackTrigger = await findSlackTrigger(a.id);
 
@@ -2345,6 +2398,8 @@ function buildAssistantTools(deps: ToolDeps) {
                 await sdk.triggers.update({
                   updateTriggerInstanceForm: {
                     id: existingSlackTrigger.id,
+                    authClientId: authClient.id,
+                    environmentId: "",
                     config: slackTriggerConfig(
                       existingSlackTrigger.config as Record<
                         string,
@@ -2363,7 +2418,7 @@ function buildAssistantTools(deps: ToolDeps) {
                     name: "Slack",
                     definitionSlug: "slack",
                     config: slackTriggerConfig(null, replyMode, eventTypes),
-                    environmentId: envResult.env.id,
+                    authClientId: authClient.id,
                     targetKind: "assistant",
                     targetRef: a.id,
                     targetDisplay: a.name,
@@ -2371,18 +2426,26 @@ function buildAssistantTools(deps: ToolDeps) {
                 });
                 triggerId = created.id;
                 webhookUrl = created.webhookUrl;
+                draft.invalidateAll();
               }
             } else if (existingSlackTrigger) {
               await sdk.triggers.delete({ id: existingSlackTrigger.id });
+              draft.invalidateAll();
             }
 
+            const botTokenConfigured = (authClient.headers ?? []).some(
+              (h) =>
+                h.name.toUpperCase() === "SLACK_BOT_TOKEN" && h.hasStoredValue,
+            );
+
             return okResult({
-              toolset_slug: toolsetSlug,
+              auth_client_id: authClient.id,
+              bot_token_configured: botTokenConfigured,
               trigger_id: triggerId,
               webhook_url: webhookUrl,
-              environment_slug: envResult.env.slug,
-              ...(notes.length > 0 ? { notes } : {}),
-              note: "Per-assistant Slack toolset attached. Next: declare the credentials this combination needs with add_environment_keys (include SLACK_SIGNING_SECRET only when a slack trigger was created here), then show_slack_app_guide (pass the webhook_url from this result), then request_environment_secrets in Slack-UI order. After the self-handshake, offer in plain English to narrow which events fire — translate the user's answer into a trigger filter via update_trigger; never mention CEL.",
+              note: botTokenConfigured
+                ? "Built-in assistant Slack tools enabled and linked to the existing Slack app credentials."
+                : "Built-in assistant Slack tools enabled and dedicated Slack app credential record created. Next: call show_slack_app_guide (pass the webhook_url from this result if a trigger was created), then request_slack_credentials (pass auth_client_id from this result) in Slack-UI order: SLACK_SIGNING_SECRET (if a trigger was created), SLACK_BOT_TOKEN, SLACK_USER_TOKEN.",
             });
           } catch (e) {
             return errResult(
@@ -2393,6 +2456,180 @@ function buildAssistantTools(deps: ToolDeps) {
       },
     },
     "propose_slack_setup",
+  );
+
+  type RequestSlackCredentialsArgs = {
+    auth_client_id?: string;
+    reason?: string;
+    keys: {
+      name: string;
+      label?: string;
+      description?: string;
+      sensitive?: boolean;
+      placeholder?: string;
+    }[];
+  };
+
+  const request_slack_credentials = defineFrontendTool<
+    RequestSlackCredentialsArgs,
+    ToolResult
+  >(
+    {
+      description:
+        "Render a form so the user can enter Slack app credentials (SLACK_SIGNING_SECRET, SLACK_BOT_TOKEN, SLACK_USER_TOKEN) and save them encrypted on the assistant's slack_app auth client. Never stores Slack secrets in an environment and never exposes plaintext to chat.",
+      parameters: z.object({
+        auth_client_id: z
+          .string()
+          .optional()
+          .describe(
+            "The auth_client_id returned by propose_slack_setup. Omit to resolve the assistant's linked Slack app auth client automatically.",
+          ),
+        reason: z
+          .string()
+          .optional()
+          .describe(
+            "One short sentence shown to the user explaining why these credentials are needed.",
+          ),
+        keys: z
+          .array(
+            z.object({
+              name: z
+                .enum([
+                  "SLACK_SIGNING_SECRET",
+                  "SLACK_BOT_TOKEN",
+                  "SLACK_USER_TOKEN",
+                  "SLACK_TOKEN",
+                ])
+                .describe("Canonical Slack credential header name."),
+              label: z.string().optional(),
+              description: z.string().optional(),
+              sensitive: z.boolean().optional(),
+              placeholder: z.string().optional(),
+            }),
+          )
+          .min(1),
+      }),
+      execute: async (rawArgs, ctx) => {
+        if (!deps.canManageAuthClients) {
+          return errResult(SLACK_PERMISSION_DENIED_MESSAGE, {
+            required_scope: SLACK_APP_AUTH_CLIENT_SCOPE,
+          });
+        }
+        const { auth_client_id, keys } = rawArgs as RequestSlackCredentialsArgs;
+        const toolCallId = ctx.toolCallId ?? "";
+
+        let authClientId = auth_client_id;
+        if (!authClientId) {
+          const assistantId = live.id ?? draft.assistantId;
+          const existing = assistantId
+            ? await findAssistantSlackAuthClient(
+                assistantId,
+                draft.assistant?.agentId,
+              )
+            : undefined;
+          authClientId = existing?.id;
+        }
+        if (!authClientId) {
+          return errResult(
+            "No Slack app credential record is linked to this assistant yet. Run propose_slack_setup first.",
+          );
+        }
+
+        type FormResult = {
+          success: boolean;
+          cancelled?: boolean;
+          values?: Record<string, string>;
+          error?: string;
+        };
+
+        const userInput: FormResult = await withTimeout(
+          new Promise<FormResult>((resolve) => {
+            draft.registerPending(toolCallId, (r) => resolve(r as FormResult));
+          }),
+          15 * 60 * 1000,
+          "request_slack_credentials",
+        ).catch((e): FormResult => ({
+          success: false,
+          cancelled: true,
+          error: e instanceof Error ? e.message : "timeout",
+        }));
+
+        if (!userInput.success) {
+          return okResult({
+            cancelled: true,
+            saved: false,
+            auth_client_id: authClientId,
+            note: "User skipped entering Slack credentials. Acknowledge briefly and do NOT retry in this turn unless the user asks.",
+          });
+        }
+
+        const resolvedClientId = authClientId;
+        return serialize(async () => {
+          try {
+            const current = await sdk.authClients
+              .get({ id: resolvedClientId })
+              .catch(() => null);
+            const entered = new Map<string, string>();
+            for (const [k, rawVal] of Object.entries(userInput.values ?? {})) {
+              const trimmed = String(rawVal ?? "").trim();
+              if (trimmed.length > 0) {
+                entered.set(k.toUpperCase(), trimmed);
+              }
+            }
+
+            const headerInputs: {
+              name: string;
+              isSecret: boolean;
+              value?: string;
+            }[] = [];
+            const seen = new Set<string>();
+            for (const existing of current?.headers ?? []) {
+              const upper = existing.name.toUpperCase();
+              if (!SLACK_APP_SECRET_KEYS.has(upper)) continue;
+              seen.add(upper);
+              const replacement = entered.get(upper);
+              if (replacement !== undefined) {
+                headerInputs.push({
+                  name: upper,
+                  isSecret: true,
+                  value: replacement,
+                });
+              } else if (existing.hasStoredValue) {
+                headerInputs.push({ name: upper, isSecret: true });
+              }
+            }
+            for (const [name, value] of entered.entries()) {
+              if (!SLACK_APP_SECRET_KEYS.has(name) || seen.has(name)) continue;
+              seen.add(name);
+              headerInputs.push({ name, isSecret: true, value });
+            }
+
+            await sdk.authClients.setHeaders({
+              setAuthClientHeadersRequestBody: {
+                id: resolvedClientId,
+                headers: headerInputs,
+              },
+            });
+            draft.invalidateAll();
+
+            return okResult({
+              saved: true,
+              auth_client_id: resolvedClientId,
+              saved_keys: [...entered.keys()],
+              requested_keys: keys.map((k) => k.name),
+            });
+          } catch (e) {
+            return errResult(
+              e instanceof Error
+                ? e.message
+                : "saving Slack credentials failed",
+              { auth_client_id: resolvedClientId },
+            );
+          }
+        });
+      },
+    },
+    "request_slack_credentials",
   );
 
   const finish_onboarding = defineFrontendTool<FinishArgs, ToolResult>(
@@ -2452,6 +2689,7 @@ function buildAssistantTools(deps: ToolDeps) {
     create_environment,
     add_environment_keys,
     request_environment_secrets,
+    request_slack_credentials,
     list_trigger_definitions,
     list_triggers,
     create_trigger,
@@ -2464,11 +2702,51 @@ function buildAssistantTools(deps: ToolDeps) {
     list_docs,
     read_docs,
     finish_onboarding,
-  };
+  } as unknown as Record<
+    OnboardingToolName,
+    FrontendTool<Record<string, unknown>, unknown>
+  >;
 }
 
-type OnboardingTools = ReturnType<typeof buildAssistantTools>;
-export type OnboardingToolName = keyof OnboardingTools;
+export type OnboardingToolName =
+  | "propose_name"
+  | "propose_personality"
+  | "update_assistant"
+  | "set_personality"
+  | "set_tasks"
+  | "attach_toolset"
+  | "detach_toolset"
+  | "attach_mcp_server"
+  | "detach_mcp_server"
+  | "list_skills"
+  | "attach_skill"
+  | "detach_skill"
+  | "list_mcp_servers"
+  | "list_toolsets"
+  | "create_toolset"
+  | "add_tools_to_toolset"
+  | "list_available_tools"
+  | "list_environments"
+  | "create_environment"
+  | "add_environment_keys"
+  | "request_environment_secrets"
+  | "request_slack_credentials"
+  | "list_trigger_definitions"
+  | "list_triggers"
+  | "create_trigger"
+  | "update_trigger"
+  | "show_webhook_url"
+  | "show_slack_app_guide"
+  | "propose_slack_setup"
+  | "choose_slack_reply_mode"
+  | "list_integrations"
+  | "list_docs"
+  | "read_docs"
+  | "finish_onboarding";
+type OnboardingTools = Record<
+  OnboardingToolName,
+  FrontendTool<Record<string, unknown>, unknown>
+>;
 
 export type OnboardingToolPermissions = {
   canWriteAssistant: boolean;
@@ -2514,13 +2792,11 @@ const PROJECT_WRITE_TOOLS = new Set<OnboardingToolName>([
 const MCP_READ_TOOLS = new Set<OnboardingToolName>([
   "list_mcp_servers",
   "list_toolsets",
-  "propose_slack_setup",
 ]);
 
 const MCP_WRITE_TOOLS = new Set<OnboardingToolName>([
   "create_toolset",
   "add_tools_to_toolset",
-  "propose_slack_setup",
 ]);
 
 const SKILL_TOOLS = new Set<OnboardingToolName>([
@@ -2541,7 +2817,6 @@ const ENVIRONMENT_WRITE_TOOLS = new Set<OnboardingToolName>([
   "create_environment",
   "add_environment_keys",
   "request_environment_secrets",
-  "propose_slack_setup",
 ]);
 
 export function isOnboardingToolAllowed(
@@ -2600,9 +2875,16 @@ export function useOnboardingTools(): {
   const canWriteMCP = hasScope("mcp:write", project.id);
   const canReadSkills = hasScope("skill:read", project.id);
   const canWriteEnvironment = hasScope("environment:write", project.id);
+  const canManageAuthClients = hasScope(SLACK_APP_AUTH_CLIENT_SCOPE);
 
   const frontendTools = useMemo<Partial<OnboardingTools>>(() => {
-    const tools = buildAssistantTools({ sdk, organizationId, draft });
+    const tools = buildAssistantTools({
+      sdk,
+      organizationId,
+      projectId: project.id,
+      canManageAuthClients,
+      draft,
+    });
     const permissions: OnboardingToolPermissions = {
       canWriteAssistant,
       canReadProject,
@@ -2620,6 +2902,8 @@ export function useOnboardingTools(): {
   }, [
     sdk,
     organizationId,
+    project.id,
+    canManageAuthClients,
     draft,
     canWriteAssistant,
     canReadProject,
@@ -2637,6 +2921,7 @@ export function useOnboardingTools(): {
       propose_slack_setup: ProposeSlackSetupComponent,
       choose_slack_reply_mode: ChooseSlackReplyModeComponent,
       request_environment_secrets: RequestEnvironmentSecretsComponent,
+      request_slack_credentials: RequestSlackCredentialsComponent,
       show_webhook_url: ShowWebhookUrlComponent,
       show_slack_app_guide: ShowSlackAppGuideComponent,
     }),

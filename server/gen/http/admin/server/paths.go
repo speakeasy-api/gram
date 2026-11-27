@@ -627,6 +627,11 @@ func BackfillOrganizationAssistantBuiltinGrantsAdminPath() string {
 	return "/admin/organization.backfillAssistantBuiltinGrants"
 }
 
+// MigrateOrganizationAssistantSlackAdminPath returns the URL path to the admin service migrateOrganizationAssistantSlack HTTP endpoint.
+func MigrateOrganizationAssistantSlackAdminPath() string {
+	return "/admin/organization.migrateAssistantSlack"
+}
+
 // ListOrganizationAssistantsAdminPath returns the URL path to the admin service listOrganizationAssistants HTTP endpoint.
 func ListOrganizationAssistantsAdminPath() string {
 	return "/admin/organization.assistants"

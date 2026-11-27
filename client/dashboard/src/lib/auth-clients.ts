@@ -12,6 +12,7 @@ const CLIENT_TYPE_LABEL: Record<string, string> = {
   static_credential: "Static credential",
   pass_through: "Caller-supplied header",
   ema: "Enterprise-managed sign-in",
+  slack_app: "Slack app",
 };
 
 const CLIENT_TYPE_HINT: Record<string, string> = {
@@ -24,7 +25,16 @@ const CLIENT_TYPE_HINT: Record<string, string> = {
   pass_through:
     "The calling app sends its own header, and Speakeasy forwards it upstream.",
   ema: "Your identity provider vouches for the person, so nobody signs in to the upstream.",
+  slack_app:
+    "Stores encrypted Slack app credentials for an assistant's built-in Slack tools and webhooks.",
 };
+
+/** Single place deciding which RBAC scope is required to create or update Slack app auth clients. */
+export const SLACK_APP_AUTH_CLIENT_SCOPE = "org:admin" as const;
+
+/** Stable policy resource ID for the built-in assistant-slack platform toolset (PlatformToolsetID("assistant-slack")). */
+export const ASSISTANT_SLACK_TOOLSET_ID =
+  "8142a254-e580-54b7-9dae-7151efe642bf" as const;
 
 export function clientTypeLabel(clientType: string): string {
   return enumPresentation(CLIENT_TYPE_LABEL, clientType, "Upstream credential");

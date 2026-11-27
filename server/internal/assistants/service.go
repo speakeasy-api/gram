@@ -3782,6 +3782,18 @@ func (s *ServiceCore) assistantPlatformSlugs(ctx context.Context, assistant assi
 	default:
 		return nil, fmt.Errorf("resolve managed assistant: %w", mErr)
 	}
+	hasAssistantSlack, err := assistantrepo.New(s.db).HasAssistantSlackPlatformGrant(ctx, assistantrepo.HasAssistantSlackPlatformGrantParams{
+		OrganizationID: assistant.OrganizationID,
+		ProjectID:      assistant.ProjectID,
+		AssistantID:    uuid.NullUUID{UUID: assistant.ID, Valid: true},
+		ToolsetID:      platformtools.PlatformToolsetID(platformtools.AssistantSlackPlatformToolsetSlug).String(),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("resolve assistant-slack platform grant: %w", err)
+	}
+	if hasAssistantSlack {
+		platformSlugs = append(platformSlugs, platformtools.AssistantSlackPlatformToolsetSlug)
+	}
 	return platformSlugs, nil
 }
 

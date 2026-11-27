@@ -512,6 +512,10 @@ type Client struct {
 	// make requests to the backfillOrganizationAssistantBuiltinGrants endpoint.
 	BackfillOrganizationAssistantBuiltinGrantsDoer goahttp.Doer
 
+	// MigrateOrganizationAssistantSlack Doer is the HTTP client used to make
+	// requests to the migrateOrganizationAssistantSlack endpoint.
+	MigrateOrganizationAssistantSlackDoer goahttp.Doer
+
 	// ListOrganizationAssistants Doer is the HTTP client used to make requests to
 	// the listOrganizationAssistants endpoint.
 	ListOrganizationAssistantsDoer goahttp.Doer
@@ -724,6 +728,7 @@ func NewClient(
 		ListAssistantOrganizationsDoer:                 doer,
 		RepairOrganizationAssistantAgentNamesDoer:      doer,
 		BackfillOrganizationAssistantBuiltinGrantsDoer: doer,
+		MigrateOrganizationAssistantSlackDoer:          doer,
 		ListOrganizationAssistantsDoer:                 doer,
 		MigrateOrganizationAssistantIdentitiesDoer:     doer,
 		MigrateOrganizationAssistantsToKitDoer:         doer,
@@ -3726,6 +3731,30 @@ func (c *Client) BackfillOrganizationAssistantBuiltinGrants() goa.Endpoint {
 		resp, err := c.BackfillOrganizationAssistantBuiltinGrantsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "backfillOrganizationAssistantBuiltinGrants", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// MigrateOrganizationAssistantSlack returns an endpoint that makes HTTP
+// requests to the admin service migrateOrganizationAssistantSlack server.
+func (c *Client) MigrateOrganizationAssistantSlack() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeMigrateOrganizationAssistantSlackRequest(c.encoder)
+		decodeResponse = DecodeMigrateOrganizationAssistantSlackResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildMigrateOrganizationAssistantSlackRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.MigrateOrganizationAssistantSlackDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "migrateOrganizationAssistantSlack", err)
 		}
 		return decodeResponse(resp)
 	}

@@ -243,6 +243,174 @@ export function RequestEnvironmentSecretsComponent({
   );
 }
 
+type SlackCredentialsArgs = {
+  reason?: string;
+  keys: SecretKey[];
+  auth_client_id?: string;
+};
+
+type SlackCredentialsResult = {
+  ok?: boolean;
+  saved?: boolean;
+  cancelled?: boolean;
+  saved_keys?: string[];
+  error?: string;
+};
+
+export function RequestSlackCredentialsComponent({
+  args,
+  status,
+  result,
+  toolCallId,
+}: ToolCallMessagePartProps): JSX.Element {
+  const draft = useAssistantDraft();
+  const a = (args ?? {}) as Partial<SlackCredentialsArgs>;
+  const keys = Array.isArray(a.keys) ? a.keys : [];
+  const reason = a.reason;
+
+  const [values, setValues] = useState<Record<string, string>>(() =>
+    Object.fromEntries(keys.map((k) => [k.name, ""])),
+  );
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const isPending = isExecuting(status);
+  const settled = !isPending;
+  const r = result as SlackCredentialsResult | undefined;
+
+  useEffect(() => {
+    if (!isPending) return;
+    return () => {
+      draft.resolvePending(toolCallId, {
+        success: false,
+        cancelled: true,
+      });
+    };
+  }, [draft, toolCallId, isPending]);
+
+  if (settled && r?.saved) {
+    const savedKeys = r.saved_keys ?? [];
+    return (
+      <ToolCard
+        title="Slack credentials saved"
+        tone="success"
+        icon={<Check className="text-emerald-600" size={16} />}
+      >
+        <Text small muted>
+          Saved to this assistant's Slack app credentials:{" "}
+          {savedKeys.length === 0 ? (
+            <em>no values provided.</em>
+          ) : (
+            savedKeys.map((k) => (
+              <code key={k} className="bg-muted mr-1 px-1.5 py-0.5">
+                {k}
+              </code>
+            ))
+          )}
+        </Text>
+      </ToolCard>
+    );
+  }
+
+  if (settled && r?.cancelled) {
+    return (
+      <ToolCard title="Slack credentials — skipped">
+        <Text small muted>
+          You can add Slack credentials later by asking me to reconnect Slack.
+        </Text>
+      </ToolCard>
+    );
+  }
+
+  if (settled) {
+    return (
+      <ToolCard title="Slack credentials — error">
+        <Text small className="text-red-600">
+          {r?.error ?? "Form was closed without saving."}
+        </Text>
+      </ToolCard>
+    );
+  }
+
+  const anyFilled = keys.some((k) => (values[k.name] ?? "").trim().length > 0);
+
+  const submit = async () => {
+    setSubmitting(true);
+    setError(null);
+    try {
+      const ok = draft.resolvePending(toolCallId, {
+        success: true,
+        values,
+      });
+      if (!ok) {
+        setError("This form is no longer connected to the assistant.");
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to save");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const cancel = () => {
+    draft.resolvePending(toolCallId, {
+      success: false,
+      cancelled: true,
+    });
+  };
+
+  return (
+    <ToolCard
+      title="Add Slack app credentials"
+      icon={<Icon name="key-round" className="text-muted-foreground h-4 w-4" />}
+    >
+      {reason && (
+        <Text small muted className="mb-3">
+          {reason}
+        </Text>
+      )}
+      <div className="space-y-3">
+        {keys.map((k) => (
+          <div key={k.name}>
+            <Label className="mb-1 block text-xs">
+              {k.label ?? k.name}{" "}
+              <code className="text-muted-foreground">{k.name}</code>
+            </Label>
+            {k.description && (
+              <Text small muted className="mb-1">
+                {k.description}
+              </Text>
+            )}
+            <Input
+              type={k.sensitive === false ? "text" : "password"}
+              value={values[k.name] ?? ""}
+              onChange={(v) => setValues((prev) => ({ ...prev, [k.name]: v }))}
+              placeholder={k.placeholder ?? ""}
+            />
+          </div>
+        ))}
+      </div>
+      {error && (
+        <Text small className="mt-2 text-red-600">
+          {error}
+        </Text>
+      )}
+      <div className="mt-4 flex justify-end gap-2">
+        <Button variant="tertiary" onClick={cancel} disabled={submitting}>
+          Skip
+        </Button>
+        <Button
+          onClick={() => void submit()}
+          disabled={!anyFilled || submitting}
+        >
+          {submitting ? <Spinner /> : null}
+          Save credentials
+        </Button>
+      </div>
+    </ToolCard>
+  );
+}
+
 type WebhookArgs = {
   webhook_url: string;
   trigger_name?: string;
@@ -1063,7 +1231,9 @@ export function ProposeSlackSetupComponent({
         icon={<Check className="text-emerald-600" size={16} />}
       >
         <Text small muted>
-          {`Created a Slack toolset for ${assistantName} and wired up its triggers.`}
+          {r.trigger_id
+            ? `Enabled built-in Slack tools for ${assistantName} and wired up its trigger.`
+            : `Enabled built-in Slack tools for ${assistantName}.`}
         </Text>
       </ToolCard>
     );
