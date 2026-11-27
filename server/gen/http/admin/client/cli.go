@@ -1258,6 +1258,45 @@ func BuildSetAdoptionDashboardURLPayload(adminSetAdoptionDashboardURLBody string
 	return v, nil
 }
 
+// BuildSetFunctionTimeoutPayload builds the payload for the admin
+// setFunctionTimeout endpoint from CLI flags.
+func BuildSetFunctionTimeoutPayload(adminSetFunctionTimeoutBody string, adminSetFunctionTimeoutAdminSessionToken string) (*admin.SetFunctionTimeoutPayload, error) {
+	var err error
+	var body SetFunctionTimeoutRequestBody
+	{
+		err = json.Unmarshal([]byte(adminSetFunctionTimeoutBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"function_timeout_seconds\": 31,\n      \"organization_id\": \"abc123\"\n   }'")
+		}
+		if body.FunctionTimeoutSeconds != nil {
+			if *body.FunctionTimeoutSeconds < 30 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("body.function_timeout_seconds", *body.FunctionTimeoutSeconds, 30, true))
+			}
+		}
+		if body.FunctionTimeoutSeconds != nil {
+			if *body.FunctionTimeoutSeconds > 600 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("body.function_timeout_seconds", *body.FunctionTimeoutSeconds, 600, false))
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminSetFunctionTimeoutAdminSessionToken != "" {
+			adminSessionToken = &adminSetFunctionTimeoutAdminSessionToken
+		}
+	}
+	v := &admin.SetFunctionTimeoutPayload{
+		OrganizationID:         body.OrganizationID,
+		FunctionTimeoutSeconds: body.FunctionTimeoutSeconds,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
 // BuildGetStripeSubscriptionPayload builds the payload for the admin
 // getStripeSubscription endpoint from CLI flags.
 func BuildGetStripeSubscriptionPayload(adminGetStripeSubscriptionOrganizationID string, adminGetStripeSubscriptionAdminSessionToken string) (*admin.GetStripeSubscriptionPayload, error) {

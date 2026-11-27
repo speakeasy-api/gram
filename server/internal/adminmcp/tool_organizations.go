@@ -86,8 +86,13 @@ type OrganizationSummary struct {
 	// Staff-entered link to the organization's adoption dashboard, set on the
 	// admin overview. Read-only here.
 	AdoptionDashboardURL *string `json:"adoption_dashboard_url,omitempty"`
-	CreatedAt            string  `json:"created_at"`
-	UpdatedAt            string  `json:"updated_at"`
+	// How long one Speakeasy Function invocation may run, in seconds, and
+	// whether that is the platform default. Set on the admin overview.
+	// Read-only here.
+	FunctionTimeoutSeconds   *int   `json:"function_timeout_seconds,omitempty"`
+	FunctionTimeoutIsDefault *bool  `json:"function_timeout_is_default,omitempty"`
+	CreatedAt                string `json:"created_at"`
+	UpdatedAt                string `json:"updated_at"`
 }
 
 type OrganizationTrial struct {
@@ -152,7 +157,7 @@ func registerOrganizationTools(server *mcp.Server, reads OrganizationReader) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_organization_summary",
 		Title:       "Get Organization Summary",
-		Description: "Read a bounded organization account summary for an exact canonical organization ID, including the staff-entered adoption dashboard link when one is set. Does not return provider identifiers or credentials.",
+		Description: "Read a bounded organization account summary for an exact canonical organization ID, including the staff-entered adoption dashboard link when one is set and the function invocation time limit in seconds (function_timeout_is_default is true when the platform default applies). Does not return provider identifiers or credentials.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input OrganizationIDInput) (*mcp.CallToolResult, OrganizationSummary, error) {
 		org, err := readExactOrganization(ctx, reads, input.OrganizationID)
@@ -162,8 +167,10 @@ func registerOrganizationTools(server *mcp.Server, reads OrganizationReader) {
 		return nil, OrganizationSummary{
 			ID: org.ID, Name: org.Name, Slug: org.Slug, AccountType: org.AccountType,
 			MemberCount: org.MemberCount, DisabledAt: org.DisabledAt,
-			AdoptionDashboardURL: org.AdoptionDashboardURL,
-			CreatedAt:            org.CreatedAt, UpdatedAt: org.UpdatedAt,
+			AdoptionDashboardURL:     org.AdoptionDashboardURL,
+			FunctionTimeoutSeconds:   org.FunctionTimeoutSeconds,
+			FunctionTimeoutIsDefault: org.FunctionTimeoutIsDefault,
+			CreatedAt:                org.CreatedAt, UpdatedAt: org.UpdatedAt,
 		}, nil
 	})
 

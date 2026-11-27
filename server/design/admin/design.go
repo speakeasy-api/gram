@@ -105,6 +105,11 @@ var AdminOrganization = Type("AdminOrganization", func() {
 		Description("Staff-entered link to the organization's adoption dashboard. Absent when none has been set.")
 		Format(FormatURI)
 	})
+	Attribute("function_timeout_seconds", Int, func() {
+		Description("How long one Speakeasy Function invocation may run, in seconds: the staff-set limit, or the platform default when none is set. Absent from list results.")
+		Example(60)
+	})
+	Attribute("function_timeout_is_default", Boolean, "True when no staff-set limit exists and function_timeout_seconds is the platform default. Absent from list results.")
 	Attribute("member_count", Int, "Number of active members in the organization.")
 	// Deliberately not an Enum. The value is whatever the creating flow
 	// recorded, so a new flow added on the server would otherwise fail response
@@ -1221,6 +1226,28 @@ var _ = Service("admin", func() {
 		})
 		Meta("openapi:operationId", "adminSetAdoptionDashboardUrl")
 		Meta("openapi:extension:x-speakeasy-name-override", "setAdoptionDashboardUrl")
+	})
+
+	Method("setFunctionTimeout", func() {
+		Description("Sets or clears the limit on how long one Speakeasy Function invocation may run for an organization. An absent value restores the platform default.")
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("organization_id")
+			Attribute("organization_id", String)
+			Attribute("function_timeout_seconds", Int, func() {
+				Description("The limit in seconds, or absent to restore the platform default.")
+				Minimum(constants.MinFunctionTimeoutSeconds)
+				Maximum(constants.MaxFunctionTimeoutSeconds)
+			})
+			Meta("openapi:typename", "SetFunctionTimeoutRequestBody")
+		})
+		Result(AdminOrganization)
+		HTTP(func() {
+			POST("/admin/organization.setFunctionTimeout")
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "adminSetFunctionTimeout")
+		Meta("openapi:extension:x-speakeasy-name-override", "setFunctionTimeout")
 	})
 
 	Method("getStripeSubscription", func() {

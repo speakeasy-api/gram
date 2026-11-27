@@ -146,6 +146,14 @@ type SetAdoptionDashboardURLRequestBody struct {
 	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
 }
 
+// SetFunctionTimeoutRequestBody is the type of the "admin" service
+// "setFunctionTimeout" endpoint HTTP request body.
+type SetFunctionTimeoutRequestBody struct {
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// The limit in seconds, or absent to restore the platform default.
+	FunctionTimeoutSeconds *int `form:"function_timeout_seconds,omitempty" json:"function_timeout_seconds,omitempty" xml:"function_timeout_seconds,omitempty"`
+}
+
 // CancelStripeSubscriptionRequestBody is the type of the "admin" service
 // "cancelStripeSubscription" endpoint HTTP request body.
 type CancelStripeSubscriptionRequestBody struct {
@@ -1102,6 +1110,13 @@ type UpdateOrganizationResponseBody struct {
 	// Staff-entered link to the organization's adoption dashboard. Absent when
 	// none has been set.
 	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
+	// How long one Speakeasy Function invocation may run, in seconds: the
+	// staff-set limit, or the platform default when none is set. Absent from list
+	// results.
+	FunctionTimeoutSeconds *int `form:"function_timeout_seconds,omitempty" json:"function_timeout_seconds,omitempty" xml:"function_timeout_seconds,omitempty"`
+	// True when no staff-set limit exists and function_timeout_seconds is the
+	// platform default. Absent from list results.
+	FunctionTimeoutIsDefault *bool `form:"function_timeout_is_default,omitempty" json:"function_timeout_is_default,omitempty" xml:"function_timeout_is_default,omitempty"`
 	// Number of active members in the organization.
 	MemberCount *int `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
 	// The flow that created the organization (e.g. signup, assistants,
@@ -1171,6 +1186,13 @@ type DisableOrganizationResponseBody struct {
 	// Staff-entered link to the organization's adoption dashboard. Absent when
 	// none has been set.
 	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
+	// How long one Speakeasy Function invocation may run, in seconds: the
+	// staff-set limit, or the platform default when none is set. Absent from list
+	// results.
+	FunctionTimeoutSeconds *int `form:"function_timeout_seconds,omitempty" json:"function_timeout_seconds,omitempty" xml:"function_timeout_seconds,omitempty"`
+	// True when no staff-set limit exists and function_timeout_seconds is the
+	// platform default. Absent from list results.
+	FunctionTimeoutIsDefault *bool `form:"function_timeout_is_default,omitempty" json:"function_timeout_is_default,omitempty" xml:"function_timeout_is_default,omitempty"`
 	// Number of active members in the organization.
 	MemberCount *int `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
 	// The flow that created the organization (e.g. signup, assistants,
@@ -1229,6 +1251,13 @@ type EnableOrganizationResponseBody struct {
 	// Staff-entered link to the organization's adoption dashboard. Absent when
 	// none has been set.
 	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
+	// How long one Speakeasy Function invocation may run, in seconds: the
+	// staff-set limit, or the platform default when none is set. Absent from list
+	// results.
+	FunctionTimeoutSeconds *int `form:"function_timeout_seconds,omitempty" json:"function_timeout_seconds,omitempty" xml:"function_timeout_seconds,omitempty"`
+	// True when no staff-set limit exists and function_timeout_seconds is the
+	// platform default. Absent from list results.
+	FunctionTimeoutIsDefault *bool `form:"function_timeout_is_default,omitempty" json:"function_timeout_is_default,omitempty" xml:"function_timeout_is_default,omitempty"`
 	// Number of active members in the organization.
 	MemberCount *int `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
 	// The flow that created the organization (e.g. signup, assistants,
@@ -1287,6 +1316,13 @@ type GetOrganizationResponseBody struct {
 	// Staff-entered link to the organization's adoption dashboard. Absent when
 	// none has been set.
 	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
+	// How long one Speakeasy Function invocation may run, in seconds: the
+	// staff-set limit, or the platform default when none is set. Absent from list
+	// results.
+	FunctionTimeoutSeconds *int `form:"function_timeout_seconds,omitempty" json:"function_timeout_seconds,omitempty" xml:"function_timeout_seconds,omitempty"`
+	// True when no staff-set limit exists and function_timeout_seconds is the
+	// platform default. Absent from list results.
+	FunctionTimeoutIsDefault *bool `form:"function_timeout_is_default,omitempty" json:"function_timeout_is_default,omitempty" xml:"function_timeout_is_default,omitempty"`
 	// Number of active members in the organization.
 	MemberCount *int `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
 	// The flow that created the organization (e.g. signup, assistants,
@@ -1404,6 +1440,13 @@ type ExtendTrialResponseBody struct {
 	// Staff-entered link to the organization's adoption dashboard. Absent when
 	// none has been set.
 	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
+	// How long one Speakeasy Function invocation may run, in seconds: the
+	// staff-set limit, or the platform default when none is set. Absent from list
+	// results.
+	FunctionTimeoutSeconds *int `form:"function_timeout_seconds,omitempty" json:"function_timeout_seconds,omitempty" xml:"function_timeout_seconds,omitempty"`
+	// True when no staff-set limit exists and function_timeout_seconds is the
+	// platform default. Absent from list results.
+	FunctionTimeoutIsDefault *bool `form:"function_timeout_is_default,omitempty" json:"function_timeout_is_default,omitempty" xml:"function_timeout_is_default,omitempty"`
 	// Number of active members in the organization.
 	MemberCount *int `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
 	// The flow that created the organization (e.g. signup, assistants,
@@ -1462,6 +1505,13 @@ type CreateOrganizationResponseBody struct {
 	// Staff-entered link to the organization's adoption dashboard. Absent when
 	// none has been set.
 	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
+	// How long one Speakeasy Function invocation may run, in seconds: the
+	// staff-set limit, or the platform default when none is set. Absent from list
+	// results.
+	FunctionTimeoutSeconds *int `form:"function_timeout_seconds,omitempty" json:"function_timeout_seconds,omitempty" xml:"function_timeout_seconds,omitempty"`
+	// True when no staff-set limit exists and function_timeout_seconds is the
+	// platform default. Absent from list results.
+	FunctionTimeoutIsDefault *bool `form:"function_timeout_is_default,omitempty" json:"function_timeout_is_default,omitempty" xml:"function_timeout_is_default,omitempty"`
 	// Number of active members in the organization.
 	MemberCount *int `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
 	// The flow that created the organization (e.g. signup, assistants,
@@ -1520,6 +1570,13 @@ type RearmTrialResponseBody struct {
 	// Staff-entered link to the organization's adoption dashboard. Absent when
 	// none has been set.
 	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
+	// How long one Speakeasy Function invocation may run, in seconds: the
+	// staff-set limit, or the platform default when none is set. Absent from list
+	// results.
+	FunctionTimeoutSeconds *int `form:"function_timeout_seconds,omitempty" json:"function_timeout_seconds,omitempty" xml:"function_timeout_seconds,omitempty"`
+	// True when no staff-set limit exists and function_timeout_seconds is the
+	// platform default. Absent from list results.
+	FunctionTimeoutIsDefault *bool `form:"function_timeout_is_default,omitempty" json:"function_timeout_is_default,omitempty" xml:"function_timeout_is_default,omitempty"`
 	// Number of active members in the organization.
 	MemberCount *int `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
 	// The flow that created the organization (e.g. signup, assistants,
@@ -1635,6 +1692,13 @@ type SetStripeCustomerResponseBody struct {
 	// Staff-entered link to the organization's adoption dashboard. Absent when
 	// none has been set.
 	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
+	// How long one Speakeasy Function invocation may run, in seconds: the
+	// staff-set limit, or the platform default when none is set. Absent from list
+	// results.
+	FunctionTimeoutSeconds *int `form:"function_timeout_seconds,omitempty" json:"function_timeout_seconds,omitempty" xml:"function_timeout_seconds,omitempty"`
+	// True when no staff-set limit exists and function_timeout_seconds is the
+	// platform default. Absent from list results.
+	FunctionTimeoutIsDefault *bool `form:"function_timeout_is_default,omitempty" json:"function_timeout_is_default,omitempty" xml:"function_timeout_is_default,omitempty"`
 	// Number of active members in the organization.
 	MemberCount *int `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
 	// The flow that created the organization (e.g. signup, assistants,
@@ -1693,6 +1757,78 @@ type SetAdoptionDashboardURLResponseBody struct {
 	// Staff-entered link to the organization's adoption dashboard. Absent when
 	// none has been set.
 	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
+	// How long one Speakeasy Function invocation may run, in seconds: the
+	// staff-set limit, or the platform default when none is set. Absent from list
+	// results.
+	FunctionTimeoutSeconds *int `form:"function_timeout_seconds,omitempty" json:"function_timeout_seconds,omitempty" xml:"function_timeout_seconds,omitempty"`
+	// True when no staff-set limit exists and function_timeout_seconds is the
+	// platform default. Absent from list results.
+	FunctionTimeoutIsDefault *bool `form:"function_timeout_is_default,omitempty" json:"function_timeout_is_default,omitempty" xml:"function_timeout_is_default,omitempty"`
+	// Number of active members in the organization.
+	MemberCount *int `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
+	// The flow that created the organization (e.g. signup, assistants,
+	// platform_admin). Absent when nothing recorded one. Informational only.
+	CreationSource *string `form:"creation_source,omitempty" json:"creation_source,omitempty" xml:"creation_source,omitempty"`
+	// The creation date of the organization.
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	// The last update date of the organization.
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// SetFunctionTimeoutResponseBody is the type of the "admin" service
+// "setFunctionTimeout" endpoint HTTP response body.
+type SetFunctionTimeoutResponseBody struct {
+	// The ID of the organization
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The name of the organization
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The slug of the organization
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// Speakeasy account type (e.g. free, pro, payg, enterprise).
+	AccountType *string `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
+	// WorkOS organization ID, if linked.
+	WorkosID *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
+	// Link to the organization in the WorkOS dashboard. Absent when the
+	// organization is not linked to WorkOS or the deployment has no WorkOS
+	// environment configured.
+	WorkosDashboardURL *string `form:"workos_dashboard_url,omitempty" json:"workos_dashboard_url,omitempty" xml:"workos_dashboard_url,omitempty"`
+	// Stripe customer ID, if billing metadata has a customer.
+	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
+	// Current Stripe subscription ID, if subscribed.
+	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Link to the Stripe customer in the Stripe dashboard. Absent when the
+	// organization has no Stripe customer or the deployment has no Stripe API key
+	// configured.
+	StripeCustomerDashboardURL *string `form:"stripe_customer_dashboard_url,omitempty" json:"stripe_customer_dashboard_url,omitempty" xml:"stripe_customer_dashboard_url,omitempty"`
+	// Link to the Stripe subscription in the Stripe dashboard. Absent when the
+	// organization has no Stripe subscription or the deployment has no Stripe API
+	// key configured.
+	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
+	// Whether the organization is whitelisted for full access.
+	Whitelisted *bool `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
+	// The time at which the organization was disabled, if any.
+	DisabledAt *string `form:"disabled_at,omitempty" json:"disabled_at,omitempty" xml:"disabled_at,omitempty"`
+	// Lifecycle state of the organization's enterprise trial.
+	TrialState *string `form:"trial_state,omitempty" json:"trial_state,omitempty" xml:"trial_state,omitempty"`
+	// The trial tier. Absent when the organization never trialled.
+	TrialTier *string `form:"trial_tier,omitempty" json:"trial_tier,omitempty" xml:"trial_tier,omitempty"`
+	// The time at which the enterprise trial ends. Absent when the organization
+	// never trialled.
+	TrialEndsAt *string `form:"trial_ends_at,omitempty" json:"trial_ends_at,omitempty" xml:"trial_ends_at,omitempty"`
+	// The time at which the trial converted to a paid plan, if any.
+	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
+	// The time at which the organization was demoted after its trial, if any.
+	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// Staff-entered link to the organization's adoption dashboard. Absent when
+	// none has been set.
+	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
+	// How long one Speakeasy Function invocation may run, in seconds: the
+	// staff-set limit, or the platform default when none is set. Absent from list
+	// results.
+	FunctionTimeoutSeconds *int `form:"function_timeout_seconds,omitempty" json:"function_timeout_seconds,omitempty" xml:"function_timeout_seconds,omitempty"`
+	// True when no staff-set limit exists and function_timeout_seconds is the
+	// platform default. Absent from list results.
+	FunctionTimeoutIsDefault *bool `form:"function_timeout_is_default,omitempty" json:"function_timeout_is_default,omitempty" xml:"function_timeout_is_default,omitempty"`
 	// Number of active members in the organization.
 	MemberCount *int `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
 	// The flow that created the organization (e.g. signup, assistants,
@@ -2210,6 +2346,13 @@ type StartTrialResponseBody struct {
 	// Staff-entered link to the organization's adoption dashboard. Absent when
 	// none has been set.
 	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
+	// How long one Speakeasy Function invocation may run, in seconds: the
+	// staff-set limit, or the platform default when none is set. Absent from list
+	// results.
+	FunctionTimeoutSeconds *int `form:"function_timeout_seconds,omitempty" json:"function_timeout_seconds,omitempty" xml:"function_timeout_seconds,omitempty"`
+	// True when no staff-set limit exists and function_timeout_seconds is the
+	// platform default. Absent from list results.
+	FunctionTimeoutIsDefault *bool `form:"function_timeout_is_default,omitempty" json:"function_timeout_is_default,omitempty" xml:"function_timeout_is_default,omitempty"`
 	// Number of active members in the organization.
 	MemberCount *int `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
 	// The flow that created the organization (e.g. signup, assistants,
@@ -2268,6 +2411,13 @@ type ChangeTrialEndDateResponseBody struct {
 	// Staff-entered link to the organization's adoption dashboard. Absent when
 	// none has been set.
 	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
+	// How long one Speakeasy Function invocation may run, in seconds: the
+	// staff-set limit, or the platform default when none is set. Absent from list
+	// results.
+	FunctionTimeoutSeconds *int `form:"function_timeout_seconds,omitempty" json:"function_timeout_seconds,omitempty" xml:"function_timeout_seconds,omitempty"`
+	// True when no staff-set limit exists and function_timeout_seconds is the
+	// platform default. Absent from list results.
+	FunctionTimeoutIsDefault *bool `form:"function_timeout_is_default,omitempty" json:"function_timeout_is_default,omitempty" xml:"function_timeout_is_default,omitempty"`
 	// Number of active members in the organization.
 	MemberCount *int `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
 	// The flow that created the organization (e.g. signup, assistants,
@@ -2982,6 +3132,13 @@ type SetStripeSubscriptionResponseBody struct {
 	// Staff-entered link to the organization's adoption dashboard. Absent when
 	// none has been set.
 	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
+	// How long one Speakeasy Function invocation may run, in seconds: the
+	// staff-set limit, or the platform default when none is set. Absent from list
+	// results.
+	FunctionTimeoutSeconds *int `form:"function_timeout_seconds,omitempty" json:"function_timeout_seconds,omitempty" xml:"function_timeout_seconds,omitempty"`
+	// True when no staff-set limit exists and function_timeout_seconds is the
+	// platform default. Absent from list results.
+	FunctionTimeoutIsDefault *bool `form:"function_timeout_is_default,omitempty" json:"function_timeout_is_default,omitempty" xml:"function_timeout_is_default,omitempty"`
 	// Number of active members in the organization.
 	MemberCount *int `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
 	// The flow that created the organization (e.g. signup, assistants,
@@ -10395,6 +10552,190 @@ type SetAdoptionDashboardURLUnexpectedResponseBody struct {
 // service "setAdoptionDashboardUrl" endpoint HTTP response body for the
 // "gateway_error" error.
 type SetAdoptionDashboardURLGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetFunctionTimeoutUnauthorizedResponseBody is the type of the "admin"
+// service "setFunctionTimeout" endpoint HTTP response body for the
+// "unauthorized" error.
+type SetFunctionTimeoutUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetFunctionTimeoutForbiddenResponseBody is the type of the "admin" service
+// "setFunctionTimeout" endpoint HTTP response body for the "forbidden" error.
+type SetFunctionTimeoutForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetFunctionTimeoutBadRequestResponseBody is the type of the "admin" service
+// "setFunctionTimeout" endpoint HTTP response body for the "bad_request" error.
+type SetFunctionTimeoutBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetFunctionTimeoutNotFoundResponseBody is the type of the "admin" service
+// "setFunctionTimeout" endpoint HTTP response body for the "not_found" error.
+type SetFunctionTimeoutNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetFunctionTimeoutConflictResponseBody is the type of the "admin" service
+// "setFunctionTimeout" endpoint HTTP response body for the "conflict" error.
+type SetFunctionTimeoutConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetFunctionTimeoutUnsupportedMediaResponseBody is the type of the "admin"
+// service "setFunctionTimeout" endpoint HTTP response body for the
+// "unsupported_media" error.
+type SetFunctionTimeoutUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetFunctionTimeoutInvalidResponseBody is the type of the "admin" service
+// "setFunctionTimeout" endpoint HTTP response body for the "invalid" error.
+type SetFunctionTimeoutInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetFunctionTimeoutInvariantViolationResponseBody is the type of the "admin"
+// service "setFunctionTimeout" endpoint HTTP response body for the
+// "invariant_violation" error.
+type SetFunctionTimeoutInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetFunctionTimeoutUnexpectedResponseBody is the type of the "admin" service
+// "setFunctionTimeout" endpoint HTTP response body for the "unexpected" error.
+type SetFunctionTimeoutUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetFunctionTimeoutGatewayErrorResponseBody is the type of the "admin"
+// service "setFunctionTimeout" endpoint HTTP response body for the
+// "gateway_error" error.
+type SetFunctionTimeoutGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -30992,6 +31333,13 @@ type AdminOrganizationResponseBody struct {
 	// Staff-entered link to the organization's adoption dashboard. Absent when
 	// none has been set.
 	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
+	// How long one Speakeasy Function invocation may run, in seconds: the
+	// staff-set limit, or the platform default when none is set. Absent from list
+	// results.
+	FunctionTimeoutSeconds *int `form:"function_timeout_seconds,omitempty" json:"function_timeout_seconds,omitempty" xml:"function_timeout_seconds,omitempty"`
+	// True when no staff-set limit exists and function_timeout_seconds is the
+	// platform default. Absent from list results.
+	FunctionTimeoutIsDefault *bool `form:"function_timeout_is_default,omitempty" json:"function_timeout_is_default,omitempty" xml:"function_timeout_is_default,omitempty"`
 	// Number of active members in the organization.
 	MemberCount *int `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
 	// The flow that created the organization (e.g. signup, assistants,
@@ -33088,6 +33436,16 @@ func NewSetAdoptionDashboardURLRequestBody(p *admin.SetAdoptionDashboardURLPaylo
 	body := &SetAdoptionDashboardURLRequestBody{
 		OrganizationID:       p.OrganizationID,
 		AdoptionDashboardURL: p.AdoptionDashboardURL,
+	}
+	return body
+}
+
+// NewSetFunctionTimeoutRequestBody builds the HTTP request body from the
+// payload of the "setFunctionTimeout" endpoint of the "admin" service.
+func NewSetFunctionTimeoutRequestBody(p *admin.SetFunctionTimeoutPayload) *SetFunctionTimeoutRequestBody {
+	body := &SetFunctionTimeoutRequestBody{
+		OrganizationID:         p.OrganizationID,
+		FunctionTimeoutSeconds: p.FunctionTimeoutSeconds,
 	}
 	return body
 }
@@ -35737,6 +36095,8 @@ func NewUpdateOrganizationAdminOrganizationOK(body *UpdateOrganizationResponseBo
 		TrialConvertedAt:               body.TrialConvertedAt,
 		TrialDemotedAt:                 body.TrialDemotedAt,
 		AdoptionDashboardURL:           body.AdoptionDashboardURL,
+		FunctionTimeoutSeconds:         body.FunctionTimeoutSeconds,
+		FunctionTimeoutIsDefault:       body.FunctionTimeoutIsDefault,
 		MemberCount:                    *body.MemberCount,
 		CreationSource:                 body.CreationSource,
 		CreatedAt:                      *body.CreatedAt,
@@ -36084,6 +36444,8 @@ func NewDisableOrganizationAdminOrganizationOK(body *DisableOrganizationResponse
 		TrialConvertedAt:               body.TrialConvertedAt,
 		TrialDemotedAt:                 body.TrialDemotedAt,
 		AdoptionDashboardURL:           body.AdoptionDashboardURL,
+		FunctionTimeoutSeconds:         body.FunctionTimeoutSeconds,
+		FunctionTimeoutIsDefault:       body.FunctionTimeoutIsDefault,
 		MemberCount:                    *body.MemberCount,
 		CreationSource:                 body.CreationSource,
 		CreatedAt:                      *body.CreatedAt,
@@ -36265,6 +36627,8 @@ func NewEnableOrganizationAdminOrganizationOK(body *EnableOrganizationResponseBo
 		TrialConvertedAt:               body.TrialConvertedAt,
 		TrialDemotedAt:                 body.TrialDemotedAt,
 		AdoptionDashboardURL:           body.AdoptionDashboardURL,
+		FunctionTimeoutSeconds:         body.FunctionTimeoutSeconds,
+		FunctionTimeoutIsDefault:       body.FunctionTimeoutIsDefault,
 		MemberCount:                    *body.MemberCount,
 		CreationSource:                 body.CreationSource,
 		CreatedAt:                      *body.CreatedAt,
@@ -36446,6 +36810,8 @@ func NewGetOrganizationAdminOrganizationOK(body *GetOrganizationResponseBody) *a
 		TrialConvertedAt:               body.TrialConvertedAt,
 		TrialDemotedAt:                 body.TrialDemotedAt,
 		AdoptionDashboardURL:           body.AdoptionDashboardURL,
+		FunctionTimeoutSeconds:         body.FunctionTimeoutSeconds,
+		FunctionTimeoutIsDefault:       body.FunctionTimeoutIsDefault,
 		MemberCount:                    *body.MemberCount,
 		CreationSource:                 body.CreationSource,
 		CreatedAt:                      *body.CreatedAt,
@@ -37804,6 +38170,8 @@ func NewExtendTrialAdminOrganizationOK(body *ExtendTrialResponseBody) *admin.Adm
 		TrialConvertedAt:               body.TrialConvertedAt,
 		TrialDemotedAt:                 body.TrialDemotedAt,
 		AdoptionDashboardURL:           body.AdoptionDashboardURL,
+		FunctionTimeoutSeconds:         body.FunctionTimeoutSeconds,
+		FunctionTimeoutIsDefault:       body.FunctionTimeoutIsDefault,
 		MemberCount:                    *body.MemberCount,
 		CreationSource:                 body.CreationSource,
 		CreatedAt:                      *body.CreatedAt,
@@ -37985,6 +38353,8 @@ func NewCreateOrganizationAdminOrganizationOK(body *CreateOrganizationResponseBo
 		TrialConvertedAt:               body.TrialConvertedAt,
 		TrialDemotedAt:                 body.TrialDemotedAt,
 		AdoptionDashboardURL:           body.AdoptionDashboardURL,
+		FunctionTimeoutSeconds:         body.FunctionTimeoutSeconds,
+		FunctionTimeoutIsDefault:       body.FunctionTimeoutIsDefault,
 		MemberCount:                    *body.MemberCount,
 		CreationSource:                 body.CreationSource,
 		CreatedAt:                      *body.CreatedAt,
@@ -38166,6 +38536,8 @@ func NewRearmTrialAdminOrganizationOK(body *RearmTrialResponseBody) *admin.Admin
 		TrialConvertedAt:               body.TrialConvertedAt,
 		TrialDemotedAt:                 body.TrialDemotedAt,
 		AdoptionDashboardURL:           body.AdoptionDashboardURL,
+		FunctionTimeoutSeconds:         body.FunctionTimeoutSeconds,
+		FunctionTimeoutIsDefault:       body.FunctionTimeoutIsDefault,
 		MemberCount:                    *body.MemberCount,
 		CreationSource:                 body.CreationSource,
 		CreatedAt:                      *body.CreatedAt,
@@ -39527,6 +39899,8 @@ func NewSetStripeCustomerAdminOrganizationOK(body *SetStripeCustomerResponseBody
 		TrialConvertedAt:               body.TrialConvertedAt,
 		TrialDemotedAt:                 body.TrialDemotedAt,
 		AdoptionDashboardURL:           body.AdoptionDashboardURL,
+		FunctionTimeoutSeconds:         body.FunctionTimeoutSeconds,
+		FunctionTimeoutIsDefault:       body.FunctionTimeoutIsDefault,
 		MemberCount:                    *body.MemberCount,
 		CreationSource:                 body.CreationSource,
 		CreatedAt:                      *body.CreatedAt,
@@ -39723,6 +40097,8 @@ func NewSetAdoptionDashboardURLAdminOrganizationOK(body *SetAdoptionDashboardURL
 		TrialConvertedAt:               body.TrialConvertedAt,
 		TrialDemotedAt:                 body.TrialDemotedAt,
 		AdoptionDashboardURL:           body.AdoptionDashboardURL,
+		FunctionTimeoutSeconds:         body.FunctionTimeoutSeconds,
+		FunctionTimeoutIsDefault:       body.FunctionTimeoutIsDefault,
 		MemberCount:                    *body.MemberCount,
 		CreationSource:                 body.CreationSource,
 		CreatedAt:                      *body.CreatedAt,
@@ -39870,6 +40246,189 @@ func NewSetAdoptionDashboardURLUnexpected(body *SetAdoptionDashboardURLUnexpecte
 // NewSetAdoptionDashboardURLGatewayError builds a admin service
 // setAdoptionDashboardUrl endpoint gateway_error error.
 func NewSetAdoptionDashboardURLGatewayError(body *SetAdoptionDashboardURLGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetFunctionTimeoutAdminOrganizationOK builds a "admin" service
+// "setFunctionTimeout" endpoint result from a HTTP "OK" response.
+func NewSetFunctionTimeoutAdminOrganizationOK(body *SetFunctionTimeoutResponseBody) *admin.AdminOrganization {
+	v := &admin.AdminOrganization{
+		ID:                             *body.ID,
+		Name:                           *body.Name,
+		Slug:                           *body.Slug,
+		AccountType:                    *body.AccountType,
+		WorkosID:                       body.WorkosID,
+		WorkosDashboardURL:             body.WorkosDashboardURL,
+		StripeCustomerID:               body.StripeCustomerID,
+		StripeSubscriptionID:           body.StripeSubscriptionID,
+		StripeCustomerDashboardURL:     body.StripeCustomerDashboardURL,
+		StripeSubscriptionDashboardURL: body.StripeSubscriptionDashboardURL,
+		Whitelisted:                    *body.Whitelisted,
+		DisabledAt:                     body.DisabledAt,
+		TrialState:                     body.TrialState,
+		TrialTier:                      body.TrialTier,
+		TrialEndsAt:                    body.TrialEndsAt,
+		TrialConvertedAt:               body.TrialConvertedAt,
+		TrialDemotedAt:                 body.TrialDemotedAt,
+		AdoptionDashboardURL:           body.AdoptionDashboardURL,
+		FunctionTimeoutSeconds:         body.FunctionTimeoutSeconds,
+		FunctionTimeoutIsDefault:       body.FunctionTimeoutIsDefault,
+		MemberCount:                    *body.MemberCount,
+		CreationSource:                 body.CreationSource,
+		CreatedAt:                      *body.CreatedAt,
+		UpdatedAt:                      *body.UpdatedAt,
+	}
+
+	return v
+}
+
+// NewSetFunctionTimeoutUnauthorized builds a admin service setFunctionTimeout
+// endpoint unauthorized error.
+func NewSetFunctionTimeoutUnauthorized(body *SetFunctionTimeoutUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetFunctionTimeoutForbidden builds a admin service setFunctionTimeout
+// endpoint forbidden error.
+func NewSetFunctionTimeoutForbidden(body *SetFunctionTimeoutForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetFunctionTimeoutBadRequest builds a admin service setFunctionTimeout
+// endpoint bad_request error.
+func NewSetFunctionTimeoutBadRequest(body *SetFunctionTimeoutBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetFunctionTimeoutNotFound builds a admin service setFunctionTimeout
+// endpoint not_found error.
+func NewSetFunctionTimeoutNotFound(body *SetFunctionTimeoutNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetFunctionTimeoutConflict builds a admin service setFunctionTimeout
+// endpoint conflict error.
+func NewSetFunctionTimeoutConflict(body *SetFunctionTimeoutConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetFunctionTimeoutUnsupportedMedia builds a admin service
+// setFunctionTimeout endpoint unsupported_media error.
+func NewSetFunctionTimeoutUnsupportedMedia(body *SetFunctionTimeoutUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetFunctionTimeoutInvalid builds a admin service setFunctionTimeout
+// endpoint invalid error.
+func NewSetFunctionTimeoutInvalid(body *SetFunctionTimeoutInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetFunctionTimeoutInvariantViolation builds a admin service
+// setFunctionTimeout endpoint invariant_violation error.
+func NewSetFunctionTimeoutInvariantViolation(body *SetFunctionTimeoutInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetFunctionTimeoutUnexpected builds a admin service setFunctionTimeout
+// endpoint unexpected error.
+func NewSetFunctionTimeoutUnexpected(body *SetFunctionTimeoutUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetFunctionTimeoutGatewayError builds a admin service setFunctionTimeout
+// endpoint gateway_error error.
+func NewSetFunctionTimeoutGatewayError(body *SetFunctionTimeoutGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -43215,6 +43774,8 @@ func NewStartTrialAdminOrganizationOK(body *StartTrialResponseBody) *admin.Admin
 		TrialConvertedAt:               body.TrialConvertedAt,
 		TrialDemotedAt:                 body.TrialDemotedAt,
 		AdoptionDashboardURL:           body.AdoptionDashboardURL,
+		FunctionTimeoutSeconds:         body.FunctionTimeoutSeconds,
+		FunctionTimeoutIsDefault:       body.FunctionTimeoutIsDefault,
 		MemberCount:                    *body.MemberCount,
 		CreationSource:                 body.CreationSource,
 		CreatedAt:                      *body.CreatedAt,
@@ -43396,6 +43957,8 @@ func NewChangeTrialEndDateAdminOrganizationOK(body *ChangeTrialEndDateResponseBo
 		TrialConvertedAt:               body.TrialConvertedAt,
 		TrialDemotedAt:                 body.TrialDemotedAt,
 		AdoptionDashboardURL:           body.AdoptionDashboardURL,
+		FunctionTimeoutSeconds:         body.FunctionTimeoutSeconds,
+		FunctionTimeoutIsDefault:       body.FunctionTimeoutIsDefault,
 		MemberCount:                    *body.MemberCount,
 		CreationSource:                 body.CreationSource,
 		CreatedAt:                      *body.CreatedAt,
@@ -51019,6 +51582,8 @@ func NewSetStripeSubscriptionAdminOrganizationOK(body *SetStripeSubscriptionResp
 		TrialConvertedAt:               body.TrialConvertedAt,
 		TrialDemotedAt:                 body.TrialDemotedAt,
 		AdoptionDashboardURL:           body.AdoptionDashboardURL,
+		FunctionTimeoutSeconds:         body.FunctionTimeoutSeconds,
+		FunctionTimeoutIsDefault:       body.FunctionTimeoutIsDefault,
 		MemberCount:                    *body.MemberCount,
 		CreationSource:                 body.CreationSource,
 		CreatedAt:                      *body.CreatedAt,
@@ -59717,6 +60282,71 @@ func ValidateSetStripeCustomerResponseBody(body *SetStripeCustomerResponseBody) 
 // ValidateSetAdoptionDashboardURLResponseBody runs the validations defined on
 // SetAdoptionDashboardUrlResponseBody
 func ValidateSetAdoptionDashboardURLResponseBody(body *SetAdoptionDashboardURLResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.AccountType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("account_type", "body"))
+	}
+	if body.Whitelisted == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("whitelisted", "body"))
+	}
+	if body.MemberCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("member_count", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.WorkosDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.workos_dashboard_url", *body.WorkosDashboardURL, goa.FormatURI))
+	}
+	if body.StripeCustomerDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.stripe_customer_dashboard_url", *body.StripeCustomerDashboardURL, goa.FormatURI))
+	}
+	if body.StripeSubscriptionDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.stripe_subscription_dashboard_url", *body.StripeSubscriptionDashboardURL, goa.FormatURI))
+	}
+	if body.DisabledAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.disabled_at", *body.DisabledAt, goa.FormatDateTime))
+	}
+	if body.TrialState != nil {
+		if !(*body.TrialState == "none" || *body.TrialState == "running" || *body.TrialState == "ending_soon" || *body.TrialState == "expired" || *body.TrialState == "demoted" || *body.TrialState == "converted") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.trial_state", *body.TrialState, []any{"none", "running", "ending_soon", "expired", "demoted", "converted"}))
+		}
+	}
+	if body.TrialEndsAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_ends_at", *body.TrialEndsAt, goa.FormatDateTime))
+	}
+	if body.TrialConvertedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_converted_at", *body.TrialConvertedAt, goa.FormatDateTime))
+	}
+	if body.TrialDemotedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_demoted_at", *body.TrialDemotedAt, goa.FormatDateTime))
+	}
+	if body.AdoptionDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.adoption_dashboard_url", *body.AdoptionDashboardURL, goa.FormatURI))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateSetFunctionTimeoutResponseBody runs the validations defined on
+// SetFunctionTimeoutResponseBody
+func ValidateSetFunctionTimeoutResponseBody(body *SetFunctionTimeoutResponseBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
@@ -71767,6 +72397,246 @@ func ValidateSetAdoptionDashboardURLUnexpectedResponseBody(body *SetAdoptionDash
 // ValidateSetAdoptionDashboardURLGatewayErrorResponseBody runs the validations
 // defined on setAdoptionDashboardUrl_gateway_error_response_body
 func ValidateSetAdoptionDashboardURLGatewayErrorResponseBody(body *SetAdoptionDashboardURLGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetFunctionTimeoutUnauthorizedResponseBody runs the validations
+// defined on setFunctionTimeout_unauthorized_response_body
+func ValidateSetFunctionTimeoutUnauthorizedResponseBody(body *SetFunctionTimeoutUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetFunctionTimeoutForbiddenResponseBody runs the validations defined
+// on setFunctionTimeout_forbidden_response_body
+func ValidateSetFunctionTimeoutForbiddenResponseBody(body *SetFunctionTimeoutForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetFunctionTimeoutBadRequestResponseBody runs the validations
+// defined on setFunctionTimeout_bad_request_response_body
+func ValidateSetFunctionTimeoutBadRequestResponseBody(body *SetFunctionTimeoutBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetFunctionTimeoutNotFoundResponseBody runs the validations defined
+// on setFunctionTimeout_not_found_response_body
+func ValidateSetFunctionTimeoutNotFoundResponseBody(body *SetFunctionTimeoutNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetFunctionTimeoutConflictResponseBody runs the validations defined
+// on setFunctionTimeout_conflict_response_body
+func ValidateSetFunctionTimeoutConflictResponseBody(body *SetFunctionTimeoutConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetFunctionTimeoutUnsupportedMediaResponseBody runs the validations
+// defined on setFunctionTimeout_unsupported_media_response_body
+func ValidateSetFunctionTimeoutUnsupportedMediaResponseBody(body *SetFunctionTimeoutUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetFunctionTimeoutInvalidResponseBody runs the validations defined
+// on setFunctionTimeout_invalid_response_body
+func ValidateSetFunctionTimeoutInvalidResponseBody(body *SetFunctionTimeoutInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetFunctionTimeoutInvariantViolationResponseBody runs the
+// validations defined on setFunctionTimeout_invariant_violation_response_body
+func ValidateSetFunctionTimeoutInvariantViolationResponseBody(body *SetFunctionTimeoutInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetFunctionTimeoutUnexpectedResponseBody runs the validations
+// defined on setFunctionTimeout_unexpected_response_body
+func ValidateSetFunctionTimeoutUnexpectedResponseBody(body *SetFunctionTimeoutUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetFunctionTimeoutGatewayErrorResponseBody runs the validations
+// defined on setFunctionTimeout_gateway_error_response_body
+func ValidateSetFunctionTimeoutGatewayErrorResponseBody(body *SetFunctionTimeoutGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

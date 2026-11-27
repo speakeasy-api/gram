@@ -156,6 +156,10 @@ type Client struct {
 	// setAdoptionDashboardUrl endpoint.
 	SetAdoptionDashboardURLDoer goahttp.Doer
 
+	// SetFunctionTimeout Doer is the HTTP client used to make requests to the
+	// setFunctionTimeout endpoint.
+	SetFunctionTimeoutDoer goahttp.Doer
+
 	// GetStripeSubscription Doer is the HTTP client used to make requests to the
 	// getStripeSubscription endpoint.
 	GetStripeSubscriptionDoer goahttp.Doer
@@ -631,6 +635,7 @@ func NewClient(
 		GetStripeCustomerDoer:                       doer,
 		SetStripeCustomerDoer:                       doer,
 		SetAdoptionDashboardURLDoer:                 doer,
+		SetFunctionTimeoutDoer:                      doer,
 		GetStripeSubscriptionDoer:                   doer,
 		CancelStripeSubscriptionDoer:                doer,
 		ResumeStripeSubscriptionDoer:                doer,
@@ -1579,6 +1584,30 @@ func (c *Client) SetAdoptionDashboardURL() goa.Endpoint {
 		resp, err := c.SetAdoptionDashboardURLDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "setAdoptionDashboardUrl", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetFunctionTimeout returns an endpoint that makes HTTP requests to the admin
+// service setFunctionTimeout server.
+func (c *Client) SetFunctionTimeout() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetFunctionTimeoutRequest(c.encoder)
+		decodeResponse = DecodeSetFunctionTimeoutResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetFunctionTimeoutRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetFunctionTimeoutDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "setFunctionTimeout", err)
 		}
 		return decodeResponse(resp)
 	}

@@ -182,6 +182,11 @@ func SetAdoptionDashboardURLAdminPath() string {
 	return "/admin/organization.setAdoptionDashboardUrl"
 }
 
+// SetFunctionTimeoutAdminPath returns the URL path to the admin service setFunctionTimeout HTTP endpoint.
+func SetFunctionTimeoutAdminPath() string {
+	return "/admin/organization.setFunctionTimeout"
+}
+
 // GetStripeSubscriptionAdminPath returns the URL path to the admin service getStripeSubscription HTTP endpoint.
 func GetStripeSubscriptionAdminPath() string {
 	return "/admin/organization.stripeSubscription"

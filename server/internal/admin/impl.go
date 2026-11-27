@@ -533,6 +533,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.SetOrganizationChatAnalysisSettings = service.strictAdminJSON(server.SetOrganizationChatAnalysisSettings, func() any { return new(adminserver.SetOrganizationChatAnalysisSettingsRequestBody) })
 	server.SetStripeCustomer = service.strictAdminJSON(server.SetStripeCustomer, func() any { return new(adminserver.SetStripeCustomerRequestBody) })
 	server.SetAdoptionDashboardURL = service.strictAdminJSON(server.SetAdoptionDashboardURL, func() any { return new(adminserver.SetAdoptionDashboardURLRequestBody) })
+	server.SetFunctionTimeout = service.strictAdminJSON(server.SetFunctionTimeout, func() any { return new(adminserver.SetFunctionTimeoutRequestBody) })
 	server.GetStripeSubscriptionCandidate = service.preauthorizeAdmin(server.GetStripeSubscriptionCandidate)
 	server.SetStripeSubscription = service.strictAdminJSON(server.SetStripeSubscription, func() any { return new(adminserver.SetStripeSubscriptionRequestBody) })
 	server.TriggerOrganizationChatAnalysis = service.strictAdminJSON(server.TriggerOrganizationChatAnalysis, func() any { return new(adminserver.TriggerOrganizationChatAnalysisRequestBody) })
@@ -2126,6 +2127,7 @@ func (s *Service) GetOrganization(ctx context.Context, payload *gen.GetOrganizat
 }
 
 func (s *Service) adminOrganizationFromGetRow(row repo.AdminGetOrganizationRow) *gen.AdminOrganization {
+	functionTimeoutSeconds, functionTimeoutIsDefault := constants.EffectiveFunctionTimeoutSeconds(conv.FromPGInt4(row.FunctionTimeoutSeconds))
 	return &gen.AdminOrganization{
 		ID:                             row.ID,
 		Name:                           row.Name,
@@ -2146,6 +2148,8 @@ func (s *Service) adminOrganizationFromGetRow(row repo.AdminGetOrganizationRow) 
 		TrialDemotedAt:                 pgTimestampPtr(row.TrialDemotedAt),
 		CreationSource:                 conv.FromPGText[string](row.CreationSource),
 		AdoptionDashboardURL:           conv.FromPGText[string](row.AdoptionDashboardUrl),
+		FunctionTimeoutSeconds:         &functionTimeoutSeconds,
+		FunctionTimeoutIsDefault:       &functionTimeoutIsDefault,
 		MemberCount:                    int(row.MemberCount),
 		CreatedAt:                      row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:                      row.UpdatedAt.Time.Format(time.RFC3339),
@@ -2173,11 +2177,13 @@ func (s *Service) adminOrganizationFromRow(row repo.AdminListOrganizationsRow) *
 		TrialDemotedAt:                 nil,
 		// The list does not select it. The record view asks for one organization
 		// and reads it there, like trial_tier above.
-		CreationSource:       nil,
-		AdoptionDashboardURL: nil,
-		MemberCount:          int(row.MemberCount),
-		CreatedAt:            row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:            row.UpdatedAt.Time.Format(time.RFC3339),
+		CreationSource:           nil,
+		AdoptionDashboardURL:     nil,
+		FunctionTimeoutSeconds:   nil,
+		FunctionTimeoutIsDefault: nil,
+		MemberCount:              int(row.MemberCount),
+		CreatedAt:                row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:                row.UpdatedAt.Time.Format(time.RFC3339),
 	}
 }
 

@@ -8373,6 +8373,240 @@ func DecodeSetAdoptionDashboardURLResponse(decoder func(*http.Response) goahttp.
 	}
 }
 
+// BuildSetFunctionTimeoutRequest instantiates a HTTP request object with
+// method and path set to call the "admin" service "setFunctionTimeout" endpoint
+func (c *Client) BuildSetFunctionTimeoutRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SetFunctionTimeoutAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "setFunctionTimeout", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSetFunctionTimeoutRequest returns an encoder for requests sent to the
+// admin setFunctionTimeout server.
+func EncodeSetFunctionTimeoutRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.SetFunctionTimeoutPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "setFunctionTimeout", "*admin.SetFunctionTimeoutPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewSetFunctionTimeoutRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "setFunctionTimeout", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSetFunctionTimeoutResponse returns a decoder for responses returned by
+// the admin setFunctionTimeout endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeSetFunctionTimeoutResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSetFunctionTimeoutResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body SetFunctionTimeoutResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setFunctionTimeout", err)
+			}
+			err = ValidateSetFunctionTimeoutResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setFunctionTimeout", err)
+			}
+			res := NewSetFunctionTimeoutAdminOrganizationOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body SetFunctionTimeoutUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setFunctionTimeout", err)
+			}
+			err = ValidateSetFunctionTimeoutUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setFunctionTimeout", err)
+			}
+			return nil, NewSetFunctionTimeoutUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SetFunctionTimeoutForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setFunctionTimeout", err)
+			}
+			err = ValidateSetFunctionTimeoutForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setFunctionTimeout", err)
+			}
+			return nil, NewSetFunctionTimeoutForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SetFunctionTimeoutBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setFunctionTimeout", err)
+			}
+			err = ValidateSetFunctionTimeoutBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setFunctionTimeout", err)
+			}
+			return nil, NewSetFunctionTimeoutBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SetFunctionTimeoutNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setFunctionTimeout", err)
+			}
+			err = ValidateSetFunctionTimeoutNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setFunctionTimeout", err)
+			}
+			return nil, NewSetFunctionTimeoutNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SetFunctionTimeoutConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setFunctionTimeout", err)
+			}
+			err = ValidateSetFunctionTimeoutConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setFunctionTimeout", err)
+			}
+			return nil, NewSetFunctionTimeoutConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SetFunctionTimeoutUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setFunctionTimeout", err)
+			}
+			err = ValidateSetFunctionTimeoutUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setFunctionTimeout", err)
+			}
+			return nil, NewSetFunctionTimeoutUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SetFunctionTimeoutInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setFunctionTimeout", err)
+			}
+			err = ValidateSetFunctionTimeoutInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setFunctionTimeout", err)
+			}
+			return nil, NewSetFunctionTimeoutInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SetFunctionTimeoutInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "setFunctionTimeout", err)
+				}
+				err = ValidateSetFunctionTimeoutInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "setFunctionTimeout", err)
+				}
+				return nil, NewSetFunctionTimeoutInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SetFunctionTimeoutUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "setFunctionTimeout", err)
+				}
+				err = ValidateSetFunctionTimeoutUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "setFunctionTimeout", err)
+				}
+				return nil, NewSetFunctionTimeoutUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "setFunctionTimeout", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SetFunctionTimeoutGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setFunctionTimeout", err)
+			}
+			err = ValidateSetFunctionTimeoutGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setFunctionTimeout", err)
+			}
+			return nil, NewSetFunctionTimeoutGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "setFunctionTimeout", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildGetStripeSubscriptionRequest instantiates a HTTP request object with
 // method and path set to call the "admin" service "getStripeSubscription"
 // endpoint
@@ -33775,6 +34009,8 @@ func unmarshalAdminOrganizationResponseBodyToAdminAdminOrganization(v *AdminOrga
 		TrialConvertedAt:               v.TrialConvertedAt,
 		TrialDemotedAt:                 v.TrialDemotedAt,
 		AdoptionDashboardURL:           v.AdoptionDashboardURL,
+		FunctionTimeoutSeconds:         v.FunctionTimeoutSeconds,
+		FunctionTimeoutIsDefault:       v.FunctionTimeoutIsDefault,
 		MemberCount:                    *v.MemberCount,
 		CreationSource:                 v.CreationSource,
 		CreatedAt:                      *v.CreatedAt,
