@@ -1,5 +1,16 @@
 # server
 
+## 2.45.0
+
+### Minor Changes
+
+- 5cecfc1: Each intent-policy analysis now records its results. Every tool call judged on the intent policies analysis page is published as a `gram.intentpolicy.v1.Assessment` event, and `gram streams` writes those events to the lake as daily-partitioned Parquet under `gram.intentpolicy.v1.LakePrimary/`. Each row says who ran the analysis (organization, project, user), which session and tool call it judged, the guardrail version, the evaluator and model, every label and contract outcome, the final decision, cost and latency, and when the call happened and when it was judged. Tool arguments are left out; a row carries only their size. Publishing never waits on Pub/Sub or fails the analysis.
+
+### Patch Changes
+
+- fc4921c: A risk policy evaluate grant that names a server (`server_url` or `server_identity`) is now refused when saved. A policy's audience is the same on every server, so such a grant applied everywhere despite naming one server. Bypass and block grants still take a server.
+- 2c4200a: Staff can preview and apply the plugin marketplace token backfill and the function runner key organization backfill from a temporary **Secret backfills** page in the admin dashboard. Both run inside the admin server, so nobody needs database write access or the platform key on their machine.
+
 ## 2.44.0
 
 ### Minor Changes

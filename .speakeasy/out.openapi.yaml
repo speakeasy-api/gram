@@ -14959,6 +14959,103 @@ paths:
       tags:
         - assistants
       x-speakeasy-name-override: getManaged
+  /rpc/assistants.inferIntent:
+    post:
+      description: Infer what the calling user is trying to do from their recent dashboard activity, so the Project Assistant can open with a specific offer of help instead of an empty prompt. The activity journal is sent by the dashboard and is not stored. Returns no goal when the activity is too thin to infer a task.
+      operationId: inferAssistantIntent
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InferIntentRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistantIntent'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: inferIntent assistants
+      tags:
+        - assistants
+      x-speakeasy-name-override: inferIntent
+      x-speakeasy-react-hook:
+        name: InferAssistantIntent
+        type: mutation
   /rpc/assistants.interruptTurn:
     post:
       description: 'Stop whatever a conversation is currently generating. Cancels turns still queued on the conversation''s thread and interrupts the turn in flight on the assistant runtime, so the reply stops where it is rather than finishing in the background. Idempotent and safe to call when nothing is running: `stopped` is false when the reply had already finished.'
@@ -93883,6 +93980,30 @@ components:
         - status
         - created_at
         - updated_at
+    AssistantActivityEntry:
+      type: object
+      properties:
+        at:
+          type: string
+          description: When it happened.
+          format: date-time
+        detail:
+          type: string
+          description: A short description, such as a page title, an action and its outcome, or an error message.
+          maxLength: 300
+        kind:
+          type: string
+          description: What kind of entry this is.
+          enum:
+            - page
+            - action
+            - error
+            - signal
+      description: One thing the user did or saw in the dashboard.
+      required:
+        - at
+        - kind
+        - detail
     AssistantExecutionProfile:
       type: object
       properties:
@@ -93915,6 +94036,47 @@ components:
         - execution_context
         - version
         - servers
+    AssistantIntent:
+      type: object
+      properties:
+        blocker:
+          type: string
+          description: What appears to be stopping the user. Absent when nothing is.
+        confidence:
+          type: number
+          description: How sure the inference is, from 0 to 1.
+          format: double
+          minimum: 0
+          maximum: 1
+        frustration:
+          type: string
+          description: How stuck the user appears to be.
+          enum:
+            - none
+            - low
+            - medium
+            - high
+        goal:
+          type: string
+          description: The task the user appears to be working on. Absent when no task can be inferred.
+        opener:
+          type: string
+          description: A short, specific line the assistant can open with. Absent when there is nothing specific to say.
+        stage:
+          type: string
+          description: Where the user is in that task.
+        suggested_prompts:
+          type: array
+          items:
+            type: string
+            maxLength: 120
+          description: Up to three short prompts the user can send.
+          maxItems: 3
+      description: What the user appears to be trying to do, inferred from their recent activity.
+      required:
+        - frustration
+        - suggested_prompts
+        - confidence
     AssistantMCPServerRef:
       type: object
       properties:
@@ -105642,6 +105804,26 @@ components:
         - assignments_removed
         - skipped_app_ids
         - truncated
+    InferIntentRequestBody:
+      type: object
+      properties:
+        activity:
+          type: array
+          items:
+            $ref: '#/components/schemas/AssistantActivityEntry'
+          description: The user's recent dashboard activity, oldest first.
+          maxItems: 60
+        assistant_id:
+          type: string
+          description: The Project Assistant the inference is for.
+          format: uuid
+        current_path:
+          type: string
+          description: The dashboard path the user is on, without the organization and project prefix.
+          maxLength: 500
+      required:
+        - assistant_id
+        - activity
     InferenceSpendCap:
       type: object
       properties:
