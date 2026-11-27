@@ -6,10 +6,13 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	tokenrepo "github.com/speakeasy-api/gram/server/internal/auth/assistanttokens/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
+	gramcache "github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -67,6 +70,23 @@ func (m *Manager) MintTurnCredential(ctx context.Context, credential principalcr
 	return raw, nil
 }
 
+// BindRuntime attaches the assistant thread and chat recorded for an
+// already-authenticated principal credential, if one was minted as an assistant
+// turn credential. A principal credential with no runtime binding is returned
+// unchanged; a binding whose assistant or thread has been deleted or paused is
+// rejected as unauthorized.
+func (m *Manager) BindRuntime(ctx context.Context) (context.Context, error) {
+	credential, ok := principalcredential.FromContext(ctx)
+	if !ok || m == nil || m.runtimeBindings == nil || m.runtimeBindings == gramcache.NoopCache {
+		return ctx, nil
+	}
+	binding, found, err := m.loadRuntimeBinding(ctx, credential, false)
+	if err != nil || !found {
+		return ctx, err
+	}
+	return attachRuntimeBinding(ctx, binding), nil
+}
+
 // AuthorizeRuntime authorizes runner calls that serve the assistant itself:
 // bootstrap, compaction persistence, MCP OAuth flow creation, model inference
 // and the platform toolset. A principal credential is authenticated as its
@@ -85,19 +105,9 @@ func (m *Manager) AuthorizeRuntime(ctx context.Context, header string) (context.
 		return ctx, nil, fmt.Errorf("authenticate runtime credential: %w", err)
 	}
 	credential, _ := principalcredential.FromContext(authed)
-	var binding RuntimeBinding
-	if err := m.runtimeBindings.Get(ctx, runtimeBindingKey(credential.ID), &binding); err != nil {
-		return ctx, nil, oops.E(oops.CodeUnauthorized, err, "runtime credential is not bound to an assistant thread")
-	}
-	if binding.OrganizationID != credential.Credential.OrganizationID || binding.ProjectID != credential.Credential.ProjectID {
-		return ctx, nil, oops.C(oops.CodeUnauthorized)
-	}
-	lifecycle, err := m.tokens.GetAssistantTokenRevocation(ctx, tokenrepo.GetAssistantTokenRevocationParams{ProjectID: binding.ProjectID, AssistantID: binding.AssistantID, ThreadID: binding.ThreadID})
+	binding, _, err := m.loadRuntimeBinding(authed, credential, true)
 	if err != nil {
-		return ctx, nil, oops.E(oops.CodeUnauthorized, err, "runtime credential thread unavailable")
-	}
-	if lifecycle.ThreadDeleted || lifecycle.AssistantDeleted || lifecycle.AssistantStatus != "active" {
-		return ctx, nil, oops.C(oops.CodeUnauthorized)
+		return ctx, nil, err
 	}
 	authed, err = m.authz.PrepareContext(authed)
 	if err != nil {
@@ -106,8 +116,7 @@ func (m *Manager) AuthorizeRuntime(ctx context.Context, header string) (context.
 		}
 		return ctx, nil, oops.E(oops.CodeUnexpected, err, "admit runtime credential")
 	}
-	authed = context.WithValue(authed, runtimeChatKey{}, binding.ChatID)
-	authed = contextvalues.SetAssistantPrincipal(authed, contextvalues.AssistantPrincipal{AssistantID: binding.AssistantID, ThreadID: binding.ThreadID})
+	authed = attachRuntimeBinding(authed, binding)
 	userID := credential.Credential.AuthorizerUserID
 	var claims Claims
 	claims.OrgID = binding.OrganizationID
@@ -116,4 +125,42 @@ func (m *Manager) AuthorizeRuntime(ctx context.Context, header string) (context.
 	claims.ThreadID = binding.ThreadID.String()
 	claims.UserID = userID
 	return authed, &claims, nil
+}
+
+func (m *Manager) loadRuntimeBinding(ctx context.Context, credential principalcredential.Authenticated, required bool) (RuntimeBinding, bool, error) {
+	var binding RuntimeBinding
+	if m.runtimeBindings == nil {
+		if required {
+			return binding, false, oops.E(oops.CodeUnauthorized, nil, "runtime credential is not bound to an assistant thread")
+		}
+		return binding, false, nil
+	}
+	if err := m.runtimeBindings.Get(ctx, runtimeBindingKey(credential.ID), &binding); err != nil {
+		if !required && errors.Is(err, cache.ErrCacheMiss) {
+			return binding, false, nil
+		}
+		if required {
+			return binding, false, oops.E(oops.CodeUnauthorized, err, "runtime credential is not bound to an assistant thread")
+		}
+		return binding, false, fmt.Errorf("read runtime credential binding: %w", err)
+	}
+	if binding.OrganizationID != credential.Credential.OrganizationID || binding.ProjectID != credential.Credential.ProjectID {
+		return binding, false, oops.C(oops.CodeUnauthorized)
+	}
+	lifecycle, err := m.tokens.GetAssistantTokenRevocation(ctx, tokenrepo.GetAssistantTokenRevocationParams{ProjectID: binding.ProjectID, AssistantID: binding.AssistantID, ThreadID: binding.ThreadID})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return binding, false, oops.E(oops.CodeUnauthorized, err, "runtime credential thread unavailable")
+		}
+		return binding, false, fmt.Errorf("check runtime credential thread revocation: %w", err)
+	}
+	if lifecycle.ThreadDeleted || lifecycle.AssistantDeleted || lifecycle.AssistantStatus != "active" {
+		return binding, false, oops.C(oops.CodeUnauthorized)
+	}
+	return binding, true, nil
+}
+
+func attachRuntimeBinding(ctx context.Context, binding RuntimeBinding) context.Context {
+	ctx = context.WithValue(ctx, runtimeChatKey{}, binding.ChatID)
+	return contextvalues.SetAssistantPrincipal(ctx, contextvalues.AssistantPrincipal{AssistantID: binding.AssistantID, ThreadID: binding.ThreadID})
 }

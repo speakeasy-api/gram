@@ -306,7 +306,7 @@ func (s *Service) logMetaMemberDiscoveryFailure(ctx context.Context, gate *metaG
 	attempt.member = &failure.member
 	attempt.fail(failure.status, failure.message)
 	row := metaFailureRow{unstamped: true, source: ""}
-	if failure.member.backend == metaMemberBackendHosted {
+	if failure.member.backend == metaMemberBackendHosted || failure.member.backend == metaMemberBackendPlatform {
 		row.source = failure.member.slug
 	}
 	qualified := metamcp.QualifyName(failure.member.slug, gatewayDiscoveryToolPrefix+toolName)
@@ -344,7 +344,7 @@ func withOwnTrace(ctx context.Context, parent trace.SpanContext) context.Context
 // the stable backend id rather than the mutable slug.
 func metaMemberToolURN(member metaMember, toolName string) string {
 	switch {
-	case member.backend == metaMemberBackendHosted:
+	case member.backend == metaMemberBackendHosted, member.backend == metaMemberBackendPlatform:
 		return "tools:" + unresolvedToolKind + ":" + member.serverID.String() + ":" + toolName
 	case member.remoteServerID.Valid:
 		return "tools:" + string(urn.ToolKindExternalMCP) + ":" + member.remoteServerID.UUID.String() + ":" + toolName
