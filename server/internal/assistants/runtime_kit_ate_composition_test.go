@@ -26,11 +26,6 @@ func TestKitATEEgressInjectedBootstrapOmitsSandboxCredentials(t *testing.T) {
 		Identity:          assistantidentity.RuntimeIdentity{ProjectID: uuid.New()},
 	}
 
-	gkeMCP, err := kitCompositionMCP(resource, binding)
-	require.NoError(t, err)
-	require.Contains(t, string(gkeMCP), KitWorkloadAssertionPath)
-	require.Contains(t, string(gkeMCP), `"workload_identity"`)
-
 	ateMCP, err := kitProjectGatewayMCPJSON(resource, map[string]string{"Authorization": "Bearer " + kitATEEgressAuthPlaceholder}, nil)
 	require.NoError(t, err)
 	require.NotContains(t, string(ateMCP), KitWorkloadAssertionPath)
@@ -132,20 +127,15 @@ func TestKitATEActorTokenIsolation(t *testing.T) {
 	require.Len(t, first, 43)
 }
 
-func TestKitATEWorkloadSubjectWorksInAllEnvironments(t *testing.T) {
+func TestKitATEWorkloadSubject(t *testing.T) {
 	t.Parallel()
 	r := assistantRuntimeRecord{ID: uuid.New()}
-	for _, env := range []string{"dev", "staging", "production", "local"} {
-		t.Run(env, func(t *testing.T) {
-			t.Parallel()
-			c := KitLocalCompositionConfig{
-				Environment: env,
-				ateIdentity: &kitATEWorkloadIdentity{Atespace: "prod-space", ActorName: "actor-one"},
-			}
-			subject, serviceAccount, err := kitWorkloadSubject(r, c, "actor-gateway-generation")
-			require.NoError(t, err)
-			require.Equal(t, "actor/prod-space/actor-one", subject)
-			require.Empty(t, serviceAccount)
-		})
+	c := KitLocalCompositionConfig{
+		Environment: "production",
+		ateIdentity: &kitATEWorkloadIdentity{Atespace: "prod-space", ActorName: "actor-one"},
 	}
+	subject, serviceAccount, err := kitWorkloadSubject(r, c, "actor-gateway-generation")
+	require.NoError(t, err)
+	require.Equal(t, "actor/prod-space/actor-one", subject)
+	require.Empty(t, serviceAccount)
 }

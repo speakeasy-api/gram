@@ -24,7 +24,7 @@ func TestATEIssuerAndJWKSFlags(t *testing.T) {
 	require.Equal(t, "https://idp.ate.example.com/custom/jwks", c.String("assistant-ate-jwks-url"))
 }
 
-func TestATEOnlyRuntimeConstructionInAnyEnvironment(t *testing.T) {
+func TestATERuntimeConstructionWithoutClusterEndpoint(t *testing.T) {
 	t.Parallel()
 	serverURL, err := url.Parse("https://1.1.1.1")
 	require.NoError(t, err)
@@ -37,20 +37,16 @@ func TestATEOnlyRuntimeConstructionInAnyEnvironment(t *testing.T) {
 		wantError string
 	}{
 		{
-			name:   "ATE enabled in production without GKE cluster uses unavailable primary",
+			name:   "ATE enabled without cluster endpoint uses unavailable primary",
 			values: map[string]string{"environment": "production", "assistant-ate-enabled": "true", "assistant-runtime-image-tag": "test"},
 		},
 		{
-			name:   "ATE enabled in dev without GKE cluster uses unavailable primary",
-			values: map[string]string{"environment": "dev", "assistant-ate-enabled": "true", "assistant-runtime-image-tag": "test"},
-		},
-		{
-			name:      "default GKE provider without ATE still requires a backend",
+			name:      "default provider without ATE requires a backend",
 			values:    map[string]string{"environment": "production", "assistant-runtime-image-tag": "test"},
 			wantError: "requires at least one backend",
 		},
 		{
-			name:      "configured GKE cluster is preserved alongside ATE",
+			name:      "configured cluster endpoint is validated alongside ATE",
 			values:    map[string]string{"environment": "production", "assistant-ate-enabled": "true", "assistant-runtime-image-tag": "test", "assistant-runtime-gke-cluster-endpoint": "https://cluster.example.com", "assistant-runtime-gke-cluster-ca": "not-base64"},
 			wantError: "decode --assistant-runtime-gke-cluster-ca",
 		},
@@ -105,37 +101,13 @@ func TestATEStartupValidationAndDisabledProvider(t *testing.T) {
 		})
 	})
 
-	t.Run("enabled ATE rejects missing assistant-ate-image even when assistant-kit-image is set", func(t *testing.T) {
-		t.Parallel()
-		c := kitCLIContext(t, map[string]string{
-			"environment":                     "production",
-			"assistant-ate-enabled":           "true",
-			"assistant-kit-image":             "ghcr.io/speakeasy-api/kit@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-			"assistant-ate-worker-selector":   "workload-type=ate-assistants",
-			"assistant-ate-issuer-url":        "https://ate.example.com",
-			"assistant-ate-api-address":       "127.0.0.1:1",
-			"assistant-ate-router-address":    "127.0.0.1:2",
-			"assistant-ate-service-ca-file":   "/nonexistent/ca.pem",
-			"assistant-ate-client-cert-file":  "/nonexistent/cert.pem",
-			"assistant-ate-client-key-file":   "/nonexistent/key.pem",
-			"assistant-ate-audience-jwt-file": "/nonexistent/token",
-			"assistant-ate-atespace":          "prod-assistants",
-			"assistant-ate-template":          "kit-v1",
-		})
-		require.Panics(t, func() {
-			_ = installKitLocalRuntimeFromCLI(testenv.NewLogger(t), c, &assistants.ServiceCore{}, nil, nil, redis.NewClient(&redis.Options{Addr: "127.0.0.1:0"}), serverURL, nil)
-		})
-	})
-
-	t.Run("enabled ATE rejects missing assistant-ate-issuer-url even when assistant-kit-workload-issuer is set", func(t *testing.T) {
+	t.Run("enabled ATE rejects missing assistant-ate-issuer-url", func(t *testing.T) {
 		t.Parallel()
 		c := kitCLIContext(t, map[string]string{
 			"environment":                     "production",
 			"assistant-ate-enabled":           "true",
 			"assistant-ate-image":             "gcr.io/example/gram-ate-runtime:sha-deadbeef@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 			"assistant-ate-worker-selector":   "workload-type=ate-assistants",
-			"assistant-kit-workload-issuer":   "https://ate.example.com",
-			"assistant-kit-workload-jwks-url": "https://ate.example.com/.well-known/jwks.json",
 			"assistant-ate-api-address":       "127.0.0.1:1",
 			"assistant-ate-router-address":    "127.0.0.1:2",
 			"assistant-ate-service-ca-file":   "/nonexistent/ca.pem",
@@ -177,7 +149,7 @@ func TestATEStartupValidationAndDisabledProvider(t *testing.T) {
 		}
 	})
 
-	t.Run("enabled ATE in production passes composition root config check when all flags set without assistant-kit-image", func(t *testing.T) {
+	t.Run("enabled ATE reaches installer when required flags are set", func(t *testing.T) {
 		t.Parallel()
 		c := kitCLIContext(t, map[string]string{
 			"environment":                     "production",
@@ -194,8 +166,6 @@ func TestATEStartupValidationAndDisabledProvider(t *testing.T) {
 			"assistant-ate-atespace":          "prod-assistants",
 			"assistant-ate-template":          "kit-v1",
 		})
-		// Reaches ServiceCore.InstallKitATERuntime (does not panic on inv.Require
-		// and does not fail on any environment == "dev" gate).
 		err := installKitLocalRuntimeFromCLI(testenv.NewLogger(t), c, &assistants.ServiceCore{}, nil, nil, redis.NewClient(&redis.Options{Addr: "127.0.0.1:0"}), serverURL, nil)
 		require.ErrorContains(t, err, "ATE requires guarded HTTP")
 	})

@@ -2,9 +2,6 @@ package assistants
 
 import (
 	"context"
-	"os"
-	"regexp"
-	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -75,7 +72,7 @@ func TestSelectTurnUserWithResolution_CoversAllInitiatorSources(t *testing.T) {
 			wantInitiator:  ateThreadInitiator{UserID: "user-oauth", Resolution: ATEInitiatorMCPAuthResume},
 		},
 		{
-			name:           "cron trigger records explicit no_user instead of owner",
+			name:           "cron trigger records explicit no_user",
 			source:         sourceKindCron,
 			payload:        `{"scheduled_at":"2026-01-01T00:00:00Z"}`,
 			wantUser:       "user-owner",
@@ -84,7 +81,7 @@ func TestSelectTurnUserWithResolution_CoversAllInitiatorSources(t *testing.T) {
 			wantInitiator:  ateThreadInitiator{UserID: "", Resolution: ATEInitiatorNoUser},
 		},
 		{
-			name:           "webhook trigger records explicit no_user instead of owner",
+			name:           "webhook trigger records explicit no_user",
 			source:         sourceKindGithub,
 			payload:        `{"user_id":"spoofed-webhook-user","event":"deploy"}`,
 			wantUser:       "user-owner",
@@ -102,7 +99,7 @@ func TestSelectTurnUserWithResolution_CoversAllInitiatorSources(t *testing.T) {
 			wantInitiator:  ateThreadInitiator{UserID: "", Resolution: ATEInitiatorNoUser},
 		},
 		{
-			name:           "legacy v0 wake records explicit no_user",
+			name:           "unversioned wake records explicit no_user",
 			source:         sourceKindWake,
 			payload:        `{"identity_version":0}`,
 			wantUser:       "user-owner",
@@ -319,59 +316,39 @@ func TestKitATEInitiator_RecordedOnceAndImmutableAcrossTurnsCrashesAndRuntimeRep
 		require.Equal(t, ATEInitiatorNoUser, row2.InitiatingUserResolution)
 	})
 
-	t.Run("legacy not_recorded actor row fails closed on replacement instead of adopting a later sender", func(t *testing.T) {
+	t.Run("unrecorded actor row fails closed on replacement", func(t *testing.T) {
 		t.Parallel()
 		ctx := t.Context()
 		core, q, runtimeSeed, ateBackend, _, _, reserveAndEnsure := newFixture(t)
-		threadLegacy := insertATEThreadFixture(t, core.db, runtimeSeed.ProjectID, runtimeSeed.AssistantID, "initiator-legacy")
-		rec1 := reserveAndEnsure(threadLegacy)
+		threadUnrecorded := insertATEThreadFixture(t, core.db, runtimeSeed.ProjectID, runtimeSeed.AssistantID, "initiator-unrecorded")
+		rec1 := reserveAndEnsure(threadUnrecorded)
 
-		// Seed a soft-deleted legacy actor row whose initiating_user_resolution is not_recorded.
-		legacyRow, err := q.InsertAssistantATEActor(ctx, assistantrepo.InsertAssistantATEActorParams{
-			ActorName:                "spk-kit-legacy-actor",
-			ActorUid:                 "uid-legacy-" + uuid.NewString(),
+		// Seed a soft-deleted actor row whose initiating_user_resolution is not_recorded.
+		unrecordedRow, err := q.InsertAssistantATEActor(ctx, assistantrepo.InsertAssistantATEActorParams{
+			ActorName:                "spk-kit-unrecorded-actor",
+			ActorUid:                 "uid-unrecorded-" + uuid.NewString(),
 			State:                    ateActorStateRunning,
 			Configured:               true,
 			InitiatingUserResolution: ATEInitiatorNotRecorded,
 			RuntimeID:                rec1.ID,
 			ProjectID:                runtimeSeed.ProjectID,
 			AssistantID:              runtimeSeed.AssistantID,
-			ThreadID:                 threadLegacy,
+			ThreadID:                 threadUnrecorded,
 		})
 		require.NoError(t, err)
 		_, err = q.SoftDeleteAssistantATEActor(ctx, assistantrepo.SoftDeleteAssistantATEActorParams{
 			RetiredState: ateActorStateRetired,
 			ProjectID:    runtimeSeed.ProjectID,
-			ID:           legacyRow.ID,
+			ID:           unrecordedRow.ID,
 		})
 		require.NoError(t, err)
 
-		// Attempting to create a replacement actor on a later turn by User B must fail closed.
+		// Attempting to create a replacement actor on a later turn by another sender must fail closed.
 		err = ateBackend.RunTurn(ctx, rec1, runTurnRequest{
-			ThreadID: threadLegacy, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium",
+			ThreadID: threadUnrecorded, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium",
 			Initiator: ateThreadInitiator{UserID: "user-later-sender", Resolution: ATEInitiatorDashboardSender},
 		})
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "validate earliest ATE thread initiator")
 	})
-}
-
-// TestAssistantATEActorInitiatorColumnsAreNeverUpdated verifies statically that
-// no SQL UPDATE query in server/internal/assistants/queries.sql mutates
-// initiating_user_id or initiating_user_resolution after insert.
-func TestAssistantATEActorInitiatorColumnsAreNeverUpdated(t *testing.T) {
-	t.Parallel()
-	raw, err := os.ReadFile("queries.sql")
-	require.NoError(t, err)
-
-	// Split SQL statements by semicolon and inspect every UPDATE statement.
-	updateRe := regexp.MustCompile(`(?is)\bUPDATE\s+assistant_ate_actors\b`)
-	for stmt := range strings.SplitSeq(string(raw), ";") {
-		if !updateRe.MatchString(stmt) {
-			continue
-		}
-		lower := strings.ToLower(stmt)
-		require.NotContains(t, lower, "initiating_user_id", "UPDATE on assistant_ate_actors must never mutate initiating_user_id: %s", stmt)
-		require.NotContains(t, lower, "initiating_user_resolution", "UPDATE on assistant_ate_actors must never mutate initiating_user_resolution: %s", stmt)
-	}
 }

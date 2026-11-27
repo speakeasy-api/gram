@@ -47,13 +47,14 @@ func legacyTurnUserID(assistant assistantRecord, thread assistantThreadRecord, e
 // Canonical values for assistant_ate_actors.initiating_user_resolution.
 // Go constants are the single source of truth (no Postgres CHECK enum).
 const (
-	// ATEInitiatorNotRecorded is the schema default on legacy pre-AIM-1217 rows.
-	// New actor writes never persist this marker; AIM-1218 fails closed on it.
+	// ATEInitiatorNotRecorded is the default marker for rows that have no
+	// recorded initiator. New actor writes never persist this marker and
+	// authorization fails closed on it.
 	ATEInitiatorNotRecorded = "not_recorded"
 
 	// ATEInitiatorNoUser explicitly records that a thread started without an
 	// attributable human initiator (e.g. cron, webhook, unmapped non-Speakeasy
-	// Slack, or legacy wake). initiating_user_id is NULL.
+	// Slack, or unversioned wake). initiating_user_id is NULL.
 	ATEInitiatorNoUser = "no_user"
 
 	// ATEInitiatorDashboardSender records a dashboard message sender.

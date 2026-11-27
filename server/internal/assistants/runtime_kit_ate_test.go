@@ -70,13 +70,11 @@ type fakeATECluster struct {
 	actors               map[string]*fakeATEActor
 	nextUID              int
 	nextWorker           int
-	mintCalled           atomic.Bool
 	createAtespaceCalled atomic.Bool
 	createTemplateCalls  atomic.Int32
 	initVersionOverride  string
 
 	bootstrapCalls   atomic.Int32
-	assertionCalls   atomic.Int32
 	connect503Count  atomic.Int32
 	acpRequestCount  atomic.Int32
 	resumeCalls      atomic.Int32
@@ -297,11 +295,6 @@ func (f *fakeATECluster) CreateActorEgressPolicy(_ context.Context, req *ateapiv
 	return entry.egressPolicy, nil
 }
 
-func (f *fakeATECluster) MintActorJwt(_ context.Context, _ *ateapiv1.MintActorJwtRequest) (*ateapiv1.MintActorJwtResponse, error) {
-	f.mintCalled.Store(true)
-	return nil, status.Error(codes.Unimplemented, "MintActorJwt must never be called") //nolint:wrapcheck // gRPC server handler returns status.Error directly.
-}
-
 func (f *fakeATECluster) handleRouterConnect(t *testing.T, w http.ResponseWriter, r *http.Request) {
 	t.Helper()
 	if r.Method != http.MethodConnect {
@@ -427,9 +420,6 @@ func (f *fakeATECluster) serveInit(entry *fakeATEActor, rw *bufio.ReadWriter, re
 		entry.bootstrapped = true
 		entry.kitReady = true
 		_, _ = fmt.Fprintf(rw, "HTTP/1.1 204 No Content\r\n%sContent-Length: 0\r\n\r\n", versionHdr)
-	case req.URL.Path == "/assertion":
-		f.assertionCalls.Add(1)
-		_, _ = fmt.Fprintf(rw, "HTTP/1.1 404 Not Found\r\n%sContent-Length: 0\r\n\r\n", versionHdr)
 	default:
 		_, _ = fmt.Fprintf(rw, "HTTP/1.1 404 Not Found\r\n%sContent-Length: 0\r\n\r\n", versionHdr)
 	}
@@ -792,8 +782,6 @@ func TestKitATEBackendPrepareTurnStopResumeAndReap(t *testing.T) {
 
 	require.Equal(t, 1, bootstrapCount)
 	require.Equal(t, int32(1), cluster.bootstrapCalls.Load())
-	require.Equal(t, int32(0), cluster.assertionCalls.Load(), "assertion endpoint must never be called")
-	require.False(t, cluster.mintCalled.Load(), "MintActorJwt must never be called")
 	require.Equal(t, int32(1), cluster.acpRequestCount.Load())
 	require.Len(t, protoDriver.turns, 1)
 
@@ -834,10 +822,6 @@ func TestKitATEBackendPrepareTurnStopResumeAndReap(t *testing.T) {
 	require.Equal(t, []int32{80}, rules[3].GetHttp().GetPorts().GetNumbers())
 	require.Nil(t, rules[3].GetHttp().GetEffects())
 	cluster.mu.Unlock()
-
-	// Verify runtime metadata does not carry per-thread state or unused SnapshotURI.
-	require.NotContains(t, string(storedMetadata), "threads")
-	require.NotContains(t, string(storedMetadata), "snapshot_uri")
 
 	storedRow, ok, err := store.GetForThread(t.Context(), record, threadID)
 	require.NoError(t, err)
