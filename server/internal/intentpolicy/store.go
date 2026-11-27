@@ -8,15 +8,14 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	hooksrepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/metering"
-	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
 const (
@@ -65,7 +64,7 @@ type storedCall struct {
 
 // StoreTranscript writes the transcript as a new chat through the standard
 // chat message writer and returns its id.
-func StoreTranscript(ctx context.Context, db *pgxpool.Pool, writer *chat.ChatMessageWriter, p StoreParams, t Transcript, now time.Time) (uuid.UUID, error) {
+func StoreTranscript(ctx context.Context, writer *chat.ChatMessageWriter, p StoreParams, t Transcript, now time.Time) (uuid.UUID, error) {
 	chatID := p.ChatID
 	if chatID == uuid.Nil {
 		id, err := uuid.NewV7()
@@ -73,32 +72,6 @@ func StoreTranscript(ctx context.Context, db *pgxpool.Pool, writer *chat.ChatMes
 			return uuid.Nil, fmt.Errorf("generate chat id: %w", err)
 		}
 		chatID = id
-	}
-
-	// Sealing inside the transaction takes the key only from the cache, so load
-	// it before the transaction begins.
-	if err := writer.PrepareTranscripts(ctx, p.ProjectID); err != nil {
-		return uuid.Nil, fmt.Errorf("prepare transcript key: %w", err)
-	}
-
-	// One transaction, so a failed message write leaves no empty chat behind.
-	tx, err := db.Begin(ctx)
-	if err != nil {
-		return uuid.Nil, fmt.Errorf("begin transcript transaction: %w", err)
-	}
-	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
-
-	if _, err := hooksrepo.New(tx).UpsertClaudeCodeSession(ctx, hooksrepo.UpsertClaudeCodeSessionParams{
-		ID:             chatID,
-		ProjectID:      p.ProjectID,
-		OrganizationID: p.OrganizationID,
-		UserID:         conv.ToPGTextEmpty(p.UserID),
-		ExternalUserID: pgtype.Text{String: "", Valid: false},
-		UserAccountID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		Title:          conv.ToPGText(stripNUL(p.Title)),
-		Cwd:            conv.ToPGTextEmpty(stripNUL(t.Cwd)),
-	}); err != nil {
-		return uuid.Nil, fmt.Errorf("create chat: %w", err)
 	}
 
 	writes := make([]chat.MessageWrite, 0, len(t.Messages))
@@ -168,11 +141,27 @@ func StoreTranscript(ctx context.Context, db *pgxpool.Pool, writer *chat.ChatMes
 		})
 	}
 
-	if _, err := writer.WriteInTx(ctx, tx, writes); err != nil {
-		return uuid.Nil, fmt.Errorf("write transcript messages: %w", err)
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return uuid.Nil, fmt.Errorf("commit transcript: %w", err)
+	// One transaction, so a failed message write leaves no empty chat behind.
+	err := writer.InTx(ctx, p.ProjectID, func(tx pgx.Tx) error {
+		if _, err := hooksrepo.New(tx).UpsertClaudeCodeSession(ctx, hooksrepo.UpsertClaudeCodeSessionParams{
+			ID:             chatID,
+			ProjectID:      p.ProjectID,
+			OrganizationID: p.OrganizationID,
+			UserID:         conv.ToPGTextEmpty(p.UserID),
+			ExternalUserID: pgtype.Text{String: "", Valid: false},
+			UserAccountID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			Title:          conv.ToPGText(stripNUL(p.Title)),
+			Cwd:            conv.ToPGTextEmpty(stripNUL(t.Cwd)),
+		}); err != nil {
+			return fmt.Errorf("create chat: %w", err)
+		}
+		if _, err := writer.WriteInTx(ctx, tx, writes); err != nil {
+			return fmt.Errorf("write transcript messages: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("store transcript: %w", err)
 	}
 	writer.NotifyStoredRows(ctx, p.ProjectID, writes)
 	return chatID, nil

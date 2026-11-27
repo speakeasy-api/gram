@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
@@ -90,25 +91,25 @@ func (f *flagFixture) insertWithoutPrepare(t *testing.T, id uuid.UUID) {
 		StorageError: pgtype.Text{String: "", Valid: false},
 		CreatedAt:    pgtype.Timestamptz{Time: time.Now(), InfinityModifier: pgtype.Finite, Valid: true},
 	}}
-	p := &params[0]
-	refs := []ProtectedFieldRefs{{MessageID: id, Content: &p.Content, ContentRaw: &p.ContentRaw, ToolCalls: &p.ToolCalls, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: &p.StorageError}}
 	tx, err := f.db.Begin(ctx) //nolint:glint // notestingrawsql: caller-owned transaction boundary is the behavior under test.
 	require.NoError(t, err)
 	defer func() { _ = tx.Rollback(ctx) }()
 	f.provisioner.inTx.Store(true)
 	defer f.provisioner.inTx.Store(false)
-	_, err = f.transcripts.InsertChatMessages(ctx, tx, f.org, f.project, refs, func() ([]uuid.UUID, error) {
-		_, err := chatrepo.New(tx).CreateChatMessage(ctx, params) //nolint:glint // nodirectchatmessageinsert: drives InsertChatMessages with the writer's own insert query.
-		return []uuid.UUID{id}, err                               //nolint:wrapcheck // test insert.
-	})
+	_, err = f.transcripts.InsertChatMessages(ctx, tx, f.org, f.project, params)
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit(ctx))
 }
 
+// sealed reports whether the message has a transcript.
 func (f *flagFixture) sealed(t *testing.T, id uuid.UUID) bool {
 	t.Helper()
-	_, err := fixturerepo.New(f.db).MessageMetadata(t.Context(), id)
-	return err == nil
+	_, err := fixturerepo.New(f.db).Ciphertext(t.Context(), id, f.project, f.org)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false
+	}
+	require.NoError(t, err)
+	return true
 }
 
 func (f *flagFixture) update(t *testing.T, id uuid.UUID, notes string) {
@@ -128,6 +129,7 @@ func TestFlagOffKeepsProjectsPlaintext(t *testing.T) {
 	f.write(t, id)
 
 	require.Equal(t, ModePlaintext, f.transcripts.Mode(t.Context(), f.project))
+	require.False(t, f.transcripts.MaySeal(t.Context(), f.project))
 	require.False(t, f.sealed(t, id), "a flag-off project seals nothing")
 	require.Zero(t, f.provisioner.calls.Load(), "a flag-off organization is never provisioned")
 }
@@ -138,6 +140,7 @@ func TestFlagOnProvisionsBeforeTheWriteTransaction(t *testing.T) {
 	f.setFlag(true)
 
 	require.Equal(t, ModePlaintext, f.transcripts.Mode(t.Context(), f.project), "shadow mode waits for the organization's key")
+	require.True(t, f.transcripts.MaySeal(t.Context(), f.project), "a writer passes the organization so Prepare can provision it")
 	id := uuid.New()
 	f.write(t, id)
 	require.Equal(t, ModeShadow, f.transcripts.Mode(t.Context(), f.project))
@@ -198,9 +201,8 @@ func TestFlagOffThenOnServesPlaintextForEditsMadeWhileOff(t *testing.T) {
 
 	f.setFlag(true)
 	rows := []openRow{plaintextRow(id)}
-	rows[0].content = "plaintext edited while off"
 	require.NoError(t, OpenRows(t.Context(), f.transcripts, f.org, f.project, rows, openRowBody))
-	require.Equal(t, "plaintext edited while off", rows[0].content, "a disagreeing transcript serves the plaintext")
+	require.Equal(t, "edited while off", rows[0].notes.String, "a disagreeing transcript serves the plaintext")
 
 	f.update(t, id, "edited while on")
 	opened, err := f.store.Load(t.Context(), f.org, f.project, id)
@@ -214,7 +216,7 @@ func TestFlagUnknownProjectIsPlaintext(t *testing.T) {
 	f.flags.SetFlag(feature.FlagChatTranscriptShadow, feature.AnyDistinctID, true)
 	unknown := uuid.New()
 	require.Equal(t, ModePlaintext, f.transcripts.Mode(t.Context(), unknown))
-	require.NoError(t, f.transcripts.PrepareProject(t.Context(), unknown))
+	require.False(t, f.transcripts.MaySeal(t.Context(), unknown))
 	require.Zero(t, f.provisioner.calls.Load())
 }
 
@@ -259,7 +261,8 @@ func TestFlagReadsNeverProvision(t *testing.T) {
 	reader := NewTranscripts(f.store).WithFeatureFlag(f.flags, f.provisioner)
 	rows := []openRow{plaintextRow(id)}
 	require.NoError(t, OpenRows(t.Context(), reader, f.org, f.project, rows, openRowBody))
-	require.Equal(t, plaintextRow(id), rows[0], "an organization without a key is served from plaintext")
+	require.False(t, f.sealed(t, id))
+	require.Equal(t, "sensitive example", rows[0].content, "an organization without a key is served from plaintext")
 	require.Zero(t, f.provisioner.calls.Load(), "a read does not provision the key")
 
 	sealed := uuid.New()

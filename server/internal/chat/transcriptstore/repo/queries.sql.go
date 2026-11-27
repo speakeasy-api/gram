@@ -52,32 +52,50 @@ func (q *Queries) Backfill(ctx context.Context, arg BackfillParams) ([]uuid.UUID
 	return items, nil
 }
 
-const canonicalJSON = `-- name: CanonicalJSON :one
-SELECT COALESCE($1::jsonb::text, '')::text AS content_raw,
-       COALESCE($2::jsonb::text, '')::text AS tool_calls,
-       COALESCE($3::jsonb::text, '')::text AS tool_call_summaries
+const canonicalJSON = `-- name: CanonicalJSON :many
+SELECT (f.idx - 1)::integer AS idx,
+       (CASE WHEN f.value ? 'content_raw' THEN (f.value -> 'content_raw')::text ELSE '' END)::text AS content_raw,
+       (CASE WHEN f.value ? 'tool_calls' THEN (f.value -> 'tool_calls')::text ELSE '' END)::text AS tool_calls,
+       (CASE WHEN f.value ? 'tool_call_summaries' THEN (f.value -> 'tool_call_summaries')::text ELSE '' END)::text AS tool_call_summaries
+FROM jsonb_array_elements($1::jsonb) WITH ORDINALITY AS f(value, idx)
+ORDER BY f.idx
 `
 
-type CanonicalJSONParams struct {
-	ContentRaw        []byte
-	ToolCalls         []byte
-	ToolCallSummaries []byte
-}
-
 type CanonicalJSONRow struct {
+	Idx               int32
 	ContentRaw        string
 	ToolCalls         string
 	ToolCallSummaries string
 }
 
-// The text form Postgres stores for jsonb values, so encrypted-mode protected fields are
-// sealed and measured exactly as a plaintext row would hold them. NULL comes
-// back as the empty string, which no JSON value is.
-func (q *Queries) CanonicalJSON(ctx context.Context, arg CanonicalJSONParams) (CanonicalJSONRow, error) {
-	row := q.db.QueryRow(ctx, canonicalJSON, arg.ContentRaw, arg.ToolCalls, arg.ToolCallSummaries)
-	var i CanonicalJSONRow
-	err := row.Scan(&i.ContentRaw, &i.ToolCalls, &i.ToolCallSummaries)
-	return i, err
+// The text form Postgres stores for jsonb, for a batch of messages, so
+// protected fields are sealed and measured exactly as the columns hold them.
+// @fields is a JSON array with one object per message; an object holds
+// content_raw, tool_calls and tool_call_summaries only when they are not NULL.
+// A missing key comes back as the empty string, which no JSON value is.
+func (q *Queries) CanonicalJSON(ctx context.Context, fields []byte) ([]CanonicalJSONRow, error) {
+	rows, err := q.db.Query(ctx, canonicalJSON, fields)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CanonicalJSONRow
+	for rows.Next() {
+		var i CanonicalJSONRow
+		if err := rows.Scan(
+			&i.Idx,
+			&i.ContentRaw,
+			&i.ToolCalls,
+			&i.ToolCallSummaries,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const capture = `-- name: Capture :execrows
@@ -168,6 +186,183 @@ func (q *Queries) GetProjectOrganization(ctx context.Context, projectID uuid.UUI
 	return i, err
 }
 
+type InsertChatMessagesParams struct {
+	ID               uuid.UUID
+	ChatID           uuid.UUID
+	Role             string
+	ProjectID        uuid.UUID
+	Content          string
+	ContentRaw       []byte
+	ContentAssetUrl  pgtype.Text
+	StorageError     pgtype.Text
+	Model            pgtype.Text
+	MessageID        pgtype.Text
+	ToolCallID       pgtype.Text
+	UserID           pgtype.Text
+	ExternalUserID   pgtype.Text
+	FinishReason     pgtype.Text
+	ToolCalls        []byte
+	PromptTokens     int64
+	CompletionTokens int64
+	TotalTokens      int64
+	Origin           pgtype.Text
+	UserAgent        pgtype.Text
+	IpAddress        pgtype.Text
+	Source           pgtype.Text
+	ContentHash      []byte
+	Generation       int32
+	Replayed         bool
+	CreatedAt        pgtype.Timestamptz
+	ToolCallCount    int32
+	ContentBytes     int32
+	ContentRawBytes  int32
+	ToolCallsBytes   int32
+}
+
+const insertExternalChatMessage = `-- name: InsertExternalChatMessage :one
+INSERT INTO chat_messages (
+    id
+  , chat_id
+  , role
+  , project_id
+  , content
+  , content_raw
+  , content_asset_url
+  , storage_error
+  , model
+  , message_id
+  , tool_call_id
+  , user_id
+  , external_user_id
+  , external_message_id
+  , finish_reason
+  , tool_calls
+  , prompt_tokens
+  , completion_tokens
+  , total_tokens
+  , origin
+  , user_agent
+  , ip_address
+  , source
+  , content_hash
+  , generation
+  , created_at
+  , tool_call_count
+  , content_bytes
+  , content_raw_bytes
+  , tool_calls_bytes
+)
+VALUES (
+    $1
+  , $2
+  , $3
+  , $4::uuid
+  , $5
+  , $6
+  , $7
+  , $8
+  , $9
+  , $10
+  , $11
+  , $12
+  , $13
+  , $14
+  , $15
+  , $16
+  , $17
+  , $18
+  , $19
+  , $20
+  , $21
+  , $22
+  , $23
+  , $24
+  , $25
+  , $26
+  , $27::integer
+  , $28::integer
+  , $29::integer
+  , $30::integer
+)
+ON CONFLICT (chat_id, external_message_id) WHERE external_message_id IS NOT NULL
+DO NOTHING
+RETURNING id
+`
+
+type InsertExternalChatMessageParams struct {
+	ID                uuid.UUID
+	ChatID            uuid.UUID
+	Role              string
+	ProjectID         uuid.UUID
+	Content           string
+	ContentRaw        []byte
+	ContentAssetUrl   pgtype.Text
+	StorageError      pgtype.Text
+	Model             pgtype.Text
+	MessageID         pgtype.Text
+	ToolCallID        pgtype.Text
+	UserID            pgtype.Text
+	ExternalUserID    pgtype.Text
+	ExternalMessageID pgtype.Text
+	FinishReason      pgtype.Text
+	ToolCalls         []byte
+	PromptTokens      int64
+	CompletionTokens  int64
+	TotalTokens       int64
+	Origin            pgtype.Text
+	UserAgent         pgtype.Text
+	IpAddress         pgtype.Text
+	Source            pgtype.Text
+	ContentHash       []byte
+	Generation        int32
+	CreatedAt         pgtype.Timestamptz
+	ToolCallCount     int32
+	ContentBytes      int32
+	ContentRawBytes   int32
+	ToolCallsBytes    int32
+}
+
+// Stores an imported message with its metadata unless one with the same
+// external message ID is already in the chat. Run only through
+// Transcripts.InsertExternalChatMessage.
+func (q *Queries) InsertExternalChatMessage(ctx context.Context, arg InsertExternalChatMessageParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, insertExternalChatMessage,
+		arg.ID,
+		arg.ChatID,
+		arg.Role,
+		arg.ProjectID,
+		arg.Content,
+		arg.ContentRaw,
+		arg.ContentAssetUrl,
+		arg.StorageError,
+		arg.Model,
+		arg.MessageID,
+		arg.ToolCallID,
+		arg.UserID,
+		arg.ExternalUserID,
+		arg.ExternalMessageID,
+		arg.FinishReason,
+		arg.ToolCalls,
+		arg.PromptTokens,
+		arg.CompletionTokens,
+		arg.TotalTokens,
+		arg.Origin,
+		arg.UserAgent,
+		arg.IpAddress,
+		arg.Source,
+		arg.ContentHash,
+		arg.Generation,
+		arg.CreatedAt,
+		arg.ToolCallCount,
+		arg.ContentBytes,
+		arg.ContentRawBytes,
+		arg.ToolCallsBytes,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const insertToolCallIDs = `-- name: InsertToolCallIDs :exec
 INSERT INTO chat_message_tool_call_ids (message_id, tool_call_id, chat_id, project_id)
 SELECT m.id, ids.tool_call_id, m.chat_id, m.project_id
@@ -242,13 +437,14 @@ func (q *Queries) Load(ctx context.Context, arg LoadParams) (LoadRow, error) {
 
 const loadMany = `-- name: LoadMany :many
 SELECT m.id, m.chat_id, m.content, m.content_raw, m.tool_calls,
-       m.tool_outcome_notes, m.tool_call_summaries, m.storage_error, t.ciphertext
+       m.tool_outcome_notes, m.tool_call_summaries, m.storage_error,
+       COALESCE(t.ciphertext, '')::text AS ciphertext
 FROM chat_messages m
 JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
 JOIN projects p ON p.id = c.project_id
-JOIN chat_message_transcripts t ON t.message_id = m.id AND t.project_id = m.project_id AND t.organization_id = p.organization_id
+LEFT JOIN chat_message_transcripts t ON t.message_id = m.id AND t.project_id = m.project_id
+  AND t.organization_id = p.organization_id AND t.source_hash IS NULL
 WHERE m.id = ANY($1::uuid[]) AND m.project_id = $2 AND p.organization_id = $3
-  AND t.source_hash IS NULL
 `
 
 type LoadManyParams struct {
@@ -269,7 +465,9 @@ type LoadManyRow struct {
 	Ciphertext        string
 }
 
-// Legacy transcripts that still carry source_hash read as missing, as in Load.
+// Every message in the project, with its current transcript or an empty
+// ciphertext when it has none. Legacy transcripts that still carry
+// source_hash read as missing, as in Load.
 func (q *Queries) LoadMany(ctx context.Context, arg LoadManyParams) ([]LoadManyRow, error) {
 	rows, err := q.db.Query(ctx, loadMany, arg.MessageIds, arg.ProjectID, arg.OrganizationID)
 	if err != nil {
@@ -424,8 +622,9 @@ type UpdateMessageMetadataParams struct {
 	ProjectID       uuid.UUID
 }
 
-// Plaintext-free metadata measured from the snapshot just sealed, in the same
-// transaction, while LockChatMessage's lock keeps the protected fields unchanged.
+// Plaintext-free metadata for a row resealed from its own columns (Capture and
+// backfill), in the same transaction, while LockChatMessage's lock keeps the
+// protected fields unchanged. Inserts and updates write it with the row.
 func (q *Queries) UpdateMessageMetadata(ctx context.Context, arg UpdateMessageMetadataParams) (int64, error) {
 	result, err := q.db.Exec(ctx, updateMessageMetadata,
 		arg.ToolCallCount,
@@ -441,14 +640,197 @@ func (q *Queries) UpdateMessageMetadata(ctx context.Context, arg UpdateMessageMe
 	return result.RowsAffected(), nil
 }
 
+const upsertCorrelatedChatMessage = `-- name: UpsertCorrelatedChatMessage :one
+INSERT INTO chat_messages (
+    id
+  , chat_id
+  , role
+  , project_id
+  , content
+  , content_raw
+  , content_asset_url
+  , storage_error
+  , model
+  , message_id
+  , tool_call_id
+  , user_id
+  , external_user_id
+  , external_message_id
+  , finish_reason
+  , tool_calls
+  , prompt_tokens
+  , completion_tokens
+  , total_tokens
+  , origin
+  , user_agent
+  , ip_address
+  , source
+  , content_hash
+  , generation
+  , replayed
+  , created_at
+  , tool_call_count
+  , content_bytes
+  , content_raw_bytes
+  , tool_calls_bytes
+)
+VALUES (
+    $1
+  , $2
+  , $3
+  , $4::uuid
+  , $5
+  , $6
+  , $7
+  , $8
+  , $9
+  , $10
+  , $11
+  , $12
+  , $13
+  , $14
+  , $15
+  , $16
+  , $17
+  , $18
+  , $19
+  , $20
+  , $21
+  , $22
+  , $23
+  , $24
+  , $25
+  , $26
+  , $27
+  , $28::integer
+  , $29::integer
+  , $30::integer
+  , $31::integer
+)
+ON CONFLICT (chat_id, external_message_id) WHERE external_message_id IS NOT NULL
+DO UPDATE SET
+    source = EXCLUDED.source
+  , user_id = COALESCE(EXCLUDED.user_id, chat_messages.user_id)
+  , external_user_id = COALESCE(EXCLUDED.external_user_id, chat_messages.external_user_id)
+  , model = COALESCE(EXCLUDED.model, chat_messages.model)
+  , replayed = chat_messages.replayed OR EXCLUDED.replayed
+  , created_at = EXCLUDED.created_at
+  , risk_analyzed_at = NULL
+WHERE chat_messages.project_id = EXCLUDED.project_id
+  AND EXCLUDED.source IN ('codex', 'opencode', 'openclaw')
+  AND chat_messages.source = 'litellm'
+RETURNING id, content, tool_calls, model, user_id, external_user_id, source, user_agent, (xmax = 0) AS inserted
+`
+
+type UpsertCorrelatedChatMessageParams struct {
+	ID                uuid.UUID
+	ChatID            uuid.UUID
+	Role              string
+	ProjectID         uuid.UUID
+	Content           string
+	ContentRaw        []byte
+	ContentAssetUrl   pgtype.Text
+	StorageError      pgtype.Text
+	Model             pgtype.Text
+	MessageID         pgtype.Text
+	ToolCallID        pgtype.Text
+	UserID            pgtype.Text
+	ExternalUserID    pgtype.Text
+	ExternalMessageID pgtype.Text
+	FinishReason      pgtype.Text
+	ToolCalls         []byte
+	PromptTokens      int64
+	CompletionTokens  int64
+	TotalTokens       int64
+	Origin            pgtype.Text
+	UserAgent         pgtype.Text
+	IpAddress         pgtype.Text
+	Source            pgtype.Text
+	ContentHash       []byte
+	Generation        int32
+	Replayed          bool
+	CreatedAt         pgtype.Timestamptz
+	ToolCallCount     int32
+	ContentBytes      int32
+	ContentRawBytes   int32
+	ToolCallsBytes    int32
+}
+
+type UpsertCorrelatedChatMessageRow struct {
+	ID             uuid.UUID
+	Content        string
+	ToolCalls      []byte
+	Model          pgtype.Text
+	UserID         pgtype.Text
+	ExternalUserID pgtype.Text
+	Source         pgtype.Text
+	UserAgent      pgtype.Text
+	Inserted       bool
+}
+
+// Stores a message with its metadata, or promotes the earlier LiteLLM row for
+// the same turn to the native-hook source. A promotion changes attribution
+// only, so it leaves the protected fields and their metadata alone. Run only
+// through Transcripts.UpsertCorrelatedChatMessage.
+func (q *Queries) UpsertCorrelatedChatMessage(ctx context.Context, arg UpsertCorrelatedChatMessageParams) (UpsertCorrelatedChatMessageRow, error) {
+	row := q.db.QueryRow(ctx, upsertCorrelatedChatMessage,
+		arg.ID,
+		arg.ChatID,
+		arg.Role,
+		arg.ProjectID,
+		arg.Content,
+		arg.ContentRaw,
+		arg.ContentAssetUrl,
+		arg.StorageError,
+		arg.Model,
+		arg.MessageID,
+		arg.ToolCallID,
+		arg.UserID,
+		arg.ExternalUserID,
+		arg.ExternalMessageID,
+		arg.FinishReason,
+		arg.ToolCalls,
+		arg.PromptTokens,
+		arg.CompletionTokens,
+		arg.TotalTokens,
+		arg.Origin,
+		arg.UserAgent,
+		arg.IpAddress,
+		arg.Source,
+		arg.ContentHash,
+		arg.Generation,
+		arg.Replayed,
+		arg.CreatedAt,
+		arg.ToolCallCount,
+		arg.ContentBytes,
+		arg.ContentRawBytes,
+		arg.ToolCallsBytes,
+	)
+	var i UpsertCorrelatedChatMessageRow
+	err := row.Scan(
+		&i.ID,
+		&i.Content,
+		&i.ToolCalls,
+		&i.Model,
+		&i.UserID,
+		&i.ExternalUserID,
+		&i.Source,
+		&i.UserAgent,
+		&i.Inserted,
+	)
+	return i, err
+}
+
 const writeChatMessage = `-- name: WriteChatMessage :one
 UPDATE chat_messages AS m
 SET content = $1, content_raw = $2, tool_calls = $3,
     tool_outcome_notes = $4, tool_call_summaries = $5,
     storage_error = $6, tool_outcome = $7,
     finish_reason = $8, content_hash = $9,
-    risk_analyzed_at = $10
-WHERE m.id = $11 AND m.project_id = $12
+    risk_analyzed_at = $10,
+    tool_call_count = $11::integer, content_bytes = $12::integer,
+    content_raw_bytes = $13::integer, tool_calls_bytes = $14::integer
+WHERE m.id = $15 AND m.project_id = $16
 RETURNING m.id, m.seq, m.chat_id, m.project_id, m.role, m.content, m.content_raw, m.content_asset_url, m.model, m.message_id, m.finish_reason, m.tool_calls, m.prompt_tokens, m.completion_tokens, m.total_tokens, m.storage_error, m.user_id, m.external_user_id, m.external_message_id, m.origin, m.user_agent, m.ip_address, m.source, m.tool_call_id, m.tool_urn, m.tool_outcome, m.tool_outcome_notes, m.tool_call_summaries, m.content_hash, m.generation, m.capture_kind, m.original_message_id, m.replayed, m.created_at, m.risk_analyzed_at, m.tool_call_count, m.content_bytes, m.content_raw_bytes, m.tool_calls_bytes
 `
 
@@ -463,14 +845,18 @@ type WriteChatMessageParams struct {
 	FinishReason      pgtype.Text
 	ContentHash       []byte
 	RiskAnalyzedAt    pgtype.Timestamptz
+	ToolCallCount     int32
+	ContentBytes      int32
+	ContentRawBytes   int32
+	ToolCallsBytes    int32
 	MessageID         uuid.UUID
 	ProjectID         uuid.NullUUID
 }
 
 // The only statement that changes an existing message's protected fields: the six protected fields
-// columns, plus the non-protected fields the protected fields change may come with. Call it only
+// columns, their metadata, plus the non-protected fields the protected fields change may come with. Call it only
 // through Transcripts.UpdateChatMessage, which locks the row, applies the change
-// in Go and writes the encrypted transcript from what this returns, in the
+// in Go and writes the encrypted transcript from the same value, in the
 // same transaction.
 func (q *Queries) WriteChatMessage(ctx context.Context, arg WriteChatMessageParams) (ChatMessage, error) {
 	row := q.db.QueryRow(ctx, writeChatMessage,
@@ -484,6 +870,10 @@ func (q *Queries) WriteChatMessage(ctx context.Context, arg WriteChatMessagePara
 		arg.FinishReason,
 		arg.ContentHash,
 		arg.RiskAnalyzedAt,
+		arg.ToolCallCount,
+		arg.ContentBytes,
+		arg.ContentRawBytes,
+		arg.ToolCallsBytes,
 		arg.MessageID,
 		arg.ProjectID,
 	)
