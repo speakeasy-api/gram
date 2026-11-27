@@ -590,7 +590,11 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 			if stopped {
 				return nil
 			}
-			if pending, mailboxErr := checkInterruptsPending(); mailboxErr == nil && pending {
+			pending, mailboxErr := checkInterruptsPending()
+			if mailboxErr != nil {
+				return nil
+			}
+			if pending {
 				withdrawInFlightSteers()
 				return nil
 			}
@@ -808,7 +812,7 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 						return c.Cancel(ctx, session.SessionID)
 					})
 				}
-			} else if !settled {
+			} else if mailboxErr == nil && !settled {
 				if err := pollSteers(); err != nil {
 					return err
 				}
