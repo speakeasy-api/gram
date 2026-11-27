@@ -32,11 +32,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz/mcpauthztest"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/staff"
@@ -628,4 +631,36 @@ func TestDirectWorkloadBearer_TokenTypeConfusionAndNeighbouringCredentials(t *te
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	w = postCompletionRequest(router, "/projects/"+uuid.NewString()+"/chat/completions", exchangedToken, nil, "")
 	require.Equal(t, http.StatusUnauthorized, w.Code, w.Body.String())
+}
+
+func TestDirectWorkloadBearer_RateLimitedReturns429WithRetryAfter(t *testing.T) {
+	t.Parallel()
+	f := newWorkloadGrantFixture(t)
+	f.setAssertionReuse(t, true)
+	gateway, _, _ := seedDirectWorkloadProjectGateway(t, f)
+	enableWorkloadInference(t, f)
+
+	rec := mcpconnectionattemptstest.New(t)
+	f.ti.service.SetConnectionRecorder(rec.Recorder)
+	f.ti.service.SetWorkloadIssuerLookupBudget(func(context.Context, string) (ratelimit.Result, error) {
+		return ratelimit.Result{Allowed: false, Remaining: 0, RetryAfter: 3 * time.Second}, nil
+	})
+
+	upstream := &workloadInferenceCompletionClient{}
+	router := newDirectWorkloadChatMux(t, f, upstream)
+	projectPath := "/projects/" + f.fx.target.ProjectID.String() + "/chat/completions"
+
+	token := f.directAssertion(t, f.subject, mcp.DirectWorkloadProjectGatewayAudience, mcp.DirectWorkloadInferenceAudience)
+
+	gwResp, err := serveProjectGatewayHTTP(t, f.ti, gateway, gateway.projectSlug, token, listServersBody(t))
+	requireOopsCode(t, err, oops.CodeRateLimitExceeded)
+	require.Equal(t, "3", gwResp.Header().Get("Retry-After"))
+	require.Empty(t, gwResp.Header().Get("WWW-Authenticate"))
+
+	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeAuthCheckUnavailable)
+	require.Equal(t, "direct_workload_rate_limited", row.SubReason)
+
+	w := postCompletionRequest(router, projectPath, token, nil, "")
+	require.Equal(t, http.StatusTooManyRequests, w.Code, w.Body.String())
+	require.Empty(t, upstream.requests)
 }
