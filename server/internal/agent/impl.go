@@ -59,6 +59,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/sessionhandoff"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/userblock"
 )
 
 // ProductFeaturesClient is the slice of the product-features client the agent
@@ -424,6 +425,9 @@ func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload
 	// adding user:<id>, user:all, or role principals. Agent keys can outlive their
 	// owner's membership, so the authenticated user id is not trusted directly.
 	principals, err := plugins.ResolveDeliveryPrincipals(ctx, s.db, authCtx.ActiveOrganizationID, email, "")
+	if errors.Is(err, plugins.ErrDeliveryUserBlocked) {
+		return nil, fmt.Errorf("plugin delivery: %w", userblock.RefusalForEmail(ctx, s.logger, "plugin_delivery", email))
+	}
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error resolving agent plugin delivery principals").LogError(ctx, s.logger)
 	}

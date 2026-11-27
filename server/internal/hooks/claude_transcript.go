@@ -321,6 +321,9 @@ func (s *Service) persistClaudeTranscript(ctx context.Context, authCtx *contextv
 	// transcript session is attributed exactly as a hook-captured one would be.
 	payload := claudeTranscriptPayload(upload)
 	actor := s.resolveCanonicalActor(ctx, payload, authCtx)
+	if err := s.refuseBlockedActor(ctx, actor); err != nil {
+		return none, err
+	}
 	metadata := s.canonicalSessionMetadata(ctx, payload, authCtx, actor)
 
 	enabled, err := s.sessionCaptureEnabled(ctx, &metadata, projectID)
