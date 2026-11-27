@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -1077,14 +1078,17 @@ func (s *Service) cacheCanonicalMCPList(ctx context.Context, sessionID string, e
 			attr.SlogGenAIConversationID(sessionID),
 		)
 	}
+	s.clearPartialMCPList(ctx, projectID, sessionID)
 	return true
 }
 
-// cachePartialMCPList stores the servers a partial inventory names as the
-// session's latest partial list, under the snapshot's owner binding and TTL.
-// A partial list carries no proof of absence, so an empty one is not stored,
-// and none is stored once the session holds a complete snapshot, which always
-// wins. Best-effort.
+// cachePartialMCPList adds the servers a partial inventory names to the
+// session's partial list, under the snapshot's owner binding and TTL. A
+// partial list only ever adds install evidence, so each delivery is merged
+// into the stored list rather than replacing it: an older delivery that
+// arrives late cannot erase servers a newer one named. A partial list carries
+// no proof of absence, so an empty one is not stored, and none is stored once
+// the session holds a complete snapshot, which always wins. Best-effort.
 func (s *Service) cachePartialMCPList(ctx context.Context, projectID, sessionID string, entries []MCPServerEntry) {
 	if len(entries) == 0 {
 		return
@@ -1095,9 +1099,61 @@ func (s *Service) cachePartialMCPList(ctx context.Context, projectID, sessionID 
 	if !s.claimMCPListSnapshot(ctx, projectID, sessionID) {
 		return
 	}
-	if err := s.cache.Set(ctx, sessionPartialMCPListCacheKey(projectID, sessionID), entries, sessionMCPListTTL); err != nil {
+	key := sessionPartialMCPListCacheKey(projectID, sessionID)
+	var stored []MCPServerEntry
+	if err := s.cache.Get(ctx, key, &stored); err == nil {
+		entries = mergePartialMCPLists(stored, entries)
+	}
+	if err := s.cache.Set(ctx, key, entries, sessionMCPListTTL); err != nil {
 		s.logger.WarnContext(ctx, "failed to cache partial MCP list",
 			attr.SlogEvent("hook_partial_mcp_list_cache_set_failed"),
+			attr.SlogError(err),
+			attr.SlogGenAIConversationID(sessionID),
+		)
+	}
+}
+
+// mergePartialMCPLists returns the entries of both partial lists, newer
+// entries first, without repeating a server reported with the same transport.
+// Two entries for one server with different transports are both kept, which
+// the inventory lookup reads as listed with no trusted transport.
+func mergePartialMCPLists(stored, newer []MCPServerEntry) []MCPServerEntry {
+	type entryKey struct {
+		source, pluginName, name, url, command, connectorUUID, toolPrefix string
+	}
+	keyOf := func(entry MCPServerEntry) entryKey {
+		return entryKey{
+			source:        entry.Source,
+			pluginName:    entry.PluginName,
+			name:          entry.Name,
+			url:           entry.URL,
+			command:       entry.Command,
+			connectorUUID: entry.ConnectorUUID,
+			toolPrefix:    entry.ToolPrefix,
+		}
+	}
+	merged := make([]MCPServerEntry, 0, len(newer)+len(stored))
+	seen := make(map[entryKey]struct{}, len(newer)+len(stored))
+	for _, list := range [][]MCPServerEntry{newer, stored} {
+		for _, entry := range list {
+			k := keyOf(entry)
+			if _, dup := seen[k]; dup {
+				continue
+			}
+			seen[k] = struct{}{}
+			merged = append(merged, entry)
+		}
+	}
+	return merged
+}
+
+// clearPartialMCPList removes the session's partial list once its complete
+// snapshot is stored. Readers already prefer the snapshot, but a partial list
+// left behind could stand in as install evidence if the snapshot is later
+// lost. Best-effort.
+func (s *Service) clearPartialMCPList(ctx context.Context, projectID, sessionID string) {
+	if err := s.cache.Delete(ctx, sessionPartialMCPListCacheKey(projectID, sessionID)); err != nil && !errors.Is(err, redisCache.ErrCacheMiss) {
+		s.logger.DebugContext(ctx, "failed to clear partial MCP list",
 			attr.SlogError(err),
 			attr.SlogGenAIConversationID(sessionID),
 		)

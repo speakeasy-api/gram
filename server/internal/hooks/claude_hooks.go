@@ -658,6 +658,9 @@ func (s *Service) cacheMCPListSnapshot(ctx context.Context, projectID, sessionID
 			attr.SlogError(err),
 		)
 	}
+	if stored {
+		s.clearPartialMCPList(ctx, projectID, sessionID)
+	}
 
 	variantKey := sessionAgentVariantCacheKey(projectID, sessionID)
 	if err := s.cache.Set(ctx, variantKey, variant, sessionMCPListTTL); err != nil {

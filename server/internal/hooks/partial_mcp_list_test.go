@@ -331,3 +331,42 @@ func TestClaude_PreToolUse_BuiltInBlocklistWithoutCompleteInventory(t *testing.T
 		})
 	}
 }
+
+// TestIngest_PartialMCPInventoriesMerge: a later partial delivery adds to the
+// stored partial list rather than replacing it, so a delivery that names other
+// servers, or an older one that arrives late, cannot erase install evidence.
+func TestIngest_PartialMCPInventoriesMerge(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+	sessionID := uuid.NewString()
+
+	other := "mise"
+	command := "mise mcp"
+	ingestCanonicalInventory(t, ctx, ti, sessionID, false, linearInventoryEntry("", "npx linear-mcp"))
+	ingestCanonicalInventory(t, ctx, ti, sessionID, false, &gen.HookMCPData{ServerName: &other, ServerIdentity: &other, Command: &command})
+	ingestCanonicalInventory(t, ctx, ti, sessionID, false, linearInventoryEntry("", "npx linear-mcp"))
+
+	require.Equal(t, "deny", ingestCanonicalLinearCall(t, ctx, ti, sessionID))
+
+	partial, err := ti.service.getCachedPartialMCPList(ctx, sessionID)
+	require.NoError(t, err)
+	require.Len(t, partial, 2, "a repeated server is stored once")
+}
+
+// TestIngest_CompleteMCPInventoryClearsPartial: storing the complete snapshot
+// removes the partial list, so it cannot stand in if the snapshot is lost.
+func TestIngest_CompleteMCPInventoryClearsPartial(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+	sessionID := uuid.NewString()
+
+	ingestCanonicalInventory(t, ctx, ti, sessionID, false, linearInventoryEntry("", "npx linear-mcp"))
+	_, err := ti.service.getCachedPartialMCPList(ctx, sessionID)
+	require.NoError(t, err)
+
+	ingestCanonicalInventory(t, ctx, ti, sessionID, true, linearInventoryEntry(builtinTestHostedURL, ""))
+	_, err = ti.service.getCachedPartialMCPList(ctx, sessionID)
+	require.Error(t, err, "the complete snapshot clears the partial list")
+}
