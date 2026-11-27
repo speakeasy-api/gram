@@ -476,7 +476,7 @@ export function Overview({
               <span className="text-muted-foreground text-sm">
                 {org.whitelisted
                   ? "Platform access, no demo gate"
-                  : "Demo gate applies"}
+                  : "Demo gate applies; MCP servers are not served"}
               </span>
             </div>
           </Row>

@@ -16,11 +16,13 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/deviceagenttoken"
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/orgserving"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	assertioncore "github.com/speakeasy-api/gram/server/internal/usersessions/assertion"
@@ -433,6 +435,21 @@ func (s *Service) authorizeDirectWorkloadInference(
 			}
 		}
 		return ctx, true, fmt.Errorf("authorize workload inference: %w", err)
+	}
+
+	organization, err := s.orgsRepo.GetOrganizationMetadata(ctx, project.OrganizationID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ctx, true, oops.C(oops.CodeUnauthorized)
+	}
+	if err != nil {
+		return ctx, true, fmt.Errorf("authorize workload inference: %w", err)
+	}
+	if refusal := orgserving.Check(organization); refusal != orgserving.RefusalNone {
+		s.logger.DebugContext(ctx, "workload inference refused for unserved organization",
+			attr.SlogOrganizationID(project.OrganizationID),
+			attr.SlogReason(string(refusal)),
+		)
+		return ctx, true, oops.E(oops.CodeUnauthorized, nil, "invalid inference credential")
 	}
 
 	version := runtimepolicy.InferenceIssuedPolicyVersion
