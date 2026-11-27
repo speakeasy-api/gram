@@ -24,6 +24,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
@@ -239,6 +241,7 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 	if err != nil {
 		return err
 	}
+	recordMetaGatewayAttribution(ctx, gate.projectID)
 	r = r.WithContext(ctx)
 	if prepared.empty() {
 		return nil
@@ -832,6 +835,24 @@ type metaGateAdmission struct {
 	clientSessionID string
 	chatID          string
 	resolution      mcpversions.Resolution
+}
+
+// recordMetaGatewayAttribution stamps the admitted caller and project on the
+// request span. Initialize requests are the durable session observation, while
+// later requests keep tool-call spans attributable to the same caller. A
+// projectless gateway has no project to stamp and is deliberately left alone.
+func recordMetaGatewayAttribution(ctx context.Context, projectID uuid.UUID) {
+	if projectID == uuid.Nil {
+		return
+	}
+
+	attrs := []attribute.KeyValue{attr.ProjectIDKey.String(projectID.String())}
+	for key, value := range contextvalues.ActorTelemetryAttributes(ctx) {
+		if value != "" {
+			attrs = append(attrs, attribute.Key(key).String(value))
+		}
+	}
+	trace.SpanFromContext(ctx).SetAttributes(attrs...)
 }
 
 // membership says where the members come from. resolvedEndpoint is the

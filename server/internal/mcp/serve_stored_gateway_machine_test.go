@@ -220,6 +220,14 @@ func TestServePublic_StoredGatewayIssuerWorkloadListsAdmittedMember(t *testing.T
 	text, isError := metaToolResultText(t, decodeRPCResponse(t, call))
 	require.False(t, isError, text)
 	require.Contains(t, text, "pong from ping")
+	requireTelemetryRowCount(t, `gram_project_id = ?
+		   AND event_source = 'tool_call'
+		   AND meta_mcp_server_id = ?
+		   AND toString(attributes.gram.authorization.actor.type) = 'agent'
+		   AND toString(attributes.gram.authorization.actor.id) = ?
+		   AND toString(attributes.gram.workload_issuer.id) = ?
+		   AND toString(attributes.gram.workload.subject) = ?`,
+		1, f.fx.target.ProjectID.String(), gateway.ID.String(), f.agentID.String(), f.issuerID.String(), f.subject)
 }
 
 func TestServePublic_StoredGatewayAgentListsOnlyAdmittedMembers(t *testing.T) {
@@ -274,6 +282,12 @@ func TestServePublic_StoredGatewayAgentListsOnlyAdmittedMembers(t *testing.T) {
 	text, isError := metaToolResultText(t, decodeRPCResponse(t, call))
 	require.False(t, isError, text)
 	require.Contains(t, text, "pong from ping")
+	requireTelemetryRowCount(t, `gram_project_id = ?
+		   AND event_source = 'tool_call'
+		   AND meta_mcp_server_id = ?
+		   AND toString(attributes.gram.authorization.actor.type) = 'agent'
+		   AND toString(attributes.gram.authorization.actor.id) = ?`,
+		1, authCtx.ProjectID.String(), gateway.ID.String(), agent.ID.String())
 
 	selectors, err := authz.NewSelector(authz.ScopeMCPConnect, grantedServerID.String()).MarshalJSON()
 	require.NoError(t, err)
