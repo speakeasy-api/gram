@@ -62,8 +62,7 @@ func (e *Engine) Decide(ctx context.Context, checks ...Check) (Decisions, error)
 		v, err := q.decide(check)
 		if err != nil {
 			if q.enforced {
-				focus := invalidPart(check)
-				e.writeInvalidCheck(ctx, listRow(q, verdicts, &focus))
+				e.writeInvalidCheck(ctx, invalidRow(q, checks, verdicts, check))
 			}
 			return Decisions{AllAllowed: false, Each: nil, row: nil}, e.mapError(ctx, err)
 		}
@@ -169,10 +168,7 @@ func (e *Engine) decideGate(ctx context.Context, q question, checks []Check) (De
 		v, err := q.decide(check)
 		if err != nil {
 			if q.enforced {
-				focus := invalidPart(check)
-				row := gateRow(q, checks, verdicts, nil)
-				row.Outcome, row.Reason, row.Focus, row.Matches = authzrepo.OutcomeError, authzrepo.ReasonInvalidCheck, &focus, nil
-				e.writeInvalidCheck(ctx, row)
+				e.writeInvalidCheck(ctx, invalidGateRow(q, checks, verdicts, check))
 			}
 			return Decisions{AllAllowed: false, Each: nil, row: nil}, nil, e.mapError(ctx, err)
 		}
@@ -211,22 +207,42 @@ func (e *Engine) writeInvalidCheck(ctx context.Context, row challengeLogger) {
 
 func rowOf(row challengeLogger) *challengeLogger { return &row }
 
+// invalidRow is the row for a Decide call holding a check that could not be
+// evaluated, in the shape its answer would have been recorded in.
+func invalidRow(q question, checks []Check, decided []verdict, invalid Check) challengeLogger {
+	if len(checks) == 1 {
+		return invalidGateRow(q, checks, decided, invalid)
+	}
+	focus := invalidPart(invalid)
+	return listRow(q, decided, &focus)
+}
+
+func invalidGateRow(q question, checks []Check, decided []verdict, invalid Check) challengeLogger {
+	focus := invalidPart(invalid)
+	row := gateRow(q, checks, decided, nil)
+	row.Outcome, row.Reason, row.Focus, row.Matches = authzrepo.OutcomeError, authzrepo.ReasonInvalidCheck, &focus, nil
+	return row
+}
+
 // gateRow is the row for checks that must all pass: it names the refused
 // check, or on an allow the first check (for a group, the alternative that
 // allowed it), with every grant that matched.
 func gateRow(q question, checks []Check, decided []verdict, refused *verdict) challengeLogger {
 	operation := authzrepo.OperationRequire
-	recorded := checks
+	// Copied, so a caller reusing its slice after Decide cannot change what
+	// Record writes.
+	recorded := slices.Clone(checks)
 	if checks[0].group != nil {
 		operation = authzrepo.OperationRequireAny
-		recorded = checks[0].group
+		recorded = slices.Clone(checks[0].group)
 	}
+	first := checks[0]
 	row := challengeLogger{
 		Operation:            operation,
 		Outcome:              authzrepo.OutcomeAllow,
 		Reason:               authzrepo.ReasonGrantMatched,
 		Checks:               recorded,
-		Focus:                &checks[0],
+		Focus:                &first,
 		Matches:              make([]grantMatch, 0, len(decided)),
 		EvaluatedGrantCount:  uint32(q.grants.grantCount()), //nolint:gosec // grant count is small
 		FilterCandidateCount: 0,

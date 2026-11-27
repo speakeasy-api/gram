@@ -439,6 +439,8 @@ func TestWithOneChallengePerResource_batchesDoNotTakeAResourcesSlot(t *testing.T
 	ctx = WithOneChallengePerResource(ctx)
 	ungranted := uuid.NewString()
 	server := MCPServer(MCPServerIDFrom(ungranted), ProjectIDFrom(testProjectID))
+	// Two tools, since a decision about one check is recorded as that check
+	// and does take the server's slot.
 	tools := []Check{server.ToolCall("search", ""), server.ToolCall("fetch", "")}
 
 	// A batch filtering the server's tools records, but leaves the server's

@@ -69,7 +69,7 @@ func (s *Service) derivedMemberAuth(ctx context.Context, shadow *mandatoryShadow
 	if member.serverID == toolset.ID && !hosting.Enabled {
 		return false, false, nil
 	}
-	// Admission runs this for every member, so it records nothing; a call
+	// Admission runs this for every member, so it records no decision; a call
 	// that names the member records it (findNamedMember).
 	allowed, _, err := s.memberToolsetConnectAllowed(ctx, shadow, shadowSurface, true, &toolset, hosting.Public)
 	if err != nil {

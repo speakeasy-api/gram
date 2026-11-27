@@ -77,7 +77,7 @@ s.authz.Record(ctx, decisions)
 | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Refuse unless allowed     | `Require(ctx, checks...)` (all must pass)                                                                                                                                                                          |
 | Any one of several grants | `Require(ctx, authz.Either(...))`: one alternative is enough, but a block on any alternative refuses the group                                                                                                     |
-| Branch on the answer      | `Decide(ctx, ...)` and read `AllAllowed`. Records nothing. Accepts `Either` groups and probes. Returns an error, not false, for an invalid check.                                                                  |
+| Branch on the answer      | `Decide(ctx, ...)` and read `AllAllowed`. Records no answer (only an invalid check). Accepts `Either` groups and probes. Returns an error, not false, for an invalid check.                                        |
 | Narrow a list             | `Decide(ctx, checks...)`, `Record(ctx, decisions)`, and keep the rows whose `Each[i].Allowed` is true. A refused tool call's `Each[i].Reason` is `read_only` or `disposition` when another disposition would pass. |
 | MCP tool call             | `authz.MCPServer(id, p).ToolCall(tool, disposition)`, with `authz.DispositionFromHints`. A tool with no annotations is `unannotated`.                                                                              |
 
