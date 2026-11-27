@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
@@ -80,11 +80,7 @@ func (s *Service) handleGetThreadBootstrap(w http.ResponseWriter, r *http.Reques
 		return err
 	}
 
-	rawToken := strings.TrimSpace(token)
-	if len(rawToken) >= len("bearer ") && strings.EqualFold(rawToken[:len("bearer ")], "bearer ") {
-		rawToken = strings.TrimSpace(rawToken[len("bearer "):])
-	}
-	ctx = withBootstrapRuntimeToken(ctx, rawToken)
+	ctx = withBootstrapRuntimeToken(ctx, assistanttokens.BearerToken(token))
 
 	result, err := s.core.BuildThreadBootstrap(ctx, projectID, threadID, principal.AssistantID)
 	if err != nil {

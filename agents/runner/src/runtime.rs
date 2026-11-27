@@ -490,6 +490,11 @@ async fn spawn_thread(
     if !bootstrap.instructions.is_empty() {
         transcript.push(Item::text(ItemKind::System, &bootstrap.instructions));
     }
+    // The initial `<mcp-servers>` disclosure is emitted only when bootstrapping
+    // in per-server mode. The transcript prefix stays append-only for provider
+    // prompt-cache stability, so mid-thread per-server <-> gateway flips do not
+    // rewrite this system item; instead, `McpActor::apply_desired` injects a
+    // turn-boundary `assistant_mcp_servers_updated` notice that supersedes it.
     if !bootstrap.mcp_servers.is_empty() && !is_gateway_mode(&bootstrap.mcp_servers) {
         transcript.push(Item::text(
             ItemKind::System,
@@ -509,11 +514,9 @@ async fn spawn_thread(
         .with_policy(FileSystemToolPolicy::new().require_read_before_write(true));
 
     let transcript_epoch = TranscriptEpoch::default();
-    let native_tools = ToolRegistry::new()
-        .with(tools::bun_run::bun_run)
-        .with(tools::inspect_asset::InspectAssetTool::new(
-            notice_tx.clone(),
-        ));
+    let native_tools = ToolRegistry::new().with(tools::bun_run::bun_run).with(
+        tools::inspect_asset::InspectAssetTool::new(notice_tx.clone()),
+    );
     let tool_search_source = PerServerOnlyToolSource::new(
         tools::tool_search::ToolSearchTool::new(
             mcp_catalog.clone(),

@@ -171,6 +171,7 @@ func TestEvaluateProjectGatewayForTurnCredential_HumanAndWorkloadEndToEnd(t *tes
 		Features:             ti.features,
 		PrincipalCredentials: ti.principalCredentials,
 		AssistantTokens:      ti.assistantTokens,
+		ServerURL:            ti.serverURL,
 		PlatformExtras:       nil,
 	})
 
@@ -235,6 +236,17 @@ func TestEvaluateProjectGatewayForTurnCredential_HumanAndWorkloadEndToEnd(t *tes
 	verifyCredential("human_turn_credential", humanToken)
 	verifyCredential("workload_turn_credential", workloadToken)
 
+	// Switch the organization issuer to shared mode to prove the standalone
+	// worker evaluator resolves sharedAuthorizationServerHosts without panicking
+	// and still agrees with *mcp.Service.
+	setIssuerMode(t, ctx, ti, fixture.issuerID, "shared", "")
+	sharedSvcEval, err := ti.service.EvaluateProjectGatewayForTurnCredential(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, humanToken, httpsServerURL)
+	require.NoError(t, err)
+	require.True(t, sharedSvcEval.Admitted, "reason=%s", sharedSvcEval.Reason)
+	sharedWorkerEval, err := workerEvaluator.EvaluateProjectGatewayForTurnCredential(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, humanToken, httpsServerURL)
+	require.NoError(t, err)
+	require.Equal(t, sharedSvcEval, sharedWorkerEval)
+
 	// Non-HTTPS URL must be rejected.
 	httpServerURL, err := url.Parse("http://api.example.test")
 	require.NoError(t, err)
@@ -270,7 +282,7 @@ func TestEvaluateProjectGatewayForTurnCredential_UnbackfilledAgentMissingBuiltin
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	_ = seedOrganizationGateway(t, ctx, ti)
+	fixture := seedOrganizationGateway(t, ctx, ti)
 	ti.features.SetFlag(feature.FlagProjectGatewayMachineAccess, authCtx.ActiveOrganizationID, true)
 	grantProjectRead(t, ti, authCtx)
 
@@ -297,9 +309,14 @@ func TestEvaluateProjectGatewayForTurnCredential_UnbackfilledAgentMissingBuiltin
 	eval, err := ti.service.EvaluateProjectGatewayForTurnCredential(context.Background(), authCtx.ActiveOrganizationID, *authCtx.ProjectID, token, httpsServerURL)
 	require.NoError(t, err)
 	require.True(t, eval.Admitted)
-	// No built-in grant -> members does NOT include "assistants", so assistant
-	// set equality rejects gateway mode and falls back to per-server.
-	for _, m := range eval.Members {
-		require.NotEqual(t, platformtools.AssistantsPlatformToolsetSlug, m.PlatformToolsetSlug)
-	}
+	// Without a built-in mcp:connect grant on "assistants", the gateway admits
+	// only the project's public server — never the "assistants" platform toolset
+	// — so assistant member-set equality rejects gateway mode with
+	// platform_toolset_mismatch.
+	openServerID := mcpServerBySlug(t, ctx, ti, *authCtx.ProjectID, fixture.open)
+	require.Equal(t, []orggateway.ProjectGatewayMember{{
+		ServerID:            openServerID,
+		PlatformToolsetSlug: "",
+		EnvironmentSlug:     "",
+	}}, eval.Members)
 }

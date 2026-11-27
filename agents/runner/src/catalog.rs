@@ -2,14 +2,21 @@
 //!
 //! Tool definitions serialize ahead of the message history in every
 //! provider's prompt-cache prefix, so any change to the declared tool set
-//! invalidates the cache for the entire transcript. The runner therefore
-//! declares a fixed tool set for the lifetime of a thread and never
-//! advertises MCP tools directly: [`HiddenCatalogSource`] exposes the MCP
-//! catalog for name-based dispatch (direct calls and compose scripts)
-//! while advertising nothing, and `tool_search` delivers schemas in-band
-//! as tool results. Providers accept histories containing calls to
-//! undeclared names; models that grammar-constrain function names to the
-//! declared set route through `compose` instead.
+//! invalidates the cache for the entire transcript. The runner handles MCP
+//! exposure in two modes:
+//! - Per-server mode: declares a fixed tool set and never advertises MCP tools
+//!   directly; [`HiddenCatalogSource`] exposes the MCP catalog for name-based
+//!   dispatch (direct calls and compose scripts) while advertising nothing,
+//!   and `tool_search` delivers schemas in-band as tool results. Providers
+//!   accept histories containing calls to undeclared names; models that
+//!   grammar-constrain function names to the declared set route through
+//!   `compose` instead.
+//! - Single Project Gateway mode: [`HiddenCatalogSource`] directly advertises
+//!   the Project Gateway's fixed set of progressive-discovery meta-tools under
+//!   their bare names (`list_servers`, `describe_server`, `describe_tools`,
+//!   `execute_tool`, `execute_read_only_tool`, `connection_status`) while
+//!   [`PerServerOnlyToolSource`] omits `tool_search`, keeping the declared tool
+//!   set fixed without a redundant catalog search layer.
 
 use std::sync::Arc;
 
@@ -612,15 +619,12 @@ mod tests {
                 }
             }
         });
-        let executor =
-            BasicToolExecutor::new([
-                Arc::new(HiddenCatalogSource::new(
-                    reader,
-                    cmd_tx,
-                    known,
-                    GatewayModeState::default(),
-                )) as Arc<dyn ToolSource>
-            ]);
+        let executor = BasicToolExecutor::new([Arc::new(HiddenCatalogSource::new(
+            reader,
+            cmd_tx,
+            known,
+            GatewayModeState::default(),
+        )) as Arc<dyn ToolSource>]);
         let approval = ApprovalRequest {
             task_id: None,
             call_id: None,

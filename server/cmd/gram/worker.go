@@ -36,7 +36,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
 	"github.com/speakeasy-api/gram/server/internal/control"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/deviceagentversions"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
@@ -850,18 +849,29 @@ func newWorkerCommand() *cli.Command {
 			assistantsCore.SetSpeakeasySlackTokens(speakeasySlackDirectory)
 			assistantsCore.SetSlackAppCredentials(slackAppCredentials)
 			assistantsCore.SetFeatureProvider(featureFlags)
+			mcpAuthenticationHost, err := mcp.NewAuthenticationHost(c.String("authentication-host-url"), serverURL, c.String("environment"))
+			if err != nil {
+				return fmt.Errorf("invalid authentication host: %w", err)
+			}
+			platformHosts, err := parsePlatformHosts(c, mcpAuthenticationHost)
+			if err != nil {
+				return err
+			}
 			assistantsCore.SetProjectGatewayEvaluator(mcp.NewProjectGatewayEvaluator(mcp.ProjectGatewayEvaluatorConfig{
-				Logger:               logger,
-				MeterProvider:        meterProvider,
-				DB:                   db,
-				Environment:          env,
-				Encryption:           encryptionClient,
-				Cache:                redisCache,
-				Authz:                authzEngine,
-				Features:             featureFlags,
-				PrincipalCredentials: principalCredentials,
-				AssistantTokens:      assistantTokenManager,
-				PlatformExtras:       nil,
+				Logger:                    logger,
+				MeterProvider:             meterProvider,
+				DB:                        db,
+				Environment:               env,
+				Encryption:                encryptionClient,
+				Cache:                     redisCache,
+				Authz:                     authzEngine,
+				Features:                  featureFlags,
+				PrincipalCredentials:      principalCredentials,
+				AssistantTokens:           assistantTokenManager,
+				ServerURL:                 serverURL,
+				AuthenticationHostBaseURL: mcpAuthenticationHost.BaseURL(),
+				PlatformHosts:             platformHosts,
+				PlatformExtras:            nil,
 			}))
 			// Turns this worker runs relay the connection links the MCP service
 			// issues on the dashboard origin, as the server's turns do.
@@ -875,10 +885,6 @@ func newWorkerCommand() *cli.Command {
 
 			piScanner := promptinjection.NewScanner(logger, newPICascade(ctx, logger, tracerProvider, meterProvider, completionsClient, guardianPolicy, openRouter, orEndpoints, db).Classify)
 
-			platformHosts, err := customdomains.ParsePlatformHosts(c.StringSlice(platformHostsFlag))
-			if err != nil {
-				return fmt.Errorf("invalid platform hosts: %w", err)
-			}
 			orgHosts, err := orgHostResolverFromCLI(c, serverURL, siteURL, c.String("environment"), platformHosts)
 			if err != nil {
 				return err

@@ -60,9 +60,9 @@ func TestMCPDeliveryMode_ComposeInstructionsAndSkills(t *testing.T) {
 	require.NotContains(t, gateway, "assistant_mcp_auth_required")
 	require.NotContains(t, gateway, "tool_search")
 	require.Contains(t, gateway, "execute_read_only_tool with assistants--skills_load")
-	require.Contains(t, gateway, "execute_tool with speakeasy-slack--platform_slack_post_message")
-	require.Contains(t, gateway, "execute_tool with speakeasy-slack--platform_slack_post_ephemeral")
 	require.Contains(t, gateway, "execute_tool with speakeasy-slack--platform_slack_send_message")
+	require.Contains(t, gateway, "execute_tool with speakeasy-slack--platform_slack_post_ephemeral")
+	require.NotContains(t, gateway, "speakeasy-slack--platform_slack_post_message")
 	require.Contains(t, gateway, "execute_tool with assistants--platform_thread_unsubscribe")
 	require.Contains(t, gateway, prefix)
 	require.Contains(t, gateway, "connection_status")
@@ -74,7 +74,7 @@ func TestMCPDeliveryMode_ComposeInstructionsAndSkills(t *testing.T) {
 	customGateway, err := ComposeInstructionsForMode("Base", customSlackThread, nil, prefix, MCPDeliveryProjectGateway)
 	require.NoError(t, err)
 	require.Contains(t, customGateway, "list_servers")
-	require.Contains(t, customGateway, "execute_tool with <server_slug>--platform_slack_post_message")
+	require.Contains(t, customGateway, "execute_tool with <server_slug>--platform_slack_send_message")
 	require.Contains(t, customGateway, "execute_tool with assistants--platform_thread_unsubscribe")
 
 	// Dashboard adapter omits legacy assistant_mcp_auth_required in gateway mode
@@ -111,7 +111,8 @@ func TestMCPDeliveryMode_SlackTurnDecodeAndSkillSnapshot(t *testing.T) {
 
 	gatewayTurn, err := adapterDecodeTurn(adapter, event, MCPDeliveryProjectGateway)
 	require.NoError(t, err)
-	require.Contains(t, gatewayTurn, "execute_read_only_tool with speakeasy-slack--platform_slack_read_thread_messages")
+	require.Contains(t, gatewayTurn, "execute_read_only_tool with <server_slug>--platform_slack_read_thread_messages")
+	require.NotContains(t, gatewayTurn, "speakeasy-slack--platform_slack_read_thread_messages")
 
 	prev := assistantSkillSetSnapshot{Version: assistantSkillSnapshotVersion, Skills: nil}
 	curr := assistantSkillSetSnapshot{

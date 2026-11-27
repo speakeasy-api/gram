@@ -125,13 +125,12 @@ When relaying a genuine "Connection required" or "Reconnect required" link, deli
 	}
 
 	slackSlug := a.gatewayServerSlug
-	postMsg := gatewayToolRef("execute_tool", slackSlug, "platform_slack_post_message")
+	sendMsg := gatewayToolRef("execute_tool", slackSlug, platformtools.ToolNameSendMessage)
 	postEphemeral := gatewayToolRef("execute_tool", slackSlug, "platform_slack_post_ephemeral")
-	sendMsg := gatewayToolRef("execute_tool", slackSlug, "platform_slack_send_message")
 	unsubscribe := gatewayToolRef("execute_tool", platformtools.AssistantsPlatformToolsetSlug, "platform_thread_unsubscribe")
 	discoverHint := ""
 	if slackSlug == "" {
-		discoverHint = " Use list_servers to find the Slack server slug."
+		discoverHint = " Use list_servers and describe_server to find the Slack server slug and its post tools."
 	}
 
 	return fmt.Sprintf(`## Slack output preferences
@@ -147,7 +146,7 @@ Not every Slack message needs a reply. ALWAYS reply when the turn's message cont
 Depending on how you are set up, you may keep receiving every new message in a Slack thread after you are mentioned in it. When a thread no longer needs you (its request is resolved, or the people in it are talking among themselves), call %s to stop receiving its messages. A later mention brings you back and gives you the messages you missed. When you start a new thread with %s and want the replies in it to continue this conversation, set route_replies to "self".
 
 When relaying a genuine "Connection required" or "Reconnect required" link, deliver it to the person this turn acts for, not the owner: call %s targeted at that person's Slack user ID, or a DM to them if ephemeral can't reach them. That person is the requester whose message started this turn, or, for a scheduled or resumed turn, the person who asked for it. Never post the link in the channel or thread. If neither reaches them, tell them in the thread, without the link, to open Speakeasy and connect the named server.`,
-		postMsg, postEphemeral, discoverHint, unsubscribe, sendMsg, postEphemeral)
+		sendMsg, postEphemeral, discoverHint, unsubscribe, sendMsg, postEphemeral)
 }
 
 func (a slackAdapter) DecodeTurn(event assistantThreadEventRecord) (string, error) {
@@ -228,7 +227,16 @@ func writeSlackThreadContext(b *bytes.Buffer, payload slackEventPayload, mode MC
 	}
 	readTool := "platform_slack_read_thread_messages"
 	if mode.IsGateway() {
-		readTool = gatewayToolRef("execute_read_only_tool", gatewayServerSlug, platformtools.ToolNameReadThreadMessages)
+		// The built-in speakeasy-slack toolset only exposes write/post tools
+		// (chat:write), not platform_slack_read_thread_messages; keep the
+		// server slug generic so the model looks up any connected Slack reader
+		// server via list_servers instead of calling a nonexistent tool on
+		// speakeasy-slack.
+		readSlug := gatewayServerSlug
+		if readSlug == platformtools.SpeakeasySlackPlatformToolsetSlug {
+			readSlug = ""
+		}
+		readTool = gatewayToolRef("execute_read_only_tool", readSlug, platformtools.ToolNameReadThreadMessages)
 	}
 	b.WriteString("<thread-context>\n")
 	switch {

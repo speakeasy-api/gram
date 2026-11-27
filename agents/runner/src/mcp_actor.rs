@@ -176,10 +176,7 @@ impl GatewayModeState {
     }
 
     pub fn is_active(&self) -> bool {
-        self.0
-            .read()
-            .unwrap_or_else(PoisonError::into_inner)
-            .active
+        self.0.read().unwrap_or_else(PoisonError::into_inner).active
     }
 
     pub fn specs(&self) -> Vec<ToolSpec> {
@@ -238,7 +235,15 @@ pub fn spawn_mcp_actor(
     servers: &[McpServer],
     tokens: &TokenRegistry,
     inbox_tx: UnboundedSender<RunnerContent>,
-) -> Result<(mpsc::Sender<McpCmd>, CatalogReader, KnownTools, GatewayModeState), RunnerError> {
+) -> Result<
+    (
+        mpsc::Sender<McpCmd>,
+        CatalogReader,
+        KnownTools,
+        GatewayModeState,
+    ),
+    RunnerError,
+> {
     // Each tool call carries its own trace context to the server.
     let mut manager = McpServerManager::new().with_request_decorator(mcp_trace_decorator());
     let catalog = manager.source();
@@ -575,7 +580,8 @@ impl McpActor {
             Err(failure) if failure.auth_required => {
                 if self.is_gateway_server(&id) {
                     let message = "Project Gateway rejected this turn's credential (401 Unauthorized); retrying on the next turn will re-evaluate gateway eligibility".to_string();
-                    self.last_errors.insert(id.clone(), (message.clone(), Instant::now()));
+                    self.last_errors
+                        .insert(id.clone(), (message.clone(), Instant::now()));
                     return Err(message);
                 }
                 self.ensure_auth_flow(&id).await;
@@ -693,6 +699,8 @@ impl McpActor {
             }
         }
 
+        let prev_configured = self.configured.clone();
+        let prev_servers: Vec<McpServer> = prev_configured.values().cloned().collect();
         self.configured = desired_map;
         self.gateway_mode.set_mode(&desired);
         if !now_gateway {
@@ -708,6 +716,11 @@ impl McpActor {
                         self.last_errors.remove(&gw_id);
                     }
                     Err(failure) if failure.auth_required => {
+                        // Roll back configured/mode state so the next turn still
+                        // observes the diff and emits the mode-change notice once
+                        // the gateway connection succeeds.
+                        self.configured = prev_configured;
+                        self.gateway_mode.set_mode(&prev_servers);
                         self.gateway_mode.clear_tools();
                         return Err(RunnerError::Loop(
                             "Project Gateway rejected this turn's credential (401 Unauthorized); \
@@ -716,6 +729,8 @@ impl McpActor {
                         ));
                     }
                     Err(failure) => {
+                        self.configured = prev_configured;
+                        self.gateway_mode.set_mode(&prev_servers);
                         self.gateway_mode.clear_tools();
                         return Err(RunnerError::Loop(format!(
                             "Project Gateway is unreachable: {}",
@@ -992,7 +1007,8 @@ fn build_mcp_server_config(
     let slot = server
         .is_gateway
         .then(|| Arc::new(RwLock::new(None::<String>)));
-    let mut mcp_http = McpSessionClient::new(http_client.clone(), token.to_string(), server_headers);
+    let mut mcp_http =
+        McpSessionClient::new(http_client.clone(), token.to_string(), server_headers);
     if let Some(slot) = &slot {
         mcp_http = mcp_http.with_instructions_slot(Arc::clone(slot));
     }
@@ -1401,8 +1417,7 @@ mod tests {
         use serde_json::{Value, json};
         use std::sync::atomic::{AtomicUsize, Ordering};
 
-        const GATEWAY_INSTRUCTIONS: &str =
-            "Tools from these servers: \"Linear\", \"Speakeasy assistant tools\".\n\nUse list_servers and describe_server.";
+        const GATEWAY_INSTRUCTIONS: &str = "Tools from these servers: \"Linear\", \"Speakeasy assistant tools\".\n\nUse list_servers and describe_server.";
         let meta_tools = [
             "list_servers",
             "describe_server",
@@ -1536,8 +1551,10 @@ mod tests {
             received_notices.push(text);
         }
         assert!(
-            received_notices.iter().any(|n| n.contains("<project-gateway-instructions>")
-                && n.contains(GATEWAY_INSTRUCTIONS)),
+            received_notices
+                .iter()
+                .any(|n| n.contains("<project-gateway-instructions>")
+                    && n.contains(GATEWAY_INSTRUCTIONS)),
             "gateway initialize.instructions must be surfaced: {received_notices:?}"
         );
 
@@ -1619,8 +1636,10 @@ mod tests {
             flip_notices.push(text);
         }
         assert!(
-            flip_notices.iter().any(|n| n.contains("assistant_mcp_servers_updated")
-                && n.contains("Use tool_search")),
+            flip_notices
+                .iter()
+                .any(|n| n.contains("assistant_mcp_servers_updated")
+                    && n.contains("Use tool_search")),
             "flip back to per-server must emit update notice: {flip_notices:?}"
         );
 
@@ -1711,6 +1730,158 @@ mod tests {
         assert!(
             notices.try_recv().is_err(),
             "gateway 401 must not emit assistant_mcp_auth_required"
+        );
+        server_task.abort();
+    }
+
+    #[tokio::test]
+    async fn gateway_connect_failure_preserves_mode_change_notice_for_retry() {
+        use axum::{Json, Router, http::StatusCode, response::IntoResponse, routing::post};
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        let reject_gateway = Arc::new(AtomicBool::new(true));
+        let reject_flag = Arc::clone(&reject_gateway);
+
+        let app = Router::new().route(
+            "/gateway",
+            post(move |Json(body): Json<serde_json::Value>| {
+                let reject = reject_flag.load(Ordering::SeqCst);
+                async move {
+                    if reject {
+                        return (
+                            StatusCode::UNAUTHORIZED,
+                            [(
+                                axum::http::header::WWW_AUTHENTICATE,
+                                r#"Bearer error="invalid_token""#,
+                            )],
+                        )
+                            .into_response();
+                    }
+                    if body.get("id").is_none() {
+                        return StatusCode::ACCEPTED.into_response();
+                    }
+                    let id = body.get("id").cloned().unwrap_or(serde_json::json!(1));
+                    let method = body
+                        .get("method")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or_default();
+                    if method == "server/discover" {
+                        return Json(serde_json::json!({
+                            "jsonrpc": "2.0",
+                            "id": id,
+                            "error": {"code": -32601, "message": "Method not found"}
+                        }))
+                        .into_response();
+                    }
+                    let resp = match method {
+                        "initialize" => serde_json::json!({
+                            "jsonrpc": "2.0",
+                            "id": id,
+                            "result": {
+                                "protocolVersion": body["params"]["protocolVersion"],
+                                "capabilities": { "tools": {} },
+                                "serverInfo": { "name": "project-gateway", "version": "1.0.0" },
+                                "instructions": "Retry gateway instructions."
+                            }
+                        }),
+                        "tools/list" => serde_json::json!({
+                            "jsonrpc": "2.0",
+                            "id": id,
+                            "result": {
+                                "tools": [
+                                    { "name": "list_servers", "description": "List servers", "inputSchema": { "type": "object" } }
+                                ]
+                            }
+                        }),
+                        _ => serde_json::json!({ "jsonrpc": "2.0", "id": id, "result": {} }),
+                    };
+                    (StatusCode::OK, Json(resp)).into_response()
+                }
+            })
+            .get(|| async { StatusCode::METHOD_NOT_ALLOWED })
+            .delete(|| async { StatusCode::OK }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server_task = tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        let tokens = TokenRegistry::new("tok-1");
+        let client = reqwest::Client::new();
+        let (notice_tx, mut notices) = mpsc::unbounded_channel();
+        let per_server = McpServer {
+            id: "linear".into(),
+            url: format!("http://{addr}/linear"),
+            headers: BTreeMap::new(),
+            is_gateway: false,
+        };
+        let gateway = McpServer {
+            id: "gateway".into(),
+            url: format!("http://{addr}/gateway"),
+            headers: BTreeMap::new(),
+            is_gateway: true,
+        };
+        let (cmd, _catalog, _known, gw_mode) = spawn_mcp_actor(
+            GramBootstrapClient::new(
+                format!("http://{addr}"),
+                crate::http_layer::build_bootstrap_client(client.clone()),
+            ),
+            client,
+            "T",
+            std::slice::from_ref(&per_server),
+            &tokens,
+            notice_tx,
+        )
+        .unwrap();
+
+        // First attempt to flip per-server -> gateway fails with 401.
+        let (reply, ack) = oneshot::channel();
+        cmd.send(McpCmd::TurnBoundary {
+            token: "tok-2".into(),
+            desired: Some(vec![gateway.clone()]),
+            reply,
+            parent: tracing::Span::none(),
+        })
+        .await
+        .unwrap();
+        assert!(ack.await.unwrap().is_err());
+        assert!(!gw_mode.is_active(), "failed flip must roll back mode");
+        assert!(
+            notices.try_recv().is_err(),
+            "failed flip must emit no notice"
+        );
+
+        // Next turn succeeds and must emit both the mode-change notice and gateway instructions.
+        reject_gateway.store(false, Ordering::SeqCst);
+        let (reply, ack) = oneshot::channel();
+        cmd.send(McpCmd::TurnBoundary {
+            token: "tok-3".into(),
+            desired: Some(vec![gateway]),
+            reply,
+            parent: tracing::Span::none(),
+        })
+        .await
+        .unwrap();
+        ack.await.unwrap().unwrap();
+        assert!(gw_mode.is_active());
+
+        let mut emitted = Vec::new();
+        while let Ok(RunnerContent::Text(text)) = notices.try_recv() {
+            emitted.push(text);
+        }
+        assert!(
+            emitted
+                .iter()
+                .any(|n| n.contains("assistant_mcp_servers_updated")
+                    && n.contains("Project Gateway")),
+            "retry after failed connect must emit mode-change notice: {emitted:?}"
+        );
+        assert!(
+            emitted
+                .iter()
+                .any(|n| n.contains("Retry gateway instructions.")),
+            "retry after failed connect must emit gateway instructions: {emitted:?}"
         );
         server_task.abort();
     }

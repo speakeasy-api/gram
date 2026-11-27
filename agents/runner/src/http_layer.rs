@@ -355,4 +355,106 @@ mod tests {
         tokens.rotate("opaque-next").unwrap();
         assert_eq!(tokens.current().unwrap(), "opaque-next");
     }
+
+    #[tokio::test]
+    async fn capture_initialize_instructions_handles_sse_and_blank_values() {
+        use axum::{Router, http::header::CONTENT_TYPE, routing::post};
+        use rmcp::model::{
+            ClientCapabilities, Implementation, InitializeRequest, InitializeRequestParams,
+            JsonRpcRequest, NumberOrString, ProtocolVersion,
+        };
+        use std::sync::Mutex;
+
+        let next_instructions: Arc<Mutex<Option<String>>> =
+            Arc::new(Mutex::new(Some("  Use list_servers first.  \n".into())));
+        let server_instructions = Arc::clone(&next_instructions);
+
+        let app = Router::new().route(
+            "/sse-gateway",
+            post(move || {
+                let instructions = server_instructions.lock().unwrap().clone();
+                async move {
+                    let body = serde_json::json!({
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "result": {
+                            "protocolVersion": "2025-03-26",
+                            "capabilities": { "tools": {} },
+                            "serverInfo": { "name": "project-gateway", "version": "1.0.0" },
+                            "instructions": instructions,
+                        }
+                    });
+                    (
+                        [(CONTENT_TYPE, "text/event-stream")],
+                        format!("event: message\ndata: {body}\n\n"),
+                    )
+                }
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server_task = tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        let init_msg = || {
+            let mut params = InitializeRequestParams::new(
+                ClientCapabilities::default(),
+                Implementation::new("runner-test", "1.0.0"),
+            );
+            params.protocol_version = ProtocolVersion::V_2025_03_26;
+            ClientJsonRpcMessage::Request(JsonRpcRequest {
+                jsonrpc: Default::default(),
+                id: NumberOrString::Number(1),
+                request: ClientRequest::InitializeRequest(InitializeRequest::new(params)),
+            })
+        };
+
+        let slot = Arc::new(RwLock::new(None));
+        let client = McpSessionClient::new(reqwest::Client::new(), "tok".into(), HeaderMap::new())
+            .with_instructions_slot(Arc::clone(&slot));
+        let uri: Arc<str> = format!("http://{addr}/sse-gateway").into();
+
+        // 1. SSE initialize response trims and stores non-empty instructions.
+        let resp = client
+            .post_message(Arc::clone(&uri), init_msg(), None, None, HashMap::new())
+            .await
+            .unwrap();
+        let McpStreamableHttpPostResponse::Sse(mut stream, _) = resp else {
+            panic!("expected SSE response");
+        };
+        while stream.next().await.is_some() {}
+        assert_eq!(
+            slot.read().unwrap().as_deref(),
+            Some("Use list_servers first.")
+        );
+
+        // 2. SSE initialize response with whitespace-only instructions clears
+        // any prior value to None.
+        *next_instructions.lock().unwrap() = Some("  \t\n ".into());
+        let resp = client
+            .post_message(Arc::clone(&uri), init_msg(), None, None, HashMap::new())
+            .await
+            .unwrap();
+        let McpStreamableHttpPostResponse::Sse(mut stream, _) = resp else {
+            panic!("expected SSE response");
+        };
+        while stream.next().await.is_some() {}
+        assert_eq!(slot.read().unwrap().as_deref(), None);
+
+        // 3. SSE initialize response with empty instructions keeps slot None.
+        store_instructions(&slot, Some("stale".into()));
+        *next_instructions.lock().unwrap() = Some(String::new());
+        let resp = client
+            .post_message(uri, init_msg(), None, None, HashMap::new())
+            .await
+            .unwrap();
+        let McpStreamableHttpPostResponse::Sse(mut stream, _) = resp else {
+            panic!("expected SSE response");
+        };
+        while stream.next().await.is_some() {}
+        assert_eq!(slot.read().unwrap().as_deref(), None);
+
+        server_task.abort();
+    }
 }

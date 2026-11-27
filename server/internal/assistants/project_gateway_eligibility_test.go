@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
+	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
@@ -83,7 +84,7 @@ func TestEvaluateProjectGatewayEligibility_SetAndEnvEquality(t *testing.T) {
 		return core
 	}
 
-	t.Run("exact match is eligible and cached briefly", func(t *testing.T) {
+	t.Run("exact match is eligible and re-evaluated live on every call", func(t *testing.T) {
 		t.Parallel()
 		stub := &stubProjectGatewayEvaluator{
 			eval: func(context.Context, string, uuid.UUID, string, *url.URL) (orggateway.ProjectGatewayEvaluation, error) {
@@ -104,10 +105,10 @@ func TestEvaluateProjectGatewayEligibility_SetAndEnvEquality(t *testing.T) {
 		require.Equal(t, gatewayURL, got.GatewayURL)
 		require.EqualValues(t, 1, stub.calls.Load())
 
-		// Identical inputs within TTL hit cache.
+		// Every call evaluates the live admitted-member set (no stale cache window).
 		gotAgain := core.EvaluateProjectGatewayEligibility(t.Context(), orgID, projectID, assistantID, serverURL, "tok-1", attached, platformSlugs)
 		require.True(t, gotAgain.Eligible)
-		require.EqualValues(t, 1, stub.calls.Load())
+		require.EqualValues(t, 2, stub.calls.Load())
 
 		// Single gateway entry JSON carries is_gateway:true; per-server entries omit it.
 		gwJSON, err := json.Marshal(projectGatewayRuntimeServer(got.GatewayURL))
@@ -310,10 +311,34 @@ func TestDefaultRuntimeTurnAndBootstrap_UsesProjectGatewayAndFallsBack(t *testin
 		IsGateway: true,
 	}}, *runTurnMCP.Load())
 
+	// 2b. During a pending runtime switch (assistant desired RuntimeVersion=3
+	// while the pinned active runtime row is still v2), bootstrap follows the
+	// serving runtime row's version so it agrees with turn dispatch.
+	queries := assistantrepo.New(db)
+	require.NoError(t, queries.ReserveAssistantRuntimeV2(ctx, assistantrepo.ReserveAssistantRuntimeV2Params{
+		AssistantThreadID: thread,
+		AssistantID:       assistant.ID,
+		ProjectID:         project,
+		Backend:           runtimeBackendGKE,
+		State:             "running",
+	}))
+	require.NoError(t, queries.SetAssistantDesiredRuntimeVersionForTest(ctx, assistantrepo.SetAssistantDesiredRuntimeVersionForTestParams{
+		RuntimeVersion: 3,
+		AssistantID:    assistant.ID,
+		ProjectID:      project,
+	}))
+	pendingSwitchBootstrap, err := core.BuildThreadBootstrap(withBootstrapRuntimeToken(authedCtx, humanToken), project, thread, assistant.ID)
+	require.NoError(t, err)
+	require.Equal(t, *gotMCP, pendingSwitchBootstrap.MCPServers, "bootstrap must gate on active runtime row (v2), not desired runtime_version (v3)")
+	require.NoError(t, queries.SetAssistantDesiredRuntimeVersionForTest(ctx, assistantrepo.SetAssistantDesiredRuntimeVersionForTestParams{
+		RuntimeVersion: 2,
+		AssistantID:    assistant.ID,
+		ProjectID:      project,
+	}))
+
 	// 3. When gateway becomes ineligible, both turn and bootstrap fall back to
 	// the exact per-server list unchanged byte-for-byte.
 	eligible.Store(false)
-	core.projectGatewayCache = newProjectGatewayEligibilityCache()
 	_, err = core.processEventTurn(ctx, assistantThreadRecord{
 		ID: thread, ProjectID: project, AssistantID: assistant.ID, SourceKind: sourceKindDashboard, SourceRefJSON: []byte(`{"user_id":"user-1"}`),
 	}, assistant, assistantRuntimeRecord{RuntimeVersion: 2}, assistantThreadEventRecord{

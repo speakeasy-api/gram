@@ -36,17 +36,20 @@ import (
 // Project Gateway admission and member resolution in processes (such as the
 // Temporal worker) that do not host the full MCP HTTP service.
 type ProjectGatewayEvaluatorConfig struct {
-	Logger               *slog.Logger
-	MeterProvider        metric.MeterProvider
-	DB                   *pgxpool.Pool
-	Environment          toolconfig.EnvironmentLoader
-	Encryption           *encryption.Client
-	Cache                cache.Cache
-	Authz                *authz.Engine
-	Features             feature.Provider
-	PrincipalCredentials *principalcredential.Issuer
-	AssistantTokens      *assistanttokens.Manager
-	PlatformExtras       []platformtools.ExternalTool
+	Logger                    *slog.Logger
+	MeterProvider             metric.MeterProvider
+	DB                        *pgxpool.Pool
+	Environment               toolconfig.EnvironmentLoader
+	Encryption                *encryption.Client
+	Cache                     cache.Cache
+	Authz                     *authz.Engine
+	Features                  feature.Provider
+	PrincipalCredentials      *principalcredential.Issuer
+	AssistantTokens           *assistanttokens.Manager
+	ServerURL                 *url.URL
+	AuthenticationHostBaseURL string
+	PlatformHosts             map[string]string
+	PlatformExtras            []platformtools.ExternalTool
 }
 
 // ProjectGatewayEvaluator evaluates Project Gateway eligibility using the exact
@@ -65,20 +68,23 @@ func NewProjectGatewayEvaluator(cfg ProjectGatewayEvaluatorConfig) *ProjectGatew
 	meter := cfg.MeterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")
 	return &ProjectGatewayEvaluator{
 		service: &Service{ //nolint:exhaustruct_v5 // lightweight evaluator only invokes gateway admission and derived member resolution
-			logger:               cfg.Logger,
-			db:                   cfg.DB,
-			env:                  cfg.Environment,
-			enc:                  cfg.Encryption,
-			authz:                cfg.Authz,
-			features:             cfg.Features,
-			principalCredentials: cfg.PrincipalCredentials,
-			assistantTokens:      cfg.AssistantTokens,
-			orgsRepo:             organizations_repo.New(cfg.DB),
-			metrics:              mcpmetrics.NewMetrics(meter, cfg.Logger),
-			identityValidator:    mcpidentity.NewValidatorBoundary(),
-			toolsetCache:         cache.NewTypedObjectCache[mv.ToolsetBaseContents](cfg.Logger, cfg.Cache, cache.SuffixNone),
-			platformToolsets:     platformToolsets,
-			platformExtras:       cfg.PlatformExtras,
+			logger:                    cfg.Logger,
+			db:                        cfg.DB,
+			env:                       cfg.Environment,
+			enc:                       cfg.Encryption,
+			authz:                     cfg.Authz,
+			features:                  cfg.Features,
+			principalCredentials:      cfg.PrincipalCredentials,
+			assistantTokens:           cfg.AssistantTokens,
+			serverURL:                 cfg.ServerURL,
+			authenticationHostBaseURL: cfg.AuthenticationHostBaseURL,
+			platformHosts:             cfg.PlatformHosts,
+			orgsRepo:                  organizations_repo.New(cfg.DB),
+			metrics:                   mcpmetrics.NewMetrics(meter, cfg.Logger),
+			identityValidator:         mcpidentity.NewValidatorBoundary(),
+			toolsetCache:              cache.NewTypedObjectCache[mv.ToolsetBaseContents](cfg.Logger, cfg.Cache, cache.SuffixNone),
+			platformToolsets:          platformToolsets,
+			platformExtras:            cfg.PlatformExtras,
 		},
 	}
 }
@@ -111,7 +117,7 @@ func (s *Service) EvaluateProjectGatewayForTurnCredential(
 	deny := func(reason string) orggateway.ProjectGatewayEvaluation {
 		return orggateway.ProjectGatewayEvaluation{Admitted: false, GatewayURL: "", Reason: reason, Members: nil}
 	}
-	if serverURL == nil || organizationID == "" || projectID == uuid.Nil || turnToken == "" || s.principalCredentials == nil {
+	if serverURL == nil || s.serverURL == nil || organizationID == "" || projectID == uuid.Nil || turnToken == "" || s.principalCredentials == nil {
 		return deny("missing_inputs"), nil
 	}
 
