@@ -383,9 +383,26 @@ async function resolveCreateServerURL(cfg: ParsedUserConfig): Promise<string> {
     if (typeof orgSlug !== "string" || typeof project !== "string") {
       return fallback;
     }
-    return `${DASHBOARD_URL}/${orgSlug}/${project}/mcp/add/from-existing-source?from=cli`;
+    // The profile's host serves the dashboard too, so the link stays on the
+    // Speakeasy host the push went to.
+    const dashboardURL = profileDashboardURL(record["api_url"]);
+    return `${dashboardURL}/${orgSlug}/${project}/mcp/add/from-existing-source?from=cli`;
   } catch {
     return fallback;
+  }
+}
+
+export function profileDashboardURL(apiURL: unknown): string {
+  if (typeof apiURL !== "string") {
+    return DASHBOARD_URL;
+  }
+  try {
+    const url = new URL(apiURL);
+    return url.protocol === "https:" || url.protocol === "http:"
+      ? url.origin
+      : DASHBOARD_URL;
+  } catch {
+    return DASHBOARD_URL;
   }
 }
 
