@@ -9009,6 +9009,9 @@ type User struct {
 	WorkosDeletedAt pgtype.Timestamptz
 	// @access: confidential
 	DeletedAt pgtype.Timestamptz
+	// When staff blocked this user from the platform. A set value rejects every request the user makes or authorizes.
+	// @access: confidential
+	BlacklistedAt pgtype.Timestamptz
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
