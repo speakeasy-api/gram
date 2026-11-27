@@ -7,6 +7,7 @@ import { assistantsDelete } from "../funcs/assistantsDelete.js";
 import { assistantsEnsureManaged } from "../funcs/assistantsEnsureManaged.js";
 import { assistantsGet } from "../funcs/assistantsGet.js";
 import { assistantsGetManaged } from "../funcs/assistantsGetManaged.js";
+import { assistantsInferIntent } from "../funcs/assistantsInferIntent.js";
 import { assistantsInterruptTurn } from "../funcs/assistantsInterruptTurn.js";
 import { assistantsList } from "../funcs/assistantsList.js";
 import { assistantsListExecutionProfiles } from "../funcs/assistantsListExecutionProfiles.js";
@@ -16,6 +17,7 @@ import { assistantsUpdate } from "../funcs/assistantsUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { Assistant } from "../models/components/assistant.js";
 import { AssistantExecutionProfile } from "../models/components/assistantexecutionprofile.js";
+import { AssistantIntent } from "../models/components/assistantintent.js";
 import { InterruptTurnResult } from "../models/components/interruptturnresult.js";
 import { ListAssistantsResult } from "../models/components/listassistantsresult.js";
 import { ListExecutionProfilesResult } from "../models/components/listexecutionprofilesresult.js";
@@ -40,6 +42,10 @@ import {
   GetManagedAssistantRequest,
   GetManagedAssistantSecurity,
 } from "../models/operations/getmanagedassistant.js";
+import {
+  InferAssistantIntentRequest,
+  InferAssistantIntentSecurity,
+} from "../models/operations/inferassistantintent.js";
 import {
   InterruptAssistantTurnRequest,
   InterruptAssistantTurnSecurity,
@@ -155,6 +161,25 @@ export class Assistants extends ClientSDK {
     options?: RequestOptions,
   ): Promise<Assistant> {
     return unwrapAsync(assistantsGetManaged(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * inferIntent assistants
+   *
+   * @remarks
+   * Infer what the calling user is trying to do from their recent dashboard activity, so the Project Assistant can open with a specific offer of help instead of an empty prompt. The activity journal is sent by the dashboard and is not stored. Returns no goal when the activity is too thin to infer a task.
+   */
+  async inferIntent(
+    request: InferAssistantIntentRequest,
+    security?: InferAssistantIntentSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<AssistantIntent> {
+    return unwrapAsync(assistantsInferIntent(
       this,
       request,
       security,

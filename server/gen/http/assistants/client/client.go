@@ -41,6 +41,10 @@ type Client struct {
 	// endpoint.
 	SendMessageDoer goahttp.Doer
 
+	// InferIntent Doer is the HTTP client used to make requests to the inferIntent
+	// endpoint.
+	InferIntentDoer goahttp.Doer
+
 	// InterruptTurn Doer is the HTTP client used to make requests to the
 	// interruptTurn endpoint.
 	InterruptTurnDoer goahttp.Doer
@@ -87,6 +91,7 @@ func NewClient(
 		UpdateAssistantDoer:           doer,
 		DeleteAssistantDoer:           doer,
 		SendMessageDoer:               doer,
+		InferIntentDoer:               doer,
 		InterruptTurnDoer:             doer,
 		GetManagedAssistantDoer:       doer,
 		EnsureManagedAssistantDoer:    doer,
@@ -239,6 +244,30 @@ func (c *Client) SendMessage() goa.Endpoint {
 		resp, err := c.SendMessageDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("assistants", "sendMessage", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// InferIntent returns an endpoint that makes HTTP requests to the assistants
+// service inferIntent server.
+func (c *Client) InferIntent() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeInferIntentRequest(c.encoder)
+		decodeResponse = DecodeInferIntentResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildInferIntentRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.InferIntentDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("assistants", "inferIntent", err)
 		}
 		return decodeResponse(resp)
 	}
