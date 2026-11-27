@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -33,8 +34,8 @@ type AssistantSlackCredentialSource interface {
 }
 
 // AllTools returns every assistant Slack platform tool executor in canonical
-// order. Used both by the built-in assistant-slack toolset (wrapped with typed
-// auth client resolution) and by legacy persisted toolsets.
+// order for the built-in assistant-slack toolset. Kept in lockstep with
+// platformtools/registry.go (enforced by TestAssistantSlackToolsCoverEverySlackPlatformTool).
 func AllTools(httpClient *guardian.HTTPClient, router ThreadRouter, enc *encryption.Client, serverURL *url.URL) []core.PlatformToolExecutor {
 	return []core.PlatformToolExecutor{
 		NewReadChannelMessagesTool(httpClient),
@@ -155,23 +156,30 @@ func (t *assistantSlackTool) Call(ctx context.Context, env toolconfig.ToolCallEn
 		return fmt.Errorf("resolve assistant Slack credentials: %w", err)
 	}
 	systemEnv := toolconfig.NewCaseInsensitiveEnv()
-	if creds.BotToken != "" {
-		systemEnv.Set(slackBotTokenEnvVar, creds.BotToken)
-	}
-	if creds.UserToken != "" {
-		systemEnv.Set(slackUserTokenEnvVar, creds.UserToken)
-	}
-	if creds.Token != "" {
-		systemEnv.Set(slackTokenEnvVar, creds.Token)
+	for _, pair := range []struct {
+		key string
+		val string
+	}{
+		{slackBotTokenEnvVar, creds.BotToken},
+		{slackUserTokenEnvVar, creds.UserToken},
+		{slackTokenEnvVar, creds.Token},
+	} {
+		if pair.val == "" {
+			continue
+		}
+		if strings.ContainsFunc(pair.val, func(r rune) bool { return r < 0x20 || r == 0x7f }) {
+			return oops.E(oops.CodeFailedPrecondition, nil, "Slack app auth client contains an invalid %s token; an organization admin must re-enter it", pair.key)
+		}
+		systemEnv.Set(pair.key, pair.val)
 	}
 	env.SystemEnv = systemEnv
 	env.UserConfig = toolconfig.NewCaseInsensitiveEnv()
 	// call, not Call: environment-based setup advice does not apply to a
 	// typed slack_app auth client.
-	return authClientConfigError(t.inner.call(ctx, env, payload, wr))
+	return authClientConfigError(t.inner.call(ctx, env, payload, wr), creds)
 }
 
-func authClientConfigError(err error) error {
+func authClientConfigError(err error, creds AssistantSlackCredentials) error {
 	if err == nil {
 		return nil
 	}
@@ -185,6 +193,12 @@ func authClientConfigError(err error) error {
 	}
 	slackErr, ok := errors.AsType[*slackapi.Error](err)
 	if !ok {
+		msg := err.Error()
+		for _, secret := range []string{creds.BotToken, creds.UserToken, creds.Token} {
+			if secret != "" && strings.Contains(msg, secret) {
+				return oops.E(oops.CodeUnexpected, nil, "Slack request failed")
+			}
+		}
 		return err
 	}
 	if slackErr.Code == "missing_scope" {

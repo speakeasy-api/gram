@@ -1156,16 +1156,19 @@ SELECT
         WHERE pma.project_id = a.project_id
           AND pma.assistant_id = a.id
     )::boolean AS is_managed,
-    EXISTS (
-        SELECT 1
-        FROM trigger_instances ti
-        WHERE ti.project_id = a.project_id
-          AND ti.definition_slug = 'slack'
-          AND ti.target_kind = 'assistant'
-          AND ti.target_ref = a.id::text
-          AND ti.auth_client_id IS NOT NULL
-          AND ti.deleted IS FALSE
-    )::boolean AS has_assistant_slack
+    COALESCE(
+        (
+            SELECT array_agg(DISTINCT ti.auth_client_id ORDER BY ti.auth_client_id)
+            FROM trigger_instances ti
+            WHERE ti.project_id = a.project_id
+              AND ti.definition_slug = 'slack'
+              AND ti.target_kind = 'assistant'
+              AND ti.target_ref = a.id::text
+              AND ti.auth_client_id IS NOT NULL
+              AND ti.deleted IS FALSE
+        ),
+        ARRAY[]::uuid[]
+    )::uuid[] AS slack_auth_client_ids
 FROM assistants a
 JOIN projects p ON p.id = a.project_id AND p.organization_id = a.organization_id AND p.deleted IS FALSE
 JOIN assistant_agent_bindings b ON b.assistant_id = a.id AND b.project_id = a.project_id AND b.organization_id = a.organization_id AND b.deleted IS FALSE
@@ -1177,13 +1180,13 @@ FOR UPDATE OF a, b, g
 `
 
 type AdminListAssistantBuiltinGrantTargetsRow struct {
-	AssistantID       uuid.UUID
-	ProjectID         uuid.UUID
-	Name              string
-	AgentID           uuid.UUID
-	AgentName         string
-	IsManaged         bool
-	HasAssistantSlack bool
+	AssistantID        uuid.UUID
+	ProjectID          uuid.UUID
+	Name               string
+	AgentID            uuid.UUID
+	AgentName          string
+	IsManaged          bool
+	SlackAuthClientIds []uuid.UUID
 }
 
 // Every live assistant of an organization with a live bound dedicated agent,
@@ -1205,7 +1208,7 @@ func (q *Queries) AdminListAssistantBuiltinGrantTargets(ctx context.Context, org
 			&i.AgentID,
 			&i.AgentName,
 			&i.IsManaged,
-			&i.HasAssistantSlack,
+			&i.SlackAuthClientIds,
 		); err != nil {
 			return nil, err
 		}

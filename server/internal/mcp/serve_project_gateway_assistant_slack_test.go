@@ -183,6 +183,7 @@ func TestServeProjectGateway_BuiltinAssistantSlackToolset(t *testing.T) {
 	seedPrincipalMCPConnectGrant(t, ctx, ti, authCtx.ActiveOrganizationID, agentPrincipal, speakeasySlackID)
 	afterSpeakeasyGrant, err := serveProjectGatewayHTTP(t, ti, fixture, fixture.projectSlug, humanTurnTokenA, listServersBody(t))
 	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, afterSpeakeasyGrant.Code, afterSpeakeasyGrant.Body.String())
 	require.NotContains(t, afterSpeakeasyGrant.Body.String(), `"slug":"speakeasy-slack"`)
 }
 

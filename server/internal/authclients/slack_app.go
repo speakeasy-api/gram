@@ -143,18 +143,21 @@ func (s *SlackAppCredentialStore) ResolveForCaller(ctx context.Context, organiza
 // auth client in (organizationID, projectID) or shared across organizationID.
 func (s *SlackAppCredentialStore) ValidateSlackAppAuthClient(ctx context.Context, organizationID string, projectID uuid.UUID, authClientID uuid.UUID) error {
 	if s == nil || s.db == nil {
-		return ErrSlackAppClientUnavailable
+		return oops.E(oops.CodeFailedPrecondition, ErrSlackAppClientUnavailable, "slack_app auth client is unavailable")
 	}
-	_, err := repo.New(s.db).GetSlackAppAuthClientInScope(ctx, repo.GetSlackAppAuthClientInScopeParams{
+	client, err := repo.New(s.db).GetSlackAppAuthClientInScope(ctx, repo.GetSlackAppAuthClientInScopeParams{
 		ID:             authClientID,
 		OrganizationID: organizationID,
 		ProjectID:      uuid.NullUUID{UUID: projectID, Valid: projectID != uuid.Nil},
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return ErrSlackAppClientUnavailable
+		return oops.E(oops.CodeFailedPrecondition, ErrSlackAppClientUnavailable, "slack_app auth client is unavailable")
 	}
 	if err != nil {
 		return fmt.Errorf("validate slack_app auth client: %w", err)
+	}
+	if !client.Enabled {
+		return oops.E(oops.CodeFailedPrecondition, ErrSlackAppClientDisabled, "slack_app auth client is disabled")
 	}
 	return nil
 }
@@ -164,7 +167,7 @@ func (s *SlackAppCredentialStore) ValidateSlackAppAuthClient(ctx context.Context
 // client is missing, soft-deleted, disabled, of another type, or outside scope.
 func (s *SlackAppCredentialStore) LoadCredentials(ctx context.Context, organizationID string, projectID uuid.UUID, authClientID uuid.UUID) (SlackAppCredentials, error) {
 	if s == nil || s.db == nil || s.enc == nil {
-		return SlackAppCredentials{}, ErrSlackAppClientUnavailable
+		return SlackAppCredentials{}, oops.E(oops.CodeFailedPrecondition, ErrSlackAppClientUnavailable, "slack_app auth client is unavailable")
 	}
 	q := repo.New(s.db)
 	client, err := q.GetSlackAppAuthClientInScope(ctx, repo.GetSlackAppAuthClientInScopeParams{
@@ -173,13 +176,13 @@ func (s *SlackAppCredentialStore) LoadCredentials(ctx context.Context, organizat
 		ProjectID:      uuid.NullUUID{UUID: projectID, Valid: projectID != uuid.Nil},
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return SlackAppCredentials{}, ErrSlackAppClientUnavailable
+		return SlackAppCredentials{}, oops.E(oops.CodeFailedPrecondition, ErrSlackAppClientUnavailable, "slack_app auth client is unavailable")
 	}
 	if err != nil {
 		return SlackAppCredentials{}, fmt.Errorf("get slack_app auth client: %w", err)
 	}
 	if !client.Enabled {
-		return SlackAppCredentials{}, ErrSlackAppClientDisabled
+		return SlackAppCredentials{}, oops.E(oops.CodeFailedPrecondition, ErrSlackAppClientDisabled, "slack_app auth client is disabled")
 	}
 
 	rows, err := q.ListSlackAppAuthClientSecrets(ctx, repo.ListSlackAppAuthClientSecretsParams{

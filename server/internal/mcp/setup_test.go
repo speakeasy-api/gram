@@ -171,11 +171,7 @@ func (t *testSlackTransport) RoundTrip(req *http.Request) (*http.Response, error
 	if fn != nil {
 		return fn(req)
 	}
-	resp, err := http.DefaultTransport.RoundTrip(req)
-	if err != nil {
-		return nil, fmt.Errorf("default slack test transport: %w", err)
-	}
-	return resp, nil
+	return nil, fmt.Errorf("unexpected Slack HTTP request (%s %s) with no test handler configured", req.Method, req.URL.String())
 }
 
 // migratedService records typed choices for fixtures that explicitly seed a

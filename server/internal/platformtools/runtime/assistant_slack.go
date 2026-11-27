@@ -2,7 +2,6 @@ package runtime
 
 import (
 	"context"
-	"fmt"
 	"net/url"
 
 	"github.com/google/uuid"
@@ -21,7 +20,7 @@ type assistantSlackStoreAdapter struct {
 func (a assistantSlackStoreAdapter) ResolveForCaller(ctx context.Context, organizationID string, projectID uuid.UUID) (platformslack.AssistantSlackCredentials, error) {
 	creds, err := a.store.ResolveForCaller(ctx, organizationID, projectID)
 	if err != nil {
-		return platformslack.AssistantSlackCredentials{}, fmt.Errorf("resolve assistant Slack credentials: %w", err)
+		return platformslack.AssistantSlackCredentials{}, err //nolint:wrapcheck // wrapped at assistantSlackTool.Call
 	}
 	return platformslack.AssistantSlackCredentials{
 		BotToken:  creds.BotToken,

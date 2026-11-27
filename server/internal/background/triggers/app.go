@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	slackclient "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
@@ -890,7 +891,13 @@ func (a *App) ProcessWebhook(ctx context.Context, instanceID uuid.UUID, body []b
 		}
 		envMap, err = a.slackAppAuthClients.LoadSlackAppCredentials(ctx, instance.OrganizationID, instance.ProjectID, instance.AuthClientID.UUID)
 		if err != nil {
-			return nil, fmt.Errorf("%w: load slack_app auth client: %w", ErrAuthFailed, err)
+			// Disabled, deleted, or missing slack_app auth clients fail closed as
+			// webhook auth failure (401); transient DB/decryption errors propagate
+			// unwrapped so Slack retries on 5xx instead of dropping the delivery.
+			if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && shareable.Code == oops.CodeFailedPrecondition {
+				return nil, fmt.Errorf("%w: load slack_app auth client: %w", ErrAuthFailed, err)
+			}
+			return nil, fmt.Errorf("load slack_app auth client: %w", err)
 		}
 	case instance.EnvironmentID.Valid:
 		envMap, err = a.loadEnvironmentMap(ctx, instance.ProjectID, instance.EnvironmentID.UUID)

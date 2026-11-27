@@ -135,8 +135,11 @@ func backfillAssistantBuiltinGrants(ctx context.Context, tx pgx.Tx, auditLogger 
 	}
 
 	desired := assistantidentity.BuiltinConnectGrants(row.ProjectID, row.IsManaged)
-	if row.HasAssistantSlack {
+	if len(row.SlackAuthClientIds) > 0 {
 		desired = append(desired, assistantidentity.BuiltinConnectGrant(row.ProjectID, platformtoolscore.AssistantSlackPlatformToolsetSlug))
+		for _, clientID := range row.SlackAuthClientIds {
+			desired = append(desired, assistantidentity.AssistantSlackAuthGrant(clientID))
+		}
 	}
 	actor, displayName, _ := adminActor(ctx)
 	agentURN := urn.NewAgentIdentity(row.AgentID.String())

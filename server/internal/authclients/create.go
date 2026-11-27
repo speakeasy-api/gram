@@ -558,6 +558,10 @@ func validateClientHeaders(clientType string, inputs []*gen.AuthClientHeaderInpu
 		case clientType == authz.AuthClientTypeSlackApp && !in.IsSecret:
 			return nil, fmt.Errorf("header %q: slack_app credentials must be marked as secret", name)
 		case keep:
+		case clientType == authz.AuthClientTypeSlackApp && strings.TrimSpace(value) == "":
+			return nil, fmt.Errorf("header %q: slack_app credentials cannot be blank", name)
+		case clientType == authz.AuthClientTypeSlackApp && strings.ContainsFunc(value, func(r rune) bool { return r < 0x20 || r == 0x7f }):
+			return nil, fmt.Errorf("header %q: slack_app credentials cannot contain control characters", name)
 		case (value == "") == (source == ""):
 			return nil, fmt.Errorf("header %q must specify exactly one of value or value_from_request_header", name)
 		case source != "" && in.IsSecret:

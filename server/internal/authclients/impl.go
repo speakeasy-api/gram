@@ -47,7 +47,9 @@ const (
 // ManageAuthClientPermission is the single authorization check governing
 // creation, modification, header rotation, server attachment, and audience
 // updates on typed auth clients (including slack_app clients).
-var ManageAuthClientPermission = authz.OrgRef.Admin
+func ManageAuthClientPermission(org authz.OrgRef) authz.Check {
+	return org.Admin()
+}
 
 type Service struct {
 	tracer trace.Tracer

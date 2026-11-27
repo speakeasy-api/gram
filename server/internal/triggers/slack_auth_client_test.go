@@ -154,13 +154,26 @@ func TestSlackTriggerWithAuthClientIngressAndCoexistence(t *testing.T) {
 	require.Equal(t, http.StatusOK, deliver(legacyTrigger.ID, eventBody, "test-secret").Code)
 	require.Equal(t, http.StatusUnauthorized, deliver(legacyTrigger.ID, eventBody, authClientSecret).Code)
 
-	// Disabling the slack_app client makes ingress fail closed (401).
+	// Disabling the slack_app client makes ingress fail closed (401) and prevents binding new triggers to it.
 	_, err = ti.authClientsSvc.UpdateAuthClient(adminCtx, &authclientsgen.UpdateAuthClientPayload{
 		ID:      client.ID,
 		Enabled: new(false),
 	})
 	require.NoError(t, err)
 	require.Equal(t, http.StatusUnauthorized, deliver(authTrigger.ID, eventBody, authClientSecret).Code)
+	_, err = ti.service.CreateTriggerInstance(ctx, &gen.CreateTriggerInstancePayload{
+		DefinitionSlug: "slack",
+		Name:           "Disabled client trigger",
+		AuthClientID:   new(client.ID),
+		TargetKind:     "noop",
+		TargetRef:      "noop",
+		TargetDisplay:  "Noop",
+		Config:         map[string]any{},
+	})
+	require.Error(t, err)
+	shareable, ok = errors.AsType[*oops.ShareableError](err)
+	require.True(t, ok)
+	require.Equal(t, oops.CodeBadRequest, shareable.Code)
 
 	// Re-enabling restores ingress.
 	_, err = ti.authClientsSvc.UpdateAuthClient(adminCtx, &authclientsgen.UpdateAuthClientPayload{
@@ -169,6 +182,40 @@ func TestSlackTriggerWithAuthClientIngressAndCoexistence(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, deliver(authTrigger.ID, eventBody, authClientSecret).Code)
+
+	// Updating a trigger with both environment_id and auth_client_id is rejected.
+	_, err = ti.service.UpdateTriggerInstance(ctx, &gen.UpdateTriggerInstancePayload{
+		ID:            legacyTrigger.ID,
+		EnvironmentID: new(ti.environmentID.String()),
+		AuthClientID:  new(client.ID),
+	})
+	require.Error(t, err)
+	shareable, ok = errors.AsType[*oops.ShareableError](err)
+	require.True(t, ok)
+	require.Equal(t, oops.CodeBadRequest, shareable.Code)
+
+	// Switching a legacy env-backed trigger to auth_client_id clears environment_id,
+	// and switching back to environment_id clears auth_client_id, updating webhook verification.
+	switched, err := ti.service.UpdateTriggerInstance(ctx, &gen.UpdateTriggerInstancePayload{
+		ID:           legacyTrigger.ID,
+		AuthClientID: new(client.ID),
+	})
+	require.NoError(t, err)
+	require.Nil(t, switched.EnvironmentID)
+	require.NotNil(t, switched.AuthClientID)
+	require.Equal(t, client.ID, *switched.AuthClientID)
+	require.Equal(t, http.StatusOK, deliver(legacyTrigger.ID, eventBody, authClientSecret).Code)
+	require.Equal(t, http.StatusUnauthorized, deliver(legacyTrigger.ID, eventBody, "test-secret").Code)
+
+	switchedBack, err := ti.service.UpdateTriggerInstance(ctx, &gen.UpdateTriggerInstancePayload{
+		ID:            legacyTrigger.ID,
+		EnvironmentID: new(ti.environmentID.String()),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, switchedBack.EnvironmentID)
+	require.Nil(t, switchedBack.AuthClientID)
+	require.Equal(t, http.StatusOK, deliver(legacyTrigger.ID, eventBody, "test-secret").Code)
+	require.Equal(t, http.StatusUnauthorized, deliver(legacyTrigger.ID, eventBody, authClientSecret).Code)
 
 	// Hard-deleting the auth client triggers ON DELETE SET NULL (auth_client_id),
 	// leaving environment_id NULL so ingress fails closed and never falls back.

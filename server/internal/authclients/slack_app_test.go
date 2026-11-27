@@ -75,6 +75,18 @@ func TestCreateSlackAppAuthClientEncryptsSecretsAndRefusesServerAttachment(t *te
 			ProjectID:  new(ti.projectID.String()),
 			Headers:    []*gen.AuthClientHeaderInput{{Name: "X-Api-Key", IsSecret: true, Value: new("secret")}},
 		},
+		"blank whitespace header value": {
+			ClientType: authz.AuthClientTypeSlackApp,
+			Name:       "Slack app",
+			ProjectID:  new(ti.projectID.String()),
+			Headers:    []*gen.AuthClientHeaderInput{{Name: authclients.SlackHeaderBotToken, IsSecret: true, Value: new("   \t ")}},
+		},
+		"control character in header value": {
+			ClientType: authz.AuthClientTypeSlackApp,
+			Name:       "Slack app",
+			ProjectID:  new(ti.projectID.String()),
+			Headers:    []*gen.AuthClientHeaderInput{{Name: authclients.SlackHeaderBotToken, IsSecret: true, Value: new("xoxb-bad\ntoken")}},
+		},
 	}
 	for name, payload := range invalidCases {
 		t.Run(name, func(t *testing.T) {
@@ -279,6 +291,7 @@ func TestSlackAppCredentialStoreResolveForCallerAndLoad(t *testing.T) {
 	require.ErrorIs(t, err, authclients.ErrNoAuthorizedSlackAppClient)
 	_, err = store.LoadSlackAppCredentials(ctx, ti.organizationID, ti.projectID, clientAID)
 	require.ErrorIs(t, err, authclients.ErrSlackAppClientDisabled)
+	require.ErrorIs(t, store.ValidateSlackAppAuthClient(ctx, ti.organizationID, ti.projectID, clientAID), authclients.ErrSlackAppClientDisabled)
 
 	// Soft-deleting clientB causes LoadSlackAppCredentials and ValidateSlackAppAuthClient to fail closed.
 	require.NoError(t, testrepo.New(ti.conn).SoftDeleteAuthClientFixture(ctx, testrepo.SoftDeleteAuthClientFixtureParams{
