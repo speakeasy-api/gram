@@ -542,7 +542,7 @@ func TestKitATEBackendPrepareTurnStopResumeAndReap(t *testing.T) {
 		},
 		Bootstrap: func(_ context.Context, r assistantRuntimeRecord, thread uuid.UUID, actorName string) (KitLocalBootstrap, error) {
 			bootstrapCount++
-			mcpJSON := []byte(`{"mcpServers":{"docs":{"type":"streamable-http","url":"https://tools.speakeasy.test/mcp/docs","headers":{}}}}`)
+			mcpJSON := []byte(`{"mcpServers":{"project-gateway":{"type":"streamable-http","url":"https://tools.speakeasy.test/mcp/gateway/org/projects/proj","headers":{}}}}`)
 			return KitLocalBootstrap{
 				Model:              "openai/gpt-4.1-mini",
 				ReasoningEffort:    "medium",
@@ -552,9 +552,10 @@ func TestKitATEBackendPrepareTurnStopResumeAndReap(t *testing.T) {
 				MCPJSON:            mcpJSON,
 				GatewayToken:       []byte(kitATEActorToken("root-secret", thread.String())),
 				Workload: &KitWorkloadBinding{
-					IssuerID: issuerID,
-					Subject:  "actor/" + atespace + "/" + actorName,
-					Audience: "https://api.speakeasy.test/oauth/usi/test",
+					MCPProjectGateway: true,
+					IssuerID:          issuerID,
+					Subject:           "actor/" + atespace + "/" + actorName,
+					Audience:          "https://api.speakeasy.test/oauth/usi/test",
 					Identity: assistantidentity.RuntimeIdentity{
 						OrganizationID:    "org_test",
 						ProjectID:         projectID,
@@ -845,12 +846,13 @@ func TestKitATEImageIdentityKeysOnDigestOnly(t *testing.T) {
 					EgressInjectedAuth: true,
 					InferenceEndpoint:  "https://ai.speakeasy.com/chat/completions",
 					AgentsMD:           []byte("# Speakeasy assistant\n"),
-					MCPJSON:            []byte(`{"mcpServers":{}}`),
+					MCPJSON:            []byte(`{"mcpServers":{"project-gateway":{"type":"streamable-http","url":"https://api.speakeasy.test/mcp/gateway/org/projects/proj","headers":{}}}}`),
 					GatewayToken:       []byte(kitATEActorToken("root-secret", thread.String())),
 					Workload: &KitWorkloadBinding{
-						IssuerID: issuerID,
-						Subject:  "actor/" + atespace + "/" + actorName,
-						Audience: "https://api.speakeasy.test/oauth/usi/test",
+						MCPProjectGateway: true,
+						IssuerID:          issuerID,
+						Subject:           "actor/" + atespace + "/" + actorName,
+						Audience:          "https://api.speakeasy.test/oauth/usi/test",
 						Identity: assistantidentity.RuntimeIdentity{
 							OrganizationID:    "org_test",
 							ProjectID:         projectID,

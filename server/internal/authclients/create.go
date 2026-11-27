@@ -55,7 +55,7 @@ const (
 )
 
 func (s *Service) CreateAuthClient(ctx context.Context, payload *gen.CreateAuthClientPayload) (*types.AuthClient, error) {
-	authCtx, logger, err := s.require(ctx, authz.OrgRef.Admin)
+	authCtx, logger, err := s.require(ctx, ManageAuthClientPermission)
 	if err != nil {
 		return nil, err
 	}
@@ -100,6 +100,13 @@ func (s *Service) CreateAuthClient(ctx context.Context, payload *gen.CreateAuthC
 	case authz.AuthClientTypeStaticCredential, authz.AuthClientTypePassThrough:
 		if registrationID.Valid {
 			return nil, oops.E(oops.CodeBadRequest, nil, "a %s client authenticates with its own headers and takes no OAuth registration", payload.ClientType).LogWarn(ctx, logger)
+		}
+	case authz.AuthClientTypeSlackApp:
+		if registrationID.Valid {
+			return nil, oops.E(oops.CodeBadRequest, nil, "a slack_app client stores Slack app credentials and takes no OAuth registration").LogWarn(ctx, logger)
+		}
+		if len(serverIDs) > 0 {
+			return nil, oops.E(oops.CodeBadRequest, nil, "a slack_app auth client cannot be offered on an MCP server; grant mcp:auth to the assistant's agent instead").LogWarn(ctx, logger)
 		}
 	default:
 		return nil, oops.E(oops.CodeBadRequest, nil, "auth clients of type %q cannot be created", payload.ClientType).LogWarn(ctx, logger)
@@ -211,7 +218,7 @@ func (s *Service) CreateAuthClient(ctx context.Context, payload *gen.CreateAuthC
 }
 
 func (s *Service) AttachAuthClientToMcpServer(ctx context.Context, payload *gen.AttachAuthClientToMcpServerPayload) (*types.AuthClient, error) {
-	authCtx, logger, err := s.require(ctx, authz.OrgRef.Admin)
+	authCtx, logger, err := s.require(ctx, ManageAuthClientPermission)
 	if err != nil {
 		return nil, err
 	}
@@ -233,7 +240,7 @@ func (s *Service) AttachAuthClientToMcpServer(ctx context.Context, payload *gen.
 }
 
 func (s *Service) SetAuthClientHeaders(ctx context.Context, payload *gen.SetAuthClientHeadersPayload) (*types.AuthClient, error) {
-	authCtx, logger, err := s.require(ctx, authz.OrgRef.Admin)
+	authCtx, logger, err := s.require(ctx, ManageAuthClientPermission)
 	if err != nil {
 		return nil, err
 	}
@@ -417,6 +424,8 @@ func attachTx(ctx context.Context, queries *repo.Queries, organizationID string,
 		return server, fmt.Errorf("lock mcp server: %w", err)
 	}
 	switch {
+	case client.ClientType == authz.AuthClientTypeSlackApp:
+		return server, &AttachRefusedError{Code: AttachInvalid, Message: "a slack_app auth client cannot be offered on an MCP server; its credentials are used only by the assistant-slack built-in toolset and Slack triggers"}
 	case !server.Proxied:
 		return server, &AttachRefusedError{Code: AttachInvalid, Message: "only remote and tunneled MCP servers offer auth clients; hosted toolsets keep their own authentication"}
 	case server.Tunneled && (client.ClientType == authz.AuthClientTypeStaticCredential || client.ClientType == authz.AuthClientTypePassThrough):
@@ -530,13 +539,29 @@ func validateClientHeaders(clientType string, inputs []*gen.AuthClientHeaderInpu
 			return nil, fmt.Errorf("a %s client produces its own Authorization header; it cannot be configured", clientType)
 		}
 
+		if clientType == authz.AuthClientTypeSlackApp {
+			canonicalSlack, allowed := allowedSlackAppHeaderKeys[key]
+			if !allowed {
+				return nil, fmt.Errorf("header %q is not a valid slack_app credential; allowed keys are SLACK_BOT_TOKEN, SLACK_USER_TOKEN, SLACK_SIGNING_SECRET, and SLACK_TOKEN", name)
+			}
+			name = canonicalSlack
+		}
+
 		value := conv.PtrValOr(in.Value, "")
 		source := strings.Trim(conv.PtrValOr(in.ValueFromRequestHeader, ""), " ")
 		stored, hasStored := storedValues[key]
 		keep := value == "" && source == "" && hasStored && stored.isSecret == in.IsSecret
 
 		switch {
+		case clientType == authz.AuthClientTypeSlackApp && source != "":
+			return nil, fmt.Errorf("header %q: a slack_app client stores encrypted Slack app credentials and cannot forward request headers", name)
+		case clientType == authz.AuthClientTypeSlackApp && !in.IsSecret:
+			return nil, fmt.Errorf("header %q: slack_app credentials must be marked as secret", name)
 		case keep:
+		case clientType == authz.AuthClientTypeSlackApp && strings.TrimSpace(value) == "":
+			return nil, fmt.Errorf("header %q: slack_app credentials cannot be blank", name)
+		case clientType == authz.AuthClientTypeSlackApp && strings.ContainsFunc(value, func(r rune) bool { return r < 0x20 || r == 0x7f }):
+			return nil, fmt.Errorf("header %q: slack_app credentials cannot contain control characters", name)
 		case (value == "") == (source == ""):
 			return nil, fmt.Errorf("header %q must specify exactly one of value or value_from_request_header", name)
 		case source != "" && in.IsSecret:

@@ -60,8 +60,8 @@ func DecodeListAuthClientsRequest(mux goahttp.Muxer, decoder func(*http.Request)
 			clientType = &clientTypeRaw
 		}
 		if clientType != nil {
-			if !(*clientType == "remote_session" || *clientType == "service_account" || *clientType == "static_credential" || *clientType == "pass_through" || *clientType == "ema") {
-				err = goa.MergeErrors(err, goa.InvalidEnumValueError("client_type", *clientType, []any{"remote_session", "service_account", "static_credential", "pass_through", "ema"}))
+			if !(*clientType == "remote_session" || *clientType == "service_account" || *clientType == "static_credential" || *clientType == "pass_through" || *clientType == "ema" || *clientType == "slack_app") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("client_type", *clientType, []any{"remote_session", "service_account", "static_credential", "pass_through", "ema", "slack_app"}))
 			}
 		}
 		cursorRaw := qp.Get("cursor")

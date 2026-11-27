@@ -361,7 +361,7 @@ var Definitions = Registry{
 			Parent:   "project",
 			Category: ScopeCategoryMCPAuthClient,
 			Dimensions: []Dimension{
-				{Key: SelectorKeyClientType, Values: []string{AuthClientTypeRemoteSession, AuthClientTypeServiceAccount, AuthClientTypeStaticCredential, AuthClientTypePassThrough, AuthClientTypeEMA}, Required: false},
+				{Key: SelectorKeyClientType, Values: []string{AuthClientTypeRemoteSession, AuthClientTypeServiceAccount, AuthClientTypeStaticCredential, AuthClientTypePassThrough, AuthClientTypeEMA, AuthClientTypeSlackApp}, Required: false},
 				{Key: SelectorKeyProjectID, Values: nil, Required: false},
 				{Key: SelectorKeyConnectionOwner, Values: nil, Required: false},
 				{Key: SelectorKeyUpstreamClient, Values: nil, Required: false},

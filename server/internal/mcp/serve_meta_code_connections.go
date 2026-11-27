@@ -45,7 +45,7 @@ func (b *metaCodeBackend) DiscoveryServers(ctx context.Context) ([]codemode.Serv
 // knownConnectionState reuses approval when the caller already checked it; nil checks here.
 func (b *metaCodeBackend) knownConnectionState(ctx context.Context, gate *metaGateContext, member metaMember, approval *catalogApproval) *codemode.ConnectionState {
 	state := &codemode.ConnectionState{Consent: "not_required", Authentication: "unknown", Instructions: "", CheckedAt: nil}
-	if member.backend == metaMemberBackendHosted && !member.remoteSessionIssuerID.Valid {
+	if (member.backend == metaMemberBackendHosted && !member.remoteSessionIssuerID.Valid) || member.backend == metaMemberBackendPlatform {
 		state.Authentication = "not_required"
 	}
 	if gate.catalog != nil {

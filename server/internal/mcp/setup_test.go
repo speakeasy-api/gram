@@ -58,6 +58,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/authclients"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -147,6 +148,30 @@ type testInstance struct {
 	// remoteProxyManager builds the service's remote and tunnel proxies; tests
 	// that assert tunnel activity metrics install a collector on it.
 	remoteProxyManager *remotemcp.ProxyManager
+	// slackTransport intercepts outbound Slack API calls made by the built-in
+	// assistant-slack toolset in tests.
+	slackTransport *testSlackTransport
+}
+
+type testSlackTransport struct {
+	mu      sync.Mutex
+	handler func(*http.Request) (*http.Response, error)
+}
+
+func (t *testSlackTransport) set(fn func(*http.Request) (*http.Response, error)) {
+	t.mu.Lock()
+	t.handler = fn
+	t.mu.Unlock()
+}
+
+func (t *testSlackTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	t.mu.Lock()
+	fn := t.handler
+	t.mu.Unlock()
+	if fn != nil {
+		return fn(req)
+	}
+	return nil, fmt.Errorf("unexpected Slack HTTP request (%s %s) with no test handler configured", req.Method, req.URL.String())
 }
 
 // migratedService records typed choices for fixtures that explicitly seed a
@@ -712,12 +737,16 @@ func buildTestMCPService(
 		)
 		platformMCPReadActingContext = assistant_platform_mcp_adapter.ActingContext(platformMCPAuthorizer)
 	}
+	slackTransport := &testSlackTransport{}
+	slackAppCreds := authclients.NewSlackAppCredentialStore(conn, authzEngine, enc)
+	assistantSlackTools := platformtoolsruntime.AssistantSlackTools(&http.Client{Transport: slackTransport}, nil, enc, serverURL, slackAppCreds)
 	platformToolsets := platformtools.BuildToolsets(platformtools.ToolsetDependencies{
 		AssistantMemoryTools:         nil,
 		AssistantSkillTools:          assistantSkillTools,
 		AssistantTriggerTools:        nil,
 		PlatformMCPReadTools:         platformMCPReadTools,
 		PlatformMCPReadActingContext: platformMCPReadActingContext,
+		AssistantSlackTools:          assistantSlackTools,
 	})
 	tunnelRoutes := route.NewRouteTable()
 	toolCallRecords := &toolCallRecorder{}
@@ -757,6 +786,7 @@ func buildTestMCPService(
 		clientCredentials:    clientCredentials,
 		toolCallRecords:      toolCallRecords,
 		remoteProxyManager:   remoteProxyManager,
+		slackTransport:       slackTransport,
 	}
 }
 
