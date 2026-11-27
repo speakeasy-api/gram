@@ -330,7 +330,7 @@ func (q *Queries) GetLiveOktaIdentityProviderConnectionForOrganization(ctx conte
 
 const getManagedClient = `-- name: GetManagedClient :one
 SELECT
-  c.id, c.project_id, c.organization_id, c.attachment_scope, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_secret_org_encrypted, c.client_secret_generation, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.json_web_key_set_id, c.scope, c.grant_types, c.audience, c.token_endpoint_auth_audience_format, c.client_id_metadata_uri, c.legacy_callback_url, c.callback_base_url, c.resource_identifier, c.resource_name, c.resource_documentation, c.resource_policy_uri, c.resource_tos_uri, c.upstream_rejected_at, c.identity_provider_connection_id, c.credential_owner, c.display_name, c.forward_client_name, c.created_at, c.updated_at, c.deleted_at, c.deleted,
+  c.id, c.project_id, c.organization_id, c.attachment_scope, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_secret_org_encrypted, c.client_secret_generation, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.json_web_key_set_id, c.scope, c.grant_types, c.session_inactivity_timeout, c.session_maximum_duration, c.audience, c.token_endpoint_auth_audience_format, c.client_id_metadata_uri, c.legacy_callback_url, c.callback_base_url, c.resource_identifier, c.resource_name, c.resource_documentation, c.resource_policy_uri, c.resource_tos_uri, c.upstream_rejected_at, c.identity_provider_connection_id, c.credential_owner, c.display_name, c.forward_client_name, c.created_at, c.updated_at, c.deleted_at, c.deleted,
   s.id AS json_web_key_set_id,
   s.external_key_id,
   k.id AS json_web_key_id,
@@ -398,6 +398,8 @@ func (q *Queries) GetManagedClient(ctx context.Context, arg GetManagedClientPara
 		&i.RemoteSessionClient.JsonWebKeySetID,
 		&i.RemoteSessionClient.Scope,
 		&i.RemoteSessionClient.GrantTypes,
+		&i.RemoteSessionClient.SessionInactivityTimeout,
+		&i.RemoteSessionClient.SessionMaximumDuration,
 		&i.RemoteSessionClient.Audience,
 		&i.RemoteSessionClient.TokenEndpointAuthAudienceFormat,
 		&i.RemoteSessionClient.ClientIDMetadataUri,
@@ -970,7 +972,7 @@ func (q *Queries) LockIdentityProviderConnectionForProvisioning(ctx context.Cont
 }
 
 const lockManagedSecretClient = `-- name: LockManagedSecretClient :one
-SELECT id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_secret_org_encrypted, client_secret_generation, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted FROM remote_session_clients
+SELECT id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_secret_org_encrypted, client_secret_generation, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, session_inactivity_timeout, session_maximum_duration, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted FROM remote_session_clients
 WHERE id = $1
   AND organization_id = $2
   AND project_id IS NULL
@@ -1007,6 +1009,8 @@ func (q *Queries) LockManagedSecretClient(ctx context.Context, arg LockManagedSe
 		&i.JsonWebKeySetID,
 		&i.Scope,
 		&i.GrantTypes,
+		&i.SessionInactivityTimeout,
+		&i.SessionMaximumDuration,
 		&i.Audience,
 		&i.TokenEndpointAuthAudienceFormat,
 		&i.ClientIDMetadataUri,
@@ -1410,7 +1414,7 @@ WHERE id = $2
   AND identity_provider_connection_id = $4
   AND client_id = $5
   AND deleted IS FALSE
-RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_secret_org_encrypted, client_secret_generation, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_secret_org_encrypted, client_secret_generation, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, session_inactivity_timeout, session_maximum_duration, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted
 `
 
 type SetManagedClientIDParams struct {
@@ -1449,6 +1453,8 @@ func (q *Queries) SetManagedClientID(ctx context.Context, arg SetManagedClientID
 		&i.JsonWebKeySetID,
 		&i.Scope,
 		&i.GrantTypes,
+		&i.SessionInactivityTimeout,
+		&i.SessionMaximumDuration,
 		&i.Audience,
 		&i.TokenEndpointAuthAudienceFormat,
 		&i.ClientIDMetadataUri,
@@ -1607,7 +1613,7 @@ WHERE id = $2
   AND token_endpoint_auth_method = 'client_secret_basic'
   AND json_web_key_set_id IS NULL
   AND deleted IS FALSE
-RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_secret_org_encrypted, client_secret_generation, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_secret_org_encrypted, client_secret_generation, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, session_inactivity_timeout, session_maximum_duration, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted
 `
 
 type SwitchManagedClientToKeySetParams struct {
@@ -1643,6 +1649,8 @@ func (q *Queries) SwitchManagedClientToKeySet(ctx context.Context, arg SwitchMan
 		&i.JsonWebKeySetID,
 		&i.Scope,
 		&i.GrantTypes,
+		&i.SessionInactivityTimeout,
+		&i.SessionMaximumDuration,
 		&i.Audience,
 		&i.TokenEndpointAuthAudienceFormat,
 		&i.ClientIDMetadataUri,
@@ -1678,7 +1686,7 @@ WHERE id = $1
   AND client_id = $4
   AND token_endpoint_auth_method = 'private_key_jwt'
   AND deleted IS FALSE
-RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_secret_org_encrypted, client_secret_generation, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_secret_org_encrypted, client_secret_generation, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, session_inactivity_timeout, session_maximum_duration, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted
 `
 
 type SwitchManagedClientToSecretParams struct {
@@ -1715,6 +1723,8 @@ func (q *Queries) SwitchManagedClientToSecret(ctx context.Context, arg SwitchMan
 		&i.JsonWebKeySetID,
 		&i.Scope,
 		&i.GrantTypes,
+		&i.SessionInactivityTimeout,
+		&i.SessionMaximumDuration,
 		&i.Audience,
 		&i.TokenEndpointAuthAudienceFormat,
 		&i.ClientIDMetadataUri,

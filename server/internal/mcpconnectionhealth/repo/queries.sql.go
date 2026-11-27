@@ -74,7 +74,7 @@ WITH endpoints AS (
   WHERE project.organization_id = $3::text
 ),
 candidates AS (
-  SELECT session.id, session.project_id, session.organization_id, session.user_session_issuer_id, session.user_session_client_id, session.subject_urn, session.authorizer_user_id, session.delegated_grants, session.delegated_grants_version, session.jti, session.refresh_token_hash, session.refresh_expires_at, session.expires_at, session.tool_selection, session.last_used_at, session.resource, session.sign_in_id, session.credential_id, session.created_at, session.updated_at, session.deleted_at, session.deleted,
+  SELECT session.id, session.project_id, session.organization_id, session.user_session_issuer_id, session.user_session_client_id, session.subject_urn, session.authorizer_user_id, session.delegated_grants, session.delegated_grants_version, session.jti, session.refresh_token_hash, session.refresh_expires_at, session.expires_at, session.session_inactivity_timeout, session.session_absolute_expires_at, session.tool_selection, session.last_used_at, session.resource, session.sign_in_id, session.credential_id, session.created_at, session.updated_at, session.deleted_at, session.deleted,
          substring(session.resource from '^https?://([^/?#]+)') AS resource_host,
          regexp_replace(regexp_replace(session.resource, '^https?://[^/?#]+', ''), '[?#].*$', '') AS resource_path,
          MIN(session.created_at) OVER (PARTITION BY COALESCE(session.credential_id, session.id)) AS signed_in_at
@@ -89,7 +89,7 @@ candidates AS (
     )
 ),
 addressed AS (
-  SELECT session.id, session.project_id, session.organization_id, session.user_session_issuer_id, session.user_session_client_id, session.subject_urn, session.authorizer_user_id, session.delegated_grants, session.delegated_grants_version, session.jti, session.refresh_token_hash, session.refresh_expires_at, session.expires_at, session.tool_selection, session.last_used_at, session.resource, session.sign_in_id, session.credential_id, session.created_at, session.updated_at, session.deleted_at, session.deleted, session.resource_host, session.resource_path, session.signed_in_at,
+  SELECT session.id, session.project_id, session.organization_id, session.user_session_issuer_id, session.user_session_client_id, session.subject_urn, session.authorizer_user_id, session.delegated_grants, session.delegated_grants_version, session.jti, session.refresh_token_hash, session.refresh_expires_at, session.expires_at, session.session_inactivity_timeout, session.session_absolute_expires_at, session.tool_selection, session.last_used_at, session.resource, session.sign_in_id, session.credential_id, session.created_at, session.updated_at, session.deleted_at, session.deleted, session.resource_host, session.resource_path, session.signed_in_at,
          EXISTS (SELECT 1 FROM custom_domains AS domain WHERE domain.organization_id = $3::text AND domain.domain = session.resource_host) AS on_custom_domain,
          substring(session.resource_path from '/mcp/([^/]+)/?$') AS endpoint_slug,
          substring(session.resource_path from '/mcp/gateway/[^/]+/projects/([^/]+)/?$') AS gateway_project_slug,

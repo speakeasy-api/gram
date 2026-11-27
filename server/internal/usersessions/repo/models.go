@@ -37,6 +37,10 @@ type UserSession struct {
 	RefreshExpiresAt pgtype.Timestamptz
 	// @access: confidential
 	ExpiresAt pgtype.Timestamptz
+	// @access: confidential
+	SessionInactivityTimeout pgtype.Interval
+	// @access: confidential
+	SessionAbsoluteExpiresAt pgtype.Timestamptz
 	// @access: opaque-restricted
 	ToolSelection []byte
 	// @access: confidential
@@ -176,6 +180,8 @@ type UserSessionIssuer struct {
 	AuthnChallengeMode string
 	// @access: confidential
 	SessionDuration pgtype.Interval
+	// @access: confidential
+	SessionInactivityTimeout pgtype.Interval
 	// @access: confidential
 	Classification string
 	// @access: confidential

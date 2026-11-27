@@ -131,7 +131,7 @@ func (q *Queries) ClearRemoteSessionAccessTokenPlatformCopies(ctx context.Contex
 
 const clearRemoteSessionOrganizationFixture = `-- name: ClearRemoteSessionOrganizationFixture :one
 UPDATE remote_sessions SET organization_id = NULL WHERE id = $1
-RETURNING id, grant_generation, subject_urn, user_session_issuer_id, remote_session_client_id, organization_id, access_token_encrypted, access_token_org_encrypted, access_expires_at, refresh_token_encrypted, refresh_token_org_encrypted, authorization_expires_at, refresh_expires_at, scopes, resource, auto_refresh, last_refresh_attempt_at, last_used_at, upstream_subject, upstream_email, upstream_display_name, identity_source, enrichment, last_validated_at, validation_status, validation_reason, created_at, updated_at, deleted_at, deleted
+RETURNING id, grant_generation, subject_urn, user_session_issuer_id, remote_session_client_id, organization_id, access_token_encrypted, access_token_org_encrypted, access_expires_at, refresh_token_encrypted, refresh_token_org_encrypted, authorized_at, authorization_expires_at, refresh_expires_at, scopes, resource, auto_refresh, last_refresh_attempt_at, last_used_at, upstream_subject, upstream_email, upstream_display_name, identity_source, enrichment, last_validated_at, validation_status, validation_reason, created_at, updated_at, deleted_at, deleted
 `
 
 // Test fixture: a session whose organization_id was never backfilled.
@@ -150,6 +150,7 @@ func (q *Queries) ClearRemoteSessionOrganizationFixture(ctx context.Context, id 
 		&i.AccessExpiresAt,
 		&i.RefreshTokenEncrypted,
 		&i.RefreshTokenOrgEncrypted,
+		&i.AuthorizedAt,
 		&i.AuthorizationExpiresAt,
 		&i.RefreshExpiresAt,
 		&i.Scopes,
@@ -969,7 +970,7 @@ VALUES (
         WHERE client.id = $3
     )
 )
-RETURNING id, grant_generation, subject_urn, user_session_issuer_id, remote_session_client_id, organization_id, access_token_encrypted, access_token_org_encrypted, access_expires_at, refresh_token_encrypted, refresh_token_org_encrypted, authorization_expires_at, refresh_expires_at, scopes, resource, auto_refresh, last_refresh_attempt_at, last_used_at, upstream_subject, upstream_email, upstream_display_name, identity_source, enrichment, last_validated_at, validation_status, validation_reason, created_at, updated_at, deleted_at, deleted
+RETURNING id, grant_generation, subject_urn, user_session_issuer_id, remote_session_client_id, organization_id, access_token_encrypted, access_token_org_encrypted, access_expires_at, refresh_token_encrypted, refresh_token_org_encrypted, authorized_at, authorization_expires_at, refresh_expires_at, scopes, resource, auto_refresh, last_refresh_attempt_at, last_used_at, upstream_subject, upstream_email, upstream_display_name, identity_source, enrichment, last_validated_at, validation_status, validation_reason, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateRemoteSessionFixtureParams struct {
@@ -995,6 +996,7 @@ func (q *Queries) CreateRemoteSessionFixture(ctx context.Context, arg CreateRemo
 		&i.AccessExpiresAt,
 		&i.RefreshTokenEncrypted,
 		&i.RefreshTokenOrgEncrypted,
+		&i.AuthorizedAt,
 		&i.AuthorizationExpiresAt,
 		&i.RefreshExpiresAt,
 		&i.Scopes,
@@ -1070,7 +1072,7 @@ func (q *Queries) CreateTrustedIssuerSessionFixture(ctx context.Context, arg Cre
 }
 
 const getRemoteSessionRowFixture = `-- name: GetRemoteSessionRowFixture :one
-SELECT id, grant_generation, subject_urn, user_session_issuer_id, remote_session_client_id, organization_id, access_token_encrypted, access_token_org_encrypted, access_expires_at, refresh_token_encrypted, refresh_token_org_encrypted, authorization_expires_at, refresh_expires_at, scopes, resource, auto_refresh, last_refresh_attempt_at, last_used_at, upstream_subject, upstream_email, upstream_display_name, identity_source, enrichment, last_validated_at, validation_status, validation_reason, created_at, updated_at, deleted_at, deleted FROM remote_sessions WHERE id = $1
+SELECT id, grant_generation, subject_urn, user_session_issuer_id, remote_session_client_id, organization_id, access_token_encrypted, access_token_org_encrypted, access_expires_at, refresh_token_encrypted, refresh_token_org_encrypted, authorized_at, authorization_expires_at, refresh_expires_at, scopes, resource, auto_refresh, last_refresh_attempt_at, last_used_at, upstream_subject, upstream_email, upstream_display_name, identity_source, enrichment, last_validated_at, validation_status, validation_reason, created_at, updated_at, deleted_at, deleted FROM remote_sessions WHERE id = $1
 `
 
 // Test fixture: the session row as stored, soft-deleted or not.
@@ -1089,6 +1091,7 @@ func (q *Queries) GetRemoteSessionRowFixture(ctx context.Context, id uuid.UUID) 
 		&i.AccessExpiresAt,
 		&i.RefreshTokenEncrypted,
 		&i.RefreshTokenOrgEncrypted,
+		&i.AuthorizedAt,
 		&i.AuthorizationExpiresAt,
 		&i.RefreshExpiresAt,
 		&i.Scopes,
@@ -2396,7 +2399,7 @@ WHERE s.id = $6
     WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
     FOR KEY SHARE
   ), 0) = $8
-RETURNING id, grant_generation, subject_urn, user_session_issuer_id, remote_session_client_id, organization_id, access_token_encrypted, access_token_org_encrypted, access_expires_at, refresh_token_encrypted, refresh_token_org_encrypted, authorization_expires_at, refresh_expires_at, scopes, resource, auto_refresh, last_refresh_attempt_at, last_used_at, upstream_subject, upstream_email, upstream_display_name, identity_source, enrichment, last_validated_at, validation_status, validation_reason, created_at, updated_at, deleted_at, deleted
+RETURNING id, grant_generation, subject_urn, user_session_issuer_id, remote_session_client_id, organization_id, access_token_encrypted, access_token_org_encrypted, access_expires_at, refresh_token_encrypted, refresh_token_org_encrypted, authorized_at, authorization_expires_at, refresh_expires_at, scopes, resource, auto_refresh, last_refresh_attempt_at, last_used_at, upstream_subject, upstream_email, upstream_display_name, identity_source, enrichment, last_validated_at, validation_status, validation_reason, created_at, updated_at, deleted_at, deleted
 `
 
 type SetRemoteSessionTokensParams struct {
@@ -2459,6 +2462,7 @@ func (q *Queries) SetRemoteSessionTokens(ctx context.Context, arg SetRemoteSessi
 		&i.AccessExpiresAt,
 		&i.RefreshTokenEncrypted,
 		&i.RefreshTokenOrgEncrypted,
+		&i.AuthorizedAt,
 		&i.AuthorizationExpiresAt,
 		&i.RefreshExpiresAt,
 		&i.Scopes,

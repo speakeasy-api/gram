@@ -28,6 +28,8 @@ type federatedClientSnapshot struct {
 	JsonWebKeySetID                 uuid.NullUUID      `json:"JsonWebKeySetID"`
 	Scope                           []string           `json:"Scope"`
 	GrantTypes                      []string           `json:"GrantTypes"`
+	SessionInactivityTimeout        pgtype.Interval    `json:"SessionInactivityTimeout"`
+	SessionMaximumDuration          pgtype.Interval    `json:"SessionMaximumDuration"`
 	Audience                        pgtype.Text        `json:"Audience"`
 	TokenEndpointAuthAudienceFormat pgtype.Text        `json:"TokenEndpointAuthAudienceFormat"`
 	ClientIDMetadataUri             pgtype.Text        `json:"ClientIDMetadataUri"`

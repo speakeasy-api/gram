@@ -24,7 +24,7 @@ WHERE c.id = $1
   AND c.organization_id IS NOT DISTINCT FROM $2::text
   AND c.project_id IS NOT DISTINCT FROM $3::uuid
   AND c.deleted IS FALSE
-RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_secret_org_encrypted, client_secret_generation, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_secret_org_encrypted, client_secret_generation, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, session_inactivity_timeout, session_maximum_duration, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted
 `
 
 type ClearRemoteSessionClientSecretParams struct {
@@ -58,6 +58,8 @@ func (q *Queries) ClearRemoteSessionClientSecret(ctx context.Context, arg ClearR
 		&i.JsonWebKeySetID,
 		&i.Scope,
 		&i.GrantTypes,
+		&i.SessionInactivityTimeout,
+		&i.SessionMaximumDuration,
 		&i.Audience,
 		&i.TokenEndpointAuthAudienceFormat,
 		&i.ClientIDMetadataUri,
@@ -220,7 +222,7 @@ func (q *Queries) GetRemoteSessionClientProjectOrganization(ctx context.Context,
 }
 
 const getRemoteSessionClientRowFixture = `-- name: GetRemoteSessionClientRowFixture :one
-SELECT id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_secret_org_encrypted, client_secret_generation, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted FROM remote_session_clients WHERE id = $1
+SELECT id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_secret_org_encrypted, client_secret_generation, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, session_inactivity_timeout, session_maximum_duration, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted FROM remote_session_clients WHERE id = $1
 `
 
 // Test fixture: the client row as stored, soft-deleted or not.
@@ -243,6 +245,8 @@ func (q *Queries) GetRemoteSessionClientRowFixture(ctx context.Context, id uuid.
 		&i.JsonWebKeySetID,
 		&i.Scope,
 		&i.GrantTypes,
+		&i.SessionInactivityTimeout,
+		&i.SessionMaximumDuration,
 		&i.Audience,
 		&i.TokenEndpointAuthAudienceFormat,
 		&i.ClientIDMetadataUri,
@@ -454,7 +458,7 @@ WHERE c.id = $4
     WHERE t.organization_id = c.organization_id AND t.use_case = 'oauth-client-secrets'
     FOR KEY SHARE
   ), 0) = $7
-RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_secret_org_encrypted, client_secret_generation, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_secret_org_encrypted, client_secret_generation, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, session_inactivity_timeout, session_maximum_duration, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted
 `
 
 type SetRemoteSessionClientSecretParams struct {
@@ -510,6 +514,8 @@ func (q *Queries) SetRemoteSessionClientSecret(ctx context.Context, arg SetRemot
 		&i.JsonWebKeySetID,
 		&i.Scope,
 		&i.GrantTypes,
+		&i.SessionInactivityTimeout,
+		&i.SessionMaximumDuration,
 		&i.Audience,
 		&i.TokenEndpointAuthAudienceFormat,
 		&i.ClientIDMetadataUri,

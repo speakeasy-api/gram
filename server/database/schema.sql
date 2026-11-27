@@ -4295,6 +4295,10 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
   -- Recorded registration grant types, not authoritative provider policy.
   -- NULL means unknown; an empty array means explicitly recorded empty.
   grant_types TEXT[],
+  -- Egress session policy. NULL inactivity uses the product default; NULL
+  -- maximum means the authorization has no Speakeasy-imposed absolute limit.
+  session_inactivity_timeout INTERVAL,
+  session_maximum_duration INTERVAL,
   -- Provider-specific OAuth audience request parameter on authorize/token
   -- requests, not the ID-JAG resource-AS issuer audience or RFC 8707 resource.
   -- The signed assertion uses token_endpoint_auth_audience_format instead.
@@ -4472,6 +4476,8 @@ COMMENT ON COLUMN remote_session_clients.token_endpoint_auth_method IS '@access:
 COMMENT ON COLUMN remote_session_clients.json_web_key_set_id IS '@access: confidential';
 COMMENT ON COLUMN remote_session_clients.scope IS '@access: opaque-restricted';
 COMMENT ON COLUMN remote_session_clients.grant_types IS '@access: opaque-confidential';
+COMMENT ON COLUMN remote_session_clients.session_inactivity_timeout IS '@access: confidential';
+COMMENT ON COLUMN remote_session_clients.session_maximum_duration IS '@access: confidential';
 COMMENT ON COLUMN remote_session_clients.audience IS '@access: restricted';
 COMMENT ON COLUMN remote_session_clients.token_endpoint_auth_audience_format IS '@access: confidential';
 COMMENT ON COLUMN remote_session_clients.client_id_metadata_uri IS '@access: confidential';
@@ -4747,6 +4753,9 @@ CREATE TABLE IF NOT EXISTS user_session_issuers (
   slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 100),
   authn_challenge_mode TEXT NOT NULL, -- One of ('chain', 'interactive'). chain exists for backwards compatibility and should be phased out. interactive will be the main mode going forward
   session_duration INTERVAL NOT NULL,
+  -- Sliding inactivity limit for sessions issued by this sign-in. NULL keeps
+  -- the legacy fixed-duration behavior.
+  session_inactivity_timeout INTERVAL,
   classification TEXT NOT NULL DEFAULT 'custom' CHECK (classification IN ('custom', 'project_default_idp')), -- 'project_default_idp' is the auto-provisioned implicit Gram issuer for private servers; 'custom' is user-configured
 
   -- Chooses which CIMD clients this issuer permits.
@@ -4791,6 +4800,7 @@ COMMENT ON COLUMN user_session_issuers.attachment_scope IS '@access: confidentia
 COMMENT ON COLUMN user_session_issuers.slug IS '@access: confidential';
 COMMENT ON COLUMN user_session_issuers.authn_challenge_mode IS '@access: confidential';
 COMMENT ON COLUMN user_session_issuers.session_duration IS '@access: confidential';
+COMMENT ON COLUMN user_session_issuers.session_inactivity_timeout IS '@access: confidential';
 COMMENT ON COLUMN user_session_issuers.classification IS '@access: confidential';
 COMMENT ON COLUMN user_session_issuers.client_id_metadata_admission_mode IS '@access: confidential';
 COMMENT ON COLUMN user_session_issuers.trusted_remote_session_issuer_id IS '@access: confidential';
@@ -6029,6 +6039,10 @@ CREATE TABLE IF NOT EXISTS user_sessions (
   refresh_token_hash TEXT,
   refresh_expires_at timestamptz NOT NULL,
   expires_at timestamptz NOT NULL,
+  -- Policy copied when the session is issued. NULL marks a legacy fixed-duration
+  -- session. The absolute deadline never slides with activity.
+  session_inactivity_timeout INTERVAL,
+  session_absolute_expires_at timestamptz,
   -- Tool selection the subject chose on the consent screen, carried across
   -- refresh-grant slides. NULL means all tools. Shape and mode values are
   -- validated in application code.
@@ -6081,6 +6095,8 @@ COMMENT ON COLUMN user_sessions.jti IS '@access: secret-restricted';
 COMMENT ON COLUMN user_sessions.refresh_token_hash IS '@access: secret-restricted';
 COMMENT ON COLUMN user_sessions.refresh_expires_at IS '@access: confidential';
 COMMENT ON COLUMN user_sessions.expires_at IS '@access: confidential';
+COMMENT ON COLUMN user_sessions.session_inactivity_timeout IS '@access: confidential';
+COMMENT ON COLUMN user_sessions.session_absolute_expires_at IS '@access: confidential';
 COMMENT ON COLUMN user_sessions.tool_selection IS '@access: opaque-restricted';
 COMMENT ON COLUMN user_sessions.last_used_at IS '@access: confidential';
 COMMENT ON COLUMN user_sessions.resource IS '@access: restricted';
@@ -6446,6 +6462,9 @@ CREATE TABLE IF NOT EXISTS remote_sessions (
   access_expires_at timestamptz,
   refresh_token_encrypted TEXT,
   refresh_token_org_encrypted TEXT,
+  -- Start of the current upstream authorization grant. NULL on grants created
+  -- before session policy began recording it. Token refresh does not move it.
+  authorized_at timestamptz,
   -- Absolute upstream authorization deadline reported via
   -- authorization_expires_in. Separate from the sliding refresh-token idle
   -- deadline because exchanging a token resets only the latter.
@@ -6521,6 +6540,7 @@ COMMENT ON COLUMN remote_sessions.access_token_org_encrypted IS '@access: secret
 COMMENT ON COLUMN remote_sessions.access_expires_at IS '@access: confidential';
 COMMENT ON COLUMN remote_sessions.refresh_token_encrypted IS '@access: secret-restricted';
 COMMENT ON COLUMN remote_sessions.refresh_token_org_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN remote_sessions.authorized_at IS '@access: confidential';
 COMMENT ON COLUMN remote_sessions.authorization_expires_at IS '@access: confidential';
 COMMENT ON COLUMN remote_sessions.refresh_expires_at IS '@access: confidential';
 COMMENT ON COLUMN remote_sessions.scopes IS '@access: opaque-restricted';
