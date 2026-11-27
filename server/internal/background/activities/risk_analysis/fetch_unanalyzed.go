@@ -13,6 +13,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
 
@@ -68,20 +69,6 @@ func (a *FetchUnanalyzed) Do(ctx context.Context, args FetchUnanalyzedArgs) (_ *
 	}()
 
 	queries := repo.New(a.db)
-	empty := &FetchUnanalyzedResult{MessageIDs: nil, ContentPartIDs: nil, Policies: nil}
-
-	// Messages captured before the organization was disabled stay unanalyzed,
-	// so they are scanned if it is re-enabled within the lookback window.
-	disabled, err := queries.IsProjectOrganizationDisabled(ctx, args.ProjectID)
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		// An unknown project falls through to the existing queries.
-	case err != nil:
-		return nil, fmt.Errorf("check organization disabled: %w", err)
-	case disabled:
-		span.SetAttributes(attribute.Bool("risk.organization_disabled", true))
-		return empty, nil
-	}
 
 	policies, err := queries.ListEnabledUnscopedRiskPoliciesByProject(ctx, args.ProjectID)
 	if err != nil {
@@ -94,6 +81,18 @@ func (a *FetchUnanalyzed) Do(ctx context.Context, args FetchUnanalyzedArgs) (_ *
 			ContentPartIDs: nil,
 			Policies:       nil,
 		}, nil
+	}
+
+	// Messages captured before the organization was disabled stay unanalyzed,
+	// so they are scanned if it is re-enabled within the lookback window.
+	org, err := orgrepo.New(a.db).GetOrganizationMetadata(ctx, policies[0].OrganizationID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+	case err != nil:
+		return nil, fmt.Errorf("load organization metadata: %w", err)
+	case org.DisabledAt.Valid:
+		span.SetAttributes(attribute.Bool("risk.organization_disabled", true))
+		return &FetchUnanalyzedResult{MessageIDs: nil, ContentPartIDs: nil, Policies: nil}, nil
 	}
 
 	messageIDs, err := queries.FetchUnanalyzedMessageIDs(ctx, repo.FetchUnanalyzedMessageIDsParams{
