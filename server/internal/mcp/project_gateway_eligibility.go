@@ -188,12 +188,16 @@ func (s *Service) EvaluateProjectGatewayForTurnCredential(
 	if err != nil {
 		return deny("invalid_caller"), nil
 	}
-	admitted, err := target.admits(caller, resolved.ProjectID, machineAccess)
+	decision, err := target.admits(caller, resolved.ProjectID, machineAccess)
 	if err != nil {
 		return deny(""), err
 	}
-	if !admitted {
-		return deny("caller_not_admitted"), nil
+	if !decision.admitted {
+		reason := string(decision.refusalReason)
+		if reason == "" {
+			reason = "caller_not_admitted"
+		}
+		return deny(reason), nil
 	}
 	if caller.kind == gatewayCallerAgent || caller.kind == gatewayCallerWorkload {
 		if _, ok := contextvalues.EffectiveAgentID(authedCtx); !ok {
