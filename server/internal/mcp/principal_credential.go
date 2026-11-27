@@ -31,6 +31,15 @@ func (s *Service) authenticatePrincipalCredential(ctx context.Context, token str
 		}
 		return ctx, oops.E(oops.CodeUnexpected, err, "admit principal credential").LogError(ctx, s.logger)
 	}
+	if s.assistantTokens != nil {
+		authed, err = s.assistantTokens.BindRuntime(authed)
+		if err != nil {
+			if isCredentialDenial(err) {
+				return ctx, fmt.Errorf("%w: %w", errCredentialRejected, err)
+			}
+			return ctx, oops.E(oops.CodeUnexpected, err, "bind runtime credential").LogError(ctx, s.logger)
+		}
+	}
 	credential, _ := principalcredential.FromContext(authed)
 	if credential.Credential.Principal.Type == urn.PrincipalTypeAgent {
 		agentID, err := uuid.Parse(credential.Credential.Principal.ID)
