@@ -99,7 +99,8 @@ export const ADMIN_NAV_GROUPS = [
       {
         to: "/hooks-rollout",
         label: "Hooks rollout",
-        keywords: "hooks observability plugin version release pin posthog",
+        keywords:
+          "hooks observability plugin version release pin posthog staged rollout pause canary",
         icon: RocketIcon,
       },
       {

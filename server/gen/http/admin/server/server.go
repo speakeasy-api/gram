@@ -155,6 +155,10 @@ type Server struct {
 	GetOrganizationHooksRollout                http.Handler
 	SetOrganizationHooksRollout                http.Handler
 	ClearOrganizationHooksRollout              http.Handler
+	StartHooksRolloutStage                     http.Handler
+	PauseHooksRolloutStage                     http.Handler
+	ResumeHooksRolloutStage                    http.Handler
+	CancelHooksRolloutStage                    http.Handler
 	ListTailscaleOAuthMigration                http.Handler
 	RunTailscaleOAuthMigrationStep             http.Handler
 	GetOrganizationEncryption                  http.Handler
@@ -326,6 +330,10 @@ func New(
 			{"GetOrganizationHooksRollout", "GET", "/admin/organization.hooksRollout"},
 			{"SetOrganizationHooksRollout", "POST", "/admin/organization.setHooksRollout"},
 			{"ClearOrganizationHooksRollout", "POST", "/admin/organization.clearHooksRollout"},
+			{"StartHooksRolloutStage", "POST", "/admin/hooksRollout.startStage"},
+			{"PauseHooksRolloutStage", "POST", "/admin/hooksRollout.pauseStage"},
+			{"ResumeHooksRolloutStage", "POST", "/admin/hooksRollout.resumeStage"},
+			{"CancelHooksRolloutStage", "POST", "/admin/hooksRollout.cancelStage"},
 			{"ListTailscaleOAuthMigration", "GET", "/admin/tailscaleOAuthMigration.organizations"},
 			{"RunTailscaleOAuthMigrationStep", "POST", "/admin/tailscaleOAuthMigration.run"},
 			{"GetOrganizationEncryption", "GET", "/admin/organizationEncryption.get"},
@@ -469,6 +477,10 @@ func New(
 		GetOrganizationHooksRollout:                NewGetOrganizationHooksRolloutHandler(e.GetOrganizationHooksRollout, mux, decoder, encoder, errhandler, formatter),
 		SetOrganizationHooksRollout:                NewSetOrganizationHooksRolloutHandler(e.SetOrganizationHooksRollout, mux, decoder, encoder, errhandler, formatter),
 		ClearOrganizationHooksRollout:              NewClearOrganizationHooksRolloutHandler(e.ClearOrganizationHooksRollout, mux, decoder, encoder, errhandler, formatter),
+		StartHooksRolloutStage:                     NewStartHooksRolloutStageHandler(e.StartHooksRolloutStage, mux, decoder, encoder, errhandler, formatter),
+		PauseHooksRolloutStage:                     NewPauseHooksRolloutStageHandler(e.PauseHooksRolloutStage, mux, decoder, encoder, errhandler, formatter),
+		ResumeHooksRolloutStage:                    NewResumeHooksRolloutStageHandler(e.ResumeHooksRolloutStage, mux, decoder, encoder, errhandler, formatter),
+		CancelHooksRolloutStage:                    NewCancelHooksRolloutStageHandler(e.CancelHooksRolloutStage, mux, decoder, encoder, errhandler, formatter),
 		ListTailscaleOAuthMigration:                NewListTailscaleOAuthMigrationHandler(e.ListTailscaleOAuthMigration, mux, decoder, encoder, errhandler, formatter),
 		RunTailscaleOAuthMigrationStep:             NewRunTailscaleOAuthMigrationStepHandler(e.RunTailscaleOAuthMigrationStep, mux, decoder, encoder, errhandler, formatter),
 		GetOrganizationEncryption:                  NewGetOrganizationEncryptionHandler(e.GetOrganizationEncryption, mux, decoder, encoder, errhandler, formatter),
@@ -619,6 +631,10 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetOrganizationHooksRollout = m(s.GetOrganizationHooksRollout)
 	s.SetOrganizationHooksRollout = m(s.SetOrganizationHooksRollout)
 	s.ClearOrganizationHooksRollout = m(s.ClearOrganizationHooksRollout)
+	s.StartHooksRolloutStage = m(s.StartHooksRolloutStage)
+	s.PauseHooksRolloutStage = m(s.PauseHooksRolloutStage)
+	s.ResumeHooksRolloutStage = m(s.ResumeHooksRolloutStage)
+	s.CancelHooksRolloutStage = m(s.CancelHooksRolloutStage)
 	s.ListTailscaleOAuthMigration = m(s.ListTailscaleOAuthMigration)
 	s.RunTailscaleOAuthMigrationStep = m(s.RunTailscaleOAuthMigrationStep)
 	s.GetOrganizationEncryption = m(s.GetOrganizationEncryption)
@@ -768,6 +784,10 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetOrganizationHooksRolloutHandler(mux, h.GetOrganizationHooksRollout)
 	MountSetOrganizationHooksRolloutHandler(mux, h.SetOrganizationHooksRollout)
 	MountClearOrganizationHooksRolloutHandler(mux, h.ClearOrganizationHooksRollout)
+	MountStartHooksRolloutStageHandler(mux, h.StartHooksRolloutStage)
+	MountPauseHooksRolloutStageHandler(mux, h.PauseHooksRolloutStage)
+	MountResumeHooksRolloutStageHandler(mux, h.ResumeHooksRolloutStage)
+	MountCancelHooksRolloutStageHandler(mux, h.CancelHooksRolloutStage)
 	MountListTailscaleOAuthMigrationHandler(mux, h.ListTailscaleOAuthMigration)
 	MountRunTailscaleOAuthMigrationStepHandler(mux, h.RunTailscaleOAuthMigrationStep)
 	MountGetOrganizationEncryptionHandler(mux, h.GetOrganizationEncryption)
@@ -7969,6 +7989,220 @@ func NewClearOrganizationHooksRolloutHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "clearOrganizationHooksRollout")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountStartHooksRolloutStageHandler configures the mux to serve the "admin"
+// service "startHooksRolloutStage" endpoint.
+func MountStartHooksRolloutStageHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/hooksRollout.startStage", f)
+}
+
+// NewStartHooksRolloutStageHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "startHooksRolloutStage" endpoint.
+func NewStartHooksRolloutStageHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeStartHooksRolloutStageRequest(mux, decoder)
+		encodeResponse = EncodeStartHooksRolloutStageResponse(encoder)
+		encodeError    = EncodeStartHooksRolloutStageError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "startHooksRolloutStage")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountPauseHooksRolloutStageHandler configures the mux to serve the "admin"
+// service "pauseHooksRolloutStage" endpoint.
+func MountPauseHooksRolloutStageHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/hooksRollout.pauseStage", f)
+}
+
+// NewPauseHooksRolloutStageHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "pauseHooksRolloutStage" endpoint.
+func NewPauseHooksRolloutStageHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodePauseHooksRolloutStageRequest(mux, decoder)
+		encodeResponse = EncodePauseHooksRolloutStageResponse(encoder)
+		encodeError    = EncodePauseHooksRolloutStageError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "pauseHooksRolloutStage")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountResumeHooksRolloutStageHandler configures the mux to serve the "admin"
+// service "resumeHooksRolloutStage" endpoint.
+func MountResumeHooksRolloutStageHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/hooksRollout.resumeStage", f)
+}
+
+// NewResumeHooksRolloutStageHandler creates a HTTP handler which loads the
+// HTTP request and calls the "admin" service "resumeHooksRolloutStage"
+// endpoint.
+func NewResumeHooksRolloutStageHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeResumeHooksRolloutStageRequest(mux, decoder)
+		encodeResponse = EncodeResumeHooksRolloutStageResponse(encoder)
+		encodeError    = EncodeResumeHooksRolloutStageError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "resumeHooksRolloutStage")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCancelHooksRolloutStageHandler configures the mux to serve the "admin"
+// service "cancelHooksRolloutStage" endpoint.
+func MountCancelHooksRolloutStageHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/hooksRollout.cancelStage", f)
+}
+
+// NewCancelHooksRolloutStageHandler creates a HTTP handler which loads the
+// HTTP request and calls the "admin" service "cancelHooksRolloutStage"
+// endpoint.
+func NewCancelHooksRolloutStageHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCancelHooksRolloutStageRequest(mux, decoder)
+		encodeResponse = EncodeCancelHooksRolloutStageResponse(encoder)
+		encodeError    = EncodeCancelHooksRolloutStageError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "cancelHooksRolloutStage")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
 		payload, err := decodeRequest(r)
 		if err != nil {

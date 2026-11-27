@@ -803,6 +803,45 @@ type ClearOrganizationHooksRolloutRequestBody struct {
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 }
 
+// StartHooksRolloutStageRequestBody is the type of the "admin" service
+// "startHooksRolloutStage" endpoint HTTP request body.
+type StartHooksRolloutStageRequestBody struct {
+	// The stage revision the operator was shown, or 0 when no rollout was ever
+	// staged. A different current revision returns 409 Conflict.
+	Revision int64 `form:"revision" json:"revision" xml:"revision"`
+	// Hooks generator version to roll out. Must be above the default pin and not
+	// exceed the version this build publishes.
+	Version int `form:"version" json:"version" xml:"version"`
+}
+
+// PauseHooksRolloutStageRequestBody is the type of the "admin" service
+// "pauseHooksRolloutStage" endpoint HTTP request body.
+type PauseHooksRolloutStageRequestBody struct {
+	// The stage revision the operator was shown, or 0 when no rollout was ever
+	// staged. A different current revision returns 409 Conflict.
+	Revision int64 `form:"revision" json:"revision" xml:"revision"`
+	// Why, recorded with the change.
+	Reason string `form:"reason" json:"reason" xml:"reason"`
+}
+
+// ResumeHooksRolloutStageRequestBody is the type of the "admin" service
+// "resumeHooksRolloutStage" endpoint HTTP request body.
+type ResumeHooksRolloutStageRequestBody struct {
+	// The stage revision the operator was shown, or 0 when no rollout was ever
+	// staged. A different current revision returns 409 Conflict.
+	Revision int64 `form:"revision" json:"revision" xml:"revision"`
+}
+
+// CancelHooksRolloutStageRequestBody is the type of the "admin" service
+// "cancelHooksRolloutStage" endpoint HTTP request body.
+type CancelHooksRolloutStageRequestBody struct {
+	// The stage revision the operator was shown, or 0 when no rollout was ever
+	// staged. A different current revision returns 409 Conflict.
+	Revision int64 `form:"revision" json:"revision" xml:"revision"`
+	// Why, recorded with the change.
+	Reason string `form:"reason" json:"reason" xml:"reason"`
+}
+
 // RunTailscaleOAuthMigrationStepRequestBody is the type of the "admin" service
 // "runTailscaleOAuthMigrationStep" endpoint HTTP request body.
 type RunTailscaleOAuthMigrationStepRequestBody struct {
@@ -3574,6 +3613,8 @@ type GetHooksRolloutResponseBody struct {
 	// The pin for every organization without an override. Absent until one is set;
 	// until then those organizations follow the legacy hooks-rollout PostHog flag.
 	DefaultPin *AdminHooksRolloutPinResponseBody `form:"default_pin,omitempty" json:"default_pin,omitempty" xml:"default_pin,omitempty"`
+	// The latest staged rollout. Absent when none was ever started.
+	Stage *AdminHooksRolloutStageResponseBody `form:"stage,omitempty" json:"stage,omitempty" xml:"stage,omitempty"`
 	// Organizations that always receive current_version and ignore pins.
 	CanaryOrganizationSlugs []string `form:"canary_organization_slugs,omitempty" json:"canary_organization_slugs,omitempty" xml:"canary_organization_slugs,omitempty"`
 	// Organizations with an override, by slug.
@@ -3618,6 +3659,8 @@ type SetHooksRolloutDefaultResponseBody struct {
 	// The pin for every organization without an override. Absent until one is set;
 	// until then those organizations follow the legacy hooks-rollout PostHog flag.
 	DefaultPin *AdminHooksRolloutPinResponseBody `form:"default_pin,omitempty" json:"default_pin,omitempty" xml:"default_pin,omitempty"`
+	// The latest staged rollout. Absent when none was ever started.
+	Stage *AdminHooksRolloutStageResponseBody `form:"stage,omitempty" json:"stage,omitempty" xml:"stage,omitempty"`
 	// Organizations that always receive current_version and ignore pins.
 	CanaryOrganizationSlugs []string `form:"canary_organization_slugs,omitempty" json:"canary_organization_slugs,omitempty" xml:"canary_organization_slugs,omitempty"`
 	// Organizations with an override, by slug.
@@ -3681,6 +3724,82 @@ type ClearOrganizationHooksRolloutResponseBody struct {
 	// Whether the organization's next publish moves its hooks plugin to
 	// current_version. Absent for legacy_flag, which the admin server cannot read.
 	Eligible *bool `form:"eligible,omitempty" json:"eligible,omitempty" xml:"eligible,omitempty"`
+}
+
+// StartHooksRolloutStageResponseBody is the type of the "admin" service
+// "startHooksRolloutStage" endpoint HTTP response body.
+type StartHooksRolloutStageResponseBody struct {
+	// The hooks generator version this server build publishes to an organization
+	// once its pin reaches it.
+	CurrentVersion *int `form:"current_version,omitempty" json:"current_version,omitempty" xml:"current_version,omitempty"`
+	// The pin for every organization without an override. Absent until one is set;
+	// until then those organizations follow the legacy hooks-rollout PostHog flag.
+	DefaultPin *AdminHooksRolloutPinResponseBody `form:"default_pin,omitempty" json:"default_pin,omitempty" xml:"default_pin,omitempty"`
+	// The latest staged rollout. Absent when none was ever started.
+	Stage *AdminHooksRolloutStageResponseBody `form:"stage,omitempty" json:"stage,omitempty" xml:"stage,omitempty"`
+	// Organizations that always receive current_version and ignore pins.
+	CanaryOrganizationSlugs []string `form:"canary_organization_slugs,omitempty" json:"canary_organization_slugs,omitempty" xml:"canary_organization_slugs,omitempty"`
+	// Organizations with an override, by slug.
+	Overrides []*AdminHooksRolloutOverrideResponseBody `form:"overrides,omitempty" json:"overrides,omitempty" xml:"overrides,omitempty"`
+	// The most recent pin changes, newest first.
+	RecentChanges []*AdminHooksRolloutChangeResponseBody `form:"recent_changes,omitempty" json:"recent_changes,omitempty" xml:"recent_changes,omitempty"`
+}
+
+// PauseHooksRolloutStageResponseBody is the type of the "admin" service
+// "pauseHooksRolloutStage" endpoint HTTP response body.
+type PauseHooksRolloutStageResponseBody struct {
+	// The hooks generator version this server build publishes to an organization
+	// once its pin reaches it.
+	CurrentVersion *int `form:"current_version,omitempty" json:"current_version,omitempty" xml:"current_version,omitempty"`
+	// The pin for every organization without an override. Absent until one is set;
+	// until then those organizations follow the legacy hooks-rollout PostHog flag.
+	DefaultPin *AdminHooksRolloutPinResponseBody `form:"default_pin,omitempty" json:"default_pin,omitempty" xml:"default_pin,omitempty"`
+	// The latest staged rollout. Absent when none was ever started.
+	Stage *AdminHooksRolloutStageResponseBody `form:"stage,omitempty" json:"stage,omitempty" xml:"stage,omitempty"`
+	// Organizations that always receive current_version and ignore pins.
+	CanaryOrganizationSlugs []string `form:"canary_organization_slugs,omitempty" json:"canary_organization_slugs,omitempty" xml:"canary_organization_slugs,omitempty"`
+	// Organizations with an override, by slug.
+	Overrides []*AdminHooksRolloutOverrideResponseBody `form:"overrides,omitempty" json:"overrides,omitempty" xml:"overrides,omitempty"`
+	// The most recent pin changes, newest first.
+	RecentChanges []*AdminHooksRolloutChangeResponseBody `form:"recent_changes,omitempty" json:"recent_changes,omitempty" xml:"recent_changes,omitempty"`
+}
+
+// ResumeHooksRolloutStageResponseBody is the type of the "admin" service
+// "resumeHooksRolloutStage" endpoint HTTP response body.
+type ResumeHooksRolloutStageResponseBody struct {
+	// The hooks generator version this server build publishes to an organization
+	// once its pin reaches it.
+	CurrentVersion *int `form:"current_version,omitempty" json:"current_version,omitempty" xml:"current_version,omitempty"`
+	// The pin for every organization without an override. Absent until one is set;
+	// until then those organizations follow the legacy hooks-rollout PostHog flag.
+	DefaultPin *AdminHooksRolloutPinResponseBody `form:"default_pin,omitempty" json:"default_pin,omitempty" xml:"default_pin,omitempty"`
+	// The latest staged rollout. Absent when none was ever started.
+	Stage *AdminHooksRolloutStageResponseBody `form:"stage,omitempty" json:"stage,omitempty" xml:"stage,omitempty"`
+	// Organizations that always receive current_version and ignore pins.
+	CanaryOrganizationSlugs []string `form:"canary_organization_slugs,omitempty" json:"canary_organization_slugs,omitempty" xml:"canary_organization_slugs,omitempty"`
+	// Organizations with an override, by slug.
+	Overrides []*AdminHooksRolloutOverrideResponseBody `form:"overrides,omitempty" json:"overrides,omitempty" xml:"overrides,omitempty"`
+	// The most recent pin changes, newest first.
+	RecentChanges []*AdminHooksRolloutChangeResponseBody `form:"recent_changes,omitempty" json:"recent_changes,omitempty" xml:"recent_changes,omitempty"`
+}
+
+// CancelHooksRolloutStageResponseBody is the type of the "admin" service
+// "cancelHooksRolloutStage" endpoint HTTP response body.
+type CancelHooksRolloutStageResponseBody struct {
+	// The hooks generator version this server build publishes to an organization
+	// once its pin reaches it.
+	CurrentVersion *int `form:"current_version,omitempty" json:"current_version,omitempty" xml:"current_version,omitempty"`
+	// The pin for every organization without an override. Absent until one is set;
+	// until then those organizations follow the legacy hooks-rollout PostHog flag.
+	DefaultPin *AdminHooksRolloutPinResponseBody `form:"default_pin,omitempty" json:"default_pin,omitempty" xml:"default_pin,omitempty"`
+	// The latest staged rollout. Absent when none was ever started.
+	Stage *AdminHooksRolloutStageResponseBody `form:"stage,omitempty" json:"stage,omitempty" xml:"stage,omitempty"`
+	// Organizations that always receive current_version and ignore pins.
+	CanaryOrganizationSlugs []string `form:"canary_organization_slugs,omitempty" json:"canary_organization_slugs,omitempty" xml:"canary_organization_slugs,omitempty"`
+	// Organizations with an override, by slug.
+	Overrides []*AdminHooksRolloutOverrideResponseBody `form:"overrides,omitempty" json:"overrides,omitempty" xml:"overrides,omitempty"`
+	// The most recent pin changes, newest first.
+	RecentChanges []*AdminHooksRolloutChangeResponseBody `form:"recent_changes,omitempty" json:"recent_changes,omitempty" xml:"recent_changes,omitempty"`
 }
 
 // ListTailscaleOAuthMigrationResponseBody is the type of the "admin" service
@@ -29618,6 +29737,764 @@ type ClearOrganizationHooksRolloutGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// StartHooksRolloutStageUnauthorizedResponseBody is the type of the "admin"
+// service "startHooksRolloutStage" endpoint HTTP response body for the
+// "unauthorized" error.
+type StartHooksRolloutStageUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// StartHooksRolloutStageForbiddenResponseBody is the type of the "admin"
+// service "startHooksRolloutStage" endpoint HTTP response body for the
+// "forbidden" error.
+type StartHooksRolloutStageForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// StartHooksRolloutStageBadRequestResponseBody is the type of the "admin"
+// service "startHooksRolloutStage" endpoint HTTP response body for the
+// "bad_request" error.
+type StartHooksRolloutStageBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// StartHooksRolloutStageNotFoundResponseBody is the type of the "admin"
+// service "startHooksRolloutStage" endpoint HTTP response body for the
+// "not_found" error.
+type StartHooksRolloutStageNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// StartHooksRolloutStageConflictResponseBody is the type of the "admin"
+// service "startHooksRolloutStage" endpoint HTTP response body for the
+// "conflict" error.
+type StartHooksRolloutStageConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// StartHooksRolloutStageUnsupportedMediaResponseBody is the type of the
+// "admin" service "startHooksRolloutStage" endpoint HTTP response body for the
+// "unsupported_media" error.
+type StartHooksRolloutStageUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// StartHooksRolloutStageInvalidResponseBody is the type of the "admin" service
+// "startHooksRolloutStage" endpoint HTTP response body for the "invalid" error.
+type StartHooksRolloutStageInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// StartHooksRolloutStageInvariantViolationResponseBody is the type of the
+// "admin" service "startHooksRolloutStage" endpoint HTTP response body for the
+// "invariant_violation" error.
+type StartHooksRolloutStageInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// StartHooksRolloutStageUnexpectedResponseBody is the type of the "admin"
+// service "startHooksRolloutStage" endpoint HTTP response body for the
+// "unexpected" error.
+type StartHooksRolloutStageUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// StartHooksRolloutStageGatewayErrorResponseBody is the type of the "admin"
+// service "startHooksRolloutStage" endpoint HTTP response body for the
+// "gateway_error" error.
+type StartHooksRolloutStageGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PauseHooksRolloutStageUnauthorizedResponseBody is the type of the "admin"
+// service "pauseHooksRolloutStage" endpoint HTTP response body for the
+// "unauthorized" error.
+type PauseHooksRolloutStageUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PauseHooksRolloutStageForbiddenResponseBody is the type of the "admin"
+// service "pauseHooksRolloutStage" endpoint HTTP response body for the
+// "forbidden" error.
+type PauseHooksRolloutStageForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PauseHooksRolloutStageBadRequestResponseBody is the type of the "admin"
+// service "pauseHooksRolloutStage" endpoint HTTP response body for the
+// "bad_request" error.
+type PauseHooksRolloutStageBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PauseHooksRolloutStageNotFoundResponseBody is the type of the "admin"
+// service "pauseHooksRolloutStage" endpoint HTTP response body for the
+// "not_found" error.
+type PauseHooksRolloutStageNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PauseHooksRolloutStageConflictResponseBody is the type of the "admin"
+// service "pauseHooksRolloutStage" endpoint HTTP response body for the
+// "conflict" error.
+type PauseHooksRolloutStageConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PauseHooksRolloutStageUnsupportedMediaResponseBody is the type of the
+// "admin" service "pauseHooksRolloutStage" endpoint HTTP response body for the
+// "unsupported_media" error.
+type PauseHooksRolloutStageUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PauseHooksRolloutStageInvalidResponseBody is the type of the "admin" service
+// "pauseHooksRolloutStage" endpoint HTTP response body for the "invalid" error.
+type PauseHooksRolloutStageInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PauseHooksRolloutStageInvariantViolationResponseBody is the type of the
+// "admin" service "pauseHooksRolloutStage" endpoint HTTP response body for the
+// "invariant_violation" error.
+type PauseHooksRolloutStageInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PauseHooksRolloutStageUnexpectedResponseBody is the type of the "admin"
+// service "pauseHooksRolloutStage" endpoint HTTP response body for the
+// "unexpected" error.
+type PauseHooksRolloutStageUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PauseHooksRolloutStageGatewayErrorResponseBody is the type of the "admin"
+// service "pauseHooksRolloutStage" endpoint HTTP response body for the
+// "gateway_error" error.
+type PauseHooksRolloutStageGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ResumeHooksRolloutStageUnauthorizedResponseBody is the type of the "admin"
+// service "resumeHooksRolloutStage" endpoint HTTP response body for the
+// "unauthorized" error.
+type ResumeHooksRolloutStageUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ResumeHooksRolloutStageForbiddenResponseBody is the type of the "admin"
+// service "resumeHooksRolloutStage" endpoint HTTP response body for the
+// "forbidden" error.
+type ResumeHooksRolloutStageForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ResumeHooksRolloutStageBadRequestResponseBody is the type of the "admin"
+// service "resumeHooksRolloutStage" endpoint HTTP response body for the
+// "bad_request" error.
+type ResumeHooksRolloutStageBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ResumeHooksRolloutStageNotFoundResponseBody is the type of the "admin"
+// service "resumeHooksRolloutStage" endpoint HTTP response body for the
+// "not_found" error.
+type ResumeHooksRolloutStageNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ResumeHooksRolloutStageConflictResponseBody is the type of the "admin"
+// service "resumeHooksRolloutStage" endpoint HTTP response body for the
+// "conflict" error.
+type ResumeHooksRolloutStageConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ResumeHooksRolloutStageUnsupportedMediaResponseBody is the type of the
+// "admin" service "resumeHooksRolloutStage" endpoint HTTP response body for
+// the "unsupported_media" error.
+type ResumeHooksRolloutStageUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ResumeHooksRolloutStageInvalidResponseBody is the type of the "admin"
+// service "resumeHooksRolloutStage" endpoint HTTP response body for the
+// "invalid" error.
+type ResumeHooksRolloutStageInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ResumeHooksRolloutStageInvariantViolationResponseBody is the type of the
+// "admin" service "resumeHooksRolloutStage" endpoint HTTP response body for
+// the "invariant_violation" error.
+type ResumeHooksRolloutStageInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ResumeHooksRolloutStageUnexpectedResponseBody is the type of the "admin"
+// service "resumeHooksRolloutStage" endpoint HTTP response body for the
+// "unexpected" error.
+type ResumeHooksRolloutStageUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ResumeHooksRolloutStageGatewayErrorResponseBody is the type of the "admin"
+// service "resumeHooksRolloutStage" endpoint HTTP response body for the
+// "gateway_error" error.
+type ResumeHooksRolloutStageGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CancelHooksRolloutStageUnauthorizedResponseBody is the type of the "admin"
+// service "cancelHooksRolloutStage" endpoint HTTP response body for the
+// "unauthorized" error.
+type CancelHooksRolloutStageUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CancelHooksRolloutStageForbiddenResponseBody is the type of the "admin"
+// service "cancelHooksRolloutStage" endpoint HTTP response body for the
+// "forbidden" error.
+type CancelHooksRolloutStageForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CancelHooksRolloutStageBadRequestResponseBody is the type of the "admin"
+// service "cancelHooksRolloutStage" endpoint HTTP response body for the
+// "bad_request" error.
+type CancelHooksRolloutStageBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CancelHooksRolloutStageNotFoundResponseBody is the type of the "admin"
+// service "cancelHooksRolloutStage" endpoint HTTP response body for the
+// "not_found" error.
+type CancelHooksRolloutStageNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CancelHooksRolloutStageConflictResponseBody is the type of the "admin"
+// service "cancelHooksRolloutStage" endpoint HTTP response body for the
+// "conflict" error.
+type CancelHooksRolloutStageConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CancelHooksRolloutStageUnsupportedMediaResponseBody is the type of the
+// "admin" service "cancelHooksRolloutStage" endpoint HTTP response body for
+// the "unsupported_media" error.
+type CancelHooksRolloutStageUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CancelHooksRolloutStageInvalidResponseBody is the type of the "admin"
+// service "cancelHooksRolloutStage" endpoint HTTP response body for the
+// "invalid" error.
+type CancelHooksRolloutStageInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CancelHooksRolloutStageInvariantViolationResponseBody is the type of the
+// "admin" service "cancelHooksRolloutStage" endpoint HTTP response body for
+// the "invariant_violation" error.
+type CancelHooksRolloutStageInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CancelHooksRolloutStageUnexpectedResponseBody is the type of the "admin"
+// service "cancelHooksRolloutStage" endpoint HTTP response body for the
+// "unexpected" error.
+type CancelHooksRolloutStageUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CancelHooksRolloutStageGatewayErrorResponseBody is the type of the "admin"
+// service "cancelHooksRolloutStage" endpoint HTTP response body for the
+// "gateway_error" error.
+type CancelHooksRolloutStageGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // ListTailscaleOAuthMigrationUnavailableResponseBody is the type of the
 // "admin" service "listTailscaleOAuthMigration" endpoint HTTP response body
 // for the "unavailable" error.
@@ -33206,6 +34083,31 @@ type AdminHooksRolloutPinResponseBody struct {
 	SetAt *string `form:"set_at,omitempty" json:"set_at,omitempty" xml:"set_at,omitempty"`
 }
 
+// AdminHooksRolloutStageResponseBody is used to define fields on response body
+// types.
+type AdminHooksRolloutStageResponseBody struct {
+	// Increases with every change to the rollout. Send it back with a change so a
+	// rollout that moved on in the meantime is refused.
+	Revision *int64 `form:"revision,omitempty" json:"revision,omitempty" xml:"revision,omitempty"`
+	// Hooks generator version the rollout clears.
+	Version *int `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
+	// Share of organizations on the default pin that the rollout clears, beyond
+	// canary organizations.
+	Percent *int `form:"percent,omitempty" json:"percent,omitempty" xml:"percent,omitempty"`
+	// One of running, paused, completed or cancelled. Running and paused rollouts
+	// clear organizations; completed and cancelled ones do not.
+	State *string `form:"state,omitempty" json:"state,omitempty" xml:"state,omitempty"`
+	// Why the rollout was paused or cancelled.
+	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	// Email of the staff operator who made the last change, or
+	// hooks-rollout-schedule when the schedule advanced it.
+	SetBy *string `form:"set_by,omitempty" json:"set_by,omitempty" xml:"set_by,omitempty"`
+	// When the last change was made.
+	SetAt *string `form:"set_at,omitempty" json:"set_at,omitempty" xml:"set_at,omitempty"`
+	// When a running rollout moves to its next share. Absent unless running.
+	NextAdvanceAt *string `form:"next_advance_at,omitempty" json:"next_advance_at,omitempty" xml:"next_advance_at,omitempty"`
+}
+
 // AdminHooksRolloutOverrideResponseBody is used to define fields on response
 // body types.
 type AdminHooksRolloutOverrideResponseBody struct {
@@ -34356,6 +35258,45 @@ func NewSetOrganizationHooksRolloutRequestBody(p *admin.SetOrganizationHooksRoll
 func NewClearOrganizationHooksRolloutRequestBody(p *admin.ClearOrganizationHooksRolloutPayload) *ClearOrganizationHooksRolloutRequestBody {
 	body := &ClearOrganizationHooksRolloutRequestBody{
 		OrganizationID: p.OrganizationID,
+	}
+	return body
+}
+
+// NewStartHooksRolloutStageRequestBody builds the HTTP request body from the
+// payload of the "startHooksRolloutStage" endpoint of the "admin" service.
+func NewStartHooksRolloutStageRequestBody(p *admin.StartHooksRolloutStagePayload) *StartHooksRolloutStageRequestBody {
+	body := &StartHooksRolloutStageRequestBody{
+		Revision: p.Revision,
+		Version:  p.Version,
+	}
+	return body
+}
+
+// NewPauseHooksRolloutStageRequestBody builds the HTTP request body from the
+// payload of the "pauseHooksRolloutStage" endpoint of the "admin" service.
+func NewPauseHooksRolloutStageRequestBody(p *admin.PauseHooksRolloutStagePayload) *PauseHooksRolloutStageRequestBody {
+	body := &PauseHooksRolloutStageRequestBody{
+		Revision: p.Revision,
+		Reason:   p.Reason,
+	}
+	return body
+}
+
+// NewResumeHooksRolloutStageRequestBody builds the HTTP request body from the
+// payload of the "resumeHooksRolloutStage" endpoint of the "admin" service.
+func NewResumeHooksRolloutStageRequestBody(p *admin.ResumeHooksRolloutStagePayload) *ResumeHooksRolloutStageRequestBody {
+	body := &ResumeHooksRolloutStageRequestBody{
+		Revision: p.Revision,
+	}
+	return body
+}
+
+// NewCancelHooksRolloutStageRequestBody builds the HTTP request body from the
+// payload of the "cancelHooksRolloutStage" endpoint of the "admin" service.
+func NewCancelHooksRolloutStageRequestBody(p *admin.CancelHooksRolloutStagePayload) *CancelHooksRolloutStageRequestBody {
+	body := &CancelHooksRolloutStageRequestBody{
+		Revision: p.Revision,
+		Reason:   p.Reason,
 	}
 	return body
 }
@@ -57140,6 +58081,9 @@ func NewGetHooksRolloutAdminHooksRolloutOK(body *GetHooksRolloutResponseBody) *a
 	if body.DefaultPin != nil {
 		v.DefaultPin = unmarshalAdminHooksRolloutPinResponseBodyToAdminAdminHooksRolloutPin(body.DefaultPin)
 	}
+	if body.Stage != nil {
+		v.Stage = unmarshalAdminHooksRolloutStageResponseBodyToAdminAdminHooksRolloutStage(body.Stage)
+	}
 	v.CanaryOrganizationSlugs = make([]string, len(body.CanaryOrganizationSlugs))
 	for i, val := range body.CanaryOrganizationSlugs {
 		v.CanaryOrganizationSlugs[i] = val
@@ -57500,6 +58444,9 @@ func NewSetHooksRolloutDefaultAdminHooksRolloutOK(body *SetHooksRolloutDefaultRe
 	}
 	if body.DefaultPin != nil {
 		v.DefaultPin = unmarshalAdminHooksRolloutPinResponseBodyToAdminAdminHooksRolloutPin(body.DefaultPin)
+	}
+	if body.Stage != nil {
+		v.Stage = unmarshalAdminHooksRolloutStageResponseBodyToAdminAdminHooksRolloutStage(body.Stage)
 	}
 	v.CanaryOrganizationSlugs = make([]string, len(body.CanaryOrganizationSlugs))
 	for i, val := range body.CanaryOrganizationSlugs {
@@ -58176,6 +59123,750 @@ func NewClearOrganizationHooksRolloutUnexpected(body *ClearOrganizationHooksRoll
 // NewClearOrganizationHooksRolloutGatewayError builds a admin service
 // clearOrganizationHooksRollout endpoint gateway_error error.
 func NewClearOrganizationHooksRolloutGatewayError(body *ClearOrganizationHooksRolloutGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewStartHooksRolloutStageAdminHooksRolloutOK builds a "admin" service
+// "startHooksRolloutStage" endpoint result from a HTTP "OK" response.
+func NewStartHooksRolloutStageAdminHooksRolloutOK(body *StartHooksRolloutStageResponseBody) *admin.AdminHooksRollout {
+	v := &admin.AdminHooksRollout{
+		CurrentVersion: *body.CurrentVersion,
+	}
+	if body.DefaultPin != nil {
+		v.DefaultPin = unmarshalAdminHooksRolloutPinResponseBodyToAdminAdminHooksRolloutPin(body.DefaultPin)
+	}
+	if body.Stage != nil {
+		v.Stage = unmarshalAdminHooksRolloutStageResponseBodyToAdminAdminHooksRolloutStage(body.Stage)
+	}
+	v.CanaryOrganizationSlugs = make([]string, len(body.CanaryOrganizationSlugs))
+	for i, val := range body.CanaryOrganizationSlugs {
+		v.CanaryOrganizationSlugs[i] = val
+	}
+	v.Overrides = make([]*admin.AdminHooksRolloutOverride, len(body.Overrides))
+	for i, val := range body.Overrides {
+		if val == nil {
+			v.Overrides[i] = nil
+			continue
+		}
+		v.Overrides[i] = unmarshalAdminHooksRolloutOverrideResponseBodyToAdminAdminHooksRolloutOverride(val)
+	}
+	v.RecentChanges = make([]*admin.AdminHooksRolloutChange, len(body.RecentChanges))
+	for i, val := range body.RecentChanges {
+		if val == nil {
+			v.RecentChanges[i] = nil
+			continue
+		}
+		v.RecentChanges[i] = unmarshalAdminHooksRolloutChangeResponseBodyToAdminAdminHooksRolloutChange(val)
+	}
+
+	return v
+}
+
+// NewStartHooksRolloutStageUnauthorized builds a admin service
+// startHooksRolloutStage endpoint unauthorized error.
+func NewStartHooksRolloutStageUnauthorized(body *StartHooksRolloutStageUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewStartHooksRolloutStageForbidden builds a admin service
+// startHooksRolloutStage endpoint forbidden error.
+func NewStartHooksRolloutStageForbidden(body *StartHooksRolloutStageForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewStartHooksRolloutStageBadRequest builds a admin service
+// startHooksRolloutStage endpoint bad_request error.
+func NewStartHooksRolloutStageBadRequest(body *StartHooksRolloutStageBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewStartHooksRolloutStageNotFound builds a admin service
+// startHooksRolloutStage endpoint not_found error.
+func NewStartHooksRolloutStageNotFound(body *StartHooksRolloutStageNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewStartHooksRolloutStageConflict builds a admin service
+// startHooksRolloutStage endpoint conflict error.
+func NewStartHooksRolloutStageConflict(body *StartHooksRolloutStageConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewStartHooksRolloutStageUnsupportedMedia builds a admin service
+// startHooksRolloutStage endpoint unsupported_media error.
+func NewStartHooksRolloutStageUnsupportedMedia(body *StartHooksRolloutStageUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewStartHooksRolloutStageInvalid builds a admin service
+// startHooksRolloutStage endpoint invalid error.
+func NewStartHooksRolloutStageInvalid(body *StartHooksRolloutStageInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewStartHooksRolloutStageInvariantViolation builds a admin service
+// startHooksRolloutStage endpoint invariant_violation error.
+func NewStartHooksRolloutStageInvariantViolation(body *StartHooksRolloutStageInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewStartHooksRolloutStageUnexpected builds a admin service
+// startHooksRolloutStage endpoint unexpected error.
+func NewStartHooksRolloutStageUnexpected(body *StartHooksRolloutStageUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewStartHooksRolloutStageGatewayError builds a admin service
+// startHooksRolloutStage endpoint gateway_error error.
+func NewStartHooksRolloutStageGatewayError(body *StartHooksRolloutStageGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPauseHooksRolloutStageAdminHooksRolloutOK builds a "admin" service
+// "pauseHooksRolloutStage" endpoint result from a HTTP "OK" response.
+func NewPauseHooksRolloutStageAdminHooksRolloutOK(body *PauseHooksRolloutStageResponseBody) *admin.AdminHooksRollout {
+	v := &admin.AdminHooksRollout{
+		CurrentVersion: *body.CurrentVersion,
+	}
+	if body.DefaultPin != nil {
+		v.DefaultPin = unmarshalAdminHooksRolloutPinResponseBodyToAdminAdminHooksRolloutPin(body.DefaultPin)
+	}
+	if body.Stage != nil {
+		v.Stage = unmarshalAdminHooksRolloutStageResponseBodyToAdminAdminHooksRolloutStage(body.Stage)
+	}
+	v.CanaryOrganizationSlugs = make([]string, len(body.CanaryOrganizationSlugs))
+	for i, val := range body.CanaryOrganizationSlugs {
+		v.CanaryOrganizationSlugs[i] = val
+	}
+	v.Overrides = make([]*admin.AdminHooksRolloutOverride, len(body.Overrides))
+	for i, val := range body.Overrides {
+		if val == nil {
+			v.Overrides[i] = nil
+			continue
+		}
+		v.Overrides[i] = unmarshalAdminHooksRolloutOverrideResponseBodyToAdminAdminHooksRolloutOverride(val)
+	}
+	v.RecentChanges = make([]*admin.AdminHooksRolloutChange, len(body.RecentChanges))
+	for i, val := range body.RecentChanges {
+		if val == nil {
+			v.RecentChanges[i] = nil
+			continue
+		}
+		v.RecentChanges[i] = unmarshalAdminHooksRolloutChangeResponseBodyToAdminAdminHooksRolloutChange(val)
+	}
+
+	return v
+}
+
+// NewPauseHooksRolloutStageUnauthorized builds a admin service
+// pauseHooksRolloutStage endpoint unauthorized error.
+func NewPauseHooksRolloutStageUnauthorized(body *PauseHooksRolloutStageUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPauseHooksRolloutStageForbidden builds a admin service
+// pauseHooksRolloutStage endpoint forbidden error.
+func NewPauseHooksRolloutStageForbidden(body *PauseHooksRolloutStageForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPauseHooksRolloutStageBadRequest builds a admin service
+// pauseHooksRolloutStage endpoint bad_request error.
+func NewPauseHooksRolloutStageBadRequest(body *PauseHooksRolloutStageBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPauseHooksRolloutStageNotFound builds a admin service
+// pauseHooksRolloutStage endpoint not_found error.
+func NewPauseHooksRolloutStageNotFound(body *PauseHooksRolloutStageNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPauseHooksRolloutStageConflict builds a admin service
+// pauseHooksRolloutStage endpoint conflict error.
+func NewPauseHooksRolloutStageConflict(body *PauseHooksRolloutStageConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPauseHooksRolloutStageUnsupportedMedia builds a admin service
+// pauseHooksRolloutStage endpoint unsupported_media error.
+func NewPauseHooksRolloutStageUnsupportedMedia(body *PauseHooksRolloutStageUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPauseHooksRolloutStageInvalid builds a admin service
+// pauseHooksRolloutStage endpoint invalid error.
+func NewPauseHooksRolloutStageInvalid(body *PauseHooksRolloutStageInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPauseHooksRolloutStageInvariantViolation builds a admin service
+// pauseHooksRolloutStage endpoint invariant_violation error.
+func NewPauseHooksRolloutStageInvariantViolation(body *PauseHooksRolloutStageInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPauseHooksRolloutStageUnexpected builds a admin service
+// pauseHooksRolloutStage endpoint unexpected error.
+func NewPauseHooksRolloutStageUnexpected(body *PauseHooksRolloutStageUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPauseHooksRolloutStageGatewayError builds a admin service
+// pauseHooksRolloutStage endpoint gateway_error error.
+func NewPauseHooksRolloutStageGatewayError(body *PauseHooksRolloutStageGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewResumeHooksRolloutStageAdminHooksRolloutOK builds a "admin" service
+// "resumeHooksRolloutStage" endpoint result from a HTTP "OK" response.
+func NewResumeHooksRolloutStageAdminHooksRolloutOK(body *ResumeHooksRolloutStageResponseBody) *admin.AdminHooksRollout {
+	v := &admin.AdminHooksRollout{
+		CurrentVersion: *body.CurrentVersion,
+	}
+	if body.DefaultPin != nil {
+		v.DefaultPin = unmarshalAdminHooksRolloutPinResponseBodyToAdminAdminHooksRolloutPin(body.DefaultPin)
+	}
+	if body.Stage != nil {
+		v.Stage = unmarshalAdminHooksRolloutStageResponseBodyToAdminAdminHooksRolloutStage(body.Stage)
+	}
+	v.CanaryOrganizationSlugs = make([]string, len(body.CanaryOrganizationSlugs))
+	for i, val := range body.CanaryOrganizationSlugs {
+		v.CanaryOrganizationSlugs[i] = val
+	}
+	v.Overrides = make([]*admin.AdminHooksRolloutOverride, len(body.Overrides))
+	for i, val := range body.Overrides {
+		if val == nil {
+			v.Overrides[i] = nil
+			continue
+		}
+		v.Overrides[i] = unmarshalAdminHooksRolloutOverrideResponseBodyToAdminAdminHooksRolloutOverride(val)
+	}
+	v.RecentChanges = make([]*admin.AdminHooksRolloutChange, len(body.RecentChanges))
+	for i, val := range body.RecentChanges {
+		if val == nil {
+			v.RecentChanges[i] = nil
+			continue
+		}
+		v.RecentChanges[i] = unmarshalAdminHooksRolloutChangeResponseBodyToAdminAdminHooksRolloutChange(val)
+	}
+
+	return v
+}
+
+// NewResumeHooksRolloutStageUnauthorized builds a admin service
+// resumeHooksRolloutStage endpoint unauthorized error.
+func NewResumeHooksRolloutStageUnauthorized(body *ResumeHooksRolloutStageUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewResumeHooksRolloutStageForbidden builds a admin service
+// resumeHooksRolloutStage endpoint forbidden error.
+func NewResumeHooksRolloutStageForbidden(body *ResumeHooksRolloutStageForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewResumeHooksRolloutStageBadRequest builds a admin service
+// resumeHooksRolloutStage endpoint bad_request error.
+func NewResumeHooksRolloutStageBadRequest(body *ResumeHooksRolloutStageBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewResumeHooksRolloutStageNotFound builds a admin service
+// resumeHooksRolloutStage endpoint not_found error.
+func NewResumeHooksRolloutStageNotFound(body *ResumeHooksRolloutStageNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewResumeHooksRolloutStageConflict builds a admin service
+// resumeHooksRolloutStage endpoint conflict error.
+func NewResumeHooksRolloutStageConflict(body *ResumeHooksRolloutStageConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewResumeHooksRolloutStageUnsupportedMedia builds a admin service
+// resumeHooksRolloutStage endpoint unsupported_media error.
+func NewResumeHooksRolloutStageUnsupportedMedia(body *ResumeHooksRolloutStageUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewResumeHooksRolloutStageInvalid builds a admin service
+// resumeHooksRolloutStage endpoint invalid error.
+func NewResumeHooksRolloutStageInvalid(body *ResumeHooksRolloutStageInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewResumeHooksRolloutStageInvariantViolation builds a admin service
+// resumeHooksRolloutStage endpoint invariant_violation error.
+func NewResumeHooksRolloutStageInvariantViolation(body *ResumeHooksRolloutStageInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewResumeHooksRolloutStageUnexpected builds a admin service
+// resumeHooksRolloutStage endpoint unexpected error.
+func NewResumeHooksRolloutStageUnexpected(body *ResumeHooksRolloutStageUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewResumeHooksRolloutStageGatewayError builds a admin service
+// resumeHooksRolloutStage endpoint gateway_error error.
+func NewResumeHooksRolloutStageGatewayError(body *ResumeHooksRolloutStageGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCancelHooksRolloutStageAdminHooksRolloutOK builds a "admin" service
+// "cancelHooksRolloutStage" endpoint result from a HTTP "OK" response.
+func NewCancelHooksRolloutStageAdminHooksRolloutOK(body *CancelHooksRolloutStageResponseBody) *admin.AdminHooksRollout {
+	v := &admin.AdminHooksRollout{
+		CurrentVersion: *body.CurrentVersion,
+	}
+	if body.DefaultPin != nil {
+		v.DefaultPin = unmarshalAdminHooksRolloutPinResponseBodyToAdminAdminHooksRolloutPin(body.DefaultPin)
+	}
+	if body.Stage != nil {
+		v.Stage = unmarshalAdminHooksRolloutStageResponseBodyToAdminAdminHooksRolloutStage(body.Stage)
+	}
+	v.CanaryOrganizationSlugs = make([]string, len(body.CanaryOrganizationSlugs))
+	for i, val := range body.CanaryOrganizationSlugs {
+		v.CanaryOrganizationSlugs[i] = val
+	}
+	v.Overrides = make([]*admin.AdminHooksRolloutOverride, len(body.Overrides))
+	for i, val := range body.Overrides {
+		if val == nil {
+			v.Overrides[i] = nil
+			continue
+		}
+		v.Overrides[i] = unmarshalAdminHooksRolloutOverrideResponseBodyToAdminAdminHooksRolloutOverride(val)
+	}
+	v.RecentChanges = make([]*admin.AdminHooksRolloutChange, len(body.RecentChanges))
+	for i, val := range body.RecentChanges {
+		if val == nil {
+			v.RecentChanges[i] = nil
+			continue
+		}
+		v.RecentChanges[i] = unmarshalAdminHooksRolloutChangeResponseBodyToAdminAdminHooksRolloutChange(val)
+	}
+
+	return v
+}
+
+// NewCancelHooksRolloutStageUnauthorized builds a admin service
+// cancelHooksRolloutStage endpoint unauthorized error.
+func NewCancelHooksRolloutStageUnauthorized(body *CancelHooksRolloutStageUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCancelHooksRolloutStageForbidden builds a admin service
+// cancelHooksRolloutStage endpoint forbidden error.
+func NewCancelHooksRolloutStageForbidden(body *CancelHooksRolloutStageForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCancelHooksRolloutStageBadRequest builds a admin service
+// cancelHooksRolloutStage endpoint bad_request error.
+func NewCancelHooksRolloutStageBadRequest(body *CancelHooksRolloutStageBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCancelHooksRolloutStageNotFound builds a admin service
+// cancelHooksRolloutStage endpoint not_found error.
+func NewCancelHooksRolloutStageNotFound(body *CancelHooksRolloutStageNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCancelHooksRolloutStageConflict builds a admin service
+// cancelHooksRolloutStage endpoint conflict error.
+func NewCancelHooksRolloutStageConflict(body *CancelHooksRolloutStageConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCancelHooksRolloutStageUnsupportedMedia builds a admin service
+// cancelHooksRolloutStage endpoint unsupported_media error.
+func NewCancelHooksRolloutStageUnsupportedMedia(body *CancelHooksRolloutStageUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCancelHooksRolloutStageInvalid builds a admin service
+// cancelHooksRolloutStage endpoint invalid error.
+func NewCancelHooksRolloutStageInvalid(body *CancelHooksRolloutStageInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCancelHooksRolloutStageInvariantViolation builds a admin service
+// cancelHooksRolloutStage endpoint invariant_violation error.
+func NewCancelHooksRolloutStageInvariantViolation(body *CancelHooksRolloutStageInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCancelHooksRolloutStageUnexpected builds a admin service
+// cancelHooksRolloutStage endpoint unexpected error.
+func NewCancelHooksRolloutStageUnexpected(body *CancelHooksRolloutStageUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCancelHooksRolloutStageGatewayError builds a admin service
+// cancelHooksRolloutStage endpoint gateway_error error.
+func NewCancelHooksRolloutStageGatewayError(body *CancelHooksRolloutStageGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -63719,6 +65410,11 @@ func ValidateGetHooksRolloutResponseBody(body *GetHooksRolloutResponseBody) (err
 			err = goa.MergeErrors(err, err2)
 		}
 	}
+	if body.Stage != nil {
+		if err2 := ValidateAdminHooksRolloutStageResponseBody(body.Stage); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
 	for _, e := range body.Overrides {
 		if e != nil {
 			if err2 := ValidateAdminHooksRolloutOverrideResponseBody(e); err2 != nil {
@@ -63798,6 +65494,11 @@ func ValidateSetHooksRolloutDefaultResponseBody(body *SetHooksRolloutDefaultResp
 			err = goa.MergeErrors(err, err2)
 		}
 	}
+	if body.Stage != nil {
+		if err2 := ValidateAdminHooksRolloutStageResponseBody(body.Stage); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
 	for _, e := range body.Overrides {
 		if e != nil {
 			if err2 := ValidateAdminHooksRolloutOverrideResponseBody(e); err2 != nil {
@@ -63838,8 +65539,8 @@ func ValidateGetOrganizationHooksRolloutResponseBody(body *GetOrganizationHooksR
 		}
 	}
 	if body.Source != nil {
-		if !(*body.Source == "canary" || *body.Source == "organization" || *body.Source == "default" || *body.Source == "legacy_flag") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.source", *body.Source, []any{"canary", "organization", "default", "legacy_flag"}))
+		if !(*body.Source == "canary" || *body.Source == "organization" || *body.Source == "stage" || *body.Source == "default" || *body.Source == "legacy_flag") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.source", *body.Source, []any{"canary", "organization", "stage", "default", "legacy_flag"}))
 		}
 	}
 	return
@@ -63868,8 +65569,8 @@ func ValidateSetOrganizationHooksRolloutResponseBody(body *SetOrganizationHooksR
 		}
 	}
 	if body.Source != nil {
-		if !(*body.Source == "canary" || *body.Source == "organization" || *body.Source == "default" || *body.Source == "legacy_flag") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.source", *body.Source, []any{"canary", "organization", "default", "legacy_flag"}))
+		if !(*body.Source == "canary" || *body.Source == "organization" || *body.Source == "stage" || *body.Source == "default" || *body.Source == "legacy_flag") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.source", *body.Source, []any{"canary", "organization", "stage", "default", "legacy_flag"}))
 		}
 	}
 	return
@@ -63898,8 +65599,176 @@ func ValidateClearOrganizationHooksRolloutResponseBody(body *ClearOrganizationHo
 		}
 	}
 	if body.Source != nil {
-		if !(*body.Source == "canary" || *body.Source == "organization" || *body.Source == "default" || *body.Source == "legacy_flag") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.source", *body.Source, []any{"canary", "organization", "default", "legacy_flag"}))
+		if !(*body.Source == "canary" || *body.Source == "organization" || *body.Source == "stage" || *body.Source == "default" || *body.Source == "legacy_flag") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.source", *body.Source, []any{"canary", "organization", "stage", "default", "legacy_flag"}))
+		}
+	}
+	return
+}
+
+// ValidateStartHooksRolloutStageResponseBody runs the validations defined on
+// StartHooksRolloutStageResponseBody
+func ValidateStartHooksRolloutStageResponseBody(body *StartHooksRolloutStageResponseBody) (err error) {
+	if body.CurrentVersion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("current_version", "body"))
+	}
+	if body.CanaryOrganizationSlugs == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("canary_organization_slugs", "body"))
+	}
+	if body.Overrides == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("overrides", "body"))
+	}
+	if body.RecentChanges == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("recent_changes", "body"))
+	}
+	if body.DefaultPin != nil {
+		if err2 := ValidateAdminHooksRolloutPinResponseBody(body.DefaultPin); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.Stage != nil {
+		if err2 := ValidateAdminHooksRolloutStageResponseBody(body.Stage); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	for _, e := range body.Overrides {
+		if e != nil {
+			if err2 := ValidateAdminHooksRolloutOverrideResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.RecentChanges {
+		if e != nil {
+			if err2 := ValidateAdminHooksRolloutChangeResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidatePauseHooksRolloutStageResponseBody runs the validations defined on
+// PauseHooksRolloutStageResponseBody
+func ValidatePauseHooksRolloutStageResponseBody(body *PauseHooksRolloutStageResponseBody) (err error) {
+	if body.CurrentVersion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("current_version", "body"))
+	}
+	if body.CanaryOrganizationSlugs == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("canary_organization_slugs", "body"))
+	}
+	if body.Overrides == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("overrides", "body"))
+	}
+	if body.RecentChanges == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("recent_changes", "body"))
+	}
+	if body.DefaultPin != nil {
+		if err2 := ValidateAdminHooksRolloutPinResponseBody(body.DefaultPin); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.Stage != nil {
+		if err2 := ValidateAdminHooksRolloutStageResponseBody(body.Stage); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	for _, e := range body.Overrides {
+		if e != nil {
+			if err2 := ValidateAdminHooksRolloutOverrideResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.RecentChanges {
+		if e != nil {
+			if err2 := ValidateAdminHooksRolloutChangeResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateResumeHooksRolloutStageResponseBody runs the validations defined on
+// ResumeHooksRolloutStageResponseBody
+func ValidateResumeHooksRolloutStageResponseBody(body *ResumeHooksRolloutStageResponseBody) (err error) {
+	if body.CurrentVersion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("current_version", "body"))
+	}
+	if body.CanaryOrganizationSlugs == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("canary_organization_slugs", "body"))
+	}
+	if body.Overrides == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("overrides", "body"))
+	}
+	if body.RecentChanges == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("recent_changes", "body"))
+	}
+	if body.DefaultPin != nil {
+		if err2 := ValidateAdminHooksRolloutPinResponseBody(body.DefaultPin); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.Stage != nil {
+		if err2 := ValidateAdminHooksRolloutStageResponseBody(body.Stage); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	for _, e := range body.Overrides {
+		if e != nil {
+			if err2 := ValidateAdminHooksRolloutOverrideResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.RecentChanges {
+		if e != nil {
+			if err2 := ValidateAdminHooksRolloutChangeResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateCancelHooksRolloutStageResponseBody runs the validations defined on
+// CancelHooksRolloutStageResponseBody
+func ValidateCancelHooksRolloutStageResponseBody(body *CancelHooksRolloutStageResponseBody) (err error) {
+	if body.CurrentVersion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("current_version", "body"))
+	}
+	if body.CanaryOrganizationSlugs == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("canary_organization_slugs", "body"))
+	}
+	if body.Overrides == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("overrides", "body"))
+	}
+	if body.RecentChanges == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("recent_changes", "body"))
+	}
+	if body.DefaultPin != nil {
+		if err2 := ValidateAdminHooksRolloutPinResponseBody(body.DefaultPin); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.Stage != nil {
+		if err2 := ValidateAdminHooksRolloutStageResponseBody(body.Stage); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	for _, e := range body.Overrides {
+		if e != nil {
+			if err2 := ValidateAdminHooksRolloutOverrideResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.RecentChanges {
+		if e != nil {
+			if err2 := ValidateAdminHooksRolloutChangeResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 	}
 	return
@@ -97538,6 +99407,972 @@ func ValidateClearOrganizationHooksRolloutGatewayErrorResponseBody(body *ClearOr
 	return
 }
 
+// ValidateStartHooksRolloutStageUnauthorizedResponseBody runs the validations
+// defined on startHooksRolloutStage_unauthorized_response_body
+func ValidateStartHooksRolloutStageUnauthorizedResponseBody(body *StartHooksRolloutStageUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateStartHooksRolloutStageForbiddenResponseBody runs the validations
+// defined on startHooksRolloutStage_forbidden_response_body
+func ValidateStartHooksRolloutStageForbiddenResponseBody(body *StartHooksRolloutStageForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateStartHooksRolloutStageBadRequestResponseBody runs the validations
+// defined on startHooksRolloutStage_bad_request_response_body
+func ValidateStartHooksRolloutStageBadRequestResponseBody(body *StartHooksRolloutStageBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateStartHooksRolloutStageNotFoundResponseBody runs the validations
+// defined on startHooksRolloutStage_not_found_response_body
+func ValidateStartHooksRolloutStageNotFoundResponseBody(body *StartHooksRolloutStageNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateStartHooksRolloutStageConflictResponseBody runs the validations
+// defined on startHooksRolloutStage_conflict_response_body
+func ValidateStartHooksRolloutStageConflictResponseBody(body *StartHooksRolloutStageConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateStartHooksRolloutStageUnsupportedMediaResponseBody runs the
+// validations defined on startHooksRolloutStage_unsupported_media_response_body
+func ValidateStartHooksRolloutStageUnsupportedMediaResponseBody(body *StartHooksRolloutStageUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateStartHooksRolloutStageInvalidResponseBody runs the validations
+// defined on startHooksRolloutStage_invalid_response_body
+func ValidateStartHooksRolloutStageInvalidResponseBody(body *StartHooksRolloutStageInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateStartHooksRolloutStageInvariantViolationResponseBody runs the
+// validations defined on
+// startHooksRolloutStage_invariant_violation_response_body
+func ValidateStartHooksRolloutStageInvariantViolationResponseBody(body *StartHooksRolloutStageInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateStartHooksRolloutStageUnexpectedResponseBody runs the validations
+// defined on startHooksRolloutStage_unexpected_response_body
+func ValidateStartHooksRolloutStageUnexpectedResponseBody(body *StartHooksRolloutStageUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateStartHooksRolloutStageGatewayErrorResponseBody runs the validations
+// defined on startHooksRolloutStage_gateway_error_response_body
+func ValidateStartHooksRolloutStageGatewayErrorResponseBody(body *StartHooksRolloutStageGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePauseHooksRolloutStageUnauthorizedResponseBody runs the validations
+// defined on pauseHooksRolloutStage_unauthorized_response_body
+func ValidatePauseHooksRolloutStageUnauthorizedResponseBody(body *PauseHooksRolloutStageUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePauseHooksRolloutStageForbiddenResponseBody runs the validations
+// defined on pauseHooksRolloutStage_forbidden_response_body
+func ValidatePauseHooksRolloutStageForbiddenResponseBody(body *PauseHooksRolloutStageForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePauseHooksRolloutStageBadRequestResponseBody runs the validations
+// defined on pauseHooksRolloutStage_bad_request_response_body
+func ValidatePauseHooksRolloutStageBadRequestResponseBody(body *PauseHooksRolloutStageBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePauseHooksRolloutStageNotFoundResponseBody runs the validations
+// defined on pauseHooksRolloutStage_not_found_response_body
+func ValidatePauseHooksRolloutStageNotFoundResponseBody(body *PauseHooksRolloutStageNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePauseHooksRolloutStageConflictResponseBody runs the validations
+// defined on pauseHooksRolloutStage_conflict_response_body
+func ValidatePauseHooksRolloutStageConflictResponseBody(body *PauseHooksRolloutStageConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePauseHooksRolloutStageUnsupportedMediaResponseBody runs the
+// validations defined on pauseHooksRolloutStage_unsupported_media_response_body
+func ValidatePauseHooksRolloutStageUnsupportedMediaResponseBody(body *PauseHooksRolloutStageUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePauseHooksRolloutStageInvalidResponseBody runs the validations
+// defined on pauseHooksRolloutStage_invalid_response_body
+func ValidatePauseHooksRolloutStageInvalidResponseBody(body *PauseHooksRolloutStageInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePauseHooksRolloutStageInvariantViolationResponseBody runs the
+// validations defined on
+// pauseHooksRolloutStage_invariant_violation_response_body
+func ValidatePauseHooksRolloutStageInvariantViolationResponseBody(body *PauseHooksRolloutStageInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePauseHooksRolloutStageUnexpectedResponseBody runs the validations
+// defined on pauseHooksRolloutStage_unexpected_response_body
+func ValidatePauseHooksRolloutStageUnexpectedResponseBody(body *PauseHooksRolloutStageUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePauseHooksRolloutStageGatewayErrorResponseBody runs the validations
+// defined on pauseHooksRolloutStage_gateway_error_response_body
+func ValidatePauseHooksRolloutStageGatewayErrorResponseBody(body *PauseHooksRolloutStageGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateResumeHooksRolloutStageUnauthorizedResponseBody runs the validations
+// defined on resumeHooksRolloutStage_unauthorized_response_body
+func ValidateResumeHooksRolloutStageUnauthorizedResponseBody(body *ResumeHooksRolloutStageUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateResumeHooksRolloutStageForbiddenResponseBody runs the validations
+// defined on resumeHooksRolloutStage_forbidden_response_body
+func ValidateResumeHooksRolloutStageForbiddenResponseBody(body *ResumeHooksRolloutStageForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateResumeHooksRolloutStageBadRequestResponseBody runs the validations
+// defined on resumeHooksRolloutStage_bad_request_response_body
+func ValidateResumeHooksRolloutStageBadRequestResponseBody(body *ResumeHooksRolloutStageBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateResumeHooksRolloutStageNotFoundResponseBody runs the validations
+// defined on resumeHooksRolloutStage_not_found_response_body
+func ValidateResumeHooksRolloutStageNotFoundResponseBody(body *ResumeHooksRolloutStageNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateResumeHooksRolloutStageConflictResponseBody runs the validations
+// defined on resumeHooksRolloutStage_conflict_response_body
+func ValidateResumeHooksRolloutStageConflictResponseBody(body *ResumeHooksRolloutStageConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateResumeHooksRolloutStageUnsupportedMediaResponseBody runs the
+// validations defined on
+// resumeHooksRolloutStage_unsupported_media_response_body
+func ValidateResumeHooksRolloutStageUnsupportedMediaResponseBody(body *ResumeHooksRolloutStageUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateResumeHooksRolloutStageInvalidResponseBody runs the validations
+// defined on resumeHooksRolloutStage_invalid_response_body
+func ValidateResumeHooksRolloutStageInvalidResponseBody(body *ResumeHooksRolloutStageInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateResumeHooksRolloutStageInvariantViolationResponseBody runs the
+// validations defined on
+// resumeHooksRolloutStage_invariant_violation_response_body
+func ValidateResumeHooksRolloutStageInvariantViolationResponseBody(body *ResumeHooksRolloutStageInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateResumeHooksRolloutStageUnexpectedResponseBody runs the validations
+// defined on resumeHooksRolloutStage_unexpected_response_body
+func ValidateResumeHooksRolloutStageUnexpectedResponseBody(body *ResumeHooksRolloutStageUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateResumeHooksRolloutStageGatewayErrorResponseBody runs the validations
+// defined on resumeHooksRolloutStage_gateway_error_response_body
+func ValidateResumeHooksRolloutStageGatewayErrorResponseBody(body *ResumeHooksRolloutStageGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCancelHooksRolloutStageUnauthorizedResponseBody runs the validations
+// defined on cancelHooksRolloutStage_unauthorized_response_body
+func ValidateCancelHooksRolloutStageUnauthorizedResponseBody(body *CancelHooksRolloutStageUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCancelHooksRolloutStageForbiddenResponseBody runs the validations
+// defined on cancelHooksRolloutStage_forbidden_response_body
+func ValidateCancelHooksRolloutStageForbiddenResponseBody(body *CancelHooksRolloutStageForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCancelHooksRolloutStageBadRequestResponseBody runs the validations
+// defined on cancelHooksRolloutStage_bad_request_response_body
+func ValidateCancelHooksRolloutStageBadRequestResponseBody(body *CancelHooksRolloutStageBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCancelHooksRolloutStageNotFoundResponseBody runs the validations
+// defined on cancelHooksRolloutStage_not_found_response_body
+func ValidateCancelHooksRolloutStageNotFoundResponseBody(body *CancelHooksRolloutStageNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCancelHooksRolloutStageConflictResponseBody runs the validations
+// defined on cancelHooksRolloutStage_conflict_response_body
+func ValidateCancelHooksRolloutStageConflictResponseBody(body *CancelHooksRolloutStageConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCancelHooksRolloutStageUnsupportedMediaResponseBody runs the
+// validations defined on
+// cancelHooksRolloutStage_unsupported_media_response_body
+func ValidateCancelHooksRolloutStageUnsupportedMediaResponseBody(body *CancelHooksRolloutStageUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCancelHooksRolloutStageInvalidResponseBody runs the validations
+// defined on cancelHooksRolloutStage_invalid_response_body
+func ValidateCancelHooksRolloutStageInvalidResponseBody(body *CancelHooksRolloutStageInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCancelHooksRolloutStageInvariantViolationResponseBody runs the
+// validations defined on
+// cancelHooksRolloutStage_invariant_violation_response_body
+func ValidateCancelHooksRolloutStageInvariantViolationResponseBody(body *CancelHooksRolloutStageInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCancelHooksRolloutStageUnexpectedResponseBody runs the validations
+// defined on cancelHooksRolloutStage_unexpected_response_body
+func ValidateCancelHooksRolloutStageUnexpectedResponseBody(body *CancelHooksRolloutStageUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCancelHooksRolloutStageGatewayErrorResponseBody runs the validations
+// defined on cancelHooksRolloutStage_gateway_error_response_body
+func ValidateCancelHooksRolloutStageGatewayErrorResponseBody(body *CancelHooksRolloutStageGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateListTailscaleOAuthMigrationUnavailableResponseBody runs the
 // validations defined on listTailscaleOAuthMigration_unavailable_response_body
 func ValidateListTailscaleOAuthMigrationUnavailableResponseBody(body *ListTailscaleOAuthMigrationUnavailableResponseBody) (err error) {
@@ -102805,6 +105640,36 @@ func ValidateAdminHooksRolloutPinResponseBody(body *AdminHooksRolloutPinResponse
 	}
 	if body.SetAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.set_at", *body.SetAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateAdminHooksRolloutStageResponseBody runs the validations defined on
+// AdminHooksRolloutStageResponseBody
+func ValidateAdminHooksRolloutStageResponseBody(body *AdminHooksRolloutStageResponseBody) (err error) {
+	if body.Revision == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("revision", "body"))
+	}
+	if body.Version == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
+	}
+	if body.Percent == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("percent", "body"))
+	}
+	if body.State == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("state", "body"))
+	}
+	if body.SetBy == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("set_by", "body"))
+	}
+	if body.SetAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("set_at", "body"))
+	}
+	if body.SetAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.set_at", *body.SetAt, goa.FormatDateTime))
+	}
+	if body.NextAdvanceAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.next_advance_at", *body.NextAdvanceAt, goa.FormatDateTime))
 	}
 	return
 }

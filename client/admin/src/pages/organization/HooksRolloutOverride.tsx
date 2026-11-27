@@ -28,6 +28,8 @@ function sourceSummary(rollout: AdminOrganizationHooksRollout): string {
       return "Canary organization: always receives the current hooks version, whatever the pins say.";
     case "organization":
       return `Pinned by its own override to hooks version ${rollout.effective_version}.`;
+    case "stage":
+      return `Cleared for hooks version ${rollout.effective_version} by the staged rollout. Pause or cancel it on the Hooks rollout page.`;
     case "default":
       return `Follows the default pin, hooks version ${rollout.effective_version}.`;
     case "legacy_flag":

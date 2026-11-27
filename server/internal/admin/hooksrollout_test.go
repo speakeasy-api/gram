@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -14,8 +15,10 @@ import (
 	goahttp "goa.design/goa/v3/http"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/hooksrollout"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/staff"
@@ -75,6 +78,10 @@ func TestHooksRolloutRequiresAdminSession(t *testing.T) {
 		{method: http.MethodGet, path: "/admin/organization.hooksRollout?organization_id=org", body: ""},
 		{method: http.MethodPost, path: "/admin/organization.setHooksRollout", body: `{"organization_id":"org","version":1}`},
 		{method: http.MethodPost, path: "/admin/organization.clearHooksRollout", body: `{"organization_id":"org"}`},
+		{method: http.MethodPost, path: "/admin/hooksRollout.startStage", body: `{"revision":0,"version":1}`},
+		{method: http.MethodPost, path: "/admin/hooksRollout.pauseStage", body: `{"revision":1,"reason":"alert"}`},
+		{method: http.MethodPost, path: "/admin/hooksRollout.resumeStage", body: `{"revision":1}`},
+		{method: http.MethodPost, path: "/admin/hooksRollout.cancelStage", body: `{"revision":1,"reason":"alert"}`},
 	} {
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequest(test.method, test.path, strings.NewReader(test.body))
@@ -258,4 +265,151 @@ func TestSetOrganizationHooksRollout_RejectsVersionAboveCurrent(t *testing.T) {
 
 	_, err := svc.SetOrganizationHooksRollout(ctx, &gen.SetOrganizationHooksRolloutPayload{AdminSessionToken: nil, OrganizationID: orgID, Version: currentHooksVersion(t) + 1})
 	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+func TestHooksRolloutStage_Lifecycle(t *testing.T) {
+	t.Parallel()
+	ctx, svc, _ := newTestAdminService(t)
+	ctx = hooksRolloutContext(ctx)
+	current := currentHooksVersion(t)
+
+	_, err := svc.SetHooksRolloutDefault(ctx, &gen.SetHooksRolloutDefaultPayload{AdminSessionToken: nil, Version: current - 1})
+	require.NoError(t, err)
+
+	result, err := svc.StartHooksRolloutStage(ctx, &gen.StartHooksRolloutStagePayload{AdminSessionToken: nil, Revision: 0, Version: current})
+	require.NoError(t, err)
+	require.NotNil(t, result.Stage)
+	require.Equal(t, current, result.Stage.Version)
+	require.Equal(t, 0, result.Stage.Percent)
+	require.Equal(t, "running", result.Stage.State)
+	require.Equal(t, hooksRolloutOperatorEmail, result.Stage.SetBy)
+	require.NotNil(t, result.Stage.NextAdvanceAt)
+	require.Positive(t, result.Stage.Revision)
+
+	_, err = svc.ResumeHooksRolloutStage(ctx, &gen.ResumeHooksRolloutStagePayload{AdminSessionToken: nil, Revision: result.Stage.Revision})
+	requireOopsCode(t, err, oops.CodeConflict)
+
+	_, err = svc.PauseHooksRolloutStage(ctx, &gen.PauseHooksRolloutStagePayload{AdminSessionToken: nil, Revision: result.Stage.Revision, Reason: "   "})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+
+	result, err = svc.PauseHooksRolloutStage(ctx, &gen.PauseHooksRolloutStagePayload{AdminSessionToken: nil, Revision: result.Stage.Revision, Reason: " hooks alert "})
+	require.NoError(t, err)
+	require.Equal(t, "paused", result.Stage.State)
+	require.Equal(t, "hooks alert", *result.Stage.Reason)
+	require.Nil(t, result.Stage.NextAdvanceAt)
+
+	result, err = svc.ResumeHooksRolloutStage(ctx, &gen.ResumeHooksRolloutStagePayload{AdminSessionToken: nil, Revision: result.Stage.Revision})
+	require.NoError(t, err)
+	require.Equal(t, "running", result.Stage.State)
+	require.Nil(t, result.Stage.Reason)
+
+	result, err = svc.CancelHooksRolloutStage(ctx, &gen.CancelHooksRolloutStagePayload{AdminSessionToken: nil, Revision: result.Stage.Revision, Reason: "bad release"})
+	require.NoError(t, err)
+	require.Equal(t, "cancelled", result.Stage.State)
+	require.Equal(t, current-1, result.DefaultPin.Version, "cancelling leaves the default pin alone")
+
+	_, err = svc.CancelHooksRolloutStage(ctx, &gen.CancelHooksRolloutStagePayload{AdminSessionToken: nil, Revision: result.Stage.Revision, Reason: "again"})
+	requireOopsCode(t, err, oops.CodeConflict)
+}
+
+func TestHooksRolloutStage_StaleRevisionConflicts(t *testing.T) {
+	t.Parallel()
+	ctx, svc, _ := newTestAdminService(t)
+	ctx = hooksRolloutContext(ctx)
+	current := currentHooksVersion(t)
+
+	_, err := svc.SetHooksRolloutDefault(ctx, &gen.SetHooksRolloutDefaultPayload{AdminSessionToken: nil, Version: current - 2})
+	require.NoError(t, err)
+	shown, err := svc.StartHooksRolloutStage(ctx, &gen.StartHooksRolloutStagePayload{AdminSessionToken: nil, Revision: 0, Version: current - 1})
+	require.NoError(t, err)
+
+	_, err = svc.StartHooksRolloutStage(ctx, &gen.StartHooksRolloutStagePayload{AdminSessionToken: nil, Revision: 0, Version: current})
+	requireOopsCode(t, err, oops.CodeConflict)
+	replaced, err := svc.StartHooksRolloutStage(ctx, &gen.StartHooksRolloutStagePayload{AdminSessionToken: nil, Revision: shown.Stage.Revision, Version: current})
+	require.NoError(t, err)
+	_, err = svc.StartHooksRolloutStage(ctx, &gen.StartHooksRolloutStagePayload{AdminSessionToken: nil, Revision: replaced.Stage.Revision, Version: current - 1})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+
+	_, err = svc.CancelHooksRolloutStage(ctx, &gen.CancelHooksRolloutStagePayload{AdminSessionToken: nil, Revision: shown.Stage.Revision, Reason: "cancel the old one"})
+	requireOopsCode(t, err, oops.CodeConflict)
+	_, err = svc.PauseHooksRolloutStage(ctx, &gen.PauseHooksRolloutStagePayload{AdminSessionToken: nil, Revision: shown.Stage.Revision, Reason: "pause the old one"})
+	requireOopsCode(t, err, oops.CodeConflict)
+
+	result, err := svc.GetHooksRollout(ctx, &gen.GetHooksRolloutPayload{AdminSessionToken: nil})
+	require.NoError(t, err)
+	require.Equal(t, replaced.Stage.Revision, result.Stage.Revision)
+	require.Equal(t, "running", result.Stage.State)
+}
+
+func TestResumeHooksRolloutStage_RejectsBodylessPost(t *testing.T) {
+	t.Parallel()
+	svc := newTestSessionService(t, newTestOIDCClient(t, userinfoOK("resume-subject", "operator@example.com")))
+	sessionID, err := svc.sessions.Store(t.Context(), StoreParams{Email: "operator@example.com", Name: "Test Operator", OIDCSubject: "resume-subject", HD: testAdminHD, AccessToken: "access-token", RefreshToken: "refresh-token", ExpiresAt: time.Now().Add(time.Hour)})
+	require.NoError(t, err)
+	mux := goahttp.NewMuxer()
+	Attach(mux, svc)
+
+	for _, contentType := range []string{"", "text/plain", "application/x-www-form-urlencoded"} {
+		req := httptest.NewRequest(http.MethodPost, "/admin/hooksRollout.resumeStage", strings.NewReader(""))
+		if contentType != "" {
+			req.Header.Set("Content-Type", contentType)
+		}
+		req.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: sessionID})
+		rec := httptest.NewRecorder()
+		SessionMiddleware(mux).ServeHTTP(rec, req)
+		require.Equal(t, http.StatusBadRequest, rec.Code, "content type %q: %s", contentType, rec.Body.String())
+	}
+}
+
+func TestStartHooksRolloutStage_RejectsInvalidVersions(t *testing.T) {
+	t.Parallel()
+	ctx, svc, _ := newTestAdminService(t)
+	ctx = hooksRolloutContext(ctx)
+	current := currentHooksVersion(t)
+
+	_, err := svc.StartHooksRolloutStage(ctx, &gen.StartHooksRolloutStagePayload{AdminSessionToken: nil, Revision: 0, Version: current + 1})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+
+	_, err = svc.SetHooksRolloutDefault(ctx, &gen.SetHooksRolloutDefaultPayload{AdminSessionToken: nil, Version: current})
+	require.NoError(t, err)
+	_, err = svc.StartHooksRolloutStage(ctx, &gen.StartHooksRolloutStagePayload{AdminSessionToken: nil, Revision: 0, Version: current})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+
+	result, err := svc.GetHooksRollout(ctx, &gen.GetHooksRolloutPayload{AdminSessionToken: nil})
+	require.NoError(t, err)
+	require.Nil(t, result.Stage, "a rejected start records nothing")
+}
+
+func TestOrganizationHooksRollout_ClearedByStage(t *testing.T) {
+	t.Parallel()
+	ctx, svc, conn := newTestAdminService(t)
+	ctx = hooksRolloutContext(ctx)
+	current := currentHooksVersion(t)
+
+	var orgID string
+	for i := 0; orgID == ""; i++ {
+		require.Less(t, i, 200, "no organization fell in the first 25 percent")
+		id := createHooksRolloutOrganization(t, ctx, conn, "hooks-rollout-stage-"+strconv.Itoa(i))
+		if hooksrollout.InStage(id, 25) {
+			orgID = id
+		}
+	}
+
+	_, err := svc.SetHooksRolloutDefault(ctx, &gen.SetHooksRolloutDefaultPayload{AdminSessionToken: nil, Version: current - 1})
+	require.NoError(t, err)
+	_, err = svc.StartHooksRolloutStage(ctx, &gen.StartHooksRolloutStagePayload{AdminSessionToken: nil, Revision: 0, Version: current})
+	require.NoError(t, err)
+
+	result, err := svc.GetOrganizationHooksRollout(ctx, &gen.GetOrganizationHooksRolloutPayload{AdminSessionToken: nil, OrganizationID: orgID})
+	require.NoError(t, err)
+	require.Equal(t, gen.AdminHooksRolloutSource("default"), result.Source, "the first stage clears canaries only")
+
+	_, err = hooksrollout.NewStageStore(conn).Advance(ctx, time.Now().Add(hooksrollout.StageSoak+time.Minute))
+	require.NoError(t, err)
+
+	result, err = svc.GetOrganizationHooksRollout(ctx, &gen.GetOrganizationHooksRolloutPayload{AdminSessionToken: nil, OrganizationID: orgID})
+	require.NoError(t, err)
+	require.Equal(t, gen.AdminHooksRolloutSource("stage"), result.Source)
+	require.Equal(t, current, *result.EffectiveVersion)
+	require.True(t, *result.Eligible)
 }

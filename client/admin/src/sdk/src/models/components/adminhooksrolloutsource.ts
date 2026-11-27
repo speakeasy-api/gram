@@ -6,16 +6,17 @@ import * as z from "zod/v4-mini";
 import { ClosedEnum } from "../../types/enums.js";
 
 /**
- * What decides an organization's hooks version: canary organizations always get the current version, organization and default name the pin that applies, and legacy_flag means no pin applies yet and the hooks-rollout PostHog flag decides.
+ * What decides an organization's hooks version: canary organizations always get the current version, organization and default name the pin that applies, stage means a staged rollout has cleared the organization, and legacy_flag means no pin applies yet and the hooks-rollout PostHog flag decides.
  */
 export const AdminHooksRolloutSource = {
   Canary: "canary",
   Organization: "organization",
+  Stage: "stage",
   Default: "default",
   LegacyFlag: "legacy_flag",
 } as const;
 /**
- * What decides an organization's hooks version: canary organizations always get the current version, organization and default name the pin that applies, and legacy_flag means no pin applies yet and the hooks-rollout PostHog flag decides.
+ * What decides an organization's hooks version: canary organizations always get the current version, organization and default name the pin that applies, stage means a staged rollout has cleared the organization, and legacy_flag means no pin applies yet and the hooks-rollout PostHog flag decides.
  */
 export type AdminHooksRolloutSource = ClosedEnum<
   typeof AdminHooksRolloutSource

@@ -946,9 +946,27 @@ export type AdminHooksRolloutChange = {
   set_at: string;
 };
 
+export type AdminHooksRolloutStageState =
+  | "running"
+  | "paused"
+  | "completed"
+  | "cancelled";
+
+export type AdminHooksRolloutStage = {
+  revision: number;
+  version: number;
+  percent: number;
+  state: AdminHooksRolloutStageState;
+  reason?: string;
+  set_by: string;
+  set_at: string;
+  next_advance_at?: string;
+};
+
 export type AdminHooksRollout = {
   current_version: number;
   default_pin?: AdminHooksRolloutPin;
+  stage?: AdminHooksRolloutStage;
   canary_organization_slugs: string[];
   overrides: AdminHooksRolloutOverride[];
   recent_changes: AdminHooksRolloutChange[];
@@ -957,6 +975,7 @@ export type AdminHooksRollout = {
 export type AdminHooksRolloutSource =
   | "canary"
   | "organization"
+  | "stage"
   | "default"
   | "legacy_flag";
 
@@ -1022,6 +1041,58 @@ export function setHooksRolloutDefault(
       body: JSON.stringify({ version }),
     },
   );
+}
+
+function hooksRolloutStageMutation(
+  path: string,
+  body: Record<string, unknown>,
+): Promise<AdminHooksRollout> {
+  return gramAdminMutation<AdminHooksRollout>(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+// revision is the stage revision the operator was shown, or 0 when no
+// rollout was ever staged. The server refuses the change with 409 when the
+// rollout has moved on since.
+export function startHooksRolloutStage(
+  revision: number,
+  version: number,
+): Promise<AdminHooksRollout> {
+  return hooksRolloutStageMutation("/admin/hooksRollout.startStage", {
+    revision,
+    version,
+  });
+}
+
+export function pauseHooksRolloutStage(
+  revision: number,
+  reason: string,
+): Promise<AdminHooksRollout> {
+  return hooksRolloutStageMutation("/admin/hooksRollout.pauseStage", {
+    revision,
+    reason,
+  });
+}
+
+export function resumeHooksRolloutStage(
+  revision: number,
+): Promise<AdminHooksRollout> {
+  return hooksRolloutStageMutation("/admin/hooksRollout.resumeStage", {
+    revision,
+  });
+}
+
+export function cancelHooksRolloutStage(
+  revision: number,
+  reason: string,
+): Promise<AdminHooksRollout> {
+  return hooksRolloutStageMutation("/admin/hooksRollout.cancelStage", {
+    revision,
+    reason,
+  });
 }
 
 export function getOrganizationHooksRollout(

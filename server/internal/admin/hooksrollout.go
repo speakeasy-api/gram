@@ -2,6 +2,8 @@ package admin
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"time"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
@@ -82,6 +84,89 @@ func (s *Service) ClearOrganizationHooksRollout(ctx context.Context, payload *ge
 	return s.organizationHooksRolloutResult(ctx, organization.ID)
 }
 
+func (s *Service) StartHooksRolloutStage(ctx context.Context, payload *gen.StartHooksRolloutStagePayload) (*gen.AdminHooksRollout, error) {
+	setBy, err := hooksRolloutOperator(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.validateHooksRolloutVersion(ctx, payload.Version); err != nil {
+		return nil, err
+	}
+	if err := hooksrollout.NewStageStore(s.db).Start(ctx, payload.Revision, payload.Version, setBy); err != nil {
+		return nil, s.hooksRolloutStageError(ctx, err, "start hooks rollout stage")
+	}
+	s.logger.InfoContext(ctx, "started staged hooks rollout",
+		attr.SlogHooksRolloutVersion(payload.Version), attr.SlogAuthUserEmail(setBy))
+	return s.hooksRolloutResult(ctx)
+}
+
+func (s *Service) PauseHooksRolloutStage(ctx context.Context, payload *gen.PauseHooksRolloutStagePayload) (*gen.AdminHooksRollout, error) {
+	setBy, err := hooksRolloutOperator(ctx)
+	if err != nil {
+		return nil, err
+	}
+	reason, err := hooksRolloutStageReason(payload.Reason)
+	if err != nil {
+		return nil, err
+	}
+	if err := hooksrollout.NewStageStore(s.db).Pause(ctx, payload.Revision, reason, setBy); err != nil {
+		return nil, s.hooksRolloutStageError(ctx, err, "pause hooks rollout stage")
+	}
+	s.logger.InfoContext(ctx, "paused staged hooks rollout", attr.SlogAuthUserEmail(setBy))
+	return s.hooksRolloutResult(ctx)
+}
+
+func (s *Service) ResumeHooksRolloutStage(ctx context.Context, payload *gen.ResumeHooksRolloutStagePayload) (*gen.AdminHooksRollout, error) {
+	setBy, err := hooksRolloutOperator(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := hooksrollout.NewStageStore(s.db).Resume(ctx, payload.Revision, setBy); err != nil {
+		return nil, s.hooksRolloutStageError(ctx, err, "resume hooks rollout stage")
+	}
+	s.logger.InfoContext(ctx, "resumed staged hooks rollout", attr.SlogAuthUserEmail(setBy))
+	return s.hooksRolloutResult(ctx)
+}
+
+func (s *Service) CancelHooksRolloutStage(ctx context.Context, payload *gen.CancelHooksRolloutStagePayload) (*gen.AdminHooksRollout, error) {
+	setBy, err := hooksRolloutOperator(ctx)
+	if err != nil {
+		return nil, err
+	}
+	reason, err := hooksRolloutStageReason(payload.Reason)
+	if err != nil {
+		return nil, err
+	}
+	if err := hooksrollout.NewStageStore(s.db).Cancel(ctx, payload.Revision, reason, setBy); err != nil {
+		return nil, s.hooksRolloutStageError(ctx, err, "cancel hooks rollout stage")
+	}
+	s.logger.InfoContext(ctx, "cancelled staged hooks rollout", attr.SlogAuthUserEmail(setBy))
+	return s.hooksRolloutResult(ctx)
+}
+
+func hooksRolloutStageReason(reason string) (string, error) {
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		return "", oops.E(oops.CodeBadRequest, nil, "a reason is required")
+	}
+	return reason, nil
+}
+
+func (s *Service) hooksRolloutStageError(ctx context.Context, err error, msg string) error {
+	switch {
+	case errors.Is(err, hooksrollout.ErrStageVersionBehind),
+		errors.Is(err, hooksrollout.ErrStageVersionOlder):
+		return oops.E(oops.CodeBadRequest, err, "%s", err.Error()).LogWarn(ctx, s.logger)
+	case errors.Is(err, hooksrollout.ErrNoActiveStage),
+		errors.Is(err, hooksrollout.ErrStageNotRunning),
+		errors.Is(err, hooksrollout.ErrStageNotPaused),
+		errors.Is(err, hooksrollout.ErrStageChanged):
+		return oops.E(oops.CodeConflict, err, "%s", err.Error()).LogWarn(ctx, s.logger)
+	default:
+		return oops.E(oops.CodeUnexpected, err, "%s", msg).LogError(ctx, s.logger)
+	}
+}
+
 // hooksRolloutOperator names the staff operator recorded against a pin change.
 // Every admin session carries an email, so a missing one is refused rather
 // than recorded anonymously.
@@ -121,6 +206,10 @@ func (s *Service) hooksRolloutResult(ctx context.Context) (*gen.AdminHooksRollou
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list hooks rollout overrides").LogError(ctx, s.logger)
 	}
+	stage, err := hooksrollout.NewStageStore(s.db).Current(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "read hooks rollout stage").LogError(ctx, s.logger)
+	}
 	changes, err := store.ListRecentChanges(ctx, hooksrollout.RecentChangesLimit)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list hooks rollout changes").LogError(ctx, s.logger)
@@ -159,6 +248,7 @@ func (s *Service) hooksRolloutResult(ctx context.Context) (*gen.AdminHooksRollou
 	return &gen.AdminHooksRollout{
 		CurrentVersion:          current,
 		DefaultPin:              hooksRolloutPinView(defaultPin),
+		Stage:                   hooksRolloutStageView(stage),
 		CanaryOrganizationSlugs: canarySlugs,
 		Overrides:               overrideViews,
 		RecentChanges:           changeViews,
@@ -221,5 +311,28 @@ func hooksRolloutPinView(pin *hooksrollout.Pin) *gen.AdminHooksRolloutPin {
 		Version: pin.Version,
 		SetBy:   pin.SetBy,
 		SetAt:   pin.SetAt.UTC().Format(time.RFC3339),
+	}
+}
+
+func hooksRolloutStageView(stage *hooksrollout.Stage) *gen.AdminHooksRolloutStage {
+	if stage == nil {
+		return nil
+	}
+	var reason, nextAdvanceAt *string
+	if stage.Reason != "" {
+		reason = new(stage.Reason)
+	}
+	if next := stage.NextAdvance(); !next.IsZero() {
+		nextAdvanceAt = new(next.UTC().Format(time.RFC3339))
+	}
+	return &gen.AdminHooksRolloutStage{
+		Revision:      stage.Revision,
+		Version:       stage.Version,
+		Percent:       stage.Percent,
+		State:         string(stage.State),
+		Reason:        reason,
+		SetBy:         stage.SetBy,
+		SetAt:         stage.SetAt.UTC().Format(time.RFC3339),
+		NextAdvanceAt: nextAdvanceAt,
 	}
 }

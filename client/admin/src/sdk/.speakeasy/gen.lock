@@ -37,6 +37,7 @@ trackedFiles:
   src/funcs/adminBackfillMcpConnectGrants.ts: {}
   src/funcs/adminBackfillOrganizationAssistantBuiltinGrants.ts: {}
   src/funcs/adminBulkUpdateAccountType.ts: {}
+  src/funcs/adminCancelHooksRolloutStage.ts: {}
   src/funcs/adminCancelStripeSubscription.ts: {}
   src/funcs/adminChangeTrialEndDate.ts: {}
   src/funcs/adminClearOrganizationHooksRollout.ts: {}
@@ -132,12 +133,14 @@ trackedFiles:
   src/funcs/adminMigrateOrganizationAssistantSlack.ts: {}
   src/funcs/adminMigrateOrganizationAssistantsToKit.ts: {}
   src/funcs/adminMigrateToGlobalIssuer.ts: {}
+  src/funcs/adminPauseHooksRolloutStage.ts: {}
   src/funcs/adminPromoteRegistryCandidate.ts: {}
   src/funcs/adminRearmTrial.ts: {}
   src/funcs/adminRedeployProject.ts: {}
   src/funcs/adminRefreshGlobalIssuerMetadata.ts: {}
   src/funcs/adminRepairInferenceKey.ts: {}
   src/funcs/adminRepairOrganizationAssistantAgentNames.ts: {}
+  src/funcs/adminResumeHooksRolloutStage.ts: {}
   src/funcs/adminResumeStripeSubscription.ts: {}
   src/funcs/adminRetryRegistryPromotionDocs.ts: {}
   src/funcs/adminRollbackOrganizationEncryption.ts: {}
@@ -159,6 +162,7 @@ trackedFiles:
   src/funcs/adminSetRegistryEntryPublished.ts: {}
   src/funcs/adminSetStripeCustomer.ts: {}
   src/funcs/adminSetStripeSubscription.ts: {}
+  src/funcs/adminStartHooksRolloutStage.ts: {}
   src/funcs/adminStartMemoryEvalRun.ts: {}
   src/funcs/adminStartTrial.ts: {}
   src/funcs/adminTriggerOrganizationChatAnalysis.ts: {}
@@ -228,6 +232,7 @@ trackedFiles:
   src/models/components/adminhooksrolloutoverride.ts: {}
   src/models/components/adminhooksrolloutpin.ts: {}
   src/models/components/adminhooksrolloutsource.ts: {}
+  src/models/components/adminhooksrolloutstage.ts: {}
   src/models/components/admininferencehookcell.ts: {}
   src/models/components/admininferencekey.ts: {}
   src/models/components/admininferencekeycause.ts: {}
@@ -347,6 +352,7 @@ trackedFiles:
   src/models/components/backfillmcpconnectgrantsrequestbody.ts: {}
   src/models/components/backfillorganizationassistantbuiltingrantsrequestbody.ts: {}
   src/models/components/bulkupdateaccounttyperequestbody.ts: {}
+  src/models/components/cancelhooksrolloutstagerequestbody.ts: {}
   src/models/components/cancelstripesubscriptionrequestbody.ts: {}
   src/models/components/changetrialenddaterequestbody.ts: {}
   src/models/components/clearorganizationhooksrolloutrequestbody.ts: {}
@@ -392,6 +398,7 @@ trackedFiles:
   src/models/components/migrateorganizationassistantstokitrequestbody.ts: {}
   src/models/components/migrateremotesessionissuerrequestbody.ts: {}
   src/models/components/migrateremotesessionissuerresult.ts: {}
+  src/models/components/pausehooksrolloutstagerequestbody.ts: {}
   src/models/components/productfeatures.ts: {}
   src/models/components/promoteregistrycandidaterequestbody.ts: {}
   src/models/components/rearmtrialrequestbody.ts: {}
@@ -403,6 +410,7 @@ trackedFiles:
   src/models/components/remotesessionissuerrefresh.ts: {}
   src/models/components/repairinferencekeyrequestbody.ts: {}
   src/models/components/repairorganizationassistantagentnamesrequestbody.ts: {}
+  src/models/components/resumehooksrolloutstagerequestbody.ts: {}
   src/models/components/resumestripesubscriptionrequestbody.ts: {}
   src/models/components/retryregistrypromotiondocsrequestbody.ts: {}
   src/models/components/riskidrequestbody.ts: {}
@@ -426,6 +434,7 @@ trackedFiles:
   src/models/components/setstripesubscriptionrequestbody.ts: {}
   src/models/components/spendbucket.ts: {}
   src/models/components/spendproduct.ts: {}
+  src/models/components/starthooksrolloutstagerequestbody.ts: {}
   src/models/components/startmemoryevalrunrequestbody.ts: {}
   src/models/components/starttrialrequestbody.ts: {}
   src/models/components/supportcapability.ts: {}
@@ -510,6 +519,7 @@ trackedFiles:
   src/react-query/adminBackfillMcpConnectGrants.ts: {}
   src/react-query/adminBackfillOrganizationAssistantBuiltinGrants.ts: {}
   src/react-query/adminBulkUpdateAccountType.ts: {}
+  src/react-query/adminCancelHooksRolloutStage.ts: {}
   src/react-query/adminCancelStripeSubscription.ts: {}
   src/react-query/adminChangeTrialEndDate.ts: {}
   src/react-query/adminClearOrganizationHooksRollout.ts: {}
@@ -664,12 +674,14 @@ trackedFiles:
   src/react-query/adminOrganizationOnboardingPlaybook.ts: {}
   src/react-query/adminOrganizationOnboardingStack.core.ts: {}
   src/react-query/adminOrganizationOnboardingStack.ts: {}
+  src/react-query/adminPauseHooksRolloutStage.ts: {}
   src/react-query/adminPromoteRegistryCandidate.ts: {}
   src/react-query/adminRearmTrial.ts: {}
   src/react-query/adminRedeployProject.ts: {}
   src/react-query/adminRefreshGlobalIssuerMetadata.ts: {}
   src/react-query/adminRepairInferenceKey.ts: {}
   src/react-query/adminRepairOrganizationAssistantAgentNames.ts: {}
+  src/react-query/adminResumeHooksRolloutStage.ts: {}
   src/react-query/adminResumeStripeSubscription.ts: {}
   src/react-query/adminRetryRegistryPromotionDocs.ts: {}
   src/react-query/adminRollbackOrganizationEncryption.ts: {}
@@ -690,6 +702,7 @@ trackedFiles:
   src/react-query/adminSetRegistryEntryPublished.ts: {}
   src/react-query/adminSetStripeCustomer.ts: {}
   src/react-query/adminSetStripeSubscription.ts: {}
+  src/react-query/adminStartHooksRolloutStage.ts: {}
   src/react-query/adminStartMemoryEvalRun.ts: {}
   src/react-query/adminStartTrial.ts: {}
   src/react-query/adminTriggerOrganizationChatAnalysis.ts: {}
@@ -796,6 +809,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  adminCancelHooksRolloutStage:
+    speakeasy-default-admin-cancel-hooks-rollout-stage:
+      requestBody:
+        application/json: {"reason": "<value>", "revision": 46538}
+      responses:
+        "200":
+          application/json: {"canary_organization_slugs": [], "current_version": 418772, "overrides": [], "recent_changes": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   adminCancelStripeSubscription:
     speakeasy-default-admin-cancel-stripe-subscription:
       requestBody:
@@ -1978,6 +2002,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  adminPauseHooksRolloutStage:
+    speakeasy-default-admin-pause-hooks-rollout-stage:
+      requestBody:
+        application/json: {"reason": "<value>", "revision": 848142}
+      responses:
+        "200":
+          application/json: {"canary_organization_slugs": [], "current_version": 418772, "overrides": [], "recent_changes": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   adminPreviewExternalMcpMigration:
     speakeasy-default-admin-preview-external-mcp-migration:
       requestBody:
@@ -2066,6 +2101,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  adminResumeHooksRolloutStage:
+    speakeasy-default-admin-resume-hooks-rollout-stage:
+      requestBody:
+        application/json: {"revision": 644382}
+      responses:
+        "200":
+          application/json: {"canary_organization_slugs": [], "current_version": 418772, "overrides": [], "recent_changes": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   adminResumeStripeSubscription:
     speakeasy-default-admin-resume-stripe-subscription:
       requestBody:
@@ -2309,6 +2355,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  adminStartHooksRolloutStage:
+    speakeasy-default-admin-start-hooks-rollout-stage:
+      requestBody:
+        application/json: {"revision": 923472, "version": 301245}
+      responses:
+        "200":
+          application/json: {"canary_organization_slugs": [], "current_version": 418772, "overrides": [], "recent_changes": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   adminStartMemoryEvalRun:
     speakeasy-default-admin-start-memory-eval-run:
       requestBody:

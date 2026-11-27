@@ -210,7 +210,7 @@ func UsageCommands() []string {
 		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|get-server-metrics|update-server|rotate-server-key|delete-server)",
 		"unproxied-mcp (create-server|list-servers|get-server|delete-server)",
 		"usage (get-period-usage|get-meter-usage|get-spend-breakdown|get-tokens-under-management|set-billing-metadata|get-billing-email|set-billing-email|set-spend-cap|get-inference-spend-caps|get-usage-tiers|create-customer-session|get-stripe-checkout-status|create-stripe-checkout|get-stripe-subscription|get-payg-billing-summary|create-stripe-portal-session|cancel-stripe-subscription|resume-stripe-subscription|create-top-up-checkout)",
-		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-users|list-user-organizations|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|repair-inference-key|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|set-adoption-dashboard-url|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|describe-mcp-server-health|set-mcp-server-scope-pin|get-mcp-server-tool-calls|get-hook-clients|get-organization-hook-fleet|list-registry-promotion-candidates|get-registry-promotion-candidate|promote-registry-candidate|curate-registry-promotion-candidate|retry-registry-promotion-docs|get-registry-okta-candidates|list-registry-okta-unmapped|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published|list-onboarding-steps|get-onboarding-stack-options|get-organization-onboarding-stack|set-organization-onboarding-stack|list-onboarding-use-cases|create-onboarding-use-case|update-onboarding-use-case|delete-onboarding-use-case|list-onboarding-playbooks|create-onboarding-playbook|update-onboarding-playbook|delete-onboarding-playbook|clone-onboarding-playbook|get-organization-onboarding-playbook|assign-organization-onboarding-playbook|list-signup-offers|create-signup-offer|update-signup-offer|list-platform-mcp-feedback|get-stripe-subscription-candidate|set-stripe-subscription|list-customer-usage|list-upstreamoauth-migration-organizations|get-upstreamoauth-migration-status|run-upstreamoauth-migration|enable-upstream-auth-enforcement|disable-upstream-auth-enforcement|backfill-mcp-auth-grants|backfill-mcp-connect-grants|get-secret-backfills|run-marketplace-token-backfill|run-runner-key-organization-backfill|get-project-redeploy-preview|redeploy-project|list-custom-domains|list-platform-external-credentials|get-gcp-iam-platform-credential|create-gcp-iam-platform-credential|update-gcp-iam-platform-credential|verify-gcp-iam-platform-credential|delete-gcp-iam-platform-credential|get-memory-eval-options|list-memory-eval-runs|get-memory-eval-run|start-memory-eval-run|list-assistant-organizations|repair-organization-assistant-agent-names|backfill-organization-assistant-builtin-grants|migrate-organization-assistant-slack|list-organization-assistants|migrate-organization-assistant-identities|migrate-organization-assistants-to-kit|get-hooks-rollout|get-hooks-release-progress|set-hooks-rollout-default|get-organization-hooks-rollout|set-organization-hooks-rollout|clear-organization-hooks-rollout|list-tailscaleoauth-migration|run-tailscaleoauth-migration-step|get-organization-encryption|list-organization-encryption-transitions|enroll-organization-encryption|rollback-organization-encryption|run-organization-encryption|finalize-organization-encryption)",
+		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-users|list-user-organizations|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|repair-inference-key|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|set-adoption-dashboard-url|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|describe-mcp-server-health|set-mcp-server-scope-pin|get-mcp-server-tool-calls|get-hook-clients|get-organization-hook-fleet|list-registry-promotion-candidates|get-registry-promotion-candidate|promote-registry-candidate|curate-registry-promotion-candidate|retry-registry-promotion-docs|get-registry-okta-candidates|list-registry-okta-unmapped|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published|list-onboarding-steps|get-onboarding-stack-options|get-organization-onboarding-stack|set-organization-onboarding-stack|list-onboarding-use-cases|create-onboarding-use-case|update-onboarding-use-case|delete-onboarding-use-case|list-onboarding-playbooks|create-onboarding-playbook|update-onboarding-playbook|delete-onboarding-playbook|clone-onboarding-playbook|get-organization-onboarding-playbook|assign-organization-onboarding-playbook|list-signup-offers|create-signup-offer|update-signup-offer|list-platform-mcp-feedback|get-stripe-subscription-candidate|set-stripe-subscription|list-customer-usage|list-upstreamoauth-migration-organizations|get-upstreamoauth-migration-status|run-upstreamoauth-migration|enable-upstream-auth-enforcement|disable-upstream-auth-enforcement|backfill-mcp-auth-grants|backfill-mcp-connect-grants|get-secret-backfills|run-marketplace-token-backfill|run-runner-key-organization-backfill|get-project-redeploy-preview|redeploy-project|list-custom-domains|list-platform-external-credentials|get-gcp-iam-platform-credential|create-gcp-iam-platform-credential|update-gcp-iam-platform-credential|verify-gcp-iam-platform-credential|delete-gcp-iam-platform-credential|get-memory-eval-options|list-memory-eval-runs|get-memory-eval-run|start-memory-eval-run|list-assistant-organizations|repair-organization-assistant-agent-names|backfill-organization-assistant-builtin-grants|migrate-organization-assistant-slack|list-organization-assistants|migrate-organization-assistant-identities|migrate-organization-assistants-to-kit|get-hooks-rollout|get-hooks-release-progress|set-hooks-rollout-default|get-organization-hooks-rollout|set-organization-hooks-rollout|clear-organization-hooks-rollout|start-hooks-rollout-stage|pause-hooks-rollout-stage|resume-hooks-rollout-stage|cancel-hooks-rollout-stage|list-tailscaleoauth-migration|run-tailscaleoauth-migration-step|get-organization-encryption|list-organization-encryption-transitions|enroll-organization-encryption|rollback-organization-encryption|run-organization-encryption|finalize-organization-encryption)",
 		"user-session-clients (create-user-session-client|update-user-session-client-redirect-ur-is|list-user-session-clients|get-user-session-client|refresh-user-session-client-cimd|revoke-user-session-client)",
 		"user-session-consents (list-user-session-consents|revoke-user-session-consent)",
 		"user-session-issuers-cimd-clients (list-presets|create-user-session-issuer-cimd-client|verify-url|list-user-session-issuer-cimd-clients|get-user-session-issuer-cimd-client|delete-user-session-issuer-cimd-client)",
@@ -5186,6 +5186,22 @@ func ParseEndpoint(
 		adminClearOrganizationHooksRolloutBodyFlag              = adminClearOrganizationHooksRolloutFlags.String("body", "REQUIRED", "")
 		adminClearOrganizationHooksRolloutAdminSessionTokenFlag = adminClearOrganizationHooksRolloutFlags.String("admin-session-token", "", "")
 
+		adminStartHooksRolloutStageFlags                 = flag.NewFlagSet("start-hooks-rollout-stage", flag.ExitOnError)
+		adminStartHooksRolloutStageBodyFlag              = adminStartHooksRolloutStageFlags.String("body", "REQUIRED", "")
+		adminStartHooksRolloutStageAdminSessionTokenFlag = adminStartHooksRolloutStageFlags.String("admin-session-token", "", "")
+
+		adminPauseHooksRolloutStageFlags                 = flag.NewFlagSet("pause-hooks-rollout-stage", flag.ExitOnError)
+		adminPauseHooksRolloutStageBodyFlag              = adminPauseHooksRolloutStageFlags.String("body", "REQUIRED", "")
+		adminPauseHooksRolloutStageAdminSessionTokenFlag = adminPauseHooksRolloutStageFlags.String("admin-session-token", "", "")
+
+		adminResumeHooksRolloutStageFlags                 = flag.NewFlagSet("resume-hooks-rollout-stage", flag.ExitOnError)
+		adminResumeHooksRolloutStageBodyFlag              = adminResumeHooksRolloutStageFlags.String("body", "REQUIRED", "")
+		adminResumeHooksRolloutStageAdminSessionTokenFlag = adminResumeHooksRolloutStageFlags.String("admin-session-token", "", "")
+
+		adminCancelHooksRolloutStageFlags                 = flag.NewFlagSet("cancel-hooks-rollout-stage", flag.ExitOnError)
+		adminCancelHooksRolloutStageBodyFlag              = adminCancelHooksRolloutStageFlags.String("body", "REQUIRED", "")
+		adminCancelHooksRolloutStageAdminSessionTokenFlag = adminCancelHooksRolloutStageFlags.String("admin-session-token", "", "")
+
 		adminListTailscaleOAuthMigrationFlags                 = flag.NewFlagSet("list-tailscaleoauth-migration", flag.ExitOnError)
 		adminListTailscaleOAuthMigrationAdminSessionTokenFlag = adminListTailscaleOAuthMigrationFlags.String("admin-session-token", "", "")
 
@@ -6963,6 +6979,10 @@ func ParseEndpoint(
 	adminGetOrganizationHooksRolloutFlags.Usage = adminGetOrganizationHooksRolloutUsage
 	adminSetOrganizationHooksRolloutFlags.Usage = adminSetOrganizationHooksRolloutUsage
 	adminClearOrganizationHooksRolloutFlags.Usage = adminClearOrganizationHooksRolloutUsage
+	adminStartHooksRolloutStageFlags.Usage = adminStartHooksRolloutStageUsage
+	adminPauseHooksRolloutStageFlags.Usage = adminPauseHooksRolloutStageUsage
+	adminResumeHooksRolloutStageFlags.Usage = adminResumeHooksRolloutStageUsage
+	adminCancelHooksRolloutStageFlags.Usage = adminCancelHooksRolloutStageUsage
 	adminListTailscaleOAuthMigrationFlags.Usage = adminListTailscaleOAuthMigrationUsage
 	adminRunTailscaleOAuthMigrationStepFlags.Usage = adminRunTailscaleOAuthMigrationStepUsage
 	adminGetOrganizationEncryptionFlags.Usage = adminGetOrganizationEncryptionUsage
@@ -10446,6 +10466,18 @@ func ParseEndpoint(
 
 			case "clear-organization-hooks-rollout":
 				epf = adminClearOrganizationHooksRolloutFlags
+
+			case "start-hooks-rollout-stage":
+				epf = adminStartHooksRolloutStageFlags
+
+			case "pause-hooks-rollout-stage":
+				epf = adminPauseHooksRolloutStageFlags
+
+			case "resume-hooks-rollout-stage":
+				epf = adminResumeHooksRolloutStageFlags
+
+			case "cancel-hooks-rollout-stage":
+				epf = adminCancelHooksRolloutStageFlags
 
 			case "list-tailscaleoauth-migration":
 				epf = adminListTailscaleOAuthMigrationFlags
@@ -14022,6 +14054,18 @@ func ParseEndpoint(
 			case "clear-organization-hooks-rollout":
 				endpoint = c.ClearOrganizationHooksRollout()
 				data, err = adminc.BuildClearOrganizationHooksRolloutPayload(*adminClearOrganizationHooksRolloutBodyFlag, *adminClearOrganizationHooksRolloutAdminSessionTokenFlag)
+			case "start-hooks-rollout-stage":
+				endpoint = c.StartHooksRolloutStage()
+				data, err = adminc.BuildStartHooksRolloutStagePayload(*adminStartHooksRolloutStageBodyFlag, *adminStartHooksRolloutStageAdminSessionTokenFlag)
+			case "pause-hooks-rollout-stage":
+				endpoint = c.PauseHooksRolloutStage()
+				data, err = adminc.BuildPauseHooksRolloutStagePayload(*adminPauseHooksRolloutStageBodyFlag, *adminPauseHooksRolloutStageAdminSessionTokenFlag)
+			case "resume-hooks-rollout-stage":
+				endpoint = c.ResumeHooksRolloutStage()
+				data, err = adminc.BuildResumeHooksRolloutStagePayload(*adminResumeHooksRolloutStageBodyFlag, *adminResumeHooksRolloutStageAdminSessionTokenFlag)
+			case "cancel-hooks-rollout-stage":
+				endpoint = c.CancelHooksRolloutStage()
+				data, err = adminc.BuildCancelHooksRolloutStagePayload(*adminCancelHooksRolloutStageBodyFlag, *adminCancelHooksRolloutStageAdminSessionTokenFlag)
 			case "list-tailscaleoauth-migration":
 				endpoint = c.ListTailscaleOAuthMigration()
 				data, err = adminc.BuildListTailscaleOAuthMigrationPayload(*adminListTailscaleOAuthMigrationAdminSessionTokenFlag)
@@ -34058,6 +34102,10 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    get-organization-hooks-rollout: Returns the hooks version rollout state for one organization.`)
 	fmt.Fprintln(os.Stderr, `    set-organization-hooks-rollout: Pins one organization to its own hooks version, regardless of the default pin.`)
 	fmt.Fprintln(os.Stderr, `    clear-organization-hooks-rollout: Removes an organization's hooks version override so it follows the default pin again.`)
+	fmt.Fprintln(os.Stderr, `    start-hooks-rollout-stage: Starts a staged rollout of a hooks version newer than the default pin. It clears canary organizations first, then 25 percent of organizations on the default pin a day later, then moves the default pin a day after that. Replaces an active rollout of an older version.`)
+	fmt.Fprintln(os.Stderr, `    pause-hooks-rollout-stage: Holds a running staged rollout at its current share. Organizations it already cleared keep the new version.`)
+	fmt.Fprintln(os.Stderr, `    resume-hooks-rollout-stage: Restarts a paused staged rollout. The day at the current share starts over.`)
+	fmt.Fprintln(os.Stderr, `    cancel-hooks-rollout-stage: Ends a staged rollout. Organizations it cleared go back to the default pin; hooks plugins already published are not downgraded.`)
 	fmt.Fprintln(os.Stderr, `    list-tailscaleoauth-migration: Lists every organization with saved Tailscale OAuth credentials and where it stands in moving them to its organization key.`)
 	fmt.Fprintln(os.Stderr, `    run-tailscaleoauth-migration-step: Runs one step of moving an organization's saved Tailscale OAuth credentials to its organization key. enroll provisions the organization key and starts dual_write; backfill seals every waiting credential with the organization key and verifies both copies; finalize moves to org_kms once the backfill and verification are clean and the minimum time in dual_write has passed; clear_platform_copies then destroys the platform-key copies; rollback returns a dual_write organization to platform_key. Each step is safe to run again.`)
 	fmt.Fprintln(os.Stderr, `    get-organization-encryption: Reports an organization's encryption configuration and, for each use case that moves to organization keys, its transition state with live counts.`)
@@ -36822,6 +36870,86 @@ func adminClearOrganizationHooksRolloutUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin clear-organization-hooks-rollout --body '{\n      \"organization_id\": \"abc123\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminStartHooksRolloutStageUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin start-hooks-rollout-stage", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Starts a staged rollout of a hooks version newer than the default pin. It clears canary organizations first, then 25 percent of organizations on the default pin a day later, then moves the default pin a day after that. Replaces an active rollout of an older version.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin start-hooks-rollout-stage --body '{\n      \"revision\": 1,\n      \"version\": 2\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminPauseHooksRolloutStageUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin pause-hooks-rollout-stage", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Holds a running staged rollout at its current share. Organizations it already cleared keep the new version.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin pause-hooks-rollout-stage --body '{\n      \"reason\": \"aa\",\n      \"revision\": 1\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminResumeHooksRolloutStageUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin resume-hooks-rollout-stage", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Restarts a paused staged rollout. The day at the current share starts over.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin resume-hooks-rollout-stage --body '{\n      \"revision\": 1\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminCancelHooksRolloutStageUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin cancel-hooks-rollout-stage", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Ends a staged rollout. Organizations it cleared go back to the default pin; hooks plugins already published are not downgraded.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin cancel-hooks-rollout-stage --body '{\n      \"reason\": \"aa\",\n      \"revision\": 1\n   }' --admin-session-token \"abc123\"")
 }
 
 func adminListTailscaleOAuthMigrationUsage() {

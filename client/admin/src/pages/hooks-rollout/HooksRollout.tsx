@@ -28,6 +28,7 @@ import {
 import { fmtDateShort } from "@/lib/utils";
 
 import { ReleaseProgress } from "@/pages/hooks-rollout/ReleaseProgress";
+import { StagedRollout } from "@/pages/hooks-rollout/StagedRollout";
 
 /**
  * The hooks version rollout: which hooks generator version every customer
@@ -77,6 +78,7 @@ export function HooksRollout(): JSX.Element {
         rollout={rollout}
         stale={query.isError}
       />
+      <StagedRollout rollout={rollout} stale={query.isError} />
       <Overrides rollout={rollout} />
       <RecentChanges changes={rollout.recent_changes} />
     </div>

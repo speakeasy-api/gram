@@ -8,6 +8,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 var errHooksRolloutUnavailable = errors.New("hooks rollout state is unavailable")
@@ -48,10 +49,22 @@ type HooksRolloutChange struct {
 	SetAt            string `json:"set_at"`
 }
 
+// HooksRolloutStage is the latest staged rollout.
+type HooksRolloutStage struct {
+	Version       int    `json:"version"`
+	Percent       int    `json:"percent"`
+	State         string `json:"state"`
+	Reason        string `json:"reason,omitempty"`
+	SetBy         string `json:"set_by"`
+	SetAt         string `json:"set_at"`
+	NextAdvanceAt string `json:"next_advance_at,omitempty"`
+}
+
 // HooksRollout is the platform-wide hooks version rollout state.
 type HooksRollout struct {
 	CurrentVersion          int                    `json:"current_version"`
 	DefaultPin              *HooksRolloutPin       `json:"default_pin,omitempty"`
+	Stage                   *HooksRolloutStage     `json:"stage,omitempty"`
 	CanaryOrganizationSlugs []string               `json:"canary_organization_slugs"`
 	Overrides               []HooksRolloutOverride `json:"overrides"`
 	OverridesTruncated      bool                   `json:"overrides_truncated"`
@@ -150,11 +163,26 @@ func hooksRolloutPin(pin *gen.AdminHooksRolloutPin) *HooksRolloutPin {
 	return &HooksRolloutPin{Version: pin.Version, SetBy: pin.SetBy, SetAt: pin.SetAt}
 }
 
+func hooksRolloutStage(stage *gen.AdminHooksRolloutStage) *HooksRolloutStage {
+	if stage == nil {
+		return nil
+	}
+	return &HooksRolloutStage{
+		Version:       stage.Version,
+		Percent:       stage.Percent,
+		State:         stage.State,
+		Reason:        conv.PtrValOr(stage.Reason, ""),
+		SetBy:         stage.SetBy,
+		SetAt:         stage.SetAt,
+		NextAdvanceAt: conv.PtrValOr(stage.NextAdvanceAt, ""),
+	}
+}
+
 func registerHooksRolloutTools(server *mcp.Server, organizations OrganizationReader, rollout HooksRolloutReader) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:         "get_hooks_rollout",
 		Title:        "Get Hooks Version Rollout",
-		Description:  "Read the platform-wide hooks version rollout: the hooks generator version this server build publishes, the default pin every non-canary organization without an override follows, canary organizations, organization overrides and recent pin changes. An organization's hooks plugin moves to the current version on the next hourly rollout sweep once its pin reaches it. Does not change pins.",
+		Description:  "Read the platform-wide hooks version rollout: the hooks generator version this server build publishes, the default pin every non-canary organization without an override follows, the latest staged rollout (version, share of default-pin organizations cleared, state and when it next advances), canary organizations, organization overrides and recent pin changes. An organization's hooks plugin moves to the current version on the next hourly rollout sweep once its pin reaches it. Does not change pins or the staged rollout.",
 		Annotations:  readOnlyAnnotations(),
 		Meta:         nil,
 		InputSchema:  nil,
@@ -198,6 +226,7 @@ func registerHooksRolloutTools(server *mcp.Server, organizations OrganizationRea
 		return nil, HooksRollout{
 			CurrentVersion:          result.CurrentVersion,
 			DefaultPin:              hooksRolloutPin(result.DefaultPin),
+			Stage:                   hooksRolloutStage(result.Stage),
 			CanaryOrganizationSlugs: append([]string{}, result.CanaryOrganizationSlugs...),
 			Overrides:               overrides,
 			OverridesTruncated:      len(result.Overrides) > maxHooksRolloutOverrides,
@@ -228,7 +257,7 @@ func registerHooksRolloutTools(server *mcp.Server, organizations OrganizationRea
 	mcp.AddTool(server, &mcp.Tool{
 		Name:         "get_organization_hooks_rollout",
 		Title:        "Get Organization Hooks Version Rollout",
-		Description:  "Read which hooks version an exact organization ID is cleared for and why: canary, its own override, the default pin, or legacy_flag when no pin applies yet and the legacy PostHog flag decides (eligibility is then unknown here). eligible reports whether its next publish moves its hooks plugin to current_version. Does not change pins.",
+		Description:  "Read which hooks version an exact organization ID is cleared for and why: canary, its own override, stage when a staged rollout has cleared it, the default pin, or legacy_flag when no pin applies yet and the legacy PostHog flag decides (eligibility is then unknown here). eligible reports whether its next publish moves its hooks plugin to current_version. Does not change pins.",
 		Annotations:  readOnlyAnnotations(),
 		Meta:         nil,
 		InputSchema:  nil,

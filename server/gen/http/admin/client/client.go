@@ -552,6 +552,22 @@ type Client struct {
 	// to the clearOrganizationHooksRollout endpoint.
 	ClearOrganizationHooksRolloutDoer goahttp.Doer
 
+	// StartHooksRolloutStage Doer is the HTTP client used to make requests to the
+	// startHooksRolloutStage endpoint.
+	StartHooksRolloutStageDoer goahttp.Doer
+
+	// PauseHooksRolloutStage Doer is the HTTP client used to make requests to the
+	// pauseHooksRolloutStage endpoint.
+	PauseHooksRolloutStageDoer goahttp.Doer
+
+	// ResumeHooksRolloutStage Doer is the HTTP client used to make requests to the
+	// resumeHooksRolloutStage endpoint.
+	ResumeHooksRolloutStageDoer goahttp.Doer
+
+	// CancelHooksRolloutStage Doer is the HTTP client used to make requests to the
+	// cancelHooksRolloutStage endpoint.
+	CancelHooksRolloutStageDoer goahttp.Doer
+
 	// ListTailscaleOAuthMigration Doer is the HTTP client used to make requests to
 	// the listTailscaleOAuthMigration endpoint.
 	ListTailscaleOAuthMigrationDoer goahttp.Doer
@@ -738,6 +754,10 @@ func NewClient(
 		GetOrganizationHooksRolloutDoer:                doer,
 		SetOrganizationHooksRolloutDoer:                doer,
 		ClearOrganizationHooksRolloutDoer:              doer,
+		StartHooksRolloutStageDoer:                     doer,
+		PauseHooksRolloutStageDoer:                     doer,
+		ResumeHooksRolloutStageDoer:                    doer,
+		CancelHooksRolloutStageDoer:                    doer,
 		ListTailscaleOAuthMigrationDoer:                doer,
 		RunTailscaleOAuthMigrationStepDoer:             doer,
 		GetOrganizationEncryptionDoer:                  doer,
@@ -3971,6 +3991,102 @@ func (c *Client) ClearOrganizationHooksRollout() goa.Endpoint {
 		resp, err := c.ClearOrganizationHooksRolloutDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "clearOrganizationHooksRollout", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// StartHooksRolloutStage returns an endpoint that makes HTTP requests to the
+// admin service startHooksRolloutStage server.
+func (c *Client) StartHooksRolloutStage() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeStartHooksRolloutStageRequest(c.encoder)
+		decodeResponse = DecodeStartHooksRolloutStageResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildStartHooksRolloutStageRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.StartHooksRolloutStageDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "startHooksRolloutStage", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// PauseHooksRolloutStage returns an endpoint that makes HTTP requests to the
+// admin service pauseHooksRolloutStage server.
+func (c *Client) PauseHooksRolloutStage() goa.Endpoint {
+	var (
+		encodeRequest  = EncodePauseHooksRolloutStageRequest(c.encoder)
+		decodeResponse = DecodePauseHooksRolloutStageResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildPauseHooksRolloutStageRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.PauseHooksRolloutStageDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "pauseHooksRolloutStage", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ResumeHooksRolloutStage returns an endpoint that makes HTTP requests to the
+// admin service resumeHooksRolloutStage server.
+func (c *Client) ResumeHooksRolloutStage() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeResumeHooksRolloutStageRequest(c.encoder)
+		decodeResponse = DecodeResumeHooksRolloutStageResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildResumeHooksRolloutStageRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ResumeHooksRolloutStageDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "resumeHooksRolloutStage", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CancelHooksRolloutStage returns an endpoint that makes HTTP requests to the
+// admin service cancelHooksRolloutStage server.
+func (c *Client) CancelHooksRolloutStage() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCancelHooksRolloutStageRequest(c.encoder)
+		decodeResponse = DecodeCancelHooksRolloutStageResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCancelHooksRolloutStageRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CancelHooksRolloutStageDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "cancelHooksRolloutStage", err)
 		}
 		return decodeResponse(resp)
 	}

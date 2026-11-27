@@ -151,6 +151,10 @@ type Client struct {
 	GetOrganizationHooksRolloutEndpoint                goa.Endpoint
 	SetOrganizationHooksRolloutEndpoint                goa.Endpoint
 	ClearOrganizationHooksRolloutEndpoint              goa.Endpoint
+	StartHooksRolloutStageEndpoint                     goa.Endpoint
+	PauseHooksRolloutStageEndpoint                     goa.Endpoint
+	ResumeHooksRolloutStageEndpoint                    goa.Endpoint
+	CancelHooksRolloutStageEndpoint                    goa.Endpoint
 	ListTailscaleOAuthMigrationEndpoint                goa.Endpoint
 	RunTailscaleOAuthMigrationStepEndpoint             goa.Endpoint
 	GetOrganizationEncryptionEndpoint                  goa.Endpoint
@@ -162,7 +166,7 @@ type Client struct {
 }
 
 // NewClient initializes a "admin" service client given the endpoints.
-func NewClient(login, callback, logout, getSession, getOrganizationFeatures, setOrganizationFeature, getOrganizationChatAnalysisSettings, setOrganizationChatAnalysisSettings, triggerOrganizationChatAnalysis, openOrganizationInDashboard, getProject, updateOrganization, bulkUpdateAccountType, disableOrganization, enableOrganization, getOrganization, listOrganizationMembers, listOrganizationProjects, listProjectMcpServers, listOrganizationActivity, listUsers, listUserOrganizations, listOrganizations, extendTrial, createOrganization, rearmTrial, getOrganizationStats, repairInferenceKey, getInferenceKeys, setInferenceKeyMonthlyLimit, getInferenceSpendHistory, getPaygBillingSummary, getStripeCustomer, setStripeCustomer, setAdoptionDashboardURL, getStripeSubscription, cancelStripeSubscription, resumeStripeSubscription, markEnterpriseTrialConverted, createGlobalIssuer, getGlobalIssuerDuplicatePreflight, listGlobalIssuers, getGlobalIssuer, updateGlobalIssuer, deleteGlobalIssuer, fetchGlobalIssuerMetadata, refreshGlobalIssuerMetadata, listGlobalIssuerConvergenceCandidates, getGlobalIssuerMigratePreflight, migrateToGlobalIssuer, uploadPlatformImage, serveImage, startTrial, changeTrialEndDate, getMeterUsage, getSpendBreakdown, getSupportMatrix, updateSupportMatrix, getSupportCoverage, describeMcpServerHealth, setMcpServerScopePin, getMcpServerToolCalls, getHookClients, getOrganizationHookFleet, listRegistryPromotionCandidates, getRegistryPromotionCandidate, promoteRegistryCandidate, curateRegistryPromotionCandidate, retryRegistryPromotionDocs, getRegistryOktaCandidates, listRegistryOktaUnmapped, listRegistryEntries, getRegistryEntry, createRegistryEntry, saveRegistryEntry, setRegistryEntryPublished, listOnboardingSteps, getOnboardingStackOptions, getOrganizationOnboardingStack, setOrganizationOnboardingStack, listOnboardingUseCases, createOnboardingUseCase, updateOnboardingUseCase, deleteOnboardingUseCase, listOnboardingPlaybooks, createOnboardingPlaybook, updateOnboardingPlaybook, deleteOnboardingPlaybook, cloneOnboardingPlaybook, getOrganizationOnboardingPlaybook, assignOrganizationOnboardingPlaybook, listSignupOffers, createSignupOffer, updateSignupOffer, listPlatformMcpFeedback, getStripeSubscriptionCandidate, setStripeSubscription, listCustomerUsage, listUpstreamOAuthMigrationOrganizations, getUpstreamOAuthMigrationStatus, runUpstreamOAuthMigration, enableUpstreamAuthEnforcement, disableUpstreamAuthEnforcement, backfillMcpAuthGrants, backfillMcpConnectGrants, getSecretBackfills, runMarketplaceTokenBackfill, runRunnerKeyOrganizationBackfill, getProjectRedeployPreview, redeployProject, listCustomDomains, listPlatformExternalCredentials, getGcpIamPlatformCredential, createGcpIamPlatformCredential, updateGcpIamPlatformCredential, verifyGcpIamPlatformCredential, deleteGcpIamPlatformCredential, getMemoryEvalOptions, listMemoryEvalRuns, getMemoryEvalRun, startMemoryEvalRun, listAssistantOrganizations, repairOrganizationAssistantAgentNames, backfillOrganizationAssistantBuiltinGrants, migrateOrganizationAssistantSlack, listOrganizationAssistants, migrateOrganizationAssistantIdentities, migrateOrganizationAssistantsToKit, getHooksRollout, getHooksReleaseProgress, setHooksRolloutDefault, getOrganizationHooksRollout, setOrganizationHooksRollout, clearOrganizationHooksRollout, listTailscaleOAuthMigration, runTailscaleOAuthMigrationStep, getOrganizationEncryption, listOrganizationEncryptionTransitions, enrollOrganizationEncryption, rollbackOrganizationEncryption, runOrganizationEncryption, finalizeOrganizationEncryption goa.Endpoint) *Client {
+func NewClient(login, callback, logout, getSession, getOrganizationFeatures, setOrganizationFeature, getOrganizationChatAnalysisSettings, setOrganizationChatAnalysisSettings, triggerOrganizationChatAnalysis, openOrganizationInDashboard, getProject, updateOrganization, bulkUpdateAccountType, disableOrganization, enableOrganization, getOrganization, listOrganizationMembers, listOrganizationProjects, listProjectMcpServers, listOrganizationActivity, listUsers, listUserOrganizations, listOrganizations, extendTrial, createOrganization, rearmTrial, getOrganizationStats, repairInferenceKey, getInferenceKeys, setInferenceKeyMonthlyLimit, getInferenceSpendHistory, getPaygBillingSummary, getStripeCustomer, setStripeCustomer, setAdoptionDashboardURL, getStripeSubscription, cancelStripeSubscription, resumeStripeSubscription, markEnterpriseTrialConverted, createGlobalIssuer, getGlobalIssuerDuplicatePreflight, listGlobalIssuers, getGlobalIssuer, updateGlobalIssuer, deleteGlobalIssuer, fetchGlobalIssuerMetadata, refreshGlobalIssuerMetadata, listGlobalIssuerConvergenceCandidates, getGlobalIssuerMigratePreflight, migrateToGlobalIssuer, uploadPlatformImage, serveImage, startTrial, changeTrialEndDate, getMeterUsage, getSpendBreakdown, getSupportMatrix, updateSupportMatrix, getSupportCoverage, describeMcpServerHealth, setMcpServerScopePin, getMcpServerToolCalls, getHookClients, getOrganizationHookFleet, listRegistryPromotionCandidates, getRegistryPromotionCandidate, promoteRegistryCandidate, curateRegistryPromotionCandidate, retryRegistryPromotionDocs, getRegistryOktaCandidates, listRegistryOktaUnmapped, listRegistryEntries, getRegistryEntry, createRegistryEntry, saveRegistryEntry, setRegistryEntryPublished, listOnboardingSteps, getOnboardingStackOptions, getOrganizationOnboardingStack, setOrganizationOnboardingStack, listOnboardingUseCases, createOnboardingUseCase, updateOnboardingUseCase, deleteOnboardingUseCase, listOnboardingPlaybooks, createOnboardingPlaybook, updateOnboardingPlaybook, deleteOnboardingPlaybook, cloneOnboardingPlaybook, getOrganizationOnboardingPlaybook, assignOrganizationOnboardingPlaybook, listSignupOffers, createSignupOffer, updateSignupOffer, listPlatformMcpFeedback, getStripeSubscriptionCandidate, setStripeSubscription, listCustomerUsage, listUpstreamOAuthMigrationOrganizations, getUpstreamOAuthMigrationStatus, runUpstreamOAuthMigration, enableUpstreamAuthEnforcement, disableUpstreamAuthEnforcement, backfillMcpAuthGrants, backfillMcpConnectGrants, getSecretBackfills, runMarketplaceTokenBackfill, runRunnerKeyOrganizationBackfill, getProjectRedeployPreview, redeployProject, listCustomDomains, listPlatformExternalCredentials, getGcpIamPlatformCredential, createGcpIamPlatformCredential, updateGcpIamPlatformCredential, verifyGcpIamPlatformCredential, deleteGcpIamPlatformCredential, getMemoryEvalOptions, listMemoryEvalRuns, getMemoryEvalRun, startMemoryEvalRun, listAssistantOrganizations, repairOrganizationAssistantAgentNames, backfillOrganizationAssistantBuiltinGrants, migrateOrganizationAssistantSlack, listOrganizationAssistants, migrateOrganizationAssistantIdentities, migrateOrganizationAssistantsToKit, getHooksRollout, getHooksReleaseProgress, setHooksRolloutDefault, getOrganizationHooksRollout, setOrganizationHooksRollout, clearOrganizationHooksRollout, startHooksRolloutStage, pauseHooksRolloutStage, resumeHooksRolloutStage, cancelHooksRolloutStage, listTailscaleOAuthMigration, runTailscaleOAuthMigrationStep, getOrganizationEncryption, listOrganizationEncryptionTransitions, enrollOrganizationEncryption, rollbackOrganizationEncryption, runOrganizationEncryption, finalizeOrganizationEncryption goa.Endpoint) *Client {
 	return &Client{
 		LoginEndpoint:                                      login,
 		CallbackEndpoint:                                   callback,
@@ -298,6 +302,10 @@ func NewClient(login, callback, logout, getSession, getOrganizationFeatures, set
 		GetOrganizationHooksRolloutEndpoint:                getOrganizationHooksRollout,
 		SetOrganizationHooksRolloutEndpoint:                setOrganizationHooksRollout,
 		ClearOrganizationHooksRolloutEndpoint:              clearOrganizationHooksRollout,
+		StartHooksRolloutStageEndpoint:                     startHooksRolloutStage,
+		PauseHooksRolloutStageEndpoint:                     pauseHooksRolloutStage,
+		ResumeHooksRolloutStageEndpoint:                    resumeHooksRolloutStage,
+		CancelHooksRolloutStageEndpoint:                    cancelHooksRolloutStage,
 		ListTailscaleOAuthMigrationEndpoint:                listTailscaleOAuthMigration,
 		RunTailscaleOAuthMigrationStepEndpoint:             runTailscaleOAuthMigrationStep,
 		GetOrganizationEncryptionEndpoint:                  getOrganizationEncryption,
@@ -3396,6 +3404,98 @@ func (c *Client) ClearOrganizationHooksRollout(ctx context.Context, p *ClearOrga
 		return
 	}
 	return ires.(*AdminOrganizationHooksRollout), nil
+}
+
+// StartHooksRolloutStage calls the "startHooksRolloutStage" endpoint of the
+// "admin" service.
+// StartHooksRolloutStage may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) StartHooksRolloutStage(ctx context.Context, p *StartHooksRolloutStagePayload) (res *AdminHooksRollout, err error) {
+	var ires any
+	ires, err = c.StartHooksRolloutStageEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminHooksRollout), nil
+}
+
+// PauseHooksRolloutStage calls the "pauseHooksRolloutStage" endpoint of the
+// "admin" service.
+// PauseHooksRolloutStage may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) PauseHooksRolloutStage(ctx context.Context, p *PauseHooksRolloutStagePayload) (res *AdminHooksRollout, err error) {
+	var ires any
+	ires, err = c.PauseHooksRolloutStageEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminHooksRollout), nil
+}
+
+// ResumeHooksRolloutStage calls the "resumeHooksRolloutStage" endpoint of the
+// "admin" service.
+// ResumeHooksRolloutStage may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ResumeHooksRolloutStage(ctx context.Context, p *ResumeHooksRolloutStagePayload) (res *AdminHooksRollout, err error) {
+	var ires any
+	ires, err = c.ResumeHooksRolloutStageEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminHooksRollout), nil
+}
+
+// CancelHooksRolloutStage calls the "cancelHooksRolloutStage" endpoint of the
+// "admin" service.
+// CancelHooksRolloutStage may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) CancelHooksRolloutStage(ctx context.Context, p *CancelHooksRolloutStagePayload) (res *AdminHooksRollout, err error) {
+	var ires any
+	ires, err = c.CancelHooksRolloutStageEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminHooksRollout), nil
 }
 
 // ListTailscaleOAuthMigration calls the "listTailscaleOAuthMigration" endpoint
