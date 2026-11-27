@@ -96,6 +96,18 @@ type SendMessageRequestBody struct {
 	Attachments []*SendMessageAttachmentRequestBody `form:"attachments,omitempty" json:"attachments,omitempty" xml:"attachments,omitempty"`
 }
 
+// InferIntentRequestBody is the type of the "assistants" service "inferIntent"
+// endpoint HTTP request body.
+type InferIntentRequestBody struct {
+	// The Project Assistant the inference is for.
+	AssistantID string `form:"assistant_id" json:"assistant_id" xml:"assistant_id"`
+	// The dashboard path the user is on, without the organization and project
+	// prefix.
+	CurrentPath *string `form:"current_path,omitempty" json:"current_path,omitempty" xml:"current_path,omitempty"`
+	// The user's recent dashboard activity, oldest first.
+	Activity []*AssistantActivityEntryRequestBody `form:"activity" json:"activity" xml:"activity"`
+}
+
 // InterruptTurnRequestBody is the type of the "assistants" service
 // "interruptTurn" endpoint HTTP request body.
 type InterruptTurnRequestBody struct {
@@ -283,6 +295,27 @@ type SendMessageResponseBody struct {
 	ThreadID *string `form:"thread_id,omitempty" json:"thread_id,omitempty" xml:"thread_id,omitempty"`
 	// Whether the message was accepted and enqueued for processing.
 	Accepted *bool `form:"accepted,omitempty" json:"accepted,omitempty" xml:"accepted,omitempty"`
+}
+
+// InferIntentResponseBody is the type of the "assistants" service
+// "inferIntent" endpoint HTTP response body.
+type InferIntentResponseBody struct {
+	// The task the user appears to be working on. Absent when no task can be
+	// inferred.
+	Goal *string `form:"goal,omitempty" json:"goal,omitempty" xml:"goal,omitempty"`
+	// Where the user is in that task.
+	Stage *string `form:"stage,omitempty" json:"stage,omitempty" xml:"stage,omitempty"`
+	// What appears to be stopping the user. Absent when nothing is.
+	Blocker *string `form:"blocker,omitempty" json:"blocker,omitempty" xml:"blocker,omitempty"`
+	// How stuck the user appears to be.
+	Frustration *string `form:"frustration,omitempty" json:"frustration,omitempty" xml:"frustration,omitempty"`
+	// A short, specific line the assistant can open with. Absent when there is
+	// nothing specific to say.
+	Opener *string `form:"opener,omitempty" json:"opener,omitempty" xml:"opener,omitempty"`
+	// Up to three short prompts the user can send.
+	SuggestedPrompts []string `form:"suggested_prompts,omitempty" json:"suggested_prompts,omitempty" xml:"suggested_prompts,omitempty"`
+	// How sure the inference is, from 0 to 1.
+	Confidence *float64 `form:"confidence,omitempty" json:"confidence,omitempty" xml:"confidence,omitempty"`
 }
 
 // InterruptTurnResponseBody is the type of the "assistants" service
@@ -1518,6 +1551,188 @@ type SendMessageGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// InferIntentUnauthorizedResponseBody is the type of the "assistants" service
+// "inferIntent" endpoint HTTP response body for the "unauthorized" error.
+type InferIntentUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// InferIntentForbiddenResponseBody is the type of the "assistants" service
+// "inferIntent" endpoint HTTP response body for the "forbidden" error.
+type InferIntentForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// InferIntentBadRequestResponseBody is the type of the "assistants" service
+// "inferIntent" endpoint HTTP response body for the "bad_request" error.
+type InferIntentBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// InferIntentNotFoundResponseBody is the type of the "assistants" service
+// "inferIntent" endpoint HTTP response body for the "not_found" error.
+type InferIntentNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// InferIntentConflictResponseBody is the type of the "assistants" service
+// "inferIntent" endpoint HTTP response body for the "conflict" error.
+type InferIntentConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// InferIntentUnsupportedMediaResponseBody is the type of the "assistants"
+// service "inferIntent" endpoint HTTP response body for the
+// "unsupported_media" error.
+type InferIntentUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// InferIntentInvalidResponseBody is the type of the "assistants" service
+// "inferIntent" endpoint HTTP response body for the "invalid" error.
+type InferIntentInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// InferIntentInvariantViolationResponseBody is the type of the "assistants"
+// service "inferIntent" endpoint HTTP response body for the
+// "invariant_violation" error.
+type InferIntentInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// InferIntentUnexpectedResponseBody is the type of the "assistants" service
+// "inferIntent" endpoint HTTP response body for the "unexpected" error.
+type InferIntentUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// InferIntentGatewayErrorResponseBody is the type of the "assistants" service
+// "inferIntent" endpoint HTTP response body for the "gateway_error" error.
+type InferIntentGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // InterruptTurnUnauthorizedResponseBody is the type of the "assistants"
 // service "interruptTurn" endpoint HTTP response body for the "unauthorized"
 // error.
@@ -2573,6 +2788,18 @@ type SendMessageAttachmentRequestBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 }
 
+// AssistantActivityEntryRequestBody is used to define fields on request body
+// types.
+type AssistantActivityEntryRequestBody struct {
+	// When it happened.
+	At string `form:"at" json:"at" xml:"at"`
+	// What kind of entry this is.
+	Kind string `form:"kind" json:"kind" xml:"kind"`
+	// A short description, such as a page title, an action and its outcome, or an
+	// error message.
+	Detail string `form:"detail" json:"detail" xml:"detail"`
+}
+
 // AssistantExecutionProfileResponseBody is used to define fields on response
 // body types.
 type AssistantExecutionProfileResponseBody struct {
@@ -2726,6 +2953,28 @@ func NewSendMessageRequestBody(p *assistants.SendMessagePayload) *SendMessageReq
 			}
 			body.Attachments[i] = marshalAssistantsSendMessageAttachmentToSendMessageAttachmentRequestBody(val)
 		}
+	}
+	return body
+}
+
+// NewInferIntentRequestBody builds the HTTP request body from the payload of
+// the "inferIntent" endpoint of the "assistants" service.
+func NewInferIntentRequestBody(p *assistants.InferIntentPayload) *InferIntentRequestBody {
+	body := &InferIntentRequestBody{
+		AssistantID: p.AssistantID,
+		CurrentPath: p.CurrentPath,
+	}
+	if p.Activity != nil {
+		body.Activity = make([]*AssistantActivityEntryRequestBody, len(p.Activity))
+		for i, val := range p.Activity {
+			if val == nil {
+				body.Activity[i] = nil
+				continue
+			}
+			body.Activity[i] = marshalAssistantsAssistantActivityEntryToAssistantActivityEntryRequestBody(val)
+		}
+	} else {
+		body.Activity = []*AssistantActivityEntryRequestBody{}
 	}
 	return body
 }
@@ -3817,6 +4066,175 @@ func NewSendMessageUnexpected(body *SendMessageUnexpectedResponseBody) *goa.Serv
 // NewSendMessageGatewayError builds a assistants service sendMessage endpoint
 // gateway_error error.
 func NewSendMessageGatewayError(body *SendMessageGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewInferIntentAssistantIntentOK builds a "assistants" service "inferIntent"
+// endpoint result from a HTTP "OK" response.
+func NewInferIntentAssistantIntentOK(body *InferIntentResponseBody) *assistants.AssistantIntent {
+	v := &assistants.AssistantIntent{
+		Goal:        body.Goal,
+		Stage:       body.Stage,
+		Blocker:     body.Blocker,
+		Frustration: *body.Frustration,
+		Opener:      body.Opener,
+		Confidence:  *body.Confidence,
+	}
+	v.SuggestedPrompts = make([]string, len(body.SuggestedPrompts))
+	for i, val := range body.SuggestedPrompts {
+		v.SuggestedPrompts[i] = val
+	}
+
+	return v
+}
+
+// NewInferIntentUnauthorized builds a assistants service inferIntent endpoint
+// unauthorized error.
+func NewInferIntentUnauthorized(body *InferIntentUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewInferIntentForbidden builds a assistants service inferIntent endpoint
+// forbidden error.
+func NewInferIntentForbidden(body *InferIntentForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewInferIntentBadRequest builds a assistants service inferIntent endpoint
+// bad_request error.
+func NewInferIntentBadRequest(body *InferIntentBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewInferIntentNotFound builds a assistants service inferIntent endpoint
+// not_found error.
+func NewInferIntentNotFound(body *InferIntentNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewInferIntentConflict builds a assistants service inferIntent endpoint
+// conflict error.
+func NewInferIntentConflict(body *InferIntentConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewInferIntentUnsupportedMedia builds a assistants service inferIntent
+// endpoint unsupported_media error.
+func NewInferIntentUnsupportedMedia(body *InferIntentUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewInferIntentInvalid builds a assistants service inferIntent endpoint
+// invalid error.
+func NewInferIntentInvalid(body *InferIntentInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewInferIntentInvariantViolation builds a assistants service inferIntent
+// endpoint invariant_violation error.
+func NewInferIntentInvariantViolation(body *InferIntentInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewInferIntentUnexpected builds a assistants service inferIntent endpoint
+// unexpected error.
+func NewInferIntentUnexpected(body *InferIntentUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewInferIntentGatewayError builds a assistants service inferIntent endpoint
+// gateway_error error.
+func NewInferIntentGatewayError(body *InferIntentGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -5076,6 +5494,44 @@ func ValidateSendMessageResponseBody(body *SendMessageResponseBody) (err error) 
 	}
 	if body.ThreadID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.thread_id", *body.ThreadID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateInferIntentResponseBody runs the validations defined on
+// InferIntentResponseBody
+func ValidateInferIntentResponseBody(body *InferIntentResponseBody) (err error) {
+	if body.Frustration == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("frustration", "body"))
+	}
+	if body.SuggestedPrompts == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("suggested_prompts", "body"))
+	}
+	if body.Confidence == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("confidence", "body"))
+	}
+	if body.Frustration != nil {
+		if !(*body.Frustration == "none" || *body.Frustration == "low" || *body.Frustration == "medium" || *body.Frustration == "high") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.frustration", *body.Frustration, []any{"none", "low", "medium", "high"}))
+		}
+	}
+	if len(body.SuggestedPrompts) > 3 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.suggested_prompts", body.SuggestedPrompts, len(body.SuggestedPrompts), 3, false))
+	}
+	for _, e := range body.SuggestedPrompts {
+		if utf8.RuneCountInString(e) > 120 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.suggested_prompts[*]", e, utf8.RuneCountInString(e), 120, false))
+		}
+	}
+	if body.Confidence != nil {
+		if *body.Confidence < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.confidence", *body.Confidence, 0, true))
+		}
+	}
+	if body.Confidence != nil {
+		if *body.Confidence > 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.confidence", *body.Confidence, 1, false))
+		}
 	}
 	return
 }
@@ -6801,6 +7257,246 @@ func ValidateSendMessageGatewayErrorResponseBody(body *SendMessageGatewayErrorRe
 	return
 }
 
+// ValidateInferIntentUnauthorizedResponseBody runs the validations defined on
+// inferIntent_unauthorized_response_body
+func ValidateInferIntentUnauthorizedResponseBody(body *InferIntentUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateInferIntentForbiddenResponseBody runs the validations defined on
+// inferIntent_forbidden_response_body
+func ValidateInferIntentForbiddenResponseBody(body *InferIntentForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateInferIntentBadRequestResponseBody runs the validations defined on
+// inferIntent_bad_request_response_body
+func ValidateInferIntentBadRequestResponseBody(body *InferIntentBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateInferIntentNotFoundResponseBody runs the validations defined on
+// inferIntent_not_found_response_body
+func ValidateInferIntentNotFoundResponseBody(body *InferIntentNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateInferIntentConflictResponseBody runs the validations defined on
+// inferIntent_conflict_response_body
+func ValidateInferIntentConflictResponseBody(body *InferIntentConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateInferIntentUnsupportedMediaResponseBody runs the validations defined
+// on inferIntent_unsupported_media_response_body
+func ValidateInferIntentUnsupportedMediaResponseBody(body *InferIntentUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateInferIntentInvalidResponseBody runs the validations defined on
+// inferIntent_invalid_response_body
+func ValidateInferIntentInvalidResponseBody(body *InferIntentInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateInferIntentInvariantViolationResponseBody runs the validations
+// defined on inferIntent_invariant_violation_response_body
+func ValidateInferIntentInvariantViolationResponseBody(body *InferIntentInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateInferIntentUnexpectedResponseBody runs the validations defined on
+// inferIntent_unexpected_response_body
+func ValidateInferIntentUnexpectedResponseBody(body *InferIntentUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateInferIntentGatewayErrorResponseBody runs the validations defined on
+// inferIntent_gateway_error_response_body
+func ValidateInferIntentGatewayErrorResponseBody(body *InferIntentGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateInterruptTurnUnauthorizedResponseBody runs the validations defined
 // on interruptTurn_unauthorized_response_body
 func ValidateInterruptTurnUnauthorizedResponseBody(body *InterruptTurnUnauthorizedResponseBody) (err error) {
@@ -8159,6 +8855,19 @@ func ValidateSendMessageAttachmentRequestBody(body *SendMessageAttachmentRequest
 		if utf8.RuneCountInString(*body.Name) > 255 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 255, false))
 		}
+	}
+	return
+}
+
+// ValidateAssistantActivityEntryRequestBody runs the validations defined on
+// AssistantActivityEntryRequestBody
+func ValidateAssistantActivityEntryRequestBody(body *AssistantActivityEntryRequestBody) (err error) {
+	err = goa.MergeErrors(err, goa.ValidateFormat("body.at", body.At, goa.FormatDateTime))
+	if !(body.Kind == "page" || body.Kind == "action" || body.Kind == "error" || body.Kind == "signal") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", body.Kind, []any{"page", "action", "error", "signal"}))
+	}
+	if utf8.RuneCountInString(body.Detail) > 300 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.detail", body.Detail, utf8.RuneCountInString(body.Detail), 300, false))
 	}
 	return
 }
