@@ -777,7 +777,7 @@ func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members 
 				OrganizationID: c.selector.organizationID, ProjectID: projects[id], ServerID: id, ClientID: res.clientID, ClientType: res.clientType, RegistrationID: res.choice.clientID,
 				CredentialKind: c.selector.credentialKindOrDefault(), CredentialID: c.selector.credentialID, Subject: c.subject,
 				UserSessionIssuerID: issuerID, ConnectionOwner: "", AttachedConsent: authz.AttachedConnectionConsent{},
-			}, res, true, c.selector.service.authClientPermitFor, nil)
+			}, res, true, true, nil)
 			resolved[id] = prepared
 			memberErrors[id] = prepareErr
 			if prepareErr == nil && prepared.sendsClientHeaders() {

@@ -472,7 +472,7 @@ func (s *Service) authorizeAgentServerClient(ctx context.Context, target agentSe
 	permit.ConnectionOwner = connection.owner
 	permit.AttachedConsent = connection.consent
 	if res.clientID != uuid.Nil {
-		permitter, err := s.authClientPermitFor(true)
+		permitter, err := s.authClientPermitFor(true, true)
 		if err != nil {
 			return none, noCredential, err
 		}

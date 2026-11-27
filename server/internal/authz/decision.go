@@ -33,7 +33,7 @@ type verdict struct {
 }
 
 // Decisions holds one Decision per check, in the order the checks were
-// passed to Decide.
+// passed to Decide or Filter.
 type Decisions struct {
 	// AllAllowed is true only when every check is allowed. It is false when
 	// no check was passed: absence is never permission.
@@ -42,65 +42,67 @@ type Decisions struct {
 	// row is the authorization check Record writes, built while deciding. It
 	// is nil when RBAC does not apply to the caller, who has nothing to show
 	// in the access log.
-	row *challengeLogger
+	row *challengeRow
 }
 
 // Decide answers each check without refusing or recording anything: a "no" is
-// a branch for the handler, not a denial. Use Require to gate an action. Pass
-// the answer to Record when the access log should show it. Example: a
-// dashboard asks whether to show the delete button for a server, and records
-// nothing; a list page decides one check per server and records the list.
+// a branch for the handler, not a denial. Use Require to gate an action, or
+// Filter to narrow a list and record the filter row. Pass the answer to Record
+// when a single check should be recorded later, as the MCP gateway does for a
+// member admitted up front and named by a later call.
 func (e *Engine) Decide(ctx context.Context, checks ...Check) (Decisions, error) {
+	return e.decide(ctx, checks, false)
+}
+
+// Filter answers each check in order and records one filter row for the call,
+// even when the list holds a single item, so a one-item list is never recorded
+// as a gate refusal. An empty list records nothing and returns AllAllowed false.
+func (e *Engine) Filter(ctx context.Context, checks ...Check) (Decisions, error) {
+	d, err := e.decide(ctx, checks, true)
+	if err != nil {
+		return d, err
+	}
+	e.Record(ctx, d)
+	return d, nil
+}
+
+func (e *Engine) decide(ctx context.Context, checks []Check, asList bool) (Decisions, error) {
 	q, err := e.prepare(ctx, checks, false)
 	if err != nil {
 		return Decisions{AllAllowed: false, Each: nil, row: nil}, e.mapError(ctx, err)
 	}
-	result := Decisions{AllAllowed: len(checks) > 0, Each: make([]Decision, 0, len(checks)), row: nil}
-	verdicts := make([]verdict, 0, len(checks))
 	e.logOtherOrganizations(ctx, q.aboutOtherOrganization, checks)
-	for _, check := range checks {
-		v, err := q.decide(check)
-		if err != nil {
-			if q.enforced {
-				e.writeInvalidCheck(ctx, invalidRow(q, checks, verdicts, check))
-			}
-			return Decisions{AllAllowed: false, Each: nil, row: nil}, e.mapError(ctx, err)
+
+	verdicts, _, invalidIdx, err := evaluateChecks(q, checks, false)
+	if err != nil {
+		if q.enforced {
+			e.emitAndWrite(ctx, invalidRow(q, checks, verdicts, checks[invalidIdx], asList))
 		}
-		result.AllAllowed = result.AllAllowed && v.Allowed
-		result.Each = append(result.Each, v.Decision)
-		verdicts = append(verdicts, v)
+		return Decisions{AllAllowed: false, Each: nil, row: nil}, e.mapError(ctx, err)
 	}
-	if !q.enforced {
+
+	result := decisionsFromVerdicts(verdicts)
+	if !q.enforced || len(verdicts) == 0 {
 		return result, nil
 	}
-	e.reportAuthorizerRefusals(ctx, q.grants, allowedPlainChecks(verdicts))
-	for _, v := range verdicts {
-		if v.Allowed && v.check.group != nil {
-			refused, err := q.grants.authorizerRefusesGroup(v.check.group)
-			reportAuthorizerRefusal(ctx, e.logger, q.grants, refused, err)
-		}
-	}
-	switch len(verdicts) {
-	case 0:
-	case 1:
+	e.reportAllowedAuthorizerRefusals(ctx, q.grants, verdicts)
+	if asList || len(verdicts) > 1 {
+		result.row = listRow(q, verdicts)
+	} else {
 		var refused *verdict
 		if !verdicts[0].Allowed {
 			refused = &verdicts[0]
 		}
-		result.row = rowOf(gateRow(q, checks, verdicts, refused))
-	default:
-		result.row = rowOf(listRow(q, verdicts, nil))
+		result.row = gateRow(q, checks, verdicts, refused)
 	}
-	if result.row != nil {
-		RecordAuthorizationDecision(ctx, result.row.Operation, result.row.Outcome, result.row.Reason)
-	}
+	RecordAuthorizationDecision(ctx, result.row.Operation, result.row.Outcome, result.row.Reason)
 	return result, nil
 }
 
-// Record writes what d decided to the access log. A decision about one check
-// is recorded as that check, the way Require records it; a decision about
-// several is recorded as the list they filtered, with how many were allowed.
-// Recording d twice writes two rows.
+// Record writes what d decided to the access log. A decision from Decide about
+// one check is recorded as that check, the way Require records it; a decision
+// about several (or from Filter) is recorded as a filter row. Recording d twice
+// writes two rows.
 func (e *Engine) Record(ctx context.Context, d Decisions) {
 	if d.row == nil {
 		return
@@ -135,142 +137,196 @@ func (e *Engine) Require(ctx context.Context, checks ...Check) error {
 	return e.requireAll(ctx, q, checks, true)
 }
 
-// requireAll decides, records and refuses. explain is false when the grants
-// are not the caller's own, since their refusal says nothing about what the
-// caller lacks.
+// requireAll decides checks in order (stopping at the first refusal), records
+// the gate row, and returns the mapped refusal error. explain is false when the
+// grants are not the caller's own, since their refusal says nothing about what
+// the caller lacks.
 func (e *Engine) requireAll(ctx context.Context, q question, checks []Check, explain bool) error {
-	d, refused, err := e.decideGate(ctx, q, checks)
+	verdicts, refused, invalidIdx, err := evaluateChecks(q, checks, true)
 	if err != nil {
-		return err
+		if q.enforced {
+			e.emitAndWrite(ctx, invalidGateRow(q, checks, checks[invalidIdx]))
+		}
+		return e.mapError(ctx, err)
 	}
-	e.Record(ctx, d)
-	if refused == nil {
+	if refused != nil {
+		if !q.enforced {
+			return e.mapError(ctx, Denied(ScopeMCPAuth, nil))
+		}
+		e.emitAndWrite(ctx, gateRow(q, checks, verdicts, refused))
+		ref := refusalOf(*refused)
+		e.logMissingKeys(ctx, q.grants, ref.missing...)
+		if explain && ref.explained != nil {
+			recordDenial(ctx, ref.explained)
+		}
+		return e.mapError(ctx, ref.err)
+	}
+	if !q.enforced {
 		return nil
 	}
-	if !q.enforced {
-		return e.mapError(ctx, Denied(ScopeMCPAuth, nil))
-	}
-	refusal := refusalOf(*refused)
-	e.logMissingKeys(ctx, q.grants, refusal.missing...)
-	if explain && refusal.explained != nil {
-		recordDenial(ctx, refusal.explained)
-	}
-	return e.mapError(ctx, refusal.err)
+	e.reportAllowedAuthorizerRefusals(ctx, q.grants, verdicts)
+	e.emitAndWrite(ctx, gateRow(q, checks, verdicts, nil))
+	return nil
 }
 
-// decideGate decides checks in order and stops at the first refusal, which it
-// returns. A later check is not evaluated, so its being invalid does not hide
-// the refusal.
-func (e *Engine) decideGate(ctx context.Context, q question, checks []Check) (Decisions, *verdict, error) {
-	result := Decisions{AllAllowed: true, Each: make([]Decision, 0, len(checks)), row: nil}
-	verdicts := make([]verdict, 0, len(checks))
-	for _, check := range checks {
-		v, err := q.decide(check)
-		if err != nil {
-			if q.enforced {
-				e.writeInvalidCheck(ctx, invalidGateRow(q, checks, verdicts, check))
-			}
-			return Decisions{AllAllowed: false, Each: nil, row: nil}, nil, e.mapError(ctx, err)
+// evaluateChecks decides checks in order. When stopOnRefusal is true it stops
+// at the first denied check so a later invalid check does not hide the refusal.
+// When a check cannot be evaluated, invalidIdx names its position in checks.
+func evaluateChecks(q question, checks []Check, stopOnRefusal bool) (verdicts []verdict, refused *verdict, invalidIdx int, err error) {
+	verdicts = make([]verdict, 0, len(checks))
+	for i, check := range checks {
+		v, decErr := q.decide(check)
+		if decErr != nil {
+			return verdicts, nil, i, decErr
 		}
-		result.Each = append(result.Each, v.Decision)
 		verdicts = append(verdicts, v)
-		if !v.Allowed {
-			result.AllAllowed = false
-			if q.enforced {
-				result.row = rowOf(gateRow(q, checks, verdicts, &v))
-				RecordAuthorizationDecision(ctx, result.row.Operation, result.row.Outcome, result.row.Reason)
-			}
-			return result, &v, nil
+		if stopOnRefusal && !v.Allowed {
+			return verdicts, &v, -1, nil
 		}
 	}
-	if !q.enforced {
-		return result, nil, nil
-	}
-	if checks[0].group != nil {
-		refused, err := q.grants.authorizerRefusesGroup(verdicts[0].check.group)
-		reportAuthorizerRefusal(ctx, e.logger, q.grants, refused, err)
-	} else {
-		e.reportAuthorizerRefusals(ctx, q.grants, checks)
-	}
-	result.row = rowOf(gateRow(q, checks, verdicts, nil))
-	RecordAuthorizationDecision(ctx, result.row.Operation, result.row.Outcome, result.row.Reason)
-	return result, nil, nil
+	return verdicts, nil, -1, nil
 }
 
-// writeInvalidCheck records a check the engine could not evaluate. It is
-// written while deciding, not left to Record: it reports a broken call, not a
-// decision a caller may choose to leave out.
-func (e *Engine) writeInvalidCheck(ctx context.Context, row challengeLogger) {
+func decisionsFromVerdicts(verdicts []verdict) Decisions {
+	result := Decisions{AllAllowed: len(verdicts) > 0, Each: make([]Decision, 0, len(verdicts)), row: nil}
+	for _, v := range verdicts {
+		result.AllAllowed = result.AllAllowed && v.Allowed
+		result.Each = append(result.Each, v.Decision)
+	}
+	return result
+}
+
+func (e *Engine) reportAllowedAuthorizerRefusals(ctx context.Context, grants grantAuthorization, verdicts []verdict) {
+	e.reportAuthorizerRefusals(ctx, grants, allowedPlainChecks(verdicts))
+	for _, v := range verdicts {
+		if v.Allowed && v.check.group != nil {
+			refused, err := grants.authorizerRefusesGroup(v.check.group)
+			reportAuthorizerRefusal(ctx, e.logger, grants, refused, err)
+		}
+	}
+}
+
+func (e *Engine) emitAndWrite(ctx context.Context, row *challengeRow) bool {
 	RecordAuthorizationDecision(ctx, row.Operation, row.Outcome, row.Reason)
-	row.write(ctx, e.db, e.logger, e.challengeLoggingEnabled)
+	return row.write(ctx, e.db, e.logger, e.challengeLoggingEnabled)
 }
 
-func rowOf(row challengeLogger) *challengeLogger { return &row }
+// gateOperationAndChecks returns the operation and a defensive copy of the
+// checks for a gate row, so a caller reusing its slice cannot alter what
+// Record writes later.
+func gateOperationAndChecks(checks []Check) (authzrepo.Operation, []Check) {
+	if checks[0].group != nil {
+		return authzrepo.OperationRequireAny, slices.Clone(checks[0].group)
+	}
+	return authzrepo.OperationRequire, slices.Clone(checks)
+}
 
-// invalidRow is the row for a Decide call holding a check that could not be
-// evaluated, in the shape its answer would have been recorded in.
-func invalidRow(q question, checks []Check, decided []verdict, invalid Check) challengeLogger {
-	if len(checks) == 1 {
-		return invalidGateRow(q, checks, decided, invalid)
+// invalidRow is the error row for a Decide or Filter call holding a check that
+// could not be evaluated, in the shape its answer would have been recorded in.
+func invalidRow(q question, checks []Check, decided []verdict, invalid Check, asList bool) *challengeRow {
+	if !asList && len(checks) == 1 {
+		return invalidGateRow(q, checks, invalid)
+	}
+	return invalidListRow(q, decided, invalid)
+}
+
+func invalidGateRow(q question, checks []Check, invalid Check) *challengeRow {
+	operation, recorded := gateOperationAndChecks(checks)
+	focus := invalidPart(invalid)
+	return &challengeRow{
+		Operation:            operation,
+		Outcome:              authzrepo.OutcomeError,
+		Reason:               authzrepo.ReasonInvalidCheck,
+		Checks:               recorded,
+		Focus:                &focus,
+		Matches:              nil,
+		EvaluatedGrantCount:  uint32(q.grants.grantCount()), //nolint:gosec // grant count is small
+		FilterCandidateCount: 0,
+		FilterAllowedCount:   0,
+	}
+}
+
+func invalidListRow(q question, decided []verdict, invalid Check) *challengeRow {
+	checks := make([]Check, 0, len(decided)+1)
+	for _, d := range decided {
+		checks = append(checks, recordedChecks(d)...)
 	}
 	focus := invalidPart(invalid)
-	return listRow(q, decided, &focus)
-}
-
-func invalidGateRow(q question, checks []Check, decided []verdict, invalid Check) challengeLogger {
-	focus := invalidPart(invalid)
-	row := gateRow(q, checks, decided, nil)
-	row.Outcome, row.Reason, row.Focus, row.Matches = authzrepo.OutcomeError, authzrepo.ReasonInvalidCheck, &focus, nil
-	return row
+	checks = append(checks, focus)
+	return &challengeRow{
+		Operation:            authzrepo.OperationFilter,
+		Outcome:              authzrepo.OutcomeError,
+		Reason:               authzrepo.ReasonInvalidCheck,
+		Checks:               checks,
+		Focus:                &focus,
+		Matches:              nil,
+		EvaluatedGrantCount:  uint32(q.grants.grantCount()), //nolint:gosec // grant count is small
+		FilterCandidateCount: uint32(len(checks)),           //nolint:gosec // candidate count is small
+		FilterAllowedCount:   0,
+	}
 }
 
 // gateRow is the row for checks that must all pass: it names the refused
 // check, or on an allow the first check (for a group, the alternative that
 // allowed it), with every grant that matched.
-func gateRow(q question, checks []Check, decided []verdict, refused *verdict) challengeLogger {
-	operation := authzrepo.OperationRequire
-	// Copied, so a caller reusing its slice after Decide cannot change what
-	// Record writes.
-	recorded := slices.Clone(checks)
-	if checks[0].group != nil {
-		operation = authzrepo.OperationRequireAny
-		recorded = slices.Clone(checks[0].group)
+func gateRow(q question, checks []Check, decided []verdict, refused *verdict) *challengeRow {
+	operation, recorded := gateOperationAndChecks(checks)
+	if refused != nil {
+		return &challengeRow{
+			Operation:            operation,
+			Outcome:              authzrepo.OutcomeDeny,
+			Reason:               challengeReason(q, *refused),
+			Checks:               recorded,
+			Focus:                refusalFocus(*refused),
+			Matches:              nil,
+			EvaluatedGrantCount:  uint32(q.grants.grantCount()), //nolint:gosec // grant count is small
+			FilterCandidateCount: 0,
+			FilterAllowedCount:   0,
+		}
 	}
 	first := checks[0]
-	row := challengeLogger{
+	focus := &first
+	if operation == authzrepo.OperationRequireAny && len(decided) > 0 && decided[0].Allowed {
+		focus = &decided[0].check.group[decided[0].alternative]
+	}
+	matches := make([]grantMatch, 0, len(decided))
+	for _, d := range decided {
+		if d.match != nil {
+			matches = append(matches, *d.match)
+		}
+	}
+	return &challengeRow{
 		Operation:            operation,
 		Outcome:              authzrepo.OutcomeAllow,
 		Reason:               authzrepo.ReasonGrantMatched,
 		Checks:               recorded,
-		Focus:                &first,
-		Matches:              make([]grantMatch, 0, len(decided)),
+		Focus:                focus,
+		Matches:              matches,
 		EvaluatedGrantCount:  uint32(q.grants.grantCount()), //nolint:gosec // grant count is small
 		FilterCandidateCount: 0,
 		FilterAllowedCount:   0,
 	}
-	if refused != nil {
-		row.Outcome, row.Reason, row.Focus, row.Matches = authzrepo.OutcomeDeny, challengeReason(q, *refused), refusalOf(*refused).focus, nil
-		return row
-	}
-	for _, d := range decided {
-		if d.match != nil {
-			row.Matches = append(row.Matches, *d.match)
-		}
-	}
-	if operation == authzrepo.OperationRequireAny && len(decided) > 0 && decided[0].Allowed {
-		row.Focus = &decided[0].check.group[decided[0].alternative]
-	}
-	return row
 }
 
 type refusal struct {
 	err error
 	// explained is what the client is told it lacks; nil tells it nothing.
 	explained error
-	focus     *Check
 	// missing are the checks whose missing selector keys are worth a log
 	// line when the refusal is returned.
 	missing []Check
+}
+
+func refusalFocus(d verdict) *Check {
+	if d.check.group == nil {
+		check := d.check
+		return &check
+	}
+	if d.blockedBy != nil {
+		return d.blockedBy
+	}
+	first := d.check.group[0]
+	return &first
 }
 
 func refusalOf(d verdict) refusal {
@@ -278,20 +334,20 @@ func refusalOf(d verdict) refusal {
 	if check.group == nil {
 		if d.Reason == ReasonBlocked {
 			err := deniedByBlock(check.Scope, check.selector())
-			return refusal{err: err, explained: err, focus: &check, missing: nil}
+			return refusal{err: err, explained: err, missing: nil}
 		}
 		err := Denied(check.Scope, check.selector())
-		return refusal{err: err, explained: err, focus: &check, missing: []Check{check}}
+		return refusal{err: err, explained: err, missing: []Check{check}}
 	}
 
 	alternatives := check.group
 	first := alternatives[0]
 	if d.blockedBy != nil {
 		blocked := d.blockedBy
-		return refusal{err: Denied(blocked.Scope, blocked.selector()), explained: nil, focus: blocked, missing: nil}
+		return refusal{err: Denied(blocked.Scope, blocked.selector()), explained: nil, missing: nil}
 	}
 	if d.blocked == nil {
-		return refusal{err: Denied(first.Scope, first.selector()), explained: nil, focus: &first, missing: nil}
+		return refusal{err: Denied(first.Scope, first.selector()), explained: nil, missing: nil}
 	}
 	var unblocked []Check
 	for i, alternative := range alternatives {
@@ -305,7 +361,7 @@ func refusalOf(d verdict) refusal {
 	if suggested, ok := leastPrivilegedAlternative(alternatives, d.blocked); ok {
 		explained = Denied(suggested.Scope, suggested.selector())
 	}
-	return refusal{err: Denied(first.Scope, first.selector()), explained: explained, focus: &first, missing: unblocked}
+	return refusal{err: Denied(first.Scope, first.selector()), explained: explained, missing: unblocked}
 }
 
 func challengeReason(q question, d verdict) authzrepo.Reason {
@@ -622,9 +678,8 @@ func (a grantAuthorization) allowsWithDisposition(check Check, disposition strin
 }
 
 // listRow is the row for checks decided as a list: every check, how many
-// were candidates and how many were allowed. focus names a check that could
-// not be evaluated.
-func listRow(q question, decided []verdict, focus *Check) challengeLogger {
+// were candidates and how many were allowed.
+func listRow(q question, decided []verdict) *challengeRow {
 	checks := make([]Check, 0, len(decided))
 	matches := make([]grantMatch, 0, len(decided))
 	allowedCount := 0
@@ -641,25 +696,18 @@ func listRow(q question, decided []verdict, focus *Check) challengeLogger {
 			anyBlocked = true
 		}
 	}
-	row := challengeLogger{
+	row := &challengeRow{
 		Operation:            authzrepo.OperationFilter,
 		Outcome:              authzrepo.OutcomeDeny,
 		Reason:               authzrepo.ReasonScopeUnsatisfied,
 		Checks:               checks,
-		Focus:                focus,
+		Focus:                nil,
 		Matches:              matches,
 		EvaluatedGrantCount:  uint32(q.grants.grantCount()), //nolint:gosec // grant count is small
 		FilterCandidateCount: uint32(len(decided)),          //nolint:gosec // candidate count is small
 		FilterAllowedCount:   uint32(allowedCount),
 	}
 	switch {
-	case focus != nil:
-		row.Checks = append(row.Checks, *focus)
-		row.Outcome = authzrepo.OutcomeError
-		row.Reason = authzrepo.ReasonInvalidCheck
-		row.Matches = nil
-		row.FilterAllowedCount = 0
-		row.FilterCandidateCount = uint32(len(row.Checks)) //nolint:gosec // candidate count is small
 	case allowedCount > 0:
 		row.Outcome = authzrepo.OutcomeAllow
 		row.Reason = authzrepo.ReasonGrantMatched

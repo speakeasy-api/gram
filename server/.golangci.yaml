@@ -583,6 +583,7 @@ linters:
         - "github.com/speakeasy-api/gram/server/internal/auth.RequirePlatformAdmin("
         - "(*github.com/speakeasy-api/gram/server/internal/authz.Engine).Require("
         - "(*github.com/speakeasy-api/gram/server/internal/authz.Engine).Decide("
+        - "(*github.com/speakeasy-api/gram/server/internal/authz.Engine).Filter("
         - "(*github.com/speakeasy-api/gram/server/internal/authz.Engine).ShouldEnforce("
         - "github.com/speakeasy-api/gram/server/internal/authz.GrantsForRole("
         - "github.com/speakeasy-api/gram/server/internal/environments.ResolveReadableEnvironment("

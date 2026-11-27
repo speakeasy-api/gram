@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	environmentsrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
@@ -26,15 +27,16 @@ var errMemberToolsetDenied = errors.New("member toolset connect denied")
 // capability, not whether a person has connected yet: an OAuth member stays
 // supported so they can connect it. A member whose private toolset the caller
 // may not connect to returns errMemberToolsetDenied.
-func (s *Service) derivedMemberAuth(ctx context.Context, shadow *mandatoryShadow, shadowSurface string, member metaMember) (supported bool, needsOAuth bool, err error) {
+func (s *Service) derivedMemberAuth(ctx context.Context, shadow *mandatoryShadow, shadowSurface string, member metaMember) (supported bool, needsOAuth bool, connect authz.Decisions, err error) {
+	var none authz.Decisions
 	oauth := memberNeedsSignIn(member)
 	if member.backend != metaMemberBackendHosted {
 		if !member.remoteServerID.Valid {
-			return true, oauth, nil
+			return true, oauth, none, nil
 		}
 		rows, err := remotemcp.NewHeaders(s.logger, s.db, s.enc).ListHeaders(ctx, member.remoteServerID.UUID, false)
 		if err != nil {
-			return false, false, fmt.Errorf("load member headers: %w", err)
+			return false, false, none, fmt.Errorf("load member headers: %w", err)
 		}
 		headers := make([]proxy.ConfiguredHeader, 0, len(rows))
 		for _, row := range rows {
@@ -47,7 +49,7 @@ func (s *Service) derivedMemberAuth(ctx context.Context, shadow *mandatoryShadow
 			})
 		}
 		supported, needsOAuth := remoteMemberAuth(headers, oauth)
-		return supported, needsOAuth, nil
+		return supported, needsOAuth, none, nil
 	}
 
 	toolset, err := toolsetsrepo.New(s.db).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{
@@ -56,27 +58,27 @@ func (s *Service) derivedMemberAuth(ctx context.Context, shadow *mandatoryShadow
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return false, false, nil
+		return false, false, none, nil
 	case err != nil:
-		return false, false, fmt.Errorf("load member auth toolset: %w", err)
+		return false, false, none, fmt.Errorf("load member auth toolset: %w", err)
 	}
 	hosting, _, err := hostedmcp.LoadServerState(ctx, s.db, toolset)
 	if err != nil {
-		return false, false, fmt.Errorf("load member auth hosting state: %w", err)
+		return false, false, none, fmt.Errorf("load member auth hosting state: %w", err)
 	}
 	// Same rules as loadMemberToolset. Derived gateways always have a
 	// signed-in caller.
 	if member.serverID == toolset.ID && !hosting.Enabled {
-		return false, false, nil
+		return false, false, none, nil
 	}
-	// Admission runs this for every member, so it records no decision; a call
-	// that names the member records it (findNamedMember).
-	allowed, _, err := s.memberToolsetConnectAllowed(ctx, shadow, shadowSurface, true, &toolset, hosting.Public)
+	// Admission runs this for every member, so it records no decision; the
+	// decision is kept on the member so a call that names it records it.
+	res, err := s.memberToolsetConnectAllowed(ctx, shadow, shadowSurface, true, &toolset, hosting.Public)
 	if err != nil {
-		return false, false, err
+		return false, false, none, err
 	}
-	if !allowed {
-		return false, false, errMemberToolsetDenied
+	if !res.allowed() {
+		return false, false, res.decision, errMemberToolsetDenied
 	}
 
 	environment := toolset.DefaultEnvironmentSlug.String
@@ -89,7 +91,7 @@ func (s *Service) derivedMemberAuth(ctx context.Context, shadow *mandatoryShadow
 		case errors.Is(err, pgx.ErrNoRows):
 			// Dangling environment: keep the toolset default.
 		case err != nil:
-			return false, false, fmt.Errorf("load member auth environment: %w", err)
+			return false, false, none, fmt.Errorf("load member auth environment: %w", err)
 		default:
 			environment = row.Slug
 		}
@@ -104,7 +106,7 @@ func (s *Service) derivedMemberAuth(ctx context.Context, shadow *mandatoryShadow
 	inputs.authenticated = true
 	satisfied, err := s.checkToolsetSecurity(ctx, &toolset, hosting.Public, &inputs)
 	if err != nil || satisfied || !oauth {
-		return satisfied, false, err
+		return satisfied, false, res.decision, err
 	}
 	// Stands in for the token a person gets by connecting the member.
 	inputs.oauthTokenInputs = []oauthTokenInputs{{ //nolint:gosec // capability probe marker, not a credential
@@ -114,7 +116,7 @@ func (s *Service) derivedMemberAuth(ctx context.Context, shadow *mandatoryShadow
 		shared:                false,
 	}}
 	satisfied, err = s.checkToolsetSecurity(ctx, &toolset, hosting.Public, &inputs)
-	return satisfied, satisfied, err
+	return satisfied, satisfied, res.decision, err
 }
 
 // remoteMemberAuth applies derivedMemberAuth to a remote member's configured

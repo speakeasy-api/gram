@@ -664,11 +664,10 @@ func (s *Service) ListMcpServers(ctx context.Context, payload *gen.ListMcpServer
 	for i, server := range servers {
 		checks[i] = authz.MCPServer(authz.MCPServerIDFrom(grantResourceID(server.ID, server.ToolsetID)), authz.ProjectIDOf(*authCtx.ProjectID)).Read()
 	}
-	decisions, err := s.authz.Decide(ctx, checks...)
+	decisions, err := s.authz.Filter(ctx, checks...)
 	if err != nil {
 		return nil, err
 	}
-	s.authz.Record(ctx, decisions)
 	allowed := make([]repo.McpServer, 0, len(servers))
 	for i, server := range servers {
 		if decisions.Each[i].Allowed {
@@ -706,11 +705,10 @@ func (s *Service) ListMcpServersForOrg(ctx context.Context, payload *gen.ListMcp
 	for i, server := range servers {
 		checks[i] = authz.MCPServer(authz.MCPServerIDFrom(grantResourceID(server.ID, server.ToolsetID)), authz.ProjectIDOf(server.ProjectID)).Read()
 	}
-	decisions, err := s.authz.Decide(ctx, checks...)
+	decisions, err := s.authz.Filter(ctx, checks...)
 	if err != nil {
 		return nil, err
 	}
-	s.authz.Record(ctx, decisions)
 	readable := make([]repo.McpServer, 0, len(servers))
 	readableViews := make([]*types.McpServer, 0, len(servers))
 	for i, server := range servers {

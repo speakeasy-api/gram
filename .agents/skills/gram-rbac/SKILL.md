@@ -1,6 +1,6 @@
 ---
 name: gram-rbac
-description: Use when a task touches authorization in Speakeasy — gating a handler or list endpoint, `authz.Require` / `Decide` / `Record` / `Either`, typed refs like `authz.MCPServer(id, project).Write()` or `authz.Environments(p).Read()`, `authz.Check{...}` literals, adding or changing a scope, permission, resource type, block or dimension in `registry.Definitions` (`authz/internal/registry/definitions.go`), system role defaults, agent-safe scopes (`SafeSince`, `AgentUnsafe`), `mise run gen:authz`, `refs_gen.go`, `scopes_gen.go`, `tables_gen.go`, the `norawauthzchecks` lint, "invalid authz check", `ErrInvalidCheck`, `CodeForbidden` from authz, or RBAC state in the dashboard (`useRBAC`, `RequireScope`, access pages).
+description: Use when a task touches authorization in Speakeasy — gating a handler or list endpoint, `authz.Require` / `Decide` / `Filter` / `Record` / `Either`, typed refs like `authz.MCPServer(id, project).Write()` or `authz.Environments(p).Read()`, `authz.Check{...}` literals, adding or changing a scope, permission, resource type, block or dimension in `registry.Definitions` (`authz/internal/registry/definitions.go`), system role defaults, agent-safe scopes (`SafeSince`, `AgentUnsafe`), `mise run gen:authz`, `refs_gen.go`, `scopes_gen.go`, `tables_gen.go`, the `norawauthzchecks` lint, "invalid authz check", `ErrInvalidCheck`, `CodeForbidden` from authz, or RBAC state in the dashboard (`useRBAC`, `RequireScope`, access pages).
 metadata:
   relevant_files:
     - "server/internal/authz/**/*.go"
@@ -65,31 +65,30 @@ if err != nil {
 if canConnect.AllAllowed {
 	// offer the connect button
 }
-// a list: one decision per row, in order, then one challenge row for the call
-decisions, err := s.authz.Decide(ctx, checks...)
+// a list: one decision per row, in order, and one filter challenge row for the call
+decisions, err := s.authz.Filter(ctx, checks...)
 if err != nil {
 	return err
 }
-s.authz.Record(ctx, decisions)
 ```
 
-| Need                      | Use                                                                                                                                                                                                                |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Refuse unless allowed     | `Require(ctx, checks...)` (all must pass)                                                                                                                                                                          |
-| Any one of several grants | `Require(ctx, authz.Either(...))`: one alternative is enough, but a block on any alternative refuses the group                                                                                                     |
-| Branch on the answer      | `Decide(ctx, ...)` and read `AllAllowed`. Records no answer (only an invalid check). Accepts `Either` groups and probes. Returns an error, not false, for an invalid check.                                        |
-| Narrow a list             | `Decide(ctx, checks...)`, `Record(ctx, decisions)`, and keep the rows whose `Each[i].Allowed` is true. A refused tool call's `Each[i].Reason` is `read_only` or `disposition` when another disposition would pass. |
-| MCP tool call             | `authz.MCPServer(id, p).ToolCall(tool, disposition)`, with `authz.DispositionFromHints`. A tool with no annotations is `unannotated`.                                                                              |
+| Need                      | Use                                                                                                                                                                                                                                      |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Refuse unless allowed     | `Require(ctx, checks...)` (all must pass)                                                                                                                                                                                                |
+| Any one of several grants | `Require(ctx, authz.Either(...))`: one alternative is enough, but a block on any alternative refuses the group                                                                                                                           |
+| Branch on the answer      | `Decide(ctx, ...)` and read `AllAllowed`. Records no answer (only an invalid check). Accepts `Either` groups and probes. Returns an error, not false, for an invalid check.                                                              |
+| Narrow a list             | `Filter(ctx, checks...)` and keep the rows whose `Each[i].Allowed` is true. Records one filter row even for a one-item list. A refused tool call's `Each[i].Reason` is `read_only` or `disposition` when another disposition would pass. |
+| MCP tool call             | `authz.MCPServer(id, p).ToolCall(tool, disposition)`, with `authz.DispositionFromHints`. A tool with no annotations is `unannotated`.                                                                                                    |
 
 Ref constructors take typed ids, never a raw string or `uuid.UUID`: `authz.Environment(authz.EnvironmentIDOf(env.ID), authz.ProjectIDOf(projectID))`. Each kind that has a ref has an id type generated in `ids_gen.go` with two constructors, `<Kind>IDOf(uuid.UUID)` and `<Kind>IDFrom(string)`, so ids of different kinds cannot be swapped. The hand-written `mcp_auth_client`, `risk_policy` and `inference` checks keep their own constructors, listed below. An id that cannot name a resource (the nil uuid, an empty string, `*`, a `$` marker, a string containing whitespace) is kept as absent, and every check built from it is refused with `ErrInvalidCheck`: an absent id never grants. In the examples here `id`, `envID`, `p` and `project` are such typed ids, already built with `IDOf` or `IDFrom`. The argument order is always the resource, then its project. A project collection (`authz.Environments(p)`, `authz.MCPServers(p)`, `authz.Assistants(p)`) builds a check on the resource type whose resource id is the project id, so project-wide grants match it and `Decide` answers it with project-wide grants.
 
 Chats are the exception. Chat has no project dimension, and every chat grant the dashboard saves covers every chat, so the id in a chat check is a placeholder. `authz.Chats(p)`, `authz.OrgChats(org)` and `authz.UnrestrictedChats()` all ask whether the caller holds chat:read on every chat, and differ only in the placeholder they carry. None of them limits access to a project or an organization. A check about one real chat, such as a chat being read or unmasked, uses `authz.Chat(authz.ChatIDOf(chatID)).Read()` (or `.Write()`) instead, as `chat/session_access.go` and `risk/unmask_ch.go` do.
 
-Keep `Require` and its `CodeForbidden` branch where the code already has one. `Require` is the gate: it decides, records the decision, allowed or refused, and refuses. `Decide` only decides; `Record(ctx, decisions)` writes what it decided, as the check when there is one, or as the list when there are several. Whoever writes the call chooses whether to record. `Decide` never refuses anything itself, so a caller that swaps `Require` for `Decide` must check `AllAllowed` and return the refusal itself; do that only where a refusal is the expected case. A helper shared by a listing and a call that names one resource returns its decision, and the call that names the resource records it, as the MCP gateway does with `metaMember.connect`.
+Keep `Require` and its `CodeForbidden` branch where the code already has one. `Require` is the gate: it decides, records the decision, allowed or refused, and refuses. `Filter` decides a list and records one filter row (even when the list holds one item). `Decide` only decides; `Record(ctx, decisions)` writes what it decided later, when a helper shared by a listing and a call that names one resource returns its decision and the named call records it (as the MCP gateway does with `metaMember.connect`). `Decide` never refuses anything itself, so a caller that swaps `Require` for `Decide` must check `AllAllowed` and return the refusal itself; do that only where a refusal is the expected case.
 
 Refs exist for every kind in the model except `mcp_auth_client` (`MCPAuthClientCheck`), `risk_policy` (`RiskPolicyApplies` / bypass checks) and `inference` (`InferenceExecuteCheck`). The list sits at the end of `refs_gen.go`.
 
-For a list endpoint, load the candidate rows, build one ref per row, call `Decide` and `Record`, and rebuild the response from the allowed rows. Never call `Require` per item.
+For a list endpoint, load the candidate rows, build one ref per row, call `Filter`, and rebuild the response from the allowed rows. Never call `Require` per item.
 
 In the handler's test, add one case without the grant that asserts `oops.CodeForbidden`, and one case with it through `authztest.WithExactGrants(t, ctx, authz.NewGrant(scope, resourceID))`.
 

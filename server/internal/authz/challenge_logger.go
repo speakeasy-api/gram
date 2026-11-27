@@ -26,9 +26,9 @@ type grantMatch struct {
 	ViaCheck Check
 }
 
-// challengeLogger is the row describing one authorization decision. The
-// engine builds it while deciding; Record and Require write it.
-type challengeLogger struct {
+// challengeRow is the row describing one authorization decision. The engine
+// builds it while deciding; Record, Filter, and Require write it.
+type challengeRow struct {
 	Operation authzrepo.Operation
 	Outcome   authzrepo.Outcome
 	Reason    authzrepo.Reason
@@ -50,7 +50,7 @@ const challengeLogStepTimeout = 10 * time.Second
 // feature is not enabled for the org (or the check fails), the call is a
 // no-op. Errors are logged at warn level and never bubble back to the caller.
 // It reports whether the challenge was enqueued.
-func (l challengeLogger) write(ctx context.Context, dbtx database.DBTX, logger *slog.Logger, isEnabled ChallengeLoggingEnabled) bool {
+func (l challengeRow) write(ctx context.Context, dbtx database.DBTX, logger *slog.Logger, isEnabled ChallengeLoggingEnabled) bool {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return false

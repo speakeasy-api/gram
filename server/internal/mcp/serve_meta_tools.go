@@ -761,13 +761,14 @@ func (s *Service) loadMemberToolset(
 	if member.serverID == toolset.ID && !hosting.Enabled {
 		return nil, hostingstate.NotHosted(), uuid.Nil, &metaMemberError{message: fmt.Sprintf("server %q is not currently servable", member.slug)}
 	}
-	// Listings and named calls both load the toolset here, so this records
-	// nothing; a call that names the member records it (findNamedMember).
-	allowed, _, err := s.memberToolsetConnectAllowed(ctx, s.newMandatoryShadow(ctx, toolset.OrganizationID), mandatorySurfaceGatewayMember, gate.authenticated, &toolset, hosting.Public)
+	res, err := s.memberToolsetConnectAllowed(ctx, s.newMandatoryShadow(ctx, toolset.OrganizationID), mandatorySurfaceGatewayMember, gate.authenticated, &toolset, hosting.Public)
 	if err != nil {
 		return nil, hostingstate.NotHosted(), uuid.Nil, oops.E(oops.CodeUnexpected, err, "check toolset-level authz").LogError(ctx, logger)
 	}
-	if !allowed {
+	if member.recordToolsetConnect {
+		s.authz.Record(ctx, res.decision)
+	}
+	if !res.allowed() {
 		// Unauthorized reads as nonexistent (as in ServeToolsetResolved).
 		return nil, hostingstate.NotHosted(), uuid.Nil, oops.E(oops.CodeNotFound, nil, "unknown server %q; call list_servers to see available servers", member.slug).LogWarn(ctx, logger)
 	}
@@ -776,23 +777,24 @@ func (s *Service) loadMemberToolset(
 
 // memberToolsetConnectAllowed decides a non-public toolset's own mcp:connect
 // check, matching ServeToolsetResolved's connection check, and returns the
-// decision for the caller to record. Grants context was prepared when the
-// member snapshot was resolved.
-func (s *Service) memberToolsetConnectAllowed(ctx context.Context, shadow *mandatoryShadow, shadowSurface string, authenticated bool, toolset *toolsets_repo.Toolset, public bool) (bool, authz.Decisions, error) {
+// result (including the decision for the caller to record). Grants context was
+// prepared when the member snapshot was resolved.
+func (s *Service) memberToolsetConnectAllowed(ctx context.Context, shadow *mandatoryShadow, shadowSurface string, authenticated bool, toolset *toolsets_repo.Toolset, public bool) (memberConnectResult, error) {
 	connect := authz.MCPServer(authz.MCPServerIDOf(toolset.ID), authz.ProjectIDOf(toolset.ProjectID)).Connect()
 	visibility := mcpservers.VisibilityPrivate
 	if public {
 		visibility = mcpservers.VisibilityPublic
 	}
+	var none memberConnectResult
 	if !public && !authenticated {
 		shadow.recordServer(ctx, shadowSurface, false, authz.MandatoryServerPrivate, connect)
-		return false, authz.Decisions{AllAllowed: false, Each: nil}, nil
+		return memberConnectResult{refusal: oops.C(oops.CodeForbidden), decision: none.decision}, nil
 	}
-	refusal, decided, err := s.memberConnectDecision(ctx, shadow, shadowSurface, visibility, connect)
+	res, err := s.memberConnectDecision(ctx, shadow, shadowSurface, visibility, connect)
 	if err != nil {
-		return false, authz.Decisions{AllAllowed: false, Each: nil}, fmt.Errorf("check toolset-level authz: %w", err)
+		return none, fmt.Errorf("check toolset-level authz: %w", err)
 	}
-	return refusal == nil, decided, nil
+	return res, nil
 }
 
 // marshalMetaToolCallResult wraps structuredContent in the meta MCP's
