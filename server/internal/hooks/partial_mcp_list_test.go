@@ -249,3 +249,85 @@ func TestClaude_PreToolUse_PartialMCPInventory(t *testing.T) {
 		})
 	}
 }
+
+// TestClaude_PreToolUse_BuiltInBlocklistWithoutCompleteInventory: a project
+// without a blocking policy is in the built-in blocklist mode. Until the
+// session's complete inventory loads, a server with no partial list entry has
+// no URL to match and is allowed, while a partial list entry is judged by its
+// URL against the blocked list. A blocking policy keeps the missing-inventory
+// deny.
+func TestClaude_PreToolUse_BuiltInBlocklistWithoutCompleteInventory(t *testing.T) {
+	t.Parallel()
+
+	deniedURL := "https://denied.example.test/mcp"
+	connectorTool := "mcp__1c55c87d-ac7c-4dfc-95f1-69e84cb5f92c__do_thing"
+	tests := []struct {
+		name     string
+		blocking bool
+		toolName string
+		partial  []MCPServerEntry
+		want     string
+		restart  bool
+	}{
+		{name: "connector without any inventory is allowed", toolName: connectorTool, want: "allow"},
+		{
+			name:     "partial entry with a denied URL is blocked",
+			toolName: "mcp__claude_ai_Linear__list_issues",
+			partial:  []MCPServerEntry{{Source: "claude.ai", Name: "Linear", URL: deniedURL}},
+			want:     "deny",
+		},
+		{
+			name:     "partial entry with an unreviewed URL is allowed",
+			toolName: "mcp__claude_ai_Linear__list_issues",
+			partial:  []MCPServerEntry{{Source: "claude.ai", Name: "Linear", URL: "https://unreviewed.example.test/mcp"}},
+			want:     "allow",
+		},
+		{name: "blocking policy still denies a connector without any inventory", blocking: true, toolName: connectorTool, want: "deny", restart: true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestHooksService(t)
+			ti.service.productFeatures = alwaysEnabledFeatures{}
+			if tc.blocking {
+				ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+			} else {
+				ti.service.riskScanner = &stubResultScanner{}
+			}
+			authCtx, ok := contextvalues.GetAuthContext(ctx)
+			require.True(t, ok)
+			require.NotNil(t, authCtx.ProjectID)
+			seedServerDecision(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, deniedURL, "denied")
+
+			sessionID := uuid.NewString()
+			if tc.partial != nil {
+				require.NoError(t, ti.service.cache.Set(ctx,
+					sessionPartialMCPListCacheKey(testProjectID(t, ctx), sessionID), tc.partial, sessionMCPListTTL))
+			}
+
+			toolUseID := "toolu_builtin_blocklist"
+			userEmail := "claude-blocklist@example.com"
+			result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
+				HookEventName: "PreToolUse",
+				SessionID:     &sessionID,
+				UserEmail:     &userEmail,
+				ToolName:      &tc.toolName,
+				ToolUseID:     &toolUseID,
+				ToolInput:     map[string]any{},
+			})
+			require.NoError(t, err)
+			require.NotNil(t, result)
+
+			output, ok := result.HookSpecificOutput.(*HookSpecificOutput)
+			require.True(t, ok)
+			require.NotNil(t, output.PermissionDecision)
+			require.Equal(t, tc.want, *output.PermissionDecision)
+			if tc.want != "deny" {
+				return
+			}
+			require.NotNil(t, output.PermissionDecisionReason)
+			require.Equal(t, tc.restart, strings.Contains(*output.PermissionDecisionReason, "restart Claude Code"))
+		})
+	}
+}
