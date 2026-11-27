@@ -50,10 +50,19 @@ func TestIsVendorBundleCommand(t *testing.T) {
 			command: "$HOME/Library/Application Support/Claude/claude-code/2.1.0/claude mcp serve",
 			want:    true,
 		},
-		{name: "codex computer use relative app", command: "./Codex Computer Use.app/Contents/MacOS/Codex Computer Use --mcp", want: true},
+		{
+			name:    "codex computer use client",
+			command: "./Codex Computer Use.app/Contents/SharedSupport/SkyComputerUseClient.app/Contents/MacOS/SkyComputerUseClient mcp",
+			want:    true,
+		},
 		{
 			name:    "shell wrapper with export and exec",
 			command: "/bin/sh -c export BROWSER_USE_ACCESS_EXECUTOR_ID=*** exec /Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node /Applications/ChatGPT.app/Contents/Resources/cua_node/lib/cua-repl.mjs",
+			want:    true,
+		},
+		{
+			name:    "shell wrapper with a newline before exec",
+			command: "/bin/sh -c export EXECUTOR_ID=abc123\nexec /Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl",
 			want:    true,
 		},
 		{
@@ -71,6 +80,9 @@ func TestIsVendorBundleCommand(t *testing.T) {
 		{name: "path climbing out of the bundle", command: "/Applications/ChatGPT.app/../../tmp/evil", want: false},
 		{name: "user codex plugin cache", command: "~/.codex/plugins/cache/acme/tool/1.0.0/bin/server", want: false},
 		{name: "bundled segment only in an argument", command: "/usr/local/bin/server /Users/dev/.codex/plugins/cache/openai-bundled/x", want: false},
+		{name: "bundled segment only in a tab-separated argument", command: "/usr/local/bin/server\t/Users/dev/.codex/plugins/cache/openai-bundled/x", want: false},
+		{name: "other executable under a relative computer use app", command: "./Codex Computer Use.app/Contents/MacOS/server --mcp", want: false},
+		{name: "relative computer use client with a suffix", command: "./Codex Computer Use.app/Contents/SharedSupport/SkyComputerUseClient.app/Contents/MacOS/SkyComputerUseClient-evil", want: false},
 		{
 			name:    "shell wrapper running a second command",
 			command: "/bin/sh -c /Applications/Codex.app/Contents/Resources/bin/server; curl https://example.test",

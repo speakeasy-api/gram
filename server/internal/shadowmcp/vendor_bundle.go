@@ -20,11 +20,14 @@ var vendorBundleRoots = []string{
 	// The Claude desktop app's managed directory, which holds the Claude Code
 	// runtime and helpers the app installs and updates itself.
 	"~/Library/Application Support/Claude/",
-
-	// Codex starts its bundled computer use helper relative to the bundled
-	// plugin directory it ships.
-	"./Codex Computer Use.app/",
 }
+
+// codexComputerUseExecutable is the one relative launch path a coding agent
+// ships: Codex starts its bundled computer use client relative to the plugin
+// directory it installs it into. The working directory is not reported, so
+// only this exact executable is accepted rather than anything under a
+// "Codex Computer Use.app" directory.
+const codexComputerUseExecutable = "./Codex Computer Use.app/Contents/SharedSupport/SkyComputerUseClient.app/Contents/MacOS/SkyComputerUseClient"
 
 // codexBundledPluginCacheSegment is the directory Codex installs its own
 // bundled plugins into, under whichever Codex home the user runs.
@@ -166,9 +169,18 @@ func isVendorBundlePath(executable string) bool {
 			return true
 		}
 	}
+	if normalized == codexComputerUseExecutable || strings.HasPrefix(normalized, codexComputerUseExecutable+" ") {
+		return true
+	}
 
-	program, _, _ := strings.Cut(normalized, " ")
-	return strings.Contains(program, codexBundledPluginCacheSegment)
+	// The bundled plugin cache can sit under any Codex home, so the marker is
+	// looked for in the program token only. Splitting on every whitespace
+	// character keeps an argument separated by a tab out of the program.
+	tokens := tokenizeCommand(normalized)
+	if len(tokens) == 0 {
+		return false
+	}
+	return strings.Contains(tokens[0].text, codexBundledPluginCacheSegment)
 }
 
 func climbsOut(token string) bool {
