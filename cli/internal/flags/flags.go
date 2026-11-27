@@ -14,10 +14,9 @@ func APIKey() *cli.StringFlag {
 func APIEndpoint() *cli.StringFlag {
 	return &cli.StringFlag{
 		Name:    "api-url",
-		Usage:   "The base URL to use for API calls.",
+		Usage:   "The Speakeasy host to call. When unset, the host saved by speakeasy auth is used, then the default.",
 		EnvVars: EnvVars("API_URL"),
 		Value:   "https://app.getgram.ai",
-		Hidden:  true,
 	}
 }
 

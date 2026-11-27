@@ -14,12 +14,16 @@ import (
 	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/attribute"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	goahttp "goa.design/goa/v3/http"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/deviceagenttoken"
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
@@ -30,6 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz/mcpauthztest"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
@@ -663,4 +668,119 @@ func TestDirectWorkloadBearer_RateLimitedReturns429WithRetryAfter(t *testing.T) 
 	w := postCompletionRequest(router, projectPath, token, nil, "")
 	require.Equal(t, http.StatusTooManyRequests, w.Code, w.Body.String())
 	require.Empty(t, upstream.requests)
+}
+
+func TestDirectWorkloadBearer_GatewayAdmissionMetrics(t *testing.T) {
+	t.Parallel()
+	reader := sdkmetric.NewManualReader()
+	meterProvider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	t.Cleanup(func() { _ = meterProvider.Shutdown(context.Background()) })
+
+	f := newWorkloadGrantFixtureWithIdentity(t, testenv.NewLogger(t), meterProvider, "", nil, "", "repo:acme/payments-api:ref:refs/heads/main")
+	f.setAssertionReuse(t, true)
+	gateway, _, _ := seedDirectWorkloadProjectGateway(t, f)
+	token := f.directAssertion(t, f.subject, mcp.DirectWorkloadProjectGatewayAudience)
+
+	// 1. Admitted at Project Gateway when machine access is enabled.
+	resp, err := serveProjectGatewayHTTP(t, f.ti, gateway, gateway.projectSlug, token, listServersBody(t))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+
+	// 2. Refused at Project Gateway with machine_access_disabled when rollout flag is off.
+	f.ti.features.SetFlag(feature.FlagProjectGatewayMachineAccess, f.fx.orgID, false)
+	_, err = serveProjectGatewayHTTP(t, f.ti, gateway, gateway.projectSlug, token, listServersBody(t))
+	requireOopsCode(t, err, oops.CodeUnauthorized)
+
+	// 3. Refused at people-only Organization Gateway with unsupported_gateway_type.
+	_, err = serveOrganizationGatewayHTTP(t, t.Context(), f.ti, gateway.organizationSlug, token, listServersBody(t))
+	requireOopsCode(t, err, oops.CodeUnauthorized)
+
+	// 4. An unverified/wrong-audience JWT at the Organization Gateway is not attributed as a workload caller.
+	wrongAudToken := f.directAssertion(t, f.subject, mcp.DirectWorkloadInferenceAudience)
+	_, err = serveOrganizationGatewayHTTP(t, t.Context(), f.ti, gateway.organizationSlug, wrongAudToken, listServersBody(t))
+	requireOopsCode(t, err, oops.CodeUnauthorized)
+
+	var rm metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(t.Context(), &rm))
+	points := map[attribute.Set]int64{}
+	for _, scope := range rm.ScopeMetrics {
+		for _, m := range scope.Metrics {
+			if m.Name != mcpmetrics.InstrumentMCPGatewayAdmission {
+				continue
+			}
+			sum, ok := m.Data.(metricdata.Sum[int64])
+			require.True(t, ok)
+			for _, pt := range sum.DataPoints {
+				points[pt.Attributes] = pt.Value
+			}
+		}
+	}
+
+	require.Equal(t, int64(1), points[attribute.NewSet(
+		attr.McpGatewayCallerKind("workload"),
+		attr.McpGatewayType("project"),
+		attr.Outcome("admitted"),
+	)])
+	require.Equal(t, int64(1), points[attribute.NewSet(
+		attr.McpGatewayCallerKind("workload"),
+		attr.McpGatewayType("project"),
+		attr.Outcome("refused"),
+		attr.McpGatewayRefusalReason("machine_access_disabled"),
+	)])
+	require.Equal(t, int64(1), points[attribute.NewSet(
+		attr.McpGatewayCallerKind("workload"),
+		attr.McpGatewayType("organization"),
+		attr.Outcome("refused"),
+		attr.McpGatewayRefusalReason("unsupported_gateway_type"),
+	)])
+	require.Len(t, points, 3)
+}
+
+func TestDirectWorkloadBearer_DisabledAndNonWhitelistedOrgRefused(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name        string
+		whitelisted bool
+		disabled    bool
+	}{
+		{name: "disabled", whitelisted: true, disabled: true},
+		{name: "not_whitelisted", whitelisted: false, disabled: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			f := newWorkloadGrantFixture(t)
+			f.setAssertionReuse(t, true)
+			gateway, _, _ := seedDirectWorkloadProjectGateway(t, f)
+			enableWorkloadInference(t, f)
+
+			upstream := &workloadInferenceCompletionClient{}
+			router := newDirectWorkloadChatMux(t, f, upstream)
+			projectPath := "/projects/" + f.fx.target.ProjectID.String() + "/chat/completions"
+
+			token := f.directAssertion(t, f.subject, mcp.DirectWorkloadProjectGatewayAudience, mcp.DirectWorkloadInferenceAudience)
+
+			// Warm Stage-1 cache on both Project Gateway and project-scoped inference while org is served.
+			gwResp, err := serveProjectGatewayHTTP(t, f.ti, gateway, gateway.projectSlug, token, listServersBody(t))
+			require.NoError(t, err)
+			require.Equal(t, http.StatusOK, gwResp.Code, gwResp.Body.String())
+
+			w := postCompletionRequest(router, projectPath, token, nil, "")
+			require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+			require.Len(t, upstream.requests, 1)
+
+			// Flip organization serving state; next request must be refused immediately despite Stage-1 cache.
+			require.NoError(t, testrepo.New(f.ti.conn).SetOrganizationServingStateFixture(f.ctx, testrepo.SetOrganizationServingStateFixtureParams{
+				ID:          f.fx.orgID,
+				Whitelisted: tc.whitelisted,
+				Disabled:    tc.disabled,
+			}))
+
+			_, err = serveProjectGatewayHTTP(t, f.ti, gateway, gateway.projectSlug, token, listServersBody(t))
+			requireOopsCode(t, err, oops.CodeNotFound)
+
+			w = postCompletionRequest(router, projectPath, token, nil, "")
+			require.Equal(t, http.StatusUnauthorized, w.Code, w.Body.String())
+			require.Len(t, upstream.requests, 1, "disabled or non-whitelisted organization must not reach inference upstream")
+		})
+	}
 }
