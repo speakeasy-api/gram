@@ -44,6 +44,54 @@ func TestGatewayTargetFromEndpoint(t *testing.T) {
 	}
 }
 
+func TestSharedGatewayTargetCallerMatrix(t *testing.T) {
+	t.Parallel()
+
+	gatewayID, projectID := uuid.New(), uuid.New()
+	matchingWorkload := gatewayCaller{
+		kind: gatewayCallerWorkload,
+		ceiling: []authz.Grant{{
+			Scope: authz.ScopeMCPConnect,
+			Selector: authz.Selector{
+				authz.SelectorKeyResourceKind: authz.ResourceKindMCP,
+				authz.SelectorKeyResourceID:   gatewayID.String(),
+				authz.SelectorKeyProjectID:    projectID.String(),
+			},
+		}},
+	}
+
+	for _, gateway := range []struct {
+		name string
+		kind gatewayKind
+	}{
+		{name: "stored", kind: gatewayKindStored},
+		{name: "project", kind: gatewayKindProject},
+		{name: "organization", kind: gatewayKindOrganization},
+	} {
+		t.Run(gateway.name, func(t *testing.T) {
+			t.Parallel()
+
+			for _, caller := range []struct {
+				name   string
+				caller gatewayCaller
+				want   bool
+			}{
+				{name: "person", caller: gatewayCaller{kind: gatewayCallerPerson}, want: true},
+				{name: "agent", caller: gatewayCaller{kind: gatewayCallerAgent}, want: gateway.kind == gatewayKindStored || gateway.kind == gatewayKindProject},
+				{name: "workload", caller: matchingWorkload, want: gateway.kind == gatewayKindStored || gateway.kind == gatewayKindProject},
+			} {
+				t.Run(caller.name, func(t *testing.T) {
+					t.Parallel()
+
+					got, err := (gatewayTarget{kind: gateway.kind, id: gatewayID}).admits(caller.caller, projectID, true)
+					require.NoError(t, err)
+					require.Equal(t, caller.want, got.admitted)
+				})
+			}
+		})
+	}
+}
+
 func TestGatewayTargetAdmission(t *testing.T) {
 	t.Parallel()
 	gatewayID, projectID, otherProjectID := uuid.New(), uuid.New(), uuid.New()
@@ -75,7 +123,36 @@ func TestGatewayTargetAdmission(t *testing.T) {
 			t.Parallel()
 			got, err := tc.target.admits(tc.caller, tc.projectID, tc.machineAccess)
 			require.NoError(t, err)
-			require.Equal(t, tc.want, got)
+			require.Equal(t, tc.want, got.admitted)
+		})
+	}
+}
+
+func TestGatewayTargetRefusalReasons(t *testing.T) {
+	t.Parallel()
+	projectID, otherProjectID, gatewayID := uuid.New(), uuid.New(), uuid.New()
+	target := gatewayTarget{kind: gatewayKindStored, id: gatewayID}
+	for _, tc := range []struct {
+		name          string
+		target        gatewayTarget
+		caller        gatewayCaller
+		projectID     uuid.UUID
+		machineAccess bool
+		want          gatewayRefusalReason
+	}{
+		{name: "machine access disabled", target: target, caller: gatewayCaller{kind: gatewayCallerAgent}, projectID: projectID, want: gatewayRefusalMachineAccessDisabled},
+		{name: "unsupported gateway", target: gatewayTarget{kind: gatewayKindOrganization}, caller: gatewayCaller{kind: gatewayCallerAgent}, projectID: projectID, want: gatewayRefusalUnsupportedGatewayType},
+		{name: "missing project", target: target, caller: gatewayCaller{kind: gatewayCallerAgent}, machineAccess: true, want: gatewayRefusalMissingProject},
+		{name: "project mismatch", target: target, caller: gatewayCaller{kind: gatewayCallerAgent, projectScope: &otherProjectID}, projectID: projectID, machineAccess: true, want: gatewayRefusalProjectScopeMismatch},
+		{name: "credential ceiling", target: target, caller: gatewayCaller{kind: gatewayCallerWorkload}, projectID: projectID, machineAccess: true, want: gatewayRefusalCredentialCeiling},
+		{name: "unsupported caller", target: target, caller: gatewayCaller{}, projectID: projectID, machineAccess: true, want: gatewayRefusalUnsupportedCaller},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := tc.target.admits(tc.caller, tc.projectID, tc.machineAccess)
+			require.NoError(t, err)
+			require.False(t, got.admitted)
+			require.Equal(t, tc.want, got.refusalReason)
 		})
 	}
 }
