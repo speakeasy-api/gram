@@ -11,6 +11,7 @@ import (
 
 	testidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	"github.com/speakeasy-api/gram/server/gen/assets"
+	adminrepo "github.com/speakeasy-api/gram/server/internal/admin/repo"
 	assetsinternal "github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -335,6 +336,53 @@ func TestService_ServeChatAttachmentSigned_AssetNotFound(t *testing.T) {
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
+}
+
+// A signed URL minted before the organization was disabled stops serving while
+// it stays disabled and serves again once it is re-enabled.
+func TestService_ServeChatAttachmentSigned_DisabledOrganization(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAssetsService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	projectID := *authCtx.ProjectID
+	testContent := "fake chat attachment content"
+
+	writer, uri, err := ti.storage.Write(ctx, "disabled-org.txt", "text/plain", int64(len(testContent)))
+	require.NoError(t, err)
+	_, err = io.Copy(writer, strings.NewReader(testContent))
+	require.NoError(t, err)
+	require.NoError(t, writer.Close())
+
+	asset, err := ti.repo.CreateAsset(ctx, repo.CreateAssetParams{
+		Name:           "disabled-org.txt",
+		Url:            uri.String(),
+		ProjectID:      projectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Sha256:         "abc123",
+		Kind:           "chat_attachment",
+		ContentType:    "text/plain",
+		ContentLength:  int64(len(testContent)),
+	})
+	require.NoError(t, err)
+	token, _, err := assetsinternal.GenerateSignedAssetToken("test-jwt-secret", asset.ID, projectID, 600*time.Second)
+	require.NoError(t, err)
+
+	_, err = adminrepo.New(ti.conn).AdminDisableOrganization(ctx, authCtx.ActiveOrganizationID)
+	require.NoError(t, err)
+	_, _, err = ti.service.ServeChatAttachmentSigned(t.Context(), &assets.ServeChatAttachmentSignedForm{Token: token})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
+
+	_, err = adminrepo.New(ti.conn).AdminEnableOrganization(ctx, authCtx.ActiveOrganizationID)
+	require.NoError(t, err)
+	_, body, err := ti.service.ServeChatAttachmentSigned(t.Context(), &assets.ServeChatAttachmentSignedForm{Token: token})
+	require.NoError(t, err)
+	require.NoError(t, body.Close())
 }
 
 func TestService_SignedChatAttachment_EndToEnd(t *testing.T) {

@@ -196,6 +196,12 @@ func (s *Syncer) RunSync(ctx context.Context, syncID uuid.UUID) error {
 	if target.Deleted || !target.Enabled || target.DisabledAt.Valid || target.AutoPausedAt.Valid {
 		return nil
 	}
+	// A disabled organization is skipped without recording a failure, so the
+	// sync neither backs off nor auto-pauses and resumes when it is re-enabled.
+	if target.OrganizationDisabled {
+		logger.InfoContext(ctx, "skip device integration sync for disabled organization", attr.SlogReason("organization_disabled"))
+		return nil
+	}
 
 	desc, ok := providers.Lookup(target.Provider)
 	if !ok {

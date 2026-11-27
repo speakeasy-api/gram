@@ -32,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
@@ -221,6 +222,10 @@ func (s *Service) RegisterDevice(ctx context.Context, payload *gen.RegisterDevic
 	org := joinToken.OrganizationID
 	actor := urn.NewPrincipal(urn.PrincipalTypeUser, joinToken.CreatedByUserID)
 
+	if err := s.requireDeviceEnrollmentOrganizationEnabled(ctx, dbtx, org); err != nil {
+		return nil, err
+	}
+
 	// Re-checked at redemption: suspending an agent must stop new devices
 	// enrolling under it, not only the ones already running.
 	agent, err := q.GetDeviceJoinAgent(ctx, repo.GetDeviceJoinAgentParams{OrganizationID: org, ID: joinToken.AgentID})
@@ -346,6 +351,12 @@ func (s *Service) replayedDeviceRegistration(ctx context.Context, dbtx pgx.Tx, t
 		return nil, oops.E(oops.CodeUnexpected, err, "error redeeming join token").LogError(ctx, s.logger)
 	}
 
+	// As on first redemption: a disabled organization's device must not be
+	// told it holds a working enrollment.
+	if err := s.requireDeviceEnrollmentOrganizationEnabled(ctx, dbtx, replay.OrganizationID); err != nil {
+		return nil, err
+	}
+
 	agent, err := q.GetDeviceJoinAgent(ctx, repo.GetDeviceJoinAgentParams{OrganizationID: replay.OrganizationID, ID: replay.AgentID})
 	if err != nil || !deviceJoinAgentRunnable(agent) {
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
@@ -370,6 +381,25 @@ func (s *Service) replayedDeviceRegistration(ctx context.Context, dbtx pgx.Tx, t
 		AgentID:        replay.AgentID.String(),
 		OrganizationID: replay.OrganizationID,
 	}, nil
+}
+
+// requireDeviceEnrollmentOrganizationEnabled refuses enrollment into a
+// disabled organization. A join token issued before the disable must not add
+// devices to it. It runs inside the redemption transaction, so a refusal rolls
+// back and the token stays unspent for when the organization is re-enabled.
+func (s *Service) requireDeviceEnrollmentOrganizationEnabled(ctx context.Context, dbtx pgx.Tx, org string) error {
+	organization, err := orgrepo.New(dbtx).GetOrganizationMetadata(ctx, org)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return oops.C(oops.CodeUnauthorized)
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "error resolving organization").LogError(ctx, s.logger)
+	case organization.DisabledAt.Valid:
+		return oops.E(oops.CodeUnauthorized, nil, "this organization is disabled, please reach out to support@speakeasy.com for more information").
+			LogInfo(ctx, s.logger, attr.SlogOrganizationID(org), attr.SlogReason("organization_disabled"))
+	default:
+		return nil
+	}
 }
 
 // deviceIssuer returns the organization's device issuer, creating it on the
