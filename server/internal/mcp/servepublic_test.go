@@ -36,6 +36,10 @@ import (
 // Shared helpers
 // ---------------------------------------------------------------------------
 
+// publicMCPNotFoundMessage is the user-facing message every unknown MCP URL
+// answers with.
+const publicMCPNotFoundMessage = "mcp server not found: no MCP server is served at this URL. If it was renamed or moved, copy its current URL from the MCP page in the Speakeasy dashboard and update your MCP client configuration"
+
 // makeInitializeBody creates a single JSON-RPC initialize request body.
 func makeInitializeBody() []byte {
 	reqBody := map[string]any{
@@ -399,7 +403,7 @@ func TestServePublic_AttachedNotFoundReturnsMCPErrorWithNullID(t *testing.T) {
 	errorBody, ok := response["error"].(map[string]any)
 	require.True(t, ok, "expected JSON-RPC error: %v", response)
 	require.InDelta(t, -32002, errorBody["code"], 0)
-	require.Equal(t, "mcp server not found", errorBody["message"])
+	require.Equal(t, publicMCPNotFoundMessage, errorBody["message"])
 }
 
 func TestServePublic_ServerInstructionsInInitializeResponse(t *testing.T) {

@@ -2160,6 +2160,9 @@ func newStartCommand() *cli.Command {
 				mcpService.SetPendingSignInConnector(platformMCPAssistant.ConsentSignIn)
 			}
 			mcp.Attach(mux, mcpRuntime.MCP, mcpRuntime.Metadata)
+			if err := setNotFoundHandler(mux, mcp.NotFoundHandler(logger)); err != nil {
+				return err
+			}
 			mcp.AttachAuthenticationHost(mcpAuthenticationHost, mcpRuntime.MCP)
 			attachApprovals(mux, logger, approvalService, mcpRuntime.MCP, ratelimit.NewRedisStore(redisClient))
 			if secret := c.String("slack-signing-secret"); secret != "" && secret != "unset" {
@@ -2615,4 +2618,17 @@ func fixtureRedirectOrigins(serverURL *url.URL, origins remotesessions.CallbackO
 		}
 	}
 	return out
+}
+
+// setNotFoundHandler installs handler as the answer to requests no route on
+// mux matches. A mux has one not-found handler, so each listener sets it once
+// where the mux is assembled. goa's Muxer interface does not expose chi's
+// NotFound, so it is reached through the router goahttp.NewMuxer embeds.
+func setNotFoundHandler(mux goahttp.Muxer, handler http.HandlerFunc) error {
+	router, ok := mux.(interface{ NotFound(http.HandlerFunc) })
+	if !ok {
+		return fmt.Errorf("set not-found handler: %T does not support one", mux)
+	}
+	router.NotFound(handler)
+	return nil
 }

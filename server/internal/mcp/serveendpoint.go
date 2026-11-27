@@ -657,8 +657,9 @@ func (s *Service) LoadResolvedMcpEndpointBySlug(ctx context.Context, logger *slo
 			return nil, oops.E(oops.CodeNotFound, nil, "not found")
 		}
 		return s.BuildResolvedMcpEndpointForServer(ctx, logger, mcpEndpoint, mcpServer, mcpRouteBase)
-	case mcpendpoints.IsAddressMiss(err):
-		return nil, oops.E(oops.CodeNotFound, err, "mcp server not found")
+	case mcpendpoints.IsAddressMiss(err), mcpendpoints.IsPolicyDenied(err):
+		// A denial must answer exactly as a miss, or it reveals the endpoint.
+		return nil, oops.E(oops.CodeNotFound, err, publicMCPNotFoundMessage)
 	default:
 		return nil, err
 	}

@@ -967,6 +967,7 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 
 	// Gateway prefix rewrites append a slash to custom-domain root requests.
 	// Mount both runtime paths directly so POST bodies never depend on redirects.
+	routingMiss := NotFoundHandler(service.logger)
 	for _, route := range []struct {
 		method  string
 		handler http.Handler
@@ -980,9 +981,10 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 		o11y.AttachHandler(mux, route.method, PublicServerRoute, route.handler.ServeHTTP)
 		o11y.AttachHandler(mux, route.method, PublicServerRoute+"/", func(w http.ResponseWriter, r *http.Request) {
 			// chi also matches empty parameters, even with a nonempty regex.
-			// /mcp// is not a runtime alias and must remain a routing miss.
+			// /mcp// is not a runtime alias and must remain a routing miss,
+			// answered exactly as the mux's not-found handler would.
 			if chi.URLParam(r, "mcpSlug") == "" {
-				http.NotFound(w, r)
+				routingMiss(w, r)
 				return
 			}
 
@@ -1239,7 +1241,9 @@ func (s *Service) serveProxyBackedEndpoint(w http.ResponseWriter, r *http.Reques
 	mcpEndpoint, mcpServer, metaServer := resolved.Endpoint, resolved.Server, resolved.MetaServer
 	switch {
 	case err == nil:
-	case mcpendpoints.IsAddressMiss(err):
+	case mcpendpoints.IsAddressMiss(err), mcpendpoints.IsPolicyDenied(err):
+		// A denial must answer exactly as a miss, or it reveals the endpoint.
+		// The callers' fallback is a fixed response, not another lookup.
 		return false, nil
 	default:
 		// Unavailable addresses are terminal, never the legacy behavior.
@@ -1300,9 +1304,11 @@ func writeOAuthProtectedResourceMetadataResponse(ctx context.Context, logger *sl
 	return httpcache.WriteCacheableJSON(ctx, w, r, logger, "application/json", metadataCacheMaxAgeSeconds, body)
 }
 
-// publicMCPNotFoundMessage is the one message ServePublic answers for an
-// address miss and a policy denial alike, so neither reveals the other.
-const publicMCPNotFoundMessage = "mcp server not found"
+// publicMCPNotFoundMessage is the one message ServePublic and the per-server
+// metadata handlers answer for an address miss and a policy denial alike, so
+// neither reveals the other. It names no server and tells the user where to
+// find the URL that does resolve.
+const publicMCPNotFoundMessage = "mcp server not found: no MCP server is served at this URL. If it was renamed or moved, copy its current URL from the MCP page in the Speakeasy dashboard and update your MCP client configuration"
 
 // ServePublic serves /mcp/{mcpSlug}. Resolution tries mcp_endpoints
 // first — a slug bound to a custom-domain request resolves only against
