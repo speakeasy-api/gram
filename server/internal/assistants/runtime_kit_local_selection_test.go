@@ -98,7 +98,7 @@ func TestKitLocalCompositionSelectsOnlyNewAssistants(t *testing.T) {
 		AgentID:        uuid.MustParse(*created.AgentID),
 	})
 	require.NoError(t, err)
-	require.True(t, hasExactBuiltinConnectGrant(t, grants, project, platformtools.AssistantsPlatformToolsetSlug), "Kit assistant must still receive explicit built-in mcp:connect grant")
+	require.True(t, hasExactBuiltinConnectGrant(t, grants, project, platformtools.AssistantsPlatformToolsetSlug), "Kit assistant must receive explicit built-in mcp:connect grant")
 	for _, g := range grants {
 		if g.Scope == string(authz.ScopeMCPConnect) {
 			sel, selErr := authz.SelectorFromRow(g.Selectors)
@@ -107,7 +107,7 @@ func TestKitLocalCompositionSelectsOnlyNewAssistants(t *testing.T) {
 		}
 	}
 
-	// Attached creates stay on Default (v2) so initial legacy attachments work.
+	// Creates with explicit MCP attachments stay on Default (v2).
 	hosted, err := toolsetsrepo.New(db).CreateToolset(t.Context(), toolsetsrepo.CreateToolsetParams{
 		OrganizationID: "org-test", ProjectID: project, Name: "Billing", Slug: "billing",
 	})
