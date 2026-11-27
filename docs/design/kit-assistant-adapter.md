@@ -4,7 +4,7 @@ Use this reference when implementing or diagnosing the local Speakeasy Kit
 adapter. For configuration and validation steps, see
 [Run Kit assistants locally](../runbooks/kit-assistant-local.md).
 
-The workload configuration requires Kit v0.2.19 or a build containing its MCP
+The workload configuration requires Kit v0.3.1 or a build containing its MCP
 and inference workload support. Production has a separate
 [GKE lifecycle contract](../runbooks/kit-assistant-production.md). Existing
 hybrid-auth Kit runtimes are invalidated; no credential compatibility is provided.
@@ -56,7 +56,7 @@ headers do not establish authority. ACP session creation and resumption must omi
 
 The approved `_kit/session/update_mcp` contract is **additive upsert**, not
 replacement of the server set. Verify support in the runtime image before using
-this API; workload authentication requires Kit v0.2.19 or a build containing
+this API; workload authentication requires Kit v0.3.1 or a build containing
 its MCP and inference workload support.
 
 | Operation                                                             | Required behavior                                                                                     |
@@ -71,8 +71,9 @@ its MCP and inference workload support.
 | A submitted name colliding with a host- or plugin-owned server        | Reject the collision; host/plugin servers and built-ins remain protected.                             |
 
 The gateway's additive retention contract was verified in `src/gateway.rs`
-for Kit v0.2.17 (commit `90a1805`); that provenance is distinct from the v0.2.19
-workload-authentication requirement. The Speakeasy adapter is deliberately stricter:
+for Kit v0.2.17 (commit `90a1805`) and retained through Kit v0.3.1; that
+provenance is distinct from the workload-authentication and prompt-delivery
+requirements. The Speakeasy adapter is deliberately stricter:
 an explicit list represents a desired set, and `[]` must not silently retain
 servers the caller intended to remove. Omission is the adapter's only retain form.
 
@@ -123,11 +124,23 @@ the resident journal; it is not an independent canonical snapshot reader.
 
 ## Settlement and retirement
 
+`session/prompt` acknowledges prompt insertion (`messageId`), not turn
+completion. When the gateway advertises `capabilities.session.prompt.delivery.steer`,
+the adapter sends `"delivery": "steer"` so a prompt starts a turn immediately
+when idle and messages arriving while a turn is running are claimed mid-turn
+and inserted into that active turn on the owning connection without waiting for
+settlement. Every event carries a stable `idempotencyKey` derived from its
+thread event ID so retries after transport or worker failure converge on a
+single insertion and return the original `messageId`, even after the turn has
+settled. Gateways without `capabilities.session.prompt.delivery.steer` omit
+`delivery` and keep one-turn-per-event admission.
+
 Use `kit/session/status` and its authoritative `settled` field while holding
 runtime admission for lifecycle decisions. Foreground `idle` does not establish
 that background work is settled. A failed status read is not proof of settlement.
 Drain queued notifications and wait for in-flight projection to commit before
-reporting a turn complete.
+reporting a turn complete. Every event absorbed into the turn settles once when
+the turn settles.
 
 Require successful durable `session/close` before retiring session authority.
 Transport disconnect only detaches; it does not cancel accepted work. Retrying
@@ -137,8 +150,9 @@ not provide exactly-once tool execution.
 `InterruptTurn` enqueues a durable PostgreSQL mailbox request fenced to the
 runtime, processing event, and attempt. It does not open a competing ACP control
 connection. With no eligible processing event/session, it returns false without
-an error. The owning worker consumes the request and sends cancellation at most
-once on its existing session connection while foreground work is active.
+an error. The owning worker consumes the request, withdraws any held uninserted
+steered prompts with `$/cancel_request`, and sends `session/cancel` at most once
+on its existing session connection while foreground work is active.
 
 Cancellation success requires an observed `idle` terminal with
 `stopReason = "cancelled"` after the owner's send, authoritative settlement, and
