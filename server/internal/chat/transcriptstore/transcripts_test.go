@@ -1,11 +1,11 @@
 package transcriptstore
 
 import (
-	"context"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
@@ -415,7 +415,7 @@ func TestEncryptedMode(t *testing.T) {
 	// reaches chat_messages or its write-ahead log.
 	inserted := uuid.New()
 	written := f.insert(t, encrypted, inserted)
-	require.Empty(t, written.Content, "the INSERT gets empty protected fields")
+	require.Empty(t, written.Content, "the INSERT writes empty protected fields")
 	require.Nil(t, written.ContentRaw)
 	require.Nil(t, written.ToolCalls)
 	require.False(t, written.StorageError.Valid)
@@ -452,10 +452,10 @@ func TestModes(t *testing.T) {
 	require.Panics(t, func() { NewTranscripts(nil).WithEncryptedProjects(shadow) })
 }
 
-// insert stores one message through InsertChatMessages with the chat writer's
-// own CreateChatMessage query, as ChatMessageWriter does. It returns the
-// params the INSERT received, which is what reached chat_messages.
-func (f *fixture) insert(t *testing.T, transcripts *Transcripts, id uuid.UUID) chatrepo.CreateChatMessageParams {
+// insert stores one message through InsertChatMessages in its own
+// transaction, as ChatMessageWriter does, and returns the row it stored in
+// chat_messages.
+func (f *fixture) insert(t *testing.T, transcripts *Transcripts, id uuid.UUID) repo.ChatMessage {
 	t.Helper()
 	ctx := t.Context()
 	params := []chatrepo.CreateChatMessageParams{{
@@ -466,22 +466,14 @@ func (f *fixture) insert(t *testing.T, transcripts *Transcripts, id uuid.UUID) c
 		StorageError: pgtype.Text{String: "example storage error", Valid: true},
 		CreatedAt:    pgtype.Timestamptz{Time: time.Now(), InfinityModifier: pgtype.Finite, Valid: true},
 	}}
-	p := &params[0]
-	refs := []ProtectedFieldRefs{{MessageID: id, Content: &p.Content, ContentRaw: &p.ContentRaw, ToolCalls: &p.ToolCalls, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: &p.StorageError}}
-	var written chatrepo.CreateChatMessageParams
-	require.NoError(t, transcripts.Prepare(ctx, f.org, f.project))
-	tx, err := f.db.Begin(ctx) //nolint:glint // notestingrawsql: caller-owned transaction boundary is the behavior under test.
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = tx.Rollback(context.Background()) })
-	ids, err := transcripts.InsertChatMessages(ctx, tx, f.org, f.project, refs, func() ([]uuid.UUID, error) {
-		written = params[0]
-		_, err := chatrepo.New(tx).CreateChatMessage(ctx, params) //nolint:glint // nodirectchatmessageinsert: drives InsertChatMessages with the writer's own insert query.
-		require.NoError(t, err)
-		return []uuid.UUID{id}, nil
+	err := transcripts.InTx(ctx, f.db, f.org, f.project, func(tx pgx.Tx) error {
+		n, err := transcripts.InsertChatMessages(ctx, tx, f.org, f.project, params)
+		require.EqualValues(t, 1, n)
+		return err
 	})
 	require.NoError(t, err)
-	require.Equal(t, []uuid.UUID{id}, ids)
-	require.NoError(t, tx.Commit(ctx))
-	require.Equal(t, "sensitive example", params[0].Content, "the caller's params are restored")
-	return written
+	require.Equal(t, "sensitive example", params[0].Content, "the caller's params are never changed")
+	row, err := repo.New(f.db).LockChatMessage(ctx, repo.LockChatMessageParams{MessageID: id, ProjectID: project(f.project), OrganizationID: f.org})
+	require.NoError(t, err)
+	return row.ChatMessage
 }

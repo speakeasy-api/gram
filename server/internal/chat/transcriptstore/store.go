@@ -163,97 +163,11 @@ func (s *Store) capture(ctx context.Context, db repo.DBTX, organizationID string
 		if err != nil {
 			return err
 		}
-		if err := seal(ctx, q, codec, organizationID, projectID, row.ChatMessage, protectedFieldsOf(row.ChatMessage)); err != nil {
+		if err := seal(ctx, q, codec, organizationID, projectID, row.ChatMessage.ChatID, row.ChatMessage.ID, protectedFieldsOf(row.ChatMessage)); err != nil {
 			return err
 		}
 	}
 	return nil
-}
-
-// insert runs a shadow or encrypted insert, with the Capture span and metrics;
-// see Transcripts.InsertChatMessages.
-func (s *Store) insert(ctx context.Context, db repo.DBTX, encrypted bool, organizationID string, projectID uuid.UUID, refs []ProtectedFieldRefs, insertRows func() ([]uuid.UUID, error)) ([]uuid.UUID, error) {
-	if db == nil || organizationID == "" || projectID == uuid.Nil {
-		return nil, ErrInvalid
-	}
-	if !encrypted {
-		ids, err := insertRows()
-		if err != nil {
-			return nil, err
-		}
-		if err := s.Capture(ctx, db, organizationID, projectID, ids); err != nil {
-			return nil, err
-		}
-		return ids, nil
-	}
-
-	ctx, span := s.tracer.Start(ctx, "transcriptstore.Capture", trace.WithAttributes(
-		attr.ProjectID(projectID.String()),
-		attr.OrganizationID(organizationID),
-		attr.TranscriptShadowMessageCount(len(refs)),
-	))
-	defer span.End()
-
-	start := time.Now()
-	ids, err := s.insertEncrypted(ctx, db, organizationID, projectID, refs, insertRows)
-	result := classify(err)
-	s.metrics.capture.record(ctx, projectID, len(refs), time.Since(start), result)
-
-	span.SetAttributes(attr.Outcome(result))
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, string(result))
-	}
-	return ids, err
-}
-
-// insertEncrypted keeps plaintext out of chat_messages: it copies the
-// protected fields in the text form Postgres stores, empties them for the
-// insert, restores them afterwards, and seals each new row from the copy.
-// The codec is built first, so a cold key fails before anything is written.
-func (s *Store) insertEncrypted(ctx context.Context, db repo.DBTX, organizationID string, projectID uuid.UUID, refs []ProtectedFieldRefs, insertRows func() ([]uuid.UUID, error)) ([]uuid.UUID, error) {
-	codec, err := transcriptcrypto.NewIn(s.service, db, organizationID)
-	if err != nil {
-		return nil, safe(err)
-	}
-	q := repo.New(db)
-	originals := make([]transcriptcrypto.ProtectedFields, len(refs))
-	sealed := make(map[uuid.UUID]transcriptcrypto.ProtectedFields, len(refs))
-	for i, ref := range refs {
-		originals[i] = ref.fields()
-		fields, err := canonical(ctx, q, originals[i])
-		if err != nil {
-			return nil, err
-		}
-		sealed[ref.MessageID] = fields
-	}
-
-	for _, ref := range refs {
-		ref.set(emptyProtectedFields)
-	}
-	ids, err := insertRows()
-	for i, ref := range refs {
-		ref.set(originals[i])
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	for _, id := range ids {
-		fields, ok := sealed[id]
-		if !ok {
-			// insert stored a row it gave no protected fields for.
-			return nil, ErrInvalid
-		}
-		row, err := lockChatMessage(ctx, q, organizationID, projectID, id)
-		if err != nil {
-			return nil, err
-		}
-		if err := seal(ctx, q, codec, organizationID, projectID, row.ChatMessage, fields); err != nil {
-			return nil, err
-		}
-	}
-	return ids, nil
 }
 
 // UpdateChatMessage is the shadow-mode message update with a trace span and
@@ -374,7 +288,7 @@ func updateChatMessage(ctx context.Context, db repo.DBTX, store *Store, encrypte
 	if store == nil {
 		return true, writeMetadata(ctx, q, projectID, written.ID, sealed)
 	}
-	if err := seal(ctx, q, codec, organizationID, projectID, written, sealed); err != nil {
+	if err := seal(ctx, q, codec, organizationID, projectID, written.ChatID, written.ID, sealed); err != nil {
 		return false, err
 	}
 	return true, store.sanityCheck(ctx, q, codec, organizationID, projectID, written, sealed, consistent)
@@ -620,16 +534,16 @@ func protectedFieldsOf(m repo.ChatMessage) transcriptcrypto.ProtectedFields {
 	return message(m.Content, m.ContentRaw, m.ToolCalls, m.ToolOutcomeNotes, m.ToolCallSummaries, m.StorageError)
 }
 
-// seal encrypts protected fields as the transcript of the locked row and writes it, with
-// the metadata and tool-call IDs measured from the row. The row stays locked
+// seal encrypts protected fields as the transcript of the locked message and writes it, with
+// the metadata and tool-call IDs measured from those fields. The row stays locked
 // until the transaction commits, so the transcript is current from then on.
-func seal(ctx context.Context, q *repo.Queries, codec *transcriptcrypto.Codec, organizationID string, projectID uuid.UUID, row repo.ChatMessage, fields transcriptcrypto.ProtectedFields) error {
-	ciphertext, err := codec.Encrypt(ctx, transcriptcrypto.Identity{ProjectID: projectID, ChatID: row.ChatID, MessageID: row.ID}, fields)
+func seal(ctx context.Context, q *repo.Queries, codec *transcriptcrypto.Codec, organizationID string, projectID, chatID, messageID uuid.UUID, fields transcriptcrypto.ProtectedFields) error {
+	ciphertext, err := codec.Encrypt(ctx, transcriptcrypto.Identity{ProjectID: projectID, ChatID: chatID, MessageID: messageID}, fields)
 	if err != nil {
 		return safe(err)
 	}
 	n, err := q.Capture(ctx, repo.CaptureParams{
-		MessageID:      row.ID,
+		MessageID:      messageID,
 		ProjectID:      projectID,
 		OrganizationID: organizationID,
 		Ciphertext:     ciphertext,
@@ -640,7 +554,7 @@ func seal(ctx context.Context, q *repo.Queries, codec *transcriptcrypto.Codec, o
 	if n != 1 {
 		return ErrNotFound
 	}
-	return writeMetadata(ctx, q, projectID, row.ID, fields)
+	return writeMetadata(ctx, q, projectID, messageID, fields)
 }
 
 // writeMetadata writes the counts and sizes to chat_messages and replaces the

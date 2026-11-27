@@ -61,9 +61,9 @@ func (t *Transcripts) Enabled(projectID uuid.UUID) bool {
 }
 
 // Prepare loads the organization's transcript key into the process cache
-// before the caller opens the transaction that InsertChatMessages or
-// UpdateChatMessage will use, so neither makes a KMS call while the
-// transaction is open. An error means they would fail too.
+// before the caller opens the transaction that an insert or UpdateChatMessage
+// will use, so neither makes a KMS call while the transaction is open. An
+// error means they would fail too. InTx calls it for you.
 func (t *Transcripts) Prepare(ctx context.Context, organizationID string, projectID uuid.UUID) error {
 	if !t.Enabled(projectID) {
 		return nil
@@ -72,30 +72,6 @@ func (t *Transcripts) Prepare(ctx context.Context, organizationID string, projec
 		return fmt.Errorf("prepare encrypted chat transcript: %w", err)
 	}
 	return nil
-}
-
-// InsertChatMessages is the one way to store new messages, as
-// UpdateChatMessage is for existing ones. Inside the caller's transaction it
-// runs insert, which executes the INSERT and returns the IDs of the rows it
-// created, and keeps every copy the project needs. refs point at the protected
-// fields of the params insert writes, one per message.
-//
-// Plaintext mode only inserts. Shadow mode inserts, then seals each new row
-// from what Postgres stored. Encrypted mode copies the protected fields and
-// empties them before insert runs, so plaintext never reaches the table (or
-// its write-ahead log), restores them once insert returns, and seals each new
-// row from the copy. Call Prepare before beginning the transaction, and roll
-// back on error.
-func (t *Transcripts) InsertChatMessages(ctx context.Context, db repo.DBTX, organizationID string, projectID uuid.UUID, refs []ProtectedFieldRefs, insert func() ([]uuid.UUID, error)) ([]uuid.UUID, error) {
-	mode := t.Mode(projectID)
-	if mode == ModePlaintext {
-		return insert()
-	}
-	ids, err := t.store.insert(ctx, db, mode == ModeEncrypted, organizationID, projectID, refs, insert)
-	if err != nil {
-		return nil, fmt.Errorf("insert chat messages: %w", err)
-	}
-	return ids, nil
 }
 
 // Mode is how a project stores protected fields.
@@ -205,34 +181,6 @@ func OpenRows[T any](ctx context.Context, t *Transcripts, organizationID string,
 		refs[i] = refsOf(&rows[i])
 	}
 	return t.Open(ctx, organizationID, projectID, refs)
-}
-
-// fields reads the protected fields the refs point at. A nil ref reads as
-// empty.
-func (r ProtectedFieldRefs) fields() transcriptcrypto.ProtectedFields {
-	f := emptyProtectedFields
-	if r.Content != nil {
-		f.Content = *r.Content
-	}
-	if r.ContentRaw != nil {
-		f.ContentRaw = *r.ContentRaw
-	}
-	if r.ToolCalls != nil {
-		f.ToolCalls = *r.ToolCalls
-	}
-	if r.ToolCallSummaries != nil {
-		f.ToolCallSummaries = *r.ToolCallSummaries
-	}
-	// Copy the strings: insertEncrypted empties the refs while it holds f.
-	if r.ToolOutcomeNotes != nil && r.ToolOutcomeNotes.Valid {
-		notes := r.ToolOutcomeNotes.String
-		f.ToolOutcomeNotes = &notes
-	}
-	if r.StorageError != nil && r.StorageError.Valid {
-		storageError := r.StorageError.String
-		f.StorageError = &storageError
-	}
-	return f
 }
 
 // set writes fields through the refs. A nil ref is left alone.
