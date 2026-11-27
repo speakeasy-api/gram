@@ -22,11 +22,16 @@ const (
 	DisableCauseAdminLock       DisableCause = "admin_lock"
 	DisableCauseTrialDemotion   DisableCause = "trial_demotion"
 	DisableCauseBillingInactive DisableCause = "billing_inactive"
+
+	// DisableCauseOrganizationDisabled is held while staff have the whole
+	// organization disabled. Enabling the organization removes it, so the key
+	// returns to whatever its other causes say.
+	DisableCauseOrganizationDisabled DisableCause = "organization_disabled"
 )
 
 func (c DisableCause) Validate() error {
 	switch c {
-	case DisableCauseAdminLock, DisableCauseTrialDemotion, DisableCauseBillingInactive:
+	case DisableCauseAdminLock, DisableCauseTrialDemotion, DisableCauseBillingInactive, DisableCauseOrganizationDisabled:
 		return nil
 	default:
 		return fmt.Errorf("unknown OpenRouter disable cause %q", c)

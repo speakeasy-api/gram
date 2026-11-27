@@ -59726,12 +59726,12 @@ func ValidateRepairInferenceKeyRequestBody(body *RepairInferenceKeyRequestBody) 
 	if len(body.RemoveCauses) < 1 {
 		err = goa.MergeErrors(err, goa.InvalidLengthError("body.remove_causes", body.RemoveCauses, len(body.RemoveCauses), 1, true))
 	}
-	if len(body.RemoveCauses) > 3 {
-		err = goa.MergeErrors(err, goa.InvalidLengthError("body.remove_causes", body.RemoveCauses, len(body.RemoveCauses), 3, false))
+	if len(body.RemoveCauses) > 4 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.remove_causes", body.RemoveCauses, len(body.RemoveCauses), 4, false))
 	}
 	for _, e := range body.RemoveCauses {
-		if !(e == "admin_lock" || e == "trial_demotion" || e == "billing_inactive") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.remove_causes[*]", e, []any{"admin_lock", "trial_demotion", "billing_inactive"}))
+		if !(e == "admin_lock" || e == "trial_demotion" || e == "billing_inactive" || e == "organization_disabled") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.remove_causes[*]", e, []any{"admin_lock", "trial_demotion", "billing_inactive", "organization_disabled"}))
 		}
 	}
 	if body.Confirmation != nil {

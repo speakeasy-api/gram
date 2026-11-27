@@ -19,12 +19,16 @@ import (
 	usagerepo "github.com/speakeasy-api/gram/server/internal/usage/repo"
 )
 
+// maxRepairRemoveCauses is the number of known disable causes: a repair names
+// each cause at most once.
+const maxRepairRemoveCauses = 4
+
 func (s *Service) RepairInferenceKey(ctx context.Context, p *gen.RepairInferenceKeyPayload) (*gen.AdminInferenceKeyRepairResult, error) {
 	auth, ok := contextvalues.GetAdminAuthContext(ctx)
 	if !ok || auth == nil || auth.OIDCSubject == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if p == nil || p.Confirmation != "I know what I'm doing" || strings.TrimSpace(p.Reason) == "" || len(p.Reason) > 2000 || len(p.RemoveCauses) == 0 || len(p.RemoveCauses) > 3 {
+	if p == nil || p.Confirmation != "I know what I'm doing" || strings.TrimSpace(p.Reason) == "" || len(p.Reason) > 2000 || len(p.RemoveCauses) == 0 || len(p.RemoveCauses) > maxRepairRemoveCauses {
 		return nil, oops.E(oops.CodeBadRequest, nil, "Explicit causes, exact confirmation, and a reason (at most 2000 bytes) are required")
 	}
 	kt := openrouter.KeyType(p.KeyType)
@@ -84,6 +88,9 @@ func (s *Service) RepairInferenceKey(ctx context.Context, p *gen.RepairInference
 			return nil, err
 		}
 	}
+	if slices.Contains(p.RemoveCauses, string(openrouter.DisableCauseOrganizationDisabled)) && org.DisabledAt.Valid {
+		return nil, oops.E(oops.CodeConflict, nil, "The organization is disabled. Enable the organization to release this cause.")
+	}
 	change, err := new(openrouter.OpenRouter).PrepareAdminKeyPolicyWithDB(ctx, tx, id, kt, openrouter.AdminKeyPolicy{RemoveCauses: p.RemoveCauses, MonthlyCredits: nil})
 	if errors.Is(err, openrouter.ErrAPIKeyDisableCausesUnclassified) {
 		return nil, oops.E(oops.CodeConflict, err, "Unclassified key requires engineering investigation")
@@ -125,6 +132,12 @@ func (s *Service) inferenceKeyCauseDiagnostics(ctx context.Context, org repo.Adm
 			if err := s.requireExistingBillingEligibility(ctx, org); err != nil {
 				d.Removable = false
 				d.BlockedReason = conv.PtrEmpty("Live linked billing eligibility could not be verified. Repair billing before removing this cause.")
+			}
+		case openrouter.DisableCauseOrganizationDisabled:
+			d.Description = "The organization is disabled."
+			if org.DisabledAt.Valid {
+				d.Removable = false
+				d.BlockedReason = conv.PtrEmpty("Enable the organization to release this cause.")
 			}
 		default:
 			d.Description = "Unrecognized disable cause."

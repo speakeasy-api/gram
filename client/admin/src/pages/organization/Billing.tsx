@@ -102,6 +102,8 @@ function inferenceKeyDisableCauseLabel(cause: string): string {
       return "Trial demotion";
     case "billing_inactive":
       return "Billing inactive";
+    case "organization_disabled":
+      return "Organization disabled";
     default:
       return cause;
   }

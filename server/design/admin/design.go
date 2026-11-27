@@ -1091,10 +1091,10 @@ var _ = Service("admin", func() {
 			Attribute("organization_id", String)
 			Attribute("key_type", String, func() { Enum("chat", "internal") })
 			Attribute("remove_causes", ArrayOf(String, func() {
-				Enum("admin_lock", "trial_demotion", "billing_inactive")
+				Enum("admin_lock", "trial_demotion", "billing_inactive", "organization_disabled")
 			}), "Unique known disable causes to remove.", func() {
 				MinLength(1)
-				MaxLength(3)
+				MaxLength(4)
 			})
 			Attribute("confirmation", String, "Exact staff confirmation: I know what I'm doing", func() {
 				Enum("I know what I'm doing")

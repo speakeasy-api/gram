@@ -125,7 +125,12 @@ type Service struct {
 	// CreateOrganization reports rather than working around.
 	workos orgprovision.WorkOSVerifiedDomainCreator
 
-	openRouter           TrialKeyReviver
+	openRouter TrialKeyReviver
+
+	// organizationKeys locks and unlocks the platform inference keys when an
+	// organization is disabled or enabled.
+	organizationKeys OrganizationInferenceKeys
+
 	openRouterSpendCap   OpenRouterSpendCapScheduler
 	openRouterUsage      OpenRouterUsageReader
 	productFeatures      *productfeatures.Client
@@ -208,6 +213,7 @@ type OpenRouterUsageReader interface {
 type AdminOpenRouter interface {
 	TrialKeyReviver
 	OpenRouterUsageReader
+	OrganizationInferenceKeys
 }
 
 // ErrOpenRouterUnavailable reports a deployment that cannot reach OpenRouter.
@@ -254,6 +260,14 @@ func (TrialKeysUnavailable) ReconcileAPIKeyConversionPolicy(context.Context, str
 
 func (TrialKeysUnavailable) GetCreditsUsed(context.Context, string, openrouter.KeyType) (float64, int, error) {
 	return 0, 0, ErrOpenRouterUnavailable
+}
+
+func (TrialKeysUnavailable) AddAPIKeyDisableCause(context.Context, string, openrouter.KeyType, openrouter.DisableCause) (openrouter.DisableCauseChange, error) {
+	return openrouter.DisableCauseChange{}, ErrOpenRouterUnavailable
+}
+
+func (TrialKeysUnavailable) RemoveAPIKeyDisableCause(context.Context, string, openrouter.KeyType, openrouter.DisableCause, *int) (int, openrouter.DisableCauseChange, error) {
+	return 0, openrouter.DisableCauseChange{}, ErrOpenRouterUnavailable
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -311,6 +325,7 @@ func NewService(
 		),
 		workos:               workosClient,
 		openRouter:           openRouter,
+		organizationKeys:     openRouter,
 		openRouterSpendCap:   openRouterSpendCap,
 		openRouterUsage:      openRouter,
 		productFeatures:      productFeatures,
@@ -1402,6 +1417,17 @@ func (s *Service) setOrganizationAccess(ctx context.Context, organizationID stri
 	if err := tx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit organization access change").LogError(ctx, logger)
 	}
+
+	// The access change stands whatever happens to the keys: a disable must
+	// never fail because OpenRouter or a key lock is unavailable. Repeating the
+	// same action retries the keys, and the organization's billing page shows a
+	// key that is still out of step.
+	keyCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), organizationKeySyncTimeout)
+	defer cancel()
+	if err := SyncInferenceKeysWithOrganizationAccess(keyCtx, s.organizationKeys, organizationID, enabled); err != nil && !errors.Is(err, ErrOpenRouterUnavailable) {
+		logger.ErrorContext(ctx, "sync inference keys after organization "+operation, attr.SlogError(err))
+	}
+
 	return s.readOrganizationAfterWrite(ctx, organizationID, "fetch organization after "+operation)
 }
 

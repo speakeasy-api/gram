@@ -49,6 +49,8 @@ const DESCRIPTIONS: Record<string, string> = {
     "The billing lifecycle disabled this key because billing was not eligible.",
   admin_lock:
     "A staff member deliberately locked this key. Remove only after checking why.",
+  organization_disabled:
+    "The organization was disabled. Enabling it releases this cause; remove it here only if it was left behind on an enabled organization.",
 };
 
 export function RepairInferenceKey({

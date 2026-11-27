@@ -275,6 +275,13 @@ type WriteDependencies struct {
 	// issuer, which leaves migrate_organization_assistant_identities
 	// unimplemented.
 	AssistantIdentities *assistantidentity.Service
+
+	// InferenceKeys locks and releases an organization's platform inference
+	// keys when it is disabled or enabled. Nil leaves the keys alone.
+	InferenceKeys admin.OrganizationInferenceKeys
+
+	// Logger records work that fails after a write has committed.
+	Logger *slog.Logger
 }
 
 // AttachWrites exposes every write operation this server implements while
@@ -287,14 +294,18 @@ func AttachWrites(runtime *Runtime, oauth *StaffOAuth, deps WriteDependencies, w
 	features, registry := deps.Features, deps.Registry
 	auditLogger := audit.NewLogger()
 	runner := oauth.runner
+	logger := deps.Logger
+	if logger == nil {
+		logger = slog.New(slog.DiscardHandler)
+	}
 	tools := &writeTools{writes: writes, uploads: deps.ImageUploads, writers: map[WriteOperation]operationWriter{ //nolint:exhaustive // Only implemented operations are listed.
 		OperationSetOrganizationFeature:               &featureWriter{runner: runner, mutator: productfeatures.NewMutator(features, auditLogger), writes: writes},
 		OperationAssignOrganizationOnboardingPlaybook: &onboardingPlaybookWriter{runner: runner, audit: auditLogger, writes: writes},
 		OperationSetOrganizationWhitelist:             &organizationWhitelistWriter{runner: runner, audit: auditLogger, writes: writes},
 		OperationExtendOrganizationTrial:              &trialWriter{runner: runner, audit: auditLogger, writes: writes},
 		OperationSetChatAnalysisSettings:              &chatAnalysisWriter{runner: runner, audit: auditLogger, writes: writes},
-		OperationEnableOrganization:                   &organizationAccessWriter{runner: runner, audit: auditLogger, writes: writes, operation: OperationEnableOrganization},
-		OperationDisableOrganization:                  &organizationAccessWriter{runner: runner, audit: auditLogger, writes: writes, operation: OperationDisableOrganization},
+		OperationEnableOrganization:                   &organizationAccessWriter{runner: runner, audit: auditLogger, writes: writes, operation: OperationEnableOrganization, keys: deps.InferenceKeys, logger: logger},
+		OperationDisableOrganization:                  &organizationAccessWriter{runner: runner, audit: auditLogger, writes: writes, operation: OperationDisableOrganization, keys: deps.InferenceKeys, logger: logger},
 		OperationUpdateSupportMatrix:                  &supportMatrixWriter{runner: runner, writes: writes},
 		OperationCreateRegistryEntry:                  &registryEntryWriter{runner: runner, registry: registry, writes: writes},
 		OperationSetRegistryIcons:                     &registryIconsWriter{runner: runner, registry: registry, writes: writes},

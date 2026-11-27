@@ -2,6 +2,7 @@ package adminmcp
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -10,11 +11,71 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
 func newOrganizationAccessWriter(f writeFixture, operation WriteOperation) *organizationAccessWriter {
 	writes := WriteConfig{Enabled: true}
-	return &organizationAccessWriter{runner: f.runner, audit: audit.NewLogger(), writes: writes, operation: operation}
+	return &organizationAccessWriter{runner: f.runner, audit: audit.NewLogger(), writes: writes, operation: operation, keys: nil, logger: nil}
+}
+
+// recordingInferenceKeys captures the key calls an access change makes and can
+// be made to fail them.
+type recordingInferenceKeys struct {
+	added   []openrouter.KeyType
+	removed []openrouter.KeyType
+	fail    error
+}
+
+func (r *recordingInferenceKeys) AddAPIKeyDisableCause(_ context.Context, _ string, keyType openrouter.KeyType, cause openrouter.DisableCause) (openrouter.DisableCauseChange, error) {
+	if cause == openrouter.DisableCauseOrganizationDisabled {
+		r.added = append(r.added, keyType)
+	}
+	return openrouter.DisableCauseChange{CauseChanged: r.fail == nil, KeyAccessChanged: r.fail == nil}, r.fail
+}
+
+func (r *recordingInferenceKeys) RemoveAPIKeyDisableCause(_ context.Context, _ string, keyType openrouter.KeyType, cause openrouter.DisableCause, _ *int) (int, openrouter.DisableCauseChange, error) {
+	if cause == openrouter.DisableCauseOrganizationDisabled {
+		r.removed = append(r.removed, keyType)
+	}
+	return 0, openrouter.DisableCauseChange{CauseChanged: r.fail == nil, KeyAccessChanged: r.fail == nil}, r.fail
+}
+
+func TestOrganizationAccessLocksAndReleasesInferenceKeys(t *testing.T) {
+	t.Parallel()
+	f := newWriteFixture(t, "admin_mcp_organization_access_keys")
+	keys := &recordingInferenceKeys{added: nil, removed: nil, fail: nil}
+	ctx := writeContext(t, f)
+
+	disable := newOrganizationAccessWriter(f, OperationDisableOrganization)
+	disable.keys, disable.logger = keys, testenv.NewLogger(t)
+	receipt, err := disable.apply(ctx, OrganizationAccessInput{OrganizationID: f.orgA})
+	require.NoError(t, err)
+	require.Equal(t, inferenceKeysSynced, receipt.InferenceKeys)
+	require.Equal(t, openrouter.AllKeyTypes, keys.added)
+	require.Empty(t, keys.removed)
+
+	enable := newOrganizationAccessWriter(f, OperationEnableOrganization)
+	enable.keys, enable.logger = keys, testenv.NewLogger(t)
+	receipt, err = enable.apply(ctx, OrganizationAccessInput{OrganizationID: f.orgA})
+	require.NoError(t, err)
+	require.Equal(t, inferenceKeysSynced, receipt.InferenceKeys)
+	require.Equal(t, openrouter.AllKeyTypes, keys.removed)
+}
+
+func TestOrganizationAccessDisableStandsWhenInferenceKeysFail(t *testing.T) {
+	t.Parallel()
+	f := newWriteFixture(t, "admin_mcp_organization_access_keys_fail")
+	keys := &recordingInferenceKeys{added: nil, removed: nil, fail: errors.New("openrouter is down")}
+	writer := newOrganizationAccessWriter(f, OperationDisableOrganization)
+	writer.keys, writer.logger = keys, testenv.NewLogger(t)
+
+	receipt, err := writer.apply(writeContext(t, f), OrganizationAccessInput{OrganizationID: f.orgA})
+	require.NoError(t, err, "a key failure must not fail the disable")
+	require.Equal(t, inferenceKeysFailed, receipt.InferenceKeys)
+	require.Equal(t, openrouter.AllKeyTypes, keys.added, "every key type is attempted even after one fails")
+	require.NotNil(t, organizationAccessState(t, f, f.orgA).DisabledAt)
 }
 
 func organizationAccessState(t *testing.T, f writeFixture, organizationID string) admin.OrganizationAccessState {
