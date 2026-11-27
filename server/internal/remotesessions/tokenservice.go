@@ -59,6 +59,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
+	"github.com/speakeasy-api/gram/server/internal/sessionactivity"
 	"github.com/speakeasy-api/gram/server/internal/urls"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -1777,7 +1778,7 @@ func (s *RefreshService) postRefreshGrant(
 type resolvedUpstreamToken = UpstreamToken
 
 func (m *ChallengeManager) touchResolvedCredential(ctx context.Context, sess remotesessions_repo.RemoteSession) {
-	if ctx.Value(availabilityCheckKey{}) == true {
+	if !sessionactivity.FromContext(ctx) || ctx.Value(availabilityCheckKey{}) == true {
 		return
 	}
 	clientID := sess.RemoteSessionClientID

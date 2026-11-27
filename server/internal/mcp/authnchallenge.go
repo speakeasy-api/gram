@@ -56,6 +56,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
+	"github.com/speakeasy-api/gram/server/internal/sessionactivity"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/userblock"
@@ -534,8 +535,8 @@ const issuerGateReasonOrganizationMismatch = "organization_mismatch"
 // within this much.
 const userSessionLastUsedCutoff = 5 * time.Minute
 
-// touchUserSessionLastUsed records that a validated session just carried a
-// request. Best-effort by design: this runs on the per-request MCP auth path,
+// touchUserSessionLastUsed records that a validated session just carried real
+// MCP work. Best-effort by design: this runs on the per-request MCP auth path,
 // where a bookkeeping write must never turn a good credential into a failed
 // call, so a failure is logged and swallowed.
 func (s *Service) touchUserSessionLastUsed(ctx context.Context, endpoint *ResolvedMcpEndpoint, jti string) {
@@ -879,10 +880,10 @@ func (s *Service) contextForSessionSubject(
 		ctx = contextvalues.SetOAuthClientID(ctx, oauthClientID)
 	}
 
-	// Stamped for every persisted subject kind, anonymous included: liveness
-	// describes the connection. Authorization-code completion passes no session
-	// id because no row exists yet.
-	if sessionID != "" {
+	// Stamped for every persisted subject kind, anonymous included, only when
+	// this request carries real MCP work. Authorization-code completion passes
+	// no session id because no row exists yet.
+	if sessionID != "" && sessionactivity.FromContext(ctx) {
 		s.touchUserSessionLastUsed(ctx, endpoint, sessionID)
 	}
 

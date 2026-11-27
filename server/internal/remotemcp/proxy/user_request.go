@@ -9,6 +9,24 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 )
 
+// BufferedRequestBody owns request bytes already read by a pre-authentication
+// classifier so the proxy can decode and forward them without another full copy.
+type BufferedRequestBody struct {
+	*bytes.Reader
+	body    []byte
+	readErr error
+}
+
+func NewBufferedRequestBody(body []byte, readErr error) *BufferedRequestBody {
+	return &BufferedRequestBody{Reader: bytes.NewReader(body), body: body, readErr: readErr}
+}
+
+func (b *BufferedRequestBody) Close() error { return nil }
+
+func (b *BufferedRequestBody) Bytes() []byte { return b.body }
+
+func (b *BufferedRequestBody) ReadError() error { return b.readErr }
+
 // UserRequest captures an inbound MCP client HTTP request along with any
 // JSON-RPC messages decoded from its body. Interceptors mutate this value
 // before the request is forwarded to the remote MCP server.
@@ -54,11 +72,20 @@ func (r *UserRequest) ParseJSONRPCMessages(maxBytes int64) error {
 		return nil
 	}
 
-	// Read up to maxBytes+1 so a fully-filled cap is distinguishable from an
-	// oversized body.
-	body, err := io.ReadAll(io.LimitReader(r.UserHTTPRequest.Body, maxBytes+1))
-	if err != nil {
-		return fmt.Errorf("read user request body: %w", err)
+	var body []byte
+	if buffered, ok := r.UserHTTPRequest.Body.(*BufferedRequestBody); ok {
+		if err := buffered.ReadError(); err != nil {
+			return fmt.Errorf("read user request body: %w", err)
+		}
+		body = buffered.Bytes()
+	} else {
+		// Read up to maxBytes+1 so a fully-filled cap is distinguishable from an
+		// oversized body.
+		var err error
+		body, err = io.ReadAll(io.LimitReader(r.UserHTTPRequest.Body, maxBytes+1))
+		if err != nil {
+			return fmt.Errorf("read user request body: %w", err)
+		}
 	}
 	if int64(len(body)) > maxBytes {
 		return ErrBodyTooLarge

@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
+	"github.com/speakeasy-api/gram/server/internal/sessionactivity"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -61,13 +62,15 @@ func (c *Chainer) cachedToken(ctx context.Context, logger *slog.Logger, req Requ
 		logger.ErrorContext(ctx, "decrypt identity chaining credential", attr.SlogError(err))
 		return none, false
 	}
-	if err := q.TouchEMACredentialLastUsed(ctx, repo.TouchEMACredentialLastUsedParams{
-		ID:         row.ID,
-		ProjectID:  uuid.NullUUID{UUID: req.ProjectID, Valid: true},
-		NowTs:      conv.ToPGTimestamptz(now),
-		UsedCutoff: conv.ToPGTimestamptz(now.Add(-lastUsedCutoff)),
-	}); err != nil {
-		logger.WarnContext(ctx, "stamp identity chaining credential last_used_at", attr.SlogError(err))
+	if sessionactivity.FromContext(ctx) {
+		if err := q.TouchEMACredentialLastUsed(ctx, repo.TouchEMACredentialLastUsedParams{
+			ID:         row.ID,
+			ProjectID:  uuid.NullUUID{UUID: req.ProjectID, Valid: true},
+			NowTs:      conv.ToPGTimestamptz(now),
+			UsedCutoff: conv.ToPGTimestamptz(now.Add(-lastUsedCutoff)),
+		}); err != nil {
+			logger.WarnContext(ctx, "stamp identity chaining credential last_used_at", attr.SlogError(err))
+		}
 	}
 	return Token{value: value, expiresAt: row.AccessExpiresAt.Time.Add(-accessExpirySkew)}, true
 }
@@ -123,6 +126,7 @@ func (c *Chainer) publishSlot(ctx context.Context, logger *slog.Logger, req Requ
 			InternalSessionIssuerKeyID: sel.internalKeyID, SignInID: sel.signInID, UserSessionID: grantSlot(req, sel),
 			RequestedScopes: storedScopes(sel.scopes), GrantedScopes: storedScopes(cred.grantedScopes),
 			AccessExpiresAt: conv.ToPGTimestamptz(cred.expiresAt), DownstreamRefreshTokenObserved: cred.refreshObserved,
+			MarkUsed: sessionactivity.FromContext(ctx),
 		})
 	} else {
 		var row repo.UpsertEMACredentialRow
@@ -142,6 +146,7 @@ func (c *Chainer) publishSlot(ctx context.Context, logger *slog.Logger, req Requ
 			GrantedScopes:                  storedScopes(cred.grantedScopes),
 			AccessExpiresAt:                pgtype.Timestamptz{Time: cred.expiresAt, Valid: true, InfinityModifier: pgtype.Finite},
 			DownstreamRefreshTokenObserved: cred.refreshObserved,
+			MarkUsed:                       sessionactivity.FromContext(ctx),
 		})
 		slot = publishedSlot{id: row.ID, updatedAt: row.UpdatedAt}
 	}

@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/sessionactivity"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -20,6 +21,7 @@ import (
 func TestResolveAuthorization_AgentAttachment(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
+	ctx = sessionactivity.WithMCPMethod(ctx, "tools/call")
 	auth, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	projectID, organizationID := *auth.ProjectID, auth.ActiveOrganizationID
