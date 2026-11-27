@@ -1351,6 +1351,20 @@ func (q *Queries) IsDefaultProject(ctx context.Context, arg IsDefaultProjectPara
 	return is_default, err
 }
 
+const isOrganizationDisabled = `-- name: IsOrganizationDisabled :one
+SELECT (disabled_at IS NOT NULL)::boolean AS disabled FROM organization_metadata WHERE id = $1
+`
+
+// Reports whether the organization is disabled. Every publish reads it first,
+// so a disabled organization's marketplace gets no new commits and no newly
+// minted plugin API keys.
+func (q *Queries) IsOrganizationDisabled(ctx context.Context, id string) (bool, error) {
+	row := q.db.QueryRow(ctx, isOrganizationDisabled, id)
+	var disabled bool
+	err := row.Scan(&disabled)
+	return disabled, err
+}
+
 const isOrganizationFeatureEnabled = `-- name: IsOrganizationFeatureEnabled :one
 SELECT EXISTS (
   SELECT 1
@@ -2072,6 +2086,7 @@ WITH candidate_projects AS MATERIALIZED (
     SELECT dp.project_id FROM plugins dp WHERE dp.is_default IS TRUE AND dp.deleted IS FALSE AND dp.project_id > $1
   ) cp
   JOIN projects p ON p.id = cp.project_id AND p.deleted IS FALSE
+  JOIN organization_metadata o ON o.id = p.organization_id AND o.disabled_at IS NULL
   ORDER BY cp.project_id ASC
   LIMIT $2
 )
@@ -2138,7 +2153,8 @@ type ListPluginPublishCandidatesRow struct {
 // ResolvePluginPublishActor. Page before resolving actors; key lookups use
 // the existing (organization_id, project_id, id) index prefix.
 // This is a deliberate cross-project sweep, so unlike the tenant-scoped
-// queries it is not constrained to a single project_id.
+// queries it is not constrained to a single project_id. Projects of disabled
+// organizations are left out: nothing is published for them.
 func (q *Queries) ListPluginPublishCandidates(ctx context.Context, arg ListPluginPublishCandidatesParams) ([]ListPluginPublishCandidatesRow, error) {
 	rows, err := q.db.Query(ctx, listPluginPublishCandidates, arg.AfterProjectID, arg.ResultLimit)
 	if err != nil {
@@ -3479,12 +3495,18 @@ func (q *Queries) RemovePluginServer(ctx context.Context, arg RemovePluginServer
 }
 
 const resolveGitHubConnectionByMarketplaceToken = `-- name: ResolveGitHubConnectionByMarketplaceToken :one
-SELECT plugin_github_connections.id, plugin_github_connections.project_id, plugin_github_connections.installation_id, plugin_github_connections.repo_owner, plugin_github_connections.repo_name, plugin_github_connections.marketplace_token, plugin_github_connections.organization_id, plugin_github_connections.marketplace_token_hash, plugin_github_connections.marketplace_token_encrypted, plugin_github_connections.marketplace_token_org_encrypted, plugin_github_connections.published_fingerprint, plugin_github_connections.published_mcp_fingerprints, plugin_github_connections.published_hooks_version, plugin_github_connections.published_hooks_config, plugin_github_connections.created_at, plugin_github_connections.updated_at, (plugin_github_connections.marketplace_token_hash IS NULL)::boolean AS plaintext_token
+SELECT plugin_github_connections.id, plugin_github_connections.project_id, plugin_github_connections.installation_id, plugin_github_connections.repo_owner, plugin_github_connections.repo_name, plugin_github_connections.marketplace_token, plugin_github_connections.organization_id, plugin_github_connections.marketplace_token_hash, plugin_github_connections.marketplace_token_encrypted, plugin_github_connections.marketplace_token_org_encrypted, plugin_github_connections.published_fingerprint, plugin_github_connections.published_mcp_fingerprints, plugin_github_connections.published_hooks_version, plugin_github_connections.published_hooks_config, plugin_github_connections.created_at, plugin_github_connections.updated_at,
+       (plugin_github_connections.marketplace_token_hash IS NULL)::boolean AS plaintext_token,
+       (om.disabled_at IS NOT NULL)::boolean AS organization_disabled
 FROM plugin_github_connections
-WHERE plugin_github_connections.marketplace_token_hash = $1
-   OR (
-       plugin_github_connections.marketplace_token_hash IS NULL
-       AND plugin_github_connections.marketplace_token = $2::text
+JOIN projects p ON p.id = plugin_github_connections.project_id
+JOIN organization_metadata om ON om.id = p.organization_id
+WHERE (
+       plugin_github_connections.marketplace_token_hash = $1
+       OR (
+           plugin_github_connections.marketplace_token_hash IS NULL
+           AND plugin_github_connections.marketplace_token = $2::text
+       )
    )
 LIMIT 1
 `
@@ -3497,6 +3519,7 @@ type ResolveGitHubConnectionByMarketplaceTokenParams struct {
 type ResolveGitHubConnectionByMarketplaceTokenRow struct {
 	PluginGithubConnection PluginGithubConnection
 	PlaintextToken         bool
+	OrganizationDisabled   bool
 }
 
 // Resolves a marketplace proxy URL token to the upstream connection by the
@@ -3505,6 +3528,10 @@ type ResolveGitHubConnectionByMarketplaceTokenRow struct {
 // snapshot, so a token the backfill moves during a request still resolves.
 // plaintext_token reports which form matched. The token is the auth
 // credential, so there's no project scope to apply ahead of it.
+// organization_disabled lets the caller refuse a token whose organization is
+// disabled before minting an installation token. The organization is reached
+// through the project because the connection's own organization_id is
+// nullable until its backfill completes.
 func (q *Queries) ResolveGitHubConnectionByMarketplaceToken(ctx context.Context, arg ResolveGitHubConnectionByMarketplaceTokenParams) (ResolveGitHubConnectionByMarketplaceTokenRow, error) {
 	row := q.db.QueryRow(ctx, resolveGitHubConnectionByMarketplaceToken, arg.MarketplaceTokenHash, arg.MarketplaceToken)
 	var i ResolveGitHubConnectionByMarketplaceTokenRow
@@ -3526,6 +3553,7 @@ func (q *Queries) ResolveGitHubConnectionByMarketplaceToken(ctx context.Context,
 		&i.PluginGithubConnection.CreatedAt,
 		&i.PluginGithubConnection.UpdatedAt,
 		&i.PlaintextToken,
+		&i.OrganizationDisabled,
 	)
 	return i, err
 }

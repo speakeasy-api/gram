@@ -13,6 +13,7 @@ import (
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
+	adminrepo "github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/deviceintegrations/providers"
@@ -350,6 +351,41 @@ func TestRunSyncSkipsDisabledSchedule(t *testing.T) {
 	rows, err := store.repo.ListManagedDevices(ctx, listDevicesParams(orgID))
 	require.NoError(t, err)
 	require.Empty(t, rows, "user-disabled schedules do not run")
+}
+
+// A disabled organization's sync is neither selected nor run, and records no
+// failure, so it resumes untouched once the organization is re-enabled.
+func TestRunSyncSkipsDisabledOrganization(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, syncer, orgID := newSyncTestEnv(t)
+
+	created := mustUpsert(t, ctx, conn, store, orgID, validCreds(), providers.Settings{
+		"instance_url": "https://example.test",
+		"devices":      "dev-1",
+	}, true)
+	syncID := findSyncID(t, ctx, store, orgID, testProviderID)
+	_, err := adminrepo.New(conn).AdminDisableOrganization(ctx, orgID)
+	require.NoError(t, err)
+
+	candidates, err := store.repo.ListSyncCandidates(ctx, repo.ListSyncCandidatesParams{LimitCount: 1000, ExcludeSyncIds: []uuid.UUID{}})
+	require.NoError(t, err)
+	for _, c := range candidates {
+		require.NotEqual(t, syncID, c.SyncID, "a disabled organization's sync is not a candidate")
+	}
+
+	// A run that raced the disable is skipped at run time.
+	require.NoError(t, syncer.RunSync(ctx, syncID))
+	rows, err := store.repo.ListManagedDevices(ctx, listDevicesParams(orgID))
+	require.NoError(t, err)
+	require.Empty(t, rows, "a disabled organization's sync does not run")
+	state := scheduleStateFor(t, ctx, store, created.Config.ID, "testmdm_inventory")
+	require.False(t, state.LastPollFailedAt.Valid, "the skip is not recorded as a failure")
+	require.False(t, state.AutoPausedAt.Valid)
+
+	_, err = adminrepo.New(conn).AdminEnableOrganization(ctx, orgID)
+	require.NoError(t, err)
+	require.Equal(t, syncID, findSyncID(t, ctx, store, orgID, testProviderID), "the sync is due again after re-enabling")
 }
 
 func TestRunEvidencePushDigestSkip(t *testing.T) {

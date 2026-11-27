@@ -50,6 +50,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/signins"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/userblock"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/idjag"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
@@ -1384,6 +1385,25 @@ func (s *Service) rotateRefreshToken(
 			admittedAgentSessionID = refreshSession.ID
 		}
 	}
+	// A user staff blocked from the platform cannot mint new MCP access tokens,
+	// and neither can an agent they authorized. Checked only for the client the
+	// token was issued to, so a leaked token reveals nothing to another client.
+	if lookupErr == nil && refreshSession.UserSessionClientID.Valid && refreshSession.UserSessionClientID.UUID == clientRow.ID {
+		blockedUserID := refreshSession.AuthorizerUserID.String
+		if refreshSession.SubjectUrn.Kind == urn.SessionSubjectKindUser {
+			blockedUserID = refreshSession.SubjectUrn.ID
+		}
+		blocked, blockErr := s.sessions.IsUserBlocked(ctx, blockedUserID)
+		if blockErr != nil {
+			return true, oops.E(oops.CodeUnexpected, blockErr, "check refresh token user").LogError(ctx, logger)
+		}
+		if blocked {
+			userblock.LogRefusal(ctx, logger, "mcp_refresh_token", blockedUserID)
+			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", refreshUserDisabled)
+			writeErr := writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidGrant, "refresh_token is unknown or already used")
+			return true, refuseInboundRefresh(ctx, tracker, r, writeErr, refreshUserDisabled, mcpconnectionattempts.Subject(&refreshSession.SubjectUrn))
+		}
+	}
 	upstreamCheck := upstreamRefreshServed
 	if lookupErr == nil &&
 		refreshSession.UserSessionClientID.Valid && refreshSession.UserSessionClientID.UUID == clientRow.ID &&
@@ -2664,6 +2684,17 @@ func (s *Service) humanReplayRevoked(ctx context.Context, endpoint *ResolvedMcpE
 	session, err := q.GetUserSessionByJTI(ctx, usersessions_repo.GetUserSessionByJTIParams{UserSessionIssuerID: endpoint.UserSessionIssuerID, Jti: jti})
 	if err != nil {
 		return replayLookupFailureReason(err, "refresh_token_revoked"), false, err
+	}
+	// Nor a successor for a user staff blocked since the rotation.
+	if session.SubjectUrn.Kind == urn.SessionSubjectKindUser {
+		blocked, err := s.sessions.IsUserBlocked(ctx, session.SubjectUrn.ID)
+		if err != nil {
+			return refreshReplayLookupFailed, false, fmt.Errorf("check replay user block: %w", err)
+		}
+		if blocked {
+			userblock.LogRefusal(ctx, endpoint.LogWith(s.logger), "mcp_refresh_token_replay", session.SubjectUrn.ID)
+			return refreshUserDisabled, false, nil
+		}
 	}
 	if !session.SignInID.Valid {
 		return "", true, nil

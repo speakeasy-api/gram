@@ -31,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/signins"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/userblock"
 )
 
 // HandleIDPCallback is the GET endpoint the IDP redirects back to after the
@@ -414,6 +415,12 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (ret
 			return oops.E(oops.CodeBadRequest, err, "failed to exchange IDP code").LogWarn(ctx, logger)
 		}
 		login, err := s.identityResolver.CompleteIDPLogin(ctx, idpUser, identity.IDPLoginOptions{SkipMembershipSync: false, Attribution: nil})
+		if errors.Is(err, identity.ErrUserBlocked) {
+			userblock.LogRefusal(ctx, logger, "mcp_login", idpUser.Sub)
+			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
+			t.Refuse(ctx, mcpconnectionattempts.CodeSignInProviderError, mcpconnectionattempts.Detail("code_rejected"))
+			return oops.E(oops.CodeBadRequest, nil, "failed to exchange IDP code")
+		}
 		if err != nil {
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
 			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)

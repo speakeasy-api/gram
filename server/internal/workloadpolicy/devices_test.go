@@ -18,6 +18,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/workload_identities"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	adminrepo "github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -250,6 +251,49 @@ func TestRegisterDevice_SameKeyRetryRechecksTheDeviceAgentGrants(t *testing.T) {
 	_, err = registerDevice(ctx, ti, token, jwk)
 	requireOopsCode(t, err, oops.CodeFailedPrecondition)
 	require.ErrorContains(t, err, "org:device_agent_sync")
+}
+
+// A join token issued before the organization was disabled cannot enroll a
+// device while it stays disabled, and the refusal leaves the token unspent.
+func TestRegisterDevice_RefusesADisabledOrganization(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	token := createJoinToken(t, ctx, ti, newAgent(t, ctx, ti, "org-disabled"))
+
+	_, err := adminrepo.New(ti.conn).AdminDisableOrganization(ctx, ti.orgID)
+	require.NoError(t, err)
+	_, err = registerDevice(ctx, ti, token, publicJWK(t, newDeviceKey(t).Public()))
+	requireOopsCode(t, err, oops.CodeUnauthorized)
+	require.ErrorContains(t, err, "this organization is disabled")
+
+	_, err = adminrepo.New(ti.conn).AdminEnableOrganization(ctx, ti.orgID)
+	require.NoError(t, err)
+	_, err = registerDevice(ctx, ti, token, publicJWK(t, newDeviceKey(t).Public()))
+	require.NoError(t, err, "the refused attempt must not have spent the token")
+}
+
+// A same-key retry is not reported as a working enrollment while the
+// organization is disabled.
+func TestRegisterDevice_SameKeyRetryRefusesADisabledOrganization(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	token := createJoinToken(t, ctx, ti, newAgent(t, ctx, ti, "retry-org-disabled"))
+	jwk := publicJWK(t, newDeviceKey(t).Public())
+
+	first, err := registerDevice(ctx, ti, token, jwk)
+	require.NoError(t, err)
+
+	_, err = adminrepo.New(ti.conn).AdminDisableOrganization(ctx, ti.orgID)
+	require.NoError(t, err)
+	_, err = registerDevice(ctx, ti, token, jwk)
+	requireOopsCode(t, err, oops.CodeUnauthorized)
+	require.ErrorContains(t, err, "this organization is disabled")
+
+	_, err = adminrepo.New(ti.conn).AdminEnableOrganization(ctx, ti.orgID)
+	require.NoError(t, err)
+	again, err := registerDevice(ctx, ti, token, jwk)
+	require.NoError(t, err, "re-enabling the organization restores the existing enrollment")
+	require.Equal(t, first, again)
 }
 
 func removeDeviceAgentSyncGrant(t *testing.T, ctx context.Context, ti *testInstance, agentID uuid.UUID) {
