@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/growthsignals"
+	"github.com/speakeasy-api/gram/server/internal/organizations/orgcap"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	usersRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
@@ -185,6 +186,9 @@ func (s *Service) provisionFirstOrgForUser(ctx context.Context, userID, orgName,
 		}
 	}()
 
+	if err := orgcap.RequireRoomForOrganization(ctx, s.db, userID, ""); err != nil {
+		return empty, fmt.Errorf("check organization cap: %w", err)
+	}
 	invitations, err := s.orgRepo.ListPendingInvitationsForEmail(ctx, conv.NormalizeEmail(actorEmail))
 	if err != nil {
 		return empty, fmt.Errorf("list pending invitations: %w", err)

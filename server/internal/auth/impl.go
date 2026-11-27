@@ -1478,7 +1478,7 @@ type orgProvisionOptions struct {
 // ActiveOrganizationID on an in-memory session before storing it once.
 func (s *Service) provisionOrgForUser(ctx context.Context, userID, orgName string, opts orgProvisionOptions) (orgRepo.OrganizationMetadatum, error) {
 	var empty orgRepo.OrganizationMetadatum
-	if err := orgcap.RequireRoomForOrganization(ctx, s.db, userID); err != nil {
+	if err := orgcap.RequireRoomForOrganization(ctx, s.db, userID, ""); err != nil {
 		return empty, fmt.Errorf("check organization cap: %w", err)
 	}
 	promotionCodeID, err := s.resolvePartnerSignup(ctx, opts.PartnerCode)
@@ -1545,7 +1545,12 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 	})
 	if err != nil {
 		if errors.Is(err, orgcap.ErrUserHasOrganization) {
-			return oops.E(oops.CodeInvalid, err, "user already has an organization").LogWarn(ctx, s.logger)
+			// Move this session into the organization the user already has, so
+			// the tab that tried to register a second one is not left without one.
+			if switchErr := s.activateExistingOrganization(ctx, *authCtx.SessionID, authCtx.UserID); switchErr != nil {
+				return oops.E(oops.CodeUnexpected, switchErr, "error switching to existing organization").LogError(ctx, s.logger)
+			}
+			return oops.E(oops.CodeConflict, err, "user already has an organization").LogWarn(ctx, s.logger)
 		}
 		if oops.IsClientFault(err) {
 			return err
@@ -1563,6 +1568,26 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 		return oops.E(oops.CodeUnexpected, err, "error storing session").LogError(ctx, s.logger)
 	}
 
+	return nil
+}
+
+func (s *Service) activateExistingOrganization(ctx context.Context, sessionID, userID string) error {
+	organizations, err := s.orgRepo.ListOrganizationsForUser(ctx, conv.ToPGText(userID))
+	if err != nil {
+		return fmt.Errorf("list user organizations: %w", err)
+	}
+	if len(organizations) == 0 {
+		return nil
+	}
+	existingSession, err := s.sessions.GetSession(ctx, sessionID)
+	if err != nil {
+		return fmt.Errorf("load session: %w", err)
+	}
+	updatedSession := existingSession
+	updatedSession.ActiveOrganizationID = organizations[0].ID
+	if err := s.sessions.UpdateSession(ctx, existingSession, updatedSession); err != nil {
+		return fmt.Errorf("store session: %w", err)
+	}
 	return nil
 }
 
@@ -1643,6 +1668,12 @@ func (s *Service) persistProvisionedOrganization(
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
 	queries := orgRepo.New(tx)
+	if err := queries.LockUserOrganizationProvision(ctx, userID); err != nil {
+		return orgRepo.OrganizationMetadatum{}, fmt.Errorf("lock organization provisioning: %w", err)
+	}
+	if err := orgcap.RequireRoomForOrganization(ctx, tx, userID, provisionedOrg.GramOrganizationID); err != nil {
+		return orgRepo.OrganizationMetadatum{}, fmt.Errorf("recheck organization cap: %w", err)
+	}
 	if opts.StripePromotionCodeID != "" {
 		// The existing create-only primitive rejects a row already inserted by
 		// identity sync (or a concurrent signup). Attribution never adopts an org.

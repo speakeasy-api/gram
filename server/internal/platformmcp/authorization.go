@@ -13,7 +13,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -77,12 +76,9 @@ func (a *LiveOrgAdminAuthorizer) PrepareExternalContext(ctx context.Context, pri
 	if a == nil || a.db == nil || a.engine == nil || principal.UserID == "" || principal.OrganizationID == "" {
 		return ctx, ErrUnavailable
 	}
-	if err := a.RequireLiveMembership(ctx, principal); err != nil {
-		return ctx, err
-	}
-	organization, err := organizationsrepo.New(a.db).GetOrganizationMetadata(ctx, principal.OrganizationID)
+	organization, err := a.liveMembershipOrganization(ctx, principal)
 	if err != nil {
-		return ctx, fmt.Errorf("load Platform MCP organization: %w", err)
+		return ctx, err
 	}
 
 	ctx = contextWithPrincipal(ctx, principal)

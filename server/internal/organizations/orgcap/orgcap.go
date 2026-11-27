@@ -1,5 +1,6 @@
-// Package orgcap is the per-user organization limit shared by every path that
-// gives a user an organization.
+// Package orgcap is the per-user organization limit. Self-serve creation checks
+// it before creating, and the identity-provider membership sync disables an
+// organization over it. Invitations and the login-time mirror do not apply it.
 package orgcap
 
 import (
@@ -27,13 +28,19 @@ var actor = urn.NewSystemPrincipal("organization-cap")
 const actorDisplayName = "Organization cap"
 
 // RequireRoomForOrganization refuses a user who already holds
-// MaxOrganizationsPerUser enabled organizations.
-func RequireRoomForOrganization(ctx context.Context, db orgrepo.DBTX, userID string) error {
+// MaxOrganizationsPerUser enabled organizations other than excludeOrganizationID.
+func RequireRoomForOrganization(ctx context.Context, db orgrepo.DBTX, userID, excludeOrganizationID string) error {
 	existing, err := orgrepo.New(db).ListOrganizationsForUser(ctx, conv.ToPGText(userID))
 	if err != nil {
 		return fmt.Errorf("list user organizations: %w", err)
 	}
-	if len(existing) >= int(MaxOrganizationsPerUser) {
+	others := 0
+	for _, organization := range existing {
+		if organization.ID != excludeOrganizationID {
+			others++
+		}
+	}
+	if others >= int(MaxOrganizationsPerUser) {
 		return ErrUserHasOrganization
 	}
 	return nil

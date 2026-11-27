@@ -383,6 +383,10 @@ func TestLiveExternalAuthorizationRejectsDisabledOrganization(t *testing.T) {
 
 	_, err = authorizer.PrepareExternalContext(ctx, admin)
 	require.NoError(t, err)
+	selector := NewLiveOrganizationSelector(conn, authorizer)
+	options, err := selector.EligibleOrganizations(ctx, adminID)
+	require.NoError(t, err)
+	require.Len(t, options, 1)
 
 	disabled, err := organizationsrepo.New(conn).DisableOrganizationByWorkosID(ctx, organizationsrepo.DisableOrganizationByWorkosIDParams{
 		WorkosLastEventID: conv.ToPGText("event_disable"),
@@ -392,8 +396,12 @@ func TestLiveExternalAuthorizationRejectsDisabledOrganization(t *testing.T) {
 	require.EqualValues(t, 1, disabled)
 
 	_, err = authorizer.PrepareExternalContext(ctx, admin)
+	require.ErrorIs(t, err, ErrOrganizationDisabled)
 	require.ErrorIs(t, err, ErrForbidden)
-	require.ErrorIs(t, authorizer.RequireLiveMembership(ctx, admin), ErrForbidden)
+	require.ErrorIs(t, authorizer.RequireLiveMembership(ctx, admin), ErrOrganizationDisabled)
+	options, err = selector.EligibleOrganizations(ctx, adminID)
+	require.NoError(t, err)
+	require.Empty(t, options)
 }
 
 func seedPlatformMCPAuthorizationMember(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID, userID, roleSlug string) {

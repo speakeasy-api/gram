@@ -1055,10 +1055,16 @@ func toolExposureAdminAuthorizationError(err error) error {
 	if _, ok := errors.AsType[*ExternalAuthorizationError](mapped); ok {
 		return mapped
 	}
+	if errors.Is(err, ErrOrganizationDisabled) {
+		return mapped
+	}
 	return toolExposureUnavailable(err)
 }
 
 func toolExposureAuthorizationError(err error, scope authz.Scope) error {
+	if errors.Is(err, ErrOrganizationDisabled) {
+		return &MCPToolExposureError{Code: "forbidden", Message: "This organization is disabled. Reach out to support@speakeasy.com for more information.", Cause: err}
+	}
 	if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && shareable.Code == oops.CodeForbidden {
 		return &ExternalAuthorizationError{RequiredScope: string(scope), cause: err}
 	}

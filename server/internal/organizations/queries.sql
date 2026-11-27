@@ -436,6 +436,12 @@ UPDATE organization_metadata
 SET created_at = @created_at
 WHERE id = @id;
 
+-- name: BackdateOrganizationUserRelationshipForTest :exec
+UPDATE organization_user_relationships
+SET created_at = @created_at
+WHERE organization_id = @organization_id
+  AND user_id = @user_id;
+
 -- name: SetOrganizationDefaultHostForTest :exec
 UPDATE organization_metadata
 SET default_host = @default_host
@@ -949,6 +955,9 @@ JOIN organization_metadata om ON om.id = our.organization_id
 WHERE our.user_id = @user_id
   AND our.deleted_at IS NULL
   AND om.disabled_at IS NULL;
+
+-- name: LockUserOrganizationProvision :exec
+SELECT pg_advisory_xact_lock(hashtextextended('organization-provision:' || @user_id::text, 0));
 
 -- name: LockUserOrganizationCap :exec
 SELECT pg_advisory_xact_lock(hashtextextended('organization-cap:' || @workos_user_id::text, 0));

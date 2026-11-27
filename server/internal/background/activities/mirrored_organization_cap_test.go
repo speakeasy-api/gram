@@ -104,6 +104,10 @@ func TestMirroredOrganizationCap_MembershipRecordedAtLoginBeforeTheEventIsChecke
 	seedWorkOSOrganization(t, ctx, conn, "gram_org_cap_login_first", "org_01HZCAPLOGINA")
 	seedWorkOSOrganization(t, ctx, conn, "gram_org_cap_login_second", "org_01HZCAPLOGINB")
 	seedWorkOSUser(t, ctx, conn, "user_cap_login", "user_01HZCAPLOGIN")
+	require.NoError(t, orgrepo.New(conn).BackdateOrganizationCreatedAtForTest(ctx, orgrepo.BackdateOrganizationCreatedAtForTestParams{
+		ID:        "gram_org_cap_login_second",
+		CreatedAt: conv.ToPGTimestamptz(time.Now().AddDate(0, -6, 0)),
+	}))
 	require.NoError(t, deliverMembershipCreated(t, ctx, conn, "org_01HZCAPLOGINA", "user_01HZCAPLOGIN", "A"))
 
 	_, err := orgrepo.New(conn).SetUserWorkOSMemberships(ctx, orgrepo.SetUserWorkOSMembershipsParams{
@@ -170,15 +174,16 @@ func TestMirroredOrganizationCap_MembershipAlreadyRecordedIsNotChecked(t *testin
 	seedWorkOSUser(t, ctx, conn, "user_cap_known", "user_01HZCAPKNOWN")
 
 	for _, organizationID := range []string{"gram_org_cap_known_first", "gram_org_cap_known_second"} {
-		require.NoError(t, orgrepo.New(conn).BackdateOrganizationCreatedAtForTest(ctx, orgrepo.BackdateOrganizationCreatedAtForTestParams{
-			ID:        organizationID,
-			CreatedAt: conv.ToPGTimestamptz(time.Now().AddDate(0, -6, 0)),
-		}))
 		_, err := orgrepo.New(conn).UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
 			OrganizationID: organizationID,
 			UserID:         conv.ToPGText("user_cap_known"),
 		})
 		require.NoError(t, err)
+		require.NoError(t, orgrepo.New(conn).BackdateOrganizationUserRelationshipForTest(ctx, orgrepo.BackdateOrganizationUserRelationshipForTestParams{
+			OrganizationID: organizationID,
+			UserID:         conv.ToPGText("user_cap_known"),
+			CreatedAt:      conv.ToPGTimestamptz(time.Now().AddDate(0, -6, 0)),
+		}))
 	}
 
 	require.NoError(t, deliverMembershipCreated(t, ctx, conn, "org_01HZCAPKNOWNB", "user_01HZCAPKNOWN", "B"))

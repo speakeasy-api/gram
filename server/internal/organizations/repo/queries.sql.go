@@ -181,6 +181,24 @@ func (q *Queries) BackdateOrganizationCreatedAtForTest(ctx context.Context, arg 
 	return err
 }
 
+const backdateOrganizationUserRelationshipForTest = `-- name: BackdateOrganizationUserRelationshipForTest :exec
+UPDATE organization_user_relationships
+SET created_at = $1
+WHERE organization_id = $2
+  AND user_id = $3
+`
+
+type BackdateOrganizationUserRelationshipForTestParams struct {
+	CreatedAt      pgtype.Timestamptz
+	OrganizationID string
+	UserID         pgtype.Text
+}
+
+func (q *Queries) BackdateOrganizationUserRelationshipForTest(ctx context.Context, arg BackdateOrganizationUserRelationshipForTestParams) error {
+	_, err := q.db.Exec(ctx, backdateOrganizationUserRelationshipForTest, arg.CreatedAt, arg.OrganizationID, arg.UserID)
+	return err
+}
+
 const clearOnboardingDefaultPlaybook = `-- name: ClearOnboardingDefaultPlaybook :exec
 UPDATE onboarding_playbooks
 SET is_default = false, updated_at = clock_timestamp()
@@ -2697,6 +2715,15 @@ SELECT pg_advisory_xact_lock(hashtextextended('organization-cap:' || $1::text, 0
 
 func (q *Queries) LockUserOrganizationCap(ctx context.Context, workosUserID string) error {
 	_, err := q.db.Exec(ctx, lockUserOrganizationCap, workosUserID)
+	return err
+}
+
+const lockUserOrganizationProvision = `-- name: LockUserOrganizationProvision :exec
+SELECT pg_advisory_xact_lock(hashtextextended('organization-provision:' || $1::text, 0))
+`
+
+func (q *Queries) LockUserOrganizationProvision(ctx context.Context, userID string) error {
+	_, err := q.db.Exec(ctx, lockUserOrganizationProvision, userID)
 	return err
 }
 

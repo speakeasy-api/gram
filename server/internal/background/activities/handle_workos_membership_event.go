@@ -72,11 +72,11 @@ func handleOrganizationMembershipEvent(ctx context.Context, logger *slog.Logger,
 		return none, fmt.Errorf("get user by workos id %q: %w", payload.UserID, err)
 	}
 
-	known, lastEventID, rowUpdatedAt, err := getMembershipRelationshipCursor(ctx, orgrepo.New(dbtx), org.ID, gramUserID, payload.ID)
+	existing, err := getMembershipRelationshipCursor(ctx, orgrepo.New(dbtx), org.ID, gramUserID, payload.ID)
 	if err != nil {
 		return none, err
 	}
-	if !ShouldProcessEvent(lastEventID, rowUpdatedAt, event.ID, payload.UpdatedAt) {
+	if !ShouldProcessEvent(existing.lastEventID, existing.updatedAt, event.ID, payload.UpdatedAt) {
 		return none, nil
 	}
 
@@ -101,7 +101,7 @@ func handleOrganizationMembershipEvent(ctx context.Context, logger *slog.Logger,
 		return none, err
 	}
 	created := workos.EventKind(event.Event) == workos.EventKindOrganizationMembershipCreated
-	if firstMembershipEvent(known, created, lastEventID, org.CreatedAt.Time, time.Now()) {
+	if firstMembershipEvent(existing, created, time.Now()) {
 		capped, err := orgcap.Enforce(ctx, dbtx, audit.NewLogger(), orgcap.NewMembership{
 			OrganizationID: org.ID,
 			UserID:         gramUserID,
@@ -153,23 +153,31 @@ func upsertOrganizationMembership(ctx context.Context, dbtx pgx.Tx, organization
 	return nil
 }
 
-// recentOrganizationWindow is how long after an organization row is created a
-// membership row that login wrote, before any event reached it, still counts
-// as new. Event processing normally follows within a minute.
-const recentOrganizationWindow = 24 * time.Hour
+// recentMembershipWindow is how long after login writes a membership row,
+// before any event reached it, that row still counts as new. Event processing
+// normally follows within a minute.
+const recentMembershipWindow = 24 * time.Hour
+
+type membershipRelationship struct {
+	known       bool
+	lastEventID *string
+	updatedAt   *time.Time
+	createdAt   time.Time
+}
 
 // firstMembershipEvent reports whether this event is the first to record the
 // membership, so the organization limit applies to it. A row written at login
-// carries no event cursor; for a created event on a recently created
-// organization, login only got there before the event did.
-func firstMembershipEvent(known, created bool, lastEventID *string, organizationCreatedAt, now time.Time) bool {
-	if !known {
+// carries no event cursor; for a created event soon after, login only got
+// there before the event did.
+func firstMembershipEvent(existing membershipRelationship, created bool, now time.Time) bool {
+	if !existing.known {
 		return true
 	}
-	return created && lastEventID == nil && now.Sub(organizationCreatedAt) < recentOrganizationWindow
+	return created && existing.lastEventID == nil && now.Sub(existing.createdAt) < recentMembershipWindow
 }
 
-func getMembershipRelationshipCursor(ctx context.Context, repo *orgrepo.Queries, organizationID, gramUserID, workosMembershipID string) (known bool, lastEventID *string, rowUpdatedAt *time.Time, err error) {
+func getMembershipRelationshipCursor(ctx context.Context, repo *orgrepo.Queries, organizationID, gramUserID, workosMembershipID string) (membershipRelationship, error) {
+	var none membershipRelationship
 	existing, err := repo.GetRelationshipByMembershipID(ctx, conv.ToPGText(workosMembershipID))
 	if errors.Is(err, pgx.ErrNoRows) && gramUserID != "" {
 		existing, err = repo.GetOrganizationRelationshipForUser(ctx, orgrepo.GetOrganizationRelationshipForUserParams{
@@ -179,19 +187,20 @@ func getMembershipRelationshipCursor(ctx context.Context, repo *orgrepo.Queries,
 	}
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return false, nil, nil, nil
+		return none, nil
 	case err != nil:
-		return false, nil, nil, fmt.Errorf("get organization membership %q: %w", workosMembershipID, err)
+		return none, fmt.Errorf("get organization membership %q: %w", workosMembershipID, err)
 	}
 
+	found := membershipRelationship{known: true, lastEventID: nil, updatedAt: nil, createdAt: existing.CreatedAt.Time}
 	if existing.WorkosLastEventID.Valid {
-		lastEventID = &existing.WorkosLastEventID.String
+		found.lastEventID = &existing.WorkosLastEventID.String
 	}
 	if existing.WorkosUpdatedAt.Valid {
-		rowUpdatedAt = &existing.WorkosUpdatedAt.Time
+		found.updatedAt = &existing.WorkosUpdatedAt.Time
 	}
 
-	return true, lastEventID, rowUpdatedAt, nil
+	return found, nil
 }
 
 func decodeWorkOSMembershipPayload(event events.Event) (workosMembershipEventPayload, error) {
