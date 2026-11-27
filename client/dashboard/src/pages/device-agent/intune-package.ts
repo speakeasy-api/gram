@@ -21,6 +21,9 @@ export type IntuneConfig = {
   orgName: string;
   autoUpdate: "automatic" | "notify";
   revision: string;
+  // Written as _control_plane_url when the agent's default host does not
+  // reach this deployment; null or absent keeps the default.
+  controlPlaneURL?: string | null;
 };
 
 // PowerShell treats the typographic single quotes as quote characters too,
@@ -45,6 +48,7 @@ export function configScript(c: IntuneConfig): string {
       org_slug: c.orgSlug,
       org_name: c.orgName,
       auto_update: c.autoUpdate,
+      ...(c.controlPlaneURL ? { _control_plane_url: c.controlPlaneURL } : {}),
     },
     null,
     2,
