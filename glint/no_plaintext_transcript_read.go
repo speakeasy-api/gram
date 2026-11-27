@@ -18,7 +18,7 @@ import (
 
 const (
 	noPlaintextTranscriptReadAnalyzer = "noplaintexttranscriptread"
-	noPlaintextTranscriptReadDoc      = "only the transcript store may call sqlc queries that read or update the plaintext transcript columns of chat_messages; it opens encrypted copies on read and stamps source_updated_at on update"
+	noPlaintextTranscriptReadDoc      = "only the transcript store may read, update or insert the plaintext transcript columns of chat_messages; it opens encrypted transcripts on read, writes every copy of a body through Transcripts.UpdateMessage, and the chat message writer seals inserts"
 )
 
 type noPlaintextTranscriptReadSettings struct {
@@ -26,8 +26,8 @@ type noPlaintextTranscriptReadSettings struct {
 }
 
 // plaintextTranscriptColumns are the chat_messages columns that the encrypted
-// transcript shadow (chat_message_transcripts.ciphertext) covers. They match
-// the source hash in server/internal/chat/transcriptstore/queries.sql.
+// transcript (chat_message_transcripts.ciphertext) covers: the message body
+// that transcriptcrypto.Message holds.
 var plaintextTranscriptColumns = []string{
 	"content",
 	"content_raw",
@@ -44,10 +44,16 @@ var plaintextTranscriptColumns = []string{
 // this rule catches a new query added anywhere else.
 const plaintextTranscriptStorePath = "github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 
-// sanctionedPlaintextTranscriptReaders may read the plaintext transcript
-// columns outside the transcript store. Keys are types.Func.FullName values.
-// Every entry needs a reason a reviewer can check. Keep it empty.
-var sanctionedPlaintextTranscriptReaders = map[string]string{}
+// sanctionedPlaintextTranscriptReaders may read or insert the plaintext
+// transcript columns outside the transcript store. Keys are types.Func.FullName
+// values. Every entry needs a reason a reviewer can check: the chat message
+// writer, which seals what it inserts in the same transaction, and demo seed
+// data for projects that never keep encrypted transcripts.
+var sanctionedPlaintextTranscriptReaders = map[string]string{
+	"(*github.com/speakeasy-api/gram/server/internal/chat.ChatMessageWriter).WriteExternalWithContentParts": "the chat message writer seals each message it inserts in the same transaction",
+	"(*github.com/speakeasy-api/gram/server/internal/demoseed.seeder).activityInsertMessages":               "demo seed data for the demo organization, whose projects never keep encrypted transcripts",
+	"(*github.com/speakeasy-api/gram/server/internal/demoseed.seeder).seedSignalConversations":              "demo seed data for the demo organization, whose projects never keep encrypted transcripts",
+}
 
 // pendingPlaintextTranscriptReaders read plaintext and have not moved behind
 // the transcript store yet. Remove an entry when its reader moves, and never
@@ -115,13 +121,18 @@ func newNoPlaintextTranscriptReadAnalyzerWith(_ noPlaintextTranscriptReadSetting
 				}
 
 				if use == plaintextTranscriptUpdate {
-					pass.ReportRangef(sel, "do not call %q here: it updates the plaintext transcript columns of chat_messages; move the query into transcriptstore, which stamps source_updated_at and reseals (caller %q)", called.Name(), callerOrPackage(caller, pass))
+					pass.ReportRangef(sel, "do not call %q here: it updates the plaintext transcript columns of chat_messages; change the message through transcriptstore.Transcripts.UpdateMessage, which writes every copy (caller %q)", called.Name(), callerOrPackage(caller, pass))
+					return true
+				}
+				if use == plaintextTranscriptInsert {
+					pass.ReportRangef(sel, "do not call %q here: it inserts the plaintext transcript columns of chat_messages; insert messages through the chat message writer, which seals them in the same transaction (caller %q)", called.Name(), callerOrPackage(caller, pass))
 					return true
 				}
 				pass.ReportRangef(sel, "do not call %q here: it reads the plaintext transcript columns of chat_messages; move the query into transcriptstore and read through transcriptstore.Transcripts (caller %q)", called.Name(), callerOrPackage(caller, pass))
 				return true
 			})
 
+			reportRawPlaintextTranscriptWrites(pass, ins, allow, readers)
 			reportStaleAllowlistEntries(pass, allow, readers)
 			return nil, nil
 		},
@@ -240,6 +251,7 @@ const (
 	plaintextTranscriptUnused plaintextTranscriptUse = iota
 	plaintextTranscriptRead
 	plaintextTranscriptUpdate
+	plaintextTranscriptInsert
 )
 
 func sqlcQueryPlaintextTranscriptUse(fset *token.FileSet, fn *types.Func, cache map[string]map[string]plaintextTranscriptUse) plaintextTranscriptUse {
@@ -258,7 +270,8 @@ func sqlcQueryPlaintextTranscriptUse(fset *token.FileSet, fn *types.Func, cache 
 var sqlcQueryHeader = regexp.MustCompile(`^-- name: (\w+) :`)
 
 // parseSqlcQueries maps each query name in a sqlc-generated file to how its
-// SQL touches plaintext transcript columns. A read wins over an update.
+// SQL touches plaintext transcript columns. A read wins over an update, and an
+// update over an insert.
 func parseSqlcQueries(filename string) map[string]plaintextTranscriptUse {
 	result := map[string]plaintextTranscriptUse{}
 	file, err := parser.ParseFile(token.NewFileSet(), filename, nil, parser.ParseComments)
@@ -293,6 +306,8 @@ func parseSqlcQueries(filename string) map[string]plaintextTranscriptUse {
 					result[m[1]] = plaintextTranscriptRead
 				case sqlUpdatesPlaintextTranscript(sql):
 					result[m[1]] = plaintextTranscriptUpdate
+				case sqlInsertsPlaintextTranscript(sql):
+					result[m[1]] = plaintextTranscriptInsert
 				default:
 					result[m[1]] = plaintextTranscriptUnused
 				}
@@ -309,6 +324,8 @@ var (
 	sqlSetKeyword      = regexp.MustCompile(`\bset\b`)
 	sqlUpdateTarget    = regexp.MustCompile(`\bupdate\s+(?:only\s+)?chat_messages\b`)
 	sqlUpsertTarget    = regexp.MustCompile(`\binsert\s+into\s+chat_messages\b[\s\S]*\bon\s+conflict\b[\s\S]*\bdo\s+update\b`)
+	sqlInsertBodyList  = regexp.MustCompile(`\binsert\s+into\s+chat_messages\s*\(([^)]*)\)`)
+	sqlBodyColumn      = regexp.MustCompile(`\b(` + strings.Join(plaintextTranscriptColumns, "|") + `)\b`)
 	sqlBodySetTarget   = regexp.MustCompile(`(?:^|,)\s*(` + strings.Join(plaintextTranscriptColumns, "|") + `)\s*=`)
 	sqlSetTerminator   = regexp.MustCompile(`^(where|from|returning)\b`)
 	sqlSetTarget       = regexp.MustCompile(`^\s*[a-z_][a-z0-9_]*\s*=`)
@@ -377,11 +394,20 @@ func sqlReadsPlaintextTranscript(sql string) bool {
 	return false
 }
 
+// sqlInsertsPlaintextTranscript reports whether a query inserts a plaintext
+// transcript column of chat_messages: its INSERT column list names one. A new
+// message must be sealed in the same transaction, which only the chat message
+// writer does.
+func sqlInsertsPlaintextTranscript(sql string) bool {
+	s := stripSQLCommentsAndStrings(strings.ToLower(strings.ReplaceAll(sql, `"`, "")))
+	m := sqlInsertBodyList.FindStringSubmatch(s)
+	return m != nil && sqlBodyColumn.MatchString(m[1])
+}
+
 // sqlUpdatesPlaintextTranscript reports whether a query updates a plaintext
 // transcript column of chat_messages: an UPDATE of chat_messages, or an INSERT
-// into it with ON CONFLICT DO UPDATE, whose SET clause assigns one. Every such
-// update must also stamp source_updated_at, so it belongs in the transcript
-// store. A plain INSERT is not an update: the column default stamps it.
+// into it with ON CONFLICT DO UPDATE, whose SET clause assigns one. Every body
+// change goes through Transcripts.UpdateMessage, which writes every copy.
 func sqlUpdatesPlaintextTranscript(sql string) bool {
 	s := stripSQLCommentsAndStrings(strings.ToLower(sql))
 	if !sqlUpdateTarget.MatchString(s) && !sqlUpsertTarget.MatchString(s) {
@@ -581,4 +607,45 @@ func isEscapeStringPrefix(s string, i int) bool {
 	}
 	c := s[i-2]
 	return c != '_' && (c < 'a' || c > 'z') && (c < '0' || c > '9')
+}
+
+// reportRawPlaintextTranscriptWrites flags SQL written as a Go string outside
+// sqlc that updates a plaintext transcript column of chat_messages, or inserts
+// one outside a sanctioned caller, which the sqlc call check cannot see.
+// Generated sqlc files are left to that check, and tests may set up stale rows
+// on purpose.
+func reportRawPlaintextTranscriptWrites(pass *analysis.Pass, ins *inspector.Inspector, allow noPlaintextTranscriptReadAllowlist, readers map[string]bool) {
+	ins.WithStack([]ast.Node{(*ast.BasicLit)(nil)}, func(node ast.Node, push bool, stack []ast.Node) bool {
+		if !push {
+			return true
+		}
+		lit := node.(*ast.BasicLit)
+		if lit.Kind != token.STRING {
+			return true
+		}
+		filename := pass.Fset.Position(lit.Pos()).Filename
+		if strings.HasSuffix(filename, "_test.go") || strings.HasSuffix(filename, ".sql.go") {
+			return true
+		}
+		sql, err := strconv.Unquote(lit.Value)
+		if err != nil {
+			return true
+		}
+		if sqlUpdatesPlaintextTranscript(sql) {
+			pass.ReportRangef(lit, "this SQL updates the plaintext transcript columns of chat_messages; change the message through transcriptstore.Transcripts.UpdateMessage, which writes every copy")
+			return true
+		}
+		if !sqlInsertsPlaintextTranscript(sql) {
+			return true
+		}
+		caller := enclosingFuncName(pass, stack)
+		if caller != "" {
+			readers[caller] = true
+		}
+		if allow.allowed(caller) {
+			return true
+		}
+		pass.ReportRangef(lit, "this SQL inserts the plaintext transcript columns of chat_messages; insert messages through the chat message writer, which seals them in the same transaction (caller %q)", callerOrPackage(caller, pass))
+		return true
+	})
 }

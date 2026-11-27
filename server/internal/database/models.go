@@ -658,9 +658,11 @@ type Asset struct {
 	ProjectID uuid.NullUUID
 	// @access: confidential
 	OrganizationID pgtype.Text
-	// @access: confidential
+	// Stored asset name, which includes a content digest for chat attachments.
+	// @access: restricted
 	Name string
-	// @access: confidential
+	// Storage path for the asset, which includes a content digest for chat attachments.
+	// @access: restricted
 	Url string
 	// @access: confidential
 	Kind string
@@ -668,7 +670,8 @@ type Asset struct {
 	ContentType string
 	// @access: confidential
 	ContentLength int64
-	// @access: confidential
+	// SHA-256 digest of the stored asset content.
+	// @access: restricted
 	Sha256 string
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
@@ -1720,7 +1723,8 @@ type ChatContentPart struct {
 	ProjectID uuid.NullUUID
 	// @access: confidential
 	Kind string
-	// @access: confidential
+	// Storage path for the content part. Its file name is a digest of the content.
+	// @access: restricted
 	ContentAssetUrl string
 	// @access: confidential
 	ExternalID pgtype.Text
@@ -1819,9 +1823,6 @@ type ChatMessage struct {
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
 	RiskAnalyzedAt pgtype.Timestamptz
-	// When the message body last changed; set on insert and by every body update.
-	// @access: confidential
-	SourceUpdatedAt pgtype.Timestamptz
 	// Number of tool calls in tool_calls, 0 when it has none.
 	// @access: confidential
 	ToolCallCount pgtype.Int4
@@ -1891,45 +1892,13 @@ type ChatMessageTranscript struct {
 	// Organization-key encrypted transcript payload.
 	// @access: opaque-restricted
 	Ciphertext string
-	// Deprecated unkeyed freshness digest of sensitive transcript fields; NULL for copies sealed with source_updated_at.
+	// Deprecated: transcripts are resealed with every body update, so no freshness check is needed. Legacy unkeyed digest of sensitive transcript fields; NULL for new transcripts. A row carrying it is plaintext-equivalent until backfill reseals it and the column is dropped.
 	// @access: opaque-restricted
 	SourceHash []byte
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
 	UpdatedAt pgtype.Timestamptz
-	// The chat_messages.source_updated_at this copy was sealed from.
-	// @access: confidential
-	SourceUpdatedAt pgtype.Timestamptz
-	// Deprecated, moved to chat_messages. Number of tool calls in the source message tool_calls, 0 when it has none.
-	// @access: confidential
-	ToolCallCount pgtype.Int4
-	// Deprecated, moved to chat_messages. octet_length of the source message content.
-	// @access: confidential
-	ContentBytes pgtype.Int4
-	// Deprecated, moved to chat_messages. octet_length of the source message content_raw as text, 0 when NULL.
-	// @access: confidential
-	ContentRawBytes pgtype.Int4
-	// Deprecated, moved to chat_messages. octet_length of the source message tool_calls as text, 0 when NULL.
-	// @access: confidential
-	ToolCallsBytes pgtype.Int4
-}
-
-type ChatMessageTranscriptToolCall struct {
-	// Shadowed assistant message that issued the tool call.
-	// @access: confidential
-	MessageID uuid.UUID
-	// Provider-issued tool call identifier from the message tool_calls.
-	// @access: opaque-confidential
-	ToolCallID string
-	// Chat that owns the message.
-	// @access: confidential
-	ChatID uuid.UUID
-	// Project that owns the message.
-	// @access: confidential
-	ProjectID uuid.UUID
-	// @access: confidential
-	CreatedAt pgtype.Timestamptz
 }
 
 type ChatResolution struct {

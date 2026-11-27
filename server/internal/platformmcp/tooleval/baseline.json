@@ -391,12 +391,6 @@
         "runs": 3
       }
     },
-    "mcp-describe-linear-tools": {
-      "progressive": {
-        "passes": 1,
-        "runs": 3
-      }
-    },
     "mcp-disable-github-incident": {
       "progressive": {
         "passes": 0,
@@ -412,12 +406,6 @@
     "mcp-enable-linear": {
       "progressive": {
         "passes": 3,
-        "runs": 3
-      }
-    },
-    "mcp-execute-linear-issue": {
-      "progressive": {
-        "passes": 2,
         "runs": 3
       }
     },
@@ -469,12 +457,6 @@
         "runs": 3
       }
     },
-    "mcp-list-my-servers": {
-      "progressive": {
-        "passes": 0,
-        "runs": 3
-      }
-    },
     "mcp-my-org-gateway": {
       "progressive": {
         "passes": 0,
@@ -488,12 +470,6 @@
       }
     },
     "mcp-my-review-status": {
-      "progressive": {
-        "passes": 3,
-        "runs": 3
-      }
-    },
-    "mcp-my-servers-crm-lookup": {
       "progressive": {
         "passes": 3,
         "runs": 3
@@ -596,12 +572,6 @@
       }
     },
     "mcp-request-review-asana": {
-      "progressive": {
-        "passes": 0,
-        "runs": 3
-      }
-    },
-    "mcp-search-my-tools-pr": {
       "progressive": {
         "passes": 0,
         "runs": 3
@@ -1261,6 +1231,12 @@
         "runs": 3
       }
     },
+    "risk-negative-remove-self-from-policy": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
     "risk-pause-data-export": {
       "progressive": {
         "passes": 3,
@@ -1276,12 +1252,6 @@
     "risk-preview-sensor-match": {
       "progressive": {
         "passes": 3,
-        "runs": 3
-      }
-    },
-    "risk-remove-self-from-policy": {
-      "progressive": {
-        "passes": 0,
         "runs": 3
       }
     },

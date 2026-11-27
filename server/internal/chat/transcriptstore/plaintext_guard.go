@@ -42,7 +42,11 @@ type plaintextGuard struct {
 // them, for a process that reads chat messages without configuring the shadow
 // store. Every read for a listed project goes through the plaintext guard.
 func NewReadOnlyTranscripts(projectIDs ...uuid.UUID) *Transcripts {
-	return NewTranscripts(nil, projectIDs...)
+	t := NewTranscripts(nil)
+	for _, projectID := range projectIDs {
+		t.projects[projectID] = struct{}{}
+	}
+	return t
 }
 
 // WithPlaintextGuard reports a read for a listed project that this process

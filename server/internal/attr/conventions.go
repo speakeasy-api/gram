@@ -1246,6 +1246,9 @@ const (
 	// or would have served plaintext for a project that keeps encrypted
 	// shadows.
 	TranscriptShadowReaderKey = attribute.Key("gram.transcript_shadow.reader")
+	// TranscriptShadowMismatchKey lists the body fields on which an encrypted
+	// transcript and its plaintext row differ, by size and nullness only.
+	TranscriptShadowMismatchKey = attribute.Key("gram.transcript_shadow.mismatch")
 	// TelemetryLogIDKey carries the telemetry_logs row id on records relayed
 	// to a customer OTLP destination. Delivery is at-least-once, so this is
 	// the key a destination dedupes redeliveries on.
@@ -4740,6 +4743,9 @@ func TranscriptShadowReader(v string) attribute.KeyValue {
 }
 func SlogTranscriptShadowReader(v string) slog.Attr {
 	return slog.String(string(TranscriptShadowReaderKey), v)
+}
+func SlogTranscriptShadowMismatch(v any) slog.Attr {
+	return slog.Any(string(TranscriptShadowMismatchKey), v)
 }
 
 func SlogRegistryEntryID(v string) slog.Attr   { return slog.String(string(RegistryEntryIDKey), v) }

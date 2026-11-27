@@ -7,6 +7,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"log/slog"
 	"math/big"
 	"reflect"
 	"sort"
@@ -21,6 +23,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptcrypto"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore/repo"
 	"github.com/speakeasy-api/gram/server/internal/orgencryption"
@@ -28,20 +31,26 @@ import (
 
 var (
 	ErrNotFound = errors.New("transcript source or shadow not found")
-	ErrChanged  = errors.New("transcript source changed during capture")
 	ErrStale    = errors.New("transcript shadow is stale")
 	ErrInvalid  = errors.New("invalid transcript store arguments")
+	// ErrUnsupported reports a storage mode that is not available yet.
+	ErrUnsupported = errors.New("transcript storage mode not supported yet")
+	// ErrMissingTranscript reports an encrypted-mode message with no current
+	// transcript: its body exists nowhere else, so nothing can be served or
+	// changed.
+	ErrMissingTranscript = errors.New("message has no current encrypted transcript")
 )
 
 type Store struct {
 	db      *pgxpool.Pool
+	logger  *slog.Logger
 	service *orgencryption.Service
 	tracer  trace.Tracer
 	metrics *storeMetrics
 }
 
-func New(db *pgxpool.Pool, service *orgencryption.Service, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider) (*Store, error) {
-	if db == nil || service == nil || tracerProvider == nil || meterProvider == nil {
+func New(db *pgxpool.Pool, service *orgencryption.Service, logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider) (*Store, error) {
+	if db == nil || service == nil || logger == nil || tracerProvider == nil || meterProvider == nil {
 		return nil, ErrInvalid
 	}
 	metrics, err := newStoreMetrics(meterProvider)
@@ -50,6 +59,7 @@ func New(db *pgxpool.Pool, service *orgencryption.Service, tracerProvider trace.
 	}
 	return &Store{
 		db:      db,
+		logger:  logger.With(attr.SlogComponent("transcriptstore")),
 		service: service,
 		tracer:  tracerProvider.Tracer(instrumentationName),
 		metrics: metrics,
@@ -79,7 +89,31 @@ func message(content string, raw, calls []byte, notes pgtype.Text, summaries []b
 	return m
 }
 
-// Capture uses the caller's transaction. The caller must roll back on error;
+// Prepare unwraps the organization's active transcript key into the process's
+// committed key cache through the pool. Call it before opening the transaction
+// that Capture will use: Capture never calls KMS, and fails with
+// orgencryption.ErrKeyNotWarm when the key is not cached. A warm cache needs
+// no KMS call here either. A failed early refresh of a key that is still
+// cached is not an error. Any error it returns means the key is not cached, so
+// Capture would fail too. Capture still reads the configuration in its
+// transaction and fails closed on its own.
+func (s *Store) Prepare(ctx context.Context, organizationID string) error {
+	if organizationID == "" {
+		return ErrInvalid
+	}
+	ctx, span := s.tracer.Start(ctx, "transcriptstore.Prepare", trace.WithAttributes(attr.OrganizationID(organizationID)))
+	defer span.End()
+
+	if err := s.service.Warm(ctx, organizationID, orgencryption.UseCaseChatTranscripts); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, string(classify(err)))
+		return safe(err)
+	}
+	return nil
+}
+
+// Capture uses the caller's transaction and never calls KMS: run Prepare
+// before opening it. The caller must roll back on error;
 // a batch is not an independently committed unit. IDs are deduplicated and sorted.
 func (s *Store) Capture(ctx context.Context, db repo.DBTX, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID) error {
 	if len(messageIDs) == 0 {
@@ -123,69 +157,462 @@ func (s *Store) capture(ctx context.Context, db repo.DBTX, organizationID string
 		if i > 0 && id == ids[i-1] {
 			continue
 		}
-		row, err := q.Snapshot(ctx, repo.SnapshotParams{MessageID: id, ProjectID: project(projectID), OrganizationID: organizationID})
-		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrNotFound
-		}
+		row, err := snapshot(ctx, q, organizationID, projectID, id)
 		if err != nil {
-			return safe(err)
+			return err
 		}
-		ciphertext, err := codec.Encrypt(ctx, transcriptcrypto.Identity{ProjectID: projectID, ChatID: row.ChatID, MessageID: id}, message(row.Content, row.ContentRaw, row.ToolCalls, row.ToolOutcomeNotes, row.ToolCallSummaries, row.StorageError))
-		if err != nil {
-			return safe(err)
-		}
-		// The copy records the source_updated_at it was sealed from. Every
-		// body update moves it, so the copy is current exactly while the two
-		// are equal.
-		n, err := q.Capture(ctx, repo.CaptureParams{
-			MessageID:       id,
-			ProjectID:       projectID,
-			OrganizationID:  organizationID,
-			ChatID:          row.ChatID,
-			SourceUpdatedAt: row.SourceUpdatedAt,
-			Ciphertext:      ciphertext,
-		})
-		if err != nil {
-			return safe(err)
-		}
-		if n != 1 {
-			return ErrChanged
-		}
-		// The counts and sizes live on chat_messages and the tool-call IDs in
-		// chat_message_tool_call_ids, measured from the same snapshot and
-		// written in the same transaction, so they never describe another
-		// version of the message than the sealed one.
-		meta := metadataOf(row.Content, row.ContentRaw, row.ToolCalls)
-		n, err = q.UpdateMessageMetadata(ctx, repo.UpdateMessageMetadataParams{
-			MessageID:       id,
-			ProjectID:       projectID,
-			SourceUpdatedAt: row.SourceUpdatedAt,
-			ToolCallCount:   meta.toolCallCount,
-			ContentBytes:    meta.contentBytes,
-			ContentRawBytes: meta.contentRawBytes,
-			ToolCallsBytes:  meta.toolCallsBytes,
-		})
-		if err != nil {
-			return safe(err)
-		}
-		if n != 1 {
-			return ErrChanged
-		}
-		if err := q.DeleteToolCallIDs(ctx, repo.DeleteToolCallIDsParams{MessageID: id, ProjectID: projectID}); err != nil {
-			return safe(err)
-		}
-		if len(meta.toolCallIDs) == 0 {
+		// An encrypted-mode message keeps its body only in the transcript and
+		// its plaintext columns empty. Resealing it from that row would
+		// overwrite the body with nothing, so it is left as it is.
+		if row.CurrentCiphertext != "" && sameMessage(bodyOf(row.ChatMessage), emptyBody) {
 			continue
 		}
-		if err := q.InsertToolCallIDs(ctx, repo.InsertToolCallIDsParams{MessageID: id, ProjectID: projectID, ToolCallIds: meta.toolCallIDs}); err != nil {
+		if err := seal(ctx, q, codec, organizationID, projectID, row.ChatMessage, bodyOf(row.ChatMessage)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// UpdateMessage is the shadow-mode message update with a trace span and
+// metrics; see Transcripts.UpdateMessage.
+func (s *Store) UpdateMessage(ctx context.Context, db repo.DBTX, organizationID string, projectID, chatID, messageID uuid.UUID, apply func(*chatrepo.ChatMessage) error) (bool, error) {
+	return s.updateMessageIn(ctx, db, false, organizationID, projectID, chatID, messageID, apply)
+}
+
+func (s *Store) updateMessageIn(ctx context.Context, db repo.DBTX, encrypted bool, organizationID string, projectID, chatID, messageID uuid.UUID, apply func(*chatrepo.ChatMessage) error) (bool, error) {
+	if db == nil || organizationID == "" || projectID == uuid.Nil {
+		return false, ErrInvalid
+	}
+	ctx, span := s.tracer.Start(ctx, "transcriptstore.UpdateMessage", trace.WithAttributes(
+		attr.ProjectID(projectID.String()),
+		attr.OrganizationID(organizationID),
+		attr.TranscriptShadowMessageCount(1),
+	))
+	defer span.End()
+
+	start := time.Now()
+	changed, err := updateMessage(ctx, db, s, encrypted, organizationID, projectID, chatID, messageID, apply)
+	result := classify(err)
+	s.metrics.update.record(ctx, projectID, 1, time.Since(start), result)
+
+	span.SetAttributes(attr.Outcome(result))
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, string(result))
+	}
+	return changed, err
+}
+
+// writableColumns are the chat_messages fields an update may change: the six
+// body columns and the non-body columns a body change comes with. apply gets
+// the whole row but may change only these.
+var writableColumns = map[string]bool{
+	"Content": true, "ContentRaw": true, "ToolCalls": true, "ToolOutcomeNotes": true,
+	"ToolCallSummaries": true, "StorageError": true,
+	"ToolOutcome": true, "FinishReason": true, "ContentHash": true, "RiskAnalyzedAt": true,
+}
+
+// updateMessage is the one read-modify-write of an existing message. It locks
+// the row and its transcript, hands apply the whole row with its body filled
+// in (from the decrypted transcript, outside plaintext mode), and when apply
+// changed anything writes the row, the metadata and, with a store, the
+// encrypted transcript, all from that one value in the caller's transaction.
+// A nil store is plaintext mode. In shadow mode a missing or disagreeing
+// transcript is logged and the plaintext row is used. In encrypted mode the
+// transcript is the only copy: it must exist, and the body columns are written
+// empty. The caller runs Prepare before opening the transaction and rolls back
+// on error.
+func updateMessage(ctx context.Context, db repo.DBTX, store *Store, encrypted bool, organizationID string, projectID, chatID, messageID uuid.UUID, apply func(*chatrepo.ChatMessage) error) (bool, error) {
+	if db == nil || organizationID == "" || projectID == uuid.Nil || chatID == uuid.Nil || messageID == uuid.Nil || apply == nil {
+		return false, ErrInvalid
+	}
+	q := repo.New(db)
+	row, err := snapshot(ctx, q, organizationID, projectID, messageID)
+	if err != nil {
+		return false, err
+	}
+	if row.ChatMessage.ChatID != chatID {
+		return false, ErrNotFound
+	}
+	body := bodyOf(row.ChatMessage)
+	consistent := true
+	var codec *transcriptcrypto.Codec
+	if store != nil {
+		codec, err = transcriptcrypto.NewIn(store.service, db, organizationID)
+		if err != nil {
+			return false, safe(err)
+		}
+		body, consistent, err = store.hydrate(ctx, codec, encrypted, projectID, row)
+		if err != nil {
+			return false, err
+		}
+	}
+	before := withBody(chatrepo.ChatMessage(row.ChatMessage), body)
+	after := cloneRow(before)
+	if err := apply(&after); err != nil {
+		return false, fmt.Errorf("apply message change: %w", err)
+	}
+	if field := changedReadOnlyField(before, after); field != "" {
+		return false, fmt.Errorf("%w: an update cannot change %s", ErrInvalid, field)
+	}
+	// In encrypted mode a row still holding plaintext (sealed in shadow mode)
+	// is emptied even when apply changes nothing.
+	populated := encrypted && !sameMessage(bodyOf(row.ChatMessage), emptyBody)
+	if sameRow(before, after) && !populated {
+		if store != nil && consistent {
+			store.metrics.check(ctx, projectID, outcomeSuccess)
+		}
+		return false, nil
+	}
+	body = bodyOf(repo.ChatMessage(after))
+	if encrypted {
+		// Seal and measure the JSON in the text form jsonb stores, as a
+		// plaintext row would hold it.
+		body, err = canonical(ctx, q, body)
+		if err != nil {
+			return false, err
+		}
+		after = withBody(after, emptyBody)
+	}
+	written, err := q.WriteMessage(ctx, writeParams(projectID, after))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, ErrNotFound
+	}
+	if err != nil {
+		return false, safe(err)
+	}
+	// Seal what Postgres stored, so the transcript and the metadata match the
+	// plaintext row byte for byte. In encrypted mode the plaintext row is
+	// empty, so the transcript holds the body itself.
+	sealed := bodyOf(written)
+	if encrypted {
+		sealed = body
+	}
+	if store == nil {
+		return true, writeMetadata(ctx, q, projectID, written.ID, sealed)
+	}
+	if err := seal(ctx, q, codec, organizationID, projectID, written, sealed); err != nil {
+		return false, err
+	}
+	return true, store.sanityCheck(ctx, q, codec, organizationID, projectID, written, sealed, consistent)
+}
+
+// canonical returns body with its JSON fields in the text form Postgres stores
+// for jsonb.
+func canonical(ctx context.Context, q *repo.Queries, body transcriptcrypto.Message) (transcriptcrypto.Message, error) {
+	row, err := q.CanonicalJSON(ctx, repo.CanonicalJSONParams{ContentRaw: body.ContentRaw, ToolCalls: body.ToolCalls, ToolCallSummaries: body.ToolCallSummaries})
+	if err != nil {
+		return body, safe(err)
+	}
+	orNil := func(v string) []byte {
+		if v == "" {
+			return nil
+		}
+		return []byte(v)
+	}
+	body.ContentRaw, body.ToolCalls, body.ToolCallSummaries = orNil(row.ContentRaw), orNil(row.ToolCalls), orNil(row.ToolCallSummaries)
+	return body, nil
+}
+
+// emptyBody is what the plaintext columns hold in encrypted mode: content is
+// NOT NULL, so it is the empty string; every other field is NULL.
+var emptyBody = transcriptcrypto.Message{Content: "", ContentRaw: nil, ToolCalls: nil, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}
+
+// withBody returns the row with its six body fields set from body.
+func withBody(m chatrepo.ChatMessage, body transcriptcrypto.Message) chatrepo.ChatMessage {
+	m.Content = body.Content
+	m.ContentRaw = body.ContentRaw
+	m.ToolCalls = body.ToolCalls
+	m.ToolOutcomeNotes = optionalText(body.ToolOutcomeNotes)
+	m.ToolCallSummaries = body.ToolCallSummaries
+	m.StorageError = optionalText(body.StorageError)
+	return m
+}
+
+// cloneRow copies the row so apply cannot change the original through a shared
+// slice.
+func cloneRow(m chatrepo.ChatMessage) chatrepo.ChatMessage {
+	c := m
+	c.ContentRaw = bytes.Clone(m.ContentRaw)
+	c.ToolCalls = bytes.Clone(m.ToolCalls)
+	c.ToolCallSummaries = bytes.Clone(m.ToolCallSummaries)
+	c.ContentHash = bytes.Clone(m.ContentHash)
+	return c
+}
+
+// changedReadOnlyField names the first field apply changed that an update may
+// not write, or returns "".
+func changedReadOnlyField(before, after chatrepo.ChatMessage) string {
+	b, a := reflect.ValueOf(before), reflect.ValueOf(after)
+	for i := range b.NumField() {
+		name := b.Type().Field(i).Name
+		if writableColumns[name] {
+			continue
+		}
+		if !reflect.DeepEqual(b.Field(i).Interface(), a.Field(i).Interface()) {
+			return name
+		}
+	}
+	return ""
+}
+
+// sameRow reports whether apply left every writable field as it was, comparing
+// JSON by value.
+func sameRow(before, after chatrepo.ChatMessage) bool {
+	return sameMessage(bodyOf(repo.ChatMessage(before)), bodyOf(repo.ChatMessage(after))) &&
+		before.ToolOutcome == after.ToolOutcome && before.FinishReason == after.FinishReason &&
+		bytes.Equal(before.ContentHash, after.ContentHash) && before.RiskAnalyzedAt == after.RiskAnalyzedAt
+}
+
+func writeParams(projectID uuid.UUID, m chatrepo.ChatMessage) repo.WriteMessageParams {
+	return repo.WriteMessageParams{
+		MessageID:         m.ID,
+		ProjectID:         project(projectID),
+		Content:           m.Content,
+		ContentRaw:        m.ContentRaw,
+		ToolCalls:         m.ToolCalls,
+		ToolOutcomeNotes:  m.ToolOutcomeNotes,
+		ToolCallSummaries: m.ToolCallSummaries,
+		StorageError:      m.StorageError,
+		ToolOutcome:       m.ToolOutcome,
+		FinishReason:      m.FinishReason,
+		ContentHash:       m.ContentHash,
+		RiskAnalyzedAt:    m.RiskAnalyzedAt,
+	}
+}
+
+// emptyPlaintext writes the plaintext body columns of freshly sealed messages
+// empty, in the caller's transaction, for a project in encrypted mode: Seal ran
+// from the inserted row, so the transcript already holds the body.
+func emptyPlaintext(ctx context.Context, q *repo.Queries, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID) error {
+	for _, id := range messageIDs {
+		row, err := snapshot(ctx, q, organizationID, projectID, id)
+		if err != nil {
+			return err
+		}
+		emptied := withBody(chatrepo.ChatMessage(row.ChatMessage), emptyBody)
+		if _, err := q.WriteMessage(ctx, writeParams(projectID, emptied)); err != nil {
 			return safe(err)
 		}
 	}
 	return nil
 }
 
-// Load refuses missing/stale shadows, including authenticated older payloads
-// whose unencrypted source_updated_at was forged to match the current source.
+// sanityCheck reads back the transcript just written, decrypts it and compares
+// it with the stored plaintext row. A difference is logged with each field's
+// size and nullness, never its contents, and counted; it does not fail the
+// update.
+func (s *Store) sanityCheck(ctx context.Context, q *repo.Queries, codec *transcriptcrypto.Codec, organizationID string, projectID uuid.UUID, row repo.ChatMessage, want transcriptcrypto.Message, consistent bool) error {
+	ciphertext, err := q.CurrentCiphertext(ctx, repo.CurrentCiphertextParams{MessageID: row.ID, ProjectID: projectID, OrganizationID: organizationID})
+	if err != nil {
+		s.metrics.check(ctx, projectID, outcomeError)
+		return safe(err)
+	}
+	opened, err := codec.Decrypt(ctx, transcriptcrypto.Identity{ProjectID: projectID, ChatID: row.ChatID, MessageID: row.ID}, ciphertext)
+	if err != nil {
+		s.metrics.check(ctx, projectID, outcomeError)
+		return safe(err)
+	}
+	if mismatch := describeMismatch(opened, want); len(mismatch) > 0 {
+		s.logger.ErrorContext(ctx, "sanity check: stored transcript does not match the body just written",
+			attr.SlogProjectID(projectID.String()), attr.SlogMessageID(row.ID.String()), attr.SlogTranscriptShadowMismatch(mismatch))
+		s.metrics.check(ctx, projectID, outcomeSanityMismatch)
+		return nil
+	}
+	if consistent {
+		s.metrics.check(ctx, projectID, outcomeSuccess)
+	}
+	return nil
+}
+
+// hydrate returns the body an update starts from in shadow mode: the plaintext
+// row with its body fields replaced by the decrypted transcript, locked until
+// the transaction ends. In shadow mode the two hold the same body, so this is
+// redundant, but it is the path an encrypted-only project takes, so both modes
+// run the same code. A message without a transcript (none yet, or only a
+// legacy one) or with one that disagrees with the plaintext row starts from
+// the plaintext row, which stays the source of truth while both copies exist.
+// Both cases are logged as errors and counted; consistent is false for them.
+func (s *Store) hydrate(ctx context.Context, codec *transcriptcrypto.Codec, encrypted bool, projectID uuid.UUID, row repo.SnapshotRow) (body transcriptcrypto.Message, consistent bool, err error) {
+	plain := bodyOf(row.ChatMessage)
+	// Snapshot read and locked the current transcript with the row.
+	ciphertext := row.CurrentCiphertext
+	if encrypted && ciphertext == "" {
+		s.metrics.check(ctx, projectID, outcomeMissingTranscript)
+		return plain, false, ErrMissingTranscript
+	}
+	if ciphertext == "" {
+		s.logger.ErrorContext(ctx, "message has no current encrypted transcript to update, using the plaintext row",
+			attr.SlogProjectID(projectID.String()), attr.SlogMessageID(row.ChatMessage.ID.String()))
+		s.metrics.check(ctx, projectID, outcomeMissingTranscript)
+		return plain, false, nil
+	}
+	opened, err := codec.Decrypt(ctx, transcriptcrypto.Identity{ProjectID: projectID, ChatID: row.ChatMessage.ChatID, MessageID: row.ChatMessage.ID}, ciphertext)
+	if err != nil {
+		s.metrics.check(ctx, projectID, outcomeError)
+		return plain, false, safe(err)
+	}
+	// In encrypted mode the plaintext columns are empty, so there is nothing
+	// to compare with: the transcript is the body.
+	if encrypted {
+		return opened, true, nil
+	}
+	if !s.agrees(ctx, "update", projectID, row.ChatMessage.ID, opened, plain) {
+		s.metrics.check(ctx, projectID, outcomeHydrateMismatch)
+		return plain, false, nil
+	}
+	return opened, true, nil
+}
+
+// fieldMismatch describes one body field that differs between the plaintext
+// row and the transcript, by size and nullness only: logging the values would
+// copy the plaintext the transcript protects into the logs.
+type fieldMismatch struct {
+	Field           string `json:"field"`
+	PlaintextBytes  int    `json:"plaintext_bytes"`
+	TranscriptBytes int    `json:"transcript_bytes"`
+	PlaintextNull   bool   `json:"plaintext_null"`
+	TranscriptNull  bool   `json:"transcript_null"`
+}
+
+// describeMismatch lists the fields on which the transcript and the plaintext
+// row differ, with their sizes and nullness.
+func describeMismatch(transcript, plain transcriptcrypto.Message) []fieldMismatch {
+	var mismatches []fieldMismatch
+	for _, field := range differingFields(transcript, plain) {
+		m := fieldMismatch{Field: field, PlaintextBytes: 0, TranscriptBytes: 0, PlaintextNull: false, TranscriptNull: false}
+		switch field {
+		case "content":
+			m.PlaintextBytes, m.TranscriptBytes = len(plain.Content), len(transcript.Content)
+		case "content_raw":
+			m.PlaintextBytes, m.TranscriptBytes = len(plain.ContentRaw), len(transcript.ContentRaw)
+			m.PlaintextNull, m.TranscriptNull = plain.ContentRaw == nil, transcript.ContentRaw == nil
+		case "tool_calls":
+			m.PlaintextBytes, m.TranscriptBytes = len(plain.ToolCalls), len(transcript.ToolCalls)
+			m.PlaintextNull, m.TranscriptNull = plain.ToolCalls == nil, transcript.ToolCalls == nil
+		case "tool_outcome_notes":
+			m.PlaintextBytes, m.PlaintextNull = textSize(plain.ToolOutcomeNotes)
+			m.TranscriptBytes, m.TranscriptNull = textSize(transcript.ToolOutcomeNotes)
+		case "tool_call_summaries":
+			m.PlaintextBytes, m.TranscriptBytes = len(plain.ToolCallSummaries), len(transcript.ToolCallSummaries)
+			m.PlaintextNull, m.TranscriptNull = plain.ToolCallSummaries == nil, transcript.ToolCallSummaries == nil
+		case "storage_error":
+			m.PlaintextBytes, m.PlaintextNull = textSize(plain.StorageError)
+			m.TranscriptBytes, m.TranscriptNull = textSize(transcript.StorageError)
+		}
+		mismatches = append(mismatches, m)
+	}
+	return mismatches
+}
+
+func textSize(v *string) (int, bool) {
+	if v == nil {
+		return 0, true
+	}
+	return len(*v), false
+}
+
+// differingFields names the body fields on which two messages differ, with the
+// same comparison Load uses. It never returns their contents.
+func differingFields(a, b transcriptcrypto.Message) []string {
+	var fields []string
+	if a.Content != b.Content {
+		fields = append(fields, "content")
+	}
+	if !sameJSON(a.ContentRaw, b.ContentRaw) {
+		fields = append(fields, "content_raw")
+	}
+	if !sameJSON(a.ToolCalls, b.ToolCalls) {
+		fields = append(fields, "tool_calls")
+	}
+	if !reflect.DeepEqual(a.ToolOutcomeNotes, b.ToolOutcomeNotes) {
+		fields = append(fields, "tool_outcome_notes")
+	}
+	if !sameJSON(a.ToolCallSummaries, b.ToolCallSummaries) {
+		fields = append(fields, "tool_call_summaries")
+	}
+	if !reflect.DeepEqual(a.StorageError, b.StorageError) {
+		fields = append(fields, "storage_error")
+	}
+	return fields
+}
+
+// snapshot locks the message row until the caller's transaction ends and reads
+// its body as Postgres stored it.
+func snapshot(ctx context.Context, q *repo.Queries, organizationID string, projectID, messageID uuid.UUID) (repo.SnapshotRow, error) {
+	row, err := q.Snapshot(ctx, repo.SnapshotParams{MessageID: messageID, ProjectID: project(projectID), OrganizationID: organizationID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return row, ErrNotFound
+	}
+	if err != nil {
+		return row, safe(err)
+	}
+	return row, nil
+}
+
+func bodyOf(m repo.ChatMessage) transcriptcrypto.Message {
+	return message(m.Content, m.ContentRaw, m.ToolCalls, m.ToolOutcomeNotes, m.ToolCallSummaries, m.StorageError)
+}
+
+// seal encrypts body as the transcript of the locked row and writes it, with
+// the metadata and tool-call IDs measured from the row. The row stays locked
+// until the transaction commits, so the transcript is current from then on.
+func seal(ctx context.Context, q *repo.Queries, codec *transcriptcrypto.Codec, organizationID string, projectID uuid.UUID, row repo.ChatMessage, body transcriptcrypto.Message) error {
+	ciphertext, err := codec.Encrypt(ctx, transcriptcrypto.Identity{ProjectID: projectID, ChatID: row.ChatID, MessageID: row.ID}, body)
+	if err != nil {
+		return safe(err)
+	}
+	n, err := q.Capture(ctx, repo.CaptureParams{
+		MessageID:      row.ID,
+		ProjectID:      projectID,
+		OrganizationID: organizationID,
+		Ciphertext:     ciphertext,
+	})
+	if err != nil {
+		return safe(err)
+	}
+	if n != 1 {
+		return ErrNotFound
+	}
+	return writeMetadata(ctx, q, projectID, row.ID, body)
+}
+
+// writeMetadata writes the counts and sizes to chat_messages and replaces the
+// tool-call IDs, measured from the body just written while the row is locked in
+// the same transaction, so they never describe another version of the message.
+func writeMetadata(ctx context.Context, q *repo.Queries, projectID, messageID uuid.UUID, body transcriptcrypto.Message) error {
+	meta := metadataOf(body.Content, body.ContentRaw, body.ToolCalls)
+	n, err := q.UpdateMessageMetadata(ctx, repo.UpdateMessageMetadataParams{
+		MessageID:       messageID,
+		ProjectID:       projectID,
+		ToolCallCount:   meta.toolCallCount,
+		ContentBytes:    meta.contentBytes,
+		ContentRawBytes: meta.contentRawBytes,
+		ToolCallsBytes:  meta.toolCallsBytes,
+	})
+	if err != nil {
+		return safe(err)
+	}
+	if n != 1 {
+		return ErrNotFound
+	}
+	if err := q.DeleteToolCallIDs(ctx, repo.DeleteToolCallIDsParams{MessageID: messageID, ProjectID: projectID}); err != nil {
+		return safe(err)
+	}
+	if len(meta.toolCallIDs) == 0 {
+		return nil
+	}
+	if err := q.InsertToolCallIDs(ctx, repo.InsertToolCallIDsParams{MessageID: messageID, ProjectID: projectID, ToolCallIds: meta.toolCallIDs}); err != nil {
+		return safe(err)
+	}
+	return nil
+}
+
+// Load is the strict single-message check that tests and tools use: it refuses
+// missing and legacy transcripts, and stale ones, a transcript that decrypts to
+// anything but the current body. Readers use LoadMany, which serves plaintext
+// instead.
 func (s *Store) Load(ctx context.Context, organizationID string, projectID, messageID uuid.UUID) (transcriptcrypto.Message, error) {
 	var zero transcriptcrypto.Message
 	if organizationID == "" || projectID == uuid.Nil || messageID == uuid.Nil {
@@ -197,9 +624,6 @@ func (s *Store) Load(ctx context.Context, organizationID string, projectID, mess
 	}
 	if err != nil {
 		return zero, safe(err)
-	}
-	if !row.Current {
-		return zero, ErrStale
 	}
 	codec, err := transcriptcrypto.New(s.service, organizationID)
 	if err != nil {
@@ -219,11 +643,19 @@ func (s *Store) Load(ctx context.Context, organizationID string, projectID, mess
 // LoadMany opens the shadows of a page of messages with one codec backed by the
 // process's committed data key cache: a warm cache needs no KMS call, and a
 // cold one unwraps the organization's key once for the page. A message with no
-// shadow at all is left out of the result, and the caller serves its plaintext.
-// Every shadow that does exist gets Load's checks, and one that is stale or not
-// authentic fails the whole page: an existing shadow is never skipped in favour
-// of plaintext. Duplicate IDs are opened once.
+// transcript, or only a legacy one with source_hash, is left out of the result,
+// and the caller serves its plaintext.
+// A transcript that disagrees with its plaintext row is logged and left out
+// too, so the caller serves plaintext; one that cannot be decrypted fails the
+// whole page. Duplicate IDs are opened once.
 func (s *Store) LoadMany(ctx context.Context, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID) (map[uuid.UUID]transcriptcrypto.Message, error) {
+	return s.open(ctx, organizationID, projectID, messageIDs, false)
+}
+
+// open is LoadMany for either mode. In encrypted mode the plaintext row is
+// empty, so a transcript is served without comparison, and a message without a
+// current transcript fails the page with ErrMissingTranscript.
+func (s *Store) open(ctx context.Context, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID, encrypted bool) (map[uuid.UUID]transcriptcrypto.Message, error) {
 	if len(messageIDs) == 0 {
 		return map[uuid.UUID]transcriptcrypto.Message{}, nil
 	}
@@ -236,7 +668,7 @@ func (s *Store) LoadMany(ctx context.Context, organizationID string, projectID u
 	defer span.End()
 
 	start := time.Now()
-	opened, err := s.loadMany(ctx, organizationID, projectID, messageIDs)
+	opened, stale, err := s.loadMany(ctx, organizationID, projectID, messageIDs, encrypted)
 	result := classify(err)
 	s.metrics.read.recordDuration(ctx, projectID, time.Since(start), result)
 
@@ -248,26 +680,35 @@ func (s *Store) LoadMany(ctx context.Context, organizationID string, projectID u
 		return nil, err
 	}
 
-	missing := 0
+	// Count per requested ID, so a duplicated ID is counted the same way each
+	// time. A disagreeing transcript is left out of opened too, so it is
+	// served from plaintext, but counted as stale rather than as a fallback.
+	missing, staleCount := 0, 0
 	for _, id := range messageIDs {
-		if _, ok := opened[id]; !ok {
-			missing++
+		if _, ok := opened[id]; ok {
+			continue
 		}
+		if _, ok := stale[id]; ok {
+			staleCount++
+			continue
+		}
+		missing++
 	}
-	s.metrics.read.recordMessages(ctx, projectID, len(messageIDs)-missing, outcomeSuccess)
+	s.metrics.read.recordMessages(ctx, projectID, len(messageIDs)-missing-staleCount, outcomeSuccess)
 	s.metrics.read.recordMessages(ctx, projectID, missing, outcomePlaintextFallback)
+	s.metrics.read.recordMessages(ctx, projectID, staleCount, outcomeStale)
 	span.SetAttributes(attr.TranscriptShadowPlaintextFallbackCount(missing))
 	return opened, nil
 }
 
-func (s *Store) loadMany(ctx context.Context, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID) (map[uuid.UUID]transcriptcrypto.Message, error) {
+func (s *Store) loadMany(ctx context.Context, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID, encrypted bool) (map[uuid.UUID]transcriptcrypto.Message, map[uuid.UUID]struct{}, error) {
 	if organizationID == "" || projectID == uuid.Nil {
-		return nil, ErrInvalid
+		return nil, nil, ErrInvalid
 	}
 	wanted := make(map[uuid.UUID]struct{}, len(messageIDs))
 	for _, id := range messageIDs {
 		if id == uuid.Nil {
-			return nil, ErrInvalid
+			return nil, nil, ErrInvalid
 		}
 		wanted[id] = struct{}{}
 	}
@@ -278,32 +719,50 @@ func (s *Store) loadMany(ctx context.Context, organizationID string, projectID u
 
 	rows, err := repo.New(s.db).LoadMany(ctx, repo.LoadManyParams{MessageIds: ids, ProjectID: project(projectID), OrganizationID: organizationID})
 	if err != nil {
-		return nil, safe(err)
+		return nil, nil, safe(err)
+	}
+	if encrypted && len(rows) != len(ids) {
+		return nil, nil, ErrMissingTranscript
 	}
 	if len(rows) == 0 {
-		return map[uuid.UUID]transcriptcrypto.Message{}, nil
+		return map[uuid.UUID]transcriptcrypto.Message{}, nil, nil
 	}
 
 	codec, err := transcriptcrypto.New(s.service, organizationID)
 	if err != nil {
-		return nil, safe(err)
+		return nil, nil, safe(err)
 	}
 	opened := make(map[uuid.UUID]transcriptcrypto.Message, len(rows))
+	stale := map[uuid.UUID]struct{}{}
 	for _, row := range rows {
-		if !row.Current {
-			return nil, ErrStale
-		}
 		msg, err := codec.Decrypt(ctx, transcriptcrypto.Identity{ProjectID: projectID, ChatID: row.ChatID, MessageID: row.ID}, row.Ciphertext)
 		if err != nil {
-			return nil, safe(err)
+			return nil, nil, safe(err)
 		}
 		source := message(row.Content, row.ContentRaw, row.ToolCalls, row.ToolOutcomeNotes, row.ToolCallSummaries, row.StorageError)
-		if !sameMessage(msg, source) {
-			return nil, ErrStale
+		if !encrypted && !s.agrees(ctx, "read", projectID, row.ID, msg, source) {
+			stale[row.ID] = struct{}{}
+			continue
 		}
 		opened[row.ID] = msg
 	}
-	return opened, nil
+	return opened, stale, nil
+}
+
+// agrees compares a decrypted transcript with its plaintext row, the same way
+// on every read and update path. In shadow mode the plaintext row is the
+// source of truth: a transcript that disagrees is logged as an error with each
+// differing field's size and nullness, never its contents, and the caller uses
+// the plaintext row instead.
+func (s *Store) agrees(ctx context.Context, path string, projectID, messageID uuid.UUID, transcript, plain transcriptcrypto.Message) bool {
+	mismatch := describeMismatch(transcript, plain)
+	if len(mismatch) == 0 {
+		return true
+	}
+	s.logger.ErrorContext(ctx, "encrypted transcript disagrees with the plaintext row, using the plaintext row",
+		attr.SlogProjectID(projectID.String()), attr.SlogMessageID(messageID.String()),
+		attr.SlogTranscriptShadowMismatch(mismatch), attr.SlogReason(path))
+	return false
 }
 
 type Page struct {
@@ -312,14 +771,17 @@ type Page struct {
 	More  bool
 }
 
-// Backfill commits a whole bounded page or returns no progress. Retry ErrChanged
-// with the same cursor. Every source row is recaptured, even when its
-// source_updated_at matches: a timestamp cannot authenticate a shadow, and
-// resealing clears a legacy source_hash. Reset the cursor
+// Backfill commits a whole bounded page or returns no progress. Every message is
+// resealed, even one with a current transcript: that clears a legacy
+// source_hash and repairs a transcript left stale by a write that bypassed the
+// application, such as one from a pod that predates resealing. Reset the cursor
 // to zero on the next sweep to catch messages inserted below the preceding sweep's cursor.
 func (s *Store) Backfill(ctx context.Context, organizationID string, projectID, after uuid.UUID, limit int32) (Page, error) {
 	if organizationID == "" || projectID == uuid.Nil || limit < 1 || limit > 500 {
 		return Page{}, ErrInvalid
+	}
+	if err := s.Prepare(ctx, organizationID); err != nil {
+		return Page{}, err
 	}
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -347,8 +809,8 @@ func (s *Store) Backfill(ctx context.Context, organizationID string, projectID, 
 	return page, nil
 }
 
-// Progress describes source_updated_at coverage, not authenticated ciphertext
-// or plaintext removal. Only Load authenticates shadows. Unattributed rows
+// Progress counts messages with a transcript sealed since body updates began
+// resealing, not authenticated ciphertext or plaintext removal. Only Load authenticates shadows. Unattributed rows
 // belong to a scoped chat but cannot safely be captured without ownership repair.
 type Progress struct{ Current, Waiting, Unattributed int64 }
 
@@ -364,8 +826,15 @@ func (s *Store) Progress(ctx context.Context, organizationID string, projectID u
 }
 
 func sameMessage(a, b transcriptcrypto.Message) bool {
-	return reflect.DeepEqual(a.StorageError, b.StorageError) && a.Content == b.Content && reflect.DeepEqual(a.ToolOutcomeNotes, b.ToolOutcomeNotes) && sameJSON(a.ContentRaw, b.ContentRaw) && sameJSON(a.ToolCalls, b.ToolCalls) && sameJSON(a.ToolCallSummaries, b.ToolCallSummaries)
+	return len(differingFields(a, b)) == 0
 }
+
+// SameJSON reports whether two JSON documents hold the same value, ignoring
+// formatting and key order, with numbers compared exactly. Both nil is equal;
+// nil and non-nil are not. It is how the transcript store compares bodies, so a
+// caller can use it to skip an update that would change nothing.
+func SameJSON(a, b []byte) bool { return sameJSON(a, b) }
+
 func sameJSON(a, b []byte) bool {
 	if a == nil || b == nil {
 		return a == nil && b == nil

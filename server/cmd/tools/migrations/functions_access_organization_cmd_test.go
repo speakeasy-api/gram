@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/cmd/tools/migrations/functionsaccessorganization"
+	"github.com/speakeasy-api/gram/server/internal/secretbackfills/functionsaccessorganization"
 )
 
 func TestParseFunctionsAccessOrganizationFlags(t *testing.T) {

@@ -308,6 +308,12 @@ func TestAccessRequest_List(t *testing.T) {
 	require.Len(t, own.Requests, 1)
 	require.Equal(t, request.ID, own.Requests[0].ID)
 
+	// An administrator sees everyone's requests.
+	adminCtx := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, orgID))
+	everyone, err := ti.service.ListAccessRequests(adminCtx, &gen.ListAccessRequestsPayload{SessionToken: nil, Status: nil, Mine: false})
+	require.NoError(t, err)
+	require.Len(t, everyone.Requests, 2)
+
 	_, err = ti.service.WithdrawAccessRequest(ctx, &gen.WithdrawAccessRequestPayload{SessionToken: nil, ID: request.ID})
 	require.NoError(t, err)
 	withdrawn, err := ti.service.ListAccessRequests(ctx, &gen.ListAccessRequestsPayload{SessionToken: nil, Status: new(AccessRequestStatusWithdrawn), Mine: true})

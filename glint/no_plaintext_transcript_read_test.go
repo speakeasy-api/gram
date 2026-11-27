@@ -14,9 +14,10 @@ func TestNoPlaintextTranscriptRead(t *testing.T) {
 	testdata := analysistest.TestData()
 	analysistest.Run(t, testdata, newNoPlaintextTranscriptReadAnalyzerWith(noPlaintextTranscriptReadSettings{}, noPlaintextTranscriptReadAllowlist{
 		sanctioned: map[string]string{
-			"(*" + reader + ".Service).Sanctioned": "test",
-			"(*" + reader + ".Service).Stale":      "test",
-			reader + ".Gone":                       "test",
+			"(*" + reader + ".Service).Sanctioned":       "test",
+			"(*" + reader + ".Service).Stale":            "test",
+			"(*" + reader + ".Service).SanctionedInsert": "test",
+			reader + ".Gone":                             "test",
 		},
 		pending: map[string]string{
 			reader + ".Pending": "test",
@@ -100,7 +101,7 @@ func TestSQLUpdatesPlaintextTranscript(t *testing.T) {
 
 	cases := map[string]bool{
 		"UPDATE chat_messages SET tool_call_summaries = $1 WHERE id = $2":                                                            true,
-		"UPDATE chat_messages AS m SET content = $1, source_updated_at = now() WHERE m.id = $2":                                      true,
+		"UPDATE chat_messages AS m SET content = $1, finish_reason = $2 WHERE m.id = $3":                                             true,
 		"UPDATE chat_messages SET tool_outcome = $1, tool_outcome_notes = $2 WHERE id = $3":                                          true,
 		`UPDATE "chat_messages" SET "storage_error" = $1 WHERE id = $2`:                                                              true,
 		"INSERT INTO chat_messages (id, content) VALUES ($1, $2) ON CONFLICT (id) DO UPDATE SET content = EXCLUDED.content":          true,
@@ -113,5 +114,20 @@ func TestSQLUpdatesPlaintextTranscript(t *testing.T) {
 	}
 	for sql, want := range cases {
 		require.Equal(t, want, sqlUpdatesPlaintextTranscript(sql), sql)
+	}
+}
+
+func TestSQLInsertsPlaintextTranscript(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]bool{
+		"INSERT INTO chat_messages (chat_id, content, tool_calls) VALUES ($1, $2, $3)":  true,
+		`INSERT INTO "chat_messages" ("id", "storage_error") VALUES ($1, $2)`:           true,
+		"INSERT INTO chat_messages (chat_id, role) VALUES ($1, $2)":                     false,
+		"INSERT INTO chat_message_transcripts (message_id, ciphertext) VALUES ($1, $2)": false,
+		"UPDATE chat_messages SET content = $1 WHERE id = $2":                           false,
+	}
+	for sql, want := range cases {
+		require.Equal(t, want, sqlInsertsPlaintextTranscript(sql), sql)
 	}
 }

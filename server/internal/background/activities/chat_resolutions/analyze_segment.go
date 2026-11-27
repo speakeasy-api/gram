@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"log/slog"
 	"strings"
 	"time"
@@ -16,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -101,6 +101,14 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 		return fmt.Errorf("failed to analyze segment with LLM: %w", err)
 	}
 
+	// Outcome notes are part of the message body, which may be encrypted, so the
+	// key loads before the transaction below begins, but only when some outcome
+	// will be written. A segment that writes none must not fail on the key.
+	var prepared error
+	if writesAnOutcome(result.ToolCalls, args.StartIndex, len(allMessages)) {
+		prepared = a.transcripts.Prepare(ctx, args.OrgID, args.ProjectID)
+	}
+
 	// Use transaction for atomic updates
 	tx, err := a.db.Begin(ctx)
 	if err != nil {
@@ -114,26 +122,35 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 
 	txRepo := a.repo.WithTx(tx)
 
-	// Update tool call outcomes
+	// Collect each message's judged outcome; the last one for a message wins.
+	var updated []uuid.UUID
+	judged := make(map[uuid.UUID]toolCallAnalysis)
 	for _, tc := range result.ToolCalls {
-		// Convert relative index to absolute
 		absoluteIndex := args.StartIndex + tc.MessageIndex
-		if absoluteIndex >= 0 && absoluteIndex < len(allMessages) {
-			msgID := allMessages[absoluteIndex].ID
-			if err := a.transcripts.UpdateToolCallOutcome(ctx, tx, transcriptstore.UpdateToolCallOutcomeParams{
-				ID:               msgID,
-				ProjectID:        args.ProjectID,
-				ToolOutcome:      conv.ToPGText(tc.Outcome),
-				ToolOutcomeNotes: conv.ToPGText(tc.Notes),
-			}); err != nil {
-				// For a project that keeps shadows, the outcome write and its
-				// shadow recapture run under one savepoint, so a failure
-				// rolled both back and never commits a stale shadow.
-				a.logger.WarnContext(ctx, "failed to update tool call outcome",
-					attr.SlogError(err),
-					attr.SlogMessageID(msgID.String()),
-				)
-			}
+		if absoluteIndex < 0 || absoluteIndex >= len(allMessages) {
+			continue
+		}
+		msgID := allMessages[absoluteIndex].ID
+		if _, seen := judged[msgID]; !seen {
+			updated = append(updated, msgID)
+		}
+		judged[msgID] = tc
+	}
+	if len(updated) > 0 && prepared != nil {
+		return fmt.Errorf("prepare tool call outcome notes: %w", prepared)
+	}
+	// Write each message's outcome and notes as one change to its row.
+	// UpdateMessage locks the row and keeps every copy of the body, which holds
+	// the notes, in step.
+	for _, msgID := range updated {
+		tc := judged[msgID]
+		_, err := a.transcripts.UpdateMessage(ctx, tx, args.OrgID, args.ProjectID, args.ChatID, msgID, func(m *repo.ChatMessage) error {
+			m.ToolOutcome = conv.ToPGText(tc.Outcome)
+			m.ToolOutcomeNotes = conv.ToPGText(tc.Notes)
+			return nil
+		})
+		if err != nil {
+			return fmt.Errorf("update tool call outcome: %w", err)
 		}
 	}
 
@@ -386,4 +403,16 @@ func (a *AnalyzeSegment) formatUserFeedback(userFeedback []UserFeedback) string 
 		}
 	}
 	return feedbackText.String()
+}
+
+// writesAnOutcome reports whether any analyzed tool call maps to a message in
+// the chat, so the segment will write at least one outcome.
+func writesAnOutcome(toolCalls []toolCallAnalysis, startIndex, messageCount int) bool {
+	for _, tc := range toolCalls {
+		absoluteIndex := startIndex + tc.MessageIndex
+		if absoluteIndex >= 0 && absoluteIndex < messageCount {
+			return true
+		}
+	}
+	return false
 }

@@ -31,6 +31,21 @@ const (
 	// meterReadMessages counts the messages each LoadMany call was asked to
 	// open, by outcome.
 	meterReadMessages = "chat.transcript_shadow.read.messages"
+
+	// meterUpdateDuration is the time one shadow-mode UpdateMessage call spends
+	// inside the caller's transaction.
+	meterUpdateDuration = "chat.transcript_shadow.update.duration"
+
+	// meterUpdateMessages counts shadow-mode UpdateMessage calls by outcome.
+	meterUpdateMessages = "chat.transcript_shadow.update.messages"
+
+	// meterUpdateChecks counts one consistency result per shadow-mode
+	// UpdateMessage call: success when both copies agreed before and after (or
+	// before, for an update that changed nothing), otherwise the check that
+	// failed, or error when reading or decrypting the transcript failed and the
+	// update rolled back. It tracks how well shadow mode keeps the transcript and
+	// the plaintext in step.
+	meterUpdateChecks = "chat.transcript_shadow.update.checks"
 )
 
 // durationBuckets are in seconds. A KMS unwrap takes about 150 to 250 ms in
@@ -53,9 +68,22 @@ const (
 	// outcome; the LoadMany call itself still succeeds.
 	outcomePlaintextFallback outcome = "plaintext_fallback"
 
+	// Consistency checks of a shadow-mode body update. None of these fails the
+	// update: the plaintext row wins and the error is logged. A read or decrypt
+	// failure does fail it and is counted as error.
+	//
+	// outcomeMissingTranscript: the message had no current transcript to
+	// start from (none yet, or only a legacy one).
+	outcomeMissingTranscript outcome = "missing_transcript"
+	// outcomeHydrateMismatch: the decrypted transcript disagreed with the
+	// plaintext row before the change, so it was discarded.
+	outcomeHydrateMismatch outcome = "hydrate_mismatch"
+	// outcomeSanityMismatch: after the write, the stored transcript did not
+	// decrypt to the stored plaintext row.
+	outcomeSanityMismatch outcome = "sanity_mismatch"
+
 	outcomeNotFound outcome = "not_found"
 	outcomeStale    outcome = "stale"
-	outcomeChanged  outcome = "changed"
 	outcomeInvalid  outcome = "invalid"
 	outcomeError    outcome = "error"
 )
@@ -68,8 +96,6 @@ func classify(err error) outcome {
 		return outcomeNotFound
 	case errors.Is(err, ErrStale):
 		return outcomeStale
-	case errors.Is(err, ErrChanged):
-		return outcomeChanged
 	case errors.Is(err, ErrInvalid):
 		return outcomeInvalid
 	default:
@@ -80,6 +106,8 @@ func classify(err error) outcome {
 type storeMetrics struct {
 	capture operationMetrics
 	read    operationMetrics
+	update  operationMetrics
+	checks  metric.Int64Counter
 }
 
 type operationMetrics struct {
@@ -104,7 +132,23 @@ func newStoreMetrics(meterProvider metric.MeterProvider) (*storeMetrics, error) 
 		return nil, err
 	}
 
-	return &storeMetrics{capture: capture, read: read}, nil
+	update, err := newOperationMetrics(meter, meterUpdateDuration, meterUpdateMessages,
+		"Time to update a message body and its encrypted transcript in one transaction",
+		"Chat message body updates in shadow mode")
+	if err != nil {
+		return nil, err
+	}
+
+	checks, err := meter.Int64Counter(
+		meterUpdateChecks,
+		metric.WithDescription("Consistency checks of shadow-mode message body updates, by result"),
+		metric.WithUnit("{check}"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create %s: %w", meterUpdateChecks, err)
+	}
+
+	return &storeMetrics{capture: capture, read: read, update: update, checks: checks}, nil
 }
 
 func newOperationMetrics(meter metric.Meter, durationName, messagesName, durationDescription, messagesDescription string) (operationMetrics, error) {
@@ -160,4 +204,9 @@ func (m operationMetrics) recordDuration(ctx context.Context, projectID uuid.UUI
 		attr.ProjectID(projectID.String()),
 		attr.Outcome(result),
 	))
+}
+
+// check counts one consistency check result of a shadow-mode body update.
+func (m *storeMetrics) check(ctx context.Context, projectID uuid.UUID, result outcome) {
+	m.checks.Add(ctx, 1, metric.WithAttributes(attr.ProjectID(projectID.String()), attr.Outcome(result)))
 }

@@ -3,3 +3,98 @@
 //   sqlc v1.31.1
 
 package repo
+
+import (
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/urn"
+)
+
+type ChatMessage struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	Seq int64
+	// @access: confidential
+	ChatID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.NullUUID
+	// @access: confidential
+	Role string
+	// @access: opaque-restricted
+	Content string
+	// @access: opaque-restricted
+	ContentRaw []byte
+	// Asset path of the stored message content; its file name is a digest of that content.
+	// @access: restricted
+	ContentAssetUrl pgtype.Text
+	// @access: confidential
+	Model pgtype.Text
+	// @access: confidential
+	MessageID pgtype.Text
+	// @access: confidential
+	FinishReason pgtype.Text
+	// @access: opaque-restricted
+	ToolCalls []byte
+	// @access: confidential
+	PromptTokens int64
+	// @access: confidential
+	CompletionTokens int64
+	// @access: confidential
+	TotalTokens int64
+	// @access: opaque-restricted
+	StorageError pgtype.Text
+	// @access: confidential
+	UserID pgtype.Text
+	// @access: confidential-pii
+	ExternalUserID pgtype.Text
+	// @access: confidential
+	ExternalMessageID pgtype.Text
+	// @access: opaque-restricted
+	Origin pgtype.Text
+	// @access: confidential-pii
+	UserAgent pgtype.Text
+	// @access: confidential-pii
+	IpAddress pgtype.Text
+	// @access: confidential
+	Source pgtype.Text
+	// @access: confidential
+	ToolCallID pgtype.Text
+	// @access: confidential
+	ToolUrn urn.Tool
+	// @access: confidential
+	ToolOutcome pgtype.Text
+	// @access: opaque-restricted
+	ToolOutcomeNotes pgtype.Text
+	// @access: opaque-restricted
+	ToolCallSummaries []byte
+	// SHA-256 digest of the message content. Reveals when two messages have equal content.
+	// @access: restricted
+	ContentHash []byte
+	// @access: confidential
+	Generation int32
+	// Original utterance, exact transcript reobservation, synthetic summary, or unknown lineage.
+	// @access: confidential
+	CaptureKind pgtype.Text
+	// Original source-message identity for an exact transcript copy. A logical reference retained independently of source-row lifetime.
+	// @access: confidential
+	OriginalMessageID uuid.NullUUID
+	// @access: confidential
+	Replayed bool
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	RiskAnalyzedAt pgtype.Timestamptz
+	// Number of tool calls in tool_calls, 0 when it has none.
+	// @access: confidential
+	ToolCallCount pgtype.Int4
+	// octet_length of content.
+	// @access: confidential
+	ContentBytes pgtype.Int4
+	// octet_length of content_raw as text, 0 when NULL.
+	// @access: confidential
+	ContentRawBytes pgtype.Int4
+	// octet_length of tool_calls as text, 0 when NULL.
+	// @access: confidential
+	ToolCallsBytes pgtype.Int4
+}

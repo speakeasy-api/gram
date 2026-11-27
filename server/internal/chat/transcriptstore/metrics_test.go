@@ -22,7 +22,7 @@ func TestCaptureRecordsOutcomeMetrics(t *testing.T) {
 	f.add(t, stored)
 
 	reader := sdkmetric.NewManualReader()
-	store, err := New(f.db, f.keys.Service, testenv.NewTracerProvider(t), sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)))
+	store, err := New(f.db, f.keys.Service, testenv.NewLogger(t), testenv.NewTracerProvider(t), sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)))
 	require.NoError(t, err)
 
 	tx, err := f.db.Begin(t.Context()) //nolint:glint // notestingrawsql: caller-owned transaction boundary matches how the chat writer calls Capture; fixture data uses generated queries.
@@ -75,7 +75,7 @@ func TestLoadManyOpensAPageAndRecordsReadMetrics(t *testing.T) {
 	f.capture(t, first, second)
 
 	reader := sdkmetric.NewManualReader()
-	store, err := New(f.db, f.keys.Service, testenv.NewTracerProvider(t), sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)))
+	store, err := New(f.db, f.keys.Service, testenv.NewLogger(t), testenv.NewTracerProvider(t), sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)))
 	require.NoError(t, err)
 
 	opened, err := store.LoadMany(t.Context(), f.org, f.project, []uuid.UUID{first, second, first})
@@ -102,7 +102,7 @@ func TestLoadManyLeavesOutMessagesWithoutAShadow(t *testing.T) {
 	f.capture(t, captured)
 
 	reader := sdkmetric.NewManualReader()
-	store, err := New(f.db, f.keys.Service, testenv.NewTracerProvider(t), sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)))
+	store, err := New(f.db, f.keys.Service, testenv.NewLogger(t), testenv.NewTracerProvider(t), sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)))
 	require.NoError(t, err)
 
 	opened, err := store.LoadMany(t.Context(), f.org, f.project, []uuid.UUID{captured, uncaptured})
@@ -119,24 +119,27 @@ func TestLoadManyLeavesOutMessagesWithoutAShadow(t *testing.T) {
 	require.Equal(t, map[string]int64{"success": 1, "plaintext_fallback": 2}, countsByOutcome(t, collected, meterReadMessages))
 }
 
-func TestLoadManyFailsThePageWhenAShadowIsStale(t *testing.T) {
+func TestLoadManyServesPlaintextForAStaleTranscript(t *testing.T) {
 	t.Parallel()
 	f := setup(t, true)
-	id := uuid.New()
-	f.add(t, id)
-	f.capture(t, id)
-	_, err := fixturerepo.New(f.db).ChangeContent(t.Context(), id, project(f.project))
+	stale, current := uuid.New(), uuid.New()
+	f.add(t, stale)
+	f.add(t, current)
+	f.capture(t, stale, current)
+	_, err := fixturerepo.New(f.db).ChangeContent(t.Context(), stale, project(f.project))
 	require.NoError(t, err)
 
-	opened, err := f.store.LoadMany(t.Context(), f.org, f.project, []uuid.UUID{id})
-	require.ErrorIs(t, err, ErrStale)
-	require.Nil(t, opened)
-
-	_, err = fixturerepo.New(f.db).ForgeSourceUpdatedAt(t.Context(), id, project(f.project), f.org)
+	reader := sdkmetric.NewManualReader()
+	store, err := New(f.db, f.keys.Service, testenv.NewLogger(t), testenv.NewTracerProvider(t), sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)))
 	require.NoError(t, err)
-	opened, err = f.store.LoadMany(t.Context(), f.org, f.project, []uuid.UUID{id})
-	require.ErrorIs(t, err, ErrStale, "a forged matching source_updated_at cannot make an older body current")
-	require.Nil(t, opened)
+	opened, err := store.LoadMany(t.Context(), f.org, f.project, []uuid.UUID{stale, current})
+	require.NoError(t, err, "a disagreeing transcript does not fail the page")
+	require.NotContains(t, opened, stale, "its message is served from plaintext")
+	require.Contains(t, opened, current)
+
+	var collected metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(t.Context(), &collected))
+	require.Equal(t, map[string]int64{"success": 1, "stale": 1}, countsByOutcome(t, collected, meterReadMessages))
 }
 
 func TestLoadManyIsScopedToTheProjectAndOrganization(t *testing.T) {
@@ -186,7 +189,6 @@ func TestClassifyCoversFailureOutcomes(t *testing.T) {
 		{nil, outcomeSuccess},
 		{ErrNotFound, outcomeNotFound},
 		{fmt.Errorf("load: %w", ErrStale), outcomeStale},
-		{fmt.Errorf("capture: %w", ErrChanged), outcomeChanged},
 		{ErrInvalid, outcomeInvalid},
 		{safe(context.DeadlineExceeded), outcomeError},
 	} {

@@ -664,17 +664,13 @@ func (s *Service) ListMcpServers(ctx context.Context, payload *gen.ListMcpServer
 	for i, server := range servers {
 		checks[i] = authz.MCPServer(authz.MCPServerIDFrom(grantResourceID(server.ID, server.ToolsetID)), authz.ProjectIDOf(*authCtx.ProjectID)).Read()
 	}
-	allowedIDs, err := s.authz.Filter(ctx, checks)
+	decisions, err := s.authz.Decide(ctx, checks...)
 	if err != nil {
 		return nil, err
 	}
-	allowedSet := make(map[string]struct{}, len(allowedIDs))
-	for _, id := range allowedIDs {
-		allowedSet[id] = struct{}{}
-	}
-	allowed := make([]repo.McpServer, 0, len(allowedIDs))
-	for _, server := range servers {
-		if _, ok := allowedSet[grantResourceID(server.ID, server.ToolsetID)]; ok {
+	allowed := make([]repo.McpServer, 0, len(servers))
+	for i, server := range servers {
+		if decisions.Each[i].Allowed {
 			allowed = append(allowed, server)
 		}
 	}
@@ -709,18 +705,14 @@ func (s *Service) ListMcpServersForOrg(ctx context.Context, payload *gen.ListMcp
 	for i, server := range servers {
 		checks[i] = authz.MCPServer(authz.MCPServerIDFrom(grantResourceID(server.ID, server.ToolsetID)), authz.ProjectIDOf(server.ProjectID)).Read()
 	}
-	allowedIDs, err := s.authz.Filter(ctx, checks)
+	decisions, err := s.authz.Decide(ctx, checks...)
 	if err != nil {
 		return nil, err
 	}
-	allowedSet := make(map[string]struct{}, len(allowedIDs))
-	for _, id := range allowedIDs {
-		allowedSet[id] = struct{}{}
-	}
-	readable := make([]repo.McpServer, 0, len(allowedIDs))
-	readableViews := make([]*types.McpServer, 0, len(allowedIDs))
+	readable := make([]repo.McpServer, 0, len(servers))
+	readableViews := make([]*types.McpServer, 0, len(servers))
 	for i, server := range servers {
-		if _, ok := allowedSet[grantResourceID(server.ID, server.ToolsetID)]; ok {
+		if decisions.Each[i].Allowed {
 			readable = append(readable, server)
 			readableViews = append(readableViews, views[i])
 			continue

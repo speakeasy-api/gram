@@ -228,6 +228,18 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 		return nil, err
 	}
 
+	return s.list(ctx, logger, *authCtx.ProjectID, payload)
+}
+
+// ListForProject lists one server's feedback in a project the caller names
+// directly rather than through the request's selected project, as the
+// Platform MCP does. It runs the same validation and authorization checks as
+// List, against the grants already loaded on ctx.
+func (s *Service) ListForProject(ctx context.Context, projectID uuid.UUID, payload *gen.ListPayload) (*gen.ListMcpFeedbackResult, error) {
+	return s.list(ctx, s.logger.With(attr.SlogProjectID(projectID.String())), projectID, payload)
+}
+
+func (s *Service) list(ctx context.Context, logger *slog.Logger, projectID uuid.UUID, payload *gen.ListPayload) (*gen.ListMcpFeedbackResult, error) {
 	if payload.Limit < 1 || payload.Limit > maxFeedbackPageSize {
 		return nil, oops.E(oops.CodeBadRequest, nil, "limit must be between 1 and %d", maxFeedbackPageSize)
 	}
@@ -257,7 +269,7 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 		cursorID = uuid.NullUUID{UUID: id, Valid: true}
 	}
 
-	server, err := s.readableServer(ctx, logger, payload.McpServerID, *authCtx.ProjectID)
+	server, err := s.readableServer(ctx, logger, payload.McpServerID, projectID)
 	if err != nil {
 		return nil, err
 	}

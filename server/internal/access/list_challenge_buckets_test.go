@@ -450,7 +450,7 @@ func TestListChallengeBuckets_IsolatesByOrganization(t *testing.T) {
 }
 
 // TestListChallengeBuckets_ExcludesUnattributedBuckets covers the rows written
-// by batch Filter/FindMatched calls: they carry no scope and no resource, so
+// by batch Decide calls: they carry no scope and no resource, so
 // there is nothing to render and nothing to grant against. They must not reach
 // the caller, and must not be counted in the total.
 func TestListChallengeBuckets_ExcludesUnattributedBuckets(t *testing.T) {

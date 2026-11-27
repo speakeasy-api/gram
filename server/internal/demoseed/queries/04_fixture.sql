@@ -93,7 +93,10 @@ WHERE id = @id::uuid AND project_id = @project_id::uuid AND deleted IS FALSE;
 UPDATE mcp_auth_client_headers SET value = @value::text, is_secret = FALSE, updated_at = clock_timestamp()
 WHERE id = @id::uuid AND organization_id = @organization_id::text;
 
--- The live seeded sign-ins on the given clients, with the email each signed in as.
+-- The seeded sign-ins on the given clients that are live at the seed clock,
+-- with the email each signed in as. The seed computed their expiry from that
+-- clock, so comparing against it keeps the selection stable when the clock is
+-- pinned.
 -- name: FixtureListLiveSessions :many
 SELECT rs.id, COALESCE(u.email, rs.upstream_email, '')::text AS email
 FROM remote_sessions rs
@@ -102,7 +105,7 @@ JOIN remote_session_clients c
 LEFT JOIN users u ON rs.subject_urn = 'user:' || u.id
 WHERE rs.remote_session_client_id = ANY(@client_ids::uuid[])
   AND rs.deleted IS FALSE
-  AND rs.access_expires_at > clock_timestamp()
+  AND rs.access_expires_at > @now::timestamptz
 ORDER BY rs.id;
 
 -- name: FixtureSetSessionTokens :execrows

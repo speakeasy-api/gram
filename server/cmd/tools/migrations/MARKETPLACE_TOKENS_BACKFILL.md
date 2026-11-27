@@ -15,6 +15,18 @@ This backfill gives every older connection the same form. For each connection th
 
 The token itself does not change, so every install URL that admins and devices already hold keeps working. The run changes only the token columns and `organization_id`. It never touches `updated_at`, which is the last-published timestamp and part of the device agent's ETag. It does not alter the schema or publish events. It never prints a token.
 
+## In dev and prod: use the admin dashboard
+
+Apply it from the admin dashboard's temporary **Secret backfills** page, under Platform Management. The page previews the counts below and runs the same backfill inside the admin server, with the platform key and organization encryption the servers use. Nobody needs database write access or the key on their machine.
+
+The page shows the admin server's platform key fingerprint. Check it matches the servers' `encryption key loaded` log before you apply. Applying sends that fingerprint back, and the admin server refuses the run if its key's fingerprint has changed since.
+
+The page lists every organization with tokens left to move or connections left to attribute. Apply one organization at a time from that list, and check each before going on. The card's **Apply to all organizations** runs the whole backfill at once.
+
+Checks 1 and 2 under "Before running" apply to the page too. Check 3 applies to the page only when the admin server has no organization encryption. When it has organization encryption, the page also seals the tokens of organizations past `platform_key` instead of leaving them in place.
+
+The commands below run the same backfill from a terminal, for local development.
+
 Run from `server/`. `GRAM_DATABASE_URL` must point directly at the intended PostgreSQL database.
 
 ## Before running
@@ -52,15 +64,16 @@ After applying, run the preview again and confirm `legacy=0`. If it is not 0, se
 
 ## Output
 
-`mode=… environment=… attributed=N moved=N skipped=N needs_organization_key=N unattributed=N legacy=N hashed=N`
+`mode=… environment=… attributed=N moved=N skipped=N needs_organization_key=N unattributed=N legacy=N hashed=N missing_organization=N`
 
 - `attributed`: connections this run gave an `organization_id`. Always 0 in a preview.
 - `moved`: plaintext tokens this run moved. Always 0 in a preview.
 - `skipped`: plaintext tokens that changed between the read and the write, such as when another run moved them first. Run again.
 - `needs_organization_key`: plaintext tokens left in place because their organization's `marketplace-tokens` use case is past `platform_key`. They keep working through the plaintext fallback. Move them before that organization finalizes; finalize refuses while they remain.
-- `unattributed`: connections still without an `organization_id`, counted after the run. After an apply, these are connections whose project's organization has no `organization_metadata` row (`projects.organization_id` has no foreign key). Their token, if any, stays in plaintext. Investigate any nonzero count.
-- `legacy`: connections that still hold a plaintext token, counted after the run.
+- `unattributed`: connections still without an `organization_id` whose project's organization exists, counted after the run. An apply gives these one.
+- `legacy`: connections that still hold a plaintext token, counted after the run, not counting those in `missing_organization`.
 - `hashed`: connections whose token is stored as a hash and a sealed copy.
+- `missing_organization`: connections whose project's organization has no `organization_metadata` row (`projects.organization_id` has no foreign key). The backfill leaves them unchanged: it can't give them an organization, so a plaintext token on one stays in plaintext. Investigate any nonzero count. The admin page shows them as **Connections that can't get one** and marks the card **Needs a look**.
 
 Counts never name organizations or connections. Do not record organization IDs in tickets or pull requests.
 

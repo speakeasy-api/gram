@@ -1220,7 +1220,7 @@ func newStartCommand() *cli.Command {
 			}
 			clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
 			clientAssertionSigner.PinManagedSigner(c.String(identityProviderSigningServiceAccount))
-			transcripts, err := configureTranscripts(ctx, c, db, chatWriter, orgEncryption, tracerProvider, meterProvider)
+			transcripts, err := configureTranscripts(ctx, c, db, chatWriter, orgEncryption, logger, tracerProvider, meterProvider)
 			if err != nil {
 				return err
 			}
@@ -1852,7 +1852,7 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
-			intentPoliciesSvc, err := intentpolicies.NewService(logger, tracerProvider, db, sessionManager, authzEngine, featureFlags, chatWriter, completionsClient, intentPoliciesClassifier)
+			intentPoliciesSvc, err := intentpolicies.NewService(logger, tracerProvider, db, sessionManager, authzEngine, featureFlags, chatWriter, completionsClient, intentPoliciesClassifier, publishers.IntentPolicyAssessments)
 			if err != nil {
 				return fmt.Errorf("create intent policies service: %w", err)
 			}
