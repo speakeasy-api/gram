@@ -265,6 +265,9 @@ type metaMemberFailure struct {
 	// message is what the caller was told about the failure.
 	message string
 
+	// logMessage is recorded in telemetry logs (stripped of sensitive one-time URLs).
+	logMessage string
+
 	// arguments is the part of the call's arguments that named this member,
 	// logged as the row's request. A describe_tools can name tools of members
 	// in other projects, and this member's row must not list them.
@@ -274,7 +277,13 @@ type metaMemberFailure struct {
 // newMetaMemberFailure records that member failed with err, whose message the
 // caller was told, for a call whose arguments named it as arguments.
 func newMetaMemberFailure(member metaMember, err error, message string, arguments []byte) metaMemberFailure {
-	return metaMemberFailure{member: member, status: metaMemberErrorStatus(err), message: message, arguments: arguments}
+	return metaMemberFailure{
+		member:     member,
+		status:     metaMemberErrorStatus(err),
+		message:    message,
+		logMessage: memberTelemetryFailureMessage(err, message),
+		arguments:  arguments,
+	}
 }
 
 // logMetaMemberDiscoveryFailure writes a failed tool_call row on a member that
@@ -304,7 +313,7 @@ func (s *Service) logMetaMemberDiscoveryFailure(ctx context.Context, gate *metaG
 
 	attempt := newMetaToolCallAttempt(start)
 	attempt.member = &failure.member
-	attempt.fail(failure.status, failure.message)
+	attempt.fail(failure.status, failure.logMessage)
 	row := metaFailureRow{unstamped: true, source: ""}
 	if failure.member.backend == metaMemberBackendHosted || failure.member.backend == metaMemberBackendPlatform {
 		row.source = failure.member.slug

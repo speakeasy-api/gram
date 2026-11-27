@@ -26,6 +26,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -700,7 +701,7 @@ func (s *Service) logMetaDiscovery(ctx context.Context, gate *metaGateContext, t
 	params := metaDiscoveryLogParams(ctx, gate, toolName, start, handlerErr)
 	if memberFailure != nil {
 		tm.HTTPLogAttributes(params.Attributes).RecordStatusCode(memberFailure.status)
-		params.Attributes[attr.ErrorMessageKey] = memberFailure.message
+		params.Attributes[attr.ErrorMessageKey] = memberFailure.logMessage
 	}
 	s.telemLogger.Log(ctx, params)
 }
@@ -923,6 +924,14 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *h
 			}
 		}
 	}
+	chatID := request.chatID
+	if boundChatID, ok := assistanttokens.RuntimeChatID(ctx); ok {
+		bound := boundChatID.String()
+		if chatID != "" && chatID != bound {
+			return ctx, nil, oops.E(oops.CodeForbidden, nil, "chat ID does not match bound thread")
+		}
+		chatID = bound
+	}
 	gate := &metaGateContext{
 		caller:           gateCaller,
 		fromRequest:      request.fromRequest,
@@ -954,7 +963,7 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *h
 		discoveryMode:       metamcp.ResolveDiscoveryMode(metaServer.DiscoveryMode),
 		authenticated:       false,
 		sessionID:           request.sessionID,
-		chatID:              request.chatID,
+		chatID:              chatID,
 		userID:              "",
 		externalUserID:      "",
 		apiKeyID:            "",
