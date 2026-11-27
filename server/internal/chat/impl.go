@@ -243,6 +243,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	srv.Mount(mux, server)
 
 	o11y.AttachHandler(mux, "POST", "/chat/completions", oops.ErrHandle(service.logger, service.HandleCompletion).ServeHTTP)
+	o11y.AttachHandler(mux, "POST", ProjectScopedCompletionsRoute, oops.ErrHandle(service.logger, service.HandleCompletion).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/chat/models", oops.ErrHandle(service.logger, service.HandleModels).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/chat/turnstream", oops.ErrHandle(service.logger, service.HandleTurnStream).ServeHTTP)
 }
@@ -3793,8 +3794,19 @@ func (s *Service) authorizeCompletion(r *http.Request) (context.Context, *contex
 		}
 		return ctx, authCtx, workloadInferenceSource, err
 	}
+	pathProjectID, hasPathProject, err := completionPathProjectID(r)
+	if err != nil {
+		return r.Context(), nil, "", err
+	}
 	if !assistanttokens.IsRuntimeCredential(r.Header.Get("Authorization")) {
-		return s.directAuthorize(r.Context(), r)
+		ctx, authCtx, slot, err := s.directAuthorize(r.Context(), r)
+		if err != nil {
+			return ctx, authCtx, slot, err
+		}
+		if hasPathProject && (authCtx == nil || authCtx.ProjectID == nil || *authCtx.ProjectID != pathProjectID) {
+			return ctx, nil, "", oops.C(oops.CodeForbidden)
+		}
+		return ctx, authCtx, slot, nil
 	}
 	ctx, _, err := s.assistantTokens.AuthorizeRuntime(r.Context(), r.Header.Get("Authorization"))
 	if err != nil {
@@ -3803,6 +3815,9 @@ func (s *Service) authorizeCompletion(r *http.Request) (context.Context, *contex
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return ctx, nil, "", oops.C(oops.CodeUnauthorized)
+	}
+	if hasPathProject && *authCtx.ProjectID != pathProjectID {
+		return ctx, nil, "", oops.C(oops.CodeForbidden)
 	}
 	return ctx, authCtx, billing.ModelUsageSourceAssistants, nil
 }

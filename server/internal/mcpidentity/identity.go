@@ -227,3 +227,14 @@ func (b *ValidatorBoundary) StampValidatedWorkloadSession(ctx context.Context, s
 	}
 	return context.WithValue(ctx, contextKey{}, Identity{kind: KindAgent, userID: "", apiKeyID: "", agentID: agentID.String(), expiresAt: session.ExpiresAt(), sessionJTI: session.JTI(), chatMinterUserID: ""})
 }
+
+// StampDirectWorkload binds a verified direct-bearer workload JWT to the agent
+// resolved by live admission. It carries no sessionJTI because no user_sessions
+// row backs a direct-bearer token, while recording the same KindAgent provenance
+// and expiration as StampValidatedWorkloadSession.
+func (b *ValidatorBoundary) StampDirectWorkload(ctx context.Context, agentID uuid.UUID, expiresAt time.Time) context.Context {
+	if b == nil || !b.initialized || agentID == uuid.Nil || expiresAt.IsZero() {
+		return ctx
+	}
+	return context.WithValue(ctx, contextKey{}, Identity{kind: KindAgent, userID: "", apiKeyID: "", agentID: agentID.String(), expiresAt: expiresAt, sessionJTI: "", chatMinterUserID: ""})
+}

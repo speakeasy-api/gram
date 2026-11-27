@@ -444,3 +444,16 @@ func (s *Service) ConsentSwitched(ctx context.Context, stateID string) bool {
 func AgentConnectionsOutageError(w http.ResponseWriter, err error) error {
 	return agentConnectionsOutage(remoteSessionUnavailableError(w, err), err)
 }
+
+// SetDirectWorkloadClock swaps the clock read by the direct-bearer Stage-1 cache.
+func (s *Service) SetDirectWorkloadClock(now func() time.Time) {
+	s.directWorkloadCache.setClock(now)
+}
+
+// SetWorkloadIssuerLookupBudget swaps the workload grant's issuer lookup
+// budget, so a test can force a rate-limit refusal without exhausting Redis.
+func (s *Service) SetWorkloadIssuerLookupBudget(budget func(context.Context, string) (ratelimit.Result, error)) {
+	grant := *s.workloadGrant
+	grant.issuers = newWorkloadIssuerAdmission(grant.issuers.lookup, budget)
+	s.workloadGrant = &grant
+}
