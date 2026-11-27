@@ -11,6 +11,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/ai_integrations"
 	adminrepo "github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations/repo"
+	"github.com/speakeasy-api/gram/server/internal/anthropicinference"
 	auditrepo "github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -163,6 +164,28 @@ func TestInferenceResolverReportsDisabledOrganization(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, binding.OrganizationDisabled)
 	require.Equal(t, orgID, binding.OrganizationID)
+}
+
+// Switching the integration off yields not found, except while the
+// organization is disabled, when signed requests must still reach the deny.
+func TestInferenceResolverDisabledOrganizationOverridesSwitchedOffIntegration(t *testing.T) {
+	t.Parallel()
+	ctx, conn, service, orgID := newInferenceTestService(t)
+	secret := "whsec_" + base64.StdEncoding.EncodeToString([]byte("EXAMPLE-inference-secret-off"))
+	enabled := false
+	saved, err := service.UpsertAnthropicInferenceConfig(ctx, &gen.UpsertAnthropicInferenceConfigPayload{SigningSecret: &secret, Enabled: &enabled})
+	require.NoError(t, err)
+	resolver := NewAnthropicInferenceResolver(conn, service.store.keys)
+
+	_, err = resolver.Resolve(ctx, *saved.ID)
+	require.ErrorIs(t, err, anthropicinference.ErrIntegrationUnavailable)
+
+	_, err = adminrepo.New(conn).AdminDisableOrganization(ctx, orgID)
+	require.NoError(t, err)
+	binding, err := resolver.Resolve(ctx, *saved.ID)
+	require.NoError(t, err)
+	require.True(t, binding.OrganizationDisabled)
+	require.Equal(t, []string{secret}, binding.SigningSecrets)
 }
 
 func TestInferenceRapidRotationsPreserveOriginalExpiry(t *testing.T) {

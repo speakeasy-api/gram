@@ -146,6 +146,8 @@ func TestUsagePollSkipsDisabledOrganization(t *testing.T) {
 	require.ErrorIs(t, err, ErrOrganizationDisabled)
 	_, _, err = store.GetProviderUsagePollConfig(ctx, created.Config.ID)
 	require.ErrorIs(t, err, ErrOrganizationDisabled)
+	_, err = store.GetUsagePollConfig(ctx, created.Config.ID, ScheduleCursor)
+	require.ErrorIs(t, err, ErrOrganizationDisabled)
 
 	_, err = adminrepo.New(conn).AdminEnableOrganization(ctx, orgID)
 	require.NoError(t, err)

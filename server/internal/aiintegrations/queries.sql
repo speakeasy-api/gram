@@ -275,10 +275,12 @@ SELECT
   , s.last_cursor_id
   , s.created_at AS sync_created_at
   , s.updated_at AS sync_updated_at
+  , (om.disabled_at IS NOT NULL)::boolean AS organization_disabled
 FROM ai_integration_configs c
 JOIN ai_integration_syncs s
   ON s.ai_integration_config_id = c.id
  AND s.schedule = @schedule
+JOIN organization_metadata om ON om.id = c.organization_id
 WHERE c.id = @ai_integration_config_id
   AND c.enabled IS TRUE
   AND c.deleted IS FALSE

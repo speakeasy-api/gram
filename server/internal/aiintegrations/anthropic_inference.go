@@ -86,7 +86,10 @@ func (r *AnthropicInferenceResolver) Resolve(ctx context.Context, id string) (an
 	if err != nil {
 		return empty, err
 	}
-	if !row.Enabled && secrets.Current != "" {
+	// A disabled organization's signed requests are always denied, even when
+	// the integration is also switched off, so a disable never falls back to
+	// Anthropic's failure posture.
+	if !row.Enabled && secrets.Current != "" && !result.OrganizationDisabled {
 		return empty, anthropicinference.ErrIntegrationUnavailable
 	}
 	keys := []string(nil)

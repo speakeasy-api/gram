@@ -173,14 +173,21 @@ func TestSyncerSkipsDisabledOrganization(t *testing.T) {
 	fakes := basicFakes()
 	fakes.Fake(basicOrgURL).RequireClientSecret(clientSecret)
 	syncer := oktaapplications.NewSyncer(testenv.NewLogger(t), testenv.NewMeterProvider(t), bc.conn, fakes, clientsecretstest.New(t, bc.conn, bc.enc))
+	listed := func() bool {
+		candidates, err := syncer.ListCandidates(ctx, 100, []uuid.UUID{})
+		require.NoError(t, err)
+		for _, candidate := range candidates {
+			if candidate.ConnectionID == bc.connectionID {
+				return true
+			}
+		}
+		return false
+	}
+	require.True(t, listed(), "the never-synced connection is a candidate while the organization is enabled")
 
 	_, err := adminrepo.New(bc.conn).AdminDisableOrganization(ctx, bc.orgID)
 	require.NoError(t, err)
-	candidates, err := syncer.ListCandidates(ctx, 100, []uuid.UUID{})
-	require.NoError(t, err)
-	for _, candidate := range candidates {
-		require.NotEqual(t, bc.connectionID, candidate.ConnectionID, "a disabled organization's connection is not a candidate")
-	}
+	require.False(t, listed(), "a disabled organization's connection is not a candidate")
 	// A run that raced the disable is skipped at run time.
 	require.NoError(t, syncer.Run(ctx, bc.connectionID, false))
 	run, err := oktaapplications.LatestRun(ctx, bc.conn, bc.orgID, bc.connectionID)

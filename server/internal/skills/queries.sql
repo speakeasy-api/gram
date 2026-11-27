@@ -2773,8 +2773,9 @@ RETURNING *;
 -- name: GetSharedSkillByToken :one
 -- Public read for the unauthenticated share-link endpoint. The join pins the
 -- share link to its owning project's skill and the lateral picks the latest
--- version by effective promotion time. A disabled organization's links do not
--- resolve, and resolve again once it is re-enabled.
+-- version by effective promotion time. Links in a deleted project or a
+-- disabled organization do not resolve; the latter resolve again once the
+-- organization is re-enabled.
 SELECT
   s.name,
   s.display_name,
@@ -2784,6 +2785,7 @@ SELECT
 FROM skill_share_links l
 JOIN projects p
   ON p.id = l.project_id
+  AND NOT p.deleted
 JOIN organization_metadata om
   ON om.id = p.organization_id
   AND om.disabled_at IS NULL

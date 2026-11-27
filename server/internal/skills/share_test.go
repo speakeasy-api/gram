@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 )
 
 func TestSkillShareCreatesToken(t *testing.T) {
@@ -179,6 +180,20 @@ func TestSkillGetSharedUnknownToken(t *testing.T) {
 	createSkill(t, ctx, ti, "unshared-only", "Never shared.")
 
 	_, err := ti.service.GetShared(ctx, &gen.GetSharedPayload{Token: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"})
+	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+func TestSkillGetSharedRefusesDeletedProject(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	created := createSkill(t, ctx, ti, "deleted-project-skill", "Shared before the project was deleted.")
+	link, err := ti.service.Share(ctx, &gen.SharePayload{SkillID: created.Skill.ID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+
+	_, err = projectsrepo.New(ti.conn).DeleteProject(ctx, ti.projectID)
+	require.NoError(t, err)
+	_, err = ti.service.GetShared(ctx, &gen.GetSharedPayload{Token: link.Token})
 	requireOopsCode(t, err, oops.CodeNotFound)
 }
 

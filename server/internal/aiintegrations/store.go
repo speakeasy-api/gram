@@ -825,6 +825,9 @@ func (s *Store) GetUsagePollConfig(ctx context.Context, configID uuid.UUID, sche
 	case err != nil:
 		return Config{}, oops.E(oops.CodeUnexpected, err, "failed to load ai integration usage poll config")
 	}
+	if row.OrganizationDisabled {
+		return Config{}, ErrOrganizationDisabled
+	}
 	cfg, err := s.configFromUsagePollConfigRow(ctx, nil, row)
 	if err != nil {
 		return Config{}, err
