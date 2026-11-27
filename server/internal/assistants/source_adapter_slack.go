@@ -227,11 +227,10 @@ func writeSlackThreadContext(b *bytes.Buffer, payload slackEventPayload, mode MC
 	}
 	readTool := "platform_slack_read_thread_messages"
 	if mode.IsGateway() {
-		// The built-in speakeasy-slack toolset only exposes write/post tools
-		// (chat:write), not platform_slack_read_thread_messages; keep the
-		// server slug generic so the model looks up any connected Slack reader
-		// server via list_servers instead of calling a nonexistent tool on
-		// speakeasy-slack.
+		// The built-in speakeasy-slack toolset does not expose
+		// platform_slack_read_thread_messages; keep the server slug generic so
+		// the model looks up any connected Slack reader server via list_servers
+		// instead of calling a nonexistent tool on speakeasy-slack.
 		readSlug := gatewayServerSlug
 		if readSlug == platformtools.SpeakeasySlackPlatformToolsetSlug {
 			readSlug = ""

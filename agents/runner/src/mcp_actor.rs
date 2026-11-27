@@ -276,6 +276,7 @@ pub fn spawn_mcp_actor(
         auth_pending: BTreeMap::new(),
         last_errors: BTreeMap::new(),
         last_reconnects: BTreeMap::new(),
+        announced_configured: configured.clone(),
         configured,
         known_tools: KnownTools::default(),
         gateway_mode: gateway_mode.clone(),
@@ -309,8 +310,14 @@ struct McpActor {
     last_reconnects: BTreeMap<String, Instant>,
     // The assistant's current configuration (latest reconcile's desired
     // set). Drives EnsureConnected's pending diff and gates ReconnectTool
-    // so a detached server cannot be resurrected.
+    // so a detached server cannot be resurrected. Always stays in sync with
+    // `manager` transports and `tokens`.
     configured: BTreeMap<String, McpServer>,
+    // The configuration last announced to the model (bootstrap set or last
+    // successful reconcile). Diffed on reconcile completion so a failed
+    // gateway handshake never drops a pending notice or drifts `configured`
+    // out of sync with `manager` / `tokens`.
+    announced_configured: BTreeMap<String, McpServer>,
     known_tools: KnownTools,
     gateway_mode: GatewayModeState,
     instruction_slots: BTreeMap<String, InstructionsSlot>,
@@ -612,7 +619,6 @@ impl McpActor {
         desired: Vec<McpServer>,
         token: String,
     ) -> Result<(), RunnerError> {
-        let was_gateway = self.gateway_mode.is_active();
         let now_gateway = is_gateway_mode(&desired);
         let gateway_server_id = now_gateway.then(|| desired[0].id.clone());
         let desired_map: BTreeMap<String, McpServer> =
@@ -625,13 +631,9 @@ impl McpActor {
         // credential re-registers every server.
         let rotating = self.tokens.current()? != token;
         let mut prepared = Vec::new();
-        let mut attached = Vec::new();
         for (id, server) in &desired_map {
             let is_new = !self.configured.contains_key(id);
             let changed = self.configured.get(id).is_some_and(|prev| prev != server);
-            if is_new {
-                attached.push(id.clone());
-            }
             if is_new || changed || rotating {
                 let (config, slot) = build_mcp_server_config(server, &self.http_client, &token)?;
                 prepared.push((id.clone(), config, slot, changed));
@@ -699,8 +701,6 @@ impl McpActor {
             }
         }
 
-        let prev_configured = self.configured.clone();
-        let prev_servers: Vec<McpServer> = prev_configured.values().cloned().collect();
         self.configured = desired_map;
         self.gateway_mode.set_mode(&desired);
         if !now_gateway {
@@ -716,11 +716,6 @@ impl McpActor {
                         self.last_errors.remove(&gw_id);
                     }
                     Err(failure) if failure.auth_required => {
-                        // Roll back configured/mode state so the next turn still
-                        // observes the diff and emits the mode-change notice once
-                        // the gateway connection succeeds.
-                        self.configured = prev_configured;
-                        self.gateway_mode.set_mode(&prev_servers);
                         self.gateway_mode.clear_tools();
                         return Err(RunnerError::Loop(
                             "Project Gateway rejected this turn's credential (401 Unauthorized); \
@@ -729,8 +724,6 @@ impl McpActor {
                         ));
                     }
                     Err(failure) => {
-                        self.configured = prev_configured;
-                        self.gateway_mode.set_mode(&prev_servers);
                         self.gateway_mode.clear_tools();
                         return Err(RunnerError::Loop(format!(
                             "Project Gateway is unreachable: {}",
@@ -749,15 +742,30 @@ impl McpActor {
             }
         }
 
-        let mode_flipped = was_gateway != now_gateway;
-        if !attached.is_empty() || !detached.is_empty() || mode_flipped {
+        let announced_servers: Vec<McpServer> =
+            self.announced_configured.values().cloned().collect();
+        let was_announced_gateway = is_gateway_mode(&announced_servers);
+        let announced_attached: Vec<String> = self
+            .configured
+            .keys()
+            .filter(|id| !self.announced_configured.contains_key(*id))
+            .cloned()
+            .collect();
+        let announced_detached: Vec<String> = self
+            .announced_configured
+            .keys()
+            .filter(|id| !self.configured.contains_key(*id))
+            .cloned()
+            .collect();
+        let mode_flipped = was_announced_gateway != now_gateway;
+        if !announced_attached.is_empty() || !announced_detached.is_empty() || mode_flipped {
             let mut notice =
                 String::from("<message-context>\nEventType: assistant_mcp_servers_updated\n");
-            if !attached.is_empty() {
-                notice.push_str(&format!("Attached: {}\n", attached.join(", ")));
+            if !announced_attached.is_empty() {
+                notice.push_str(&format!("Attached: {}\n", announced_attached.join(", ")));
             }
-            if !detached.is_empty() {
-                notice.push_str(&format!("Detached: {}\n", detached.join(", ")));
+            if !announced_detached.is_empty() {
+                notice.push_str(&format!("Detached: {}\n", announced_detached.join(", ")));
             }
             if now_gateway {
                 notice.push_str(
@@ -772,6 +780,7 @@ impl McpActor {
             }
             self.send_notice(notice);
         }
+        self.announced_configured = self.configured.clone();
         if let Some(instructions_notice) = gateway_instructions_notice {
             self.send_notice(instructions_notice);
         }
@@ -1225,6 +1234,7 @@ mod tests {
             tokens: tokens.clone(),
             inbox_tx,
             configured: BTreeMap::new(),
+            announced_configured: BTreeMap::new(),
             auth_pending: BTreeMap::from([("server".into(), None)]),
             last_errors: BTreeMap::from([("server".into(), ("old error".into(), Instant::now()))]),
             last_reconnects: BTreeMap::from([("server".into(), Instant::now())]),
@@ -1846,7 +1856,10 @@ mod tests {
         .await
         .unwrap();
         assert!(ack.await.unwrap().is_err());
-        assert!(!gw_mode.is_active(), "failed flip must roll back mode");
+        assert!(
+            gw_mode.specs().is_empty(),
+            "failed connect must clear advertised gateway tools"
+        );
         assert!(
             notices.try_recv().is_err(),
             "failed flip must emit no notice"
@@ -1882,6 +1895,173 @@ mod tests {
                 .iter()
                 .any(|n| n.contains("Retry gateway instructions.")),
             "retry after failed connect must emit gateway instructions: {emitted:?}"
+        );
+        server_task.abort();
+    }
+
+    #[tokio::test]
+    async fn gateway_connect_failure_fallback_rebuilds_transport_with_rotated_token() {
+        use axum::{
+            Json, Router,
+            http::{HeaderMap, StatusCode, header::AUTHORIZATION},
+            response::IntoResponse,
+            routing::post,
+        };
+        use std::sync::Mutex;
+
+        let seen_linear_auth = Arc::new(Mutex::new(Vec::<String>::new()));
+        let auth_log = Arc::clone(&seen_linear_auth);
+
+        let app = Router::new()
+            .route(
+                "/gateway",
+                post(|| async {
+                    (
+                        StatusCode::UNAUTHORIZED,
+                        [(
+                            axum::http::header::WWW_AUTHENTICATE,
+                            r#"Bearer error="invalid_token""#,
+                        )],
+                    )
+                }),
+            )
+            .route(
+                "/linear",
+                post(
+                    move |headers: HeaderMap, Json(body): Json<serde_json::Value>| {
+                        let auth_log = Arc::clone(&auth_log);
+                        async move {
+                            if let Some(auth) = headers
+                                .get(AUTHORIZATION)
+                                .and_then(|v| v.to_str().ok())
+                                .map(str::to_string)
+                            {
+                                auth_log.lock().unwrap().push(auth);
+                            }
+                            if body.get("id").is_none() {
+                                return StatusCode::ACCEPTED.into_response();
+                            }
+                            let id = body.get("id").cloned().unwrap_or(serde_json::json!(1));
+                            let method = body
+                                .get("method")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or_default();
+                            if method == "server/discover" {
+                                return Json(serde_json::json!({
+                                    "jsonrpc": "2.0",
+                                    "id": id,
+                                    "error": {"code": -32601, "message": "Method not found"}
+                                }))
+                                .into_response();
+                            }
+                            let resp = match method {
+                                "initialize" => serde_json::json!({
+                                    "jsonrpc": "2.0",
+                                    "id": id,
+                                    "result": {
+                                        "protocolVersion": body["params"]["protocolVersion"],
+                                        "capabilities": { "tools": {} },
+                                        "serverInfo": { "name": "linear", "version": "1.0.0" }
+                                    }
+                                }),
+                                "tools/list" => serde_json::json!({
+                                    "jsonrpc": "2.0",
+                                    "id": id,
+                                    "result": { "tools": [] }
+                                }),
+                                _ => {
+                                    serde_json::json!({ "jsonrpc": "2.0", "id": id, "result": {} })
+                                }
+                            };
+                            (StatusCode::OK, Json(resp)).into_response()
+                        }
+                    },
+                )
+                .get(|| async { StatusCode::METHOD_NOT_ALLOWED })
+                .delete(|| async { StatusCode::OK }),
+            );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server_task = tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        let tokens = TokenRegistry::new("tok-1");
+        let client = reqwest::Client::new();
+        let (notice_tx, mut notices) = mpsc::unbounded_channel();
+        let per_server = McpServer {
+            id: "linear".into(),
+            url: format!("http://{addr}/linear"),
+            headers: BTreeMap::new(),
+            is_gateway: false,
+        };
+        let gateway = McpServer {
+            id: "gateway".into(),
+            url: format!("http://{addr}/gateway"),
+            headers: BTreeMap::new(),
+            is_gateway: true,
+        };
+        let (cmd, _catalog, _known, gw_mode) = spawn_mcp_actor(
+            GramBootstrapClient::new(
+                format!("http://{addr}"),
+                crate::http_layer::build_bootstrap_client(client.clone()),
+            ),
+            client,
+            "T",
+            std::slice::from_ref(&per_server),
+            &tokens,
+            notice_tx,
+        )
+        .unwrap();
+
+        // Turn rotates to tok-2 and tries gateway; gateway rejects with 401.
+        let (reply, ack) = oneshot::channel();
+        cmd.send(McpCmd::TurnBoundary {
+            token: "tok-2".into(),
+            desired: Some(vec![gateway]),
+            reply,
+            parent: tracing::Span::none(),
+        })
+        .await
+        .unwrap();
+        assert!(ack.await.unwrap().is_err());
+
+        // Next turn falls back to per-server `linear` carrying the same tok-2.
+        // Because `configured` stayed in sync with `manager` / `tokens`,
+        // `linear` is freshly re-registered with tok-2 (not stale tok-1), and
+        // no spurious mode-change notice is emitted.
+        let (reply, ack) = oneshot::channel();
+        cmd.send(McpCmd::TurnBoundary {
+            token: "tok-2".into(),
+            desired: Some(vec![per_server]),
+            reply,
+            parent: tracing::Span::none(),
+        })
+        .await
+        .unwrap();
+        ack.await.unwrap().unwrap();
+        assert!(!gw_mode.is_active());
+        assert!(
+            notices.try_recv().is_err(),
+            "fallback to already-announced per-server set must not emit spurious notice"
+        );
+
+        let (reply, statuses) = oneshot::channel();
+        cmd.send(McpCmd::EnsureConnected {
+            reply,
+            parent: tracing::Span::none(),
+        })
+        .await
+        .unwrap();
+        let statuses = statuses.await.unwrap();
+        assert_eq!(statuses.len(), 1);
+        assert_eq!(statuses[0].status, McpServerConnectionStatus::Connected);
+
+        let auths = seen_linear_auth.lock().unwrap().clone();
+        assert!(!auths.is_empty());
+        assert!(
+            auths.iter().all(|a| a == "Bearer tok-2"),
+            "restored per-server transport must carry tok-2, got {auths:?}"
         );
         server_task.abort();
     }
