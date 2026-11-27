@@ -36,14 +36,18 @@ export function useRecordDashboardActivity(
 
   useEffect(() => {
     if (!enabled) return undefined;
+    // A call started in the previous project can settle after the switch;
+    // only calls submitted under this scope belong in its log.
+    const scopeStartedAt = Date.now();
     return queryClient.getMutationCache().subscribe((event) => {
       if (event.type !== "updated") return;
+      if (event.mutation.state.submittedAt < scopeStartedAt) return;
       const outcome = event.action.type;
       if (outcome !== "success" && outcome !== "error") return;
       const action = describeMutationKey(event.mutation.options.mutationKey);
       if (action) recordActionOutcome(action, outcome === "error");
     });
-  }, [queryClient, enabled]);
+  }, [queryClient, enabled, scope]);
 }
 
 /**
