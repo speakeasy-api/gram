@@ -32,6 +32,11 @@ const ErrTypeGitHubRepoConflict = "PluginGitHubRepoConflict"
 // attributed to: a retry fails the same way.
 const ErrTypePluginActorNotMember = "PluginActorNotMember"
 
+// ErrTypeOrganizationDisabled tags the non-retryable Temporal application
+// error returned when the project's organization is disabled: a retry is
+// refused the same way until the organization is re-enabled.
+const ErrTypeOrganizationDisabled = "PluginOrganizationDisabled"
+
 type PluginPublishClient interface {
 	PublishProject(ctx context.Context, input plugins.PublishProjectInput) (*plugins.PublishProjectResult, error)
 }
@@ -145,6 +150,9 @@ func (p *PluginPublisher) PublishProject(ctx context.Context, input plugins.Publ
 		}
 		if errors.Is(err, plugins.ErrPluginAPIKeyCreatorNotMember) {
 			return nil, temporal.NewNonRetryableApplicationError(err.Error(), ErrTypePluginActorNotMember, err)
+		}
+		if errors.Is(err, plugins.ErrOrganizationDisabled) {
+			return nil, temporal.NewNonRetryableApplicationError(err.Error(), ErrTypeOrganizationDisabled, err)
 		}
 		return nil, fmt.Errorf("publish plugin project: %w", err)
 	}

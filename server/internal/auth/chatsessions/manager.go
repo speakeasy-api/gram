@@ -22,6 +22,8 @@ import (
 type SessionEpochChecker interface {
 	// SessionPredatesEpoch applies the user cutoff to the parent session issuance.
 	SessionPredatesEpoch(ctx context.Context, userID, sessionID string) (bool, error)
+	// CheckUserBlock rejects a user staff blocked from the platform.
+	CheckUserBlock(ctx context.Context, userID string) error
 }
 
 // Manager handles chat session token lifecycle
@@ -101,6 +103,17 @@ func (m *Manager) Authorize(ctx context.Context, token string) (context.Context,
 		// Not a verdict on the token — surface as a server fault rather than
 		// telling the caller to re-authenticate.
 		return ctx, oops.E(oops.CodeUnexpected, err, "validate chat session token").LogError(ctx, m.logger)
+	}
+
+	// Any token carrying a user, including an API key's creator, stops working
+	// once staff block that user.
+	if claims.UserID != "" {
+		if m.sessionEpochs == nil {
+			return ctx, oops.E(oops.CodeUnexpected, nil, "session epoch checker is not configured").LogError(ctx, m.logger)
+		}
+		if err := m.sessionEpochs.CheckUserBlock(ctx, claims.UserID); err != nil {
+			return ctx, fmt.Errorf("chat session user: %w", err)
+		}
 	}
 
 	// API-key tokens can carry their creator's user ID, but do not inherit a
