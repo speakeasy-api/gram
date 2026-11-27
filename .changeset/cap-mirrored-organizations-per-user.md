@@ -2,4 +2,4 @@
 "server": patch
 ---
 
-Disable an organization mirrored from the identity provider when its only member already has another enabled organization, and record it as `organization:disabled_by_membership_cap`. Platform MCP connections now stop working when their organization is disabled.
+Limit each user to one organization in a single shared rule. Self-serve organization creation refuses a user who already has one, and an organization that arrives from the identity provider for such a user is disabled and recorded as `organization:disabled_by_membership_cap`. Platform MCP connections now stop working when their organization is disabled.

@@ -100,10 +100,6 @@ func handleOrganizationMembershipEvent(ctx context.Context, logger *slog.Logger,
 	if err := upsertOrganizationMembership(ctx, dbtx, org.ID, gramUserID, event, payload); err != nil {
 		return none, err
 	}
-	// Only a membership Speakeasy has never recorded is checked against the
-	// cap. A row that already exists belongs to a long-standing organization,
-	// a login that got here first, or an earlier event that already decided,
-	// and re-checking it would undo an organization staff re-enabled.
 	if !known {
 		capped, err := orgcap.Enforce(ctx, dbtx, audit.NewLogger(), orgcap.NewMembership{
 			OrganizationID: org.ID,
@@ -156,9 +152,6 @@ func upsertOrganizationMembership(ctx context.Context, dbtx pgx.Tx, organization
 	return nil
 }
 
-// getMembershipRelationshipCursor reads the sync cursor of the relationship row
-// a membership event applies to. known reports whether any such row exists,
-// including a removed one; a row written at login exists but has no cursor.
 func getMembershipRelationshipCursor(ctx context.Context, repo *orgrepo.Queries, organizationID, gramUserID, workosMembershipID string) (known bool, lastEventID *string, rowUpdatedAt *time.Time, err error) {
 	existing, err := repo.GetRelationshipByMembershipID(ctx, conv.ToPGText(workosMembershipID))
 	if errors.Is(err, pgx.ErrNoRows) && gramUserID != "" {

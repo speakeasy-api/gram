@@ -216,9 +216,6 @@ func (a *LiveOrgAdminAuthorizer) RequireLiveMembership(ctx context.Context, prin
 	if !member {
 		return ErrForbidden
 	}
-	// A disabled organization is refused here as it is for dashboard sessions
-	// and API keys. Membership alone would keep an existing connection, and a
-	// token refresh for it, working after the organization was disabled.
 	organization, err := organizationsrepo.New(a.db).GetOrganizationMetadata(ctx, principal.OrganizationID)
 	if err != nil {
 		return fmt.Errorf("load organization for membership check: %w", err)

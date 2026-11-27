@@ -381,7 +381,6 @@ func TestLiveExternalAuthorizationRejectsDisabledOrganization(t *testing.T) {
 	authorizer := NewLiveOrgAdminAuthorizer(conn, engine)
 	admin := Principal{UserID: adminID, OrganizationID: organizationID, ConnectionID: uuid.NewString(), Generation: uuid.NewString(), ClientID: "client-test", Surface: SurfacePlatformMCP}
 
-	// The connection works while the organization is enabled.
 	_, err = authorizer.PrepareExternalContext(ctx, admin)
 	require.NoError(t, err)
 	selector := NewLiveOrganizationSelector(conn, authorizer)
@@ -396,8 +395,6 @@ func TestLiveExternalAuthorizationRejectsDisabledOrganization(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, 1, disabled)
 
-	// An existing connection, a token refresh and the organization picker all
-	// pass through the membership check, so each refuses the disabled organization.
 	_, err = authorizer.PrepareExternalContext(ctx, admin)
 	require.ErrorIs(t, err, ErrForbidden)
 	require.ErrorIs(t, authorizer.RequireLiveMembership(ctx, admin), ErrForbidden)

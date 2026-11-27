@@ -46,10 +46,8 @@ const (
 	ActionOrganizationEnterpriseTrialStarted    Action = "organization:enterprise_trial_started"
 	ActionOrganizationEnterpriseTrialEndChanged Action = "organization:enterprise_trial_end_changed"
 
-	ActionOrganizationDisabled Action = "organization:disabled"
-	ActionOrganizationEnabled  Action = "organization:enabled"
-	// ActionOrganizationDisabledByMembershipCap is an automatic disable of an
-	// organization mirrored from the identity provider.
+	ActionOrganizationDisabled                Action = "organization:disabled"
+	ActionOrganizationEnabled                 Action = "organization:enabled"
 	ActionOrganizationDisabledByMembershipCap Action = "organization:disabled_by_membership_cap"
 	ActionOrganizationWhitelistUpdated        Action = "organization:whitelist_updated"
 	ActionOrganizationPaygActivated           Action = "organization:payg_activated"
@@ -1086,10 +1084,6 @@ func (l *Logger) LogOrganizationDisabled(ctx context.Context, dbtx repo.DBTX, ev
 	return l.logOrganizationAccess(ctx, dbtx, event, ActionOrganizationDisabled)
 }
 
-// LogOrganizationDisabledByMembershipCap records an organization disabled
-// automatically because it would have given its only member more than one
-// organization mirrored from the identity provider. It is a separate action
-// from LogOrganizationDisabled so staff can tell it from a manual disable.
 func (l *Logger) LogOrganizationDisabledByMembershipCap(ctx context.Context, dbtx repo.DBTX, event LogOrganizationAccessEvent) error {
 	return l.logOrganizationAccess(ctx, dbtx, event, ActionOrganizationDisabledByMembershipCap)
 }

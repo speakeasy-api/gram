@@ -412,8 +412,6 @@ type CreateOrganizationMetadataFromWorkOSWithRequestsRow struct {
 // Create a Speakeasy organization row from a WorkOS organization event. The caller
 // chooses the Speakeasy org ID from WorkOS external_id or a deterministic fallback.
 // Slug is a Speakeasy-owned initial value and is never updated by WorkOS sync.
-// whitelisted is written explicitly so the dashboard's book-a-demo gate for
-// these organizations is decided here and not by the column default.
 func (q *Queries) CreateOrganizationMetadataFromWorkOSWithRequests(ctx context.Context, arg CreateOrganizationMetadataFromWorkOSWithRequestsParams) (CreateOrganizationMetadataFromWorkOSWithRequestsRow, error) {
 	row := q.db.QueryRow(ctx, createOrganizationMetadataFromWorkOSWithRequests,
 		arg.ID,
@@ -670,7 +668,31 @@ func (q *Queries) DeleteRetiredOnboardingPlaybookSteps(ctx context.Context, arg 
 	return result.RowsAffected(), nil
 }
 
-const disableMirroredOrganizationOverCap = `-- name: DisableMirroredOrganizationOverCap :one
+const disableOrganizationByWorkosID = `-- name: DisableOrganizationByWorkosID :execrows
+UPDATE organization_metadata
+SET disabled_at = COALESCE(disabled_at, clock_timestamp()),
+    workos_last_event_id = $1,
+    updated_at = clock_timestamp()
+WHERE workos_id = $2
+`
+
+type DisableOrganizationByWorkosIDParams struct {
+	WorkosLastEventID pgtype.Text
+	WorkosID          pgtype.Text
+}
+
+// Mark a WorkOS-linked organization as disabled. Append-only: keeps
+// organization_user_relationships intact. Idempotent — disabled_at is only
+// set on first delete event.
+func (q *Queries) DisableOrganizationByWorkosID(ctx context.Context, arg DisableOrganizationByWorkosIDParams) (int64, error) {
+	result, err := q.db.Exec(ctx, disableOrganizationByWorkosID, arg.WorkosLastEventID, arg.WorkosID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const disableOrganizationOverUserCap = `-- name: DisableOrganizationOverUserCap :one
 UPDATE organization_metadata AS target
 SET disabled_at = clock_timestamp(),
     updated_at = clock_timestamp()
@@ -714,42 +736,28 @@ WHERE target.id = $1
 RETURNING target.id, target.name, target.slug, target.disabled_at
 `
 
-type DisableMirroredOrganizationOverCapParams struct {
-	OrganizationID        string
-	UserID                pgtype.Text
-	WorkosUserID          pgtype.Text
-	MaxOtherOrganizations int32
+type DisableOrganizationOverUserCapParams struct {
+	OrganizationID   string
+	UserID           pgtype.Text
+	WorkosUserID     pgtype.Text
+	MaxOrganizations int32
 }
 
-type DisableMirroredOrganizationOverCapRow struct {
+type DisableOrganizationOverUserCapRow struct {
 	ID         string
 	Name       string
 	Slug       string
 	DisabledAt pgtype.Timestamptz
 }
 
-// Disable an organization mirrored from the identity provider when its only
-// member already has max_other_organizations enabled organizations. Callers
-// hold LockMirroredOrganizationCap for the user and run this once, when the
-// membership is first recorded. No row is returned when the organization
-// stays enabled.
-//
-// An organization is left alone when any of these hold:
-//   - a Speakeasy flow created it (creation_source is recorded);
-//   - it has SSO, directory sync or a verified domain, which a throwaway
-//     organization does not;
-//   - the user is staff;
-//   - anyone else is a member;
-//   - the user has fewer than max_other_organizations other enabled
-//     organizations.
-func (q *Queries) DisableMirroredOrganizationOverCap(ctx context.Context, arg DisableMirroredOrganizationOverCapParams) (DisableMirroredOrganizationOverCapRow, error) {
-	row := q.db.QueryRow(ctx, disableMirroredOrganizationOverCap,
+func (q *Queries) DisableOrganizationOverUserCap(ctx context.Context, arg DisableOrganizationOverUserCapParams) (DisableOrganizationOverUserCapRow, error) {
+	row := q.db.QueryRow(ctx, disableOrganizationOverUserCap,
 		arg.OrganizationID,
 		arg.UserID,
 		arg.WorkosUserID,
-		arg.MaxOtherOrganizations,
+		arg.MaxOrganizations,
 	)
-	var i DisableMirroredOrganizationOverCapRow
+	var i DisableOrganizationOverUserCapRow
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
@@ -757,30 +765,6 @@ func (q *Queries) DisableMirroredOrganizationOverCap(ctx context.Context, arg Di
 		&i.DisabledAt,
 	)
 	return i, err
-}
-
-const disableOrganizationByWorkosID = `-- name: DisableOrganizationByWorkosID :execrows
-UPDATE organization_metadata
-SET disabled_at = COALESCE(disabled_at, clock_timestamp()),
-    workos_last_event_id = $1,
-    updated_at = clock_timestamp()
-WHERE workos_id = $2
-`
-
-type DisableOrganizationByWorkosIDParams struct {
-	WorkosLastEventID pgtype.Text
-	WorkosID          pgtype.Text
-}
-
-// Mark a WorkOS-linked organization as disabled. Append-only: keeps
-// organization_user_relationships intact. Idempotent — disabled_at is only
-// set on first delete event.
-func (q *Queries) DisableOrganizationByWorkosID(ctx context.Context, arg DisableOrganizationByWorkosIDParams) (int64, error) {
-	result, err := q.db.Exec(ctx, disableOrganizationByWorkosID, arg.WorkosLastEventID, arg.WorkosID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
 }
 
 const expireInvitationForTest = `-- name: ExpireInvitationForTest :exec
@@ -2553,19 +2537,6 @@ func (q *Queries) LockActiveOrganizationUser(ctx context.Context, arg LockActive
 	return user_id, err
 }
 
-const lockMirroredOrganizationCap = `-- name: LockMirroredOrganizationCap :exec
-SELECT pg_advisory_xact_lock(hashtextextended('mirrored-organization-cap:' || $1::text, 0))
-`
-
-// Serializes the mirrored-organization cap for one identity-provider user.
-// Organization events are processed one organization at a time, so a burst of
-// new organizations for the same user is handled in parallel transactions.
-// Without this lock each would see no other organization yet and keep its own.
-func (q *Queries) LockMirroredOrganizationCap(ctx context.Context, workosUserID string) error {
-	_, err := q.db.Exec(ctx, lockMirroredOrganizationCap, workosUserID)
-	return err
-}
-
 const lockOnboardingPlaybooks = `-- name: LockOnboardingPlaybooks :exec
 SELECT pg_advisory_xact_lock(719438203)
 `
@@ -2700,6 +2671,15 @@ SELECT pg_advisory_xact_lock(hashtext($1))
 
 func (q *Queries) LockOrganizationSlug(ctx context.Context, slug string) error {
 	_, err := q.db.Exec(ctx, lockOrganizationSlug, slug)
+	return err
+}
+
+const lockUserOrganizationCap = `-- name: LockUserOrganizationCap :exec
+SELECT pg_advisory_xact_lock(hashtextextended('organization-cap:' || $1::text, 0))
+`
+
+func (q *Queries) LockUserOrganizationCap(ctx context.Context, workosUserID string) error {
+	_, err := q.db.Exec(ctx, lockUserOrganizationCap, workosUserID)
 	return err
 }
 

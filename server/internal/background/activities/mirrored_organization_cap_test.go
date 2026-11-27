@@ -25,12 +25,8 @@ import (
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
-// mirroredCapEventTime is the timestamp carried by the membership events these
-// tests deliver. It is later than the seeded organization rows.
 var mirroredCapEventTime = time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)
 
-// deliverMembershipCreated runs the organization event sync for one
-// organization with a single organization_membership.created event.
 func deliverMembershipCreated(t *testing.T, ctx context.Context, conn *pgxpool.Pool, workosOrgID, workosUserID, suffix string) error {
 	t.Helper()
 
@@ -89,7 +85,6 @@ func TestMirroredOrganizationCap_UserWithoutSpeakeasyAccountIsCappedByIdentityPr
 	seedWorkOSOrganization(t, ctx, conn, "gram_org_cap_unlinked_first", "org_01HZCAPUNLINKEDA")
 	seedWorkOSOrganization(t, ctx, conn, "gram_org_cap_unlinked_second", "org_01HZCAPUNLINKEDB")
 
-	// No users row: the member has never signed in to Speakeasy.
 	require.NoError(t, deliverMembershipCreated(t, ctx, conn, "org_01HZCAPUNLINKEDA", "user_01HZCAPUNLINKED", "A"))
 	require.NoError(t, deliverMembershipCreated(t, ctx, conn, "org_01HZCAPUNLINKEDB", "user_01HZCAPUNLINKED", "B"))
 
@@ -106,9 +101,6 @@ func TestMirroredOrganizationCap_MembershipAlreadyRecordedIsNotChecked(t *testin
 	seedWorkOSOrganization(t, ctx, conn, "gram_org_cap_known_second", "org_01HZCAPKNOWNB")
 	seedWorkOSUser(t, ctx, conn, "user_cap_known", "user_01HZCAPKNOWN")
 
-	// The user already belongs to both organizations, as a user with two
-	// long-standing organizations does. A replayed membership event for one of
-	// them must not disable it.
 	for _, organizationID := range []string{"gram_org_cap_known_first", "gram_org_cap_known_second"} {
 		_, err := orgrepo.New(conn).UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
 			OrganizationID: organizationID,
@@ -136,7 +128,6 @@ func TestMirroredOrganizationCap_OrganizationWithAnotherMemberIsNotDisabled(t *t
 	require.NoError(t, deliverMembershipCreated(t, ctx, conn, "org_01HZCAPOWN", "user_01HZCAPJOINER", "A"))
 	require.NoError(t, deliverMembershipCreated(t, ctx, conn, "org_01HZCAPTEAM", "user_01HZCAPTEAMMATE", "B"))
 
-	// Joining a team that already has a member is an invitation, not sprawl.
 	require.NoError(t, deliverMembershipCreated(t, ctx, conn, "org_01HZCAPTEAM", "user_01HZCAPJOINER", "C"))
 
 	require.False(t, organizationDisabled(t, ctx, conn, "gram_org_cap_team"))
@@ -152,8 +143,6 @@ func TestMirroredOrganizationCap_OrganizationCreatedBySpeakeasyFlowIsNotDisabled
 	seedWorkOSOrganization(t, ctx, conn, "gram_org_cap_source_prospect", "org_01HZCAPSOURCEB")
 	seedWorkOSUser(t, ctx, conn, "user_cap_source", "user_01HZCAPSOURCE")
 
-	// A staff-created prospect organization, which its first customer member
-	// joins while already holding a self-serve organization.
 	_, err := orgrepo.New(conn).UpsertOrganizationMetadata(ctx, orgrepo.UpsertOrganizationMetadataParams{
 		ID:             "gram_org_cap_source_prospect",
 		Name:           "Test Org",
@@ -214,8 +203,6 @@ func TestMirroredOrganizationCap_StaffUserIsNotCapped(t *testing.T) {
 	require.False(t, organizationDisabled(t, ctx, conn, "gram_org_cap_staff_second"))
 }
 
-// joinInTransaction records a new membership and applies the cap inside tx, the
-// way the event sync does, and reports whether the organization was disabled.
 func joinInTransaction(ctx context.Context, tx pgx.Tx, organizationID, userID, workosUserID, membershipID string) (bool, error) {
 	if err := orgrepo.New(tx).UpsertWorkOSMembership(ctx, orgrepo.UpsertWorkOSMembershipParams{
 		OrganizationID:     organizationID,
@@ -247,8 +234,6 @@ func TestMirroredOrganizationCap_OverlappingTransactionsDecideOneAfterAnother(t 
 	seedWorkOSOrganization(t, ctx, conn, "gram_org_cap_overlap_second", "org_01HZCAPOVERLAPB")
 	seedWorkOSUser(t, ctx, conn, "user_cap_overlap", "user_01HZCAPOVERLAP")
 
-	// The first transaction joins and decides, then stays open. Its membership
-	// is invisible to everyone else until it commits.
 	first := testenv.BeginTx(t, ctx, conn)
 	capped, err := joinInTransaction(ctx, first, "gram_org_cap_overlap_first", "user_cap_overlap", "user_01HZCAPOVERLAP", "mem_01HZCAPOVERLAPA")
 	require.NoError(t, err)
@@ -269,8 +254,6 @@ func TestMirroredOrganizationCap_OverlappingTransactionsDecideOneAfterAnother(t 
 		second <- result
 	}()
 
-	// The second transaction must wait for the first. Deciding now, it would
-	// see no other organization for the user and keep its own as well.
 	testenv.WaitForBackendsBlockedBy(t, ctx, conn, testenv.BackendPID(first), 1)
 	require.NoError(t, first.Commit(ctx))
 
@@ -281,8 +264,6 @@ func TestMirroredOrganizationCap_OverlappingTransactionsDecideOneAfterAnother(t 
 	require.True(t, organizationDisabled(t, ctx, conn, "gram_org_cap_overlap_second"))
 }
 
-// burstOrganizations is how many organizations the parallel test delivers for
-// one user at once, roughly the size of the burst this cap was written for.
 const burstOrganizations = 12
 
 func TestMirroredOrganizationCap_ParallelBurstKeepsExactlyOneOrganization(t *testing.T) {
@@ -300,8 +281,6 @@ func TestMirroredOrganizationCap_ParallelBurstKeepsExactlyOneOrganization(t *tes
 		seedWorkOSOrganization(t, ctx, conn, organizationIDs[i], workosOrgIDs[i])
 	}
 
-	// Each organization has its own event stream, so the sync handles them in
-	// separate transactions at the same time.
 	var group errgroup.Group
 	for i := range burstOrganizations {
 		group.Go(func() error {

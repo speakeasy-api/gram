@@ -20,11 +20,6 @@ import (
 	usersRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
-// ErrUserHasOrganization refuses a Platform MCP workspace for a user who
-// already belongs to an organization. Only a user with no organization may
-// create one from the OAuth flow.
-var ErrUserHasOrganization = errors.New("user already belongs to an organization")
-
 // ErrUserHasPendingInvitation refuses a Platform MCP workspace for a user who
 // has a live invitation to an existing organization. Such a user joins that
 // organization instead, so an invited teammate does not split from their team.
@@ -190,13 +185,6 @@ func (s *Service) provisionFirstOrgForUser(ctx context.Context, userID, orgName,
 		}
 	}()
 
-	existing, err := s.orgRepo.ListOrganizationsForUser(ctx, conv.ToPGText(userID))
-	if err != nil {
-		return empty, fmt.Errorf("list user organizations: %w", err)
-	}
-	if len(existing) > 0 {
-		return empty, ErrUserHasOrganization
-	}
 	invitations, err := s.orgRepo.ListPendingInvitationsForEmail(ctx, conv.NormalizeEmail(actorEmail))
 	if err != nil {
 		return empty, fmt.Errorf("list pending invitations: %w", err)

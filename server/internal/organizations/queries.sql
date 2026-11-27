@@ -817,8 +817,6 @@ SELECT pg_advisory_xact_lock(hashtext(@slug));
 -- Create a Speakeasy organization row from a WorkOS organization event. The caller
 -- chooses the Speakeasy org ID from WorkOS external_id or a deterministic fallback.
 -- Slug is a Speakeasy-owned initial value and is never updated by WorkOS sync.
--- whitelisted is written explicitly so the dashboard's book-a-demo gate for
--- these organizations is decided here and not by the column default.
 WITH written AS (
 INSERT INTO organization_metadata (
     id,
@@ -947,28 +945,10 @@ WHERE our.user_id = @user_id
   AND our.deleted_at IS NULL
   AND om.disabled_at IS NULL;
 
--- name: LockMirroredOrganizationCap :exec
--- Serializes the mirrored-organization cap for one identity-provider user.
--- Organization events are processed one organization at a time, so a burst of
--- new organizations for the same user is handled in parallel transactions.
--- Without this lock each would see no other organization yet and keep its own.
-SELECT pg_advisory_xact_lock(hashtextextended('mirrored-organization-cap:' || @workos_user_id::text, 0));
+-- name: LockUserOrganizationCap :exec
+SELECT pg_advisory_xact_lock(hashtextextended('organization-cap:' || @workos_user_id::text, 0));
 
--- name: DisableMirroredOrganizationOverCap :one
--- Disable an organization mirrored from the identity provider when its only
--- member already has max_other_organizations enabled organizations. Callers
--- hold LockMirroredOrganizationCap for the user and run this once, when the
--- membership is first recorded. No row is returned when the organization
--- stays enabled.
---
--- An organization is left alone when any of these hold:
---   * a Speakeasy flow created it (creation_source is recorded);
---   * it has SSO, directory sync or a verified domain, which a throwaway
---     organization does not;
---   * the user is staff;
---   * anyone else is a member;
---   * the user has fewer than max_other_organizations other enabled
---     organizations.
+-- name: DisableOrganizationOverUserCap :one
 UPDATE organization_metadata AS target
 SET disabled_at = clock_timestamp(),
     updated_at = clock_timestamp()
@@ -1008,7 +988,7 @@ WHERE target.id = @organization_id
             COALESCE(mine.user_id = sqlc.narg('user_id')::text, FALSE)
             OR COALESCE(mine.workos_user_id = sqlc.narg('workos_user_id')::text, FALSE)
         )
-  ) >= @max_other_organizations::int
+  ) >= @max_organizations::int
 RETURNING target.id, target.name, target.slug, target.disabled_at;
 
 -- name: DisableOrganizationByWorkosID :execrows
