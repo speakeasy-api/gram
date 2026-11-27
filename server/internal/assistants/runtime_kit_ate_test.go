@@ -910,11 +910,29 @@ func TestKitATEMetadataRejectsForeignBinding(t *testing.T) {
 
 func TestParseKitATEWorkerSelector(t *testing.T) {
 	t.Parallel()
-	labels, err := ParseKitATEWorkerSelector("workload-type=ate-assistants,tier=prod")
+	labels, err := ParseKitATEWorkerSelector("workload-type=ate-assistants,ate.dev/tier=prod")
 	require.NoError(t, err)
-	require.Equal(t, map[string]string{"workload-type": "ate-assistants", "tier": "prod"}, labels)
+	require.Equal(t, map[string]string{"workload-type": "ate-assistants", "ate.dev/tier": "prod"}, labels)
 
-	for _, invalid := range []string{"", "   ", "noequals", "=val", "key=", "a=b,a=c", "bad key=val", "key=bad val"} {
+	longLabel := strings.Repeat("a", 64)
+	longPrefix := strings.Repeat("a", 63) + "." + strings.Repeat("b", 63) + "." + strings.Repeat("c", 63) + "." + strings.Repeat("d", 63)
+	for _, invalid := range []string{
+		"",
+		"   ",
+		"noequals",
+		"=val",
+		"key=",
+		"a=b,a=c",
+		"bad key=val",
+		"key=bad val",
+		"a..b/key=val",
+		"-bad/key=val",
+		longLabel + "=val",
+		"ate.dev/" + longLabel + "=val",
+		longLabel + ".ate.dev/key=val",
+		longPrefix + "/key=val",
+		"key=" + longLabel,
+	} {
 		_, err := ParseKitATEWorkerSelector(invalid)
 		require.Error(t, err, invalid)
 	}
