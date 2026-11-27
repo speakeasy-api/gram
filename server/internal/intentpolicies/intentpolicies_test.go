@@ -10,7 +10,6 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/intent_policies"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
-	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore/fixturerepo"
 	"github.com/speakeasy-api/gram/server/internal/classifier"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -119,8 +118,8 @@ func TestAnalyzeReadsThroughEncryptedShadows(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, res.Assessments, 2, "the opened shadows carry the tool calls")
 
-	// Analysis reads the shadow, not the plaintext row: plaintext edited
-	// behind it fails the analysis instead of being judged.
+	// Plaintext edited behind the shadow disagrees with it: the read logs the
+	// mismatch and serves the plaintext row, which stays the source of truth.
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	chatID := uuid.MustParse(up.ChatID)
@@ -128,9 +127,9 @@ func TestAnalyzeReadsThroughEncryptedShadows(t *testing.T) {
 	require.NoError(t, err)
 	_, err = fixturerepo.New(conn).ChangeContent(ctx, last, uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true})
 	require.NoError(t, err)
-	_, err = svc.AnalyzeSession(ctx, &gen.AnalyzeSessionPayload{SessionToken: nil, ProjectSlugInput: nil, ChatID: up.ChatID, Evaluator: "gemini", Generation: nil, Offset: 0, Limit: nil})
-	requireOopsCode(t, err, oops.CodeUnexpected)
-	require.ErrorIs(t, err, transcriptstore.ErrStale)
+	res, err = svc.AnalyzeSession(ctx, &gen.AnalyzeSessionPayload{SessionToken: nil, ProjectSlugInput: nil, ChatID: up.ChatID, Evaluator: "gemini", Generation: nil, Offset: 0, Limit: nil})
+	require.NoError(t, err)
+	require.Len(t, res.Assessments, 2, "the plaintext row keeps its tool calls")
 }
 
 func TestAnalyzePublishesAssessments(t *testing.T) {
