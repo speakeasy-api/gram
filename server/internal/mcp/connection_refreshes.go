@@ -106,6 +106,10 @@ func refuseInboundRefresh(ctx context.Context, tracker *mcpconnectionattempts.Tr
 	return nil
 }
 
+// refreshUserDisabled is the refusal reason for a refresh by, or on behalf of,
+// a user staff blocked from the platform.
+const refreshUserDisabled = "user_disabled"
+
 // inboundRefreshHappened leaves out a request with no token to judge; an unknown reason is ours.
 func inboundRefreshHappened(reason string) (mcpconnectionattempts.Code, bool) {
 	switch reason {
@@ -133,6 +137,9 @@ func inboundRefreshHappened(reason string) (mcpconnectionattempts.Code, bool) {
 		return mcpconnectionattempts.CodeCredentialMisconfigured, true
 	case "agent_admission_denied":
 		return mcpconnectionattempts.CodeNoServerAccess, true
+	case refreshUserDisabled:
+		// Recorded like an unknown token, so nothing shows the user is blocked.
+		return mcpconnectionattempts.CodeRefreshTokenUnknownOrAlreadyUsed, true
 	case string(upstreamRefreshReconnect):
 		return mcpconnectionattempts.CodeUpstreamReconnectRequired, true
 	case string(upstreamRefreshEMARefused):

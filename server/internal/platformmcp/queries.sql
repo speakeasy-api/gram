@@ -427,6 +427,24 @@ WHERE organization_id = @organization_id
   AND connection_generation = @connection_generation
   AND revoked_at IS NULL;
 
+-- name: HasActiveMembershipInEnabledOrganization :one
+-- Returns whether the user is an active member of an organization that has
+-- not been disabled. Platform MCP runs this on every request so disabling an
+-- organization cuts off connections that are already open.
+SELECT EXISTS(
+  SELECT 1
+  FROM users
+  JOIN organization_user_relationships
+    ON organization_user_relationships.user_id = users.id
+  JOIN organization_metadata
+    ON organization_metadata.id = organization_user_relationships.organization_id
+  WHERE users.id = @user_id
+    AND users.deleted_at IS NULL
+    AND organization_user_relationships.organization_id = @organization_id
+    AND organization_user_relationships.deleted_at IS NULL
+    AND organization_metadata.disabled_at IS NULL
+) AS exists;
+
 -- name: GetActivePlatformMCPSessionByJTI :one
 SELECT
     session.connection_id,

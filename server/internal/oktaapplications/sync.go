@@ -237,6 +237,12 @@ func (s *Syncer) Run(ctx context.Context, connectionID uuid.UUID, final bool) er
 		return nil
 	}
 	logger = logger.With(attr.SlogOrganizationID(target.OrganizationID))
+	// Skipped before a run row opens, so nothing is recorded and the
+	// connection syncs once the organization is re-enabled.
+	if target.OrganizationDisabled {
+		logger.InfoContext(ctx, "okta application sync skipped: organization disabled", attr.SlogReason("organization_disabled"))
+		return nil
+	}
 
 	run, opened, err := s.openRun(ctx, target)
 	if err != nil {

@@ -58,6 +58,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/userblock"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -901,6 +902,17 @@ func (s *Service) contextForSessionSubject(
 	}
 	switch subject.Kind {
 	case urn.SessionSubjectKindUser:
+		// A user staff blocked from the platform loses every MCP session and
+		// grant at once: access tokens, consent, refresh and ID-JAG all stamp
+		// the subject here.
+		blocked, err := s.sessions.IsUserBlocked(ctx, subject.ID)
+		if err != nil {
+			return nil, fmt.Errorf("session subject block state: %w", err)
+		}
+		if blocked {
+			userblock.LogRefusal(ctx, s.logger, "mcp_session", subject.ID)
+			return nil, fmt.Errorf("%w: %w", errCredentialRejected, userblock.ErrBlocked)
+		}
 		authCtx.UserID = subject.ID
 		// Resolve the validated Speakeasy subject through the session manager's
 		// cached database profile. Request-authentication profile values may
