@@ -431,6 +431,32 @@ func TestServeAgentGateway_CustomDomainLockdownBlocksPlatformHost(t *testing.T) 
 	requireAgentGatewayCode(t, err, oops.CodeForbidden)
 }
 
+// An organization that is not whitelisted has none of its MCP servers served,
+// so its agent gateway answers as an unknown one would until it is whitelisted
+// again.
+func TestServeAgentGateway_NotWhitelistedOrganizationIsNotServed(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	fx := seedAgentGateway(t, ctx, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	setServingState := func(whitelisted bool) {
+		t.Helper()
+		require.NoError(t, testrepo.New(ti.conn).SetOrganizationServingStateFixture(ctx, testrepo.SetOrganizationServingStateFixtureParams{
+			ID: authCtx.ActiveOrganizationID, Whitelisted: whitelisted, Disabled: false,
+		}))
+	}
+
+	setServingState(false)
+	_, err := serveAgentGatewayHTTP(t, ti, fx.agent.ID.String(), fx.token, makeInitializeBody())
+	requireAgentGatewayCode(t, err, oops.CodeNotFound)
+
+	setServingState(true)
+	w, err := serveAgentGatewayHTTP(t, ti, fx.agent.ID.String(), fx.token, makeInitializeBody())
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+}
+
 // A custom domain with no allowlist is the ordinary dual-serve case and must
 // not lock the platform host down.
 func TestServeAgentGateway_CustomDomainWithoutAllowlistStillServes(t *testing.T) {
