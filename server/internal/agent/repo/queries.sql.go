@@ -49,11 +49,13 @@ FROM (
   SELECT l.id, l.blob_url
   FROM session_handoff_links l
   JOIN projects p ON p.id = l.project_id
+  JOIN organization_metadata om ON om.id = l.organization_id
   WHERE l.token = $1
     AND l.consumed_at IS NULL
     AND l.expires_at > clock_timestamp()
     AND p.deleted IS FALSE
     AND p.organization_id = l.organization_id
+    AND om.disabled_at IS NULL
   FOR UPDATE OF l
 ) claimed
 WHERE s.id = claimed.id
@@ -64,7 +66,8 @@ RETURNING claimed.blob_url
 // so a raced second fetch loses and gets no rows — burn-after-read without a
 // separate lock. Expired, already-consumed, and links whose project has since
 // been soft-deleted all return no rows; callers must serve every case as an
-// indistinguishable 404.
+// indistinguishable 404. A disabled organization's links return no rows too
+// and stay unconsumed, so they resolve again if it is re-enabled before expiry.
 //
 // The claim returns the blob URL and blanks the stored pointer in the same
 // statement; the caller reads the document from object storage and deletes
