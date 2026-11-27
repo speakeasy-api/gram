@@ -77,6 +77,21 @@ func (q *Queries) AcknowledgeKitInterrupt(ctx context.Context, arg AcknowledgeKi
 	return result.RowsAffected(), nil
 }
 
+const acquireATEThreadSessionLock = `-- name: AcquireATEThreadSessionLock :exec
+SELECT pg_advisory_lock(hashtextextended('ate-thread:' || $1::text || ':' || $2::text, 0))
+`
+
+type AcquireATEThreadSessionLockParams struct {
+	RuntimeID string
+	ThreadID  string
+}
+
+// Pin the connection to serialize lifecycle phases for one ATE thread actor without locking sibling threads.
+func (q *Queries) AcquireATEThreadSessionLock(ctx context.Context, arg AcquireATEThreadSessionLockParams) error {
+	_, err := q.db.Exec(ctx, acquireATEThreadSessionLock, arg.RuntimeID, arg.ThreadID)
+	return err
+}
+
 const acquireAssistantAdvisoryLock = `-- name: AcquireAssistantAdvisoryLock :exec
 SELECT pg_advisory_xact_lock(hashtext('asst:' || $1::text))
 `
@@ -824,6 +839,23 @@ func (q *Queries) CountActiveAssistantThreads(ctx context.Context, arg CountActi
 	return active_threads, err
 }
 
+const countAssistantATEActorsForRuntime = `-- name: CountAssistantATEActorsForRuntime :one
+SELECT count(*) FROM assistant_ate_actors
+WHERE project_id = $1 AND runtime_id = $2 AND deleted IS FALSE
+`
+
+type CountAssistantATEActorsForRuntimeParams struct {
+	ProjectID uuid.UUID
+	RuntimeID uuid.UUID
+}
+
+func (q *Queries) CountAssistantATEActorsForRuntime(ctx context.Context, arg CountAssistantATEActorsForRuntimeParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countAssistantATEActorsForRuntime, arg.ProjectID, arg.RuntimeID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countAssistantRuntimeRowsForTest = `-- name: CountAssistantRuntimeRowsForTest :one
 SELECT count(*) FROM assistant_runtimes
 WHERE assistant_id = $1 AND project_id = $2
@@ -1230,6 +1262,72 @@ func (q *Queries) GetAssistant(ctx context.Context, arg GetAssistantParams) (Get
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+	)
+	return i, err
+}
+
+const getAssistantATEActorByUID = `-- name: GetAssistantATEActorByUID :one
+SELECT id, organization_id, project_id, assistant_id, runtime_id, assistant_thread_id, actor_name, actor_uid, state, configured, workload_binding_json, warm_until, created_at, updated_at, deleted_at, deleted FROM assistant_ate_actors
+WHERE actor_uid = $1 AND deleted IS FALSE
+`
+
+// Uses assistant_ate_actors_actor_uid_key for durable actor identity lookup.
+func (q *Queries) GetAssistantATEActorByUID(ctx context.Context, actorUid string) (AssistantAteActor, error) {
+	row := q.db.QueryRow(ctx, getAssistantATEActorByUID, actorUid)
+	var i AssistantAteActor
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.AssistantID,
+		&i.RuntimeID,
+		&i.AssistantThreadID,
+		&i.ActorName,
+		&i.ActorUid,
+		&i.State,
+		&i.Configured,
+		&i.WorkloadBindingJson,
+		&i.WarmUntil,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getAssistantATEActorForThread = `-- name: GetAssistantATEActorForThread :one
+SELECT id, organization_id, project_id, assistant_id, runtime_id, assistant_thread_id, actor_name, actor_uid, state, configured, workload_binding_json, warm_until, created_at, updated_at, deleted_at, deleted FROM assistant_ate_actors
+WHERE project_id = $1 AND runtime_id = $2 AND assistant_thread_id = $3
+  AND deleted IS FALSE
+`
+
+type GetAssistantATEActorForThreadParams struct {
+	ProjectID uuid.UUID
+	RuntimeID uuid.UUID
+	ThreadID  uuid.UUID
+}
+
+func (q *Queries) GetAssistantATEActorForThread(ctx context.Context, arg GetAssistantATEActorForThreadParams) (AssistantAteActor, error) {
+	row := q.db.QueryRow(ctx, getAssistantATEActorForThread, arg.ProjectID, arg.RuntimeID, arg.ThreadID)
+	var i AssistantAteActor
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.AssistantID,
+		&i.RuntimeID,
+		&i.AssistantThreadID,
+		&i.ActorName,
+		&i.ActorUid,
+		&i.State,
+		&i.Configured,
+		&i.WorkloadBindingJson,
+		&i.WarmUntil,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
 	)
 	return i, err
 }
@@ -2028,6 +2126,71 @@ func (q *Queries) InitThreadSkillSnapshot(ctx context.Context, arg InitThreadSki
 	return skill_set_snapshot, err
 }
 
+const insertAssistantATEActor = `-- name: InsertAssistantATEActor :one
+INSERT INTO assistant_ate_actors (
+  organization_id, project_id, assistant_id, runtime_id, assistant_thread_id,
+  actor_name, actor_uid, state, configured, workload_binding_json, warm_until
+)
+SELECT a.organization_id, r.project_id, r.assistant_id, r.id, t.id,
+  $1, $2, $3, $4, $5, $6
+FROM assistant_runtimes r
+JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
+JOIN assistant_threads t ON t.assistant_id = a.id AND t.project_id = a.project_id
+WHERE r.id = $7 AND r.project_id = $8 AND r.assistant_id = $9
+  AND t.id = $10
+  AND r.runtime_version = 3 AND r.backend = 'ate' AND r.deleted IS FALSE AND r.ended IS FALSE
+  AND a.deleted IS FALSE AND t.deleted IS FALSE
+RETURNING id, organization_id, project_id, assistant_id, runtime_id, assistant_thread_id, actor_name, actor_uid, state, configured, workload_binding_json, warm_until, created_at, updated_at, deleted_at, deleted
+`
+
+type InsertAssistantATEActorParams struct {
+	ActorName           string
+	ActorUid            string
+	State               string
+	Configured          bool
+	WorkloadBindingJson []byte
+	WarmUntil           pgtype.Timestamptz
+	RuntimeID           uuid.UUID
+	ProjectID           uuid.UUID
+	AssistantID         uuid.UUID
+	ThreadID            uuid.UUID
+}
+
+func (q *Queries) InsertAssistantATEActor(ctx context.Context, arg InsertAssistantATEActorParams) (AssistantAteActor, error) {
+	row := q.db.QueryRow(ctx, insertAssistantATEActor,
+		arg.ActorName,
+		arg.ActorUid,
+		arg.State,
+		arg.Configured,
+		arg.WorkloadBindingJson,
+		arg.WarmUntil,
+		arg.RuntimeID,
+		arg.ProjectID,
+		arg.AssistantID,
+		arg.ThreadID,
+	)
+	var i AssistantAteActor
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.AssistantID,
+		&i.RuntimeID,
+		&i.AssistantThreadID,
+		&i.ActorName,
+		&i.ActorUid,
+		&i.State,
+		&i.Configured,
+		&i.WorkloadBindingJson,
+		&i.WarmUntil,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const insertAssistantThreadEvent = `-- name: InsertAssistantThreadEvent :one
 WITH ingestion_fence AS MATERIALIZED (
   SELECT pg_advisory_xact_lock(hashtext('asst:' || $2::uuid::text))
@@ -2245,6 +2408,54 @@ func (q *Queries) ListActiveAssistantRuntimes(ctx context.Context, activeState s
 			&i.BackendMetadataJson,
 			&i.State,
 			&i.WarmUntil,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAssistantATEActorsForRuntime = `-- name: ListAssistantATEActorsForRuntime :many
+SELECT id, organization_id, project_id, assistant_id, runtime_id, assistant_thread_id, actor_name, actor_uid, state, configured, workload_binding_json, warm_until, created_at, updated_at, deleted_at, deleted FROM assistant_ate_actors
+WHERE project_id = $1 AND runtime_id = $2 AND deleted IS FALSE
+ORDER BY created_at ASC, id ASC
+`
+
+type ListAssistantATEActorsForRuntimeParams struct {
+	ProjectID uuid.UUID
+	RuntimeID uuid.UUID
+}
+
+func (q *Queries) ListAssistantATEActorsForRuntime(ctx context.Context, arg ListAssistantATEActorsForRuntimeParams) ([]AssistantAteActor, error) {
+	rows, err := q.db.Query(ctx, listAssistantATEActorsForRuntime, arg.ProjectID, arg.RuntimeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AssistantAteActor
+	for rows.Next() {
+		var i AssistantAteActor
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.AssistantID,
+			&i.RuntimeID,
+			&i.AssistantThreadID,
+			&i.ActorName,
+			&i.ActorUid,
+			&i.State,
+			&i.Configured,
+			&i.WorkloadBindingJson,
+			&i.WarmUntil,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
 		); err != nil {
 			return nil, err
 		}
@@ -3062,6 +3273,55 @@ func (q *Queries) ListPendingRuntimeSwitchRetirements(ctx context.Context, limit
 	return items, nil
 }
 
+const listRunningAssistantATEActors = `-- name: ListRunningAssistantATEActors :many
+SELECT id, organization_id, project_id, assistant_id, runtime_id, assistant_thread_id, actor_name, actor_uid, state, configured, workload_binding_json, warm_until, created_at, updated_at, deleted_at, deleted FROM assistant_ate_actors
+WHERE state = $1 AND deleted IS FALSE
+ORDER BY warm_until ASC NULLS LAST, id ASC
+LIMIT $2
+`
+
+type ListRunningAssistantATEActorsParams struct {
+	RunningState string
+	LimitCount   int32
+}
+
+func (q *Queries) ListRunningAssistantATEActors(ctx context.Context, arg ListRunningAssistantATEActorsParams) ([]AssistantAteActor, error) {
+	rows, err := q.db.Query(ctx, listRunningAssistantATEActors, arg.RunningState, arg.LimitCount)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AssistantAteActor
+	for rows.Next() {
+		var i AssistantAteActor
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.AssistantID,
+			&i.RuntimeID,
+			&i.AssistantThreadID,
+			&i.ActorName,
+			&i.ActorUid,
+			&i.State,
+			&i.Configured,
+			&i.WorkloadBindingJson,
+			&i.WarmUntil,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listStoppedRuntimesForReap = `-- name: ListStoppedRuntimesForReap :many
 SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.runtime_version, r.backend, r.backend_metadata_json, r.state, r.warm_until
 FROM assistant_runtimes r
@@ -3842,6 +4102,43 @@ func (q *Queries) LoadThreadContextV2(ctx context.Context, arg LoadThreadContext
 	return i, err
 }
 
+const lockAssistantATEActorForThread = `-- name: LockAssistantATEActorForThread :one
+SELECT id, organization_id, project_id, assistant_id, runtime_id, assistant_thread_id, actor_name, actor_uid, state, configured, workload_binding_json, warm_until, created_at, updated_at, deleted_at, deleted FROM assistant_ate_actors
+WHERE project_id = $1 AND runtime_id = $2 AND assistant_thread_id = $3
+  AND deleted IS FALSE
+FOR UPDATE
+`
+
+type LockAssistantATEActorForThreadParams struct {
+	ProjectID uuid.UUID
+	RuntimeID uuid.UUID
+	ThreadID  uuid.UUID
+}
+
+func (q *Queries) LockAssistantATEActorForThread(ctx context.Context, arg LockAssistantATEActorForThreadParams) (AssistantAteActor, error) {
+	row := q.db.QueryRow(ctx, lockAssistantATEActorForThread, arg.ProjectID, arg.RuntimeID, arg.ThreadID)
+	var i AssistantAteActor
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.AssistantID,
+		&i.RuntimeID,
+		&i.AssistantThreadID,
+		&i.ActorName,
+		&i.ActorUid,
+		&i.State,
+		&i.Configured,
+		&i.WorkloadBindingJson,
+		&i.WarmUntil,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const lockKitLocalWorkloadSubject = `-- name: LockKitLocalWorkloadSubject :exec
 SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))
 `
@@ -4089,6 +4386,22 @@ func (q *Queries) RecordAssistantSkillObservation(ctx context.Context, arg Recor
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const releaseATEThreadSessionLock = `-- name: ReleaseATEThreadSessionLock :one
+SELECT pg_advisory_unlock(hashtextextended('ate-thread:' || $1::text || ':' || $2::text, 0))::boolean AS unlocked
+`
+
+type ReleaseATEThreadSessionLockParams struct {
+	RuntimeID string
+	ThreadID  string
+}
+
+func (q *Queries) ReleaseATEThreadSessionLock(ctx context.Context, arg ReleaseATEThreadSessionLockParams) (bool, error) {
+	row := q.db.QueryRow(ctx, releaseATEThreadSessionLock, arg.RuntimeID, arg.ThreadID)
+	var unlocked bool
+	err := row.Scan(&unlocked)
+	return unlocked, err
 }
 
 const releaseAssistantSessionLock = `-- name: ReleaseAssistantSessionLock :one
@@ -5074,6 +5387,29 @@ func (q *Queries) SetKitThreadSourceFixture(ctx context.Context, arg SetKitThrea
 	return err
 }
 
+const softDeleteAssistantATEActor = `-- name: SoftDeleteAssistantATEActor :execrows
+UPDATE assistant_ate_actors
+SET state = $1,
+    warm_until = NULL,
+    deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE project_id = $2 AND id = $3 AND deleted IS FALSE
+`
+
+type SoftDeleteAssistantATEActorParams struct {
+	RetiredState string
+	ProjectID    uuid.UUID
+	ID           uuid.UUID
+}
+
+func (q *Queries) SoftDeleteAssistantATEActor(ctx context.Context, arg SoftDeleteAssistantATEActorParams) (int64, error) {
+	result, err := q.db.Exec(ctx, softDeleteAssistantATEActor, arg.RetiredState, arg.ProjectID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const softDeleteAssistantThread = `-- name: SoftDeleteAssistantThread :exec
 UPDATE assistant_threads SET deleted_at = clock_timestamp() WHERE id = $1 AND project_id = $2
 `
@@ -5172,6 +5508,37 @@ func (q *Queries) StoreKitGatewayCredential(ctx context.Context, arg StoreKitGat
 	return result.RowsAffected(), nil
 }
 
+const storeKitGatewayCredentialIfAbsent = `-- name: StoreKitGatewayCredentialIfAbsent :execrows
+INSERT INTO assistant_kit_gateway_credentials (project_id, assistant_id, runtime_id, token_ciphertext)
+SELECT r.project_id, r.assistant_id, r.id, $1
+FROM assistant_runtimes r
+JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
+WHERE r.id = $2 AND r.project_id = $3 AND r.assistant_id = $4
+  AND r.runtime_version = 3 AND r.deleted IS FALSE AND r.ended IS FALSE
+  AND a.deleted IS FALSE
+ON CONFLICT (runtime_id) DO NOTHING
+`
+
+type StoreKitGatewayCredentialIfAbsentParams struct {
+	TokenCiphertext string
+	RuntimeID       uuid.UUID
+	ProjectID       uuid.UUID
+	AssistantID     uuid.UUID
+}
+
+func (q *Queries) StoreKitGatewayCredentialIfAbsent(ctx context.Context, arg StoreKitGatewayCredentialIfAbsentParams) (int64, error) {
+	result, err := q.db.Exec(ctx, storeKitGatewayCredentialIfAbsent,
+		arg.TokenCiphertext,
+		arg.RuntimeID,
+		arg.ProjectID,
+		arg.AssistantID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const storeKitProtocolUserEcho = `-- name: StoreKitProtocolUserEcho :execrows
 UPDATE assistant_thread_events e
 SET source_payload_json=jsonb_set(e.source_payload_json,'{_kit_user_echoes}',
@@ -5205,6 +5572,28 @@ func (q *Queries) StoreKitProtocolUserEcho(ctx context.Context, arg StoreKitProt
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const threadHasUnsettledEvents = `-- name: ThreadHasUnsettledEvents :one
+SELECT EXISTS (
+  SELECT 1 FROM assistant_thread_events e
+  WHERE e.project_id = $1 AND e.assistant_id = $2
+    AND e.assistant_thread_id = $3
+    AND e.deleted IS FALSE AND e.status NOT IN ('completed', 'failed', 'cancelled')
+) AS busy
+`
+
+type ThreadHasUnsettledEventsParams struct {
+	ProjectID   uuid.UUID
+	AssistantID uuid.UUID
+	ThreadID    uuid.UUID
+}
+
+func (q *Queries) ThreadHasUnsettledEvents(ctx context.Context, arg ThreadHasUnsettledEventsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, threadHasUnsettledEvents, arg.ProjectID, arg.AssistantID, arg.ThreadID)
+	var busy bool
+	err := row.Scan(&busy)
+	return busy, err
 }
 
 const touchProcessingLease = `-- name: TouchProcessingLease :exec
@@ -5357,6 +5746,102 @@ func (q *Queries) UpdateAssistant(ctx context.Context, arg UpdateAssistantParams
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+	)
+	return i, err
+}
+
+const updateAssistantATEActorBootstrap = `-- name: UpdateAssistantATEActorBootstrap :one
+UPDATE assistant_ate_actors
+SET workload_binding_json = $1,
+    configured = $2,
+    state = $3,
+    warm_until = $4,
+    updated_at = clock_timestamp()
+WHERE project_id = $5 AND id = $6 AND deleted IS FALSE
+RETURNING id, organization_id, project_id, assistant_id, runtime_id, assistant_thread_id, actor_name, actor_uid, state, configured, workload_binding_json, warm_until, created_at, updated_at, deleted_at, deleted
+`
+
+type UpdateAssistantATEActorBootstrapParams struct {
+	WorkloadBindingJson []byte
+	Configured          bool
+	State               string
+	WarmUntil           pgtype.Timestamptz
+	ProjectID           uuid.UUID
+	ID                  uuid.UUID
+}
+
+func (q *Queries) UpdateAssistantATEActorBootstrap(ctx context.Context, arg UpdateAssistantATEActorBootstrapParams) (AssistantAteActor, error) {
+	row := q.db.QueryRow(ctx, updateAssistantATEActorBootstrap,
+		arg.WorkloadBindingJson,
+		arg.Configured,
+		arg.State,
+		arg.WarmUntil,
+		arg.ProjectID,
+		arg.ID,
+	)
+	var i AssistantAteActor
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.AssistantID,
+		&i.RuntimeID,
+		&i.AssistantThreadID,
+		&i.ActorName,
+		&i.ActorUid,
+		&i.State,
+		&i.Configured,
+		&i.WorkloadBindingJson,
+		&i.WarmUntil,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const updateAssistantATEActorState = `-- name: UpdateAssistantATEActorState :one
+UPDATE assistant_ate_actors
+SET state = $1,
+    warm_until = $2,
+    updated_at = clock_timestamp()
+WHERE project_id = $3 AND id = $4 AND deleted IS FALSE
+RETURNING id, organization_id, project_id, assistant_id, runtime_id, assistant_thread_id, actor_name, actor_uid, state, configured, workload_binding_json, warm_until, created_at, updated_at, deleted_at, deleted
+`
+
+type UpdateAssistantATEActorStateParams struct {
+	State     string
+	WarmUntil pgtype.Timestamptz
+	ProjectID uuid.UUID
+	ID        uuid.UUID
+}
+
+func (q *Queries) UpdateAssistantATEActorState(ctx context.Context, arg UpdateAssistantATEActorStateParams) (AssistantAteActor, error) {
+	row := q.db.QueryRow(ctx, updateAssistantATEActorState,
+		arg.State,
+		arg.WarmUntil,
+		arg.ProjectID,
+		arg.ID,
+	)
+	var i AssistantAteActor
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.AssistantID,
+		&i.RuntimeID,
+		&i.AssistantThreadID,
+		&i.ActorName,
+		&i.ActorUid,
+		&i.State,
+		&i.Configured,
+		&i.WorkloadBindingJson,
+		&i.WarmUntil,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
 	)
 	return i, err
 }

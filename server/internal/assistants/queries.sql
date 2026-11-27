@@ -2104,3 +2104,101 @@ SELECT id FROM projects WHERE id = @project_id AND organization_id = @organizati
 -- Test fixture only: simulate a legacy row during nullable column expansion.
 UPDATE assistants SET reasoning_effort = NULL
 WHERE id = @assistant_id AND project_id = @project_id;
+
+-- name: GetAssistantATEActorByUID :one
+-- Uses assistant_ate_actors_actor_uid_key for durable actor identity lookup.
+SELECT * FROM assistant_ate_actors
+WHERE actor_uid = @actor_uid AND deleted IS FALSE;
+
+-- name: GetAssistantATEActorForThread :one
+SELECT * FROM assistant_ate_actors
+WHERE project_id = @project_id AND runtime_id = @runtime_id AND assistant_thread_id = @thread_id
+  AND deleted IS FALSE;
+
+-- name: LockAssistantATEActorForThread :one
+SELECT * FROM assistant_ate_actors
+WHERE project_id = @project_id AND runtime_id = @runtime_id AND assistant_thread_id = @thread_id
+  AND deleted IS FALSE
+FOR UPDATE;
+
+-- name: InsertAssistantATEActor :one
+INSERT INTO assistant_ate_actors (
+  organization_id, project_id, assistant_id, runtime_id, assistant_thread_id,
+  actor_name, actor_uid, state, configured, workload_binding_json, warm_until
+)
+SELECT a.organization_id, r.project_id, r.assistant_id, r.id, t.id,
+  @actor_name, @actor_uid, @state, @configured, @workload_binding_json, @warm_until
+FROM assistant_runtimes r
+JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
+JOIN assistant_threads t ON t.assistant_id = a.id AND t.project_id = a.project_id
+WHERE r.id = @runtime_id AND r.project_id = @project_id AND r.assistant_id = @assistant_id
+  AND t.id = @thread_id
+  AND r.runtime_version = 3 AND r.backend = 'ate' AND r.deleted IS FALSE AND r.ended IS FALSE
+  AND a.deleted IS FALSE AND t.deleted IS FALSE
+RETURNING *;
+
+-- name: UpdateAssistantATEActorBootstrap :one
+UPDATE assistant_ate_actors
+SET workload_binding_json = @workload_binding_json,
+    configured = @configured,
+    state = @state,
+    warm_until = @warm_until,
+    updated_at = clock_timestamp()
+WHERE project_id = @project_id AND id = @id AND deleted IS FALSE
+RETURNING *;
+
+-- name: UpdateAssistantATEActorState :one
+UPDATE assistant_ate_actors
+SET state = @state,
+    warm_until = @warm_until,
+    updated_at = clock_timestamp()
+WHERE project_id = @project_id AND id = @id AND deleted IS FALSE
+RETURNING *;
+
+-- name: SoftDeleteAssistantATEActor :execrows
+UPDATE assistant_ate_actors
+SET state = @retired_state,
+    warm_until = NULL,
+    deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE project_id = @project_id AND id = @id AND deleted IS FALSE;
+
+-- name: ListAssistantATEActorsForRuntime :many
+SELECT * FROM assistant_ate_actors
+WHERE project_id = @project_id AND runtime_id = @runtime_id AND deleted IS FALSE
+ORDER BY created_at ASC, id ASC;
+
+-- name: CountAssistantATEActorsForRuntime :one
+SELECT count(*) FROM assistant_ate_actors
+WHERE project_id = @project_id AND runtime_id = @runtime_id AND deleted IS FALSE;
+
+-- name: ListRunningAssistantATEActors :many
+SELECT * FROM assistant_ate_actors
+WHERE state = @running_state AND deleted IS FALSE
+ORDER BY warm_until ASC NULLS LAST, id ASC
+LIMIT @limit_count;
+
+-- name: AcquireATEThreadSessionLock :exec
+-- Pin the connection to serialize lifecycle phases for one ATE thread actor without locking sibling threads.
+SELECT pg_advisory_lock(hashtextextended('ate-thread:' || @runtime_id::text || ':' || @thread_id::text, 0));
+
+-- name: ReleaseATEThreadSessionLock :one
+SELECT pg_advisory_unlock(hashtextextended('ate-thread:' || @runtime_id::text || ':' || @thread_id::text, 0))::boolean AS unlocked;
+
+-- name: StoreKitGatewayCredentialIfAbsent :execrows
+INSERT INTO assistant_kit_gateway_credentials (project_id, assistant_id, runtime_id, token_ciphertext)
+SELECT r.project_id, r.assistant_id, r.id, @token_ciphertext
+FROM assistant_runtimes r
+JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
+WHERE r.id = @runtime_id AND r.project_id = @project_id AND r.assistant_id = @assistant_id
+  AND r.runtime_version = 3 AND r.deleted IS FALSE AND r.ended IS FALSE
+  AND a.deleted IS FALSE
+ON CONFLICT (runtime_id) DO NOTHING;
+
+-- name: ThreadHasUnsettledEvents :one
+SELECT EXISTS (
+  SELECT 1 FROM assistant_thread_events e
+  WHERE e.project_id = @project_id AND e.assistant_id = @assistant_id
+    AND e.assistant_thread_id = @thread_id
+    AND e.deleted IS FALSE AND e.status NOT IN ('completed', 'failed', 'cancelled')
+) AS busy;
