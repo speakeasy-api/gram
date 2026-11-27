@@ -23,6 +23,7 @@ import (
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/wide"
 )
@@ -333,6 +334,24 @@ func TestAuthorizePrincipalAPIKeyUsesLiveAgentAdmission(t *testing.T) {
 		require.ErrorAs(t, err, &oopsErr, "no admission may succeed after direct credential revocation commits")
 		require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
 	}
+}
+
+func TestAuthorizeAPIKeyRefusedInDisabledOrganization(t *testing.T) {
+	t.Parallel()
+
+	ctx, instance, _ := newProjectAccessTest(t, "only-project")
+	key := createTestAPIKey(t, ctx, instance, nil)
+
+	_, err := instance.authorizer.Authorize(ctx, key, apiKeyScheme)
+	require.NoError(t, err)
+
+	require.NoError(t, testrepo.New(instance.conn).DisableDelegationOrganizationFixture(ctx, defaultMockUserInfo().Organizations[0].ID))
+
+	_, err = instance.authorizer.Authorize(ctx, key, apiKeyScheme)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
+	require.ErrorContains(t, err, authz.OrganizationDisabledMessage)
 }
 
 func newProjectAccessTest(t *testing.T, projectSlugs ...string) (context.Context, *testInstance, []projectsrepo.Project) {

@@ -332,10 +332,6 @@ func (k *ByKey) KeyBasedAuth(ctx context.Context, key string, requiredScopes []s
 		return ctx, oops.E(oops.CodeUnexpected, err, "error loading organization")
 	}
 
-	if org.DisabledAt.Valid {
-		return ctx, oops.E(oops.CodeUnauthorized, nil, "this organization is disabled, please reach out to support@speakeasy.com for more information")
-	}
-
 	var projectID *uuid.UUID
 	if apiKey.ProjectID.Valid {
 		projectID = &apiKey.ProjectID.UUID
