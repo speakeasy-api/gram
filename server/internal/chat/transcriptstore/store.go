@@ -93,11 +93,11 @@ func message(content string, raw, calls []byte, notes pgtype.Text, summaries []b
 
 // Prepare unwraps the organization's active transcript key into the process's
 // committed key cache through the pool. Call it before opening the transaction
-// that Capture will use: Capture never calls KMS, and fails with
+// that ResealChatMessages or a write will use: neither calls KMS, and they fail with
 // orgencryption.ErrKeyNotWarm when the key is not cached. A warm cache needs
 // no KMS call here either. A failed early refresh of a key that is still
 // cached is not an error. Any error it returns means the key is not cached, so
-// Capture would fail too. Capture still reads the configuration in its
+// they would fail too. They still read the configuration in their
 // transaction and fails closed on its own.
 func (s *Store) Prepare(ctx context.Context, organizationID string) error {
 	if organizationID == "" {
@@ -114,7 +114,7 @@ func (s *Store) Prepare(ctx context.Context, organizationID string) error {
 	return nil
 }
 
-// Capture seals each message's transcript from its plaintext row, as shadow
+// ResealChatMessages reseals each message's transcript from its plaintext row, as shadow
 // mode does: an existing transcript is replaced, and the metadata and
 // tool-call IDs are measured again. It is the same lock, prepare and finish
 // steps as an update, with the metadata as the only column written, since the
@@ -122,7 +122,7 @@ func (s *Store) Prepare(ctx context.Context, organizationID string) error {
 // calls KMS: run Prepare before opening it. The caller must roll back on
 // error; a batch is not an independently committed unit. IDs are
 // deduplicated and locked in sorted order.
-func (s *Store) Capture(ctx context.Context, db repo.DBTX, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID) error {
+func (s *Store) ResealChatMessages(ctx context.Context, db repo.DBTX, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID) error {
 	if len(messageIDs) == 0 {
 		return nil
 	}
@@ -768,7 +768,7 @@ func (s *Store) Backfill(ctx context.Context, organizationID string, projectID, 
 	}
 	page := Page{After: after, Count: 0, More: len(ids) > int(limit)}
 	ids = ids[:min(len(ids), int(limit))]
-	if err := s.Capture(ctx, tx, organizationID, projectID, ids); err != nil {
+	if err := s.ResealChatMessages(ctx, tx, organizationID, projectID, ids); err != nil {
 		return Page{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {

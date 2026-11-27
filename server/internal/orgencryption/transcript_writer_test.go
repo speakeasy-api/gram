@@ -367,9 +367,9 @@ func TestTranscriptWriterEncryptedRepatchKeepsRiskAnalysis(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, row.RiskAnalyzedAt.Valid, "changed content is analyzed again")
 	encrypted := transcriptstore.NewTranscripts(f.store).WithEncryptedProjects(f.projectID)
-	content := row.Content
-	require.NoError(t, encrypted.Open(t.Context(), f.orgID, f.projectID, []transcriptstore.OpenTarget{{MessageID: m.Params.ID, Set: func(f transcriptcrypto.ProtectedFields) { content = f.Content }}}))
-	require.Equal(t, "EXAMPLE changed projection", content)
+	opened := []chatrepo.ChatMessage{row}
+	require.NoError(t, transcriptstore.OpenChatMessages(t.Context(), encrypted, f.orgID, f.projectID, opened, chatMessageTarget))
+	require.Equal(t, "EXAMPLE changed projection", opened[0].Content)
 }
 
 // In encrypted mode every insert path keeps the protected fields out of
@@ -407,8 +407,9 @@ func TestTranscriptWriterEncryptedInsertsStoreNoPlaintext(t *testing.T) {
 		require.NoError(t, err)
 		require.Empty(t, row.Content, "chat_messages never holds the plaintext")
 		require.Empty(t, row.ToolCalls)
-		content, toolCalls := row.Content, row.ToolCalls
-		require.NoError(t, encrypted.Open(t.Context(), f.orgID, f.projectID, []transcriptstore.OpenTarget{{MessageID: id, Set: func(f transcriptcrypto.ProtectedFields) { content, toolCalls = f.Content, f.ToolCalls }}}))
+		opened := []chatrepo.ChatMessage{row}
+		require.NoError(t, transcriptstore.OpenChatMessages(t.Context(), encrypted, f.orgID, f.projectID, opened, chatMessageTarget))
+		content, toolCalls := opened[0].Content, opened[0].ToolCalls
 		require.Equal(t, want.content, content, "the transcript holds what was written")
 		if want.toolCalls == "" {
 			require.Empty(t, toolCalls)
@@ -416,4 +417,11 @@ func TestTranscriptWriterEncryptedInsertsStoreNoPlaintext(t *testing.T) {
 		}
 		require.JSONEq(t, want.toolCalls, string(toolCalls), "the transcript holds the tool calls")
 	}
+}
+
+// chatMessageTarget opens a full chat_messages row in place.
+func chatMessageTarget(m *chatrepo.ChatMessage) transcriptstore.OpenTarget {
+	return transcriptstore.OpenTarget{MessageID: m.ID, Set: func(f transcriptcrypto.ProtectedFields) {
+		*m = transcriptstore.WithProtectedFields(*m, f)
+	}}
 }

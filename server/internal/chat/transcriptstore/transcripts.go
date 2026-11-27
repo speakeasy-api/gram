@@ -131,7 +131,7 @@ type OpenTarget struct {
 	Set       func(transcriptcrypto.ProtectedFields)
 }
 
-// Open writes each message's protected fields into its target, in one query
+// open writes each message's protected fields into its target, in one query
 // per page; in plaintext mode it reads no transcript. In shadow mode a message
 // with no transcript yet gets its plaintext and counts as plaintext_fallback,
 // and a transcript that disagrees with its plaintext row is logged, counted as
@@ -139,7 +139,7 @@ type OpenTarget struct {
 // In encrypted mode the transcript is served without comparison, and a message
 // without one fails the read with ErrMissingTranscript. A transcript that
 // cannot be decrypted fails the read in either mode.
-func (t *Transcripts) Open(ctx context.Context, organizationID string, projectID uuid.UUID, targets []OpenTarget) error {
+func (t *Transcripts) open(ctx context.Context, organizationID string, projectID uuid.UUID, targets []OpenTarget) error {
 	if len(targets) == 0 || !t.Enabled(projectID) {
 		return nil
 	}
@@ -161,9 +161,10 @@ func (t *Transcripts) Open(ctx context.Context, organizationID string, projectID
 	return nil
 }
 
-// OpenRows is Open for a page of rows of any sqlc row type. targetOf maps a
+// OpenChatMessages opens a page of loaded messages of any sqlc row type; see open for
+// the fallback and failure rules. targetOf maps a
 // row to its target.
-func OpenRows[T any](ctx context.Context, t *Transcripts, organizationID string, projectID uuid.UUID, rows []T, targetOf func(*T) OpenTarget) error {
+func OpenChatMessages[T any](ctx context.Context, t *Transcripts, organizationID string, projectID uuid.UUID, rows []T, targetOf func(*T) OpenTarget) error {
 	// Plaintext reads build no targets.
 	if len(rows) == 0 || !t.Enabled(projectID) {
 		return nil
@@ -172,7 +173,7 @@ func OpenRows[T any](ctx context.Context, t *Transcripts, organizationID string,
 	for i := range rows {
 		targets[i] = targetOf(&rows[i])
 	}
-	return t.Open(ctx, organizationID, projectID, targets)
+	return t.open(ctx, organizationID, projectID, targets)
 }
 
 // WithProtectedFields returns the row with its six protected fields set from
