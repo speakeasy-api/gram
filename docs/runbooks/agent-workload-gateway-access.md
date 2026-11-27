@@ -1,30 +1,38 @@
 # Agent and workload access through gateways
 
 Use this guide when connecting an agent runtime or workload to Speakeasy MCP.
-The supported endpoint is the agent-bound project gateway URL shown by the
-dashboard setup flow. An organization that serves gateways on a custom domain
-gets the corresponding custom-domain URL from the same flow. Do not construct
-an endpoint from the agent ID or replace the displayed host.
+The supported endpoint is the shared project gateway URL shown by the dashboard
+setup flow. The credential, not a per-agent URL, binds each request to the
+agent. An organization that serves gateways on a custom domain gets the
+corresponding custom-domain URL from the same flow. Do not construct an endpoint
+from the agent ID or replace the displayed host.
 
 ## Before connecting a runtime
 
 An agent must be assigned to a project. Its runtime uses that project's gateway,
 and the gateway evaluates the agent's current permissions on every request.
 Changing the servers that the agent may reach therefore does not require a new
-endpoint. A workload also needs an active assignment to an agent: workloads do
-not hold grants independently, but inherit the assigned agent's policy and
-lifecycle state.
+endpoint.
+
+A workload also needs an active assignment to an agent. On every request,
+Speakeasy bounds its authority by that assignment, the assigned agent's live
+policy and lifecycle state, and the current permissions of the agent's owner.
+The workload session's immutable ceiling is an additional bound: live policy
+changes can narrow or revoke an existing session, but cannot expand it beyond
+what was authorized when it was issued.
 
 The setup flow provides connection instructions only when machine access to the
 project gateway is ready. In particular:
 
 - project gateway machine access must be enabled;
-- the organization must have exactly one organization sign-in issuer; and
+- for workload modes that use one shared MCP authorization server, every agent
+  server that signs users in must use the selected shared provider; the
+  provider may be owned by the organization or the project;
 - when the organization requires its custom domain, that domain must be active.
 
-Resolve these conditions in the dashboard and reload the setup flow rather than
-trying another URL. A URL copied from a project or gateway page is not a
-substitute for the agent-bound URL returned by **Agent sign-in**.
+Resolve the conditions reported by the dashboard and reload the setup flow
+rather than trying another URL. Use the exact shared project gateway URL returned
+by **Agent sign-in**, including its displayed host.
 
 ## Choose a token mode
 
@@ -55,7 +63,13 @@ custom domain. Send the selected credential according to the generated setup
 instructions, then perform MCP initialization and list the available tools.
 
 If authentication succeeds but no tools are available, check the agent's
-project assignment, current policy, and lifecycle state. If connection
-instructions are withheld, fix the reported gateway-readiness condition first.
-Rotating or revoking an API key changes the credential, not the gateway URL; a
-workload assignment or admission change takes effect on a later token exchange.
+project assignment, current policy and lifecycle state, the owner's current
+permissions, and the workload session ceiling. If connection instructions are
+withheld, fix the reported gateway-readiness condition first. Rotating or
+revoking an API key changes the credential, not the gateway URL.
+
+Workload admission rechecks the assignment, agent policy and lifecycle state,
+and owner permissions on every request, including requests made with an
+already-issued session. Re-exchange workload credentials after an admission
+change or when newly granted authority exceeds the existing session's immutable
+ceiling.
