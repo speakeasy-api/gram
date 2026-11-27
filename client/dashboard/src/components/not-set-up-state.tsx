@@ -12,7 +12,6 @@ type NotSetUpStateProps = {
   screenshot?: ReactNode;
   setupHref?: string;
   setupLabel?: string;
-  demoHref?: string;
   className?: string;
 };
 
@@ -24,7 +23,6 @@ export function NotSetUpState({
   screenshot,
   setupHref,
   setupLabel = "View setup guide",
-  demoHref,
   className,
 }: NotSetUpStateProps): JSX.Element {
   return (
@@ -50,16 +48,6 @@ export function NotSetUpState({
                 <Button.Text>{setupLabel}</Button.Text>
                 <Button.RightIcon>
                   <Icon name="arrow-right" />
-                </Button.RightIcon>
-              </a>
-            </Button>
-          )}
-          {demoHref && (
-            <Button variant="tertiary" asChild>
-              <a href={demoHref} target="_blank" rel="noopener noreferrer">
-                <Button.Text>View in demo</Button.Text>
-                <Button.RightIcon>
-                  <Icon name="external-link" />
                 </Button.RightIcon>
               </a>
             </Button>

@@ -1,6 +1,3 @@
-import { getRuntimeConfig, type RuntimeConfig } from "@/lib/runtime-config";
-import { firstPartyHosts } from "@/lib/utils";
-
 // The shared read-only demo org. Sessions enter it via /explore-demo
 // (auth.enterDemo) or the platform-admin override cookie; identity is carried
 // by the org slug on the frontend.
@@ -9,10 +6,6 @@ export const DEMO_ORG_SLUG = "acme-demo";
 // The demo org is seeded with a single project. New visitors land here so
 // they see sample data instead of the empty org home.
 const DEMO_PROJECT_SLUG = "default";
-// The demo org lives in the US production deployment. Every other deployment
-// (local, dev, previews, other partitions) links there.
-const DEMO_APP_ORIGIN = "https://app.getgram.ai";
-const DEMO_APP_HOST = new URL(DEMO_APP_ORIGIN).hostname;
 
 export const DEMO_LANDING_PATH = `/${DEMO_ORG_SLUG}/projects/${DEMO_PROJECT_SLUG}`;
 
@@ -21,33 +14,6 @@ export const DEMO_LANDING_PATH = `/${DEMO_ORG_SLUG}/projects/${DEMO_PROJECT_SLUG
  * page after switching their session into the demo org.
  */
 export const DEMO_REDIRECT_PARAM = "redirect";
-
-/**
- * Link to the demo-org equivalent of a page. Routes through /explore-demo so
- * auth.enterDemo runs first — a direct deep link would fail for users whose
- * session is scoped to a different org.
- */
-export function demoProjectPageHref(
-  pathname: string,
-  projectSlug?: string,
-  currentOrigin = window.location.origin,
-  config: RuntimeConfig = getRuntimeConfig(),
-): string {
-  const projectRoot = projectSlug ? `/projects/${projectSlug}` : undefined;
-  const projectRootIndex = projectRoot ? pathname.indexOf(projectRoot) : -1;
-  const pagePath =
-    projectRootIndex >= 0
-      ? pathname.slice(projectRootIndex + (projectRoot?.length ?? 0))
-      : "";
-
-  const demoPath = `${DEMO_LANDING_PATH}${pagePath}`;
-  // The demo's own deployment serves /explore-demo on each of its hosts; stay
-  // on the current one so the host-only session cookie is kept.
-  const origin = firstPartyHosts(currentOrigin, config).includes(DEMO_APP_HOST)
-    ? ""
-    : DEMO_APP_ORIGIN;
-  return `${origin}/explore-demo?${DEMO_REDIRECT_PARAM}=${encodeURIComponent(demoPath)}`;
-}
 
 // Set by the /explore-demo page before switching, so Exit demo can return a
 // multi-org user to the org they actually came from.

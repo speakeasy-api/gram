@@ -27,11 +27,10 @@ import BookDemo from "./BookDemo";
 afterEach(cleanup);
 
 describe("BookDemo", () => {
-  it("renders a secondary CTA into the live demo org", () => {
+  it("renders the booking flow without a CTA into the live demo org", () => {
     render(<BookDemo />);
 
-    const cta = screen.getByRole("link", { name: "Explore a Live Demo" });
-    expect(cta.getAttribute("href")).toBe("/explore-demo");
-    expect(screen.queryByText(/or explore a live demo org/i)).toBeNull();
+    expect(screen.getByTestId("booking-flow")).toBeTruthy();
+    expect(screen.queryByText(/explore a live demo/i)).toBeNull();
   });
 });

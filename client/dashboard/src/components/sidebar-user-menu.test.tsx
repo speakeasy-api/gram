@@ -81,7 +81,6 @@ vi.mock("@/components/ui/ThemeSwitcher", () => ({
   ThemeSwitcher: () => <div data-testid="theme-switcher" />,
 }));
 
-import { DEMO_ORG_SLUG } from "@/lib/demo";
 import { isPylonChatOpen, togglePylonChat } from "@/lib/pylon";
 import { installMockPylon } from "@/lib/pylon-test-mock";
 
@@ -249,12 +248,11 @@ describe("SidebarUserMenu", () => {
     expect(screen.queryByText("Close Support")).toBeNull();
   });
 
-  it("always offers Explore demo org outside the demo org", () => {
+  it("does not offer Explore demo org", () => {
     renderMenu();
     fireEvent.click(screen.getByTestId("user-menu-trigger"));
 
-    fireEvent.click(screen.getByText("Explore demo org"));
-    expect(screen.getByTestId("location").textContent).toBe("/explore-demo");
+    expect(screen.queryByText("Explore demo org")).toBeNull();
   });
 
   it("logs out and leaves the page when Log out is clicked", async () => {
@@ -294,13 +292,5 @@ describe("SidebarUserMenu", () => {
     } finally {
       consoleError.mockRestore();
     }
-  });
-
-  it("hides Explore demo org while already in the demo org", () => {
-    orgSlug.current = DEMO_ORG_SLUG;
-    renderMenu();
-    fireEvent.click(screen.getByTestId("user-menu-trigger"));
-
-    expect(screen.queryByText("Explore demo org")).toBeNull();
   });
 });

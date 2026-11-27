@@ -3,14 +3,11 @@ import { RequireScope } from "@/components/require-scope";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { useOrganization } from "@/contexts/Auth";
-import { useSlugs } from "@/contexts/Sdk";
 import { useIsCurrentOrganization } from "@/hooks/useIsCurrentOrganization";
-import { DEMO_ORG_SLUG, demoProjectPageHref } from "@/lib/demo";
 import { useOrgRoutes } from "@/routes";
 import { FeatureName } from "@gram/client/models/components/setproductfeaturerequestbody.js";
 import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet.js";
 import { useState } from "react";
-import { useLocation } from "react-router";
 
 interface EnableLoggingOverlayProps {
   onEnabled: () => void;
@@ -30,14 +27,8 @@ export function EnableLoggingOverlay({
   className,
 }: EnableLoggingOverlayProps): JSX.Element {
   const organization = useOrganization();
-  const { orgSlug, projectSlug } = useSlugs();
-  const location = useLocation();
   const orgRoutes = useOrgRoutes();
   const isCurrentOrganization = useIsCurrentOrganization(organization.id);
-  const demoHref =
-    orgSlug === DEMO_ORG_SLUG
-      ? undefined
-      : demoProjectPageHref(location.pathname, projectSlug);
 
   return (
     <EnableLoggingOverlayInner
@@ -45,7 +36,6 @@ export function EnableLoggingOverlay({
       organizationId={organization.id}
       isCurrentOrganization={isCurrentOrganization}
       setupHref={orgRoutes.logs.href()}
-      demoHref={demoHref}
       screenshotSrc={screenshotSrc}
       screenshotAlt={screenshotAlt}
       className={className}
@@ -58,7 +48,6 @@ function EnableLoggingOverlayInner({
   organizationId,
   isCurrentOrganization,
   setupHref,
-  demoHref,
   screenshotSrc,
   screenshotAlt,
   className,
@@ -67,7 +56,6 @@ function EnableLoggingOverlayInner({
   organizationId: string;
   isCurrentOrganization: () => boolean;
   setupHref: string;
-  demoHref?: string;
 }): JSX.Element {
   const [mutationError, setMutationError] = useState<string | null>(null);
   const { mutate: setLogsFeature, status: mutationStatus } =
@@ -134,7 +122,6 @@ function EnableLoggingOverlayInner({
       }
       setupHref={setupHref}
       setupLabel="Configure Observability"
-      demoHref={demoHref}
       className={className}
     />
   );
