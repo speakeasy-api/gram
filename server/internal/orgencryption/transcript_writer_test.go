@@ -398,13 +398,23 @@ func TestTranscriptWriterEncryptedInsertsStoreNoPlaintext(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, 1, n)
 
-	for id, want := range map[uuid.UUID]string{plain.Params.ID: "EXAMPLE plain write", correlated.Params.ID: "EXAMPLE correlated prompt", external.Params.ID: "EXAMPLE imported content"} {
+	wants := map[uuid.UUID]struct{ content, toolCalls string }{
+		plain.Params.ID:      {content: "EXAMPLE plain write", toolCalls: string(plain.Params.ToolCalls)},
+		correlated.Params.ID: {content: "EXAMPLE correlated prompt", toolCalls: ""},
+		external.Params.ID:   {content: "EXAMPLE imported content", toolCalls: ""},
+	}
+	for id, want := range wants {
 		row, err := chatrepo.New(f.conn).GetKitProjectionMessage(t.Context(), chatrepo.GetKitProjectionMessageParams{ProjectID: uuid.NullUUID{UUID: f.projectID, Valid: true}, ID: id})
 		require.NoError(t, err)
 		require.Empty(t, row.Content, "chat_messages never holds the plaintext")
 		require.Empty(t, row.ToolCalls)
-		content := row.Content
-		require.NoError(t, encrypted.Open(t.Context(), f.orgID, f.projectID, []transcriptstore.ProtectedFieldRefs{{MessageID: id, Content: &content, ContentRaw: nil, ToolCalls: nil, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}}))
-		require.Equal(t, want, content, "the transcript holds what was written")
+		content, toolCalls := row.Content, row.ToolCalls
+		require.NoError(t, encrypted.Open(t.Context(), f.orgID, f.projectID, []transcriptstore.ProtectedFieldRefs{{MessageID: id, Content: &content, ContentRaw: nil, ToolCalls: &toolCalls, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}}))
+		require.Equal(t, want.content, content, "the transcript holds what was written")
+		if want.toolCalls == "" {
+			require.Empty(t, toolCalls)
+			continue
+		}
+		require.JSONEq(t, want.toolCalls, string(toolCalls), "the transcript holds the tool calls")
 	}
 }

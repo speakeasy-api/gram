@@ -189,24 +189,7 @@ func (t *Transcripts) Open(ctx context.Context, organizationID string, projectID
 		if !ok {
 			continue
 		}
-		if b.Content != nil {
-			*b.Content = message.Content
-		}
-		if b.ContentRaw != nil {
-			*b.ContentRaw = message.ContentRaw
-		}
-		if b.ToolCalls != nil {
-			*b.ToolCalls = message.ToolCalls
-		}
-		if b.ToolCallSummaries != nil {
-			*b.ToolCallSummaries = message.ToolCallSummaries
-		}
-		if b.ToolOutcomeNotes != nil {
-			*b.ToolOutcomeNotes = optionalText(message.ToolOutcomeNotes)
-		}
-		if b.StorageError != nil {
-			*b.StorageError = optionalText(message.StorageError)
-		}
+		b.set(message)
 	}
 	return nil
 }
