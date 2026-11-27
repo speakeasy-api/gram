@@ -120,7 +120,7 @@ func TestBackfillOrganizationAssistantBuiltinGrants(t *testing.T) {
 	require.NoError(t, err)
 
 	agents := agentrepo.New(db)
-	// Simulate pre-cutover state:
+	// Seed assistants missing explicit built-in grants:
 	// - withWildcard keeps project-wide mcp:connect * but lacks explicit built-in row.
 	// - narrowed has no mcp:connect grants at all.
 	// - managed has a lapsed temporary assistants grant and lacks platform/speakeasy-slack.
