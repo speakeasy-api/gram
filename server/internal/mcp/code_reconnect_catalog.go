@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"slices"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
@@ -107,6 +109,61 @@ func (s *Service) markReconnectReviewReady(r *http.Request, grant remotesessions
 	binding := *state.CodeReconnect
 	binding.ReviewReady = true
 	return s.updateCodeReconnect(r.Context(), state, binding)
+}
+
+// prepareDirectCodeReconnectReview opens catalog review right after user
+// authentication when the bound member needs no per-user upstream sign-in.
+// Members that still require upstream OAuth keep ReviewReady false until
+// markReconnectReviewReady runs on the remote login callback.
+func (s *Service) prepareDirectCodeReconnectReview(
+	r *http.Request,
+	logger *slog.Logger,
+	t *mcpconnectionattempts.Tracker,
+	endpoint *ResolvedMcpEndpoint,
+	state *AuthnChallengeState,
+) (bool, error) {
+	ctx := r.Context()
+	if err := validateCodeReconnectBinding(*state); err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeExpired)
+		return false, err
+	}
+	members, err := s.consentSubjectMembers(context.WithValue(ctx, hostedConsentPresentationKey{}, true), endpoint, *state)
+	if err != nil {
+		t.Refuse(ctx, accessHappened(err))
+		return false, err
+	}
+	if err := s.markUnreachableHostedConsentPlacements(ctx, endpoint.OrganizationID, members); err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
+		return false, fmt.Errorf("read hosted gateway consent registrations: %w", err)
+	}
+	clients, err := s.listEndpointClients(ctx, endpoint, *state)
+	if err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
+		return false, fmt.Errorf("resolve reconnect clients: %w", err)
+	}
+	if len(subjectConnectedClients(clients)) > 0 {
+		return false, nil
+	}
+	if len(clients) == 0 {
+		for _, member := range members {
+			if errors.Is(member.upstreamUnavailable, errHostedConsentSetupIncomplete) || memberNeedsSignIn(member) {
+				return false, nil
+			}
+		}
+	}
+	if _, _, err := s.loadReconnectConnection(ctx, usersessionsrepo.New(s.db), endpoint, *state, time.Now()); err != nil {
+		attempt := state.connectionAttempt(s.aiCatalog.SnapshotFor(ctx), endpoint)
+		s.refuseReconnect(r, logger, t, attempt, err)
+		if errors.Is(err, errConnectionCatalogExpired) {
+			logger.WarnContext(ctx, "catalogue reconnect requires full gateway consent", attr.SlogError(err))
+			return true, nil
+		}
+		return false, err
+	}
+	binding := *state.CodeReconnect
+	binding.ReviewReady = true
+	state.CodeReconnect = &binding
+	return false, nil
 }
 
 func (s *Service) approveCodeReconnect(w http.ResponseWriter, r *http.Request, t *mcpconnectionattempts.Tracker, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState, inventory *consentToolInventory, selection *toolfilter.SessionSelection, mode toolfilter.CatalogMode) error {

@@ -242,6 +242,13 @@ type consentTemplateData struct {
 	// terminal state; partially-linked connections (some cards still
 	// disconnected) and MCP client consent remain open.
 	AutoClose bool
+	// FocusLocked marks a focused server page pinned to a single server
+	// (such as a code-mode reconnect challenge), hiding navigation back to
+	// all servers.
+	FocusLocked bool
+	// CatalogCanceled marks a completed code-mode tool review the user
+	// canceled without approving changes.
+	CatalogCanceled bool
 	// SessionDurationOptions is the "Session length" picker rendered as an
 	// info row wired to the approve form: presets capped at the issuer's
 	// maximum, preselecting the maximum. Empty hides the picker (first-party
@@ -1158,7 +1165,9 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		CatalogChanges:          changes,
 		ClientIDOrigin:          clientIDOrigin,
 		LoopbackRedirectWarning: loopbackRedirectWarning,
-		AutoClose:               !challengeState.CodeReconnect.catalogPending() && shouldAutoCloseFirstParty(challengeState.FirstParty, cards),
+		AutoClose:               approvalError == nil && shouldAutoCloseCodeReconnect(challengeState.CodeReconnect, challengeState.FirstParty, cards),
+		FocusLocked:             challengeState.CodeReconnect != nil,
+		CatalogCanceled:         challengeState.CodeReconnect != nil && challengeState.CodeReconnect.CatalogCanceled,
 		SessionDurationOptions:  durationOptions,
 		AutoRefreshPolicy:       autoRefreshPolicy,
 		AutoRefreshOn:           autoRefreshOn,
@@ -2020,6 +2029,22 @@ func shouldAutoCloseFirstParty(firstParty bool, cards []remoteSessionCard) bool 
 		}
 	}
 	return true
+}
+
+// shouldAutoCloseCodeReconnect extends shouldAutoCloseFirstParty for bound
+// code-mode catalog reviews: pending or canceled reviews stay open, while a
+// completed approval auto-closes even when the target member needs no
+// per-user upstream sign-in cards.
+func shouldAutoCloseCodeReconnect(binding *CodeReconnectBinding, firstParty bool, cards []remoteSessionCard) bool {
+	if binding != nil {
+		if binding.undecidedOrCanceled() {
+			return false
+		}
+		if binding.CatalogComplete {
+			return firstParty && (len(cards) == 0 || shouldAutoCloseFirstParty(firstParty, cards))
+		}
+	}
+	return shouldAutoCloseFirstParty(firstParty, cards)
 }
 
 // consentDurationPresets are the session-length choices offered on the
