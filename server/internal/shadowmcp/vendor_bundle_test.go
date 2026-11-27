@@ -56,6 +56,16 @@ func TestIsVendorBundleCommand(t *testing.T) {
 			want:    true,
 		},
 		{
+			name:    "codex computer use client with a tab before its argument",
+			command: "./Codex Computer Use.app/Contents/SharedSupport/SkyComputerUseClient.app/Contents/MacOS/SkyComputerUseClient\tmcp",
+			want:    true,
+		},
+		{
+			name:    "codex computer use client without arguments",
+			command: "./Codex Computer Use.app/Contents/SharedSupport/SkyComputerUseClient.app/Contents/MacOS/SkyComputerUseClient",
+			want:    true,
+		},
+		{
 			name:    "shell wrapper with export and exec",
 			command: "/bin/sh -c export BROWSER_USE_ACCESS_EXECUTOR_ID=*** exec /Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node /Applications/ChatGPT.app/Contents/Resources/cua_node/lib/cua-repl.mjs",
 			want:    true,

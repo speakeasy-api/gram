@@ -183,7 +183,7 @@ func isVendorBundlePath(executable string) bool {
 			return true
 		}
 	}
-	if normalized == codexComputerUseExecutable || strings.HasPrefix(normalized, codexComputerUseExecutable+" ") {
+	if rest, ok := strings.CutPrefix(normalized, codexComputerUseExecutable); ok && (rest == "" || strings.ContainsAny(rest[:1], " \t\n\r")) {
 		return true
 	}
 
