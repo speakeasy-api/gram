@@ -197,6 +197,11 @@ func enableTestOrganizationGateway(t *testing.T, db *pgxpool.Pool, orgID string)
 	require.NoError(t, err)
 	_, err = q.DeleteFeature(t.Context(), productfeaturesrepo.DeleteFeatureParams(setting))
 	require.NoError(t, err)
+	require.NoError(t, testrepo.New(db).SetOrganizationServingStateFixture(t.Context(), testrepo.SetOrganizationServingStateFixtureParams{
+		ID:          orgID,
+		Whitelisted: true,
+		Disabled:    false,
+	}))
 }
 
 func TestKitEligibilityUsesSharedProjectGatewayPredicate(t *testing.T) {
@@ -270,6 +275,26 @@ func TestKitEligibilityUsesSharedProjectGatewayPredicate(t *testing.T) {
 	f.core.serverURL, _ = url.Parse("http://mcp.example")
 	check(nil, false)
 	f.core.serverURL = origin
+
+	// Non-whitelisted or disabled organizations are not served MCP servers and make Kit ineligible.
+	require.NoError(t, fixtures.SetOrganizationServingStateFixture(t.Context(), testrepo.SetOrganizationServingStateFixtureParams{
+		ID:          a.OrganizationID,
+		Whitelisted: false,
+		Disabled:    false,
+	}))
+	check(nil, false)
+	require.NoError(t, fixtures.SetOrganizationServingStateFixture(t.Context(), testrepo.SetOrganizationServingStateFixtureParams{
+		ID:          a.OrganizationID,
+		Whitelisted: true,
+		Disabled:    true,
+	}))
+	check(nil, false)
+	require.NoError(t, fixtures.SetOrganizationServingStateFixture(t.Context(), testrepo.SetOrganizationServingStateFixtureParams{
+		ID:          a.OrganizationID,
+		Whitelisted: true,
+		Disabled:    false,
+	}))
+	check(nil, true)
 
 	// Turning the organization gateway off makes Kit ineligible immediately.
 	_, err = productfeaturesrepo.New(f.db).EnableFeature(t.Context(), productfeaturesrepo.EnableFeatureParams{
