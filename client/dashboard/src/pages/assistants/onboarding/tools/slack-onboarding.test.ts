@@ -70,8 +70,6 @@ function makeDeps(overrides?: {
     definitionSlug: "slack",
     webhookUrl: "https://api.example.invalid/rpc/triggers/trig-slack-1/webhook",
   });
-  const toolsetsCreate = vi.fn();
-  const toolsetsUpdateBySlug = vi.fn();
   const environmentsCreate = vi.fn();
   const environmentsUpdateBySlug = vi.fn();
   const assistantsUpdate = vi
@@ -104,8 +102,6 @@ function makeDeps(overrides?: {
     },
     toolsets: {
       list: vi.fn().mockResolvedValue({ toolsets: [] }),
-      create: toolsetsCreate,
-      updateBySlug: toolsetsUpdateBySlug,
     },
     environments: {
       list: vi.fn().mockResolvedValue({ environments: [] }),
@@ -144,8 +140,6 @@ function makeDeps(overrides?: {
       agentsCreatePolicyGrant,
       triggersList,
       triggersCreate,
-      toolsetsCreate,
-      toolsetsUpdateBySlug,
       environmentsCreate,
       environmentsUpdateBySlug,
       registerPending: draft.registerPending,
@@ -154,7 +148,7 @@ function makeDeps(overrides?: {
 }
 
 describe("Slack onboarding tools", () => {
-  it("creates a slack_app auth client, built-in grants, and auth-client trigger without creating a toolset or touching environments", async () => {
+  it("creates a slack_app auth client, built-in grants, and auth-client trigger", async () => {
     const { deps, spies } = makeDeps({
       pendingSubmit: (_id, resolve) =>
         resolve({
@@ -217,13 +211,9 @@ describe("Slack onboarding tools", () => {
       spies.triggersCreate.mock.calls[0]?.[0]?.createTriggerInstanceForm
         ?.environmentId,
     ).toBeUndefined();
-    expect(spies.toolsetsCreate).not.toHaveBeenCalled();
-    expect(spies.toolsetsUpdateBySlug).not.toHaveBeenCalled();
-    expect(spies.environmentsCreate).not.toHaveBeenCalled();
-    expect(spies.environmentsUpdateBySlug).not.toHaveBeenCalled();
   });
 
-  it("saves Slack credentials onto the slack_app auth client while preserving existing secrets and never touching environments", async () => {
+  it("saves Slack credentials onto the slack_app auth client while preserving existing secrets", async () => {
     const { deps, spies } = makeDeps({
       existingHeaders: [
         { name: "SLACK_SIGNING_SECRET", isSecret: true, hasStoredValue: true },
@@ -272,8 +262,6 @@ describe("Slack onboarding tools", () => {
         ],
       },
     });
-    expect(spies.environmentsCreate).not.toHaveBeenCalled();
-    expect(spies.environmentsUpdateBySlug).not.toHaveBeenCalled();
   });
 
   it("rejects an explicit auth_client_id that does not belong to the assistant and propagates authClients.get errors", async () => {
