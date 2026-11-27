@@ -33,7 +33,7 @@ func newOrganizationGatewayFixture(t *testing.T) (context.Context, *pgxpool.Pool
 		Name:        "Organization gateway test organization",
 		Slug:        slug,
 		WorkosID:    pgtype.Text{},
-		Whitelisted: pgtype.Bool{},
+		Whitelisted: pgtype.Bool{Bool: true, Valid: true},
 	})
 	require.NoError(t, err)
 
