@@ -2689,7 +2689,7 @@ func (s *Service) humanReplayRevoked(ctx context.Context, endpoint *ResolvedMcpE
 	if session.SubjectUrn.Kind == urn.SessionSubjectKindUser {
 		blocked, err := s.sessions.IsUserBlocked(ctx, session.SubjectUrn.ID)
 		if err != nil {
-			return refreshReplayLookupFailed, false, err
+			return refreshReplayLookupFailed, false, fmt.Errorf("check replay user block: %w", err)
 		}
 		if blocked {
 			userblock.LogRefusal(ctx, endpoint.LogWith(s.logger), "mcp_refresh_token_replay", session.SubjectUrn.ID)
